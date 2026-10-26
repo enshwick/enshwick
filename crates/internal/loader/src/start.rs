@@ -154,6 +154,7 @@ pub(crate) fn start(
         .collect();
     let plan = resolve::resolve(&candidates, game.side);
     skip(&libraries, &candidates, &plan);
+    carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
     let loader = Loader {
@@ -235,6 +236,31 @@ pub(crate) fn start(
         names(loader).into_iter().collect(),
         pages(loader).into_iter().collect(),
     );
+}
+
+/// Copies each loading mod's settings and data from the ids it had, once.
+fn carry_former_ids(
+    mods_dir: &Path,
+    data_dir: &Path,
+    candidates: &[Candidate],
+    plan: &resolve::Plan,
+) {
+    let mods: Vec<(&str, Vec<&str>)> = plan
+        .order
+        .iter()
+        .map(|&i| {
+            let candidate = &candidates[i];
+            (candidate.id.as_str(), candidate.former_ids().collect())
+        })
+        .collect();
+    let configs = mods_dir.with_file_name("mod-configs");
+    let dirs = crate::carry::Dirs {
+        configs: &configs,
+        data: data_dir,
+    };
+    for line in crate::carry::carry_all(dirs, &mods, crate::migrations::dry_run()) {
+        log::write(line.level, &line.id, &line.text);
+    }
 }
 
 /// Lets the dedicated server's own code run once the hooks are armed, and
@@ -323,6 +349,7 @@ fn records(
             manifest: libraries[i].manifest,
             // SAFETY: the manifest is static data inside its loaded DLL.
             meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
+            former: candidates[i].former_ids().map(str::to_owned).collect(),
             notes: notes
                 .iter()
                 .filter(|(index, _)| *index == i)

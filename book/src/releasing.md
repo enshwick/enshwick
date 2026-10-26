@@ -174,7 +174,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 itself.
 
 `mods::replaced()` lists the mods in `mods/` that a present mod replaces after
-a rename (`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
+a rename or a fold (`was:` or `replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
 which the loader never started, each with `replaced_by` and its `file`.
 
 ## Where to publish

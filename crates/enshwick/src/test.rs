@@ -74,6 +74,7 @@
 //! # Ok::<(), &str>(())
 //! ```
 
+mod migrations;
 mod points;
 mod stats;
 mod table;
@@ -101,7 +102,6 @@ use crate::abi::{
     ZoneCheck,
 };
 use crate::events::Kind;
-use crate::migrations::MigrationError;
 use crate::{FnPtr, Hook};
 
 /// A widget a frame callback drew, as [`Installed::draw_frame`] reports it.
@@ -308,41 +308,6 @@ pub(crate) fn ask(
     unsafe { reply.as_str() }.unwrap_or("").to_owned()
 }
 
-/// A migration step as the fake keeps it: kind, from, to.
-pub(crate) type FakeStep = (u32, String, String);
-
-/// The migrations a mod declared, as the fake keeps them: id and steps as
-/// `(kind, from, to)`, and the mod's map.
-#[derive(Clone, Debug)]
-pub(crate) struct FakeMigrations {
-    pub(crate) list: Vec<(String, Vec<FakeStep>)>,
-    pub(crate) map: crate::abi::MigrateFn,
-    pub(crate) user: usize,
-}
-
-impl FakeMigrations {
-    /// Runs the map of step `step` of migration `migration` on `input`.
-    fn call(&self, migration: usize, step: usize, input: &str) -> Result<String, String> {
-        let (Ok(migration), Ok(step)) = (u32::try_from(migration), u32::try_from(step)) else {
-            return Err("too many steps".to_owned());
-        };
-        let mut out = Str::EMPTY;
-        // SAFETY: the mod's map, with its pointer and a text valid for the call.
-        let status = unsafe {
-            (self.map)(
-                core::ptr::with_exposed_provenance_mut(self.user),
-                migration,
-                step,
-                Str::new(input),
-                &raw mut out,
-            )
-        };
-        // SAFETY: the text stays valid until the next call.
-        let text = unsafe { out.as_str() }.unwrap_or_default().to_owned();
-        if status.is_ok() { Ok(text) } else { Err(text) }
-    }
-}
-
 /// A published service, as the fake keeps it.
 #[derive(Clone, Debug)]
 pub(crate) struct FakeService {
@@ -386,6 +351,7 @@ pub struct FakeHost {
     type_sizes: HashMap<String, u32>,
     type_hashes: HashMap<String, u32>,
     settings: Option<String>,
+    other_settings: HashMap<String, String>,
     server_synced: Option<String>,
     data_dir: String,
     log_level: Level,
@@ -447,6 +413,7 @@ impl FakeHost {
             type_sizes: HashMap::new(),
             type_hashes: HashMap::new(),
             settings: None,
+            other_settings: HashMap::new(),
             server_synced: None,
             data_dir: "mod-data/test".to_owned(),
             log_level: Level::INFO,
@@ -3200,111 +3167,6 @@ impl Installed {
     #[must_use]
     pub fn content_ids(&self) -> Vec<String> {
         table::with(Vec::new(), |s| s.content_ids.clone())
-    }
-
-    /// The ids of the migrations the mod declared, in order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.migrations().is_empty());
-    /// ```
-    #[must_use]
-    pub fn migrations(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| {
-            s.migrations
-                .as_ref()
-                .map(|m| m.list.iter().map(|(id, _)| id.clone()).collect())
-                .unwrap_or_default()
-        })
-    }
-
-    /// Runs the settings steps of every migration the mod declared on the
-    /// settings text `old`, as the loader does on a file an older version
-    /// wrote; the new text, without comments.
-    ///
-    /// # Errors
-    ///
-    /// Why a step failed: the text is no TOML, or a step's map refused.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.migrate_settings("a = 1\n"), Ok("a = 1\n".to_owned()));
-    /// ```
-    pub fn migrate_settings(&self, old: &str) -> Result<String, MigrationError> {
-        use crate::abi::MigrationStep as S;
-        let migrations = table::with(None, |s| s.migrations.clone());
-        let mut table: toml::Table = toml::from_str(old)?;
-        let list = migrations.as_ref().map_or(&[][..], |m| &m.list[..]);
-        for (index, (_, steps)) in list.iter().enumerate() {
-            for (step, (kind, from, to)) in steps.iter().enumerate() {
-                match *kind {
-                    S::RENAME_SETTING if !table.contains_key(to) => {
-                        if let Some(value) = table.remove(from) {
-                            table.insert(to.clone(), value);
-                        }
-                    }
-                    S::REMOVE_SETTING => {
-                        table.remove(from);
-                    }
-                    S::MAP_SETTING => {
-                        let (Some(value), Some(map)) = (table.get(from), migrations.as_ref())
-                        else {
-                            continue;
-                        };
-                        let text = crate::migrations::write_value(value)?;
-                        let new = map
-                            .call(index, step, &text)
-                            .map_err(|e| MigrationError::new(format!("setting {from}: {e}")))?;
-                        table.insert(from.clone(), crate::migrations::parse_value(&new)?);
-                    }
-                    _ => {}
-                }
-            }
-        }
-        toml::to_string(&table).map_err(|e| MigrationError::new(e.to_string()))
-    }
-
-    /// Runs the store steps of every migration the mod declared on the
-    /// world store `name` holding `old`, following renames; the name and
-    /// text it ends with.
-    ///
-    /// # Errors
-    ///
-    /// Why a step's map refused.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick::test::FakeHost::new().install();
-    /// let migrated = loader.migrate_store("owners", "count = 1\n");
-    /// assert_eq!(migrated, Ok(("owners".to_owned(), "count = 1\n".to_owned())));
-    /// ```
-    pub fn migrate_store(&self, name: &str, old: &str) -> Result<(String, String), MigrationError> {
-        use crate::abi::MigrationStep as S;
-        let migrations = table::with(None, |s| s.migrations.clone());
-        let (mut name, mut text) = (name.to_owned(), old.to_owned());
-        let list = migrations.as_ref().map_or(&[][..], |m| &m.list[..]);
-        for (index, (_, steps)) in list.iter().enumerate() {
-            for (step, (kind, from, to)) in steps.iter().enumerate() {
-                match *kind {
-                    S::RENAME_STORE if *from == name => name.clone_from(to),
-                    S::MAP_STORE if *from == name => {
-                        let Some(map) = migrations.as_ref() else {
-                            continue;
-                        };
-                        text = map
-                            .call(index, step, &text)
-                            .map_err(|e| MigrationError::new(format!("store {from}: {e}")))?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok((name, text))
     }
 
     /// The mod events the mod defined, by name, in order.

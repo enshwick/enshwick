@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 68;
+pub const ABI_MINOR: u16 = 69;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -1290,11 +1290,16 @@ impl Relation {
     /// loads first when present, and the loader notes when it is missing or
     /// in another version.
     pub const RECOMMENDS: Self = Self(3);
-    /// This mod takes the place of the other mod, an old id of the same mod
+    /// This mod takes the place of the other mod, such as one it folds in
     /// (any version; the range stays empty): while this one is present, the
     /// loader never starts the other and names its DLL to delete. Since
     /// minor 54.
     pub const REPLACES: Self = Self(4);
+    /// The other id is one this mod had before a rename: it replaces that
+    /// mod as [`REPLACES`](Self::REPLACES) does, a requirement or a point
+    /// named by the old id finds this mod, and on the first start the loader
+    /// copies the old id's settings and data to this one. Since minor 69.
+    pub const WAS: Self = Self(5);
 }
 
 /// A relation to another mod, by id and SemVer range.
@@ -5030,6 +5035,10 @@ impl MigrationStep {
     /// Reads content saved under `from_guid` as the content now under
     /// `to_guid`.
     pub const RENAME_CONTENT: u32 = 6;
+    /// Sets the setting `to` from the setting another mod keeps, `from`
+    /// written `<mod id>:<key>`, in its settings file and in each world's
+    /// copy; nothing where that mod has no such value. Since minor 69.
+    pub const TAKE_SETTING: u32 = 7;
 }
 
 /// One mod migration: an id and its steps, in order.
