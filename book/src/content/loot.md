@@ -100,10 +100,10 @@ mods too, for the games it hosts.
 
 ## A worked example: area loot
 
-[`enshwick-area-loot`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-area-loot)
+[`enshwick-area-loot`](https://github.com/enshwick/mod-area-loot)
 empties the loot around a container a player just emptied into the same
 player. Its
-[`take.rs`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)
+[`take.rs`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs)
 puts the pieces of this chapter together:
 
 1. At `init` it resolves `Containers`, `Inventories` and `Worlds`, and hooks
