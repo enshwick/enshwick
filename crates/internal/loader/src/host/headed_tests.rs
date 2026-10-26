@@ -33,6 +33,7 @@ macro_rules! headed {
             DamageCheck,
             DaytimeInfo,
             EventSpec,
+            EventTypeInfo,
             ExperiencePass,
             GameEventData,
             Interaction,

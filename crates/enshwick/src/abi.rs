@@ -5147,10 +5147,14 @@ pub struct HostApi {
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
     /// Writes the first `capacity` of the running build's game event types
-    /// to `out`, aligned room for `capacity` entries or null, and how many
-    /// there are to `count`: every reflected type that derives from the
-    /// engine's event base, in no set order. The names are the loader's,
-    /// valid for the rest of the process. Any thread. Since minor 72.
+    /// to `out`, null or room for `capacity` entries each as large as the
+    /// header of the first one says, and how many there are to `count`:
+    /// every reflected type that derives from the engine's event base, in no
+    /// set order. The names are the loader's, valid for the rest of the
+    /// process. A null `count` gives [`Status::BAD_ARGS`] after the entries
+    /// are written; a handle the loader never gave out gives
+    /// [`Status::BAD_ARGS`] and a mod that is off [`Status::FAULTED`], with
+    /// nothing written. Any thread. Since minor 72.
     pub event_types: extern "system" fn(
         me: ModHandle,
         out: *mut EventTypeInfo,
@@ -5162,19 +5166,24 @@ pub struct HostApi {
 /// One game event type of the running build, as [`HostApi::event_types`]
 /// writes it. `name` is the loader's, valid for the rest of the process.
 ///
-/// Frozen: written as an array.
-///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{EventTypeInfo, Str};
+/// use enshwick::abi::{EventTypeInfo, Header, Str};
 ///
-/// let info = EventTypeInfo { name: Str::new("you::Event"), hash: 1, size: 16 };
+/// let info = EventTypeInfo {
+///     header: Header::of::<EventTypeInfo>(),
+///     name: Str::new("you::Event"),
+///     hash: 1,
+///     size: 16,
+/// };
 /// assert_eq!(info.size, 16);
 /// ```
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
 pub struct EventTypeInfo {
+    /// Size and version of this struct.
+    pub header: Header,
     /// The reflected name.
     pub name: Str,
     /// The reflected type hash, which each event of the type carries.
@@ -5182,6 +5191,8 @@ pub struct EventTypeInfo {
     /// The bytes each event of the type carries.
     pub size: u32,
 }
+
+impl_headed!(EventTypeInfo);
 
 /// What a recipe rule of [`HostApi::recipe_rule`] names.
 ///
@@ -5839,7 +5850,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, run_console) == 24 + 40 * 8);
     assert!(core::mem::offset_of!(HostApi, actions) == 24 + 140 * 8);
     assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 141 * 8);
-    assert!(size_of::<EventTypeInfo>() == 16 + 4 + 4);
+    assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);

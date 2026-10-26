@@ -17,7 +17,7 @@ mod kinds;
 
 use core::marker::PhantomData;
 
-use crate::abi::{EventTypeInfo, GameEventData, Str};
+use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
 use crate::ecs::Entity;
 use crate::{Load, Off};
 
@@ -190,6 +190,7 @@ impl Load<'_> {
         let status = (api.event_types)(me, core::ptr::null_mut(), 0, &raw mut count);
         crate::load::ok(status, (), || "event types".to_owned())?;
         let empty = EventTypeInfo {
+            header: Header::of::<EventTypeInfo>(),
             name: Str::new(""),
             hash: 0,
             size: 0,

@@ -1412,17 +1412,14 @@ extern "system" fn event_types(
             .event_types
             .iter()
             .map(|&(name, hash, size)| EventTypeInfo {
+                header: Header::of::<EventTypeInfo>(),
                 name: Str::new(name),
                 hash,
                 size,
             })
             .collect()
     });
-    for (i, info) in found.iter().take(capacity as usize).enumerate() {
-        // SAFETY: the safe layer passes room for `capacity` entries.
-        unsafe { out.wrapping_add(i).write(*info) };
-    }
-    put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+    put_list(&found, out, capacity, count)
 }
 
 extern "system" fn entities(

@@ -104,7 +104,7 @@ impl<'a> TypeInfo<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout, Reflection};
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -449,7 +449,7 @@ impl<'a> Reflection<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout, Reflection};
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -876,6 +876,8 @@ mod tests {
                 Some(at(3)),
             ),
             ("keen::ecs::Health", KIND_STRUCT, None),
+            ("keen::Loop", KIND_STRUCT, Some(at(7))),
+            ("keen::Pool", KIND_STRUCT, Some(at(6))),
         ];
         for (i, (name, kind, inner)) in (1..).zip(types) {
             describe(&mut fake, at(i), strings(i), name, kind, inner);
@@ -904,6 +906,11 @@ mod tests {
         derived.sort_unstable();
         assert_eq!(derived, ["keen::ecs::GameEvent", "keen::ecs::HitEvent"]);
         assert_eq!(reflection.derived_from("keen::ecs::Missing").count(), 0);
+        assert_eq!(
+            reflection.derived_from("keen::Root").count(),
+            0,
+            "a loop of bases ends"
+        );
     }
 
     #[test]
