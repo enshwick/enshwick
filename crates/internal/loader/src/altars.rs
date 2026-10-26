@@ -4,9 +4,10 @@
 //! tick, so no pass sees every altar: passes merge into what is known, and an
 //! altar no pass has seen for [`FORGET_AFTER`] and [`FORGET_STEPS`] server
 //! steps is forgotten, the last one too. Counting steps keeps a server that
-//! stalls from forgetting altars it could not step over. A mod that controls
-//! the zones gets `upgrade_building_range` replaced by vanilla's own loop on
-//! the same engine helpers, writing its sizes.
+//! stalls from forgetting altars it could not step over. With altar zone
+//! filters, `upgrade_building_range` is replaced by vanilla's own loop on the
+//! same engine helpers, writing the sizes the filters chained to, in load
+//! order, each on the size the last one left.
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -20,14 +21,14 @@ use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::TryLockError;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick::abi::{
-    AltarInfo, AltarZoneSize, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
+    AltarInfo, AltarZone, AltarZoneFn, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
     ZoneCheckFn,
 };
 use enshwick::altars::MAX_ZONES;
@@ -195,8 +196,10 @@ impl Fields {
     }
 }
 static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
-/// The index of the mod that controls the zones, plus one; 0 for none.
-static CONTROLLER: AtomicUsize = AtomicUsize::new(0);
+/// The mods' altar zone filters, in load order.
+static SIZERS: Registry<Sizer> = Registry::new();
+/// Set when a mod asked for the zones to be sized again.
+static RESIZE: AtomicBool = AtomicBool::new(false);
 static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
 static CHANGED: AtomicBool = AtomicBool::new(false);
 /// The server steps the post-step counted.
@@ -216,6 +219,7 @@ static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
 static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 type Filter = Registered<ZoneCheckFn>;
+type Sizer = Registered<AltarZoneFn>;
 
 #[derive(Debug, Clone, Copy)]
 struct SeamLayout {
@@ -272,55 +276,98 @@ pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
     Status::OK
 }
 
-/// Makes mod `owner` the one that sizes altar zones; during init only.
-pub(crate) fn control(loader: &Loader, owner: ModIndex) -> Status {
+/// Adds mod `owner`'s altar zone filter; it opens altars too. During init
+/// only.
+pub(crate) fn add_sizer(
+    loader: &Loader,
+    owner: ModIndex,
+    callback: AltarZoneFn,
+    user: *mut c_void,
+) -> Status {
     let status = open(loader, owner);
     if !status.is_ok() {
         return status;
     }
-    match CONTROLLER.compare_exchange(0, owner.handle().0, Ordering::AcqRel, Ordering::Acquire) {
-        Ok(_) => Status::OK,
-        Err(held) if held == owner.handle().0 => Status::OK,
-        Err(_) => Status::REFUSED,
+    SIZERS
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// Has the zones sized again on the server's next step, for mod `owner`,
+/// which must have a filter.
+pub(crate) fn resize(owner: ModIndex) -> Status {
+    let has_filter = SIZERS
+        .sealed()
+        .is_some_and(|sizers| sizers.iter().any(|s| s.owner == owner));
+    if !has_filter {
+        return Status::REFUSED;
     }
+    RESIZE.store(true, Ordering::Release);
+    Status::OK
 }
 
 pub(crate) fn opened(owner: ModIndex) -> bool {
     OPENERS.relock().contains(&owner)
 }
 
-pub(crate) fn set_sizes(owner: ModIndex, sizes: &[AltarZoneSize]) -> Status {
-    if CONTROLLER.load(Ordering::Acquire) != owner.handle().0 {
-        return Status::REFUSED;
+/// The filters of mods that run.
+fn running_sizers() -> impl Iterator<Item = &'static Sizer> {
+    SIZERS
+        .sealed()
+        .unwrap_or_default()
+        .iter()
+        .filter(|s| !crate::host::is_off(s.owner))
+}
+
+/// Asks the filters for every altar's zone and keeps what differs from
+/// vanilla for the next range pass.
+fn size_zones() {
+    if running_sizers().next().is_none() {
+        TARGETS.store(None);
+        return;
     }
     let state = STATE.relock();
     let mut targets = Targets::new();
-    for size in sizes {
-        let (Some(placed), Some(levels)) =
-            (state.placed.get(size.altar), state.levels.get(size.altar))
-        else {
+    for (id, placed) in state.placed.iter() {
+        let Some(levels) = state.levels.get(id) else {
             continue;
         };
-        let level = usize::from(size.level);
-        let (Some(turn), Some(current)) = (geometry::turn(placed.orientation), levels.last())
-        else {
+        let (Some(turn), Some(centre), Some(current)) = (
+            geometry::turn(placed.orientation),
+            geometry::centre(placed),
+            levels.last(),
+        ) else {
             continue;
         };
-        if levels.len() != level || size.grow < 0 || size.height <= 0 {
+        let range = current.map(|v| v * HALF);
+        let vanilla = geometry::cells(centre, range, turn);
+        let height = vanilla.max[1] - vanilla.min[1];
+        let mut zone = AltarZone {
+            header: Header::of::<AltarZone>(),
+            altar: id,
+            level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
+            reserved: [0; 3],
+            grow: 0,
+            height,
+        };
+        for sizer in running_sizers() {
+            // SAFETY: the mod's filter with its own pointer and a zone valid
+            // for the call; the safe layer catches its panics.
+            unsafe { (sizer.callback)(&raw mut zone, sizer.user()) };
+        }
+        if zone.grow < 0 || zone.height <= 0 || (zone.grow, zone.height) == (0, height) {
             continue;
         }
-        let range = current.map(|v| v * HALF);
         targets.insert(
-            size.altar,
+            id,
             (
-                level,
-                geometry::grown_range(range, turn, size.grow, size.height),
+                levels.len(),
+                geometry::grown_range(range, turn, zone.grow, zone.height),
             ),
         );
     }
     drop(state);
     TARGETS.store(Some(Arc::new(targets)));
-    Status::OK
 }
 
 pub(crate) fn list() -> Vec<AltarInfo> {
@@ -377,7 +424,11 @@ pub(crate) fn after_step(loader: &Loader) {
             CHANGED.store(true, Ordering::Release);
         }
     }
-    if CHANGED.swap(false, Ordering::AcqRel) {
+    let changed = CHANGED.swap(false, Ordering::AcqRel);
+    if changed | RESIZE.swap(false, Ordering::AcqRel) {
+        size_zones();
+    }
+    if changed {
         loader.emit(Event::ALTARS_CHANGED, None, core::ptr::null());
     }
 }
@@ -431,7 +482,7 @@ pub(crate) fn link(loader: &'static Loader) {
             return;
         }
     }
-    let controlled = CONTROLLER.load(Ordering::Acquire) != 0;
+    let controlled = !SIZERS.seal().is_empty();
     let upgrade_flags = if controlled {
         HookFlags::EXCLUSIVE
     } else {
@@ -567,8 +618,7 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     };
-    let controller = CONTROLLER.load(Ordering::Acquire);
-    if controller != 0 && !crate::host::is_off(ModIndex::new(controller - 1)) {
+    if running_sizers().next().is_some() {
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
         // its thread, and vanilla has not run this tick.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {

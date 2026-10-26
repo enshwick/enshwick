@@ -41,40 +41,38 @@ pub(crate) extern "system" fn altars(
     })
 }
 
-pub(crate) extern "system" fn altar_zones_control(me: ModHandle) -> Status {
-    entry("altar_zones_control", || {
-        let (loader, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        crate::conflicts::note(
-            "altar zones",
-            index,
-            crate::conflicts::Mode::Exclusive,
-            crate::altars::control(loader, index),
-        )
-    })
+pub(crate) extern "system" fn altar_zones_control(_me: ModHandle) -> Status {
+    Status::REFUSED
 }
 
 pub(crate) extern "system" fn set_altar_zones(
-    me: ModHandle,
-    sizes: *const api_frame::AltarZoneSize,
-    count: usize,
+    _me: ModHandle,
+    _sizes: *const api_frame::AltarZoneSize,
+    _count: usize,
 ) -> Status {
-    entry("set_altar_zones", || {
-        let (_, index) = match caller_index(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        let sizes = if count == 0 {
-            &[][..]
-        } else if sizes.is_null() {
-            return Status::BAD_ARGS;
-        } else {
-            // SAFETY: the mod passes `count` sizes, valid for the call.
-            unsafe { core::slice::from_raw_parts(sizes, count) }
-        };
-        crate::altars::set_sizes(index, sizes)
+    Status::REFUSED
+}
+
+pub(crate) extern "system" fn altar_zone_filter(
+    me: ModHandle,
+    callback: api_frame::AltarZoneFn,
+    user: *mut core::ffi::c_void,
+) -> Status {
+    entry("altar_zone_filter", || match caller_index(me) {
+        Ok((loader, index)) => crate::conflicts::note(
+            "altar zone filter",
+            index,
+            crate::conflicts::Mode::Chained,
+            crate::altars::add_sizer(loader, index, callback, user),
+        ),
+        Err(status) => status,
+    })
+}
+
+pub(crate) extern "system" fn altar_zones_changed(me: ModHandle) -> Status {
+    entry("altar_zones_changed", || match caller_index(me) {
+        Ok((_, index)) => crate::altars::resize(index),
+        Err(status) => status,
     })
 }
 

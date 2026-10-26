@@ -1,4 +1,4 @@
-abi 2.77
+abi 2.78
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -50,6 +50,13 @@ AltarInfo size 856 align 8
     zone at 16 size 48
     levels at 64 size 768
     position at 832 size 24
+AltarZone size 32 align 8
+    header at 0 size 8
+    altar at 8 size 4
+    level at 12 size 1
+    reserved at 13 size 3
+    grow at 16 size 8
+    height at 24 size 8
 AltarZoneSize size 24 align 8
     altar at 0 size 4
     level at 4 size 1
@@ -218,7 +225,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1224 align 8
+HostApi size 1240 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -371,6 +378,8 @@ HostApi size 1224 align 8
     loop_wait at 1200 size 8
     server_wait at 1208 size 8
     task_workers at 1216 size 8
+    altar_zone_filter at 1224 size 8
+    altar_zones_changed at 1232 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
