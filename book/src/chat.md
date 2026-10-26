@@ -87,8 +87,9 @@ the file is saved. Only complete lines run, so a line waits for its line
 break; blank lines and lines starting with `#` are skipped, and so are the
 lines already in the file when the server starts. Each line and its answer
 go to `logs/enshwick/loader.log`. Administrators and their scripts reach the
-console this way without anyone joining. A server that kept its command file
-in `mod-data/enshwick.admin-tools/` reads that one too.
+console this way without anyone joining. The loader took over the admin
+tools mod: it never loads, the log names its DLL to delete, and its command
+file in `mod-data/enshwick.admin-tools/` is read too.
 
 ### The server's console window
 
@@ -130,9 +131,6 @@ No mod may take the id `enshwick`.
 
 ## Worked examples
 
-- [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
-  declares administrator actions, answers with `tell`, and runs each line of
-  its command file with `console::run` from a scheduled task.
 - [`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.
