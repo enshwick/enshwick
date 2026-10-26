@@ -1,0 +1,31 @@
+//! Build table ids under `server.`.
+
+use super::{Constant, Symbol};
+
+pub(crate) const CHAT_STORE: Constant = Constant::new("server.chat_store");
+pub(crate) const CUSTOM_STRINGS: Constant = Constant::new("server.custom_strings");
+pub(crate) const ENTRY_STATE: Constant = Constant::new("server.entry_state");
+pub(crate) const GAME_SETTINGS: Constant = Constant::new("server.game_settings");
+pub(crate) const GAME_SETTINGS_PRESET: Constant = Constant::new("server.game_settings_preset");
+pub(crate) const GAME_SETTINGS_RESEND: Constant = Constant::new("server.game_settings_resend");
+pub(crate) const PERMISSION_ENTRY_SIZE: Constant = Constant::new("server.permission_entry_size");
+pub(crate) const PERMISSION_MASK: Constant = Constant::new("server.permission_mask");
+pub(crate) const PERMISSION_TABLE: Constant = Constant::new("server.permission_table");
+pub(crate) const PLAYER_INFOS: Constant = Constant::new("server.player_infos");
+pub(crate) const PLAYER_REMOVE: Symbol = Symbol::new("server.player_remove");
+pub(crate) const PLAYER_SLOTS: Constant = Constant::new("server.player_slots");
+pub(crate) const PLAYER_SLOT_COUNT: Constant = Constant::new("server.player_slot_count");
+pub(crate) const PLAYER_SLOT_ENTITY: Constant = Constant::new("server.player_slot_entity");
+pub(crate) const PLAYER_SLOT_KEY: Constant = Constant::new("server.player_slot_key");
+pub(crate) const PLAYER_SLOT_MACHINE: Constant = Constant::new("server.player_slot_machine");
+pub(crate) const PLAYER_SLOT_NAME: Constant = Constant::new("server.player_slot_name");
+pub(crate) const PLAYER_SLOT_SIZE: Constant = Constant::new("server.player_slot_size");
+pub(crate) const PLAYER_SLOT_STATE: Constant = Constant::new("server.player_slot_state");
+pub(crate) const POST_STEP: Symbol = Symbol::new("server.post_step");
+pub(crate) const SAVE_BLOCKED: Constant = Constant::new("server.save_blocked");
+pub(crate) const SAVE_REQUEST: Symbol = Symbol::new("server.save_request");
+pub(crate) const SAVE_STEP: Symbol = Symbol::new("server.save_step");
+pub(crate) const SAVE_SYSTEM: Constant = Constant::new("server.save_system");
+pub(crate) const SESSION: Constant = Constant::new("server.session");
+pub(crate) const SET_STATE: Symbol = Symbol::new("server.set_state");
+pub(crate) const WORLD: Constant = Constant::new("server.world");

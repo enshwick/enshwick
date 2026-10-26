@@ -1,9 +1,10 @@
-//! What each mod costs: the time of its own hook links, and of every
-//! callback the loader makes into it, by feature. With `diagnostics` on,
-//! the loader times every callback into a mod, the mods it calls in turn
-//! left out; with `diagnostics_timing` also, the timed thunk in front of
-//! each link gives the link's own time as its time less the rest of the
-//! chain's. `enshwick profile` on the console and the status summary show
+//! What each mod costs: the time of its own hook links, and of every callback
+//! the loader makes into it, by feature.
+//!
+//! With `diagnostics` on, the loader times every callback into a mod, the mods
+//! it calls in turn left out; with `diagnostics_timing` also, the timed thunk
+//! in front of each link gives the link's own time as its time less the rest of
+//! the chain's. `enshwick profile` on the console and the status summary show
 //! the busiest mods since start or since `enshwick profile reset`.
 
 use crate::mod_index::ModIndex;
@@ -320,10 +321,11 @@ impl Cost {
     }
 }
 
-/// Every mod's costs in a window, from the readings: `chains` with the
-/// readings at its start subtracted already, and the callback buckets now
-/// and at its start. The costliest mod first; mods that cost nothing are
-/// left out.
+/// Every mod's costs in a window, from the readings: `chains` with the readings
+/// at its start subtracted already, and the callback buckets now and at its
+/// start.
+///
+/// The costliest mod first; mods that cost nothing are left out.
 #[must_use]
 #[expect(
     clippy::cast_precision_loss,

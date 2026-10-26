@@ -323,14 +323,16 @@ impl UiDialog {
 
 /// A mod's callback for the answer to its dialog: the answer, such as
 /// [`UiDialog::OK`] or [`UiDialog::CLOSED`], and the pointer given with the
-/// dialog. Called once, on the thread that draws the interface, or on a
-/// thread of the loader's when the dialog shows as a system window. It must
-/// not unwind.
+/// dialog.
+///
+/// Called once, on the thread that draws the interface, or on a thread of the
+/// loader's when the dialog shows as a system window. It must not unwind.
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 
-/// A mod's check of a new text of its settings file, before the loader
-/// writes it: [`Status::OK`] to accept it; else the reason, written to
-/// `why` and valid until the mod's next call, and [`Status::REFUSED`]. It
-/// must not unwind.
+/// A mod's check of a new text of its settings file, before the loader writes
+/// it: [`Status::OK`] to accept it; else the reason, written to `why` and valid
+/// until the mod's next call, and [`Status::REFUSED`].
+///
+/// It must not unwind.
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;

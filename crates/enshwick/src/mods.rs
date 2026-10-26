@@ -174,9 +174,12 @@ pub fn mods() -> Vec<ModEntry> {
 }
 
 /// The server's join mods that the last refused join found missing on this
-/// client or in another version: the server's version, `running` false, the
-/// client's DLL path when it has the mod, and the name and homepage the
-/// server advertises. Read it on [`JoinRefused`](crate::events::JoinRefused).
+/// client or in another version.
+///
+/// Each carries the server's version, `running` false, the client's DLL path
+/// when it has the mod, and the name and homepage the server advertises.
+///
+/// Read it on [`JoinRefused`](crate::events::JoinRefused).
 ///
 /// Empty before a refused join.
 ///

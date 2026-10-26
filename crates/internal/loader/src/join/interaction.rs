@@ -6,18 +6,13 @@
 // interactions answers that one start with 0, as the game itself does when it
 // cannot start one; the provider then goes back to the menu without a dialog.
 
+use crate::pinned;
 use core::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-/// The build table's id of the game's start of a user interaction.
-pub const START_ID: &str = "user.start_interaction";
 /// The build table's id of its first eight bytes.
 pub const BYTES_ID: &str = "user.start_interaction.bytes";
-/// The build table's id of where an interaction request holds its kind.
-pub const KIND_ID: &str = "user.interaction_kind";
-/// The build table's id of the kind that tells the player a join failed.
-pub const JOIN_FAILED_ID: &str = "user.join_failed_kind";
 /// How long after a refusal the game's dialog is held back at most: the
 /// provider fails the join within a few frames.
 const HOLD: Duration = Duration::from_secs(5);
@@ -213,7 +208,7 @@ pub fn verify(
     read: impl Fn(u64) -> Option<u64>,
     code: Range<u64>,
 ) -> Result<u64, Error> {
-    let start = start.ok_or(Error::Missing(START_ID))?;
+    let start = start.ok_or(Error::Missing(pinned::user::START_INTERACTION.id()))?;
     let expected = expected.ok_or(Error::Missing(BYTES_ID))?;
     let inside = start
         .checked_add(8)
@@ -411,7 +406,7 @@ mod tests {
         );
         assert_eq!(
             verify(None, Some(0x5540), read, code.clone()),
-            Err(Error::Missing(START_ID))
+            Err(Error::Missing(pinned::user::START_INTERACTION.id()))
         );
         assert_eq!(
             verify(Some(0x4000), None, read, code),

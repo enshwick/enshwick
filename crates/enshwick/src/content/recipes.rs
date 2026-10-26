@@ -222,12 +222,15 @@ impl Load<'_> {
     }
 }
 
-/// Builds the recipe registry again with every mod's recipe changes, from
-/// any thread, for a mod whose [`Load::modify_recipes`] or
-/// [`Load::add_recipe_with`] reads values that changed, such as a server's
-/// join values on a joined client: the counts the game holds change in place. Nothing is done while the game has not
-/// built the registry yet. See [`rebuild`](crate::content::rebuild) for
-/// what a rebuild can change.
+/// Builds the recipe registry again with every mod's recipe changes, from any
+/// thread.
+///
+/// For a mod whose [`Load::modify_recipes`] or [`Load::add_recipe_with`] reads
+/// values that changed, such as a server's join values on a joined client: the
+/// counts the game holds change in place.
+///
+/// Nothing is done while the game has not built the registry yet. See
+/// [`rebuild`](crate::content::rebuild) for what a rebuild can change.
 ///
 /// # Errors
 ///

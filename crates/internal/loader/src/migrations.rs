@@ -1,11 +1,13 @@
-//! Mod migrations: what a new version of a mod changes in what older
-//! versions left behind. The settings steps run on a mod's settings file
-//! when it registers its migrations; every step runs on a world's files when
-//! the world loads, before the mod reads the world's settings or opens its
-//! stores. `mod-data/enshwick/migrations.toml` records what ran, for the
-//! settings file and per world, so nothing runs twice; a world or settings
-//! file the mod has never seen starts current. Before changing anything the
-//! loader logs what it will do; in a dry run it only logs.
+//! Mod migrations: what a new version of a mod changes in what older versions
+//! left behind.
+//!
+//! The settings steps run on a mod's settings file when it registers its
+//! migrations; every step runs on a world's files when the world loads, before
+//! the mod reads the world's settings or opens its stores. `mod-
+//! data/enshwick/migrations.toml` records what ran, for the settings file and
+//! per world, so nothing runs twice; a world or settings file the mod has never
+//! seen starts current. Before changing anything the loader logs what it will
+//! do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -99,7 +101,103 @@ pub struct Migration {
 
 /// Runs a step's map: migration index, step index and input, to the output
 /// or why it failed.
-pub type MapFn<'a> = &'a dyn Fn(usize, usize, &str) -> Result<String, String>;
+pub type MapFn<'a> = &'a dyn Fn(usize, usize, &str) -> Result<String, MapError>;
+
+/// Why a mod's map gave no value.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum MapError {
+    /// The migration or step index does not fit the ABI.
+    #[error("too many steps")]
+    TooManySteps,
+    /// The map wrote text that is not UTF-8.
+    #[error("the result is not UTF-8")]
+    NotUtf8,
+    /// The map refused without saying why, with its status.
+    #[error("refused ({0})")]
+    Refused(u32),
+    /// The map refused and said why.
+    #[error("{0}")]
+    Said(String),
+}
+
+/// Why the record of migrations that ran does not read.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum RecordError {
+    /// The file is empty, as a write cut short leaves it.
+    #[error("the file is empty")]
+    Empty,
+    /// The file is no record.
+    #[error("{0}")]
+    Malformed(#[from] toml::de::Error),
+    /// The file does not read.
+    #[error("{0}")]
+    Io(#[from] std::io::Error),
+}
+
+/// Why a migration step failed.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum MigrationError {
+    /// The settings file is no TOML.
+    #[error("settings: {0}")]
+    Settings(toml_edit::TomlError),
+    /// The mod's map gave no value for a setting.
+    #[error("setting {key}: {reason}")]
+    SettingMap {
+        /// The setting.
+        key: String,
+        /// Why the map gave none.
+        reason: MapError,
+    },
+    /// The map's value for a setting is no TOML value.
+    #[error("setting {key}: the new value: {reason}")]
+    SettingValue {
+        /// The setting.
+        key: String,
+        /// Why the value does not parse.
+        reason: toml_edit::TomlError,
+    },
+    /// A setting taken from another mod is not `<mod id>:<key>`.
+    #[error("setting {0}: not <mod id>:<key>")]
+    NotModKey(String),
+    /// Another mod's settings file, read for a take, is no TOML.
+    #[error("settings of {id}: {reason}")]
+    OtherSettings {
+        /// The other mod.
+        id: String,
+        /// Why its file does not parse.
+        reason: toml_edit::TomlError,
+    },
+    /// A part of the path to a taken setting is a value, not a table.
+    #[error("setting {key}: {part} is not a table")]
+    NotTable {
+        /// The setting.
+        key: String,
+        /// The part that is no table.
+        part: String,
+    },
+    /// A store to rename does not read.
+    #[error("store {0}: unreadable")]
+    StoreUnreadable(String),
+    /// The mod's map gave no value for a store.
+    #[error("store {store}: {reason}")]
+    StoreMap {
+        /// The store.
+        store: String,
+        /// Why the map gave none.
+        reason: MapError,
+    },
+    /// A file could not be written or removed.
+    #[error("{file}: {reason}")]
+    File {
+        /// The file's name.
+        file: String,
+        /// Why.
+        reason: std::io::Error,
+    },
+}
 
 /// The text of another mod's settings file beside the one migrated, by that
 /// mod's id; `None` when it has none.
@@ -125,12 +223,12 @@ impl Record {
     ///
     /// When the file is there but does not read, or is empty, as a write cut
     /// short leaves it: an empty record would run every migration again.
-    pub fn read(data_dir: &Path) -> Result<Self, String> {
+    pub fn read(data_dir: &Path) -> Result<Self, RecordError> {
         match std::fs::read_to_string(data_dir.join(RECORD)) {
-            Ok(text) if text.trim().is_empty() => Err("the file is empty".to_owned()),
-            Ok(text) => toml::from_str(&text).map_err(|e| e.to_string()),
+            Ok(text) if text.trim().is_empty() => Err(RecordError::Empty),
+            Ok(text) => Ok(toml::from_str(&text)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -233,8 +331,8 @@ pub fn apply_settings(
     migration: &Migration,
     map: MapFn<'_>,
     source: SourceFn<'_>,
-) -> Result<String, String> {
-    let mut doc: DocumentMut = text.parse().map_err(|e| format!("settings: {e}"))?;
+) -> Result<String, MigrationError> {
+    let mut doc: DocumentMut = text.parse().map_err(MigrationError::Settings)?;
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
             MigrationStep::TAKE_SETTING => take(&mut doc, &step.from, &step.to, source)?,
@@ -250,11 +348,17 @@ pub fn apply_settings(
                     continue;
                 };
                 let old = value.clone().decorated("", "").to_string();
-                let new = map(index, step_index, old.trim())
-                    .map_err(|e| format!("setting {}: {e}", step.from))?;
-                let mut parsed: toml_edit::Value = new
-                    .parse()
-                    .map_err(|e| format!("setting {}: the new value: {e}", step.from))?;
+                let new = map(index, step_index, old.trim()).map_err(|reason| {
+                    MigrationError::SettingMap {
+                        key: step.from.clone(),
+                        reason,
+                    }
+                })?;
+                let mut parsed: toml_edit::Value =
+                    new.parse().map_err(|reason| MigrationError::SettingValue {
+                        key: step.from.clone(),
+                        reason,
+                    })?;
                 *parsed.decor_mut() = value.decor().clone();
                 *value = parsed;
             }
@@ -268,14 +372,24 @@ pub fn apply_settings(
 /// reads for that mod, the comments on `to` kept; nothing when that mod has
 /// no such value. Both keys may be dotted paths into tables, such as
 /// `comfort.multiplier`; a missing table on the way to `to` is made.
-fn take(doc: &mut DocumentMut, from: &str, to: &str, source: SourceFn<'_>) -> Result<(), String> {
+fn take(
+    doc: &mut DocumentMut,
+    from: &str,
+    to: &str,
+    source: SourceFn<'_>,
+) -> Result<(), MigrationError> {
     let Some((id, key)) = from.split_once(':') else {
-        return Err(format!("setting {from}: not <mod id>:<key>"));
+        return Err(MigrationError::NotModKey(from.to_owned()));
     };
     let Some(text) = source(id) else {
         return Ok(());
     };
-    let other: DocumentMut = text.parse().map_err(|e| format!("settings of {id}: {e}"))?;
+    let other: DocumentMut = text
+        .parse()
+        .map_err(|reason| MigrationError::OtherSettings {
+            id: id.to_owned(),
+            reason,
+        })?;
     let mut item = other.as_item();
     for part in key.split('.') {
         match item.get(part) {
@@ -295,7 +409,10 @@ fn take(doc: &mut DocumentMut, from: &str, to: &str, source: SourceFn<'_>) -> Re
             .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
         table = next
             .as_table_mut()
-            .ok_or_else(|| format!("setting {to}: {part} is not a table"))?;
+            .ok_or_else(|| MigrationError::NotTable {
+                key: to.to_owned(),
+                part: part.to_owned(),
+            })?;
     }
     match table.get_mut(leaf).and_then(toml_edit::Item::as_value_mut) {
         Some(old) => {
@@ -345,7 +462,7 @@ pub fn apply_stores(
     index: usize,
     migration: &Migration,
     map: MapFn<'_>,
-) -> Result<(), String> {
+) -> Result<(), MigrationError> {
     let mut staged = Staged::default();
     stage_stores(&mut staged, dir, index, migration, map)?;
     staged.commit()
@@ -382,18 +499,22 @@ impl Staged {
     }
 
     /// Writes every staged file, then removes the ones staged away.
-    fn commit(self) -> Result<(), String> {
-        let name = |path: &Path| path.file_name().map(|n| n.to_string_lossy().into_owned());
+    fn commit(self) -> Result<(), MigrationError> {
+        let failed = |path: &Path, reason| MigrationError::File {
+            file: path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            reason,
+        };
         for (path, text) in &self.files {
             if let Some(text) = text {
-                write(path, text)
-                    .map_err(|e| format!("{}: {e}", name(path).unwrap_or_default()))?;
+                write(path, text).map_err(|e| failed(path, e))?;
             }
         }
         for (path, text) in &self.files {
             if text.is_none() && path.exists() {
-                std::fs::remove_file(path)
-                    .map_err(|e| format!("{}: {e}", name(path).unwrap_or_default()))?;
+                std::fs::remove_file(path).map_err(|e| failed(path, e))?;
             }
         }
         Ok(())
@@ -407,7 +528,7 @@ fn stage_stores(
     index: usize,
     migration: &Migration,
     map: MapFn<'_>,
-) -> Result<(), String> {
+) -> Result<(), MigrationError> {
     let file = |name: &str| dir.join(format!("{name}.toml"));
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
@@ -416,7 +537,7 @@ fn stage_stores(
                 if staged.exists(&from) && !staged.exists(&to) {
                     let text = staged
                         .read(&from)
-                        .ok_or_else(|| format!("store {}: unreadable", step.from))?;
+                        .ok_or_else(|| MigrationError::StoreUnreadable(step.from.clone()))?;
                     staged.put(to, Some(text));
                     staged.put(from, None);
                 }
@@ -426,8 +547,11 @@ fn stage_stores(
                 let Some(text) = staged.read(&path) else {
                     continue;
                 };
-                let new = map(index, step_index, &text)
-                    .map_err(|e| format!("store {}: {e}", step.from))?;
+                let new =
+                    map(index, step_index, &text).map_err(|reason| MigrationError::StoreMap {
+                        store: step.from.clone(),
+                        reason,
+                    })?;
                 staged.put(path, Some(new));
             }
             _ => {}
@@ -548,7 +672,7 @@ fn stage_settings(
     migration: &Migration,
     map: MapFn<'_>,
     source: SourceFn<'_>,
-) -> Result<(), String> {
+) -> Result<(), MigrationError> {
     if !migration.steps.iter().any(Step::on_settings) {
         return Ok(());
     }
@@ -613,7 +737,7 @@ mod live {
     use enshwick::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
 
-    use super::{Migration, Record, Step, Target, dry_run, follow_renames, run};
+    use super::{MapError, Migration, Record, Step, Target, dry_run, follow_renames, run};
     use crate::host::Loader;
     use crate::mod_index::ModIndex;
 
@@ -643,9 +767,9 @@ mod live {
         migration: usize,
         step: usize,
         input: &str,
-    ) -> Result<String, String> {
+    ) -> Result<String, MapError> {
         let (Ok(migration), Ok(step)) = (u32::try_from(migration), u32::try_from(step)) else {
-            return Err("too many steps".to_owned());
+            return Err(MapError::TooManySteps);
         };
         let mut out = Str::EMPTY;
         // SAFETY: `reg.map` is the mod's migration function in its DLL, which
@@ -666,14 +790,14 @@ mod live {
         // keeps valid and unchanged until the mod's next map call; it is copied
         // here.
         let Some(text) = (unsafe { out.as_str() }).map(str::to_owned) else {
-            return Err("the result is not UTF-8".to_owned());
+            return Err(MapError::NotUtf8);
         };
         if status.is_ok() {
             Ok(text)
         } else if text.is_empty() {
-            Err(format!("refused ({})", status.0))
+            Err(MapError::Refused(status.0))
         } else {
-            Err(text)
+            Err(MapError::Said(text))
         }
     }
 
@@ -1006,10 +1130,10 @@ mod tests {
         }
     }
 
-    fn double(_: usize, _: usize, input: &str) -> Result<String, String> {
+    fn double(_: usize, _: usize, input: &str) -> Result<String, MapError> {
         let n: i64 = input
             .parse()
-            .map_err(|_| format!("not a number: {input}"))?;
+            .map_err(|_| MapError::Said(format!("not a number: {input}")))?;
         Ok((n * 2).to_string())
     }
 
@@ -1055,7 +1179,10 @@ mod tests {
     fn a_refused_map_names_the_setting() {
         let m = migration("2", vec![step(MigrationStep::MAP_SETTING, "limit", "")]);
         let error = apply_settings("limit = \"x\"\n", 0, &m, &double, &none).unwrap_err();
-        assert!(error.starts_with("setting limit: not a number"), "{error}");
+        assert!(
+            error.to_string().starts_with("setting limit: not a number"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1129,13 +1256,13 @@ mod tests {
             "limit = 4\n"
         );
         record.write(&dir).unwrap();
-        assert_eq!(Record::read(&dir), Ok(record));
+        assert_eq!(Record::read(&dir).unwrap(), record);
         std::fs::write(dir.join(RECORD), "").unwrap();
-        assert!(Record::read(&dir).is_err());
+        assert!(matches!(Record::read(&dir), Err(RecordError::Empty)));
         std::fs::write(dir.join(RECORD), "settings = [").unwrap();
-        assert!(Record::read(&dir).is_err());
+        assert!(matches!(Record::read(&dir), Err(RecordError::Malformed(_))));
         std::fs::remove_file(dir.join(RECORD)).unwrap();
-        assert_eq!(Record::read(&dir), Ok(Record::default()));
+        assert_eq!(Record::read(&dir).unwrap(), Record::default());
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
@@ -1170,7 +1297,7 @@ mod tests {
         };
         let refuse = |_: usize, step: usize, input: &str| {
             if step == 2 {
-                Err("refused".to_owned())
+                Err(MapError::Said("refused".to_owned()))
             } else {
                 double(0, 0, input)
             }

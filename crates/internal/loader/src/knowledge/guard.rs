@@ -20,6 +20,7 @@
 //! which consumes the request without queueing it.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use crate::registry::Registry;
 use core::ffi::c_void;
 use std::sync::OnceLock;
@@ -101,7 +102,7 @@ pub(crate) fn register(
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    if site(loader).is_none() || loader.address("knowledge.input_check").is_none() {
+    if site(loader).is_none() || loader.address(pinned::knowledge::INPUT_CHECK).is_none() {
         return Status::MISSING;
     }
     FILTERS
@@ -118,9 +119,9 @@ fn site(loader: &Loader) -> Option<Site> {
             .and_then(|v| usize::try_from(v).ok())
     };
     Some(Site {
-        action: loader.offset("knowledge.input_action")?,
-        kind: loader.offset("knowledge.request_kind")?,
-        value: loader.offset("knowledge.request_value")?,
+        action: loader.offset(pinned::knowledge::INPUT_ACTION)?,
+        kind: loader.offset(pinned::knowledge::REQUEST_KIND)?,
+        value: loader.offset(pinned::knowledge::REQUEST_VALUE)?,
         experience: field("experienceGainId")?,
         skill_points: field("unlockedSkillPoints")?,
     })
@@ -137,7 +138,7 @@ pub(crate) fn link(loader: &Loader) {
     let (Some(site), Some(_), Some(address)) = (
         site(loader),
         layout(loader),
-        loader.address("knowledge.input_check"),
+        loader.address(pinned::knowledge::INPUT_CHECK),
     ) else {
         crate::log!(WARN, "knowledge guard off: not in this build");
         return;

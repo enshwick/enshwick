@@ -1,7 +1,8 @@
-//! The codes the loader's messages carry, each with a page on the
-//! documentation site that says what went wrong and how to fix it. The codes,
-//! their texts and the steps of "the game won't start" live in `errors.toml`
-//! beside this file; the site builds its pages from it.
+//! The codes the loader's messages carry, each with a page on the documentation
+//! site that says what went wrong and how to fix it.
+//!
+//! The codes, their texts and the steps of "the game won't start" live in
+//! `errors.toml` beside this file; the site builds its pages from it.
 
 use core::fmt;
 
