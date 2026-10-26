@@ -1,3 +1,7 @@
+#:schema ./items.schema.json
+# Items of this pack, and changes of items the game or other mods have.
+# A number sets a value; { times = x } multiplies it.
+
 [[change]]
 items = ["Prop_Storage_24_T1_Box"]
 slots = 32

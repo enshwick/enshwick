@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loot",
+  "type": "object",
+  "properties": {
+    "change": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/LootChangeEntry"
+      }
+    },
+    "drop": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/DropEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "DropEntry": {
+      "type": "object",
+      "properties": {
+        "chance": {
+          "description": "The chance per roll, from 0 to 1.",
+          "type": "number",
+          "format": "double"
+        },
+        "count": {
+          "description": "How many per drop, at least and at most; 1 when left out.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "from": {
+          "description": "`bosses`, `locked-chests`, `corpses`, `chests`, `containers`,\n`destroyed`, or a list of the last four.",
+          "$ref": "#/$defs/FromEntry"
+        },
+        "items": {
+          "description": "The items, one picked per drop.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "meter": {
+          "description": "How full each dropped item's meter starts, at least and at most.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "chance",
+        "from"
+      ]
+    },
+    "FromEntry": {
+      "description": "Where a drop comes from: one name or several.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "LootChangeEntry": {
+      "description": "A change of the game's loot for some items.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "description": "The count container fill tables give, at least and at most alike.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "items": {
+          "description": "The items whose loot changes: debug names, GUIDs or content ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "spawn_probability": {
+          "description": "The chance container fill tables give the item, from 0 to 1.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stack_size": {
+          "description": "The stack size random loot rolls, at least and at most alike.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weight": {
+          "description": "The item's weight among the ones a fill table picks from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ]
+    },
+    "ScaleEntry": {
+      "type": "object",
+      "properties": {
+        "times": {
+          "description": "The factor, from 0 to 100.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "times"
+      ]
+    },
+    "ValueEntry": {
+      "description": "A new value: a number sets it, `{ times = x }` scales it.",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "$ref": "#/$defs/ScaleEntry"
+        }
+      ]
+    }
+  }
+}

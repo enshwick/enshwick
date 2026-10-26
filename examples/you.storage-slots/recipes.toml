@@ -1,0 +1,7 @@
+#:schema ./recipes.schema.json
+# Recipes of this pack, and changes of the game's recipes, picked by their
+# debug name (recipes) or by what they make (output).
+
+# [[change]]
+# output = ["Material_T2_Wood_Planks"]
+# time = { times = 0.5 }

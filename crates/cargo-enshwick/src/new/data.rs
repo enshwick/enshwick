@@ -161,18 +161,18 @@ mod tests {
     #[test]
     fn a_new_data_pack_checks_clean_as_it_is() {
         let dir = scratch("clean");
-        create(&dir, "you.bigger-stacks", Side::Both).unwrap();
+        create(&dir, "you.material-stacks", Side::Both).unwrap();
         let (summary, manifest, _) =
-            crate::pack::check(&dir.join("you.bigger-stacks"), None).unwrap();
-        assert_eq!(manifest.id, "you.bigger-stacks");
-        assert_eq!(manifest.name, "Bigger stacks");
+            crate::pack::check(&dir.join("you.material-stacks"), None).unwrap();
+        assert_eq!(manifest.id, "you.material-stacks");
+        assert_eq!(manifest.name, "Material stacks");
         assert!(summary.contains("0 changes"), "{summary}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
     fn every_pack_file_names_its_schema_and_the_schema_is_there() {
-        let files = files("you.bigger-stacks", Side::Server);
+        let files = files("you.material-stacks", Side::Server);
         for (path, text) in &files {
             let Some(name) = path
                 .to_str()
@@ -213,5 +213,50 @@ mod tests {
         assert!(create(&dir, "you.stacks", Side::Both).is_err());
         assert!(create(&dir, "Stacks", Side::Both).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The comment lines a rendered file opens with, up to its first blank
+    /// line.
+    fn header(text: &str) -> Vec<&str> {
+        text.lines().take_while(|line| !line.is_empty()).collect()
+    }
+
+    #[test]
+    fn every_example_pack_has_the_layout_a_new_pack_gets() {
+        for dir in crate::pack::tests::example_packs() {
+            let at = dir.display();
+            let manifest: toml_edit::DocumentMut = std::fs::read_to_string(dir.join(MANIFEST_FILE))
+                .unwrap()
+                .parse()
+                .unwrap();
+            let id = manifest["id"].as_str().unwrap();
+            assert_eq!(dir.file_name().unwrap().to_str(), Some(id), "{at}");
+            let rendered = files(id, Side::Both);
+
+            let mut found: Vec<PathBuf> = std::fs::read_dir(&dir)
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name().into())
+                .collect();
+            found.sort();
+            let mut wanted: Vec<PathBuf> = rendered.iter().map(|(path, _)| path.clone()).collect();
+            wanted.sort();
+            assert_eq!(found, wanted, "{at}");
+
+            for (path, template) in &rendered {
+                let text = std::fs::read_to_string(dir.join(path)).unwrap();
+                let name = path.to_str().unwrap();
+                if name == MANIFEST_FILE {
+                    let template: toml_edit::DocumentMut = template.parse().unwrap();
+                    let keys = |doc: &toml_edit::DocumentMut| -> Vec<String> {
+                        doc.iter().map(|(key, _)| key.to_owned()).collect()
+                    };
+                    assert_eq!(keys(&manifest), keys(&template), "{at}: {name}");
+                } else if path.extension().is_some_and(|ext| ext == "json") || name == TEXTS_FILE {
+                    assert_eq!(&text, template, "{at}: {name}");
+                } else {
+                    assert_eq!(header(&text), header(template), "{at}: {name}");
+                }
+            }
+        }
     }
 }

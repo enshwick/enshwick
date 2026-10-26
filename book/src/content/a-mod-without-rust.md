@@ -5,14 +5,14 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 ## Create the pack
 
-1. Run `cargo enshwick new --data you.bigger-stacks`. It makes the folder
-   `you.bigger-stacks/` with `pack.toml`, one file per kind of data and a
+1. Run `cargo enshwick new --data you.material-stacks`. It makes the folder
+   `you.material-stacks/` with `pack.toml`, one file per kind of data and a
    README.
 
    Without the tool, make the folder by hand with a `pack.toml` of two lines:
 
    ```toml
-   id = "you.bigger-stacks"
+   id = "you.material-stacks"
    version = "0.1.0"
    ```
 
@@ -29,7 +29,7 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 ## Check it
 
-1. Run `cargo enshwick pack check you.bigger-stacks --game <game folder>`. It
+1. Run `cargo enshwick pack check you.material-stacks --game <game folder>`. It
    reads every file against the game's data and prints each problem with its
    file and line, with the names that look like a misspelt one:
 
@@ -41,11 +41,11 @@ you make one that lets four times as many wood logs fit in one inventory slot.
 
 1. Copy the folder into the game's `mods/` folder, on the server and in every
    player's game: the join check lets only players with the same pack in.
-2. Start the game. The pack's log, `logs/enshwick/mods/you.bigger-stacks.log`,
+2. Start the game. The pack's log, `logs/enshwick/mods/you.material-stacks.log`,
    counts what it changed:
 
    ```text
-   info  [you.bigger-stacks] data pack: 0 ids, 0 loot drops, 1 changes
+   info  [you.material-stacks] data pack: 0 ids, 0 loot drops, 1 changes
    ```
 
 3. Pick up wood logs: a slot now holds four times as many.
@@ -57,11 +57,13 @@ you remove it.
 
 ## Release it
 
-1. Run `cargo enshwick pack zip you.bigger-stacks` and attach the archive to
+1. Run `cargo enshwick pack zip you.material-stacks` and attach the archive to
    your release; players unpack it into the game's folder.
 
 ## Next
 
 [Data packs](packs.md) lists every change a pack can make: recipe costs and
 times, chest slots, item stats, new items, workshops and loot. With
-`dev_reload = true`, changed values apply while the game runs.
+`dev_reload = true`, changed values apply while the game runs. The
+repository's `examples/you.material-stacks/` is a finished pack of this kind
+for five materials.

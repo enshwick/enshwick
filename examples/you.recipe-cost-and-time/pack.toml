@@ -1,5 +1,7 @@
-id = "you.faster-crafting"
+id = "you.recipe-cost-and-time"
 version = "0.1.0"
-name = "Faster crafting"
+name = "Recipe cost and time"
 description = "Bronze bars, fired bricks and flat bread take half the ingredients and half the time."
+authors = ["You"]
 license = "MIT"
+side = "both"

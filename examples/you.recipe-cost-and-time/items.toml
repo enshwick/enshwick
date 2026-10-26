@@ -1,0 +1,7 @@
+#:schema ./items.schema.json
+# Items of this pack, and changes of items the game or other mods have.
+# A number sets a value; { times = x } multiplies it.
+
+# [[change]]
+# items = ["Material_T1_Wood_Logs", "Material_T1_Resin"]
+# max_stack = { times = 4 }

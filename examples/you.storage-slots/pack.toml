@@ -1,0 +1,7 @@
+id = "you.storage-slots"
+version = "0.1.0"
+name = "Storage slots"
+description = "Every storage box holds more slots, the bigger ones more again."
+authors = ["You"]
+license = "MIT"
+side = "both"
