@@ -222,5 +222,5 @@ meter's maximum is 0, or when the loader refuses one of its content ids. An
 item whose game id a vanilla item has turns the mod off when the game first
 reads the registry, with both items named in the mod's log. A meter on an item that has an entity already turns
 the mod off when the game reads the item.
-[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-safes)
 adds its Safe this way.

@@ -357,16 +357,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-safes"
-version = "0.0.0-dev"
-dependencies = [
- "arc-swap",
- "enshwick",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

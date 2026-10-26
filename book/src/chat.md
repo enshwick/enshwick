@@ -105,6 +105,6 @@ No mod may take the id `enshwick`.
 - [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
   declares administrator actions, answers with `tell`, and runs each line of
   its command file with `console::run` from a scheduled task.
-- [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+- [`enshwick-safes`](https://github.com/enshwick/mod-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.

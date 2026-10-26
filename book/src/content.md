@@ -42,7 +42,7 @@ fn manifest() -> &'static enshwick::abi::Manifest {
 
 `join: true` puts the mod in the mod set the server advertises, so a player
 without it is warned before joining; see [The join check](concepts/join-check.md).
-[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-safes)
 and
 [`enshwick-building-materials`](https://github.com/enshwick/mod-building-materials)
 are content mods of this kind.

@@ -291,7 +291,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 A panic in the filter turns the mod off and lets that rename through.
-[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-safes)
 uses labels and a rename filter for its Safes.
 
 ## Chat lines

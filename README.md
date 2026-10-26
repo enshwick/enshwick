@@ -34,7 +34,7 @@ they are never released.
 | [Flame altar count](https://github.com/enshwick/mod-flame-altar-count)      | how many altars each Flame level allows, twice vanilla by default  |
 | [Furniture comfort](https://github.com/enshwick/mod-furniture-comfort)      | more comfort from furniture, twice vanilla by default              |
 | [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
-| [Safes](mods/enshwick-safes)                                                | a craftable chest only the player who placed it can use            |
+| [Safes](https://github.com/enshwick/mod-safes)                              | a craftable chest only the player who placed it can use            |
 | [Building materials x2](https://github.com/enshwick/mod-building-materials) | twice the output of block, roof, overgrowth and decor recipes      |
 | [Build camera](https://github.com/enshwick/mod-build-camera)                | the building fly mode for every player, without the skill          |
 | [Shared experience](https://github.com/enshwick/mod-shared-experience)      | every character keeps up with the one furthest ahead in experience |

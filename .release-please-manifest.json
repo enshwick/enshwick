@@ -6,6 +6,5 @@
   "crates/enshwick-macros": "0.0.0-dev",
   "crates/enshwick-reflect": "0.0.0-dev",
   "crates/enshwick-gamedata": "0.0.0-dev",
-  "mods/enshwick-safes": "0.0.0-dev",
   "mods/enshwick-optimizer": "0.0.0-dev"
 }
