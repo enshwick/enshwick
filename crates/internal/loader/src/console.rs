@@ -132,30 +132,33 @@ mod tests {
         assert_eq!(parse("   "), Line::Empty);
         assert_eq!(parse("enshwick"), Line::Loader(Tool::Mods));
         assert_eq!(parse("Enshwick  HELP"), Line::Loader(Tool::Help));
-        assert_eq!(parse("enshwick safes"), Line::Loader(Tool::About("safes")));
+        assert_eq!(
+            parse("enshwick you.trading-post"),
+            Line::Loader(Tool::About("you.trading-post"))
+        );
         assert_eq!(
             parse("enshwick profile reset"),
             Line::Loader(Tool::Profile { reset: true })
         );
         assert_eq!(
-            parse("enshwick config safes language uk"),
-            Line::Loader(Tool::Config("safes language uk"))
+            parse("enshwick config you.trading-post language uk"),
+            Line::Loader(Tool::Config("you.trading-post language uk"))
         );
         assert_eq!(
             parse("enshwick ui-demo Ann Lee"),
             Line::Loader(Tool::UiDemo("Ann Lee"))
         );
         assert_eq!(
-            parse("admin-tools give 7 1  Ann "),
+            parse("you.my-mod give 7 1  Ann "),
             Line::Mod {
-                id: "admin-tools",
+                id: "you.my-mod",
                 rest: "give 7 1  Ann"
             }
         );
         assert_eq!(
-            parse("safes"),
+            parse("you.trading-post"),
             Line::Mod {
-                id: "safes",
+                id: "you.trading-post",
                 rest: ""
             }
         );
@@ -163,11 +166,11 @@ mod tests {
 
     #[test]
     fn a_log_query_takes_its_words_in_any_order() {
-        let known = |id: &str| id == "safes";
+        let known = |id: &str| id == "you.trading-post";
         assert_eq!(log_query("", known), Ok((None, Level::DEBUG, 10)));
         assert_eq!(
-            log_query("warn 5 safes", known),
-            Ok((Some("safes".to_owned()), Level::WARN, 5))
+            log_query("warn 5 you.trading-post", known),
+            Ok((Some("you.trading-post".to_owned()), Level::WARN, 5))
         );
         assert_eq!(
             log_query("Enshwick 999", known),
