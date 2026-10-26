@@ -24,7 +24,7 @@ deny = [
     { crate = "webpki-roots", reason = "no TLS in the game process" },
     { crate = "minisign-verify", reason = "releases are not signature-checked in game" },
     { crate = "percent-encoding", reason = "no HTTP client in the game process" },
-    { crate = "enshwick-loader", wrappers = ["enshwick-compat"], reason = "cargo-enshwick shares code with the loader only through the reflect and gamedata crates" },
+    { crate = "enshwick-loader", wrappers = ["xtask"], reason = "cargo-enshwick shares code with the loader only through the gamedata crate" },
 ]
 
 [sources]
