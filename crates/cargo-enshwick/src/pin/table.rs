@@ -232,7 +232,14 @@ fn patterns_into(
 ) -> Result<Patterned, String> {
     let present =
         enshwick_loader_builds::Table::parse(&doc.to_string()).map_err(|e| e.to_string())?;
-    let mut anchors_here = anchor::of_table(&present, exe);
+    let pinned = |id: &str| {
+        present
+            .symbols()
+            .iter()
+            .find(|s| s.id() == id)
+            .map(enshwick_loader_builds::Symbol::rva)
+    };
+    let mut anchors_here = anchor::of_table(&present, exe, pinned);
     anchors_here.extend(anchors.iter().map(|(id, a)| (id.clone(), a.clone())));
     let (code, _) = exe.text();
     let written = pattern_texts(doc, "constants");
