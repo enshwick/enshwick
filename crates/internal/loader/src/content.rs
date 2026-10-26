@@ -396,16 +396,22 @@ fn serve_changes(
             apply,
             user: user.expose_provenance(),
         };
+        // A development reload builds the changed resources again.
+        let keep = crate::reload::copies();
         match served.iter_mut().find(|s| s.key == key) {
             Some(entry) if crate::data_changes::goes_first(&key, &entry.base) => {
                 entry.patches.insert(0, patch);
+                entry.keeps_base.fetch_or(keep, Ordering::Relaxed);
             }
-            Some(entry) => entry.patches.push(patch),
+            Some(entry) => {
+                entry.patches.push(patch);
+                entry.keeps_base.fetch_or(keep, Ordering::Relaxed);
+            }
             None => served.push(Served {
                 key,
                 base: key,
                 patches: vec![patch],
-                keeps_base: AtomicBool::new(false),
+                keeps_base: AtomicBool::new(keep),
                 state: Mutex::new(State::default()),
                 rebuilding: Mutex::new(()),
             }),

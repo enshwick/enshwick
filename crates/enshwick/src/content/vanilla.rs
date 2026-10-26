@@ -241,8 +241,8 @@ impl Vanilla {
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
-    ///     let chest = vanilla.item("Prop_Decoration_T0_Storage_16")?;
-    ///     assert_eq!(vanilla.container_slots(chest)?, Some(16));
+    ///     let chest = vanilla.item("Prop_Storage_24_T1_Box")?;
+    ///     assert_eq!(vanilla.container_slots(chest)?, Some(24));
     /// }
     /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
     /// ```
@@ -737,8 +737,8 @@ pub(crate) mod tests {
     #[test]
     fn a_chest_s_slots_are_read_from_the_template_it_places() {
         let chest = Guid([1; 16]);
-        let vanilla = game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
-        assert_eq!(vanilla.container_slots(chest), Ok(Some(16)));
+        let vanilla = game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+        assert_eq!(vanilla.container_slots(chest), Ok(Some(24)));
         assert_eq!(vanilla.container_slots(Guid([7; 16])), Ok(None));
         assert_eq!(
             game(&[]).container_slots(chest),

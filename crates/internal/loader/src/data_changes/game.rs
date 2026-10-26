@@ -3,7 +3,9 @@
 //! hold a raised stack size sets on the side that keeps the world.
 
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
+
+use arc_swap::ArcSwap;
 
 use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
 use enshwick::content::Guid;
@@ -14,7 +16,7 @@ use enshwick::state::Hold;
 use rustc_hash::FxHashMap;
 
 use super::{
-    Declared, HoldStep, Key, Merged, Raised, credited, grown_slots, hold_step, merge,
+    Conflict, Declared, HoldStep, Key, Merged, Raised, credited, grown_slots, hold_step, merge,
     template_slots,
 };
 use crate::host::Loader;
@@ -29,15 +31,29 @@ struct Changes {
     raised: Mutex<Option<FxHashMap<ModIndex, Raised>>>,
 }
 
-/// What the end of init fixed for the process.
+/// What the end of init fixed for the process; the changes themselves
+/// change only in a development reload.
 struct Sealed {
     loader: &'static Loader,
-    merged: Merged,
+    /// Every change in force, in load order.
+    declared: Mutex<Vec<Declared>>,
+    merged: ArcSwap<Merged>,
     /// The names packs gave the changed entries.
     labels: FxHashMap<Guid, String>,
     /// For each item with changed container slots, the place of its last
     /// such change in load order.
     slots_order: FxHashMap<Guid, usize>,
+    /// The resources the loader patches, filled once its patches are made.
+    patched: OnceLock<Vec<ResourceKey>>,
+    /// The template each item with changed container slots places.
+    templates: OnceLock<FxHashMap<Guid, ResourceKey>>,
+}
+
+impl Sealed {
+    /// The merged changes in force now.
+    fn merged(&self) -> Arc<Merged> {
+        self.merged.load_full()
+    }
 }
 
 static CHANGES: Changes = Changes {
@@ -71,7 +87,7 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
 pub(crate) fn wanted(loader: &Loader) -> bool {
     let declared = CHANGES.sealed.get().map_or_else(
         || !CHANGES.declared.relock().is_empty(),
-        |sealed| !sealed.merged.is_empty(),
+        |sealed| !sealed.merged().is_empty(),
     );
     declared
         || enshwick::state::holds(&loader.data_dir)
@@ -111,15 +127,10 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
         .any(|d| d.relation == Relation::REQUIRES && b.owns(&d.id))
 }
 
-/// Merges every declared change, reports the overridden sets, and returns
-/// the loader's patches, one per changed item: its key and the patch with
-/// its pointer. Called once, when the served resources are sealed.
-pub(crate) fn serve(
-    loader: &'static Loader,
-) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
-    let declared = std::mem::take(&mut *CHANGES.declared.relock());
-    let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
-    for conflict in &conflicts {
+/// Reports each set another mod overrides in both mods' logs and the
+/// conflict report.
+fn report(loader: &Loader, conflicts: &[Conflict]) {
+    for conflict in conflicts {
         let line = conflict.describe(|m| id(loader, m));
         let level = if conflict.intended {
             Level::INFO
@@ -146,6 +157,31 @@ pub(crate) fn serve(
             Status::OK,
         );
     }
+}
+
+/// The items whose stack size some change of `merged` changes.
+fn stacked(merged: &Merged) -> Vec<Guid> {
+    merged
+        .entries(Entry::Item)
+        .into_iter()
+        .filter(|item| {
+            merged
+                .keys(*item)
+                .iter()
+                .any(|k| k.field == Field::MaxStack)
+        })
+        .collect()
+}
+
+/// Merges every declared change, reports the overridden sets, and returns
+/// the loader's patches, one per changed item: its key and the patch with
+/// its pointer. Called once, when the served resources are sealed.
+pub(crate) fn serve(
+    loader: &'static Loader,
+) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+    let declared = std::mem::take(&mut *CHANGES.declared.relock());
+    let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
+    report(loader, &conflicts);
     let labels: FxHashMap<Guid, String> = declared
         .iter()
         .filter_map(|d| label(&d.source).map(|l| (d.change.entry, l.to_owned())))
@@ -155,18 +191,21 @@ pub(crate) fn serve(
         &loader.reflection,
     )
     .and_then(|at| usize::try_from(at).ok());
-    let items: Vec<Guid> = merged.entries(Entry::Item);
+    let items = stacked(&merged);
     let slots_order: FxHashMap<Guid, usize> = declared
         .iter()
         .enumerate()
         .filter(|(_, d)| d.change.field == Field::Slots)
         .map(|(at, d)| (d.change.entry, at))
         .collect();
-    let _sealed = CHANGES.sealed.set(Sealed {
+    let sealed = CHANGES.sealed.get_or_init(|| Sealed {
         loader,
-        merged,
+        declared: Mutex::new(declared),
+        merged: ArcSwap::from_pointee(merged),
         labels,
         slots_order,
+        patched: OnceLock::new(),
+        templates: OnceLock::new(),
     });
     let mut patches = Vec::new();
     match max_stack_at {
@@ -192,7 +231,87 @@ pub(crate) fn serve(
         patches.push(patch);
     }
     patches.extend(container_patches(loader));
+    let _first = sealed
+        .patched
+        .set(patches.iter().map(|(key, _, _)| *key).collect());
     patches
+}
+
+/// Takes `changes` as mod `owner`'s changes from now on, for a development
+/// reload: merges every change again, reports the overridden sets, and
+/// builds each resource the loader patches again in place; how many it
+/// rebuilt.
+///
+/// # Errors
+///
+/// What takes a restart: a change of an entry the loader did not patch at
+/// start, or a rebuild that changes a resource's length, such as an
+/// ingredient taken out or added.
+pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<usize, String> {
+    let sealed = CHANGES
+        .sealed
+        .get()
+        .ok_or_else(|| "no changes were in force at start".to_owned())?;
+    let loader = sealed.loader;
+    let patched = sealed.patched.get().cloned().unwrap_or_default();
+    let mut declared = sealed.declared.relock();
+    let next = super::replace_owner(
+        &declared,
+        owner,
+        changes
+            .into_iter()
+            .map(|(change, source)| Declared {
+                owner,
+                change,
+                source,
+            })
+            .collect(),
+    );
+    let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
+    if let Some(item) = stacked(&merged)
+        .into_iter()
+        .find(|item| !patched.contains(&item.key_by_hash(crate::catalogue::types::ITEM_INFO)))
+    {
+        return Err(format!(
+            "the stack size of {item} changes for the first time, which takes a restart"
+        ));
+    }
+    let recipes = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
+    if !merged.entries(Entry::Recipe).is_empty() && !patched.contains(&recipes) {
+        return Err("recipes change for the first time, which takes a restart".to_owned());
+    }
+    let templates = sealed.templates.get();
+    let slotted = merged
+        .entries(Entry::Item)
+        .into_iter()
+        .filter(|item| merged.keys(*item).iter().any(|k| k.field == Field::Slots));
+    for item in slotted {
+        if !templates.is_some_and(|t| t.contains_key(&item)) {
+            return Err(format!(
+                "the container slots of {item} change for the first time, which takes a restart"
+            ));
+        }
+    }
+    report(loader, &conflicts);
+    sealed.merged.store(Arc::new(merged));
+    *declared = next;
+    drop(declared);
+    let mut failed = Vec::new();
+    for key in &patched {
+        let status = crate::content::rebuild(ModIndex::LOADER, *key);
+        if !status.is_ok() {
+            failed.push(format!("{}:{:08x}", Guid(key.guid), key.type_hash));
+        }
+    }
+    if failed.is_empty() {
+        Ok(patched.len())
+    } else {
+        Err(format!(
+            "{} resources take a restart, as their length changed: {}",
+            failed.len(),
+            failed.join(", ")
+        ))
+    }
 }
 
 /// The loader's patches of the templates the items with changed container
@@ -203,17 +322,11 @@ fn container_patches(
     let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
-    let items: Vec<Guid> = sealed
-        .merged
+    let merged = sealed.merged();
+    let items: Vec<Guid> = merged
         .entries(Entry::Item)
         .into_iter()
-        .filter(|item| {
-            sealed
-                .merged
-                .keys(*item)
-                .iter()
-                .any(|k| k.field == Field::Slots)
-        })
+        .filter(|item| merged.keys(*item).iter().any(|k| k.field == Field::Slots))
         .collect();
     if items.is_empty() {
         return Vec::new();
@@ -255,6 +368,7 @@ fn container_patches(
         }
     }
     let mut patches = Vec::new();
+    let mut placed_by = FxHashMap::default();
     for (template, mut items) in templates {
         items.sort_by_key(|item| sealed.slots_order.get(item).copied().unwrap_or(0));
         crate::log!(
@@ -268,9 +382,13 @@ fn container_patches(
         );
         let patch: &'static ContainerPatch = Box::leak(Box::new(ContainerPatch { items, layout }));
         let key = template.key_by_hash(crate::catalogue::types::TEMPLATE);
+        for item in &patch.items {
+            placed_by.insert(*item, key);
+        }
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
         patches.push((key, build_container as enshwick::abi::ResourcePatchFn, user));
     }
+    let _first = sealed.templates.set(placed_by);
     patches
 }
 
@@ -334,7 +452,7 @@ fn resized(patch: &ContainerPatch, bytes: &[u8]) -> Option<Vec<u8>> {
         .filter_map(|&item| {
             let key = Key::new(item, Field::Slots);
             let value = sealed
-                .merged
+                .merged()
                 .value(key, f64::from(old), |m| on(sealed.loader, m))?;
             Some((item, value))
         })
@@ -374,7 +492,7 @@ fn recipe_patch(
     loader: &'static Loader,
 ) -> Option<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
     let sealed = CHANGES.sealed.get()?;
-    let recipes = sealed.merged.entries(Entry::Recipe);
+    let recipes = sealed.merged().entries(Entry::Recipe);
     if recipes.is_empty() {
         return None;
     }
@@ -449,9 +567,10 @@ unsafe extern "system" fn build_recipes(
     unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let sealed = CHANGES.sealed.get()?;
+        let merged = sealed.merged();
         let live = Live {
             loader: sealed.loader,
-            merged: &sealed.merged,
+            merged: &merged,
         };
         change_recipes_in(&patch.layout, patch.duration, &bytes, &live)
     }));
@@ -511,15 +630,11 @@ unsafe extern "system" fn build_item(
 
 /// Writes the changed stack size into the item `bytes`, and notes a raise.
 fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
-    let Some(Sealed {
-        loader,
-        merged,
-        labels,
-        ..
-    }) = CHANGES.sealed.get()
-    else {
+    let Some(sealed) = CHANGES.sealed.get() else {
         return;
     };
+    let (loader, labels) = (sealed.loader, &sealed.labels);
+    let merged = sealed.merged();
     let at = patch.max_stack_at;
     let Some(field) = bytes.get_mut(at..at + 2) else {
         crate::log!(WARN, "item {} is too short for its stack size", patch.item);
