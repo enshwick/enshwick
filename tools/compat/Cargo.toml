@@ -12,7 +12,6 @@ publish.workspace = true
 clap = { workspace = true }
 enshwick.workspace = true
 enshwick-gamedata.workspace = true
-enshwick-reflect.workspace = true
 memchr.workspace = true
 serde.workspace = true
 serde_json.workspace = true

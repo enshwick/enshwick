@@ -5,7 +5,6 @@ members = [
     "crates/enshwick",
     "crates/enshwick-gamedata",
     "crates/enshwick-macros",
-    "crates/enshwick-reflect",
     "crates/internal/*",
     "examples/hot-reload",
     "examples/market-stalls",
@@ -36,7 +35,6 @@ bytemuck = { version = "1.25.2", default-features = false, features = ["derive",
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.2" }
 enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.2" }
-enshwick-reflect = { path = "crates/enshwick-reflect", version = "1.0.0-alpha.2" }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }

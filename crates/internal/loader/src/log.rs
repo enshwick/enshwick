@@ -83,8 +83,8 @@ pub fn open(dir: &Path) {
             let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
                 return;
             };
-            let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
-                std::collections::HashMap::new();
+            let mut files: rustc_hash::FxHashMap<String, Option<std::fs::File>> =
+                rustc_hash::FxHashMap::default();
             for (level, source, line) in receive {
                 let dropped = DROPPED.swap(0, Ordering::Relaxed);
                 if dropped > 0 {

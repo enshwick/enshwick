@@ -296,11 +296,11 @@ one people play on, with a copy of a world:
 - [`enshwick-probe`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
-  `logs/enshwick/mods/probe.log`;
+  `logs/enshwick/mods/enshwick.probe.log`;
 - [`enshwick-research`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-research),
   another development mod, logs what a running client hands its item
   tooltip and what a refused join leaves behind, to
-  `logs/enshwick/mods/research.log`.
+  `logs/enshwick/mods/enshwick.research.log`.
 
 What needs a player, such as hits, levels or a character's stats, waits for
 a client that joins the server or hosts the game.

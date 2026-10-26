@@ -8,7 +8,7 @@
 //! # Examples
 //!
 //! ```no_run
-//! use enshwick_reflect::{Image, Layout, Reflection};
+//! use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -35,7 +35,7 @@ pub use pe::{Fingerprint, Image, ImageError, Layout, Section};
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout, Reflection};
+/// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -136,7 +136,7 @@ impl<'a> TypeInfo<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout, Reflection};
+/// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -193,7 +193,7 @@ impl<'a> Field<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout, Reflection};
+/// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -271,7 +271,7 @@ impl<'a> System<'a> {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout, LookupError, Reflection};
+/// use enshwick_gamedata::reflect::{Image, Layout, LookupError, Reflection};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -329,7 +329,7 @@ const MAX_LIST: u64 = 64;
 /// # Examples
 ///
 /// ```
-/// use enshwick_reflect::fnv1a32;
+/// use enshwick_gamedata::reflect::fnv1a32;
 ///
 /// assert_eq!(fnv1a32(b""), 0x811c_9dc5);
 /// assert_eq!(fnv1a32(b"foobar"), 0xbf9c_f968);
@@ -349,7 +349,7 @@ pub const fn fnv1a32(bytes: &[u8]) -> u32 {
 ///
 /// # Examples
 ///
-/// See the [crate documentation](crate).
+/// See the [module documentation](crate::reflect).
 #[derive(Debug)]
 pub struct Reflection<'a> {
     types: FxHashMap<&'a str, Vec<TypeInfo<'a>>>,
@@ -364,7 +364,7 @@ impl<'a> Reflection<'a> {
     ///
     /// # Examples
     ///
-    /// See the [crate documentation](crate).
+    /// See the [module documentation](crate::reflect).
     #[must_use]
     pub fn scan(image: &Image<'a>) -> Self {
         let mut types: FxHashMap<&'a str, Vec<TypeInfo<'a>>> = FxHashMap::default();
@@ -431,7 +431,7 @@ impl<'a> Reflection<'a> {
     ///
     /// # Examples
     ///
-    /// See the [crate documentation](crate).
+    /// See the [module documentation](crate::reflect).
     pub fn field_offset(&self, type_name: &str, field: &str) -> Result<u64, LookupError> {
         let info = self.type_info(type_name)?;
         let mut found = info.fields.iter().filter(|f| f.name == field);
@@ -488,7 +488,7 @@ impl<'a> Reflection<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout, Reflection};
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -507,7 +507,7 @@ impl<'a> Reflection<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout, Reflection};
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;

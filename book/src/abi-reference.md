@@ -8,10 +8,10 @@ chapter is for reading logs and the rare call to the raw table. The exact types 
 
 ## Versions
 
-| Constant | Value | Meaning |
-| --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
-| [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 2 | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | 72 | A newer minor only appends. |
+| Constant | Meaning |
+| --- | --- |
+| [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A loader refuses a mod built for another major. |
+| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A newer minor only appends. |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
 [Releasing mods](releasing.md#versions)): a platform release raises
@@ -38,6 +38,37 @@ A mod built against an older `enshwick` loads under a newer loader:
 the loader reads the manifest fields the mod's header covers and takes the
 rest as empty, with no build rows and no names. A mod built against a
 newer one waits for a loader update.
+
+## How does `enshwick` version its API?
+
+The `enshwick` crate follows [SemVer](https://semver.org) for its Rust API,
+and the ABI version follows the crate:
+
+| Change | ABI | `enshwick` version |
+| --- | --- | --- |
+| A field, struct or host table entry removed, moved or resized | major | major |
+| A public item removed or renamed, a signature changed | none | major |
+| A field appended to a struct, an entry appended to the host table | minor | minor |
+| A new public item that adds no ABI | none | minor |
+| A fix that changes neither the API nor the ABI | none | patch |
+
+Until 1.0.0 the crate is a prerelease: any release may break the API, and a
+break raises the minor of a `0.x` version or the prerelease number of
+`1.0.0-alpha.N`. From 1.0.0 the table holds as written.
+
+Three checks hold the repository to it:
+
+- A layout file,
+  [`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/layout.txt),
+  lists the size, alignment and field offsets of every ABI type. A test
+  fails when the layout differs from the file, and refuses to rewrite the
+  file unless the change appends with a higher `ABI_MINOR` or comes with a
+  higher `ABI_MAJOR`.
+- CI runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
+  on `enshwick` against its last release on crates.io, so a release whose
+  version claims less change than its API made fails.
+- A test builds a mod against the last published `enshwick` and starts it
+  against the current host table.
 
 ## The exports of a mod
 

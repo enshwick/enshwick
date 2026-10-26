@@ -4,7 +4,7 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick_reflect::{Image, Layout, Reflection};
+    use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     fn check_common(reflection: &Reflection<'_>) {
         let shape = "keen::ecs::TriggerShape";
@@ -19,7 +19,7 @@ mod tests {
         assert!(reflection.system("add_buildzones_server").is_ok());
         let events: Vec<&str> = reflection
             .derived_from("keen::ecs::Event")
-            .map(enshwick_reflect::TypeInfo::name)
+            .map(enshwick_gamedata::reflect::TypeInfo::name)
             .collect();
         for event in [
             "keen::ecs::HitEvent",

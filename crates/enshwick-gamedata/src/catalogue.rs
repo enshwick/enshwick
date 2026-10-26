@@ -3,9 +3,9 @@
 //! game's reflection, so a game update that renames or moves something
 //! changes this table, not the mods.
 
+use crate::reflect::{Reflection, TypeInfo};
 use enshwick::Off;
 use enshwick::content::EngineFacts;
-use enshwick_reflect::{Reflection, TypeInfo};
 
 /// How one engine fact is found.
 ///
@@ -666,7 +666,7 @@ pub fn type_name(name: &str) -> &str {
 #[must_use]
 pub const fn type_hash(id: &str) -> Option<u32> {
     match fact(id) {
-        Some(Fact::Type(engine)) => Some(enshwick_reflect::fnv1a32(engine.as_bytes())),
+        Some(Fact::Type(engine)) => Some(crate::reflect::fnv1a32(engine.as_bytes())),
         _ => None,
     }
 }
@@ -697,7 +697,7 @@ const EVENT_BASE: &str = "keen::ecs::Event";
 ///
 /// ```
 /// use enshwick_gamedata::catalogue::event_types;
-/// use enshwick_reflect::Reflection;
+/// use enshwick_gamedata::reflect::Reflection;
 ///
 /// fn count(reflection: &Reflection<'_>) -> usize {
 ///     event_types(reflection).count()
@@ -716,7 +716,7 @@ pub fn event_types<'r, 'a>(
 ///
 /// ```
 /// use enshwick_gamedata::catalogue::constant;
-/// use enshwick_reflect::Reflection;
+/// use enshwick_gamedata::reflect::Reflection;
 ///
 /// fn name_at(reflection: &Reflection<'_>) -> Option<u64> {
 ///     constant("item_info.name", reflection)
@@ -737,7 +737,7 @@ pub fn constant(id: &str, reflection: &Reflection<'_>) -> Option<u64> {
 /// ```
 /// use enshwick::content::items::ItemLayout;
 /// use enshwick_gamedata::catalogue::Reflected;
-/// use enshwick_reflect::Reflection;
+/// use enshwick_gamedata::reflect::Reflection;
 ///
 /// fn items(reflection: &Reflection<'_>) -> Result<ItemLayout, enshwick::Off> {
 ///     ItemLayout::resolve(&Reflected(reflection))
@@ -863,7 +863,7 @@ mod tests {
             std::fs::read(client).unwrap(),
         ];
         let images = bytes.each_ref().map(|bytes| {
-            enshwick_reflect::Image::parse(bytes, enshwick_reflect::Layout::File, None).unwrap()
+            crate::reflect::Image::parse(bytes, crate::reflect::Layout::File, None).unwrap()
         });
         let reflections = images.each_ref().map(Reflection::scan);
         for &(id, fact) in FACTS {

@@ -187,7 +187,7 @@ pub(crate) fn link(loader: &'static Loader) {
         .reflection
         .system("inventory_actions")
         .ok()
-        .map(enshwick_reflect::System::entry);
+        .map(enshwick_gamedata::reflect::System::entry);
     let stock_flags = if layout.stock_ui_return == 0 {
         HookFlags::NONE
     } else {

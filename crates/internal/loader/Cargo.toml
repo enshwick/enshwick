@@ -23,7 +23,6 @@ arrayvec.workspace = true
 base64.workspace = true
 enshwick.workspace = true
 enshwick-gamedata.workspace = true
-enshwick-reflect.workspace = true
 postcard.workspace = true
 rustc-hash.workspace = true
 semver.workspace = true

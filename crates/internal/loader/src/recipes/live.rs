@@ -1,7 +1,6 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
@@ -203,7 +202,7 @@ fn names(loader: &Loader) -> Arc<Names> {
 }
 
 /// The mods' content ids by the game id of their GUID.
-fn content_names() -> HashMap<u32, String> {
+fn content_names() -> FxHashMap<u32, String> {
     crate::ids::with(|ids| {
         ids.content()
             .into_iter()
