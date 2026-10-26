@@ -94,10 +94,11 @@ pub(crate) extern "system" fn change_data(
     change: *const crate::abi::DataChange,
 ) -> Status {
     // SAFETY: the safe layer passes null or a record with its header, valid
-    // for the call; an all-zero record is valid.
-    let Some(raw) =
-        (unsafe { crate::abi::read_headed(change, size_of::<crate::abi::DataChange>()) })
-    else {
+    // for the call; an all-zero record is valid, and `item` reads as zero
+    // for a record of a mod built before it.
+    let Some(raw) = (unsafe {
+        crate::abi::read_headed(change, core::mem::offset_of!(crate::abi::DataChange, item))
+    }) else {
         return Status::BAD_ARGS;
     };
     let Ok(Some(change)) = crate::content::changes::Change::from_abi(&raw) else {

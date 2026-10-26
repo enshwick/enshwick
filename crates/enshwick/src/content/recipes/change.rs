@@ -23,10 +23,11 @@ pub trait RecipeChanges {
 /// many recipes changed. `duration` is where a recipe keeps its time, when
 /// the build reflects it.
 ///
-/// Counts change in place. An ingredient set to 0 is taken out, and one the
-/// recipe lacks is added as a copy of its first ingredient; a recipe with no
-/// ingredient gets none. Either moves the ingredient list to the end of the
-/// registry, so only a first build takes it.
+/// Counts change in place. An ingredient that takes any item of a kind keeps
+/// its count. An ingredient set to 0 is taken out, and one the recipe lacks
+/// is added with nothing but its item and count. Either moves the
+/// ingredient list to the end of the registry, so only a first build takes
+/// it.
 ///
 /// # Examples
 ///
@@ -126,8 +127,17 @@ fn scale_outputs(
     Some(touched)
 }
 
-/// Changes the ingredients of the recipe at `at`: every count, then each
-/// named ingredient, taken out at 0 and added when missing.
+/// Whether an ingredient names an item: one that takes any item of a kind
+/// leaves its item stack empty and keeps its count elsewhere.
+fn names_item(input: &[u8]) -> bool {
+    input
+        .get(..16)
+        .is_some_and(|guid| guid.iter().any(|&b| b != 0))
+}
+
+/// Changes the ingredients of the recipe at `at`: every count of an
+/// ingredient that names an item, then each named ingredient, taken out at
+/// 0 and added when missing.
 fn change_inputs(
     layout: &RecipeLayout,
     blob: &mut Blob,
@@ -154,7 +164,7 @@ fn change_inputs(
         Some(())
     };
     if keys.iter().any(|(field, _)| *field == Field::Cost) {
-        for input in &mut inputs {
+        for input in inputs.iter_mut().filter(|input| names_item(input)) {
             let taken = count_at(input, layout.stack_count)?;
             if let Some(new) = changes.value(recipe, Field::Cost, None, f64::from(taken)) {
                 set(input, whole(new))?;
@@ -182,10 +192,7 @@ fn change_inputs(
             (Some(i), new) => set(&mut inputs[i], new)?,
             (None, 0) => {}
             (None, new) => {
-                let Some(mut added) = inputs.first().or(before.first()).cloned() else {
-                    crate::warn!("recipe {recipe} has no ingredient to copy for {item}");
-                    continue;
-                };
+                let mut added = vec![0u8; size];
                 added.get_mut(..16)?.copy_from_slice(&item.0);
                 added
                     .get_mut(layout.stack_item..layout.stack_item + 4)?
@@ -378,6 +385,31 @@ mod tests {
             ((Field::Ingredient, Some(WOOD)), Value::Set(1.0)),
         ]);
         assert_eq!(inputs(&blob), [(WOOD, 1), (RESIN, 5)]);
+    }
+
+    #[test]
+    fn an_ingredient_of_a_kind_keeps_its_count_and_an_added_one_names_only_its_item() {
+        let mut blob = Blob::new(&registry());
+        let (recipes, _) = blob.array(8).unwrap();
+        let (at, _) = blob.array(recipes + 0x28).unwrap();
+        let mut kind = vec![0u8; 48];
+        kind[24 + 20..24 + 24].copy_from_slice(&7u32.to_le_bytes());
+        assert!(blob.write(at + 48, &kind));
+        let bytes = blob.into_bytes();
+        let changes = Table(HashMap::from([
+            ((Field::Cost, None), vec![Value::Times(2.0)]),
+            ((Field::Ingredient, Some(STONE)), vec![Value::Set(1.0)]),
+        ]));
+        let (built, _) = change_recipes_in(&LAYOUT, None, &bytes, &changes).unwrap();
+        let blob = Blob::new(&built);
+        let (recipes, _) = blob.array(8).unwrap();
+        let (at, count) = blob.array(recipes + 0x28).unwrap();
+        assert_eq!(count, 3);
+        let input = |i: usize| &blob.bytes()[at + i * 48..at + (i + 1) * 48];
+        assert_eq!(count_at(input(0), 0x14), Some(4));
+        assert_eq!(input(1), &kind[..]);
+        assert_eq!(&input(2)[..16], &STONE.0);
+        assert!(input(2)[24..].iter().all(|&b| b == 0));
     }
 
     #[test]

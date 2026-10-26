@@ -317,7 +317,7 @@ impl Pack {
     /// ```
     /// use enshwick::packs::{Pack, PackFiles};
     ///
-    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Torch\"\n");
+    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Tool_Torch01\"\n");
     /// let errors = Pack::parse_with("lights", &files, None).err().ok_or("parsed")?;
     /// assert!(errors.to_string().contains("items.toml:1"));
     /// # Ok::<(), &str>(())
@@ -456,7 +456,7 @@ impl Pack {
 
     /// The pack's changes of vanilla values, each with its source: the file
     /// and line, then the name the pack wrote unless it is a GUID, such as
-    /// `items.toml:12 (Wood_Log)`.
+    /// `items.toml:12 (Material_T1_Wood_Logs)`.
     ///
     /// # Examples
     ///

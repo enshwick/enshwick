@@ -75,7 +75,7 @@ the game lacks, or that several items carry, is a problem at its line, with
 the names that look like it:
 
 ```text
-error [you.lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
+error [you.lanterns] items.toml:7:1: no item "Tool_Torch1" in this pack, and no vanilla item "Tool_Torch1"; near: Tool_Torch01
 ```
 
 `cargo enshwick id you.lockers:locker` prints a name's GUID and game id.
@@ -107,11 +107,11 @@ another mod's, with a `[[change]]` table:
 
 ```toml
 [[change]]
-items = ["Wood_Log", "Stone_Raw", "6943053a-32c1-4718-ae22-e61427ddf54d"]
+items = ["Material_T1_Wood_Logs", "Build_TerrainMaterial_T1_Stone", "6943053a-32c1-4718-ae22-e61427ddf54d"]
 max_stack = 999
 
 [[change]]
-items = ["Resin"]
+items = ["Material_T1_Resin"]
 max_stack = { times = 4 }
 ```
 
@@ -132,23 +132,23 @@ every other.
 
 ```toml
 [[change]]
-recipes = ["Torch_Recipe"]
+recipes = ["Tool_Torch01_T0_PK"]
 output_count = 3
 
 [[change]]
-output = ["Wood_Planks"]
+output = ["Material_T2_Wood_Planks"]
 cost = { times = 0.5 }
 time = { times = 0.5 }
 
 [[change]]
-output = ["Torch"]
-ingredients = { Wood_Log = 1, Resin = 0, Stone_Raw = 2 }
+output = ["Tool_Torch01"]
+ingredients = { Material_T1_Wood_Logs = 1, Material_T1_Resin = 0, Build_TerrainMaterial_T1_Stone = 2 }
 ```
 
-`recipes` names recipes by GUID, by content id, by a name of the pack's own
-recipes, or by a vanilla recipe's debug name. `output` names items and picks
-every vanilla recipe that makes one of them. A change gives at least one of
-the two.
+`recipes` names vanilla recipes by GUID or by debug name. `output` names
+items and picks every vanilla recipe that makes one of them. A change gives
+at least one of the two. A recipe a mod or the pack adds gets its values
+where it is defined, so naming one here is a problem.
 
 | Field | Meaning | Values |
 | --- | --- | --- |
@@ -158,7 +158,8 @@ the two.
 | `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
 
 `cost` applies first, then `ingredients`, so a named ingredient wins over the
-cost. A scaled count of 1 or more stays at least 1. Most workbench recipes
+cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
+any item of a kind keeps its count. Most workbench recipes
 take no time; production stations such as the kiln do. A changed time
 reaches a production that runs already from its next step on.
 
@@ -178,7 +179,7 @@ later pack [requires](#packtoml) the other, it overrides it on purpose and
 the line is information:
 
 ```text
-warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Wood_Log), which overrides 500 from ann.bags items.toml:7 (Wood_Log)
+warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Material_T1_Wood_Logs), which overrides 500 from ann.bags items.toml:7 (Material_T1_Wood_Logs)
 ```
 
 A Rust mod declares the same changes with
@@ -194,7 +195,7 @@ depends on that pack. The first time such a world loads, the pack sets a
 stops before the world loads and the log says which pack and items:
 
 ```text
-error you.stacks holds this game (it lets Wood_Log and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
 ```
 
 To remove such a pack safely, split every stack larger than the game's size

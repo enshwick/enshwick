@@ -34,8 +34,8 @@ const NEAR: usize = 5;
 /// ```
 /// use enshwick::content::vanilla::VanillaError;
 ///
-/// let unknown = VanillaError::Unknown { name: "Torchh".into(), near: vec!["Torch".into()] };
-/// assert_eq!(unknown.to_string(), "no vanilla item \"Torchh\"; near: Torch");
+/// let unknown = VanillaError::Unknown { name: "Tool_Torch1".into(), near: vec!["Tool_Torch01".into()] };
+/// assert_eq!(unknown.to_string(), "no vanilla item \"Tool_Torch1\"; near: Tool_Torch01");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -258,7 +258,7 @@ impl Vanilla {
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
-    ///     let _recipe = vanilla.recipe("Torch");
+    ///     let _recipe = vanilla.recipe("Tool_Torch01");
     /// }
     /// ```
     pub fn recipe(&self, name: &str) -> Result<Guid, VanillaError> {
@@ -289,7 +289,7 @@ impl Vanilla {
     /// use enshwick::content::vanilla::Vanilla;
     ///
     /// if let Some(vanilla) = Vanilla::game() {
-    ///     let torch = vanilla.item("Torch")?;
+    ///     let torch = vanilla.item("Tool_Torch01")?;
     ///     let _recipes = vanilla.recipes_making(torch)?;
     /// }
     /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
@@ -539,15 +539,19 @@ pub(crate) mod tests {
         let torch = Guid([1; 16]);
         let (one, two) = (Guid([2; 16]), Guid([3; 16]));
         let data = registry(&[
-            (torch, "Torch"),
+            (torch, "Tool_Torch01"),
             (one, "Twin"),
             (two, "Twin"),
-            (Guid([4; 16]), "Torch_Wall"),
+            (Guid([4; 16]), "Material_T2_Wood_Planks"),
+            (Guid([5; 16]), "Material_T1_Wood_Logs"),
         ]);
         let names = registry_names(&ITEMS, &data).unwrap();
-        assert_eq!(names.get("Torch"), Some(&vec![torch]));
-        assert_eq!(near(&names, "torch"), ["Torch", "Torch_Wall"]);
-        assert_eq!(near(&names, "wall"), ["Torch_Wall"]);
+        assert_eq!(names.get("Tool_Torch01"), Some(&vec![torch]));
+        assert_eq!(near(&names, "tool_torch01"), ["Tool_Torch01"]);
+        assert_eq!(
+            near(&names, "wood"),
+            ["Material_T1_Wood_Logs", "Material_T2_Wood_Planks"]
+        );
         assert!(near(&names, "nothing").is_empty());
     }
 
@@ -661,16 +665,22 @@ pub(crate) mod tests {
     #[test]
     fn a_recipe_is_found_by_its_name_and_by_what_it_makes() {
         let (torch, recipe) = (Guid([1; 16]), Guid([3; 16]));
-        let vanilla = game_with_recipes(&[(torch, "Torch")], &[(recipe, "Torch_Recipe", torch)]);
-        assert_eq!(vanilla.recipe("Torch_Recipe"), Ok(recipe));
+        let vanilla = game_with_recipes(
+            &[(torch, "Tool_Torch01")],
+            &[(recipe, "Tool_Torch01_T0_PK", torch)],
+        );
+        assert_eq!(vanilla.recipe("Tool_Torch01_T0_PK"), Ok(recipe));
         assert_eq!(
-            vanilla.recipe("torch_recipe").unwrap_err().to_string(),
-            "no vanilla recipe \"torch_recipe\"; near: Torch_Recipe"
+            vanilla
+                .recipe("tool_torch01_t0_pk")
+                .unwrap_err()
+                .to_string(),
+            "no vanilla recipe \"tool_torch01_t0_pk\"; near: Tool_Torch01_T0_PK"
         );
         assert_eq!(vanilla.recipes_making(torch), Ok(vec![recipe]));
         assert_eq!(vanilla.recipes_making(Guid([9; 16])), Ok(Vec::new()));
         assert_eq!(
-            game(&[]).recipe("Torch_Recipe"),
+            game(&[]).recipe("Tool_Torch01_T0_PK"),
             Err(VanillaError::Unreadable("recipe registry"))
         );
     }
@@ -679,15 +689,15 @@ pub(crate) mod tests {
     fn a_name_finds_its_item_or_explains_why_not() {
         let torch = Guid([1; 16]);
         let vanilla = game(&[
-            (torch, "Torch"),
+            (torch, "Tool_Torch01"),
             (Guid([2; 16]), "Twin"),
             (Guid([3; 16]), "Twin"),
         ]);
-        assert_eq!(vanilla.item("Torch"), Ok(torch));
+        assert_eq!(vanilla.item("Tool_Torch01"), Ok(torch));
         let unknown = vanilla.item("torch").unwrap_err();
         assert_eq!(
             unknown.to_string(),
-            "no vanilla item \"torch\"; near: Torch"
+            "no vanilla item \"torch\"; near: Tool_Torch01"
         );
         let ambiguous = vanilla.item("Twin").unwrap_err().to_string();
         assert!(
@@ -701,7 +711,7 @@ pub(crate) mod tests {
             |_| None,
         );
         assert_eq!(
-            empty.item("Torch"),
+            empty.item("Tool_Torch01"),
             Err(VanillaError::Unreadable("item registry"))
         );
     }

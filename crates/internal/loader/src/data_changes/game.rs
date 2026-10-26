@@ -122,7 +122,10 @@ pub(crate) fn serve(
         for owner in [conflict.winner.owner, conflict.overridden.owner] {
             crate::log::write(level, &id(loader, owner), &line);
         }
-        let feature = format!("{} of {}", conflict.key.field, conflict.key.entry);
+        let feature = match conflict.key.item {
+            Some(item) => format!("{} {item} of {}", conflict.key.field, conflict.key.entry),
+            None => format!("{} of {}", conflict.key.field, conflict.key.entry),
+        };
         crate::conflicts::note(
             feature.clone(),
             conflict.overridden.owner,

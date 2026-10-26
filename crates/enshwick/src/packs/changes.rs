@@ -33,7 +33,7 @@ fn value(entry: ValueEntry) -> Value {
 
 /// The checked changes of `items_file`, each with its source,
 /// `items.toml:<line>`, followed by the name the pack wrote when it is no
-/// GUID: `items.toml:12 (Wood_Log)`.
+/// GUID: `items.toml:12 (Material_T1_Wood_Logs)`.
 pub(super) fn item_changes(
     reader: &mut Reader<'_>,
     items_file: &ItemsFile,
@@ -107,34 +107,29 @@ pub(super) fn item_changes(
     out
 }
 
-/// The recipe `name` names: a GUID, a content id, a recipe of the pack, or a
-/// vanilla recipe by its debug name where the game's data is at hand.
+/// The vanilla recipe `name` names: a GUID, or a debug name where the
+/// game's data is at hand. A recipe a mod or this pack adds is built after
+/// the changes of values, so its values are set where it is defined.
 fn recipe(reader: &mut Reader<'_>, text: &str, at: usize, name: &str) -> Option<Guid> {
     let file = RECIPES_FILE;
     if let Some(guid) = Guid::try_parse(name) {
         return Some(guid);
     }
     let own = reader.own(name);
-    let full = if name.contains(':') {
-        name
-    } else {
-        own.as_str()
-    };
     if name.contains(':') || reader.defined.get(&own) == Some(&"recipe") {
-        let guid = Guid::try_named(full);
-        if guid.is_none() {
-            reader.error(
-                file,
-                text,
-                at,
-                format!("{name:?} is no content id: <mod>:<name>"),
-            );
-        }
-        return guid;
+        reader.error(
+            file,
+            text,
+            at,
+            format!(
+                "{name:?} is a recipe a mod or this pack adds: set its values where it is defined"
+            ),
+        );
+        return None;
     }
     let found = match reader.vanilla {
         None => Err(format!(
-            "no recipe {name:?} in this pack; a vanilla recipe by its debug name needs the game's data at hand, or name it by its GUID"
+            "no vanilla recipe {name:?} at hand; name it by its GUID, or check with the game's data"
         )),
         Some(vanilla) => vanilla.recipe(name).map_err(|why| why.to_string()),
     };
