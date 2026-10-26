@@ -545,21 +545,36 @@ impl Code {
         self.emit(&[0xc5, 0xf8, 0x77]);
     }
 
+    /// `test r12b, bits`.
+    fn test_path(&mut self, bits: u8) {
+        self.emit(&[0x41, 0xf6, 0xc4, bits]);
+    }
+
+    /// `test al, bits`.
+    fn test_used(&mut self, bits: u8) {
+        self.emit(&[0xa8, bits]);
+    }
+
+    /// `mov r12d, eax`.
+    fn path_from_eax(&mut self) {
+        self.emit(&[0x41, 0x89, 0xc4]);
+    }
+
     /// `test r12b, bits; jnz`: to the path the stub chose before.
     fn branch(&mut self, bits: u8) -> usize {
-        self.emit(&[0x41, 0xf6, 0xc4, bits]);
-        self.jump(&[0x0f, 0x85])
+        self.test_path(bits);
+        self.jnz()
     }
 
     /// `test r12b, bits; jz`: past a part the stub did not keep.
     fn unless(&mut self, bits: u8) -> usize {
-        self.emit(&[0x41, 0xf6, 0xc4, bits]);
+        self.test_path(bits);
         self.jz()
     }
 
     /// `test al, bits; jz`: past a part the handlers left unused.
     fn unless_used(&mut self, bits: u8) -> usize {
-        self.emit(&[0xa8, bits]);
+        self.test_used(bits);
         self.jz()
     }
 
@@ -780,24 +795,21 @@ fn keep_zmm_by_value(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
     code.bind(&[zero]);
     keep_parts(code, masks, 2);
     call(code);
-    // or eax, -1: what the stub found zero is zeroed, whatever the handlers
-    // used.
-    code.emit(&[0x83, 0xc8, 0xff]);
-    give_back_zmm(code, masks);
+    give_back_zmm(code, masks, false);
 }
 
 /// [`Vectors::ZmmInUse`].
 fn keep_zmm_in_use(code: &mut Code, masks: Masks, call: impl Fn(&mut Code)) {
     code.frame(mask_slot(8));
-    // mov r12d, eax: the parts in use.
+    // The parts in use.
     code.in_use();
-    code.emit(&[0x41, 0x89, 0xc4]);
+    code.path_from_eax();
     keep_parts(code, masks, 0);
     call(code);
     // What the handlers left in use: a part that stays unused stays zero, and
     // zeroing it would mark it in use for every later hit.
     code.in_use();
-    give_back_zmm(code, masks);
+    give_back_zmm(code, masks, true);
 }
 
 /// Stores the parts `r12b` names, `xmm<from>` up (the stub stored the
@@ -837,16 +849,18 @@ fn keep_parts(code: &mut Code, masks: Masks, from: u8) {
 }
 
 /// Loads back the parts [`keep_parts`] stored. A part it did not store was
-/// zero, so it is given back as zero where `al` names it used after the
-/// handlers.
-fn give_back_zmm(code: &mut Code, masks: Masks) {
+/// zero, so it is given back as zero: where `al` names it used after the
+/// handlers if `checked`, every time if not.
+fn give_back_zmm(code: &mut Code, masks: Masks, checked: bool) {
     let zero = code.unless(HI16_ZMM);
     for n in 16..32 {
         code.zmm(LOAD, n, slot(n, ZMM));
     }
     let mut done = vec![code.jmp()];
     code.bind(&[zero]);
-    done.push(code.unless_used(HI16_ZMM));
+    if checked {
+        done.push(code.unless_used(HI16_ZMM));
+    }
     code.zero_hi16();
     code.bind(&done);
     let zero = code.unless(MASK_STATE);
@@ -855,7 +869,9 @@ fn give_back_zmm(code: &mut Code, masks: Masks) {
     }
     let mut done = vec![code.jmp()];
     code.bind(&[zero]);
-    done.push(code.unless_used(MASK_STATE));
+    if checked {
+        done.push(code.unless_used(MASK_STATE));
+    }
     code.zero_masks(masks);
     code.bind(&done);
     let zmm = code.branch(ZMM_HI256);

@@ -286,7 +286,8 @@ fn clear_upper_halves_stay_clear_after_a_handler_using_avx() {
 }
 
 /// Holds `value` in `k1` and `zmm17` across the marked `nop`, the upper
-/// halves of `zmm0`-`zmm15` clear; then returns whether those are in use,
+/// halves of `zmm0`-`zmm15` clear; then returns whether those are in use
+/// (the AVX state and the upper halves of `zmm0`-`zmm15`),
 /// together with the bits that changed in `k1` and in `xmm17`.
 #[unsafe(naked)]
 extern "system" fn upper_in_use_beside_avx512(value: u32) -> u32 {
@@ -298,7 +299,7 @@ extern "system" fn upper_in_use_beside_avx512(value: u32) -> u32 {
         ".byte 0x0f, 0x1f, 0x44, 0x00, 0x00",
         "mov ecx, 1",
         "xgetbv",
-        "and eax, 4",
+        "and eax, 0x44",
         "kmovw edx, k1",
         "xor edx, r8d",
         "or eax, edx",
@@ -519,6 +520,9 @@ extern "system" fn encodings() {
         "or r12b, 0x80",
         "mov ecx, 1",
         "xgetbv",
+        "test r12b, 0x20",
+        "test al, 0x80",
+        "mov r12d, eax",
         "vpxord xmm16, xmm16, xmm16",
         "vpxord xmm27, xmm27, xmm27",
         "kxorq k5, k5, k5",
@@ -557,6 +561,9 @@ fn the_stub_writes_instructions_as_the_assembler_does() {
     code.test_masks(Masks::Word, 6, 7);
     code.keep(HI16_ZMM);
     code.in_use();
+    code.test_path(MASK_STATE);
+    code.test_used(HI16_ZMM);
+    code.path_from_eax();
     let zero = code.bytes.len();
     let mut zeroing = Code::default();
     zeroing.zero_hi16();
