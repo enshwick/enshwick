@@ -244,6 +244,9 @@ pub unsafe fn write_bytes_at(base: *mut u8, offset: usize, bytes: &[u8]) {
 }
 
 #[cfg(test)]
+mod proofs;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

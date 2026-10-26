@@ -594,7 +594,7 @@ fn hook(
         let result = result.as_ref().map_err(Clone::clone).and_then(|hook| {
             let (start, len) = hook.span();
             if taken.iter().any(|&(s, l)| s < start + len && start < s + l) {
-                return Err("its bytes overlap another hook's jump".to_owned());
+                return Err(crate::detour::PrepareError::OverlapsAnotherHook);
             }
             taken.push((start, len));
             Ok(hook)
@@ -625,7 +625,7 @@ fn hook(
                 failures.push(Failure {
                     target,
                     inside: request.inside,
-                    reason,
+                    reason: reason.to_string(),
                 });
             }
         }
