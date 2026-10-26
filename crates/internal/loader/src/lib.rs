@@ -91,6 +91,8 @@ mod notices;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]
+mod pages;
+#[cfg(windows)]
 mod patch;
 #[cfg(windows)]
 mod points;
