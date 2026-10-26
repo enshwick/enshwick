@@ -1,4 +1,4 @@
-//! The JSON Schemas editors read for a content pack's files, held as
+//! The JSON Schemas editors read for a data pack's files, held as
 //! snapshots so a change to a pack's format shows in review. Descriptions,
 //! which come from the docs, are left out: only the shape is held.
 

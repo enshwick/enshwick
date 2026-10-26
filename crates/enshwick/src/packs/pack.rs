@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::Off;
+use crate::content::changes::Change;
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -75,6 +76,7 @@ pub struct Pack {
     pub(super) recipes: Vec<PackRecipe>,
     pub(super) workshops: Vec<PackWorkshop>,
     pub(super) drops: Vec<Drop>,
+    pub(super) changes: Vec<(Change, String)>,
     pub(super) texts: String,
     pub(super) hash: u32,
 }
@@ -111,7 +113,7 @@ impl Reader<'_> {
         }
     }
 
-    fn error(&mut self, file: &str, text: &str, at: usize, message: impl AsRef<str>) {
+    pub(super) fn error(&mut self, file: &str, text: &str, at: usize, message: impl AsRef<str>) {
         self.errors
             .push(PackError::at(file, text, at, message.as_ref()));
     }
@@ -146,7 +148,7 @@ impl Reader<'_> {
 
     /// The GUID `reference` names, and whether the pack defines it; a
     /// pack name must be a `what` of the pack.
-    fn reference(
+    pub(super) fn reference(
         &mut self,
         file: &str,
         text: &str,
@@ -389,6 +391,7 @@ impl Pack {
             recipes: Vec::new(),
             workshops: Vec::new(),
             drops: Vec::new(),
+            changes: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -401,6 +404,7 @@ impl Pack {
         );
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
+        pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
@@ -445,6 +449,59 @@ impl Pack {
         &self.drops
     }
 
+    /// The pack's changes of vanilla values, each with its source: the file
+    /// and line, then the name the pack wrote unless it is a GUID, such as
+    /// `items.toml:12 (Wood_Log)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::{Field, Value};
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", r#"
+    /// [[change]]
+    /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
+    /// max_stack = { times = 4 }
+    /// "#);
+    /// let pack = Pack::parse("you.stacks", &files)?;
+    /// let (change, source) = &pack.changes()[0];
+    /// assert_eq!((change.field, change.value), (Field::MaxStack, Value::Times(4.0)));
+    /// assert_eq!(source, "items.toml:2");
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> &[(Change, String)] {
+        &self.changes
+    }
+
+    /// Whether the pack adds or changes anything players' games read: items,
+    /// workshops, recipes, texts or changes of values. Such a pack runs on
+    /// the server and every player alike, so it keeps `join` on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let loot = PackFiles::new().with("loot.toml", r#"
+    /// [[drop]]
+    /// items = ["you.lockers:locker"]
+    /// chance = 0.1
+    /// from = "bosses"
+    /// "#);
+    /// assert!(!Pack::parse("you.loot", &loot)?.reaches_players());
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn reaches_players(&self) -> bool {
+        !(self.items.is_empty()
+            && self.workshops.is_empty()
+            && self.recipes.is_empty()
+            && self.changes.is_empty()
+            && self.texts.trim().is_empty())
+    }
+
     /// Whether `other` adds the same content as this pack, its loot aside:
     /// what a running game can take without a restart.
     ///
@@ -467,6 +524,7 @@ impl Pack {
             && self.items == other.items
             && self.recipes == other.recipes
             && self.workshops == other.workshops
+            && self.changes == other.changes
             && self.texts == other.texts
     }
 
@@ -742,7 +800,7 @@ pub(super) fn drops(
 /// A content id the pack built at run time; ids live for the process.
 pub(super) fn id(full: &str) -> Result<Id, Off> {
     let name: &'static str = Box::leak(full.to_owned().into_boxed_str());
-    Id::try_new(name).ok_or_else(|| Off::new(format!("content pack: {full:?} is no content id")))
+    Id::try_new(name).ok_or_else(|| Off::new(format!("data pack: {full:?} is no content id")))
 }
 
 /// The group of a pack's drops, which a reload replaces.

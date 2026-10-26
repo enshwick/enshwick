@@ -68,7 +68,7 @@ enum Command {
     /// Ports the build rows of the loader and the mods in an Enshwick
     /// checkout to a new game build. Exits with 2 when an entry needs a human.
     Pin(pin::Args),
-    /// Checks, describes and packages content packs.
+    /// Checks, describes and packages data packs.
     #[command(subcommand)]
     Pack(pack::Command),
     /// Writes the Rust definition of another mod's extension point, read

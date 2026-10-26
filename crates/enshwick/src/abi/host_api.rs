@@ -6,16 +6,17 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneSize,
     BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header,
+    HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1066,13 +1067,22 @@ pub struct HostApi {
     /// thread; neither allocates nor locks once
     /// every mod is initialised. Since minor 75.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
+    /// Declares a change of a vanilla value. The loader merges the changes
+    /// of every mod once their `init` ran: a set in load order, the last
+    /// winning and the overridden one reported in both mods' logs and the
+    /// conflict report; then every factor, multiplied. It builds the changed
+    /// resource the first time the game reads it, on each side from its own
+    /// mods. [`Status::BAD_ARGS`] for a null `change`, an unknown field or
+    /// operation and a value outside the field's range; [`Status::MISSING`]
+    /// when the build does not reflect the field. Init only. Since minor 76.
+    pub change_data: extern "system" fn(me: ModHandle, change: *const DataChange) -> Status,
     /// Calls `callback` with `user` before every wait of the engine's event
     /// loop on its handles, on the thread that waits, and writes to `found`
     /// which waits it hooked ([`LoopWaitSites`]); a wait this build lacks,
     /// whose code is not what its table expects, or that the mod hooked
     /// already is left out. [`Status::BAD_ARGS`] for a null `found`, before
     /// anything is hooked. Handlers run in load order. Allowed during
-    /// `enshwick_mod_init` only. Since minor 76.
+    /// `enshwick_mod_init` only. Since minor 77.
     pub loop_wait: extern "system" fn(
         me: ModHandle,
         callback: LoopWaitFn,
@@ -1085,7 +1095,7 @@ pub struct HostApi {
     /// place, else 0. [`Status::BAD_ARGS`] for a null `found`, before
     /// anything is hooked. Handlers run in load order, each on the last one's wait. On
     /// the game thread of the server loop. Allowed during `enshwick_mod_init`
-    /// only. Since minor 76.
+    /// only. Since minor 77.
     pub server_wait: extern "system" fn(
         me: ModHandle,
         callback: ServerWaitFn,
@@ -1098,7 +1108,7 @@ pub struct HostApi {
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
-    /// `enshwick_mod_init` only. Since minor 76.
+    /// `enshwick_mod_init` only. Since minor 77.
     pub task_workers:
         extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
 }

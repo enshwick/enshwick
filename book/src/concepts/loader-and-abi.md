@@ -27,7 +27,7 @@ is optional. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
 and runs on its own, and the status summary and the Mods screen list it. One
 with only part of the interface is logged and unloaded. The file name is free; the id in the manifest
 names the mod. Every folder in `mods/` with a `pack.toml` is a
-[content pack](../content/packs.md), which the loader runs as a mod of its
+[data pack](../content/packs.md), which the loader runs as a mod of its
 own; its entry's file is `<id>/pack.toml`.
 
 ## The mod list and the lock

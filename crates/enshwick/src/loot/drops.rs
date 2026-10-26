@@ -889,7 +889,7 @@ pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
     replace_group(0, drops).map_err(Off::new)
 }
 
-/// Replaces every drop of group `group` with `drops`, as a content pack's
+/// Replaces every drop of group `group` with `drops`, as a data pack's
 /// reload does; no drops forgets the group.
 ///
 /// # Errors

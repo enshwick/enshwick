@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use super::MANIFEST_FILE;
 use super::files::PackError;
+use super::pack::Pack;
 
 /// Where a pack runs, in `pack.toml`.
 ///
@@ -111,6 +112,44 @@ impl PackManifest {
             ));
         }
         Ok(manifest)
+    }
+}
+
+impl PackManifest {
+    /// Whether `pack` may run under this manifest, whose file reads `text`:
+    /// a pack that [reaches players](Pack::reaches_players) keeps `join` on.
+    ///
+    /// # Errors
+    ///
+    /// The problem, at the line of `join`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles, PackManifest};
+    ///
+    /// let text = "id = \"you.stacks\"\nversion = \"1.0.0\"\njoin = false\n";
+    /// let manifest = PackManifest::parse(text)?;
+    /// let files = PackFiles::new().with("items.toml", r#"
+    /// [[change]]
+    /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
+    /// max_stack = 50
+    /// "#);
+    /// let pack = Pack::parse("you.stacks", &files).map_err(|e| e.list()[0].clone())?;
+    /// let problem = manifest.check(text, &pack).unwrap_err();
+    /// assert_eq!(problem.line, 3);
+    /// # Ok::<(), enshwick::packs::PackError>(())
+    /// ```
+    pub fn check(&self, text: &str, pack: &Pack) -> Result<(), PackError> {
+        if self.join || !pack.reaches_players() {
+            return Ok(());
+        }
+        Err(PackError::at(
+            MANIFEST_FILE,
+            text,
+            find(text, "join"),
+            "join = false, but the pack adds or changes what players' games read, so server and players must run it alike; remove the line",
+        ))
     }
 }
 

@@ -1,7 +1,8 @@
-# Content packs
+# Data packs
 
-A **content pack** adds items, recipes, workshops, loot and texts from TOML
-files, with no code. It is a folder in `mods/` with a `pack.toml` and no DLL:
+A **data pack** adds items, recipes, workshops, loot and texts from TOML
+files, with no code, and changes vanilla values such as how many of an item
+one slot holds. It is a folder in `mods/` with a `pack.toml` and no DLL:
 
 ```text
 mods/
@@ -21,7 +22,10 @@ mod: it is in [`mods.toml`](../concepts/loader-and-abi.md) and the lock, counts 
 [the join check](../concepts/join-check.md), has its log `logs/enshwick/mods/<id>.log`, and is turned off alone when it goes
 wrong. What it adds goes through the same calls a mod makes (`add_item`,
 `add_recipe`, `add_workshop`, `add_loot`, `add_texts`), beside vanilla
-content: a pack never changes a vanilla item, recipe or table.
+content. A pack changes vanilla values only through
+[changes](#changes-of-vanilla-values), in memory: it never removes a vanilla
+item, recipe or table, never gives one another id, and never writes the
+game's files or saves.
 
 A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
 
@@ -46,7 +50,7 @@ homepage = "https://example.com/lanterns"
 | `version` | the pack's SemVer version |
 | `name`, `description`, `authors`, `license`, `homepage` | what players read, as a mod's [manifest](../releasing.md) says it |
 | `side` | `both` (the default), `server` or `client` |
-| `join` | whether server and players must run the same pack to play together; on unless `false` |
+| `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
 
 ## Names and references
@@ -95,6 +99,68 @@ each item a count of its own (`start` is `max` when left out); `format` is
 `number`, `signed` or `percent`. An `icon` either recolours a vanilla icon
 (`tint`, `amount` in percent, `like` the icon's item, the item's `like` when
 left out) or names a PNG of the pack: `icon = { png = "icons/lantern.png" }`.
+
+## Changes of vanilla values
+
+`items.toml` also changes values of items that exist already, vanilla or
+another mod's, with a `[[change]]` table:
+
+```toml
+[[change]]
+items = ["Wood_Log", "Stone_Raw", "6943053a-32c1-4718-ae22-e61427ddf54d"]
+max_stack = 999
+
+[[change]]
+items = ["Resin"]
+max_stack = { times = 4 }
+```
+
+`items` names the items as [references](#names-and-references) do. A number
+sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
+
+| Field | Meaning | Values |
+| --- | --- | --- |
+| `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
+
+A change that names no item, changes nothing, gives a value out of range or
+changes one field of one item a second time is a problem at its line, like
+every other.
+
+### Several packs on one value
+
+The loader takes every pack's and mod's changes of one value in load order.
+The last set wins; then every factor multiplies it. A whole number rounds
+half away from zero and stays in the field's range, and a factor never takes
+it below the smallest value. Two factors never conflict, since their order
+does not matter. A set that overrides another mod's set is a warning in both
+logs and in the conflict report, naming both values and both lines; when the
+later pack [requires](#packtoml) the other, it overrides it on purpose and
+the line is information:
+
+```text
+warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Wood_Log), which overrides 500 from ann.bags items.toml:7 (Wood_Log)
+```
+
+A Rust mod declares the same changes with
+[`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
+during `init`.
+
+### Stack sizes and saved worlds
+
+The game cuts every stack above an item's stack size when a world loads and
+deletes the rest. So a world saved with a pack that raised a stack size
+depends on that pack. The first time such a world loads, the pack sets a
+[hold](../state.md#holds): if the world is opened again without the pack, the game
+stops before the world loads and the log says which pack and items:
+
+```text
+error you.stacks holds this game (it lets Wood_Log and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+```
+
+To remove such a pack safely, split every stack larger than the game's size
+first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
+item, each of them holds. A pack that only lowers stack sizes sets no hold;
+while it runs, the game cuts larger stacks to its value.
 
 ## `workshops.toml`
 
@@ -164,7 +230,8 @@ overrides them as it does a mod's.
 The loader checks every file before the pack adds anything: unknown fields,
 names defined twice, references to names neither the pack nor the game has,
 stations that cannot be cloned, text keys without text, icons the pack
-lacks, chances outside 0 to 1. Each problem is a line
+lacks, chances outside 0 to 1, changes out of range or made twice, and
+`join = false` on a pack that players' games read. Each problem is a line
 in the pack's log with its file, line and column, and the pack stays off:
 
 ```text
@@ -184,13 +251,13 @@ editor with TOML support completes and checks fields as you type.
 The dedicated server watches a pack's files. When they change it reads them
 again and logs any problem with its line; with none, it applies the new
 `loot.toml` at once: chances, counts and items of drops change for the next
-roll. Items, recipes, workshops and texts are built into the game's
-registries at start, on the server and on every player's client, so a change
-to them waits for the next start, and the log says so:
+roll. Items, recipes, workshops, texts and changes of values are built into
+the game's registries at start, on the server and on every player's client,
+so a change to them waits for the next start, and the log says so:
 
 ```text
-info  [you.lanterns] content pack reloaded: 2 loot drops
-warn  [you.lanterns] content pack changed beyond its loot: items, recipes, workshops and texts change at the next start
+info  [you.lanterns] data pack reloaded: 2 loot drops
+warn  [you.lanterns] data pack changed beyond its loot: items, recipes, workshops, texts and changes of values change at the next start
 ```
 
 Loot of a kind no pack or mod had at start, such as the first drop from

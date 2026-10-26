@@ -38,6 +38,7 @@ mod content;
 mod crash;
 #[cfg(windows)]
 mod damage;
+pub mod data_changes;
 #[cfg(windows)]
 mod daytime;
 #[cfg(windows)]

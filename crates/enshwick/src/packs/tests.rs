@@ -1,4 +1,6 @@
 use crate::content::Guid;
+use crate::content::changes::{Change, Field, Value};
+use crate::content::vanilla::Vanilla;
 use crate::content::workshops::stations;
 use crate::loot::Kinds;
 
@@ -181,4 +183,108 @@ fn a_manifest_names_its_problem_line() {
 fn groups_differ_by_pack_and_are_never_a_mod_s() {
     assert_ne!(group("a"), group("b"));
     assert_ne!(group("a"), 0);
+}
+
+fn vanilla_wood() -> (Vanilla, Guid) {
+    let wood = Guid([1; 16]);
+    (
+        crate::content::vanilla::tests::game(&[(wood, "Wood_Log")]),
+        wood,
+    )
+}
+
+#[test]
+fn an_item_change_sets_the_stack_size_of_every_item_it_names() {
+    let (vanilla, wood) = vanilla_wood();
+    let items = format!("[[change]]\nitems = [\"Wood_Log\", \"{CHEST}\"]\nmax_stack = 999\n");
+    let pack = Pack::parse_with("you.stacks", &files(&items), Some(&vanilla)).unwrap();
+    let set = Value::Set(999.0);
+    assert_eq!(
+        pack.changes(),
+        [
+            (
+                Change::new(wood, Field::MaxStack, set),
+                "items.toml:1 (Wood_Log)".to_owned()
+            ),
+            (
+                Change::new(Guid::parse(CHEST), Field::MaxStack, set),
+                "items.toml:1".to_owned()
+            ),
+        ]
+    );
+    assert!(pack.reaches_players());
+}
+
+#[test]
+fn a_table_with_times_scales_the_value() {
+    let pack = Pack::parse(
+        "you.stacks",
+        &files(&format!(
+            "\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = {{ times = 4 }}\n"
+        )),
+    )
+    .unwrap();
+    assert_eq!(pack.changes()[0].0.value, Value::Times(4.0));
+    assert_eq!(pack.changes()[0].1, "items.toml:2");
+}
+
+#[test]
+fn a_value_out_of_range_is_a_problem_at_its_change() {
+    let items = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 20\n\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 70000\n"
+    );
+    let errors = Pack::parse("you.stacks", &files(&items)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:5:1: change 2: max_stack 70000 is not from 1 to 65535"
+    );
+}
+
+#[test]
+fn one_field_of_one_item_changed_twice_names_both_lines() {
+    let items = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = 20\n\n[[change]]\nitems = [\"{CHEST}\"]\nmax_stack = {{ times = 2 }}\n"
+    );
+    let errors = Pack::parse("you.stacks", &files(&items)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        format!("items.toml:5:1: change 2: max_stack of {CHEST} is changed at line 1 already")
+    );
+}
+
+#[test]
+fn a_change_that_picks_or_changes_nothing_is_a_problem() {
+    let errors = Pack::parse(
+        "you.stacks",
+        &files("[[change]]\nitems = []\nmax_stack = 20\n"),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:1:1: change 1: items names no item"
+    );
+    let errors = Pack::parse(
+        "you.stacks",
+        &files(&format!("[[change]]\nitems = [\"{CHEST}\"]\n")),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "items.toml:1:1: change 1: changes nothing; give max_stack"
+    );
+}
+
+#[test]
+fn a_misspelt_item_in_a_change_suggests_the_near_name() {
+    let (vanilla, _) = vanilla_wood();
+    let items = "[[change]]\nitems = [\"Wood_Logg\"]\nmax_stack = 50\n";
+    let errors = Pack::parse_with("you.stacks", &files(items), Some(&vanilla)).unwrap_err();
+    assert!(errors.to_string().contains("near: Wood_Log"), "{errors}");
+}
+
+#[test]
+fn a_pack_without_changes_reaches_players_only_through_its_content() {
+    let pack = Pack::parse("you.stacks", &PackFiles::new()).unwrap();
+    assert!(pack.changes().is_empty());
+    assert!(!pack.reaches_players());
 }

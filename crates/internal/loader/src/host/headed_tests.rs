@@ -31,6 +31,7 @@ macro_rules! headed {
             Comfort,
             CraftCheck,
             DamageCheck,
+            DataChange,
             DaytimeInfo,
             EventSpec,
             EventTypeInfo,
