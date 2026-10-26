@@ -4,7 +4,8 @@
 //! voxels, half a metre a voxel. The game's box read copies a box at one
 //! level of detail into a buffer of voxel words, brick by brick under the
 //! store's own lock, and answers false when a brick of the box is not
-//! resident (far from every player, or still streaming). The store numbers
+//! resident; that read also makes the server load the column, about a
+//! second later (server 399, server copy). The store numbers
 //! its levels coarse to fine; the loader reads at the finest, half a metre
 //! a voxel, on the game thread at a quiet moment, since the read takes the
 //! editor's lock for each column and a step may hold it, and decodes each

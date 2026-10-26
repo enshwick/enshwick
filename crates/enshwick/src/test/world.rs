@@ -282,7 +282,8 @@ impl Installed {
     }
 
     /// Makes the loader's next step meet `reason` for transaction `id`, as
-    /// the game would far from every player ([`Status::NOT_LOADED`]) or
+    /// the game would where the world is not loaded yet
+    /// ([`Status::NOT_LOADED`]) or
     /// after a change in its region ([`Status::REFUSED`]): a pending one
     /// fails before writing, an undo is refused and it stays applied.
     ///
@@ -438,7 +439,8 @@ impl FakeHost {
     /// Loaded voxels of the world: the box of `size` from `min`, its
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
-    /// cover wholly not loaded, as the loader does far from every player;
+    /// cover wholly not loaded, as the loader does where the world is not
+    /// loaded yet;
     /// once the fake has boxes, a terrain edit whose position lies in none
     /// is not loaded either.
     /// Past the world's edge ([`FakeHost::world_extent`]) a read is outside

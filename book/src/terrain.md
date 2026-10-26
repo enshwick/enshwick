@@ -59,9 +59,10 @@ Each call fails with a [`WorldError`](world.md#writing-components):
 `OutsideWorld` for an edit that reaches past the world's edge or above
 1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
 `WrongThread` off the game thread, `Missing` while no world runs. The
-server keeps only the parts of the world near players; an edit elsewhere
+server holds only some parts of the world in memory; an edit elsewhere
 writes nothing, since the game would leave it floating there with no
-ground under it. Try again when a player is near.
+ground under it. Asking starts loading the area, so the same edit works
+again a second or so later.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
@@ -138,7 +139,9 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 
 A transaction checks that its whole region lies inside the world and is
 loaded before it writes anything: if not, it fails with `OutsideWorld` or
-`NotLoaded`, and the world is as it was. Once the loader has met the
+`NotLoaded`, and the world is as it was; the check starts loading the
+area, so the same transaction committed again a second or so later can
+pass. Once the loader has met the
 running world, a commit with an edit past its edge is refused at once
 with `OutsideWorld`. A region can still unload while a large transaction is under way;
 it then stops before the next edit, and an undo takes back what it wrote.
@@ -206,9 +209,11 @@ game does not name it, so the name is enshwick's. A box is read in the
 order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
 `iter` walks them all with their places.
 
-The server keeps only the parts of the world near players. A read of a box
-that is not wholly loaded fails with `NotLoaded`; the mod tries again when
-a player is near. A box past the world's edge, or above 1,024 metres,
+The server holds only some parts of the world in memory. A read of a box
+that is not wholly loaded fails with `NotLoaded` and starts loading it;
+about a second later the same read returns the real ground. Every read can
+pull an area into memory, so a mod reads where it needs to and never
+sweeps the world. A box past the world's edge, or above 1,024 metres,
 fails with `OutsideWorld`: the game itself reads such voxels as air, which
 a mod could not tell from real air. The edge is the game's own, read from
 the running world; the height is the loader's, above every place the game

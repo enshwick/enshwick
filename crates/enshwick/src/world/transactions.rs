@@ -60,7 +60,8 @@ pub enum TransactionStatus {
     Undone,
     /// It stopped before or right after a change it could not write or
     /// read back: [`WorldError::NotLoaded`] when part of the world was not
-    /// loaded, [`WorldError::OutsideWorld`] when a change leaves the world,
+    /// loaded yet (the check starts loading it, so the same transaction
+    /// committed again a second or so later can pass), [`WorldError::OutsideWorld`] when a change leaves the world,
     /// [`WorldError::Missing`] when the world ended. The changes written
     /// stay, and [`World::undo`] can take them back while the loader keeps
     /// their undo data; a brick it could not read back after its change is

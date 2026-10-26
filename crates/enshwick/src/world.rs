@@ -296,8 +296,8 @@ pub enum WorldError {
     /// asked for its stamina.
     #[error("the entity lacks the component")]
     Lacks,
-    /// The part of the world asked about is not loaded now, far from every
-    /// player; try again when a player is near.
+    /// The part of the world asked about is not loaded yet; asking starts
+    /// loading it, so try again in a second or so.
     #[error("that part of the world is not loaded")]
     NotLoaded,
     /// The box asked about leaves the world: past its edge across, or

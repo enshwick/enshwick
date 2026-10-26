@@ -1159,8 +1159,8 @@ pub struct HostApi {
     /// box, one past [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or
     /// a `capacity` below them; [`Status::OUTSIDE_WORLD`] for a box past
     /// the world's edge or above the height the loader takes (since minor
-    /// 87); [`Status::NOT_LOADED`] while part of the box is not
-    /// loaded, far from every player; [`Status::MISSING`] before a world
+    /// 87); [`Status::NOT_LOADED`] while part of the box is not loaded
+    /// yet, which starts loading it; [`Status::MISSING`] before a world
     /// runs or on a build without the read. On the server's game thread at
     /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
     /// inside a step. Since minor 84.

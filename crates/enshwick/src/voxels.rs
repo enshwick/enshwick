@@ -5,8 +5,11 @@
 //! world's corner ([`VoxelPos`]). Each voxel is air, ground of a terrain
 //! material ([`Terrain::materials`](crate::terrain::Terrain::materials)
 //! lists them) or a building block's material, and is more or less full.
-//! The server holds only the parts of the world near players: a read
-//! elsewhere fails with [`WorldError::NotLoaded`] until a player comes near.
+//! The server holds only some parts of the world in memory: a read
+//! elsewhere fails with [`WorldError::NotLoaded`] and starts loading that
+//! part, which is there to read about a second later. Every read can pull
+//! a part of the world into memory, so a mod reads where it needs to, never
+//! the whole world.
 //! A read past the world's edge, or above the 1,024 metres the loader
 //! takes, fails with [`WorldError::OutsideWorld`].
 //!
@@ -453,8 +456,9 @@ impl Voxels {
     ///
     /// [`WorldError::Refused`] for an empty box, more than [`READ_MAX`]
     /// voxels or one past 2³⁰ voxels on an axis;
-    /// [`WorldError::NotLoaded`] while part of the box is not loaded, far
-    /// from every player; [`WorldError::Missing`] before a world runs or on
+    /// [`WorldError::NotLoaded`] while part of the box is not loaded yet,
+    /// which this read starts loading: try again in a second or so;
+    /// [`WorldError::Missing`] before a world runs or on
     /// a game build without the read; [`WorldError::WrongThread`] off the
     /// game thread or inside a step; [`WorldError::OutsideWorld`] for a box
     /// past the world's edge or above the height the loader takes, 1,024

@@ -468,8 +468,8 @@ impl Status {
     /// Called from a thread the function does not serve, such as a game
     /// read off the server's game thread, or a world change inside a step.
     pub const WRONG_THREAD: Self = Self(7);
-    /// The part of the world asked about is not loaded now, far from every
-    /// player or still streaming in; the same call may work later. A mod
+    /// The part of the world asked about is not loaded yet; asking starts
+    /// loading it, so the same call works again in a second or so. A mod
     /// built before minor 84 reads it as an unknown failure. Since minor 84.
     pub const NOT_LOADED: Self = Self(8);
     /// The box asked about leaves the world: past its edge across, or above
