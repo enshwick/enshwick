@@ -23,15 +23,19 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
 use super::{
-    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Pending, Raised, TraitOffsets,
+    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Pending, Raised, TraitOffsets, UNSET,
     credited, edit_item, expand, grouped, grown_slots, hold_step, merge, template_slots, traits_of,
 };
-use enshwick::content::changes::{ItemTraits, ItemsChange};
+use enshwick::abi::ChangeId;
+use enshwick::content::changes::{ItemTraits, ItemsChange, Value};
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
 struct Changes {
     declared: Mutex<Vec<Pending>>,
+    /// The changes mods set later: owner, number and field, in the order
+    /// declared.
+    live: Mutex<Vec<(ModIndex, ChangeId, Field)>>,
     sealed: OnceLock<Sealed>,
     raised: Mutex<Option<FxHashMap<ModIndex, Raised>>>,
 }
@@ -65,6 +69,7 @@ impl Sealed {
 
 static CHANGES: Changes = Changes {
     declared: Mutex::new(Vec::new()),
+    live: Mutex::new(Vec::new()),
     sealed: OnceLock::new(),
     raised: Mutex::new(None),
 };
@@ -85,6 +90,7 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
         owner,
         change,
         source,
+        live: None,
     }));
     Status::OK
 }
@@ -99,8 +105,100 @@ pub(crate) fn declare_items(owner: ModIndex, change: ItemsChange, source: String
         owner,
         change,
         source,
+        live: None,
     });
     Status::OK
+}
+
+/// Records mod `owner`'s change of `target`, whose value it sets later;
+/// its number. `TOO_LATE` once init is over.
+///
+/// # Errors
+///
+/// The status the entry answers.
+pub(crate) fn declare_change(
+    owner: ModIndex,
+    target: LiveTarget,
+    field: Field,
+) -> Result<ChangeId, Status> {
+    if CHANGES.sealed.get().is_some() {
+        return Err(Status::TOO_LATE);
+    }
+    let mut live = CHANGES.live.relock();
+    let id = ChangeId(u32::try_from(live.len() + 1).map_err(|_| Status::BAD_ARGS)?);
+    let pending = match target {
+        LiveTarget::Entry(entry, source) => Pending::One(Declared {
+            owner,
+            change: Change::new(entry, field, UNSET),
+            source,
+            live: Some(id),
+        }),
+        LiveTarget::Items(items, source) => Pending::Each {
+            owner,
+            change: ItemsChange::new(items, field, UNSET),
+            source,
+            live: Some(id),
+        },
+    };
+    CHANGES.declared.relock().push(pending);
+    live.push((owner, id, field));
+    Ok(id)
+}
+
+/// What a change a mod sets later reaches, with its source.
+pub(crate) enum LiveTarget {
+    /// One entry.
+    Entry(Guid, String),
+    /// Every vanilla item a selection picks.
+    Items(enshwick::content::changes::Items, String),
+}
+
+/// Puts `value` in force for mod `owner`'s change `id`, or takes the
+/// mod's value out for `None`, and builds what it reaches again.
+pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) -> Status {
+    let field = CHANGES
+        .live
+        .relock()
+        .iter()
+        .find(|(o, i, _)| *o == owner && *i == id)
+        .map(|(_, _, field)| *field);
+    let Some(field) = field else {
+        return Status::BAD_ARGS;
+    };
+    if value.is_some_and(|value| field.check(value).is_err()) {
+        return Status::BAD_ARGS;
+    }
+    let Some(sealed) = CHANGES.sealed.get() else {
+        let mut pending = CHANGES.declared.relock();
+        for p in pending.iter_mut() {
+            match p {
+                Pending::One(d) if d.owner == owner && d.live == Some(id) => {
+                    d.change.value = value.unwrap_or(UNSET);
+                }
+                Pending::Each {
+                    owner: o,
+                    change,
+                    live,
+                    ..
+                } if *o == owner && *live == Some(id) => change.value = value.unwrap_or(UNSET),
+                _ => {}
+            }
+        }
+        return Status::OK;
+    };
+    let mut declared = sealed.declared.relock();
+    let next = super::set_live(&declared, owner, id, value);
+    match apply(sealed, &mut declared, next) {
+        Ok(_) => Status::OK,
+        Err(why) => {
+            crate::log::write(
+                Level::WARN,
+                &self::id(sealed.loader, owner),
+                &format!("{field}: the new value takes a restart: {why}"),
+            );
+            Status::OK
+        }
+    }
 }
 
 /// Every vanilla item with what a selection reads of it, from the game's
@@ -381,8 +479,6 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
         .sealed
         .get()
         .ok_or_else(|| "no changes were in force at start".to_owned())?;
-    let loader = sealed.loader;
-    let patched = sealed.patched.get().cloned().unwrap_or_default();
     let mut declared = sealed.declared.relock();
     let next = super::replace_owner(
         &declared,
@@ -393,9 +489,28 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
                 owner,
                 change,
                 source,
+                live: None,
             })
             .collect(),
     );
+    apply(sealed, &mut declared, next)
+}
+
+/// Puts `next` in force as every change: merges it, reports the overridden
+/// sets, and builds each resource the loader patches again in place; how
+/// many it rebuilt.
+///
+/// # Errors
+///
+/// As [`reload`]; `declared` stays as it was when a change reaches an
+/// entry the loader did not patch at start.
+fn apply(
+    sealed: &Sealed,
+    declared: &mut Vec<Declared>,
+    next: Vec<Declared>,
+) -> Result<usize, String> {
+    let loader = sealed.loader;
+    let patched = sealed.patched.get().cloned().unwrap_or_default();
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
     if let Some(item) = edited(&merged)
         .into_iter()
@@ -432,7 +547,6 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
     report(loader, &conflicts);
     sealed.merged.store(Arc::new(merged));
     *declared = next;
-    drop(declared);
     let mut failed = Vec::new();
     for key in &patched {
         let status = crate::content::rebuild(ModIndex::LOADER, *key);

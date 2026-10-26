@@ -171,7 +171,26 @@ impl ChangeOp {
     pub const SET: Self = Self(0);
     /// The value is multiplied by `value`, a finite factor from 0 to 100.
     pub const TIMES: Self = Self(1);
+    /// The mod's value is taken out, as if it never set one; `value` is
+    /// ignored. Only [`HostApi::set_change`](super::HostApi::set_change)
+    /// takes it. Since minor 84.
+    pub const RESET: Self = Self(2);
 }
+
+/// A change a mod declared with
+/// [`HostApi::declare_change`](super::HostApi::declare_change), whose value it
+/// sets later; numbered by the loader, per mod.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ChangeId;
+///
+/// assert_ne!(ChangeId(1), ChangeId(2));
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct ChangeId(pub u32);
 
 /// One change of a vanilla value, as
 /// [`HostApi::change_data`](super::HostApi::change_data) takes it. The

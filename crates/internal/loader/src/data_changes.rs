@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 
 use rustc_hash::FxHashMap;
 
+use enshwick::abi::ChangeId;
 use enshwick::content::Guid;
 use enshwick::content::changes::{Change, Field, Value};
 
@@ -15,10 +16,15 @@ use crate::mod_index::ModIndex;
 
 #[cfg(windows)]
 mod game;
+mod live;
 mod select;
 
 #[cfg(windows)]
-pub(crate) use game::{declare, declare_items, reachable, reload, serve, wanted, world_event};
+pub(crate) use game::{
+    LiveTarget, declare, declare_change, declare_items, reachable, reload, serve, set_change,
+    wanted, world_event,
+};
+pub use live::{UNSET, set_live};
 pub use select::{Pending, Picked, TraitOffsets, expand, grouped, traits_of};
 
 /// A change one mod declared, with where it came from.
@@ -30,6 +36,9 @@ pub struct Declared {
     pub change: Change,
     /// Its source, such as `items.toml:12`; may be empty.
     pub source: String,
+    /// The change a mod sets later that this one came from; `None` for a
+    /// change whose value was given at init.
+    pub live: Option<ChangeId>,
 }
 
 /// What one change changes: the entry, the field and the item inside the
@@ -492,6 +501,7 @@ mod tests {
             owner: ModIndex::new(owner),
             change: Change::new(entry, Field::MaxStackSize, value),
             source: source.to_owned(),
+            live: None,
         }
     }
 

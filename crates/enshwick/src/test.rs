@@ -90,7 +90,7 @@ mod table;
 mod ui;
 mod world;
 
-pub use content::ServedResource;
+pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;

@@ -226,6 +226,20 @@ impl Installed {
         table::with(Vec::new(), |s| s.changes.items.clone())
     }
 
+    /// The changes the mod declared to set later, in order, each with its
+    /// value in force: `None` until set or after a reset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.live_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn live_changes(&self) -> Vec<LiveChange> {
+        table::with(Vec::new(), |s| s.changes.live.clone())
+    }
+
     /// The mod's recipe rules in force, from
     /// [`recipes::disable`](crate::content::recipes::disable) less those
     /// [`recipes::enable`](crate::content::recipes::enable) took back: kind
@@ -422,4 +436,22 @@ pub struct ServedResource {
     pub key: ResourceKey,
     /// The resource it is built from.
     pub base: ResourceKey,
+}
+
+/// A change a mod declared to set later, as the fake loader keeps it.
+///
+/// # Examples
+///
+/// See [`FakeHost::live_changes`](crate::test::FakeHost::live_changes).
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub struct LiveChange {
+    /// What it reaches.
+    pub target: crate::content::changes::Target,
+    /// What it changes.
+    pub field: crate::content::changes::Field,
+    /// Its source.
+    pub source: String,
+    /// The value in force; `None` until set or after a reset.
+    pub value: Option<crate::content::changes::Value>,
 }
