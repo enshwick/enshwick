@@ -110,3 +110,32 @@ fn a_rebuild_writes_only_the_bytes_that_differ() {
     );
     assert_eq!(again, 0);
 }
+
+#[test]
+fn the_rate_patch_runs_last_and_keeps_the_base() {
+    let key = recipe_registry();
+    let mut served = vec![served_by(key, &[1])];
+    let change = core::ptr::without_provenance_mut::<c_void>(1);
+    assert_eq!(serve_changes(&mut served, vec![(key, add_one, change)]), 1);
+    assert_eq!(serve_rates(&mut served, Some(no_patch)), 1);
+    let entry = &served[0];
+    let owners: Vec<ModIndex> = entry.patches.iter().map(|p| p.owner).collect();
+    assert_eq!(
+        owners,
+        [ModIndex::LOADER, ModIndex::new(1), ModIndex::LOADER]
+    );
+    assert_eq!(entry.patches[0].user, 1, "the data change first");
+    assert_eq!(entry.patches[2].user, 0, "the rates last");
+    assert!(entry.keeps_base.load(Ordering::Relaxed));
+}
+
+#[test]
+fn the_rate_patch_serves_the_registry_alone_or_not_at_all() {
+    let mut served = Vec::new();
+    assert_eq!(serve_rates(&mut served, None), 0);
+    assert!(served.is_empty());
+    assert_eq!(serve_rates(&mut served, Some(no_patch)), 1);
+    assert_eq!(served[0].key, recipe_registry());
+    assert_eq!(served[0].patches.len(), 1);
+    assert!(served[0].keeps_base.load(Ordering::Relaxed));
+}

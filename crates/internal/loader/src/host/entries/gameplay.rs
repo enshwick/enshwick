@@ -836,7 +836,17 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
 
 pub(crate) extern "system" fn set_rate(me: ModHandle, rate: RateId, factor: f32) -> Status {
     entry("set_rate", || match caller_index(me) {
-        Ok((_, index)) => crate::rates::RATES.set(index, rate, factor),
+        Ok((_, index)) => {
+            let recipes = crate::rates::is_recipe_output(rate);
+            let before = recipes.then(|| crate::rate_links::factor(rate).to_bits());
+            let status = crate::rates::RATES.set(index, rate, factor);
+            if status == Status::OK
+                && before.is_some_and(|before| before != crate::rate_links::factor(rate).to_bits())
+            {
+                crate::rate_links::rebuild_recipes();
+            }
+            status
+        }
         Err(status) => status,
     })
 }

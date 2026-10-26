@@ -4,10 +4,12 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
+    use enshwick::content::recipes::RecipeKind;
     use enshwick::rates::{ExperienceGroup, Rate, RateError};
     use enshwick::test::FakeHost;
 
     const COMBAT: Rate = Rate::Experience(ExperienceGroup::Combat);
+    const ROOFS: Rate = Rate::RecipeOutput(RecipeKind::Roof);
 
     struct Rates;
 
@@ -26,6 +28,7 @@ mod tests {
             if let Ok(drops) = load.rate(Rate::ResourceDrops) {
                 drops.set(5.0)?;
             }
+            load.rate(ROOFS)?.set(1.5)?;
             Ok(Self)
         }
     }
@@ -41,5 +44,7 @@ mod tests {
         assert_eq!(loader.rate(Rate::WorkshopSpeed), Some(2.0));
         assert_eq!(loader.rate(Rate::ResourceDrops), None);
         assert_eq!(loader.rate(Rate::Experience(ExperienceGroup::Mining)), None);
+        assert_eq!(loader.rate(ROOFS), Some(1.5));
+        assert_eq!(loader.rate(Rate::RecipeOutput(RecipeKind::Other)), None);
     }
 }

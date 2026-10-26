@@ -1061,8 +1061,9 @@ pub struct HostApi {
     /// 100, from the next time it reads the rate. [`Status::BAD_ARGS`] for
     /// a factor that is not finite or lies outside 0 to 100, or a rate the
     /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
-    /// thread; neither allocates nor locks once
-    /// every mod is initialised. Since minor 75.
+    /// thread; neither allocates nor locks once every mod is initialised,
+    /// except for a recipe output rate, whose change builds the recipe
+    /// registry again. Since minor 75.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
     /// Declares a change of a vanilla value. The loader merges the changes
     /// of every mod once their `init` ran: a set in load order, the last
