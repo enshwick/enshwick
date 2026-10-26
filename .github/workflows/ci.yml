@@ -28,7 +28,7 @@ jobs:
       # v2.2.0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.3
+          bun-version: 1.4.4
 
       - name: Install
         run: bun install --frozen-lockfile --ignore-scripts
@@ -135,7 +135,7 @@ jobs:
       # v2.87.29
       - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
-          tool: cargo-nextest@0.9.148
+          tool: cargo-nextest@0.9.149
 
       - name: Format
         run: cargo fmt --all --check

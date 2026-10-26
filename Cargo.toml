@@ -18,7 +18,7 @@ members = [
 [workspace.package]
 authors = ["themaiby"]
 edition = "2024"
-rust-version = "1.98"
+rust-version = "1.99"
 license = "MIT"
 repository = "https://github.com/themaiby/enshwick"
 publish = false
@@ -32,13 +32,13 @@ base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 enshwick-loader-api = { path = "crates/enshwick-loader-api", version = "0.0.0-dev" } # x-release-please-version
 enshwick-loader-builds = { path = "crates/internal/builds", version = "0.0.0-dev" } # x-release-please-version
 enshwick-loader-reflect = { path = "crates/internal/reflect", version = "0.0.0-dev" } # x-release-please-version
-fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
+fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 minisign-verify = { version = "0.3.0", default-features = false }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
-bcdec_rs = { version = "0.2.0", default-features = false }
+bcdec_rs = { version = "0.2.1", default-features = false }
 zune-png = { version = "0.5.2", default-features = false, features = ["std"] }
-zune-core = { version = "0.5.1", default-features = false, features = ["std"] }
+zune-core = { version = "0.5.3", default-features = false, features = ["std"] }
 postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
 proptest = { version = "1.12.0", default-features = false, features = ["std"] }
 schemars = { version = "1.2.3", default-features = false, features = ["std", "derive"] }
@@ -50,7 +50,7 @@ semver = { version = "1.0.28", default-features = false, features = ["std"] }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
-zip = { version = "9.0.5", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 windows-sys = { version = "0.61.2", default-features = false }
 ruzstd = { version = "0.9.1", default-features = false, features = ["std"] }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
@@ -88,6 +88,9 @@ pedantic = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 # cargo-deny owns duplicate versions.
 multiple_crate_versions = "allow"
+# Its fix, `assert_eq!(value, [] as [T; 0])`, reads worse than `is_empty()`,
+# and the test name already says what was expected.
+assert_is_empty = "allow"
 missing_errors_doc = "deny"
 missing_panics_doc = "deny"
 missing_safety_doc = "deny"
