@@ -471,13 +471,16 @@ impl World {
             large.resize(len, 0);
             &mut large[..]
         };
-        // SAFETY: the entity's live component of the reflected size, which
-        // the loader handed out for writing, on the game thread.
+        // SAFETY: `component_mut` returned the entity's live component, handed
+        // out for writing on the game thread; `len` is `WritableType::size`,
+        // the reflected size of its type, and `copy` holds `len` bytes.
         unsafe { core::ptr::copy_nonoverlapping(data.cast::<u8>(), copy.as_mut_ptr(), len) };
         let result = write(copy);
         // Asked again: `write` may have moved or removed the component.
         let data = self.component_mut(entity, ty.ty)?;
-        // SAFETY: as above.
+        // SAFETY: `component_mut` returned the entity's live component again,
+        // handed out for writing on the game thread; `len` is the reflected
+        // size of its type, and `copy` holds `len` bytes.
         unsafe { core::ptr::copy_nonoverlapping(copy.as_ptr(), data.cast::<u8>(), len) };
         Ok(result)
     }
@@ -494,8 +497,10 @@ impl World {
         let at = usize::try_from(field.offset()).ok()?;
         let mut bytes = [0u8; 8];
         let len = size_of::<T>().min(bytes.len());
-        // SAFETY: the field lies inside the component, as resolution checked,
-        // and the component is live until the game thread moves on.
+        // SAFETY: `component` returned the entity's live component, valid until
+        // the game thread moves on; `Field::within` checked at resolution that
+        // `offset + size_of::<T>()` lies inside the reflected size of its type,
+        // and `len` is at most `size_of::<T>()`.
         unsafe {
             core::ptr::copy_nonoverlapping(
                 data.cast::<u8>().wrapping_add(at),
@@ -551,8 +556,10 @@ impl World {
         if !value.to_bytes(&mut bytes[..len]) {
             return Err(WorldError::Missing);
         }
-        // SAFETY: the field lies inside the component, as resolution checked;
-        // the loader handed the component out for writing.
+        // SAFETY: `component_mut` returned the entity's live component, handed
+        // out for writing on the game thread; `Field::within` checked at
+        // resolution that `offset + size_of::<T>()` lies inside the reflected
+        // size of its type, and `len` is at most `size_of::<T>()`.
         unsafe {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), data.cast::<u8>().wrapping_add(at), len);
         };
@@ -585,7 +592,8 @@ impl World {
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let data = self.component(entity, self.transform)?;
-        // SAFETY: the entity's live CurrentTransform, read at once.
+        // SAFETY: `component` returned the entity's live CurrentTransform,
+        // valid until the game thread moves on, and read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
     }
 
@@ -596,9 +604,10 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn used_item(&self, entity: Entity) -> Option<u32> {
-        let data = self.component(entity, self.used_item)?.cast::<u32>();
-        // SAFETY: UsedItem is the item id alone.
-        Some(unsafe { data.read_unaligned() })
+        let data = self.component(entity, self.used_item)?;
+        // SAFETY: `component` returned the entity's live UsedItem, valid until
+        // the game thread moves on; the component is the u32 item id alone.
+        Some(unsafe { crate::raw::read_at::<u32>(data.cast(), 0) })
     }
 
     /// Whether `entity` carries a name a player or [`World::set_label`] gave
@@ -619,8 +628,10 @@ impl World {
         let Some(data) = self.component(entity, label) else {
             return Some(false);
         };
-        // SAFETY: a live CustomPlayerString is its string id; 0 for none.
-        Some(unsafe { data.cast::<u64>().read_unaligned() } != 0)
+        // SAFETY: `component` returned the entity's live CustomPlayerString,
+        // valid until the game thread moves on; the component is its u64
+        // string id, 0 for none.
+        Some(unsafe { crate::raw::read_at::<u64>(data.cast(), 0) } != 0)
     }
 
     /// `entity`'s template GUID, in file order.
@@ -1230,6 +1241,7 @@ pub(crate) fn world_key(host: Host) -> Option<String> {
     if !(api.world_key)(host.handle(), &raw mut out).is_ok() {
         return None;
     }
-    // SAFETY: the loader keeps the key for the process.
+    // SAFETY: `world_key` returned OK, and the loader keeps the key's bytes
+    // alive and unchanged for the process, which outlives the copy here.
     unsafe { out.as_str() }.map(str::to_owned)
 }

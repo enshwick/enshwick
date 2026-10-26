@@ -40,8 +40,9 @@ pub(crate) fn enforce(data_dir: &std::path::Path, running: &[&str], unknown_buil
             ERROR,
             "{id} holds this game ({reason}) and {why}: the game stops before the world loads; \
              update Enshwick and the mod, or delete mod-data/{id}/{} to open the world anyway, \
-             at your own risk",
-            enshwick::state::HOLD_FILE
+             at your own risk ({})",
+            enshwick::state::HOLD_FILE,
+            crate::errors::HELD
         );
     }
     std::thread::sleep(LOG_GRACE);

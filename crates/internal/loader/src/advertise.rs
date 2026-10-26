@@ -70,7 +70,10 @@ pub fn fingerprint(
     for (id, values) in synced {
         let _written = write!(text, "\nsync {id} {values}");
     }
-    format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
+    format!(
+        "{:08x}",
+        enshwick_gamedata::reflect::fnv1a32(text.as_bytes())
+    )
 }
 
 /// `value` cut into parts of at most [`RULE_LIMIT`] bytes, on character
@@ -299,14 +302,14 @@ mod runtime {
     use std::path::Path;
     use std::time::{Duration, Instant};
 
-    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    use crate::module::Export;
 
     type Interface = unsafe extern "C" fn() -> *mut c_void;
-    type LoggedOn = unsafe extern "C" fn(server: *mut c_void) -> bool;
+    /// Returns a C++ `bool`, read as its byte so no other value can make an
+    /// invalid Rust `bool`.
+    type LoggedOn = unsafe extern "C" fn(server: *mut c_void) -> u8;
     type SetName = unsafe extern "C" fn(server: *mut c_void, name: *const i8);
     type SetKeyValue = unsafe extern "C" fn(server: *mut c_void, key: *const i8, value: *const i8);
-
-    type Export = unsafe extern "system" fn() -> isize;
 
     const POLL: Duration = Duration::from_secs(2);
     const GIVE_UP: Duration = Duration::from_secs(300);
@@ -358,10 +361,14 @@ mod runtime {
         };
         let started = Instant::now();
         let server = loop {
-            // SAFETY: the flat API's accessor takes no arguments.
+            // SAFETY: `api.interface` is `steam_api64.dll`'s export
+            // `SteamAPI_SteamGameServer_v015`, typed by the flat API, which
+            // takes no arguments and returns null before the server starts.
             let server = unsafe { (api.interface)() };
-            // SAFETY: a non-null game server interface.
-            if !server.is_null() && unsafe { (api.logged_on)(server) } {
+            // SAFETY: `server` is non-null, checked first, and is the game
+            // server interface the flat API handed out, which lives for the
+            // process; `api.logged_on` is its `BLoggedOn` export.
+            if !server.is_null() && unsafe { (api.logged_on)(server) } != 0 {
                 break server;
             }
             if started.elapsed() > GIVE_UP {
@@ -398,14 +405,20 @@ mod runtime {
                 .chain(stale)
                 .chain(advert.rules.iter().cloned());
             if let Ok(name) = CString::new(advert.name.as_str()) {
-                // SAFETY: the logged-on interface and a NUL-terminated string.
+                // SAFETY: `server` is the non-null logged-on interface from
+                // the loop above, which lives for the process;
+                // `api.set_name` is its `SetServerName` export, and `name` is
+                // a live NUL-terminated string the call copies.
                 unsafe { (api.set_name)(server, name.as_ptr()) };
             }
             for (key, value) in pairs {
                 let (Ok(key), Ok(value)) = (CString::new(key), CString::new(value)) else {
                     continue;
                 };
-                // SAFETY: the logged-on interface and NUL-terminated strings.
+                // SAFETY: `server` is the non-null logged-on interface from
+                // the loop above, which lives for the process;
+                // `api.set_key_value` is its `SetKeyValue` export, and `key`
+                // and `value` are live NUL-terminated strings the call copies.
                 unsafe { (api.set_key_value)(server, key.as_ptr(), value.as_ptr()) };
             }
             last = Some(advert);
@@ -458,28 +471,23 @@ mod runtime {
 
     impl Api {
         fn load() -> Option<Self> {
-            let module_name: Vec<u16> = "steam_api64.dll".encode_utf16().chain([0]).collect();
-            // SAFETY: a NUL-terminated module name.
-            let module = unsafe { GetModuleHandleW(module_name.as_ptr()) };
-            if module.is_null() {
-                return None;
-            }
-            let get = |name: &str| {
-                let name = CString::new(name).ok()?;
-                // SAFETY: a loaded module and a NUL-terminated name.
-                unsafe { GetProcAddress(module, name.as_ptr().cast()) }
-            };
+            let module = crate::module::Module::loaded("steam_api64.dll")?;
+            let get = |name: &str| module.export(name);
             let interface = get("SteamAPI_SteamGameServer_v015")?;
             let logged_on = get("SteamAPI_ISteamGameServer_BLoggedOn")?;
             let set_name = get("SteamAPI_ISteamGameServer_SetServerName")?;
             let set_key_value = get("SteamAPI_ISteamGameServer_SetKeyValue")?;
-            // SAFETY: each export has the flat API's signature for its name.
+            // SAFETY: the Steamworks flat API declares
+            // `SteamAPI_SteamGameServer_v015` as `Interface`.
             let interface = unsafe { core::mem::transmute::<Export, Interface>(interface) };
-            // SAFETY: as above.
+            // SAFETY: the Steamworks flat API declares
+            // `SteamAPI_ISteamGameServer_BLoggedOn` as `LoggedOn`.
             let logged_on = unsafe { core::mem::transmute::<Export, LoggedOn>(logged_on) };
-            // SAFETY: as above.
+            // SAFETY: the Steamworks flat API declares
+            // `SteamAPI_ISteamGameServer_SetServerName` as `SetName`.
             let set_name = unsafe { core::mem::transmute::<Export, SetName>(set_name) };
-            // SAFETY: as above.
+            // SAFETY: the Steamworks flat API declares
+            // `SteamAPI_ISteamGameServer_SetKeyValue` as `SetKeyValue`.
             let set_key_value =
                 unsafe { core::mem::transmute::<Export, SetKeyValue>(set_key_value) };
             Some(Self {

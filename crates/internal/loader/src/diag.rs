@@ -13,6 +13,8 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use enshwick_gamedata::{Part, PartState};
+
 use crate::settings::Settings;
 
 /// With diagnostics timing on, one call in this many of each hooked
@@ -254,6 +256,25 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
+    /// Each loader feature that names build table entries, with what this
+    /// build lacks of them.
+    pub parts: Vec<Part<'static>>,
+}
+
+/// What the log and the summary say of a loader feature this build does
+/// not serve whole; `None` when it does.
+#[must_use]
+pub fn part_line(part: &Part<'_>) -> Option<String> {
+    let how = match part.state() {
+        PartState::Works => return None,
+        PartState::Off => "off",
+        _ => "partly off",
+    };
+    Some(format!(
+        "{} {how}: missing {}",
+        part.name,
+        part.missing.join(", ")
+    ))
 }
 
 impl Summary {
@@ -281,6 +302,7 @@ impl Summary {
         if let Some(crash) = &self.last_crash {
             let _w = writeln!(out, "the last session crashed: {crash}");
         }
+        self.render_parts(&mut out);
         let running = self.mods.iter().filter(|m| m.running).count();
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
@@ -354,6 +376,26 @@ services and events:"
         }
         self.render_costs_and_conflicts(&mut out);
         out
+    }
+
+    fn render_parts(&self, out: &mut String) {
+        if self.parts.is_empty() {
+            return;
+        }
+        let lines: Vec<String> = self.parts.iter().filter_map(part_line).collect();
+        let total = self.parts.len();
+        let _w = if lines.is_empty() {
+            writeln!(out, "\nloader features: all {total} work on this build")
+        } else {
+            writeln!(
+                out,
+                "\nloader features: {} of {total} work on this build",
+                total - lines.len()
+            )
+        };
+        for line in &lines {
+            let _w = writeln!(out, "  {line}");
+        }
     }
 
     fn render_costs_and_conflicts(&self, out: &mut String) {
@@ -565,7 +607,53 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            parts: vec![
+                Part {
+                    name: "weather",
+                    named: 2,
+                    missing: vec!["weather.set", "weather.get"],
+                },
+                Part {
+                    name: "altars",
+                    named: 3,
+                    missing: vec!["altars.radius"],
+                },
+                Part {
+                    name: "chat",
+                    named: 1,
+                    missing: Vec::new(),
+                },
+            ],
         }
+    }
+
+    #[test]
+    fn the_summary_names_the_loader_features_this_build_lacks() {
+        let text = summary().render();
+        assert!(text.contains(
+            "\nloader features: 1 of 3 work on this build\n  \
+             weather off: missing weather.set, weather.get\n  \
+             altars partly off: missing altars.radius\n"
+        ));
+        let mut whole = summary();
+        whole.parts.clear();
+        assert!(!whole.render().contains("loader features"));
+        whole.parts.push(summary().parts.swap_remove(2));
+        assert!(
+            whole
+                .render()
+                .contains("\nloader features: all 1 work on this build\n")
+        );
+    }
+
+    #[test]
+    fn a_part_the_build_serves_whole_gives_no_line() {
+        let parts = summary().parts;
+        assert_eq!(
+            part_line(&parts[0]).as_deref(),
+            Some("weather off: missing weather.set, weather.get")
+        );
+        assert_eq!(part_line(&parts[2]), None);
     }
 
     #[test]

@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn a_mod_reads_a_corpse_and_takes_everything() {
         let loader = world().install();
-        // SAFETY: the export of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Looter)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
         let inventories = INVENTORIES.get().unwrap();
 

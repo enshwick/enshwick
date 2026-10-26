@@ -122,7 +122,8 @@ pub(crate) fn start(
         crate::profile::start(loader.mods.len());
     }
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
-    // SAFETY: the loader's table lives for the process.
+    // SAFETY: `host::API` is the loader's process-wide table, a static that
+    // lives for the process.
     unsafe {
         enshwick::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
@@ -233,7 +234,12 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         if reason == resolve::OTHER_SIDE {
             crate::log!(INFO, "{} skipped: {reason}", libraries[*index].file);
         } else {
-            crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
+            crate::log!(
+                WARN,
+                "{} skipped: {reason} ({})",
+                libraries[*index].file,
+                crate::errors::UNMET_RELATIONS
+            );
         }
     }
     let replaced = plan
@@ -289,7 +295,10 @@ fn records(
             version: candidates[i].version.to_string(),
             file: format!("mods/{}", libraries[i].file),
             manifest: libraries[i].manifest,
-            // SAFETY: the manifest is static data inside its loaded DLL.
+            // SAFETY: the manifest is the copy `manifest::read` made for the
+            // process or a pack's manifest built for the process, its
+            // strings and lists readable and never written; a string `read`
+            // left in the DLL is read while the planned mod's DLL is loaded.
             meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
             former: candidates[i].former_ids().map(str::to_owned).collect(),
             notes: notes
@@ -321,7 +330,8 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
         })
         .collect();
     let mut own: HMODULE = core::ptr::null_mut();
-    // SAFETY: an address inside this DLL; the handle is not counted.
+    // SAFETY: `attribute_crashes` is an address inside this DLL, `own` is a
+    // writable local, and the unchanged refcount means nothing is to free.
     let found = unsafe {
         GetModuleHandleExW(
             GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -352,8 +362,9 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
 fn initialise(loader: &Loader, order: &[&Library]) {
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
-        // SAFETY: the mod exports `init` with this signature; the table lives
-        // for the process.
+        // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
+        // as `enshwick::abi::exports` documents, called with the static host
+        // table and the mod's own handle.
         let status = crate::reload::initialising(index, || unsafe {
             (library.init)(&raw const host::API, host::handle(index))
         });
@@ -369,7 +380,9 @@ fn initialise(loader: &Loader, order: &[&Library]) {
 fn ready(loader: &Loader, order: &[&Library]) {
     for (index, library) in order.iter().enumerate() {
         if !loader.mods[index].off.load(Ordering::Acquire) {
-            // SAFETY: the mod exports `ready` with this signature.
+            // SAFETY: `library.ready` is the mod's `READY` export, typed
+            // `ReadyFn` as `enshwick::abi::exports` documents, called with the
+            // static host table after the mod's init succeeded.
             unsafe { (library.ready)(&raw const host::API, host::handle(index)) };
         }
     }

@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use enshwick::abi::Side;
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
-use crate::{builds, log};
+use crate::{builds, errors, log};
 
 use super::pe;
 
@@ -30,7 +30,7 @@ pub(super) struct Game {
     /// Where the executable's image is mapped.
     pub(super) base: u64,
     /// The build's fingerprint from its debug directory.
-    pub(super) fingerprint: enshwick_reflect::Fingerprint,
+    pub(super) fingerprint: enshwick_gamedata::reflect::Fingerprint,
     /// The build table that serves it.
     pub(super) build: &'static builds::KnownBuild,
     /// Its reflected types and systems.
@@ -45,6 +45,11 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
 
+    /// # Safety
+    ///
+    /// - `EnumWindows` calls it with a window handle valid for the call.
+    /// - `found` is the exposed address of a writable `bool` alive for the
+    ///   whole enumeration.
     unsafe extern "system" fn ours(window: HWND, found: LPARAM) -> i32 {
         let mut process = 0u32;
         // SAFETY: a window Windows enumerates; the out word is ours.
@@ -55,7 +60,9 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
         let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcessId() };
         if visible && process == me {
             let flag = core::ptr::with_exposed_provenance_mut::<bool>(found.cast_unsigned());
-            // SAFETY: `found` is the address of the caller's flag.
+            // SAFETY: `found` is the exposed address of the `found` flag that
+            // `wait_for_window` passed `EnumWindows`, alive for the whole
+            // enumeration.
             unsafe { flag.write(true) };
             return 0;
         }
@@ -65,7 +72,8 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
     let started = std::time::Instant::now();
     while started.elapsed() < limit {
         let mut found = false;
-        // SAFETY: the callback only writes the flag, which outlives the call.
+        // SAFETY: `ours` matches `WNDENUMPROC` and writes only the flag whose
+        // address goes in as `LPARAM`, a local that outlives the call.
         unsafe {
             EnumWindows(
                 Some(ours),
@@ -102,7 +110,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     if let Some(problem) = problem {
-        crate::log!(WARN, "loader settings left at their defaults: {problem}");
+        crate::log!(
+            WARN,
+            "loader settings left at their defaults: {problem} ({})",
+            errors::BAD_SETTINGS
+        );
     }
     if stub_abi != STUB_ABI {
         crate::log!(
@@ -111,7 +123,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
         );
     }
     if missing_forwards == u32::MAX {
-        crate::log!(WARN, "the system powrprof.dll could not be loaded");
+        crate::log!(
+            WARN,
+            "the system powrprof.dll could not be loaded ({})",
+            errors::NO_SYSTEM_POWRPROF
+        );
     } else if missing_forwards > 0 {
         crate::log!(
             INFO,
@@ -128,19 +144,29 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     let Some((side, base, image_len)) = identify() else {
         crate::log!(
             ERROR,
-            "this is not Enshrouded or its dedicated server; nothing loads"
+            "this is not Enshrouded or its dedicated server; nothing loads ({})",
+            errors::NOT_THE_GAME
         );
         return None;
     };
-    // SAFETY: the game's image stays mapped for the life of the process.
+    // SAFETY: `identify` found `image_len` bytes of the game's image at
+    // `base`, whose provenance it exposed, mapped for the life of the process.
     let bytes: &'static [u8] = unsafe { core::slice::from_raw_parts(base as *const u8, image_len) };
     let Ok(image) = Image::parse(bytes, Layout::Mapped, Some(base)) else {
-        crate::log!(ERROR, "the game's image could not be read; nothing loads");
+        crate::log!(
+            ERROR,
+            "the game's image could not be read; nothing loads ({})",
+            errors::UNREADABLE_GAME
+        );
         return None;
     };
     let image: &'static Image<'static> = Box::leak(Box::new(image));
     let Some(fingerprint) = image.fingerprint() else {
-        crate::log!(ERROR, "the game build has no fingerprint; nothing loads");
+        crate::log!(
+            ERROR,
+            "the game build has no fingerprint; nothing loads ({})",
+            errors::UNREADABLE_GAME
+        );
         return None;
     };
     let reflection = Reflection::scan(image);
@@ -160,9 +186,10 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     let Some(mut build) = builds::select(&tables, side, fingerprint, code) else {
         crate::log!(
             ERROR,
-            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table",
+            "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table ({})",
             hex(&fingerprint.guid()),
-            fingerprint.age()
+            fingerprint.age(),
+            errors::UNKNOWN_BUILD
         );
         crate::holds::enforce(data_dir, &[], true);
         return None;
@@ -170,11 +197,12 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     for (name, rva) in build.checks() {
         let entry = reflection
             .system(name)
-            .map_or(0, enshwick_reflect::System::entry);
+            .map_or(0, enshwick_gamedata::reflect::System::entry);
         if entry != base + rva {
             crate::log!(
                 ERROR,
-                "{name} is not where the build table says; nothing loads"
+                "{name} is not where the build table says; nothing loads ({})",
+                errors::TABLE_MISMATCH
             );
             crate::holds::enforce(data_dir, &[], true);
             return None;
@@ -188,11 +216,12 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         builds::Kind::Exact => crate::log!(INFO, "game: {}", build.name),
         builds::Kind::Fallback => crate::log!(
             WARN,
-            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table",
+            "game build {}/{} has no build table yet: {} entries found by their code patterns, {} missing; features and mods that need a missing one stay off until a loader build carries its table ({})",
             hex(&fingerprint.guid()),
             fingerprint.age(),
             build.entries(),
-            build.missing().len()
+            build.missing().len(),
+            errors::FEATURES_OFF
         ),
     }
     if build.kind == builds::Kind::Fallback {
@@ -201,6 +230,11 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             "missing on this build: {}",
             build.missing().join(", ")
         );
+    }
+    for part in build.parts(crate::TABLE_IDS) {
+        if let Some(line) = crate::diag::part_line(&part) {
+            crate::log!(WARN, "loader feature {line}; the game runs it vanilla");
+        }
     }
     Some(Game {
         side,
@@ -254,9 +288,11 @@ pub(super) fn identify() -> Option<(Side, u64, usize)> {
     if module.is_null() {
         return None;
     }
-    let base = module.addr();
-    // SAFETY: the executable's headers are mapped at its base.
-    let header = unsafe { core::slice::from_raw_parts(base as *const u8, HEADER_PAGE) };
+    let base = module.expose_provenance();
+    // SAFETY: `module` is the executable's base, non-null as checked just
+    // before, where Windows maps its read-only header page of `HEADER_PAGE`
+    // bytes for the life of the process.
+    let header = unsafe { core::slice::from_raw_parts(module.cast::<u8>(), HEADER_PAGE) };
     let optional = usize::try_from(pe::u32_at(header, pe::PE_POINTER)?).ok()? + pe::OPTIONAL;
     let len = usize::try_from(pe::u32_at(header, optional + pe::SIZE_OF_IMAGE)?).ok()?;
     Some((side, u64::try_from(base).ok()?, len))

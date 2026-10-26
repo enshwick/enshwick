@@ -33,11 +33,16 @@ pub use values::{__Values, __check_field, __entry};
 ///   applied when a world loads, and a joined client runs with the server's
 ///   value, which stays the same while the world runs;
 /// - `range = a..=b` (also `a..` or `..=b`) for numbers and `choices = [..]`
-///   for values from a list, both checked whenever the file is read and
-///   before the console or the Mods screen writes a value;
+///   for values from a list. The console and the Mods screen refuse a value
+///   outside them; a file that holds a number outside its range, a list's
+///   element too, still reads, the number held to the range with a warning
+///   in the mod's log;
 /// - `text = "key"`, the text key of the field's translated label in the
 ///   mod's texts, `config.<field>` by default; its description is the key
-///   with `.doc` appended;
+///   with `.doc` appended, and for a list each element's label is the key
+///   with `.element` appended, `{n}` in it standing for the element's number;
+/// - `first = n`, for a list, the number its first element shows with, 1 by
+///   default;
 /// - `#[config(group)]` on a field whose type is a `Config` of its own: its
 ///   settings are a table of the file, `[<field>]`, with dotted keys such as
 ///   `<field>.<key>`, and the Mods screen shows them together. A group's

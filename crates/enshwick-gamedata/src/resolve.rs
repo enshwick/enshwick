@@ -1,6 +1,7 @@
 //! A table resolved for the running build, and choosing that table.
 
-use crate::{Fingerprint, Side, Table};
+use crate::reflect::Fingerprint;
+use crate::{Side, Table};
 
 /// How a [`Resolved`] table came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

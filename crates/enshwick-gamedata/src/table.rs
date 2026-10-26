@@ -6,9 +6,8 @@ use std::collections::BTreeMap;
 use enshwick::code::Pattern;
 
 use crate::entries::read;
-use crate::{
-    Constant, Fingerprint, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol,
-};
+use crate::reflect::Fingerprint;
+use crate::{Constant, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol};
 
 /// Why a table does not read.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]

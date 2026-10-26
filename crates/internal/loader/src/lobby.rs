@@ -73,7 +73,8 @@ mod runtime {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
     use enshwick::abi::UiDialog;
-    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    use crate::module::Export;
 
     /// Steam's callback id of `LobbyEnter_t`: matchmaking callbacks start at
     /// 500, and it is the fourth.
@@ -91,7 +92,6 @@ mod runtime {
     /// `k_EChatRoomEnterResponseSuccess`.
     const ENTERED: u32 = 1;
 
-    type Export = unsafe extern "system" fn() -> isize;
     type Matchmaking = unsafe extern "C" fn() -> *mut c_void;
     type GetLobbyData =
         unsafe extern "C" fn(this: *mut c_void, lobby: u64, key: *const c_char) -> *const c_char;
@@ -100,7 +100,7 @@ mod runtime {
         lobby: u64,
         key: *const c_char,
         value: *const c_char,
-    ) -> bool;
+    ) -> u8;
     type RegisterCallback = unsafe extern "C" fn(callback: *mut Callback, id: i32);
 
     struct Api {
@@ -151,12 +151,21 @@ mod runtime {
         size,
     };
 
+    /// Steam's `Run` for `LobbyEnter_t`: notes the lobby the client entered.
+    ///
+    /// # Safety
+    ///
+    /// - Called by Steam on the thread that runs its callbacks, with null or
+    ///   a `LobbyEnter_t` of `LOBBY_ENTER_SIZE` readable bytes that Steam
+    ///   does not change during the call.
     unsafe extern "C" fn run(_callback: *mut Callback, data: *const u8) {
         if data.is_null() {
             return;
         }
-        // SAFETY: Steam hands a `LobbyEnter_t`, `LOBBY_ENTER_SIZE` bytes.
-        let record = unsafe { data.cast::<[u8; LOBBY_ENTER_BYTES]>().read() };
+        // SAFETY: `data` is non-null, checked by the guard before it, and
+        // points at Steam's `LobbyEnter_t` of `LOBBY_ENTER_BYTES` bytes,
+        // unchanged during the call, by this function's `# Safety`.
+        let record: [u8; LOBBY_ENTER_BYTES] = unsafe { enshwick::raw::read_at(data, 0) };
         let lobby = record
             .first_chunk::<8>()
             .map_or(0, |b| u64::from_le_bytes(*b));
@@ -172,6 +181,11 @@ mod runtime {
         }
     }
 
+    /// Steam's `GetCallbackSizeBytes`: the size of `LobbyEnter_t`.
+    ///
+    /// # Safety
+    ///
+    /// - Called by Steam with the callback object it was registered with.
     unsafe extern "C" fn size(_callback: *mut Callback) -> i32 {
         LOBBY_ENTER_SIZE
     }
@@ -194,34 +208,32 @@ mod runtime {
             flags: 0,
             id: 0,
         }));
-        // SAFETY: a callback object that lives for the process, laid out as
-        // Steam's; Steam writes its flags and id.
+        // SAFETY: `register` is `SteamAPI_RegisterCallback`, typed by the
+        // flat API; `callback` is leaked, so it lives for the process, is
+        // laid out as MSVC's `CCallbackBase` (`repr(C)`), and Rust never
+        // touches it again while Steam writes its flags and id.
         unsafe { register(&raw mut *callback, LOBBY_ENTER) };
     }
 
     fn load() -> Option<(Api, RegisterCallback)> {
-        let module_name: Vec<u16> = "steam_api64.dll".encode_utf16().chain([0]).collect();
-        // SAFETY: a NUL-terminated module name.
-        let module = unsafe { GetModuleHandleW(module_name.as_ptr()) };
-        if module.is_null() {
-            return None;
-        }
-        let get = |name: &str| {
-            let name = CString::new(name).ok()?;
-            // SAFETY: a loaded module and a NUL-terminated name.
-            unsafe { GetProcAddress(module, name.as_ptr().cast()) }
-        };
+        let module = crate::module::Module::loaded("steam_api64.dll")?;
+        let get = |name: &str| module.export(name);
         let matchmaking = get("SteamAPI_SteamMatchmaking_v009")?;
         let get_data = get("SteamAPI_ISteamMatchmaking_GetLobbyData")?;
         let set_data = get("SteamAPI_ISteamMatchmaking_SetLobbyData")?;
         let register = get("SteamAPI_RegisterCallback")?;
-        // SAFETY: each export has the flat API's signature for its name.
+        // SAFETY: the Steamworks flat API declares
+        // `SteamAPI_SteamMatchmaking_v009` as `Matchmaking`.
         let matchmaking = unsafe { core::mem::transmute::<Export, Matchmaking>(matchmaking) };
-        // SAFETY: as above.
+        // SAFETY: the Steamworks flat API declares
+        // `SteamAPI_ISteamMatchmaking_GetLobbyData` as `GetLobbyData`.
         let get_data = unsafe { core::mem::transmute::<Export, GetLobbyData>(get_data) };
-        // SAFETY: as above.
+        // SAFETY: the Steamworks flat API declares
+        // `SteamAPI_ISteamMatchmaking_SetLobbyData` as `SetLobbyData`, its
+        // C++ `bool` read as a byte.
         let set_data = unsafe { core::mem::transmute::<Export, SetLobbyData>(set_data) };
-        // SAFETY: as above.
+        // SAFETY: the Steamworks flat API declares `SteamAPI_RegisterCallback`
+        // as `RegisterCallback`.
         let register = unsafe { core::mem::transmute::<Export, RegisterCallback>(register) };
         Some((
             Api {
@@ -235,8 +247,9 @@ mod runtime {
 
     impl Api {
         fn interface(&self) -> Option<*mut c_void> {
-            // SAFETY: the flat API's accessor takes no arguments; null
-            // before Steam starts.
+            // SAFETY: `self.matchmaking` is the flat API's
+            // `SteamAPI_SteamMatchmaking_v009`, which takes no arguments and
+            // returns null before Steam starts.
             let this = unsafe { (self.matchmaking)() };
             (!this.is_null()).then_some(this)
         }
@@ -246,13 +259,17 @@ mod runtime {
             let (Some(this), Ok(key)) = (self.interface(), CString::new(key)) else {
                 return String::new();
             };
-            // SAFETY: the interface, a lobby id and a NUL-terminated key;
-            // Steam returns a NUL-terminated string it keeps, or null.
+            // SAFETY: `this` is the non-null matchmaking interface
+            // `interface` returned, which lives for the process; `key` is a
+            // live NUL-terminated string. Steam returns null or a
+            // NUL-terminated string it keeps.
             let value = unsafe { (self.get)(this, lobby, key.as_ptr()) };
             if value.is_null() {
                 return String::new();
             }
-            // SAFETY: as above.
+            // SAFETY: `value` is non-null, checked by the guard before it, and
+            // is the NUL-terminated string Steam keeps until its next lobby
+            // call, which this thread does not make before the copy below.
             unsafe { CStr::from_ptr(value) }
                 .to_string_lossy()
                 .into_owned()
@@ -266,9 +283,10 @@ mod runtime {
             else {
                 return false;
             };
-            // SAFETY: the interface, a lobby id and NUL-terminated strings
-            // Steam copies.
-            unsafe { (self.set)(this, lobby, key.as_ptr(), value.as_ptr()) }
+            // SAFETY: `this` is the non-null matchmaking interface
+            // `interface` returned, which lives for the process; `key` and
+            // `value` are live NUL-terminated strings Steam copies.
+            unsafe { (self.set)(this, lobby, key.as_ptr(), value.as_ptr()) != 0 }
         }
     }
 

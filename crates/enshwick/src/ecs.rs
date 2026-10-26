@@ -6,7 +6,7 @@
 //! address and offset comes from the loader for the running build.
 
 use crate::abi::Side;
-use crate::raw::read_at;
+use crate::raw::{read_at, read_ptr_at, write_at};
 use crate::{Host, Load, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
@@ -76,11 +76,11 @@ pub struct Ecs {
 ///
 /// # Safety
 ///
-/// `address` is a function of type `F`.
-unsafe fn function<F: Copy>(address: u64) -> F {
+/// - `address` is the entry of a function with the signature and ABI of `F`.
+unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
     let address = usize::try_from(address).unwrap_or(0);
-    // SAFETY: the caller guarantees the type; `F` is a function pointer the size
-    // of `usize`.
+    // SAFETY: `F: FnPtr` is a function pointer the size of `usize`, and the
+    // caller guarantees `address` is a function of type `F`.
     unsafe { core::mem::transmute_copy(&address) }
 }
 
@@ -104,11 +104,14 @@ impl Ecs {
             load.symbol("ecs.iterator_next")?,
             load.symbol("ecs.mark_changed")?,
         );
-        // SAFETY: the loader pins this id to the iterator's `init`.
+        // SAFETY: the build table's `ecs.iterator_init` is the query
+        // iterator's init, with the signature of `IteratorInit`.
         let init = unsafe { function::<IteratorInit>(init) };
-        // SAFETY: the loader pins this id to the iterator's `next`.
+        // SAFETY: the build table's `ecs.iterator_next` is the query
+        // iterator's step, with the signature of `IteratorNext`.
         let next = unsafe { function::<IteratorNext>(next) };
-        // SAFETY: the loader pins this id to `mark_changed`.
+        // SAFETY: the build table's `ecs.mark_changed` is the engine's change
+        // mark, with the signature of `MarkChanged`.
         let mark = unsafe { function::<MarkChanged>(mark) };
         Ok(Self {
             init,
@@ -125,10 +128,12 @@ impl Ecs {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live query context of the hooked system and `N` matches its
-    /// iterator. The [`Query`] stays inside that call of the hook: its safe
-    /// [`Query::next`] walks `ctx`, so a query kept past the hook's return,
-    /// in a static or another thread's hands, walks freed memory.
+    /// - `ctx` is the live query context the hooked system was called with,
+    ///   used on that system's thread during the hook.
+    /// - `N` is the number of iterator words the system declares.
+    /// - The [`Query`] is dropped before the hook returns: its safe
+    ///   [`Query::next`] walks `ctx`, so a query kept past the hook's return,
+    ///   in a static or another thread's hands, walks freed memory.
     ///
     /// # Examples
     ///
@@ -147,7 +152,9 @@ impl Ecs {
     #[must_use]
     pub unsafe fn query<const N: usize>(&self, ctx: *mut u64) -> Query<'_, N> {
         let mut words = [0u64; N];
-        // SAFETY: the caller passes a live context and a matching size.
+        // SAFETY: the caller guarantees `ctx` is the hooked system's live
+        // context and `N` its iterator's word count; `words` holds those
+        // `N * 8` writable bytes.
         unsafe { (self.init)(ctx, words.as_mut_ptr(), (N * 8) as u64) };
         Query {
             ecs: self,
@@ -160,25 +167,27 @@ impl Ecs {
     ///
     /// # Safety
     ///
-    /// `ctx` is a live query context.
+    /// - `ctx` is the live query context the hooked system was called with,
+    ///   used on that system's thread during the hook.
     ///
     /// # Examples
     ///
     /// ```
     /// /// Walks the query again from its first row, leaving the counter as found.
     /// unsafe fn again(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) {
-    ///     // SAFETY: called from the system's hook with its context.
+    ///     // SAFETY: called from the system's hook with its live context.
     ///     let row = unsafe { ecs.row(ctx) };
-    ///     // SAFETY: as above.
+    ///     // SAFETY: `ctx` is the hooked system's live context, on its thread.
     ///     unsafe { ecs.set_row(ctx, 0) };
     ///     // ... a second pass over the rows ...
-    ///     // SAFETY: as above.
+    ///     // SAFETY: `ctx` is the hooked system's live context, and `row` its own counter.
     ///     unsafe { ecs.set_row(ctx, row) };
     /// }
     /// ```
     #[must_use]
     pub unsafe fn row(&self, ctx: *mut u64) -> u32 {
-        // SAFETY: the row counter lies inside a live context.
+        // SAFETY: the caller guarantees a live context, which keeps its u32
+        // row counter at the build table's `ecs.context_row`.
         unsafe { read_at(ctx.cast(), self.context_row) }
     }
 
@@ -187,26 +196,26 @@ impl Ecs {
     ///
     /// # Safety
     ///
-    /// `ctx` is a live query context.
+    /// - `ctx` is the live query context the hooked system was called with,
+    ///   used on that system's thread during the hook.
+    /// - `row` is 0 or a row of the query, such as one [`Ecs::row`] read.
     ///
     /// # Examples
     ///
     /// See [`Ecs::row`].
     pub unsafe fn set_row(&self, ctx: *mut u64, row: u32) {
-        // SAFETY: the row counter lies inside a live context.
-        unsafe {
-            ctx.cast::<u8>()
-                .wrapping_add(self.context_row)
-                .cast::<u32>()
-                .write_unaligned(row);
-        }
+        // SAFETY: the caller guarantees a live context on the system's thread,
+        // which keeps its u32 row counter at the build table's
+        // `ecs.context_row`.
+        unsafe { write_at(ctx.cast(), self.context_row, row) };
     }
 
     /// The entity of the query's current row, `None` before the first.
     ///
     /// # Safety
     ///
-    /// `ctx` is a live query context.
+    /// - `ctx` is the live query context the hooked system was called with,
+    ///   used on that system's thread during the hook.
     ///
     /// # Examples
     ///
@@ -218,17 +227,22 @@ impl Ecs {
     /// ```
     #[must_use]
     pub unsafe fn entity(&self, ctx: *mut u64) -> Option<Entity> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `ctx` is the hooked system's live
+        // context, used on its thread, which is the contract of `row`.
         let row = unsafe { self.row(ctx) };
         if row == 0 {
             return None;
         }
-        // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
-        // SAFETY: the descriptor holds a pointer to the per-row entity records.
-        let records: *const u8 = unsafe { read_at(descriptor, self.entity_records) };
+        // SAFETY: the caller guarantees a live context, whose first word is
+        // its query descriptor (engine layout).
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
+        // SAFETY: a live query descriptor keeps the pointer to its per-row
+        // entity records at the build table's `ecs.descriptor_entity_records`.
+        let records = unsafe { read_ptr_at::<u8>(descriptor, self.entity_records) }.cast_const();
         let offset = (row as usize - 1) * self.entity_record_size;
-        // SAFETY: `row` is a valid 1-based row of this query.
+        // SAFETY: `row` is the context's own 1-based row, not 0 as checked
+        // above, and the records hold one of `ecs.entity_record_size` bytes
+        // per row, each starting with the row's u32 entity id.
         Entity::from_raw(unsafe { read_at(records, offset) })
     }
 
@@ -239,8 +253,9 @@ impl Ecs {
     ///
     /// # Safety
     ///
-    /// The words come from the current row of a live query that writes the
-    /// component.
+    /// - The words come from the current row of a live query of the hooked
+    ///   system, which writes the component, used on that system's thread
+    ///   during the hook.
     ///
     /// # Examples
     ///
@@ -266,7 +281,10 @@ impl Ecs {
             reason = "the engine packs the type and flags"
         )]
         let (type_index, flags) = (kind as u16, (kind >> 16) as u8);
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees the words of the current row of a live
+        // query that writes the component, on its thread, which is what the
+        // build table's `ecs.mark_changed` takes; `tracker` is not 0, checked
+        // above.
         unsafe { (self.mark)(tracker, stamp_a, stamp_b, entity, type_index, flags) };
     }
 }
@@ -299,7 +317,10 @@ impl<const N: usize> Query<'_, N> {
         reason = "rows borrow the query, so this is a lending walk"
     )]
     pub fn next(&mut self) -> Option<&[u64; N]> {
-        // SAFETY: the query was created from a live context and a matching size.
+        // SAFETY: only `Ecs::query` makes a `Query`, whose caller guarantees a
+        // live `ctx` of the hooked system, `N` its iterator's word count, and
+        // that the query is dropped before the hook returns; `words` holds
+        // `N * 8` writable bytes.
         let more = unsafe { (self.ecs.next)(self.ctx, self.words.as_mut_ptr(), (N * 8) as u64) };
         (more & 0xff != 0).then_some(&self.words)
     }
@@ -359,11 +380,14 @@ impl Components {
             load.symbol("ecs.component_read_raw")?,
             load.symbol("ecs.slot_root")?,
         );
-        // SAFETY: the loader pins this id to the component type lookup.
+        // SAFETY: the build table's `ecs.type_index` is the component type
+        // lookup, with the signature of `TypeIndex`.
         let type_index = unsafe { function::<TypeIndex>(type_index) };
-        // SAFETY: the loader pins this id to the side-effect-free component read.
+        // SAFETY: the build table's `ecs.component_read_raw` is the component
+        // read without side effects, with the signature of `ReadComponent`.
         let read = unsafe { function::<ReadComponent>(read) };
-        // SAFETY: the loader pins this id to the slot root walk.
+        // SAFETY: the build table's `ecs.slot_root` is the walk up
+        // `OwnerRelationship`, with the signature of `SlotRoot`.
         let slot_root = unsafe { function::<SlotRoot>(slot_root) };
         Ok(Self {
             type_index,
@@ -384,20 +408,23 @@ impl Components {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live context of the hooked system, used on its thread.
+    /// - `ctx` is null or the live query context the hooked system was called
+    ///   with, used on that system's thread during the hook.
     ///
     /// # Examples
     ///
     /// ```
+    /// use enshwick::raw::read_at;
+    ///
     /// unsafe fn used_item(
     ///     c: &enshwick::ecs::Components,
     ///     ctx: *mut u64,
     ///     chest: enshwick::ecs::Entity,
     /// ) -> Option<u32> {
-    ///     // SAFETY: called from a system's hook with its context.
+    ///     // SAFETY: called from a system's hook with its live context.
     ///     let data = unsafe { c.component(ctx, chest, 0x0b02_361d) }?;
-    ///     // SAFETY: UsedItem is the item id alone.
-    ///     Some(unsafe { data.cast::<u32>().read_unaligned() })
+    ///     // SAFETY: a live UsedItem, inside the hook, is its u32 item id alone.
+    ///     Some(unsafe { read_at(data, 0) })
     /// }
     /// ```
     #[must_use]
@@ -405,23 +432,31 @@ impl Components {
         if ctx.is_null() || entity.is_none() {
             return None;
         }
-        // SAFETY: the first word of a context is its query descriptor, which
-        // points at the entity world.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
-        // SAFETY: as above.
-        let world: *const u8 = unsafe { read_at(descriptor, self.entity_world) };
+        // SAFETY: `ctx` is not null, as the early return ensures, and the
+        // caller guarantees a live context, whose first word is its query
+        // descriptor (engine layout).
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
+        // SAFETY: a live query descriptor keeps the pointer to its entity
+        // world at the build table's `ecs.context_entity_world`.
+        let world = unsafe { read_ptr_at::<u8>(descriptor, self.entity_world) }.cast_const();
         if world.is_null() {
             return None;
         }
-        // SAFETY: the entity world starts with its component registry.
-        let registry: *const u8 = unsafe { read_at(world, 0) };
+        // SAFETY: `world` is not null, as the early return ensures, and an
+        // entity world starts with the pointer to its component registry
+        // (engine layout).
+        let registry = unsafe { read_ptr_at::<u8>(world, 0) }.cast_const();
         let index = self.registry_maps.iter().find_map(|&map| {
-            // SAFETY: the registry's type maps; lookups do not change them.
+            // SAFETY: the registry keeps its type maps at the build table's
+            // `ecs.registry_type_map` and `ecs.registry_type_map_fallback`;
+            // the lookup only reads them and `hash`, a local.
             let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };
             (!index.is_null()).then_some(index)
         })?;
         let mut out = [0usize; 2];
-        // SAFETY: a read with no side effects, from inside a running system.
+        // SAFETY: `world` is the live entity world of the hooked system and
+        // `index` its registry's entry for `hash`; the read has no side
+        // effects and writes two words to `out`, a local.
         unsafe { (self.read)(&raw mut out, world, index, entity.0) };
         (out[0] != 0).then(|| core::ptr::with_exposed_provenance_mut(out[0]))
     }
@@ -432,21 +467,26 @@ impl Components {
     ///
     /// # Safety
     ///
-    /// As for [`Components::component`]; `owner_index` comes from the same
-    /// system.
+    /// - `ctx` is the live query context the hooked system was called with,
+    ///   used on that system's thread during the hook.
+    /// - `owner_index` is that system's `OwnerRelationship` index pointer,
+    ///   from the same call.
     ///
     /// # Examples
     ///
     /// ```
     /// unsafe fn root(c: &enshwick::ecs::Components, ctx: *mut u64, slot: u64, index: u64) {
-    ///     // SAFETY: called from the inventory system's hook.
+    ///     // SAFETY: the inventory system's live context and index, inside its hook.
     ///     let _ = unsafe { c.slot_root(ctx, slot, index) };
     /// }
     /// ```
     #[must_use]
     pub unsafe fn slot_root(&self, ctx: *mut u64, slot: u64, owner_index: u64) -> Option<Entity> {
         let mut out = [0u64; 2];
-        // SAFETY: the game's walk up `OwnerRelationship`, inside its system.
+        // SAFETY: the caller guarantees the hooked system's live context and
+        // its own `OwnerRelationship` index, on its thread, which the build
+        // table's `ecs.slot_root` takes; it writes two words to `out`, a
+        // local.
         unsafe { (self.slot_root)(&raw mut out, slot, owner_index, ctx) };
         #[expect(
             clippy::cast_possible_truncation,
@@ -543,7 +583,8 @@ impl Worlds {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live context of a running system, or null.
+    /// - `ctx` is null or the live query context a hooked system was called
+    ///   with, used on that system's thread during the hook.
     ///
     /// # Examples
     ///
@@ -562,12 +603,16 @@ impl Worlds {
         if server_world == 0 || ctx.is_null() {
             return false;
         }
-        // SAFETY: the first word of a context is its query descriptor.
-        let descriptor: *const u8 = unsafe { read_at(ctx.cast(), 0) };
+        // SAFETY: `ctx` is not null, as the early return ensures, and the
+        // caller guarantees a live context, whose first word is its query
+        // descriptor (engine layout).
+        let descriptor = unsafe { read_ptr_at::<u8>(ctx.cast(), 0) }.cast_const();
         if descriptor.is_null() {
             return false;
         }
-        // SAFETY: the descriptor points at its entity world here.
+        // SAFETY: `descriptor` is not null, as the early return ensures, and a
+        // live query descriptor keeps its entity world's address at the build
+        // table's `ecs.context_entity_world`.
         let world: u64 = unsafe { read_at(descriptor, self.entity_world) };
         server_role(self.side, world, server_world)
     }
@@ -625,10 +670,11 @@ pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
 ///
 /// # Safety
 ///
-/// `transform` points at a live `CurrentTransform`, such as one
-/// [`Components::component`] or
-/// [`World::component`](crate::world::World::component) returned, read while
-/// it is valid.
+/// - `transform` is readable for 24 bytes, such as a live `CurrentTransform`
+///   that [`Components::component`] or
+///   [`World::component`](crate::world::World::component) returned, while it
+///   is valid; no alignment is needed.
+/// - No other thread writes those bytes during the read.
 ///
 /// # Examples
 ///
@@ -636,14 +682,14 @@ pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
 /// use enshwick::ecs::transform_position;
 ///
 /// let transform: [i64; 3] = [2_i64 << 32, 1 << 31, -(3_i64 << 32)];
-/// // SAFETY: three fixed-point coordinates, as a transform starts.
+/// // SAFETY: `transform` is 24 readable bytes, three fixed-point coordinates.
 /// let at = unsafe { transform_position(transform.as_ptr().cast()) };
 /// assert_eq!(at, [2.0, 0.5, -3.0]);
 /// ```
 #[must_use]
 pub unsafe fn transform_position(transform: *const u8) -> [f64; 3] {
-    // SAFETY: a live CurrentTransform starts with three i64, as the caller
-    // guarantees.
+    // SAFETY: the caller guarantees 24 readable bytes with no concurrent
+    // writer; a CurrentTransform starts with its three i64 coordinates.
     metres(unsafe { read_at(transform, 0) })
 }
 
@@ -684,7 +730,8 @@ impl Attributes {
         };
         let find = load.symbol("ecs.attribute_find")?;
         Ok(Self {
-            // SAFETY: the loader pins this id to the attribute lookup.
+            // SAFETY: the build table's `ecs.attribute_find` is the attribute
+            // lookup, with the signature of `AttributeFind`.
             find: unsafe { function(find) },
             flags: size("ecs.level_flags")?,
             data_offset: size("ecs.level_data_offset")?,
@@ -698,8 +745,10 @@ impl Attributes {
     ///
     /// # Safety
     ///
-    /// `set` is a live attribute-set component and `registry` the attribute
-    /// registry word of the same row, inside the hooked system.
+    /// - `set` is null or a live attribute-set component of the hooked
+    ///   system's current row, used on its thread during the hook.
+    /// - `registry` is the attribute registry word of the same row.
+    /// - No other thread writes `set` during the call.
     ///
     /// # Examples
     ///
@@ -711,10 +760,13 @@ impl Attributes {
     /// ```
     #[must_use]
     pub unsafe fn value(&self, registry: u64, set: *const u8, attribute: u32) -> Option<u32> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees a live set of the current row, its
+        // row's registry and no concurrent writer, which is the contract of
+        // `word`.
         let word = unsafe { self.word(registry, set, attribute) }?;
-        // SAFETY: the attribute's word inside the set's data.
-        Some(unsafe { word.cast::<u32>().read_unaligned() })
+        // SAFETY: `word` found the attribute's 32-bit word inside the live
+        // set's data.
+        Some(unsafe { read_at(word, 0) })
     }
 
     /// Writes `value` to `attribute` in the attribute set `set`; false when the
@@ -724,7 +776,11 @@ impl Attributes {
     ///
     /// # Safety
     ///
-    /// As for [`Attributes::value`], and the hooked system writes `set`.
+    /// - `set` is null or a live attribute-set component of the hooked
+    ///   system's current row, which that system writes, used on its thread
+    ///   during the hook.
+    /// - `registry` is the attribute registry word of the same row.
+    /// - Nothing else reads or writes `set` during the call.
     ///
     /// # Examples
     ///
@@ -735,12 +791,16 @@ impl Attributes {
     /// }
     /// ```
     pub unsafe fn set(&self, registry: u64, set: *mut u8, attribute: u32, value: u32) -> bool {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees a live set of the current row, its
+        // row's registry and no concurrent writer, which is the contract of
+        // `word`.
         let Some(word) = (unsafe { self.word(registry, set, attribute) }) else {
             return false;
         };
-        // SAFETY: the attribute's word inside a set the system writes.
-        unsafe { word.cast_mut().cast::<u32>().write_unaligned(value) };
+        // SAFETY: `word` found the attribute's 32-bit word inside the live
+        // set's data, which the hooked system writes and nothing else touches
+        // during the call, as the caller guarantees.
+        unsafe { write_at(word.cast_mut(), 0, value) };
         true
     }
 
@@ -748,34 +808,48 @@ impl Attributes {
     ///
     /// # Safety
     ///
-    /// As for [`Attributes::value`].
+    /// - `set` is null or a live attribute-set component of the hooked
+    ///   system's current row, used on its thread during the hook.
+    /// - `registry` is the attribute registry word of the same row.
+    /// - No other thread writes `set` during the call.
     unsafe fn word(&self, registry: u64, set: *const u8, attribute: u32) -> Option<*const u8> {
         if set.is_null() {
             return None;
         }
-        // SAFETY: the set's flags; bit 0 marks it initialised.
+        // SAFETY: `set` is not null, as the early return ensures, and the
+        // caller guarantees a live attribute set, whose flag byte sits at the
+        // build table's `ecs.level_flags`.
         let flags: u8 = unsafe { read_at(set, self.flags) };
         if flags & 1 == 0 {
             return None;
         }
         let mut found = [0u64; 2];
-        // SAFETY: the row's attribute registry, inside its system.
+        // SAFETY: the caller guarantees `registry` is the current row's
+        // attribute registry, on the hooked system's thread, which the build
+        // table's `ecs.attribute_find` takes; it writes two words to `found`,
+        // a local.
         unsafe { (self.find)(found.as_mut_ptr(), attribute, registry) };
         let definition =
             core::ptr::with_exposed_provenance::<u8>(usize::try_from(found[1]).unwrap_or(0));
         if found[0] & 0xff != 0 || definition.is_null() {
             return None;
         }
-        // SAFETY: a found definition starts with its set id.
+        // SAFETY: `definition` is not null, as the early return ensures, and an
+        // attribute definition the lookup found starts with its u32 set id
+        // (engine layout).
         let definition_set: u32 = unsafe { read_at(definition, 0) };
-        // SAFETY: so does the set.
+        // SAFETY: `set` is the live attribute set the caller guarantees, which
+        // starts with its u32 set id (engine layout).
         let set_id: u32 = unsafe { read_at(set, 0) };
         if definition_set != set_id {
             return None;
         }
-        // SAFETY: the definition's slot.
+        // SAFETY: `definition` is the found attribute definition, which keeps
+        // its u16 slot at the build table's `ecs.attribute_slot`.
         let slot = usize::from(unsafe { read_at::<u16>(definition, self.slot) });
-        // SAFETY: the set's data offset.
+        // SAFETY: `set` is the live, initialised attribute set (flag checked
+        // above), which keeps its u16 data offset at the build table's
+        // `ecs.level_data_offset`.
         let data = usize::from(unsafe { read_at::<u16>(set, self.data_offset) });
         Some(set.wrapping_add(data + slot * 4))
     }

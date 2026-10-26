@@ -75,11 +75,17 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 static FLY_MODE: AtomicUsize = AtomicUsize::new(0);
 static LEVELS: OnceLock<Option<Levels>> = OnceLock::new();
 
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `NodeUnlockedFn` is the signature of the table's
+// `skill.node_unlocked`, and this slot is the `next` of the one link `link`
+// makes on it, whose detour `node_unlocked` calls `get`.
 static SKILL_NEXT: Next<NodeUnlockedFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `RegisterFn` is the signature of the table's
+// `comfort.base_register`, and this slot is the `next` of the one link `link`
+// makes on it, whose detour `register` calls `get`.
 static COMFORT_NEXT: Next<RegisterFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `SystemFn` is the signature of the reflected `player_level` system
+// entry, and this slot is the `next` of the one link `link` makes on it,
+// whose detour `player_level_link` calls `get`.
 static LEVEL_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 thread_local! {
@@ -113,10 +119,13 @@ fn levels(loader: &Loader) -> Option<&'static Levels> {
                 symbol(loader, "experience.level_cap")?,
             );
             Some(Levels {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the table's `experience.need_for_level` is the
+                // address of the game function with the `NeedForFn`
+                // signature on this build, in the image, which stays mapped.
                 need_for: unsafe { core::mem::transmute::<usize, NeedForFn>(need_for) },
-                // SAFETY: as above.
+                // SAFETY: the table's `experience.level_cap` is the address of
+                // the game function with the `LevelCapFn` signature on this
+                // build, in the image, which stays mapped.
                 level_cap: unsafe { core::mem::transmute::<usize, LevelCapFn>(level_cap) },
                 gained: hash("experience.gained")?,
                 progress: hash("experience.progress")?,
@@ -209,7 +218,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Ok(()) => loader
             .reflection
             .system("player_level")
-            .map_or(0, enshwick_reflect::System::entry),
+            .map_or(0, enshwick_gamedata::reflect::System::entry),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");
@@ -265,33 +274,46 @@ unsafe extern "system" fn node_unlocked(node: u32, bits: *const u64, tree: *cons
         .get()
         .is_some_and(|s| s.skills.iter().any(|(n, _)| *n == node));
     if ours
-        // SAFETY: the game's arguments, forwarded.
+        // SAFETY: `node`, `bits` and `tree` are the game's arguments to
+        // `skill.node_unlocked`, passed on unchanged, on the thread the game
+        // called it on, inside the chain whose frame `CALLER_FRAME` took.
         && let Some(answer) = SKILLS_FUSE.run("a skill check", || unsafe {
             override_skill(node, bits, tree)
         })
     {
         return answer;
     }
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's arguments to `skill.node_unlocked`, passed on
+    // unchanged to the rest of the chain, which the slot holds since the
+    // chain is wired before the target jumps here.
     unsafe { SKILL_NEXT.get()(node, bits, tree) }
 }
 
+/// Answers a skill check a mod asked for, after the rest of the chain.
+///
 /// # Safety
 ///
-/// The game's arguments to `node_unlocked`.
+/// - `node`, `bits` and `tree` are the game's arguments to
+///   `skill.node_unlocked`, unchanged.
+/// - Called from the `node_unlocked` detour on the game's calling thread,
+///   inside the chain whose caller frame the link took.
 #[cold]
 unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     let gate = LOADED.get().map_or(SkillCheck::OTHER, |loader| {
         let frame = (loader.caller_frame)();
         let fly_mode = FLY_MODE.load(Ordering::Relaxed) as u64;
-        // SAFETY: the frame was taken at entry of this chain.
+        // SAFETY: the link takes `CALLER_FRAME`, so `frame` was taken at the
+        // entry of the running chain (the caller's contract) and its `rsp`,
+        // non-zero (checked first), points at the live return address.
         if fly_mode != 0 && frame.rsp != 0 && unsafe { frame.return_address() } == fly_mode {
             SkillCheck::FLY_MODE
         } else {
             SkillCheck::OTHER
         }
     });
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's arguments to `skill.node_unlocked`, unchanged by the
+    // caller's contract, passed on to the rest of the chain, which the slot
+    // holds since the chain is wired before the target jumps here.
     let vanilla = unsafe { SKILL_NEXT.get()(node, bits, tree) };
     let check = SkillCheck {
         header: Header::of::<SkillCheck>(),
@@ -309,8 +331,9 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
         .filter(|(n, r)| *n == node && !crate::host::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
-        // SAFETY: the callback lives in the mod's DLL and takes the pointer
-        // it registered; the check is valid for the call.
+        // SAFETY: `callback` is a `SkillCheckFn` the mod registered, in its
+        // DLL, which stays loaded (`Registered`); `user` is the pointer it
+        // registered with it, and `check` lives on this stack for the call.
         match crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
             (r.callback)(&raw const check, user)
         }) {
@@ -332,8 +355,11 @@ unsafe extern "system" fn register(
         let at = if position.is_null() {
             [0.0; 3]
         } else {
-            // SAFETY: the game passes the provider's position as three floats.
-            unsafe { position.cast::<[f32; 3]>().read_unaligned() }
+            // SAFETY: `position` is non-null (the `is_null` branch) and is the
+            // game's argument to `comfort.base_register`, the provider's
+            // position as three floats, which the game does not write during
+            // the call.
+            unsafe { enshwick::raw::read_at::<[f32; 3]>(position.cast(), 0) }
         };
         sealed
             .comfort
@@ -347,8 +373,10 @@ unsafe extern "system" fn register(
                     position: at,
                 };
                 let user = core::ptr::with_exposed_provenance_mut(r.user);
-                // SAFETY: the callback lives in the mod's DLL and takes the
-                // pointer it registered; the call is valid for it.
+                // SAFETY: `callback` is a `ComfortFn` the mod registered, in
+                // its DLL, which stays loaded (`Registered`); `user` is the
+                // pointer it registered with it, and `call` lives on this
+                // stack for the call.
                 crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
                     (r.callback)(&raw const call, user)
                 })
@@ -358,26 +386,38 @@ unsafe extern "system" fn register(
         .get()
         .and_then(|sealed| COMFORT_FUSE.run("a comfort provider", || filtered(sealed)))
         .unwrap_or(comfort);
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's arguments to `comfort.base_register`, with `comfort`
+    // filtered, an `i32` like the game's own, passed on to the rest of the
+    // chain, which the slot holds since the chain is wired before the target
+    // jumps here.
     unsafe { COMFORT_NEXT.get()(system, category, comfort, position) }
 }
 
 unsafe extern "system" fn player_level_link(ctx: *mut u64) {
     if let (Some(loader), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
         && !ctx.is_null()
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is non-null (the `is_null` condition) and the live
+        // context the game passed to `player_level`, used on its thread while
+        // it runs.
         && (loader.side == Side::SERVER || unsafe { engine.is_world(ctx, crate::world::server_world()) })
     {
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is non-null (the `is_null` condition) and the live
+        // query context the game passed to `player_level`, used on its thread
+        // while it runs.
         let saved = unsafe { engine.row(ctx) };
-        // SAFETY: as above, before vanilla runs.
+        // SAFETY: `ctx` is the live, non-null context the game passed to
+        // `player_level`, on its thread while it runs and before vanilla does.
         let _done = EXPERIENCE_FUSE.run("the experience pass", || unsafe {
             experience(loader, engine, ctx);
         });
-        // SAFETY: as above.
+        // SAFETY: `ctx` is the live, non-null query context the game passed
+        // to `player_level`, which only this thread writes while the system
+        // runs.
         unsafe { engine.set_row(ctx, saved) };
     }
-    // SAFETY: the original system takes its own context.
+    // SAFETY: `ctx` is the game's argument to `player_level`, passed on
+    // unchanged to the rest of the chain, which the slot holds since the
+    // chain is wired before the target jumps here.
     unsafe { LEVEL_NEXT.get()(ctx) };
 }
 
@@ -391,9 +431,15 @@ unsafe extern "system" fn need_for(token: *mut c_void, level: u32) -> u32 {
     if token.is_null() || level == 0 {
         return 0;
     }
-    // SAFETY: the token of the running pass.
+    // SAFETY: `token` is non-null (`is_null` returns 0 first) and, by the
+    // `ExperiencePass::need_for` contract, the pass's `token`: a `NeedToken`
+    // on `experience`'s stack, alive and unwritten while the pass's filters
+    // run.
     let token = unsafe { &*token.cast::<NeedToken>() };
-    // SAFETY: the game's need per level with the row's balancing registry.
+    // SAFETY: `need_for` is the table's `experience.need_for_level`, called
+    // with a level of 1 or more (`level == 0` returns 0 first) and the
+    // balancing registry of a live `player_level` row, on that system's thread
+    // while it runs.
     unsafe { (token.levels.need_for)(level, token.balancing) }
 }
 
@@ -402,7 +448,8 @@ unsafe extern "system" fn need_for(token: *mut c_void, level: u32) -> u32 {
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of `player_level`, before vanilla runs.
+/// - `ctx` is the live query context the game passed to `player_level`,
+///   used on that system's thread while it runs, before vanilla runs.
 unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
     let (Some(levels), Some(sealed)) = (levels(loader), SEALED.get()) else {
         return;
@@ -411,12 +458,18 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
         BEFORE.with_borrow_mut(|before| {
             rows.clear();
             let mut balancing = 0;
-            // SAFETY: the system's live context.
+            // SAFETY: `ctx` is the live query context of `player_level`, which
+            // only this thread writes while the system runs (the caller's
+            // contract).
             unsafe { engine.set_row(ctx, 0) };
-            // SAFETY: as above, with the system's iterator size.
+            // SAFETY: `ctx` is the live query context of `player_level` on its
+            // thread (the caller's contract); `WORDS` is that system's
+            // iterator size on the layout `link` checks against its reflected
+            // components; `query` drops at the end of this closure.
             let mut query = unsafe { engine.query::<WORDS>(ctx) };
             while let Some(words) = query.next() {
-                // SAFETY: the words of the current row.
+                // SAFETY: `words` is the current row of `query`, the live
+                // `player_level` query over `ctx`, on its thread while it runs.
                 if let Some(row) = unsafe { read_row(engine, levels, ctx, words) } {
                     balancing = words[BALANCING];
                     rows.push(row);
@@ -431,7 +484,10 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 levels: *levels,
                 balancing,
             };
-            // SAFETY: the game's cap lookup with a row's balancing registry.
+            // SAFETY: `level_cap` is the table's `experience.level_cap`, called
+            // with the non-zero (`balancing == 0` returns first) balancing
+            // registry of a live `player_level` row, on that system's thread
+            // while it runs.
             let level_cap = unsafe { (levels.level_cap)(balancing) };
             for r in sealed
                 .experience
@@ -447,8 +503,10 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                     token: (&raw mut token).cast(),
                 };
                 let user = core::ptr::with_exposed_provenance_mut(r.user);
-                // SAFETY: the callback lives in the mod's DLL and takes the
-                // pointer it registered; the pass is valid for the call.
+                // SAFETY: `callback` is an `ExperiencePassFn` the mod
+                // registered, in its DLL, which stays loaded (`Registered`);
+                // `user` is the pointer it registered with it; `pass`, the
+                // rows and `token` live on this thread for the call.
                 crate::profile::call(r.owner, crate::profile::Feature::Progress, || unsafe {
                     (r.callback)(&raw mut pass, user);
                 });
@@ -456,12 +514,18 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
             if rows.iter().zip(before.iter()).all(|(r, b)| r.gained == *b) {
                 return;
             }
-            // SAFETY: the system's live context.
+            // SAFETY: `ctx` is the live query context of `player_level`, which
+            // only this thread writes while the system runs (the caller's
+            // contract).
             unsafe { engine.set_row(ctx, 0) };
-            // SAFETY: as above, with the system's iterator size.
+            // SAFETY: `ctx` is the live query context of `player_level` on its
+            // thread (the caller's contract); `WORDS` is that system's
+            // iterator size on the layout `link` checks against its reflected
+            // components; `query` drops at the end of this closure.
             let mut query = unsafe { engine.query::<WORDS>(ctx) };
             while let Some(words) = query.next() {
-                // SAFETY: the system's live context.
+                // SAFETY: `ctx` is the live query context of `player_level`,
+                // used on its thread while it runs (the caller's contract).
                 let entity = unsafe { engine.entity(ctx) };
                 let Some((row, old)) = rows
                     .iter()
@@ -473,8 +537,9 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 if row.gained == *old {
                     continue;
                 }
-                // SAFETY: the change-tracking words of the current row, which
-                // `player_level` writes.
+                // SAFETY: the words are the change tracking of the current row
+                // of the live `player_level` query, which writes `Experience`
+                // (`WRITES`), on that system's thread while it runs.
                 unsafe {
                     engine.mark_changed(
                         words[TRACKER],
@@ -484,7 +549,10 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                         words[KIND],
                     );
                 }
-                // SAFETY: the row's `Experience`, which this system writes.
+                // SAFETY: `words[EXPERIENCE]` is the current row's
+                // `Experience` attribute set, which `player_level` writes and
+                // nothing else writes while it runs on this thread;
+                // `words[REGISTRY]` is the same row's attribute registry.
                 let _written = unsafe {
                     engine.set_attribute(
                         words[REGISTRY],
@@ -498,9 +566,14 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
     });
 }
 
+/// One character's experience from the current row, `None` when its
+/// attributes do not read.
+///
 /// # Safety
 ///
-/// `words` are the current row of `player_level`'s live query `ctx`.
+/// - `words` is the current row of the live `player_level` query over
+///   `ctx`.
+/// - Called on that system's thread while it runs.
 unsafe fn read_row(
     engine: &Engine,
     levels: &Levels,
@@ -509,16 +582,25 @@ unsafe fn read_row(
 ) -> Option<ExperienceRow> {
     let experience = words[EXPERIENCE] as *const u8;
     let registry = words[REGISTRY];
-    // SAFETY: the row's `Level` and attribute registry.
+    // SAFETY: `words[LEVEL]` is the current row's `Level` attribute set, null
+    // or live, and `registry` the same row's attribute registry, on the
+    // system's thread (the caller's contract).
     let level = unsafe { engine.level(registry, words[LEVEL] as *const u8) }?;
-    // SAFETY: the row's `Experience` and attribute registry.
+    // SAFETY: `experience` is the current row's `Experience` attribute set,
+    // null or live, and `registry` the same row's attribute registry, on the
+    // system's thread (the caller's contract).
     let progress = unsafe { engine.attribute(registry, experience, levels.progress) }?;
-    // SAFETY: as above.
+    // SAFETY: `experience` is the current row's `Experience` attribute set,
+    // null or live, and `registry` the same row's attribute registry, on the
+    // system's thread (the caller's contract).
     let need = unsafe { engine.attribute(registry, experience, levels.need) }?;
-    // SAFETY: as above.
+    // SAFETY: `experience` is the current row's `Experience` attribute set,
+    // null or live, and `registry` the same row's attribute registry, on the
+    // system's thread (the caller's contract).
     let gained = unsafe { engine.attribute(registry, experience, levels.gained) }?;
     Some(ExperienceRow {
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the live query context of `player_level`, used on
+        // its thread while it runs (the caller's contract).
         entity: unsafe { engine.entity(ctx) },
         level,
         progress,

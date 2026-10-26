@@ -22,6 +22,7 @@ use std::sync::OnceLock;
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 
 use crate::host::Loader;
+use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -185,14 +186,21 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 return None;
             }
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the table's `buffs.type_by_id` is the address of the
+                // game function with the `TypeByIdFn` signature on this
+                // build, in the image, which stays mapped.
                 type_by_id: unsafe { core::mem::transmute::<usize, TypeByIdFn>(type_by_id) },
-                // SAFETY: as above.
+                // SAFETY: the table's `buffs.restore` is the address of the
+                // game function with the `RestoreFn` signature on this build,
+                // in the image, which stays mapped.
                 restore: unsafe { core::mem::transmute::<usize, RestoreFn>(restore) },
-                // SAFETY: as above.
+                // SAFETY: the table's `buffs.cleanse` is the address of the
+                // game function with the `CleanseFn` signature on this build,
+                // in the image, which stays mapped.
                 cleanse: unsafe { core::mem::transmute::<usize, CleanseFn>(cleanse) },
-                // SAFETY: as above.
+                // SAFETY: the table's `world.time` is the address of the game
+                // function with the `NowFn` signature on this build, in the
+                // image, which stays mapped.
                 now: unsafe { core::mem::transmute::<usize, NowFn>(now) },
                 world: loader.offset("server.world")?,
                 game: loader.offset("server.player_infos")?,
@@ -232,47 +240,33 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
-/// Reads a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, at: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { crate::world::read(base, at) }
-}
-
-/// Writes a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(base: usize, at: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe {
-        core::ptr::with_exposed_provenance_mut::<T>(base.wrapping_add(at)).write_unaligned(value);
-    };
-}
-
 /// The server, its world, its game object and the game time, on the game
 /// thread.
 fn server(layout: &Layout) -> Result<(usize, usize, usize, i64), Status> {
     let server = crate::world::server()?;
-    // SAFETY: the server holds its world and its game object.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `server.world` offset holds its world
+    // pointer.
     let world: usize = unsafe { read(server, layout.world) };
-    // SAFETY: as above.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `server.player_infos` offset holds
+    // its game object pointer.
     let game: usize = unsafe { read(server, layout.game) };
     if world == 0 || game == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the game's time of its live world, on the game thread.
+    // SAFETY: `now` is the table's `world.time`, called with the server's live,
+    // non-zero (`world == 0` returns first) world on the game thread (checked
+    // by `crate::world::server`).
     let now = unsafe { (layout.now)(core::ptr::with_exposed_provenance(world)) };
     Ok((server, world, game, now))
 }
 
 /// The buff registry, on the game thread.
 fn registry(layout: &Layout, game: usize) -> Result<usize, Status> {
-    // SAFETY: the game object holds the buff registry from its start.
+    // SAFETY: callers pass the non-zero game object `server` read on the game
+    // thread; the table's `buffs.registry` offset holds its buff registry
+    // pointer, set from its start.
     let registry: usize = unsafe { read(game, layout.registry) };
     if registry == 0 {
         return Err(Status::MISSING);
@@ -282,17 +276,24 @@ fn registry(layout: &Layout, game: usize) -> Result<usize, Status> {
 
 /// The type `id`'s data, or `None` for an unknown one.
 fn find_type(layout: &Layout, registry: usize, id: u32) -> Option<usize> {
-    // SAFETY: the game's lookup on its live registry.
+    // SAFETY: `type_by_id` is the table's `buffs.type_by_id`; callers pass
+    // the non-zero live registry `registry` returned, on the game thread.
     let found = unsafe { (layout.type_by_id)(id, core::ptr::with_exposed_provenance(registry)) };
-    (!found.is_null()).then(|| found.addr())
+    (!found.is_null()).then(|| found.expose_provenance())
 }
 
 fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
-    // SAFETY: a live `BuffType` of the registry; its fields as reflected.
+    // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type` or
+    // the registry's collection on the game thread; the reflected
+    // `keen::BuffType` places its 16-byte `name` at `type_name`.
     let name: [u8; 16] = unsafe { read(ty, layout.type_name) };
-    // SAFETY: as above.
+    // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type` or
+    // the registry's collection on the game thread; the reflected
+    // `keen::BuffType` places its `isSaved` byte at `type_saved`.
     let saved: u8 = unsafe { read(ty, layout.type_saved) };
-    // SAFETY: as above.
+    // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type` or
+    // the registry's collection on the game thread; the reflected
+    // `keen::BuffType` places its `hideInUi` byte at `type_hidden`.
     let hidden: u8 = unsafe { read(ty, layout.type_hidden) };
     let mut flags = 0;
     if saved != 0 {
@@ -303,13 +304,20 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
     }
     BuffTypeInfo {
         header: Header::of::<BuffTypeInfo>(),
-        // SAFETY: as above.
+        // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type`
+        // or the registry's collection on the game thread; the reflected
+        // `keen::BuffType` places its `u32` `buffTypeId` at `type_id`.
         id: unsafe { read(ty, layout.type_id) },
-        // SAFETY: as above.
+        // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type`
+        // or the registry's collection on the game thread; the reflected
+        // `keen::BuffType` places its `slot` byte at `type_slot`.
         slot: u16::from(unsafe { read::<u8>(ty, layout.type_slot) }),
         flags,
-        name: enshwick_reflect::fnv1a32(&name),
-        // SAFETY: as above.
+        name: enshwick_gamedata::reflect::fnv1a32(&name),
+        // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type`
+        // or the registry's collection on the game thread; the reflected
+        // `keen::BuffType` places its `i64` `defaultLifeTime` at
+        // `type_duration`.
         duration: unsafe { read(ty, layout.type_duration) },
     }
 }
@@ -319,15 +327,21 @@ pub(crate) fn types(loader: &Loader) -> Result<Vec<BuffTypeInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, game, _) = server(layout)?;
     let registry = registry(layout, game)?;
-    // SAFETY: the registry holds its collection's blob.
+    // SAFETY: `registry` is the non-zero live registry (checked by
+    // `registry`), on the game thread (checked by `server`); the table's
+    // `buffs.registry_blob` offset holds its collection's blob pointer.
     let blob: usize = unsafe { read(registry, layout.registry_blob) };
     if blob == 0 {
         return Err(Status::MISSING);
     }
     let header = blob + layout.types;
-    // SAFETY: the blob's array header: an offset from itself and a count.
+    // SAFETY: `blob` is non-zero (`blob == 0` returns first) and the reflected
+    // `buffs` field of `keen::BuffTypeCollectionResource` is an array header at
+    // `header`: an `i32` offset from itself, then a `u32` count.
     let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: as above.
+    // SAFETY: `blob` is non-zero (`blob == 0` returns first) and the reflected
+    // `buffs` field of `keen::BuffTypeCollectionResource` is an array header at
+    // `header`: an `i32` offset from itself, then a `u32` count.
     let count: u32 = unsafe { read(header, 4) };
     if count > MAX_TYPES {
         return Err(Status::MISSING);
@@ -354,12 +368,18 @@ fn slots(layout: &Layout, container: usize) -> impl Iterator<Item = (usize, u16)
 pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, _, now) = server(layout)?;
-    let container = crate::world::component(loader, entity, layout.container)?.addr();
+    let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
     let mut out = Vec::new();
     for (slot, kind) in slots(layout, container) {
-        // SAFETY: a slot of the live container, as reflected.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `u32` `buffEntityId` at
+        // `instance_entity`.
         let buff: u32 = unsafe { read(slot, layout.instance_entity) };
-        // SAFETY: as above.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `cleansed` byte at
+        // `instance_cleansed`.
         let cleansed: u8 = unsafe { read(slot, layout.instance_cleansed) };
         if buff == 0 || cleansed != 0 {
             continue;
@@ -367,18 +387,28 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
         let Ok(network) = crate::world::component(loader, buff, layout.network) else {
             continue;
         };
-        let network = network.addr();
-        // SAFETY: the buff entity's live `BuffNetworkData`, as reflected.
+        let network = network.expose_provenance();
+        // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
+        // which `crate::world::component` found on the game thread; the
+        // reflected type places its `i64` `lifeTime` at `network_lifetime`.
         let total: i64 = unsafe { read(network, layout.network_lifetime) };
-        // SAFETY: as above.
+        // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
+        // which `crate::world::component` found on the game thread; the
+        // reflected type places its `i64` `endOfLife` at `network_end`.
         let end: i64 = unsafe { read(network, layout.network_end) };
         out.push(ActiveBuff {
             header: Header::of::<ActiveBuff>(),
-            // SAFETY: as for the slot above.
+            // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
+            // which `crate::world::component` found on the game thread; the
+            // reflected `keen::ecs::BuffInstance` places its `u32` `typeId` at
+            // `instance_type`.
             id: unsafe { read(slot, layout.instance_type) },
             entity: buff,
             slot: u32::from(kind),
-            // SAFETY: as for the network data above.
+            // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
+            // which `crate::world::component` found on the game thread; the
+            // reflected type places its `level` at `network_level`, read as
+            // the `u32` the ABI hands on.
             level: unsafe { read(network, layout.network_level) },
             duration: total,
             remaining: end.saturating_sub(now).max(0),
@@ -396,15 +426,23 @@ pub(crate) fn type_ids(loader: &Loader, entity: u32) -> Vec<u32> {
     let Ok(container) = crate::world::component(loader, entity, layout.container) else {
         return Vec::new();
     };
-    let container = container.addr();
+    let container = container.expose_provenance();
     slots(layout, container)
         .filter_map(|(slot, _)| {
-            // SAFETY: a slot of the live container, as reflected, read on
-            // the game thread.
+            // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
+            // which `crate::world::component` found on the game thread; the
+            // reflected `keen::ecs::BuffInstance` places its `u32`
+            // `buffEntityId` at `instance_entity`.
             let buff: u32 = unsafe { read(slot, layout.instance_entity) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
+            // which `crate::world::component` found on the game thread; the
+            // reflected `keen::ecs::BuffInstance` places its `cleansed` byte at
+            // `instance_cleansed`.
             let cleansed: u8 = unsafe { read(slot, layout.instance_cleansed) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
+            // which `crate::world::component` found on the game thread; the
+            // reflected `keen::ecs::BuffInstance` places its `u32` `typeId` at
+            // `instance_type`.
             (buff != 0 && cleansed == 0).then(|| unsafe { read(slot, layout.instance_type) })
         })
         .collect()
@@ -419,30 +457,43 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     }
     let ty = find_type(layout, registry(layout, game)?, request.id).ok_or(Status::BAD_ARGS)?;
     let duration = if request.duration == 0 {
-        // SAFETY: a live `BuffType`, as reflected.
+        // SAFETY: `ty` is the non-null live `BuffType` `find_type` returned
+        // on the game thread; the reflected `keen::BuffType` places its `i64`
+        // `defaultLifeTime` at `type_duration`.
         unsafe { read::<i64>(ty, layout.type_duration) }
     } else {
         request.duration
     };
-    let container = crate::world::component(loader, request.entity, layout.container)?.addr();
+    let container =
+        crate::world::component(loader, request.entity, layout.container)?.expose_provenance();
     for (slot, _) in slots(layout, container) {
-        // SAFETY: a slot of the live container, as reflected.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `u32` `typeId` at
+        // `instance_type`.
         let id: u32 = unsafe { read(slot, layout.instance_type) };
         if id != request.id {
             continue;
         }
-        // SAFETY: as above.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `cleansed` byte at
+        // `instance_cleansed`.
         let cleansed: u8 = unsafe { read(slot, layout.instance_cleansed) };
         if cleansed != 0 {
             return Err(Status::REFUSED);
         }
-        // SAFETY: as above.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `u32` `buffEntityId` at
+        // `instance_entity`.
         let buff: u32 = unsafe { read(slot, layout.instance_entity) };
         if buff != 0 {
             return renew(loader, layout, buff, duration, now);
         }
     }
-    let container = crate::writes::component_mut(loader, request.entity, layout.container)?.addr();
+    let container =
+        crate::writes::component_mut(loader, request.entity, layout.container)?.expose_provenance();
     let mut record = [0u8; RECORD];
     let mut put = |at: usize, bytes: &[u8]| {
         if let Some(out) = record.get_mut(at..at + bytes.len()) {
@@ -458,12 +509,16 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     }
     put(layout.record_strength, &STRENGTH.to_le_bytes());
     put(layout.record_has_strength, &[1]);
-    // SAFETY: the game object holds its balancing registry.
+    // SAFETY: `game` is the non-zero game object `server` read on the game
+    // thread; the table's `game.balancing` offset holds its balancing
+    // registry pointer.
     let balancing: usize = unsafe { read(game, layout.balancing) };
-    // SAFETY: the game's restore of a saved buff, with the entity's live
-    // container marked changed, a full record, its server and balancing
-    // registry, on the game thread between steps, where the game calls it
-    // when a character spawns.
+    // SAFETY: `restore` is the table's `buffs.restore`, the game's restore of
+    // a saved buff, called as the game calls it when a character spawns: on
+    // the game thread at a quiet moment (checked by `server`), with the
+    // entity's live container `component_mut` marked changed, a record of
+    // `RECORD` bytes the build's `buffs.record_size` fits (checked in
+    // `layout`), the server and its balancing registry.
     unsafe {
         (layout.restore)(
             core::ptr::with_exposed_provenance_mut(container),
@@ -485,10 +540,16 @@ fn renew(
     duration: i64,
     now: i64,
 ) -> Result<(), Status> {
-    let lifetime = crate::writes::component_mut(loader, buff, layout.lifetime)?.addr();
-    // SAFETY: the buff entity's live `LifeTime`, handed out for writing.
+    let lifetime = crate::writes::component_mut(loader, buff, layout.lifetime)?.expose_provenance();
+    // SAFETY: `lifetime` is the buff entity's live `LifeTime`, which
+    // `component_mut` handed out for writing at a quiet moment on the game
+    // thread; the reflected type places its `i64` `lifeTime` at
+    // `lifetime_total`.
     unsafe { write(lifetime, layout.lifetime_total, duration) };
-    // SAFETY: as above.
+    // SAFETY: `lifetime` is the buff entity's live `LifeTime`, which
+    // `component_mut` handed out for writing at a quiet moment on the game
+    // thread; the reflected type places its `i64` `endOfLife` at
+    // `lifetime_end`.
     unsafe { write(lifetime, layout.lifetime_end, now.saturating_add(duration)) };
     Ok(())
 }
@@ -497,20 +558,28 @@ fn renew(
 pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     server(layout)?;
-    let container = crate::world::component(loader, entity, layout.container)?.addr();
+    let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
     let had = slots(layout, container).any(|(slot, _)| {
-        // SAFETY: a slot of the live container, as reflected.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `u32` `typeId` at
+        // `instance_type`.
         let ty = unsafe { read::<u32>(slot, layout.instance_type) };
-        // SAFETY: as above.
+        // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
+        // `crate::world::component` found on the game thread; the reflected
+        // `keen::ecs::BuffInstance` places its `cleansed` byte at
+        // `instance_cleansed`.
         let cleansed = unsafe { read::<u8>(slot, layout.instance_cleansed) };
         ty == id && cleansed == 0
     });
     if !had {
         return Ok(false);
     }
-    let container = crate::writes::component_mut(loader, entity, layout.container)?.addr();
-    // SAFETY: the game's cleanse on the entity's live container, marked
-    // changed, on the game thread between steps.
+    let container =
+        crate::writes::component_mut(loader, entity, layout.container)?.expose_provenance();
+    // SAFETY: `cleanse` is the table's `buffs.cleanse`, called on the
+    // entity's live container, which `component_mut` marked changed, on the
+    // game thread at a quiet moment (checked by `server`).
     unsafe { (layout.cleanse)(core::ptr::with_exposed_provenance_mut(container), id) };
     Ok(true)
 }

@@ -112,8 +112,9 @@ static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
 /// entity's destroy for the playback after the next step; nonzero when
 /// queued.
 type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
-// SAFETY: the slot joins the chain of `ecs.destroy_request`, whose type
-// `DestroyFn` names.
+// SAFETY: `DestroyFn` is the exact signature of the game function at the
+// table's `ecs.destroy_request`, and the slot is used only as the `next` of
+// the `destroy` link on that function.
 static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 /// `ecs::ItemState`'s type hash and the offset of its `itemId`.
 static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
@@ -126,8 +127,9 @@ fn is_part(part: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-/// The full id of `id` asked for by mod `mod_id`: `name` names the mod's
-/// own kind, `mod:name` any mod's.
+/// The full id of `id` asked for by a mod whose bare names take the
+/// namespace `mod_id` (its first former id after a rename): `name` names the
+/// mod's own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
@@ -162,7 +164,7 @@ fn open_kind(
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
-    let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
     let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
     let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
         let kind = &mut pending[index];
@@ -250,7 +252,8 @@ pub(crate) fn link(loader: &Loader) {
 }
 
 unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) -> u8 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the destroy request's signature.
     let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
     if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
         note_destroyed(entity);
@@ -649,14 +652,10 @@ fn held(loader: &Loader, pide: u32) -> Option<u32> {
         Some((ty, usize::try_from(offset).ok()?))
     }))?;
     let data = crate::world::component(loader, pide, ty).ok()?;
-    // SAFETY: a live ItemState holds its item id at the reflected offset,
-    // read on the game thread.
-    Some(unsafe {
-        data.cast::<u8>()
-            .wrapping_add(offset)
-            .cast::<u32>()
-            .read_unaligned()
-    })
+    // SAFETY: `world::component` returned the entity's live `ItemState`, read
+    // on the game thread that owns it; it holds its `u32` item id at the
+    // reflected `itemId` offset.
+    Some(unsafe { enshwick::raw::read_at(data.cast(), offset) })
 }
 
 /// Follows the server's world: reads the world's values once it has

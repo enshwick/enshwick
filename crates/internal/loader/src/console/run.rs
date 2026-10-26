@@ -196,9 +196,10 @@ fn config(loader: &Loader, args: &str) -> String {
         }
         Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
     };
-    let Some((index, record)) = loader.mods.iter().enumerate().find(|(_, m)| m.id == id) else {
+    let Some((index, record)) = loader.find_mod(id) else {
         return texts::fill("config.unknown", &[("id", id)]);
     };
+    let id = record.id.as_str();
     let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
         return texts::fill("config.no-schema", &[("id", id)]);
     };

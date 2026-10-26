@@ -29,11 +29,13 @@ impl<F: Copy> Next<F> {
     ///
     /// # Safety
     ///
-    /// `F` is the pointer type of the hooked function, with its exact
-    /// signature and calling convention, and the slot is used only as the
-    /// `next` of a link on that function, whose detour [`Next::get`] is
-    /// called from. Chains are wired before their targets jump to them, so
-    /// the slot holds a function of type `F` whenever the detour runs.
+    /// - `F` is the function pointer type of the hooked function, with its
+    ///   exact signature and calling convention.
+    /// - The slot is used only as the `next` of a link on that function.
+    /// - [`Next::get`] is called only from that link's detour.
+    ///
+    /// Chains are wired before their targets jump to them, so the slot holds
+    /// a function of type `F` whenever the detour runs.
     #[must_use]
     pub const unsafe fn new() -> Self {
         const {

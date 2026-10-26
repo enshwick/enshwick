@@ -113,6 +113,23 @@ pub struct Field {
     /// would a `sync` one: `#[config(startup, sync)]`.
     #[serde(default, skip_serializing_if = "core::ops::Not::not")]
     pub synced: bool,
+    /// The number a list's first element shows with on the Mods screen,
+    /// such as 0 for a list by Flame level: `#[config(first = 0)]`.
+    #[serde(default = "first_element", skip_serializing_if = "is_first_element")]
+    pub first: u32,
+}
+
+/// The number a list's first element shows with unless the field says.
+const fn first_element() -> u32 {
+    1
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde passes a reference"
+)]
+const fn is_first_element(first: &u32) -> bool {
+    *first == 1
 }
 
 impl Field {
@@ -132,8 +149,26 @@ impl Field {
             kind: value.as_ref().map(Kind::of),
             default: value.map(|v| v.to_string()).unwrap_or_default(),
             text: format!("config.{key}"),
+            first: first_element(),
             ..Self::default()
         }
+    }
+
+    /// The field numbering a list's elements from `first` on the Mods
+    /// screen.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Stage};
+    ///
+    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4]).with_first(0);
+    /// assert_eq!(per_level.first, 0);
+    /// ```
+    #[must_use]
+    pub const fn with_first(mut self, first: u32) -> Self {
+        self.first = first;
+        self
     }
 
     /// The field inside the group `group`: its key and its default text key
@@ -252,7 +287,8 @@ impl Field {
         self.stage == Stage::Sync || self.synced
     }
 
-    /// Checks `value` against the field's type, range and choices.
+    /// Checks `value` against the field's type, range and choices; the range
+    /// applies to every element of a list.
     ///
     /// # Errors
     ///
@@ -268,6 +304,87 @@ impl Field {
         {
             return Err(self.refused(format!("takes {}", kind_name(kind))));
         }
+        if let toml::Value::Array(items) = value {
+            let element = self.element_kind();
+            for item in items {
+                if element.is_some_and(|kind| !kind.accepts(Kind::of(item))) {
+                    return Err(self.refused(format!(
+                        "takes a list of {}",
+                        element.map_or("values", kind_name)
+                    )));
+                }
+                self.check_bounds(item)?;
+            }
+        }
+        let number = self.check_bounds(value)?;
+        let chosen = |choice: &String| {
+            *choice == value.to_string()
+                || number.is_some_and(|n| {
+                    choice
+                        .parse::<f64>()
+                        .is_ok_and(|c| c.to_bits() == n.to_bits())
+                })
+        };
+        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
+            return Err(self.refused(format!("is {}", self.accepts())));
+        }
+        Ok(())
+    }
+
+    /// Holds the number `value`, named `key`, to the range; the log line
+    /// when it was outside.
+    fn clamp_one(&self, value: &mut toml::Value, key: &str) -> Option<String> {
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "bounds are compared as f64; a setting near 2^53 is no setting"
+        )]
+        let n = match value {
+            toml::Value::Integer(n) => *n as f64,
+            toml::Value::Float(n) => *n,
+            _ => return None,
+        };
+        let bound = match (self.min, self.max) {
+            (Some(min), _) if n < min => min,
+            (_, Some(max)) if n > max => max,
+            _ => return None,
+        };
+        let was = value.to_string();
+        *value = match value {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a whole-number range's ends are whole numbers"
+            )]
+            toml::Value::Integer(_) => toml::Value::Integer(bound.round() as i64),
+            _ => toml::Value::Float(bound),
+        };
+        Some(format!(
+            "{key} = {was} is outside {}; {value} applies",
+            self.accepts()
+        ))
+    }
+
+    /// The kind of each element of a list setting, from its default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Kind, Stage};
+    ///
+    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4, 8]);
+    /// assert_eq!(per_level.element_kind(), Some(Kind::Integer));
+    /// ```
+    #[must_use]
+    pub fn element_kind(&self) -> Option<Kind> {
+        let table: toml::Table = toml::from_str(&format!("v = {}", self.default)).ok()?;
+        match table.get("v")? {
+            toml::Value::Array(items) => items.first().map(Kind::of),
+            _ => None,
+        }
+    }
+
+    /// Checks a number against the range; the number, `None` for a value
+    /// that is none.
+    fn check_bounds(&self, value: &toml::Value) -> Result<Option<f64>, ConfigError> {
         #[expect(
             clippy::cast_precision_loss,
             reason = "bounds are compared as f64; a setting near 2^53 is no setting"
@@ -282,18 +399,7 @@ impl Field {
         {
             return Err(self.refused(format!("is {}", self.accepts())));
         }
-        let chosen = |choice: &String| {
-            *choice == value.to_string()
-                || number.is_some_and(|n| {
-                    choice
-                        .parse::<f64>()
-                        .is_ok_and(|c| c.to_bits() == n.to_bits())
-                })
-        };
-        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
-            return Err(self.refused(format!("is {}", self.accepts())));
-        }
-        Ok(())
+        Ok(number)
     }
 
     fn refused(&self, need: String) -> ConfigError {
@@ -418,6 +524,16 @@ impl Group {
     }
 }
 
+/// The value at the dotted `key` of `settings`, to change.
+fn value_at_mut<'a>(settings: &'a mut toml::Table, key: &str) -> Option<&'a mut toml::Value> {
+    let mut parts = key.split('.');
+    let mut value = settings.get_mut(parts.next()?)?;
+    for part in parts {
+        value = value.as_table_mut()?.get_mut(part)?;
+    }
+    Some(value)
+}
+
 /// The value at `key` of `settings`, a dotted key reaching into tables:
 /// `comfort.multiplier` is `multiplier` in `[comfort]`.
 ///
@@ -473,6 +589,32 @@ impl Schema {
     pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
         self.groups = groups;
         self
+    }
+
+    /// Holds every number of `settings` that lies outside its field's range,
+    /// list elements too, to the nearest end of the range; returns a line
+    /// per value held, for the log. A file a player wrote keeps reading.
+    #[must_use]
+    pub(crate) fn clamp(&self, settings: &mut toml::Table) -> Vec<String> {
+        let mut held = Vec::new();
+        for field in &self.fields {
+            if field.min.is_none() && field.max.is_none() {
+                continue;
+            }
+            let Some(value) = value_at_mut(settings, &field.key) else {
+                continue;
+            };
+            if let toml::Value::Array(items) = value {
+                for (i, item) in items.iter_mut().enumerate() {
+                    if let Some(line) = field.clamp_one(item, &format!("{}[{i}]", field.key)) {
+                        held.push(line);
+                    }
+                }
+            } else if let Some(line) = field.clamp_one(value, &field.key) {
+                held.push(line);
+            }
+        }
+        held
     }
 
     /// The group a field with key `key` belongs to, if any.

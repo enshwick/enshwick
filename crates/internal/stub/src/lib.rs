@@ -1,17 +1,22 @@
 //! The POWRPROF.dll proxy that starts the Enshwick loader.
 //!
 //! Windows loads it from the game's folder. It forwards every POWRPROF.dll
-//! export to the system copy, then, outside the loader lock, loads
-//! `mods/enshwick/enshwick.dll` and calls its `enshwick_start`. Without the loader the game runs vanilla.
+//! export to the system copy, then, outside the loader lock, loads the other
+//! proxy DLLs placed in `mods/chain/`, loads `mods/enshwick/enshwick.dll` and
+//! calls its `enshwick_start`. Without the loader the game runs vanilla.
 //! On the dedicated server the server's own code waits until the loader has
 //! armed its hooks.
 
 #![cfg(windows)]
 
+mod chain;
 mod gate;
 mod proxy;
 
 use core::ffi::c_void;
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt as _;
+use std::path::PathBuf;
 
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleFileNameW, GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
@@ -35,7 +40,8 @@ const NO_SYSTEM_COPY: u32 = u32::MAX;
 ///
 /// # Safety
 ///
-/// Called by the Windows loader only.
+/// - Called only by the Windows loader, as this DLL's entry point.
+/// - `reason` and `reserved` are the values that loader passes for the call.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn DllMain(
     _module: *mut c_void,
@@ -66,9 +72,14 @@ pub unsafe extern "system" fn DllMain(
 }
 
 fn start(missing: u32) {
-    let Some(path) = loader_path() else {
+    if !chain::first_in_process() {
+        return;
+    }
+    let Some(game_dir) = game_dir() else {
         return;
     };
+    chain::load(&game_dir);
+    let path = chain::wide(game_dir.join(chain::LOADER).as_os_str());
     // SAFETY: `path` is NUL-terminated; the altered search path lets the
     // loader's own dependencies resolve next to it.
     let module = unsafe {
@@ -91,8 +102,8 @@ fn start(missing: u32) {
     unsafe { start(STUB_ABI, missing, gate::release) };
 }
 
-/// `<game folder>\mods\enshwick\enshwick.dll`, NUL-terminated.
-fn loader_path() -> Option<Vec<u16>> {
+/// The folder of the game's executable.
+fn game_dir() -> Option<PathBuf> {
     let mut exe = vec![0u16; 1024];
     #[expect(clippy::cast_possible_truncation, reason = "the buffer is 1024 units")]
     // SAFETY: the buffer and its length match; a null module is the executable.
@@ -103,8 +114,6 @@ fn loader_path() -> Option<Vec<u16>> {
         return None;
     }
     exe.truncate(len);
-    let folder = exe.iter().rposition(|&c| c == u16::from(b'\\'))?;
-    exe.truncate(folder + 1);
-    exe.extend(r"mods\enshwick\enshwick.dll".encode_utf16().chain([0]));
-    Some(exe)
+    let exe = PathBuf::from(OsString::from_wide(&exe));
+    exe.parent().map(PathBuf::from)
 }

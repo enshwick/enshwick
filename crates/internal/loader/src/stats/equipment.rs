@@ -4,6 +4,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::raw::read_at;
+
 use crate::host::Loader;
 
 /// The equipment category of an inventory link.
@@ -58,21 +60,6 @@ fn layout(loader: &Loader) -> Option<Layout> {
     })
 }
 
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: *const core::ffi::c_void, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe {
-        base.cast::<u8>()
-            .wrapping_add(offset)
-            .cast::<T>()
-            .read_unaligned()
-    }
-}
-
 /// The `(entity, item)` of every item `entity` wears that has an entity of
 /// its own; empty for an entity without inventories. On the game thread.
 pub(super) fn worn(loader: &Loader, entity: u32) -> Vec<(u32, u32)> {
@@ -87,18 +74,24 @@ fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(
     let Ok(setup) = crate::world::component(loader, root, layout.setup) else {
         return;
     };
-    // SAFETY: a live InventorySetup, on the game thread, holds its flag.
-    if unsafe { read::<u8>(setup, layout.initialized) } == 0 {
+    // SAFETY: `world::component` returned the entity's live `InventorySetup`,
+    // read on the game thread that owns it; `isInitialized` is a one-byte
+    // field at the offset reflection gave.
+    if unsafe { read_at::<u8>(setup.cast(), layout.initialized) } == 0 {
         return;
     }
     for i in 0..LINKS {
-        // SAFETY: the setup holds 16 links and 16 categories.
-        let link: u32 = unsafe { read(setup, layout.links + i * size_of::<u32>()) };
+        // SAFETY: the live `InventorySetup` from `world::component`, on the
+        // game thread, holds 16 `u32` links at the reflected `linksEntities`
+        // offset, and `i` is below 16.
+        let link: u32 = unsafe { read_at(setup.cast(), layout.links + i * size_of::<u32>()) };
         if link == 0 {
             break;
         }
-        // SAFETY: as above.
-        let category: u8 = unsafe { read(setup, layout.categories + i) };
+        // SAFETY: the live `InventorySetup` from `world::component`, on the
+        // game thread, holds 16 one-byte categories at the reflected
+        // `linksCategories` offset, and `i` is below 16.
+        let category: u8 = unsafe { read_at(setup.cast(), layout.categories + i) };
         if category == VIRTUAL && depth < MAX_DEPTH {
             walk(loader, layout, link, depth + 1, out);
             continue;
@@ -111,12 +104,18 @@ fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(
         };
         for index in 0..SLOTS {
             let at = index * layout.stack;
-            // SAFETY: a live Inventory holds 8 stacks of the reflected size.
-            let item: u32 = unsafe { read(slots, at) };
-            // SAFETY: as above.
-            let count: u32 = unsafe { read(slots, at + layout.count) };
-            // SAFETY: as above.
-            let pide: u32 = unsafe { read(slots, at + layout.pide) };
+            // SAFETY: the live `Inventory` from `world::component`, on the
+            // game thread, holds 8 stacks of the reflected `ItemStack` size,
+            // `index` is below 8, and a stack starts with its `u32` item id.
+            let item: u32 = unsafe { read_at(slots.cast(), at) };
+            // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
+            // `index` below 8) and holds its `u32` count at the reflected
+            // `data` offset.
+            let count: u32 = unsafe { read_at(slots.cast(), at + layout.count) };
+            // SAFETY: the stack at `at` lies in the live `Inventory` (8 stacks,
+            // `index` below 8) and holds its `u32` entity id right after the
+            // count, inside the reflected `ItemStack` size.
+            let pide: u32 = unsafe { read_at(slots.cast(), at + layout.pide) };
             if item != 0 && count != 0 && pide != 0 {
                 out.push((pide, item));
             }
