@@ -6,14 +6,14 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{RateId, Status};
+use enshwick::abi::{RateId, RecipeKind, Status};
 use enshwick::game_events::ExperienceSource;
 pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
-use crate::pinned::{Symbol, comfort, experience, item, loot, settings, skill};
+use crate::pinned::{Symbol, comfort, experience, item, loot, resource, settings, skill};
 
 /// For each rate, the build table symbols of the game functions whose
 /// answer the loader scales; the rate works where every one resolves.
@@ -29,7 +29,21 @@ pub(crate) const LINKS: &[(RateId, &[Symbol])] = &[
     (RateId::COMFORT, &[comfort::BASE_REGISTER]),
     (RateId::SKILL_POINTS, &[skill::POINTS_PER_LEVEL]),
     (RateId::LOOT, &[loot::STACK_ROLL, item::INFO]),
+    (RateId::recipe_output(RecipeKind::OTHER), SERVED),
+    (RateId::recipe_output(RecipeKind::BUILDING_BLOCK), SERVED),
+    (RateId::recipe_output(RecipeKind::ROOF), SERVED),
+    (RateId::recipe_output(RecipeKind::OVERGROWTH), SERVED),
+    (RateId::recipe_output(RecipeKind::TERRAIN), SERVED),
 ];
+
+/// What a recipe output rate needs: the served resource links its patch of
+/// the recipe registry rides on.
+const SERVED: &[Symbol] = &[resource::OPEN, resource::RESOLVE, resource::KEY_OF];
+
+/// Whether `rate` multiplies what recipes make.
+pub(crate) fn is_recipe_output(rate: RateId) -> bool {
+    matches!(Rate::from_id(rate), Some(Rate::RecipeOutput(_)))
+}
 
 /// The build table symbols `rate` links; empty for a rate the loader does
 /// not know.
@@ -173,6 +187,15 @@ impl Rates {
         let _first = self
             .sealed
             .set(std::mem::take(&mut *open).into_boxed_slice());
+    }
+
+    /// Whether a mod declared a rate `which` accepts, before or after the
+    /// seal.
+    pub(crate) fn any(&self, which: impl Fn(RateId) -> bool) -> bool {
+        match self.sealed.get() {
+            Some(sealed) => sealed.iter().any(|d| which(d.rate)),
+            None => self.open.relock().iter().any(|d| which(d.rate)),
+        }
     }
 
     /// Whether any mod declared `rate`; `false` before the seal.
@@ -367,5 +390,19 @@ mod tests {
             0.0,
             "the game's own zero stays"
         );
+    }
+
+    #[test]
+    fn a_recipe_output_rate_is_seen_before_and_after_the_seal() {
+        let roof = RateId::recipe_output(RecipeKind::ROOF);
+        assert!(is_recipe_output(roof));
+        assert!(!is_recipe_output(COMBAT));
+        let rates = Rates::new();
+        assert!(!rates.any(is_recipe_output));
+        rates.declare(ModIndex::new(0), roof, true, true);
+        assert!(rates.any(is_recipe_output), "open");
+        rates.seal();
+        assert!(rates.any(is_recipe_output), "sealed");
+        assert!(!rates.any(|rate| rate == COMBAT));
     }
 }

@@ -32,4 +32,20 @@ impl RateId {
     pub const SKILL_POINTS: Self = Self(7);
     /// How many items each stack of random loot holds.
     pub const LOOT: Self = Self(8);
+
+    /// How many items a recipe makes, for the recipes whose output is of
+    /// `kind`: one id per [`RecipeKind`](super::RecipeKind) code, above
+    /// every other rate's. A loader older than minor 78 refuses them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{RateId, RecipeKind};
+    ///
+    /// assert_ne!(RateId::recipe_output(RecipeKind::ROOF), RateId::recipe_output(RecipeKind::OTHER));
+    /// ```
+    #[must_use]
+    pub const fn recipe_output(kind: super::RecipeKind) -> Self {
+        Self(0x100 | kind.0)
+    }
 }

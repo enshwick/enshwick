@@ -838,7 +838,13 @@ pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
 
 pub(crate) extern "system" fn set_rate(me: ModHandle, rate: RateId, factor: f32) -> Status {
     entry("set_rate", || match caller_index(me) {
-        Ok((_, index)) => crate::rates::RATES.set(index, rate, factor),
+        Ok((_, index)) => {
+            let status = crate::rates::RATES.set(index, rate, factor);
+            if status == Status::OK && crate::rates::is_recipe_output(rate) {
+                crate::rate_links::rebuild_recipes();
+            }
+            status
+        }
         Err(status) => status,
     })
 }

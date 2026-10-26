@@ -16,7 +16,8 @@
 //! }
 //! ```
 
-use crate::abi::{RateId, Status};
+use crate::abi::{RateId, RecipeKind as AbiKind, Status};
+use crate::content::recipes::RecipeKind;
 use crate::{Host, Load, Off};
 
 /// The largest factor a mod sets and the largest product in force.
@@ -104,6 +105,11 @@ pub enum Rate {
     /// random pickups. Where the game's resource drop setting also scales a
     /// roll, both apply.
     Loot,
+    /// How many items a recipe makes, for the vanilla and mod recipes whose
+    /// output is of this kind, rounded and at least one; applied after every
+    /// mod's own recipe patch. The crafting menu shows the counts, so only a
+    /// mod with `join: true` declares it, set from a synced setting.
+    RecipeOutput(RecipeKind),
 }
 
 impl Rate {
@@ -117,6 +123,11 @@ impl Rate {
         Self::Comfort,
         Self::SkillPoints,
         Self::Loot,
+        Self::RecipeOutput(RecipeKind::Other),
+        Self::RecipeOutput(RecipeKind::BuildingBlock),
+        Self::RecipeOutput(RecipeKind::Roof),
+        Self::RecipeOutput(RecipeKind::Overgrowth),
+        Self::RecipeOutput(RecipeKind::Terrain),
     ];
 
     /// The loader's number for this rate.
@@ -140,6 +151,13 @@ impl Rate {
             Self::Comfort => RateId::COMFORT,
             Self::SkillPoints => RateId::SKILL_POINTS,
             Self::Loot => RateId::LOOT,
+            Self::RecipeOutput(kind) => RateId::recipe_output(match kind {
+                RecipeKind::BuildingBlock => AbiKind::BUILDING_BLOCK,
+                RecipeKind::Roof => AbiKind::ROOF,
+                RecipeKind::Overgrowth => AbiKind::OVERGROWTH,
+                RecipeKind::Terrain => AbiKind::TERRAIN,
+                RecipeKind::Other => AbiKind::OTHER,
+            }),
         }
     }
 
@@ -173,7 +191,10 @@ impl Rate {
     /// ```
     #[must_use]
     pub const fn seen_by_clients(self) -> bool {
-        matches!(self, Self::WorkshopSpeed | Self::SkillPoints)
+        matches!(
+            self,
+            Self::WorkshopSpeed | Self::SkillPoints | Self::RecipeOutput(_)
+        )
     }
 }
 
@@ -352,6 +373,17 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+
+    #[test]
+    fn every_recipe_kind_has_its_output_rate_and_ids_are_unique() {
+        for &kind in RecipeKind::ALL {
+            assert!(Rate::ALL.contains(&Rate::RecipeOutput(kind)), "{kind:?}");
+        }
+        for (i, a) in Rate::ALL.iter().enumerate() {
+            assert_eq!(Rate::from_id(a.id()), Some(*a));
+            assert!(Rate::ALL[i + 1..].iter().all(|b| b.id() != a.id()), "{a:?}");
+        }
+    }
 
     proptest! {
         #[test]

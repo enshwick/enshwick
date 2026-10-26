@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Rate::RecipeOutput(kind)` multiplies what the recipes of each
+  `RecipeKind` make, after every mod's own recipe patch;
+  `RecipeEdit::scale_output_by` scales by a fraction and
+  `RecipeKind::ALL` lists the kinds.
+
 ## [1.0.0-alpha.4] - 2026-10-26
 
 ### Added

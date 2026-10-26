@@ -25,6 +25,23 @@ pub enum RecipeKind {
 }
 
 impl RecipeKind {
+    /// Every kind, in the order of their codes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// assert!(RecipeKind::ALL.contains(&RecipeKind::Roof));
+    /// ```
+    pub const ALL: &[Self] = &[
+        Self::Other,
+        Self::BuildingBlock,
+        Self::Roof,
+        Self::Overgrowth,
+        Self::Terrain,
+    ];
+
     /// The kind of the item `item`, as the loader answers it.
     pub(super) fn of(item: Guid) -> Option<Self> {
         let host = crate::host()?;

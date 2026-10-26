@@ -441,6 +441,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         serve_stand_ins(&mut served, items, registry)
     });
     let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
+    let rated = serve_rates(&mut served, crate::rate_links::recipe_patch(loader));
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
@@ -449,7 +450,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + changed == 0
+        || count + recorded + renames.len() + standing + changed + rated == 0
     {
         return;
     }
@@ -537,6 +538,36 @@ fn serve_stand_ins(
         }),
     }
     count
+}
+
+/// Adds the loader's patch for the recipe output rates to `served`, last on
+/// the recipe registry, after every mod's and every data change, and keeps
+/// the registry's base, since a changed factor rebuilds it; how many keys.
+fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usize {
+    let Some(apply) = patch else {
+        return 0;
+    };
+    let key = recipe_registry();
+    let patch = Patch {
+        owner: ModIndex::LOADER,
+        apply,
+        user: 0,
+    };
+    match served.iter_mut().find(|s| s.key == key) {
+        Some(entry) => {
+            entry.patches.push(patch);
+            entry.keeps_base.store(true, Ordering::Relaxed);
+        }
+        None => served.push(Served {
+            key,
+            base: key,
+            patches: vec![patch],
+            keeps_base: AtomicBool::new(true),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        }),
+    }
+    1
 }
 
 /// Adds the loader's patches of changed vanilla values to `served`: first
@@ -699,7 +730,7 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 }
 
 /// The game's recipe registry.
-fn recipe_registry() -> ResourceKey {
+pub(crate) fn recipe_registry() -> ResourceKey {
     use enshwick::content::recipes::RECIPE_REGISTRY;
 
     use crate::catalogue::types;
