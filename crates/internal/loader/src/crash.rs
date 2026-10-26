@@ -803,7 +803,7 @@ fn fits(reach: &Reach, rsp: usize, frame: Option<usize>, low: usize, end: usize)
 /// - `context` is the context of a thread stopped in the fault or of the
 ///   thread running this, so its stack does not change during the walk.
 unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
-    let mut aligned = Aligned(*context);
+    let mut aligned = crate::detour::ThreadContext(*context);
     let context = &mut aligned.0;
     let mut found = 0;
     while found < FRAMES {
@@ -881,11 +881,6 @@ unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
     }
     found
 }
-
-/// A `CONTEXT` on the 16-byte boundary Windows writes it with aligned
-/// stores; the windows-sys type does not ask for it.
-#[repr(C, align(16))]
-struct Aligned(CONTEXT);
 
 /// `address` as a context register holds it.
 fn context_rsp(address: usize) -> u64 {
@@ -1231,7 +1226,7 @@ mod tests {
     fn the_bounded_walk_unwinds_a_live_stack_and_stops_on_a_broken_one() {
         use windows_sys::Win32::System::Diagnostics::Debug::RtlCaptureContext;
         // SAFETY: an all-zero context is a valid value to capture into.
-        let mut aligned = Aligned(unsafe { core::mem::zeroed() });
+        let mut aligned = crate::detour::ThreadContext(unsafe { core::mem::zeroed() });
         // SAFETY: a writable context on its 16-byte boundary.
         unsafe { RtlCaptureContext(&raw mut aligned.0) };
         let context = aligned.0;

@@ -471,15 +471,32 @@ fn follows_call(start: usize, at: usize) -> bool {
     })
 }
 
+/// A thread's `CONTEXT` on the 16-byte boundary x64 Windows requires:
+/// `GetThreadContext` and `SetThreadContext` refuse a misaligned one, which
+/// the windows-sys type, aligned to 8, does not prevent; Wine does not check.
+#[repr(C, align(16))]
+#[derive(Clone, Copy)]
+pub(crate) struct ThreadContext(pub(crate) CONTEXT);
+
+impl ThreadContext {
+    /// An empty context that asks for the control registers.
+    pub(crate) fn control() -> Self {
+        Self(CONTEXT {
+            ContextFlags: CONTEXT_CONTROL_AMD64,
+            ..CONTEXT::default()
+        })
+    }
+}
+
 /// A suspended thread's stack pointer and instruction pointer, with the
-/// context read for writing it back.
-fn control(thread: HANDLE) -> Option<CONTEXT> {
-    let mut context: CONTEXT = unsafe_zeroed_context();
-    context.ContextFlags = CONTEXT_CONTROL_AMD64;
+/// context read for writing it back; `None` when Windows refuses to read
+/// it.
+fn control(thread: HANDLE) -> Option<ThreadContext> {
+    let mut context = ThreadContext::control();
     // SAFETY: `GetThreadContext` writes at most one `CONTEXT` into
-    // `context`, a local with `ContextFlags` set; a handle without context
-    // rights fails the call.
-    (unsafe { GetThreadContext(thread, &raw mut context) } != 0).then_some(context)
+    // `context.0`, 16-byte aligned by its type, with `ContextFlags` set; a
+    // handle without context rights fails the call.
+    (unsafe { GetThreadContext(thread, &raw mut context.0) } != 0).then_some(context)
 }
 
 /// The words on a suspended thread's stack, from its stack pointer up to
@@ -558,7 +575,7 @@ impl Stack {
 /// - Every thread of the process but the caller, `thread` among them, stays
 ///   suspended for the call, as `Threads::suspend` leaves them.
 unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
-    let Some(context) = control(thread) else {
+    let Some(ThreadContext(context)) = control(thread) else {
         return false;
     };
     let rip = usize::try_from(context.Rip).unwrap_or(0);
@@ -597,17 +614,17 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
             .flatten()
             .map(|i| moved[i].1)
     };
-    let Some(mut context) = control(thread) else {
+    let Some(mut held) = control(thread) else {
         return;
     };
-    if let Some(new) = find(usize::try_from(context.Rip).unwrap_or(0)) {
-        context.Rip = new as u64;
+    if let Some(new) = find(usize::try_from(held.0.Rip).unwrap_or(0)) {
+        held.0.Rip = new as u64;
         // SAFETY: the caller keeps `thread` suspended, `context` is the one
         // `control` read from it with only `Rip` changed, and the moved
         // address holds the same instruction in the trampoline.
-        unsafe { SetThreadContext(thread, &raw const context) };
+        unsafe { SetThreadContext(thread, &raw const held.0) };
     }
-    if let Some(stack) = Stack::at(context.Rsp) {
+    if let Some(stack) = Stack::at(held.0.Rsp) {
         // SAFETY: the caller keeps every other thread, the stack's owner
         // among them, suspended for the call and vouches for the moved
         // addresses. A word equal to a moved address is a return address, or
@@ -615,11 +632,6 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
         // instruction.
         unsafe { stack.rewrite(find) };
     }
-}
-
-fn unsafe_zeroed_context() -> CONTEXT {
-    // SAFETY: `CONTEXT` is plain data, valid when zeroed.
-    unsafe { core::mem::zeroed() }
 }
 
 #[link(name = "ntdll", kind = "raw-dylib")]
