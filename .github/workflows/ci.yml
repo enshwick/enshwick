@@ -32,12 +32,15 @@ concurrency:
 jobs:
   rust:
     # main: the organization runners run only workflows from main.
-    uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
+    uses: enshwick/.github/.github/workflows/rust-ci.yml@ci/native-windows-tests # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
     with:
       semver: enshwick
       split: true
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
 
   nightly:
     if: github.event_name == 'schedule' || inputs.nightly
