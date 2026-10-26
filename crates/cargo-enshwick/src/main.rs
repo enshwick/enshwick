@@ -33,14 +33,19 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Creates a mod crate in `<dir>/<name>`.
+    /// Creates a mod crate in `<dir>/<name>`, or with `--data` a data pack
+    /// folder in `<dir>/<id>`.
     New {
         /// The mod id, `<author>.<name>`: each part of `[a-z0-9-]`, the name
         /// starting with a letter; the name names the crate.
         id: String,
-        /// Where the mod runs.
-        #[arg(long, value_enum, default_value_t = Side::Server)]
-        side: Side,
+        /// Creates a data pack, TOML files and no code, instead of a crate.
+        #[arg(long)]
+        data: bool,
+        /// Where the mod runs; a mod runs on the server and a data pack on
+        /// both sides when left out.
+        #[arg(long, value_enum)]
+        side: Option<Side>,
         /// The folder the crate is created in.
         #[arg(long, default_value = ".")]
         dir: PathBuf,
@@ -128,7 +133,13 @@ fn main() -> ExitCode {
                 }
             };
         }
-        Command::New { id, side, dir } => new::create(&dir, &id, side),
+        Command::New {
+            id,
+            data: true,
+            side,
+            dir,
+        } => new::data::create(&dir, &id, side.unwrap_or(Side::Both)),
+        Command::New { id, side, dir, .. } => new::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {
             dll,

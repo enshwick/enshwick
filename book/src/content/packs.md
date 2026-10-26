@@ -29,6 +29,12 @@ game's files or saves.
 
 A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
 
+`cargo enshwick new --data you.bigger-stacks` starts a pack: the folder
+`you.bigger-stacks/` with every file above, each showing its first change
+commented out, the schema files that let an editor check them, and a README
+with the steps to check, install and release it. `--side` sets where it runs,
+both sides when left out.
+
 ## `pack.toml`
 
 ```toml

@@ -64,40 +64,32 @@ fn based(altars: &enshwick::altars::Altars, cell: [i64; 3]) -> bool {
 
 ## Sizing the zones
 
-One mod may size the zones:
-[`load.control_altar_zones()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
-makes it the one, and a second mod asking is refused. It hands the loader a
-`ZoneSize` per altar: the vanilla zone of the altar's level grown by `grow`
-cells on every horizontal side and made `height` cells tall. The loader turns
-that into the engine's own shape for the altar's turn and writes it on the
-server's next zone pass, while the altar stays at that level; an altar without
-a size, or at another level, keeps its vanilla zone.
+Any mod may size the zones:
+[`load.on_altar_zone(|zone| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
+adds its filter to a chain. When altars change, the loader asks the filters
+about every altar, in load order: each sees the zone so far, the vanilla one
+first, and may grow it by `grow` cells on every horizontal side or make it
+`height` cells tall. The loader turns the result into the engine's own shape
+for the altar's turn and writes it on the server's next zone pass, while the
+altar stays at that level.
 
 ```rust
-use enshwick::altars::ZoneSize;
-use enshwick::events::AltarsChanged;
-
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let control = load.control_altar_zones()?;
-    load.on::<AltarsChanged>(move |()| {
-        let sizes: Vec<ZoneSize> = control
-            .altars()
-            .list()
-            .iter()
-            .filter_map(|altar| {
-                let zone = altar.levels.last()?;
-                Some(ZoneSize { altar: altar.entity, level: altar.level, grow: 4, height: zone.max[1] - zone.min[1] })
-            })
-            .collect();
-        let _ = control.set(&sizes);
-    })
+    // Every altar four cells wider on each side, on top of what mods before
+    // this one gave it.
+    let sizes = load.on_altar_zone(|zone| zone.grow += 4)?;
+    let _ = sizes;
+    Ok(())
 }
 ```
 
-`set` works from any thread, so a mod that solves sizes at length does it on
-a thread of its own. A size changes the altar's built zone and so raises
-`AltarsChanged` again: compare the input you solve from, the `levels`, not the
-built zones, before solving again.
+Filters run on the server's game thread, once per altar each time the
+altars change. A mod that solves sizes at length does it on a thread of its
+own, keeps the answers where its filter reads them, and calls
+`sizes.changed()` from any thread to have the zones sized again on the next
+step. A size changes the altar's built zone and so raises `AltarsChanged`
+again: compare the input you solve from, the `levels`, not the built zones,
+before solving again.
 
 ## Altars per level and bases past 16
 

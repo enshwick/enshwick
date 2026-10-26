@@ -21,6 +21,7 @@ macro_rules! headed {
             AffixDefData,
             AffixRoll,
             AltarInfo,
+            AltarZone,
             BedCheck,
             BuffRequest,
             BuffTypeInfo,

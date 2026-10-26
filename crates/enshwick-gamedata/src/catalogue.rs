@@ -5,6 +5,10 @@
 //! and the tools answer it, so a game update that renames or moves something
 //! changes this table, not the mods.
 
+mod facts;
+
+pub use facts::FACTS;
+
 use crate::reflect::{Reflection, TypeInfo};
 use enshwick::Off;
 use enshwick::content::EngineFacts;
@@ -37,698 +41,19 @@ pub enum Fact {
     /// The sum of the offsets of fields nested one in the next: each pair
     /// is a reflected type and its field, the field holding the next type.
     Path(&'static [(&'static str, &'static str)]),
+    /// The value of the constant `name` of the reflected enum `ty`; for a
+    /// mask, the index of its bit.
+    Constant {
+        /// The reflected enum.
+        ty: &'static str,
+        /// The constant in it.
+        name: &'static str,
+    },
 }
-
-/// Every fact the API asks for, by id, in the order the API lists its ids.
-pub const FACTS: &[(&str, Fact)] = &[
-    ("hit_event", Fact::Type("keen::ecs::HitEvent")),
-    (
-        "hit_event.attacker",
-        offset("keen::ecs::BaseHitEvent", "rootSourceId"),
-    ),
-    (
-        "hit_event.target",
-        offset("keen::ecs::BaseHitEvent", "targetId"),
-    ),
-    (
-        "hit_event.source",
-        offset("keen::ecs::HitEvent", "sourceId"),
-    ),
-    (
-        "hit_event.root_target",
-        offset("keen::ecs::HitEvent", "rootTargetId"),
-    ),
-    (
-        "hit_event.weapon",
-        offset("keen::ecs::HitEvent", "weaponPideId"),
-    ),
-    (
-        "hit_event.health_change",
-        offset("keen::ecs::HitEvent", "healthChange"),
-    ),
-    (
-        "hit_event.stamina_change",
-        offset("keen::ecs::HitEvent", "staminaChange"),
-    ),
-    (
-        "hit_event.damage_types",
-        offset("keen::ecs::HitEvent", "damageTypes"),
-    ),
-    (
-        "hit_event.attack",
-        offset("keen::ecs::HitEvent", "attackCategory"),
-    ),
-    (
-        "hit_event.target_faction",
-        offset("keen::ecs::HitEvent", "targetFaction"),
-    ),
-    ("died_event", Fact::Type("keen::ecs::EntityDiedEvent")),
-    (
-        "died_event.entity",
-        offset("keen::ecs::EntityDiedEvent", "deadEntityId"),
-    ),
-    ("hit_history", Fact::Type("keen::ecs::HitHistory")),
-    (
-        "hit_history.last_index",
-        offset("keen::ecs::HitHistory", "lastIndex"),
-    ),
-    (
-        "hit_history.entries",
-        offset("keen::ecs::HitHistory", "history"),
-    ),
-    (
-        "hit_history.end",
-        offset("keen::ecs::HitHistory", "targetTransform"),
-    ),
-    (
-        "experience_credit",
-        Fact::Type("keen::ecs::ExperienceSource"),
-    ),
-    (
-        "experience_credit.last_player",
-        offset("keen::ecs::ExperienceSource", "lastHitPlayerId"),
-    ),
-    ("level_gained_event", Fact::Type("keen::ecs::LevelUpEvent")),
-    (
-        "level_gained_event.player",
-        offset("keen::ecs::LevelUpEvent", "playerEntityId"),
-    ),
-    (
-        "level_gained_event.level",
-        offset("keen::ecs::LevelUpEvent", "level"),
-    ),
-    (
-        "experience_gained_event",
-        Fact::Type("keen::ecs::XPGainedEvent"),
-    ),
-    (
-        "experience_gained_event.player",
-        offset("keen::ecs::XPGainedEvent", "playerEntityId"),
-    ),
-    (
-        "experience_gained_event.amount",
-        offset("keen::ecs::XPGainedEvent", "amount"),
-    ),
-    (
-        "experience_gained_event.source",
-        offset("keen::ecs::XPGainedEvent", "source"),
-    ),
-    (
-        "craft_requested_event",
-        Fact::Type("keen::ecs::CraftRecipeEvent"),
-    ),
-    (
-        "craft_requested_event.player",
-        offset("keen::ecs::CraftRecipeEvent", "craftingOperatorId"),
-    ),
-    (
-        "craft_requested_event.station",
-        offset("keen::ecs::CraftRecipeEvent", "craftingStationId"),
-    ),
-    (
-        "craft_requested_event.recipe",
-        offset("keen::ecs::CraftRecipeEvent", "recipeId"),
-    ),
-    (
-        "craft_requested_event.amount",
-        offset("keen::ecs::CraftRecipeEvent", "recipeAmount"),
-    ),
-    (
-        "crafted_event",
-        Fact::Type("keen::ecs::CraftRecipeSuccessEvent"),
-    ),
-    (
-        "crafted_event.workshop",
-        offset("keen::ecs::CraftRecipeSuccessEvent", "workshopId"),
-    ),
-    (
-        "crafted_event.recipe",
-        offset("keen::ecs::CraftRecipeSuccessEvent", "recipeId"),
-    ),
-    (
-        "interacted_event",
-        Fact::Type("keen::ecs::AcceptOfferedInteractionEvent"),
-    ),
-    (
-        "interacted_event.player",
-        offset("keen::ecs::AcceptOfferedInteractionEvent", "guestEntityId"),
-    ),
-    (
-        "interacted_event.target",
-        offset("keen::ecs::AcceptOfferedInteractionEvent", "hostEntityId"),
-    ),
-    (
-        "interacted_event.offer",
-        offset("keen::ecs::AcceptOfferedInteractionEvent", "offerId"),
-    ),
-    ("built_event", Fact::Type("keen::ecs::BuildingPlaceEvent")),
-    (
-        "built_event.player",
-        offset("keen::ecs::BuildingPlaceEvent", "ownerId"),
-    ),
-    (
-        "built_event.position",
-        offset("keen::ecs::BuildingPlaceEvent", "position"),
-    ),
-    (
-        "built_event.volume_min",
-        offset("keen::ecs::BuildingPlaceEvent", "volumeMin"),
-    ),
-    (
-        "built_event.volume_max",
-        offset("keen::ecs::BuildingPlaceEvent", "volumeMax"),
-    ),
-    (
-        "built_event.material",
-        offset("keen::ecs::BuildingPlaceEvent", "material"),
-    ),
-    (
-        "built_event.item",
-        offset("keen::ecs::BuildingPlaceEvent", "trackingItemId"),
-    ),
-    (
-        "torn_down_event",
-        Fact::Type("keen::ecs::BuildingTearDownEvent"),
-    ),
-    (
-        "torn_down_event.player",
-        offset("keen::ecs::BuildingTearDownEvent", "ownerId"),
-    ),
-    (
-        "torn_down_event.position",
-        offset("keen::ecs::BuildingTearDownEvent", "position"),
-    ),
-    (
-        "torn_down_event.volume_min",
-        offset("keen::ecs::BuildingTearDownEvent", "volumeMin"),
-    ),
-    (
-        "torn_down_event.volume_max",
-        offset("keen::ecs::BuildingTearDownEvent", "volumeMax"),
-    ),
-    (
-        "torn_down_event.material",
-        offset("keen::ecs::BuildingTearDownEvent", "material"),
-    ),
-    (
-        "picked_up_event",
-        Fact::Type("keen::ecs::BuildingPickUpEvent"),
-    ),
-    (
-        "picked_up_event.player",
-        offset("keen::ecs::BuildingPickUpEvent", "ownerId"),
-    ),
-    (
-        "picked_up_event.position",
-        offset("keen::ecs::BuildingPickUpEvent", "position"),
-    ),
-    (
-        "picked_up_event.volume_min",
-        offset("keen::ecs::BuildingPickUpEvent", "volumeMin"),
-    ),
-    (
-        "picked_up_event.volume_max",
-        offset("keen::ecs::BuildingPickUpEvent", "volumeMax"),
-    ),
-    (
-        "picked_up_event.material",
-        offset("keen::ecs::BuildingPickUpEvent", "material"),
-    ),
-    (
-        "picked_up_event.entity",
-        offset("keen::ecs::BuildingPickUpEvent", "pickedEntityId"),
-    ),
-    ("altar_used_event", Fact::Type("keen::ecs::FlameAltarEvent")),
-    (
-        "altar_used_event.player",
-        offset("keen::ecs::FlameAltarEvent", "playerEntityId"),
-    ),
-    (
-        "altar_used_event.altar",
-        offset("keen::ecs::FlameAltarEvent", "baseEntityId"),
-    ),
-    (
-        "altar_used_event.action",
-        offset("keen::ecs::FlameAltarEvent", "type"),
-    ),
-    (
-        "loot_opened_event",
-        Fact::Type("keen::ecs::LootInteractionEvent"),
-    ),
-    (
-        "loot_opened_event.player",
-        offset("keen::ecs::LootInteractionEvent", "guestId"),
-    ),
-    (
-        "loot_opened_event.container",
-        offset("keen::ecs::LootInteractionEvent", "hostId"),
-    ),
-    (
-        "loot_opened_event.take_all",
-        offset("keen::ecs::LootInteractionEvent", "lootAll"),
-    ),
-    (
-        "equipment_changed_event",
-        Fact::Type("keen::ecs::HandleEquipmentSlotChangedEvent"),
-    ),
-    (
-        "equipment_changed_event.player",
-        offset(
-            "keen::ecs::HandleEquipmentSlotChangedEvent",
-            "playerEntityId",
-        ),
-    ),
-    (
-        "equipment_changed_event.slot",
-        offset(
-            "keen::ecs::HandleEquipmentSlotChangedEvent",
-            "equipmentSlot",
-        ),
-    ),
-    ("revived_event", Fact::Type("keen::ecs::RevivedPlayerEvent")),
-    (
-        "revived_event.player",
-        offset("keen::ecs::RevivedPlayerEvent", "targetEntityId"),
-    ),
-    (
-        "revived_event.by",
-        offset("keen::ecs::RevivedPlayerEvent", "sourceEntityId"),
-    ),
-    (
-        "world_transform.position",
-        offset("keen::WorldTransform", "position"),
-    ),
-    (
-        "world_transform.orientation",
-        offset("keen::WorldTransform", "orientation"),
-    ),
-    (
-        "world_transform.scale",
-        offset("keen::WorldTransform", "scale"),
-    ),
-    (
-        "npc_command_event",
-        Fact::Type("keen::ecs::NpcCommandEvent"),
-    ),
-    (
-        "npc_command_event.kind",
-        offset("keen::ecs::NpcCommandEvent", "type"),
-    ),
-    (
-        "npc_command_event.npc",
-        offset("keen::ecs::NpcCommandEvent", "npcId"),
-    ),
-    (
-        "npc_command_event.target",
-        offset("keen::ecs::NpcCommandEvent", "targetTransform"),
-    ),
-    (
-        "set_toggle_state_event",
-        Fact::Type("keen::ecs::SetToggleStateEvent"),
-    ),
-    (
-        "set_toggle_state_event.sender",
-        offset("keen::ecs::SetToggleStateEvent", "senderId"),
-    ),
-    (
-        "set_toggle_state_event.signal",
-        offset("keen::ecs::SetToggleStateEvent", "signalId"),
-    ),
-    (
-        "set_toggle_state_event.state",
-        offset("keen::ecs::SetToggleStateEvent", "newState"),
-    ),
-    (
-        "add_threat_target_event",
-        Fact::Type("keen::ecs::AddThreatTargetEvent"),
-    ),
-    (
-        "add_threat_target_event.attacker",
-        offset("keen::ecs::AddThreatTargetEvent", "attackerId"),
-    ),
-    (
-        "add_threat_target_event.target",
-        offset("keen::ecs::AddThreatTargetEvent", "targetId"),
-    ),
-    (
-        "add_threat_target_event.threat",
-        offset("keen::ecs::AddThreatTargetEvent", "threatValue"),
-    ),
-    ("ui_ping_event", Fact::Type("keen::ecs::UiPingEvent")),
-    (
-        "ui_ping_event.sender",
-        offset("keen::ecs::UiPingEvent", "senderEntityId"),
-    ),
-    (
-        "ui_ping_event.position",
-        offset("keen::ecs::UiPingEvent", "position"),
-    ),
-    ("item_info", Fact::Type("keen::ItemInfo")),
-    ("item_info.id", offset("keen::ItemInfo", "itemId")),
-    ("item_info.object", offset("keen::ItemInfo", "objectId")),
-    ("item_info.name", offset("keen::ItemInfo", "name")),
-    (
-        "item_info.description",
-        offset("keen::ItemInfo", "description"),
-    ),
-    ("item_info.flags", offset("keen::ItemInfo", "flags")),
-    (
-        "item_info.max_stack",
-        offset("keen::ItemInfo", "maxStackSize"),
-    ),
-    (
-        "item_info.pid_entity",
-        offset("keen::ItemInfo", "pidEntity"),
-    ),
-    ("item_info.ui_values", offset("keen::ItemInfo", "uiValues")),
-    (
-        "item_info.icon_image",
-        offset("keen::ItemInfo", "iconImage"),
-    ),
-    (
-        "item_info.placed_entity",
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "placedEntity"),
-        ]),
-    ),
-    (
-        "item_info.equipment_slot",
-        Fact::Path(&[
-            ("keen::ItemInfo", "equipment"),
-            ("keen::EquipmentSetup", "slot"),
-        ]),
-    ),
-    ("equipment_slot", Fact::Type("keen::EquipmentSlotType")),
-    ("item_stat", Fact::Type("keen::ImpactUiValue")),
-    ("item_stat.label", offset("keen::ImpactUiValue", "locaId")),
-    (
-        "item_stat.format",
-        offset("keen::ImpactUiValue", "valueFormat"),
-    ),
-    ("item_stat.value", offset("keen::ImpactUiValue", "value")),
-    (
-        "item_stat.signed",
-        offset("keen::ImpactUiValue", "isSigned"),
-    ),
-    ("item_registry", Fact::Type("keen::ItemRegistryResource")),
-    (
-        "item_registry.refs",
-        offset("keen::ItemRegistryResource", "itemRefs"),
-    ),
-    (
-        "item_registry.names",
-        offset("keen::ItemRegistryResource", "dbgNames"),
-    ),
-    ("template", Fact::Type("keen::ecs::TemplateResource")),
-    (
-        "template.components",
-        offset("keen::ecs::TemplateResource", "components"),
-    ),
-    (
-        "template_collection",
-        Fact::Type("keen::ecs::TemplateCollectionResource"),
-    ),
-    (
-        "template_collection.templates",
-        offset("keen::ecs::TemplateCollectionResource", "templates"),
-    ),
-    ("fuel_setup", Fact::Type("keen::ecs::FuelSetup")),
-    (
-        "fuel_setup.max",
-        offset("keen::ecs::FuelSetup", "maxFuelCharges"),
-    ),
-    (
-        "fuel_setup.start",
-        offset("keen::ecs::FuelSetup", "initialFuelPercentage"),
-    ),
-    ("crafting", Fact::Type("keen::ecs::Crafting")),
-    (
-        "crafting.workshop",
-        offset("keen::ecs::Crafting", "workshop"),
-    ),
-    (
-        "crafting.workshop_id",
-        offset("keen::ecs::Crafting", "workshopId"),
-    ),
-    (
-        "crafting_interaction",
-        Fact::Type("keen::ecs::CraftingInteraction"),
-    ),
-    (
-        "crafting_interaction.workshop",
-        offset("keen::ecs::CraftingInteraction", "workshop"),
-    ),
-    (
-        "crafting_interaction.workshop_id",
-        offset("keen::ecs::CraftingInteraction", "workshopId"),
-    ),
-    (
-        "client_crafting_interaction",
-        Fact::Type("keen::ecs::ClientCraftingInteraction"),
-    ),
-    (
-        "client_crafting_interaction.workshop_id",
-        offset("keen::ecs::ClientCraftingInteraction", "workshopId"),
-    ),
-    (
-        "workshop_registry",
-        Fact::Type("keen::WorkshopRegistryResource"),
-    ),
-    (
-        "workshop_registry.workshops",
-        offset("keen::WorkshopRegistryResource", "workshops"),
-    ),
-    ("workshop", Fact::Type("keen::WorkshopResource")),
-    (
-        "workshop.guid",
-        offset("keen::WorkshopResource", "workshopGuid"),
-    ),
-    (
-        "workshop.id",
-        offset("keen::WorkshopResource", "workshopId"),
-    ),
-    ("workshop.name", offset("keen::WorkshopResource", "name")),
-    ("workshop.item", offset("keen::WorkshopResource", "item")),
-    (
-        "workshop.item_ref",
-        offset("keen::WorkshopResource", "itemRef"),
-    ),
-    ("workshop.npc", offset("keen::WorkshopResource", "isNpc")),
-    (
-        "recipe_registry",
-        Fact::Type("keen::RecipeRegistryResource"),
-    ),
-    (
-        "recipe_registry.recipes",
-        offset("keen::RecipeRegistryResource", "recipes"),
-    ),
-    ("recipe", Fact::Type("keen::RecipeInfo")),
-    ("recipe.guid", offset("keen::RecipeInfo", "recipeGuid")),
-    ("recipe.id", offset("keen::RecipeInfo", "recipeId")),
-    (
-        "recipe.workshop_guid",
-        offset("keen::RecipeInfo", "workshopGuid"),
-    ),
-    ("recipe.workshop", offset("keen::RecipeInfo", "workshopId")),
-    ("recipe.input", offset("keen::RecipeInfo", "input")),
-    ("recipe.output", offset("keen::RecipeInfo", "output")),
-    (
-        "recipe.completion",
-        offset("keen::RecipeInfo", "completionRequirementQuery"),
-    ),
-    (
-        "recipe.duration",
-        offset("keen::RecipeInfo", "craftingDuration"),
-    ),
-    (
-        "recipe.required_props",
-        offset("keen::RecipeInfo", "requiredProps"),
-    ),
-    ("recipe.debug_name", offset("keen::RecipeInfo", "debugName")),
-    ("recipe_ingredient", Fact::Type("keen::RecipeInputResource")),
-    ("recipe_stack", Fact::Type("keen::RecipeItemStackResource")),
-    (
-        "recipe_stack.item",
-        offset("keen::RecipeItemStackResource", "item"),
-    ),
-    (
-        "recipe_stack.count",
-        offset("keen::RecipeItemStackResource", "count"),
-    ),
-    ("ui_image", Fact::Type("keen::UiTextureResource")),
-    ("ui_bundle", Fact::Type("keen::FbUiBundle")),
-    (
-        "ui_bundle.crafting_menu",
-        Fact::Path(&[
-            ("keen::FbUiBundle", "menu"),
-            ("keen::FbUiMenu", "crafting"),
-            ("keen::FbUiCrafting", "recipes"),
-        ]),
-    ),
-    (
-        "crafting_menu.workshops",
-        offset("keen::FbUiCraftingRecipeCollection", "workshops"),
-    ),
-    (
-        "crafting_menu.trees",
-        offset("keen::FbUiCraftingRecipeCollection", "trees"),
-    ),
-    (
-        "crafting_menu.max_groups",
-        offset("keen::FbUiCraftingRecipeCollection", "maxRecipeGroupCount"),
-    ),
-    (
-        "crafting_menu.max_sets",
-        offset("keen::FbUiCraftingRecipeCollection", "maxRecipeSetCount"),
-    ),
-    (
-        "crafting_menu_tree",
-        Fact::Type("keen::FbUiCraftingRecipeTree"),
-    ),
-    (
-        "crafting_menu_tree.groups",
-        offset("keen::FbUiCraftingRecipeTree", "groups"),
-    ),
-    (
-        "crafting_menu_group",
-        Fact::Type("keen::FbUiCraftingRecipeGroup"),
-    ),
-    (
-        "crafting_menu_group.id",
-        offset("keen::FbUiCraftingRecipeGroup", "groupId"),
-    ),
-    (
-        "crafting_menu_group.sets",
-        offset("keen::FbUiCraftingRecipeGroup", "sets"),
-    ),
-    (
-        "crafting_menu_set",
-        Fact::Type("keen::FbUiCraftingRecipeSet"),
-    ),
-    (
-        "crafting_menu_set.entries",
-        offset("keen::FbUiCraftingRecipeSet", "entries"),
-    ),
-    (
-        "current_transform",
-        Fact::Type("keen::ecs::CurrentTransform"),
-    ),
-    ("used_item", Fact::Type("keen::ecs::UsedItem")),
-    ("label", Fact::Type("keen::ecs::CustomPlayerString")),
-    ("inventory_setup", Fact::Type("keen::ecs::InventorySetup")),
-    (
-        "inventory_setup.links",
-        offset("keen::ecs::InventorySetup", "linksEntities"),
-    ),
-    (
-        "inventory_setup.categories",
-        offset("keen::ecs::InventorySetup", "linksCategories"),
-    ),
-    (
-        "inventory_setup.initialized",
-        offset("keen::ecs::InventorySetup", "isInitialized"),
-    ),
-    ("inventory", Fact::Type("keen::ecs::Inventory")),
-    ("item_stack", Fact::Type("keen::ItemStack")),
-    ("item_stack.count", offset("keen::ItemStack", "data")),
-    (
-        "item_stack.pide",
-        // `data` holds the u32 count, then the id of the item's own entity.
-        Fact::Offset {
-            ty: "keen::ItemStack",
-            field: "data",
-            plus: 4,
-        },
-    ),
-    ("durability", Fact::Type("keen::ecs::NetworkDurability")),
-    (
-        "durability.max",
-        offset("keen::ecs::NetworkDurability", "durabilityMax"),
-    ),
-    ("fuel", Fact::Type("keen::ecs::NetworkFuel")),
-    ("fuel.max", offset("keen::ecs::NetworkFuel", "fuelMax")),
-    ("owner", Fact::Type("keen::ecs::OwnerRelationship")),
-    (
-        "inventory_empty_state",
-        Fact::Type("keen::ecs::InventoryEmptyState"),
-    ),
-    (
-        "inventory_empty_state.empty",
-        offset("keen::ecs::InventoryEmptyState", "isEmpty"),
-    ),
-    ("destroy_on_loot", Fact::Type("keen::ecs::DestroyOnLoot")),
-    ("lifetime", Fact::Type("keen::ecs::LifeTime")),
-    ("area_loot", Fact::Type("keen::ecs::AreaLootOverride")),
-    (
-        "area_loot.exclude",
-        offset("keen::ecs::AreaLootOverride", "exclude"),
-    ),
-    (
-        "interaction_offer",
-        Fact::Type("keen::ecs::InteractionOfferRuntime"),
-    ),
-    (
-        "interaction_offer.accept_time",
-        offset("keen::ecs::InteractionOfferRuntime", "lastAcceptTime"),
-    ),
-    (
-        "interaction_offer.accept_guest",
-        Fact::Path(&[
-            ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
-            ("keen::ecs::InteractionAcceptData", "guestId"),
-        ]),
-    ),
-    (
-        "interaction_offer.disabled",
-        offset("keen::ecs::InteractionOfferRuntime", "isDisabled"),
-    ),
-    ("player_input", Fact::Type("keen::ecs::PlayerInput")),
-    ("boss", Fact::Type("keen::ecs::Boss")),
-    ("interaction_lock", Fact::Type("keen::ecs::InteractionLock")),
-    (
-        "interaction_lock.item",
-        offset("keen::ecs::InteractionLock", "requiredItem"),
-    ),
-    ("loot_slot", Fact::Type("keen::LootSlotInfo")),
-    ("loot_slot.item", offset("keen::LootSlotInfo", "itemId")),
-    ("loot_slot.count", offset("keen::LootSlotInfo", "stackSize")),
-    ("attribute_set.health", Fact::Type("keen::ecs::Health")),
-    ("attribute_set.stamina", Fact::Type("keen::ecs::Stamina")),
-    ("attribute_set.mana", Fact::Type("keen::ecs::Mana")),
-    ("attribute_set.level", Fact::Type("keen::ecs::Level")),
-    (
-        "attribute_set.experience",
-        Fact::Type("keen::ecs::Experience"),
-    ),
-    ("attribute_set.fuel", Fact::Type("keen::ecs::Fuel")),
-    (
-        "attribute_set.shroud",
-        Fact::Type("keen::ecs::FogResistance"),
-    ),
-    ("skill_nodes", Fact::Type("keen::ecs::UnlockedSkillNodes")),
-    (
-        "skill_nodes.ids",
-        offset("keen::ecs::UnlockedSkillNodes", "knownSkillNodes"),
-    ),
-    (
-        "skill_nodes.levels",
-        offset("keen::ecs::UnlockedSkillNodes", "unlockLevel"),
-    ),
-    ("base_actor", Fact::Type("keen::ecs::BaseActor")),
-    (
-        "base_actor.state",
-        offset("keen::ecs::BaseActor", "currentState"),
-    ),
-    ("npc", Fact::Type("keen::ecs::ActiveNpcState")),
-    ("animal", Fact::Type("keen::ecs::Animal")),
-    ("loot_fill", Fact::Type("keen::ecs::DefaultInventory")),
-    ("resource_node", Fact::Type("keen::ecs::MiningNode")),
-];
 
 /// The id of the enum an item's equipment slot holds, which
 /// [`RECIPE_KINDS`] names constants of.
-pub const SLOT_TYPE: &str = "equipment_slot";
+pub const SLOT_TYPE: &str = "item_slot_type";
 
 /// The id of the offset of the item id in an item's static data.
 pub const ITEM_ID: &str = "item_info.id";
@@ -787,6 +112,10 @@ pub fn recipe_kind_slots(reflection: &Reflection<'_>) -> Vec<(u64, RecipeKind)> 
 
 const fn offset(ty: &'static str, field: &'static str) -> Fact {
     Fact::Offset { ty, field, plus: 0 }
+}
+
+const fn enum_constant(ty: &'static str, name: &'static str) -> Fact {
+    Fact::Constant { ty, name }
 }
 
 /// The fact named `id`, if the catalogue has one.
@@ -875,7 +204,7 @@ fn offset_of(fact: Fact, field: impl Fn(&str, &str) -> Option<u64>) -> Option<u6
         Fact::Path(steps) => steps
             .iter()
             .try_fold(0u64, |sum, &(ty, name)| sum.checked_add(field(ty, name)?)),
-        Fact::Type(_) => None,
+        Fact::Type(_) | Fact::Constant { .. } => None,
     }
 }
 
@@ -901,8 +230,8 @@ pub fn event_types<'r, 'a>(
     reflection.derived_from(EVENT_BASE)
 }
 
-/// The value of the offset named `id` in `reflection`; `None` when the id
-/// names no offset or reflection lacks its type or field.
+/// The value of the offset or enum constant named `id` in `reflection`;
+/// `None` when the id names neither or reflection lacks what it names.
 ///
 /// # Examples
 ///
@@ -916,9 +245,10 @@ pub fn event_types<'r, 'a>(
 /// ```
 #[must_use]
 pub fn constant(id: &str, reflection: &Reflection<'_>) -> Option<u64> {
-    offset_of(fact(id)?, |ty, field| {
-        reflection.field_offset(ty, field).ok()
-    })
+    match fact(id)? {
+        Fact::Constant { ty, name } => reflection.enum_value(ty, name).ok(),
+        fact => offset_of(fact, |ty, field| reflection.field_offset(ty, field).ok()),
+    }
 }
 
 /// The game's reflection answering engine facts by enshwick id, for the
@@ -977,6 +307,33 @@ mod tests {
         assert_eq!(enshwick::__private::ENGINE_IDS, ours.as_slice());
     }
 
+    /// `name` in lower case without underscores, to compare an id with the
+    /// engine name it stands for.
+    fn plain(name: &str) -> String {
+        name.chars()
+            .filter(|&c| c != '_')
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
+    }
+
+    #[test]
+    fn every_enum_constant_id_is_named_after_its_engine_constant() {
+        for &(id, fact) in FACTS {
+            if let Fact::Constant { name, .. } = fact {
+                let (_, ours) = id.rsplit_once('.').unwrap();
+                assert_eq!(plain(ours), plain(name), "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn an_enum_constant_is_neither_a_type_nor_an_offset() {
+        let fact = fact("damage_type.magical_fire");
+        assert!(matches!(fact, Some(Fact::Constant { .. })));
+        assert_eq!(type_hash("damage_type.magical_fire"), None);
+        assert_eq!(offset_of(fact.unwrap(), |_, _| Some(8)), None);
+    }
+
     #[test]
     fn a_type_id_answers_its_engine_name_and_other_names_pass_through() {
         assert_eq!(type_name("ui_ping_event"), "keen::ecs::UiPingEvent");
@@ -1027,7 +384,7 @@ mod tests {
     fn every_offset_and_path_names_types_the_engine_spells_out() {
         for &(id, fact) in FACTS {
             match fact {
-                Fact::Type(ty) | Fact::Offset { ty, .. } => {
+                Fact::Type(ty) | Fact::Offset { ty, .. } | Fact::Constant { ty, .. } => {
                     assert!(ty.starts_with("keen::"), "{id}");
                 }
                 Fact::Path(steps) => {
@@ -1095,7 +452,9 @@ mod tests {
         for &(id, fact) in FACTS {
             let found = reflections.iter().any(|reflection| match fact {
                 Fact::Type(engine) => reflection.type_info(engine).is_ok(),
-                Fact::Offset { .. } | Fact::Path(_) => constant(id, reflection).is_some(),
+                Fact::Offset { .. } | Fact::Path(_) | Fact::Constant { .. } => {
+                    constant(id, reflection).is_some()
+                }
             });
             assert!(found, "{id}");
         }
