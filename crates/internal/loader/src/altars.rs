@@ -319,54 +319,69 @@ fn running_sizers() -> impl Iterator<Item = &'static Sizer> {
         .filter(|s| !crate::host::is_off(s.owner))
 }
 
+/// One altar's vanilla zone, taken from the state before the filters run.
+struct Vanilla {
+    zone: AltarZone,
+    levels: usize,
+    range: [f32; 3],
+    turn: (f64, f64),
+}
+
 /// Asks the filters for every altar's zone and keeps what differs from
-/// vanilla for the next range pass.
+/// vanilla for the next range pass. The filters run without the state's
+/// lock, so they may read the altars.
 fn size_zones() {
     if running_sizers().next().is_none() {
         TARGETS.store(None);
         return;
     }
-    let state = STATE.relock();
+    let vanilla: Vec<Vanilla> = {
+        let state = STATE.relock();
+        state
+            .placed
+            .iter()
+            .filter_map(|(id, placed)| {
+                let levels = state.levels.get(id)?;
+                let turn = geometry::turn(placed.orientation)?;
+                let centre = geometry::centre(placed)?;
+                let range = levels.last()?.map(|v| v * HALF);
+                let cells = geometry::cells(centre, range, turn);
+                Some(Vanilla {
+                    zone: AltarZone {
+                        header: Header::of::<AltarZone>(),
+                        altar: id,
+                        level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
+                        reserved: [0; 3],
+                        grow: 0,
+                        height: cells.max[1] - cells.min[1],
+                    },
+                    levels: levels.len(),
+                    range,
+                    turn,
+                })
+            })
+            .collect()
+    };
     let mut targets = Targets::new();
-    for (id, placed) in state.placed.iter() {
-        let Some(levels) = state.levels.get(id) else {
-            continue;
-        };
-        let (Some(turn), Some(centre), Some(current)) = (
-            geometry::turn(placed.orientation),
-            geometry::centre(placed),
-            levels.last(),
-        ) else {
-            continue;
-        };
-        let range = current.map(|v| v * HALF);
-        let vanilla = geometry::cells(centre, range, turn);
-        let height = vanilla.max[1] - vanilla.min[1];
-        let mut zone = AltarZone {
-            header: Header::of::<AltarZone>(),
-            altar: id,
-            level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
-            reserved: [0; 3],
-            grow: 0,
-            height,
-        };
+    for altar in vanilla {
+        let mut zone = altar.zone;
         for sizer in running_sizers() {
             // SAFETY: the mod's filter with its own pointer and a zone valid
             // for the call; the safe layer catches its panics.
             unsafe { (sizer.callback)(&raw mut zone, sizer.user()) };
         }
+        let height = altar.zone.height;
         if zone.grow < 0 || zone.height <= 0 || (zone.grow, zone.height) == (0, height) {
             continue;
         }
         targets.insert(
-            id,
+            zone.altar,
             (
-                levels.len(),
-                geometry::grown_range(range, turn, zone.grow, zone.height),
+                altar.levels,
+                geometry::grown_range(altar.range, altar.turn, zone.grow, zone.height),
             ),
         );
     }
-    drop(state);
     TARGETS.store(Some(Arc::new(targets)));
 }
 
