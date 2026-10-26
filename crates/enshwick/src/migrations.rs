@@ -1,15 +1,16 @@
 //! Migrations: what a new version of a mod changes in what older versions
 //! left behind, run once per world and recorded.
 //!
-//! A migration has an id and steps: settings renamed, removed or changed,
-//! world stores renamed or changed, content renamed. The mod declares every
+//! A migration has an id and steps: settings renamed, removed, changed or
+//! taken from another mod, world stores renamed or changed, content renamed. The mod declares every
 //! migration it ever made, oldest first, with [`Load::migrate`]. The loader
 //! runs the settings steps on the settings file at start, and every step on
 //! a world's files the first time the world loads with the migration known,
 //! before the mod reads the world's settings or opens its stores; it
 //! records each migration that ran in `mod-data/enshwick/migrations.toml`,
 //! so none runs twice. A world the mod has never seen starts current: its
-//! files come from the mod as it is now. Before it changes anything the
+//! files come from the mod as it is now, with only the settings it takes
+//! from other mods. Before it changes anything the
 //! loader logs what it will do, and with `migrations_dry_run = true` in
 //! `mod-configs/enshwick.toml` it only logs.
 //!
@@ -164,6 +165,52 @@ impl Migration {
         self.push(MigrationStep::MAP_SETTING, key, "", Some(map))
     }
 
+    /// Sets the setting `to` from the setting `key` of the mod `from`, in
+    /// the settings file and in each world's copy, so a mod that folds
+    /// another one in keeps its players' values. Either key may be a dotted
+    /// path into a table, such as `comfort.multiplier`. A file or world of
+    /// this mod that is new still takes the value; where `from` has none,
+    /// `to` stays as it is.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,standalone_crate
+    /// use enshwick::migrations::Migrations;
+    ///
+    /// struct Rates;
+    ///
+    /// impl enshwick::Mod for Rates {
+    ///     fn manifest() -> &'static enshwick::abi::Manifest {
+    ///         enshwick::manifest!(id: "rates", side: SERVER, replaces: ["comfort"])
+    ///     }
+    ///
+    ///     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+    ///         load.migrate(Migrations::new().add("2", |m| {
+    ///             m.take_setting("comfort", "multiplier", "comfort.multiplier")
+    ///         }))?;
+    ///         Ok(Self)
+    ///     }
+    /// }
+    ///
+    /// enshwick::declare_mod!(Rates);
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .other_settings("comfort", "multiplier = 2.5\n")
+    ///     .install();
+    /// // SAFETY: the exports of `declare_mod!` above.
+    /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+    /// assert!(status.is_ok());
+    /// assert_eq!(
+    ///     loader.migrate_settings("[comfort]\nmultiplier = 1.0\n"),
+    ///     Ok("[comfort]\nmultiplier = 2.5\n".to_owned())
+    /// );
+    /// ```
+    #[must_use]
+    pub fn take_setting(self, from: &str, key: &str, to: &str) -> Self {
+        let from = format!("{from}:{key}");
+        self.push(MigrationStep::TAKE_SETTING, &from, to, None)
+    }
+
     /// Renames the world store `from` to `to`: the file of
     /// [`Load::world_store`](crate::Load::world_store) moves.
     ///
@@ -309,8 +356,21 @@ impl Migrations {
             for step in &migration.steps {
                 let renames = matches!(
                     step.kind,
-                    MigrationStep::RENAME_SETTING | MigrationStep::RENAME_STORE
+                    MigrationStep::RENAME_SETTING
+                        | MigrationStep::RENAME_STORE
+                        | MigrationStep::TAKE_SETTING
                 );
+                if step.kind == MigrationStep::TAKE_SETTING
+                    && step
+                        .from
+                        .split_once(':')
+                        .is_none_or(|(id, key)| !abi::is_valid_id(id) || key.is_empty())
+                {
+                    return Err(format!(
+                        "migration {}: a setting is taken from <mod id>:<key>, not {}",
+                        migration.id, step.from
+                    ));
+                }
                 if step.from.is_empty() || (renames && step.to.is_empty()) {
                     return Err(format!("migration {}: a step names nothing", migration.id));
                 }
@@ -635,6 +695,29 @@ mod tests {
                 .check()
                 .is_err()
         );
+        assert!(
+            Migrations::new()
+                .add("2", |m| m.take_setting(
+                    "comfort",
+                    "multiplier",
+                    "comfort.multiplier"
+                ))
+                .check()
+                .is_ok()
+        );
+        for (from, key, to) in [
+            ("Bad Id", "a", "a"),
+            ("comfort", "", "a"),
+            ("comfort", "a", ""),
+        ] {
+            assert!(
+                Migrations::new()
+                    .add("2", |m| m.take_setting(from, key, to))
+                    .check()
+                    .is_err(),
+                "{from}:{key} to {to}"
+            );
+        }
         let guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
         assert!(
             Migrations::new()

@@ -50,14 +50,15 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - Keep every migration in the list forever. A player may skip versions, and
   each world runs the ones it has not seen.
 
-| Step                       | What it does                                                                       |
-| -------------------------- | ---------------------------------------------------------------------------------- |
-| `rename_setting(from, to)` | moves a setting to a new key, value and comments kept; nothing when `to` is taken  |
-| `remove_setting(key)`      | removes a setting                                                                  |
-| `map_setting(key, f)`      | changes a setting's value: `f` takes the old `toml::Value` and returns the new one |
-| `rename_store(from, to)`   | moves a [world store](state.md#per-world-state) to a new name                      |
-| `map_store(name, f)`       | changes a world store: `f` edits its `toml::Table` in place                        |
-| `rename_content(from, to)` | reads content saved under the GUID `from` as the content now under `to`            |
+| Step                         | What it does                                                                             |
+| ---------------------------- | ---------------------------------------------------------------------------------------- |
+| `rename_setting(from, to)`   | moves a setting to a new key, value and comments kept; nothing when `to` is taken        |
+| `remove_setting(key)`        | removes a setting                                                                        |
+| `map_setting(key, f)`        | changes a setting's value: `f` takes the old `toml::Value` and returns the new one       |
+| `take_setting(mod, key, to)` | sets `to` from the setting `key` of another mod; see [below](#settings-from-another-mod) |
+| `rename_store(from, to)`     | moves a [world store](state.md#per-world-state) to a new name                            |
+| `map_store(name, f)`         | changes a world store: `f` edits its `toml::Table` in place                              |
+| `rename_content(from, to)`   | reads content saved under the GUID `from` as the content now under `to`                  |
 
 A step whose setting or store is missing does nothing. A map returns
 `Result<_, MigrationError>`; a `&str` or `String` turns into one with `?`, as
@@ -83,12 +84,38 @@ reason.
 
 A file or world the mod has never seen starts current: its files come from
 the mod as it is now, so the loader records every migration as done and
-runs none. This holds for a world created after the update and for a world
+runs only the `take_setting` steps. This holds for a world created after the update and for a world
 the mod joins late.
 
 `mod-data/enshwick/migrations.toml` records what ran, per mod, for the
 settings files and for each world by its [key](world.md). Delete a mod's
 line to run its migrations again.
+
+## Settings from another mod
+
+A mod that folds another one in lists it under `replaces` in its
+[manifest](concepts/loader-and-abi.md#the-manifest) and takes the settings it
+keeps with `take_setting`, so players keep their values:
+
+```rust
+use enshwick::migrations::Migrations;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.migrate(Migrations::new().add("2", |m| {
+        m.take_setting("comfort", "multiplier", "comfort.multiplier")
+            .take_setting("comfort", "enabled", "comfort.enabled")
+    }))
+}
+```
+
+The step reads the other mod's settings file for the settings file, and its
+copy for each world for that world. Either key may be a dotted path into a
+table. Unlike other steps, it runs on a settings file or a world the mod has
+never seen too, since that is where a folded mod's values arrive. Where the
+other mod has no value, the setting keeps its default.
+
+A mod that only changes its id lists the old id under `was` instead: the
+loader copies the old id's files whole, and no step is needed.
 
 ## Items under their old ids
 

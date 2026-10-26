@@ -249,8 +249,14 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
             | Relation::BREAKS
             | Relation::RECOMMENDS
             | Relation::REPLACES
+            | Relation::WAS
     ) {
         return Err(format!("unknown relation {} to {id}", raw.relation.0));
+    }
+    if id == crate::settings::LOADER_ID
+        && matches!(raw.relation, Relation::REPLACES | Relation::WAS)
+    {
+        return Err(format!("{id} is the loader's own id; no mod takes it over"));
     }
     Ok(resolve::Dependency {
         id: id.to_owned(),
@@ -450,6 +456,29 @@ mod tests {
         // SAFETY: static data.
         let major = unsafe { parse(&other) }.unwrap_err();
         assert!(major.contains(&format!("ABI {}", ABI_MAJOR + 1)), "{major}");
+    }
+
+    #[test]
+    fn a_former_id_parses_and_the_loader_s_own_id_is_never_taken_over() {
+        static FORMER: [Dependency; 1] = [Dependency {
+            id: Str::new("survivors"),
+            range: Str::EMPTY,
+            relation: Relation::WAS,
+        }];
+        static LOADER: [Dependency; 1] = [Dependency {
+            id: Str::new("enshwick"),
+            range: Str::EMPTY,
+            relation: Relation::REPLACES,
+        }];
+        let mut renamed = manifest("survivors-per-altar", "0.2.0");
+        renamed.dependencies = FORMER.as_ptr();
+        // SAFETY: static data.
+        let candidate = unsafe { parse(&renamed) }.unwrap();
+        assert_eq!(candidate.dependencies[0].relation, Relation::WAS);
+        renamed.dependencies = LOADER.as_ptr();
+        // SAFETY: static data.
+        let why = unsafe { parse(&renamed) }.unwrap_err();
+        assert!(why.contains("loader's own"), "{why}");
     }
 
     #[test]

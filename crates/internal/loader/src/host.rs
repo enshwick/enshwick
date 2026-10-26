@@ -30,6 +30,8 @@ pub(crate) struct ModRecord {
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
     pub(crate) meta: crate::manifest::Meta,
+    /// The ids it had before a rename.
+    pub(crate) former: Vec<String>,
     /// Notes on its relations, such as a recommended mod that is missing.
     pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
@@ -1131,7 +1133,7 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
         let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
             return Status::BAD_ARGS;
         };
-        let Some((_, record)) = loader.record(me) else {
+        let Some((index, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
@@ -1148,8 +1150,11 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
                         &record.id,
                         "could not write the default settings",
                     );
+                    defaults.to_owned()
+                } else {
+                    crate::migrations::settings_written(loader, index);
+                    std::fs::read_to_string(&path).unwrap_or_else(|_| defaults.to_owned())
                 }
-                defaults.to_owned()
             }
             // The player's file stays as it is, for them to fix.
             Err(e) => {
@@ -1171,7 +1176,11 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
 
 impl crate::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {
-        self.mods.iter().position(|m| m.id == id)
+        self.mods.iter().position(|m| m.id == id).or_else(|| {
+            self.mods
+                .iter()
+                .position(|m| m.former.iter().any(|old| old == id))
+        })
     }
 }
 

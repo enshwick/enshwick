@@ -121,7 +121,8 @@ pub(crate) struct Inert {
 
 /// The mods the seal asks about.
 pub(crate) trait Mods: Names {
-    /// The index of the running or off mod `id`.
+    /// The index of the running or off mod `id`, or of the mod that had
+    /// `id` before a rename.
     fn find(&self, id: &str) -> Option<usize>;
 }
 
@@ -198,11 +199,13 @@ impl Registry {
                 continue;
             }
             let point = link.declared.name.clone();
-            let found = self
-                .defined
-                .iter()
-                .enumerate()
-                .find(|(_, d)| d.declared.name == point);
+            let find = |name: &str| {
+                self.defined
+                    .iter()
+                    .enumerate()
+                    .find(|(_, d)| d.declared.name == name)
+            };
+            let found = find(&point).or_else(|| renamed(&point, mods).and_then(|p| find(&p)));
             let Some((id, definition)) = found else {
                 inert.push(missing(&link, mods));
                 continue;
@@ -217,7 +220,7 @@ impl Registry {
                 continue;
             }
             let (linker, _) = mods.name(link.owner);
-            if link_off(linker, &point) {
+            if link_off(linker, &point) || link_off(linker, &definition.declared.name) {
                 inert.push(Inert {
                     owner: link.owner,
                     point,
@@ -300,6 +303,14 @@ fn chain(
             undid_whom: AtomicUsize::new(usize::MAX),
         })
         .collect()
+}
+
+/// The point `point` under its owner's id now, when the owner had the id
+/// the point names before a rename: `old:what` as `new:what`.
+fn renamed(point: &str, mods: &impl Mods) -> Option<String> {
+    let (owner, what) = point.split_once(':')?;
+    let (id, _) = mods.name(mods.find(owner)?);
+    (id != owner).then(|| format!("{id}:{what}"))
 }
 
 /// Why a link whose point no running mod defines stays inert.
@@ -841,6 +852,45 @@ mod tests {
 
     fn defined(registry: &mut Registry) -> &'static AtomicU32 {
         registry.define(0, "safes", access()).unwrap().1
+    }
+
+    /// A mod renamed from `safes`, and a mod that links it by that id.
+    struct Renamed;
+
+    impl Names for Renamed {
+        fn name(&self, index: usize) -> (&str, &str) {
+            [("me.safes", "0.4.0"), ("safe-viewers", "0.1.0")]
+                .get(index)
+                .copied()
+                .unwrap_or(("?", "?"))
+        }
+        fn off(&self, _index: usize) -> bool {
+            false
+        }
+    }
+
+    impl Mods for Renamed {
+        fn find(&self, id: &str) -> Option<usize> {
+            match id {
+                "me.safes" | "safes" => Some(0),
+                "safe-viewers" => Some(1),
+                _ => None,
+            }
+        }
+    }
+
+    #[test]
+    fn a_link_named_by_a_former_id_finds_the_renamed_owner() {
+        let mut registry = Registry::default();
+        let declared = Declared {
+            name: "me.safes:access".to_owned(),
+            ..access()
+        };
+        registry.define(0, "me.safes", declared).unwrap();
+        registry.attach(link(1, set(7))).unwrap();
+        let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
+        assert!(inert.is_empty(), "{inert:?}");
+        assert_eq!(points[0].links.len(), 1);
     }
 
     #[test]

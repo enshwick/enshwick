@@ -78,6 +78,7 @@ fn describe(manifest: &Manifest) -> String {
             Relation::BREAKS => "breaks",
             Relation::RECOMMENDS => "recommends",
             Relation::REPLACES => "replaces",
+            Relation::WAS => "was",
             _ => "unknown relation",
         };
         let range = text(&dependency.range);
@@ -182,6 +183,7 @@ join check: no"
             recommends: ["flame-altar-count" => ""],
             breaks: ["old-survivors" => "<0.3"],
             replaces: ["survivors"],
+            was: ["survivor-copies"],
         );
         assert_eq!(
             describe(manifest),
@@ -191,7 +193,7 @@ join check: no"
              side: both\njoin check: yes\n\
              requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
              recommends: flame-altar-count\nbreaks: old-survivors <0.3\n\
-             replaces: survivors"
+             replaces: survivors\nwas: survivor-copies"
         );
     }
 }
