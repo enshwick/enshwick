@@ -225,13 +225,15 @@ impl Installed {
             for (step, (kind, from, to)) in steps.iter().enumerate() {
                 match *kind {
                     S::TAKE_SETTING => take(&mut table, from, to, &others)?,
-                    S::RENAME_SETTING if !table.contains_key(to) => {
-                        if let Some(value) = table.remove(from) {
-                            table.insert(to.clone(), value);
+                    S::RENAME_SETTING => {
+                        if crate::config::value_at(&table, to).is_none()
+                            && let Some(value) = remove_path(&mut table, from)
+                        {
+                            set_path(&mut table, to, value)?;
                         }
                     }
                     S::REMOVE_SETTING => {
-                        table.remove(from);
+                        let _gone = remove_path(&mut table, from);
                     }
                     S::MAP_SETTING => {
                         let (Some(value), Some(map)) = (table.get(from), migrations.as_ref())
@@ -366,15 +368,30 @@ fn take(
     let Some(value) = value.cloned() else {
         return Ok(());
     };
-    let (path, leaf) = to.rsplit_once('.').map_or(("", to), |(p, l)| (p, l));
+    set_path(table, to, value)
+}
+
+/// Sets the dotted key `key` of `table` to `value`, making missing tables.
+fn set_path(table: &mut toml::Table, key: &str, value: toml::Value) -> Result<(), MigrationError> {
+    let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
     let mut at = table;
     for part in path.split('.').filter(|p| !p.is_empty()) {
         at = at
             .entry(part)
             .or_insert_with(|| toml::Value::Table(toml::Table::new()))
             .as_table_mut()
-            .ok_or_else(|| MigrationError::new(format!("setting {to}: {part} is not a table")))?;
+            .ok_or_else(|| MigrationError::new(format!("setting {key}: {part} is not a table")))?;
     }
     at.insert(leaf.to_owned(), value);
     Ok(())
+}
+
+/// Takes the dotted key `key` out of `table`.
+fn remove_path(table: &mut toml::Table, key: &str) -> Option<toml::Value> {
+    let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
+    let mut at = table;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        at = at.get_mut(part)?.as_table_mut()?;
+    }
+    at.remove(leaf)
 }

@@ -74,5 +74,8 @@ mod tests {
     fn an_unknown_build_meets_no_hold() {
         assert_eq!(unmet(holds(), &["you.lanterns", "other"], true).len(), 2);
         assert!(unmet(Vec::new(), &[], true).is_empty());
+        // A running mod counts under every id it had: the start lists them.
+        let renamed = vec![("lanterns".to_owned(), "a world".to_owned())];
+        assert!(unmet(renamed, &["you.lanterns", "lanterns"], false).is_empty());
     }
 }

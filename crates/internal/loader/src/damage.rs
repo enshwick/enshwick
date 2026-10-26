@@ -18,12 +18,13 @@
 
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Symbol};
+use crate::registry::Registry;
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use enshwick::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
 
-use crate::host::{Loader, Registered, take};
+use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 use crate::mid::MidLink;
 
@@ -54,8 +55,7 @@ const CARRY: u64 = 1;
 /// filters refuse it.
 static NO_HEALTH: u64 = 0;
 
-static FILTERS: Mutex<Vec<Registered<DamageFilterFn>>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Registered<DamageFilterFn>]>> = OnceLock::new();
+static FILTERS: Registry<Registered<DamageFilterFn>> = Registry::new();
 static LAYOUT: OnceLock<Layout> = OnceLock::new();
 
 /// Where each site keeps what the filters need, from the build table.
@@ -89,16 +89,15 @@ pub(crate) fn register(
     callback: DamageFilterFn,
     user: *mut c_void,
 ) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     if layout(loader).is_none() || crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 fn layout(loader: &Loader) -> Option<Layout> {
@@ -111,9 +110,8 @@ fn layout(loader: &Loader) -> Option<Layout> {
 
 /// Seals the filters and adds the sites when any mod asked.
 pub(crate) fn link(loader: &Loader) {
-    let filters = take(&FILTERS);
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty() || crate::stats::wanted();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
@@ -171,7 +169,7 @@ type MidFn = unsafe extern "system" fn(registers: *mut Registers, user: *mut c_v
 
 /// Runs every live filter on `check`.
 fn filter(check: &mut DamageCheck) {
-    let Some(filters) = SEALED.get() else {
+    let Some(filters) = FILTERS.sealed() else {
         return;
     };
     for f in filters.iter().filter(|f| f.live()) {

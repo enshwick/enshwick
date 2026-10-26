@@ -139,6 +139,7 @@ pub mod profile;
 #[cfg(windows)]
 mod progress;
 pub mod recipes;
+pub mod registry;
 #[cfg(windows)]
 mod reload;
 pub mod remote;
@@ -179,6 +180,7 @@ mod vetoes;
 mod watch;
 #[cfg(windows)]
 mod weather;
+pub mod wire;
 #[cfg(windows)]
 mod world;
 pub mod worlds;

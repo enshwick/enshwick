@@ -58,6 +58,7 @@ windows-sys = { workspace = true, features = [
 loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
+criterion.workspace = true
 bytemuck.workspace = true
 insta.workspace = true
 proptest.workspace = true
@@ -69,3 +70,7 @@ windows-tests = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "registry_read"
+harness = false
