@@ -11,13 +11,14 @@ use crate::{Load, Off};
 /// A content id the pack built at run time; ids live for the process.
 pub(super) fn id(full: &str) -> Result<Id, Off> {
     let name: &'static str = Box::leak(full.to_owned().into_boxed_str());
-    Id::try_new(name).ok_or_else(|| Off::new(format!("content pack: {full:?} is no content id")))
+    Id::try_new(name).ok_or_else(|| Off::new(format!("data pack: {full:?} is no content id")))
 }
 
 impl Load<'_> {
     /// Adds what `pack` describes, on the server and the client alike:
     /// its workshops, items, recipes, texts and loot, each through the call
-    /// code uses, beside vanilla content.
+    /// code uses, beside vanilla content, and declares its changes of
+    /// vanilla values with [`Load::change`].
     ///
     /// # Errors
     ///
@@ -126,6 +127,11 @@ impl Load<'_> {
                 ..NewItem::new(own, item.like)
             })?;
         }
+        self.add_pack_rest(pack)
+    }
+
+    /// Adds `pack`'s recipes, changes of values and loot.
+    fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
             self.add_recipe(NewRecipe {
                 id: id(&recipe.id)?,
@@ -135,6 +141,9 @@ impl Load<'_> {
                 cost: recipe.cost,
                 workshop: recipe.workshop.map(WorkshopId::new),
             })?;
+        }
+        for (change, source) in &pack.changes {
+            self.change(change, source)?;
         }
         let group = group(&pack.namespace);
         for drop in &pack.drops {

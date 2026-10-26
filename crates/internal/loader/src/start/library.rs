@@ -22,14 +22,14 @@ pub(super) type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) ->
 
 pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 
-/// A mod DLL with its exports, or a content pack with the loader's.
+/// A mod DLL with its exports, or a data pack with the loader's.
 pub(super) struct Library {
     /// The DLL's file name, for messages.
     pub(super) file: String,
     /// The loaded DLL, freed again when the mod list turns its id off; null
     /// for a pack.
     pub(super) module: HMODULE,
-    /// Whether it is a content pack.
+    /// Whether it is a data pack.
     pub(super) pack: bool,
     /// Where the DLL is mapped, for crash attribution.
     pub(super) range: Option<(usize, usize)>,

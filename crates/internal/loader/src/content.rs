@@ -406,6 +406,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let standing = stand_ins.map_or(0, |(items, registry)| {
         serve_stand_ins(&mut served, items, registry)
     });
+    let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
@@ -414,7 +415,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing == 0
+        || count + recorded + renames.len() + standing + changed == 0
     {
         return;
     }
@@ -500,6 +501,36 @@ fn serve_stand_ins(
             state: Mutex::new(State::default()),
             rebuilding: Mutex::new(()),
         }),
+    }
+    count
+}
+
+/// Adds the loader's patches of changed vanilla values to `served`: first
+/// on a vanilla key, so mods patch the changed values; last on a mod's new
+/// resource, after the mod built it. How many keys.
+fn serve_changes(
+    served: &mut Vec<Served>,
+    patches: Vec<(ResourceKey, ResourcePatchFn, *mut c_void)>,
+) -> usize {
+    let count = patches.len();
+    for (key, apply, user) in patches {
+        let patch = Patch {
+            owner: ModIndex::LOADER,
+            apply,
+            user: user.expose_provenance(),
+        };
+        match served.iter_mut().find(|s| s.key == key) {
+            Some(entry) if entry.base == key => entry.patches.insert(0, patch),
+            Some(entry) => entry.patches.push(patch),
+            None => served.push(Served {
+                key,
+                base: key,
+                patches: vec![patch],
+                keeps_base: AtomicBool::new(false),
+                state: Mutex::new(State::default()),
+                rebuilding: Mutex::new(()),
+            }),
+        }
     }
     count
 }
@@ -941,7 +972,8 @@ fn run_patches(
             if patch.owner == ModIndex::LOADER {
                 crate::log!(
                     WARN,
-                    "a stand-in for an item of a removed mod failed to build"
+                    "the loader's own patch of {} failed to build",
+                    key_name(&entry.key)
                 );
             } else if let Some(loader) = LOADED.get() {
                 loader.turn_off(

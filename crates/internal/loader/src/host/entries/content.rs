@@ -94,6 +94,30 @@ pub(crate) extern "system" fn recipe_kind(
     })
 }
 
+pub(crate) extern "system" fn change_data(
+    me: ModHandle,
+    change: *const api_frame::DataChange,
+) -> Status {
+    entry("change_data", || {
+        let (_, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        // SAFETY: `HostApi::change_data` has the mod pass null or a record
+        // with its header, valid for the call; an all-zero record is valid.
+        let Some(raw) =
+            (unsafe { api_frame::read_headed(change, size_of::<api_frame::DataChange>()) })
+        else {
+            return Status::BAD_ARGS;
+        };
+        let Ok(Some(change)) = enshwick::content::changes::Change::from_abi(&raw) else {
+            return Status::BAD_ARGS;
+        };
+        let source = text(raw.source).unwrap_or_default().to_owned();
+        crate::data_changes::declare(index, change, source)
+    })
+}
+
 pub(crate) extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) -> Status {
     entry("add_text", || {
         let Some(text) = self::text(text) else {

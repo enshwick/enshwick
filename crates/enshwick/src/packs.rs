@@ -1,4 +1,4 @@
-//! Content packs: items, recipes, workshops, loot and texts described in
+//! Data packs: items, recipes, workshops, loot and texts described in
 //! TOML files instead of code.
 //!
 //! A pack is a set of files: `items.toml`, `recipes.toml`, `workshops.toml`,
@@ -40,6 +40,7 @@ use serde::Deserialize;
 
 use crate::Off;
 use crate::content::Guid;
+use crate::content::changes::Change;
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -128,7 +129,7 @@ impl ParsePackError {
 
 impl From<ParsePackError> for Off {
     fn from(errors: ParsePackError) -> Self {
-        Self::new(format!("content pack: {errors}"))
+        Self::new(format!("data pack: {errors}"))
     }
 }
 
@@ -416,6 +417,44 @@ impl PackManifest {
     }
 }
 
+impl PackManifest {
+    /// Whether `pack` may run under this manifest, whose file reads `text`:
+    /// a pack that [reaches players](Pack::reaches_players) keeps `join` on.
+    ///
+    /// # Errors
+    ///
+    /// The problem, at the line of `join`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles, PackManifest};
+    ///
+    /// let text = "id = \"you.stacks\"\nversion = \"1.0.0\"\njoin = false\n";
+    /// let manifest = PackManifest::parse(text)?;
+    /// let files = PackFiles::new().with("items.toml", r#"
+    /// [[change]]
+    /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
+    /// max_stack = 50
+    /// "#);
+    /// let pack = Pack::parse("you.stacks", &files).map_err(|e| e.list()[0].clone())?;
+    /// let problem = manifest.check(text, &pack).unwrap_err();
+    /// assert_eq!(problem.line, 3);
+    /// # Ok::<(), enshwick::packs::PackError>(())
+    /// ```
+    pub fn check(&self, text: &str, pack: &Pack) -> Result<(), PackError> {
+        if self.join || !pack.reaches_players() {
+            return Ok(());
+        }
+        Err(PackError::at(
+            MANIFEST_FILE,
+            text,
+            find(text, "join"),
+            "join = false, but the pack adds or changes what players' games read, so server and players must run it alike; remove the line",
+        ))
+    }
+}
+
 /// The byte offset of the line that sets `key`, for an error about it.
 fn find(text: &str, key: &str) -> usize {
     let mut at = 0;
@@ -455,6 +494,7 @@ impl PackError {
 }
 
 mod add;
+mod changes;
 mod entries;
 mod read;
 #[cfg(test)]
@@ -525,6 +565,7 @@ pub struct Pack {
     recipes: Vec<PackRecipe>,
     workshops: Vec<PackWorkshop>,
     drops: Vec<Drop>,
+    changes: Vec<(Change, String)>,
     texts: String,
     hash: u32,
 }
@@ -636,6 +677,7 @@ impl Pack {
             recipes: Vec::new(),
             workshops: Vec::new(),
             drops: Vec::new(),
+            changes: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -648,6 +690,7 @@ impl Pack {
         );
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
+        pack.changes = changes::item_changes(&mut reader, &items_file, &items_text);
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
@@ -692,6 +735,59 @@ impl Pack {
         &self.drops
     }
 
+    /// The pack's changes of vanilla values, each with its source: the file
+    /// and line, then the name the pack wrote unless it is a GUID, such as
+    /// `items.toml:12 (Wood_Log)`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::{Field, Value};
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", r#"
+    /// [[change]]
+    /// items = ["6943053a-32c1-4718-ae22-e61427ddf54d"]
+    /// max_stack = { times = 4 }
+    /// "#);
+    /// let pack = Pack::parse("you.stacks", &files)?;
+    /// let (change, source) = &pack.changes()[0];
+    /// assert_eq!((change.field, change.value), (Field::MaxStack, Value::Times(4.0)));
+    /// assert_eq!(source, "items.toml:2");
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> &[(Change, String)] {
+        &self.changes
+    }
+
+    /// Whether the pack adds or changes anything players' games read: items,
+    /// workshops, recipes, texts or changes of values. Such a pack runs on
+    /// the server and every player alike, so it keeps `join` on.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let loot = PackFiles::new().with("loot.toml", r#"
+    /// [[drop]]
+    /// items = ["you.lockers:locker"]
+    /// chance = 0.1
+    /// from = "bosses"
+    /// "#);
+    /// assert!(!Pack::parse("you.loot", &loot)?.reaches_players());
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn reaches_players(&self) -> bool {
+        !(self.items.is_empty()
+            && self.workshops.is_empty()
+            && self.recipes.is_empty()
+            && self.changes.is_empty()
+            && self.texts.trim().is_empty())
+    }
+
     /// Whether `other` adds the same content as this pack, its loot aside:
     /// what a running game can take without a restart.
     ///
@@ -714,6 +810,7 @@ impl Pack {
             && self.items == other.items
             && self.recipes == other.recipes
             && self.workshops == other.workshops
+            && self.changes == other.changes
             && self.texts == other.texts
     }
 
