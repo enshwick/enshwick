@@ -1,0 +1,227 @@
+use core::ffi::c_void;
+use std::sync::{Arc, Mutex};
+
+use crate::abi::{InventoryOpResult, InventoryResult};
+use crate::locks::Relock;
+
+use super::ops::BatchError;
+
+/// How a request ended.
+///
+/// # Examples
+///
+/// See [`Outcome`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Done {
+    /// Every operation succeeded and the transaction was committed.
+    Committed,
+    /// An operation failed or fell short; nothing changed.
+    RolledBack,
+    /// This game build lacks a piece, or the loader's hook is not in place;
+    /// nothing changed.
+    Unavailable,
+    /// The game did not run its inventory system in time, as with nobody
+    /// online; nothing changed.
+    TimedOut,
+    /// The batch was refused before it reached the game.
+    Refused(BatchError),
+}
+
+/// The result of one operation.
+///
+/// # Examples
+///
+/// See [`Outcome`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct OpResult {
+    /// The game's error code, 0 for none; [`InventoryOpResult::NOT_RUN`]
+    /// when an operation before it failed.
+    pub error: u32,
+    /// How much of the count the operation could not do.
+    pub remaining: u32,
+}
+
+impl OpResult {
+    /// The game's code for a full op log or more than 16 touched
+    /// inventories; split the batch.
+    pub const TOO_LARGE: u32 = 0x27;
+    /// The game's code for an item that did not fit or does not exist.
+    pub const NO_ROOM: u32 = 0x15;
+
+    /// Whether the operation ran without an error.
+    ///
+    /// # Examples
+    ///
+    /// See [`Outcome`].
+    #[must_use]
+    pub const fn ok(self) -> bool {
+        self.error == 0
+    }
+}
+
+/// What became of a request, with a result per operation once it ran.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::inventory::{Done, Outcome};
+///
+/// fn report(outcome: &Outcome) {
+///     match outcome.done {
+///         Done::Committed => enshwick::info!("done"),
+///         Done::RolledBack => {
+///             let failed = outcome.ops.iter().position(|op| !op.ok() || op.remaining > 0);
+///             enshwick::warn!("rolled back at operation {failed:?}");
+///         }
+///         other => enshwick::warn!("not run: {other:?}"),
+///     }
+/// }
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Outcome {
+    /// How it ended.
+    pub done: Done,
+    /// One per operation when the request ran, else empty.
+    pub ops: Vec<OpResult>,
+}
+
+impl Outcome {
+    /// Whether the change was made.
+    ///
+    /// # Examples
+    ///
+    /// See [`Ticket`].
+    #[must_use]
+    pub const fn is_committed(&self) -> bool {
+        matches!(self.done, Done::Committed)
+    }
+
+    pub(super) const fn not_run(done: Done) -> Self {
+        Self {
+            done,
+            ops: Vec::new(),
+        }
+    }
+
+    /// The outcome the loader reported in `result`.
+    ///
+    /// # Safety
+    ///
+    /// - `result.ops` is null or points at `op_count` initialised, aligned
+    ///   op results, alive for the call.
+    pub(super) unsafe fn from_raw(result: &InventoryResult) -> Self {
+        let done = match result.outcome {
+            InventoryResult::COMMITTED => Done::Committed,
+            InventoryResult::ROLLED_BACK => Done::RolledBack,
+            InventoryResult::TIMED_OUT => Done::TimedOut,
+            _ => Done::Unavailable,
+        };
+        let ops = if result.ops.is_null() || result.op_count == 0 {
+            &[][..]
+        } else {
+            // SAFETY: `ops` is not null in this branch, and the caller
+            // guarantees `op_count` aligned op results there, alive for the
+            // call.
+            unsafe { core::slice::from_raw_parts(result.ops, result.op_count as usize) }
+        };
+        Self {
+            done,
+            ops: ops
+                .iter()
+                .map(|r: &InventoryOpResult| OpResult {
+                    error: r.error,
+                    remaining: r.remaining,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A submitted request; holds its [`Outcome`] once it is known. Clone it
+/// freely.
+///
+/// # Examples
+///
+/// ```
+/// fn finished(ticket: &enshwick::inventory::Ticket) -> bool {
+///     ticket.outcome().is_some_and(|outcome| outcome.is_committed())
+/// }
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct Ticket(Arc<Mutex<Option<Outcome>>>);
+
+impl Ticket {
+    /// The outcome, once the request is done.
+    ///
+    /// # Examples
+    ///
+    /// See [`Ticket`].
+    #[must_use]
+    pub fn outcome(&self) -> Option<Outcome> {
+        self.0.relock().clone()
+    }
+
+    /// Whether the request is done.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert!(!enshwick::inventory::Ticket::default().is_done());
+    /// ```
+    #[must_use]
+    pub fn is_done(&self) -> bool {
+        self.0.relock().is_some()
+    }
+}
+
+pub(super) type Callback = Box<dyn FnOnce(&Outcome) + Send>;
+
+/// A request on its way: where its outcome goes.
+pub(super) struct Pending {
+    pub(super) ticket: Ticket,
+    pub(super) done: Callback,
+}
+
+impl Pending {
+    pub(super) fn complete(self, outcome: &Outcome) {
+        *self.ticket.0.relock() = Some(outcome.clone());
+        (self.done)(outcome);
+    }
+}
+
+/// Completes the request whose `Pending` the loader hands back.
+///
+/// # Safety
+///
+/// - `user` is null or the `Box<Pending>` that [`Inventories::submit`] handed
+///   over, passed back once.
+/// - `result` is null or points at an [`InventoryResult`] readable for the
+///   size its header states, with no other writer during the call.
+/// - The result's `ops` is null or points at `op_count` aligned op results,
+///   alive for the call.
+pub(super) unsafe extern "system" fn deliver(result: *const InventoryResult, user: *mut c_void) {
+    if user.is_null() {
+        return;
+    }
+    // SAFETY: `user` is not null, as the early return ensures, and the caller
+    // guarantees it is the `Box<Pending>` that `submit` leaked, passed back
+    // once, so this is its only owner.
+    let pending = unsafe { Box::from_raw(user.cast::<Pending>()) };
+    // SAFETY: the caller guarantees `result` is null or an `InventoryResult`
+    // readable for the size its header states with no concurrent writer,
+    // which is the contract of `read_headed`.
+    let outcome = unsafe { crate::abi::read_headed(result, size_of::<InventoryResult>()) }
+        .map_or_else(
+            || Outcome::not_run(Done::Unavailable),
+            // SAFETY: the caller guarantees the result's `ops` is null or
+            // `op_count` aligned op results alive for the call.
+            |r| unsafe { Outcome::from_raw(&r) },
+        );
+    crate::host::guard(
+        "panic in an inventory callback",
+        || (),
+        || {
+            pending.complete(&outcome);
+        },
+    );
+}

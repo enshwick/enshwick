@@ -32,6 +32,13 @@ mod tests {
             events.iter().all(|name| !name.contains('<')),
             "only structs derive: {events:?}"
         );
+        let slot = "keen::EquipmentSlotType";
+        assert_eq!(reflection.enum_value(slot, "Invalid"), Ok(0));
+        assert_eq!(
+            reflection.enum_value(slot, "BlueprintMaterial_Roof"),
+            Ok(11)
+        );
+        assert!(reflection.type_info(slot).unwrap().enum_values().len() > 12);
     }
 
     fn with_binary(var: &str, check: impl FnOnce(&Image<'_>, &Reflection<'_>)) {

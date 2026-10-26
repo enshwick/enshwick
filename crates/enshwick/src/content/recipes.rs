@@ -9,6 +9,7 @@ use crate::{Load, Off};
 
 mod add;
 mod derive;
+mod kind;
 mod rules;
 
 pub use add::{
@@ -18,6 +19,7 @@ pub use add::{
 pub use derive::{
     Derived, RecipeEdit, RecipeView, derive_recipes_in, derived_guid, modify_recipes_in,
 };
+pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
 use add::fnv1a;
@@ -282,6 +284,57 @@ mod tests {
         u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
     }
 
+    /// The kind after `kind`, in an order with every kind in it: a new kind
+    /// fails to compile here until it joins the order.
+    fn after(kind: RecipeKind) -> Option<RecipeKind> {
+        match kind {
+            RecipeKind::BuildingBlock => Some(RecipeKind::Roof),
+            RecipeKind::Roof => Some(RecipeKind::Overgrowth),
+            RecipeKind::Overgrowth => Some(RecipeKind::Terrain),
+            RecipeKind::Terrain => Some(RecipeKind::Other),
+            RecipeKind::Other => None,
+        }
+    }
+
+    fn every_kind() -> Vec<RecipeKind> {
+        std::iter::successors(Some(RecipeKind::BuildingBlock), |&kind| after(kind)).collect()
+    }
+
+    #[test]
+    fn every_kind_crosses_the_abi_and_an_unknown_code_reads_as_other() {
+        let kinds = every_kind();
+        for &kind in &kinds {
+            assert_eq!(RecipeKind::from(crate::abi::RecipeKind::from(kind)), kind);
+        }
+        let mut codes: Vec<u32> = kinds
+            .iter()
+            .map(|&kind| crate::abi::RecipeKind::from(kind).0)
+            .collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), kinds.len());
+        assert_eq!(
+            RecipeKind::from(crate::abi::RecipeKind(u32::MAX)),
+            RecipeKind::Other
+        );
+    }
+
+    #[test]
+    fn a_view_outside_the_game_has_no_kind() {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let recipe = blob.append(&[0; 0xa8], 8);
+        let mut output = vec![0u8; 24];
+        output[..16].copy_from_slice(&CHEST.0);
+        let output_at = blob.append(&output, 8);
+        assert!(blob.set_array(recipe + 0x30, output_at, 1));
+        let view = RecipeView {
+            blob: &blob,
+            at: recipe,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view.output().map(|(item, _)| item), Some(CHEST));
+        assert_eq!(view.kind(), None);
+    }
     #[test]
     fn the_copy_costs_more_and_makes_the_new_output() {
         let mut blob = Blob::new(&[0u8; 16]);

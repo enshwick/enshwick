@@ -80,6 +80,7 @@ mod interactions;
 mod inventory;
 #[cfg(windows)]
 mod item_data;
+pub mod item_kinds;
 pub mod join;
 #[cfg(windows)]
 mod knowledge;
@@ -144,6 +145,11 @@ pub mod registry;
 #[cfg(windows)]
 mod reload;
 pub mod remote;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "written from the start, which runs on Windows")
+)]
+mod report;
 pub mod resolve;
 #[cfg(windows)]
 mod saves;
@@ -181,6 +187,7 @@ mod vetoes;
 mod watch;
 #[cfg(windows)]
 mod weather;
+pub mod wire;
 #[cfg(windows)]
 mod world;
 pub mod worlds;

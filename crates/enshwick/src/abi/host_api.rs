@@ -10,7 +10,7 @@ use crate::abi::{
     EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
     InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
     KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
+    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RecipeKind,
     RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec,
     SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
     StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
@@ -1035,11 +1035,17 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Writes to `out` the kind of the recipes that make the item `item`,
+    /// from the item's static data; [`Status::MISSING`] while the game has
+    /// not loaded the item, which on a dedicated server comes after its
+    /// recipe registry is first built, and while the loader serves no
+    /// resource. Any thread. Since minor 73.
+    pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
     /// Reports whether the mod's feature `name` runs on this game build:
     /// off for the reason `off`, or on when `off` is empty. The loader
     /// logs it and shows it in the status summary and on the Mods screen; a
     /// later report of the same name replaces the earlier one.
     /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
-    /// the call. Any thread. Since minor 73.
+    /// the call. Any thread. Since minor 74.
     pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
 }
