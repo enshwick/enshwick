@@ -25,7 +25,13 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   in a workspace with several mods, `--package` names one.
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
-  derives them: `cargo enshwick id safes:safe`.
+  derives them: `cargo enshwick id you.lanterns:lantern`.
+- `point <mod>:<point> --from <path> [--out <file>]` writes the Rust
+  definition of another mod's
+  [extension point](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md#getting-a-points-definition)
+  from the schema its owner's build put into the owner's DLL, read without
+  running it. `--from` is the owner's DLL, a folder with it in it or in its
+  `mods/` (such as the game's), or a schema file the owner published.
 - `pack check <dir>` checks a [content pack](https://github.com/enshwick/enshwick/blob/main/book/src/content/packs.md)
   folder as the loader reads it, every problem with its file and line;
   `pack schema [dir]` writes the JSON Schema of each pack file for editors;

@@ -158,6 +158,10 @@ let manifest = enshwick::manifest!(
   has no such file yet, and counts the migrations that ran under the old id as
   run. The old files stay, for a player who goes back. `migrations.toml`
   records the copy under `[carried]`, so it happens once.
+- `points` lists the [extension points](../extending.md#defining-a-point) the
+  mod defines, by their input types. Their schemas go into the manifest and
+  into the DLL's `.enshpt` section, where `cargo enshwick point` reads them
+  to write other mods' definitions.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).
