@@ -77,8 +77,16 @@ fn run(args: &[String]) -> Result<bool, String> {
     let windows_only: Vec<&str> = packages
         .iter()
         .filter(|p| p.windows_only)
+        .filter(|p| match &scope {
+            Scope::All => true,
+            Scope::Some { code, docs } => code.contains(&p.name) || docs.contains(&p.name),
+        })
         .map(|p| p.name.as_str())
         .collect();
+    if windows_only.is_empty() {
+        say("no Windows-only package changed; no tests under Wine");
+        return Ok(true);
+    }
     Ok(wine::run(&windows_only, windows))
 }
 
