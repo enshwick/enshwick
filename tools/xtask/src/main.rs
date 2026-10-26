@@ -16,6 +16,7 @@
 
 mod affected;
 mod bundle;
+mod ranges;
 mod wine;
 
 use std::collections::BTreeSet;
@@ -65,6 +66,14 @@ fn run(args: &[String]) -> Result<bool, String> {
         }
     }
     let packages = packages()?;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let problems = ranges::check(&root, &packages);
+    for problem in &problems {
+        say(&format!("manifest range: {problem}"));
+    }
+    if !problems.is_empty() {
+        return Ok(false);
+    }
     let scope = if all {
         Scope::All
     } else if let Some(files) = changed_files(&base) {
@@ -134,6 +143,7 @@ fn packages() -> Result<Vec<Package>, String> {
                 .collect();
             Package {
                 name: package["name"].as_str().unwrap_or_default().to_owned(),
+                version: package["version"].as_str().unwrap_or_default().to_owned(),
                 dir,
                 deps,
                 windows_only: package["metadata"]["enshwick"]["windows-only"].as_bool()

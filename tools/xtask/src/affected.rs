@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone)]
 pub(crate) struct Package {
     pub(crate) name: String,
+    /// The package's version.
+    pub(crate) version: String,
     /// Directory relative to the repository root, with `/` separators.
     pub(crate) dir: String,
     /// Workspace packages it depends on, in any dependency kind.
@@ -94,6 +96,7 @@ mod tests {
     fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         Package {
             name: name.to_owned(),
+            version: "0.0.0-dev".to_owned(),
             dir: dir.to_owned(),
             deps: deps.iter().map(|d| (*d).to_owned()).collect(),
             windows_only: false,
