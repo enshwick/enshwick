@@ -25,6 +25,13 @@ detours, patches and threads, so those are skipped there. `cargo xtask check
 --all` runs the whole suite, the Wine tests included when Docker runs. The
 rules the hooks enforce, and the ones they cannot, are in this file:
 
+- a change to a hot path names its numbers before and after, from the
+  criterion benchmarks: `cargo bench -p enshwick --features test` for hook
+  dispatch and pattern scans, `-p enshwick-reflect` for reflection and
+  `-p enshwick-gamedata` for the archive; benchmarks that read the game set
+  `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` to its executables and are skipped
+  without them;
+
 - branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
   open a pull request into `main`; its title is a conventional commit,
   `<type>(<scope>): <subject>`, and becomes the squashed commit;
