@@ -323,6 +323,7 @@ dependencies = [
  "fastrand",
  "memchr",
  "postcard",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",

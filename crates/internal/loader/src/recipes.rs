@@ -15,7 +15,9 @@
 //! request for one. A client joined to a server takes the server's list over
 //! the loader's messages.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
+
+use rustc_hash::FxHashMap;
 
 use enshwick::abi::RecipeRuleKind;
 use enshwick::content::recipes::RecipeLayout;
@@ -221,14 +223,14 @@ pub struct Recipe {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Index {
     recipes: Vec<Recipe>,
-    by_name: HashMap<String, Vec<usize>>,
+    by_name: FxHashMap<String, Vec<usize>>,
 }
 
 impl Index {
     /// The index of `recipes`.
     #[must_use]
     pub fn new(recipes: Vec<Recipe>) -> Self {
-        let mut by_name: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut by_name: FxHashMap<String, Vec<usize>> = FxHashMap::default();
         for (at, recipe) in recipes.iter().enumerate() {
             by_name.entry(recipe.name.clone()).or_default().push(at);
         }
@@ -275,7 +277,7 @@ impl Index {
     /// The index with each recipe a content id names called by that id:
     /// a mod's recipe is a copy of a vanilla one, debug name included.
     #[must_use]
-    pub fn with_content(mut self, content: &HashMap<u32, String>) -> Self {
+    pub fn with_content(mut self, content: &FxHashMap<u32, String>) -> Self {
         for recipe in &mut self.recipes {
             if let Some(name) = content.get(&recipe.id) {
                 recipe.name.clone_from(name);
@@ -303,11 +305,11 @@ pub struct Names {
     /// Item debug names to the items that carry them.
     items: BTreeMap<String, Vec<Guid>>,
     /// Item game ids to their debug names.
-    item_labels: HashMap<u32, String>,
+    item_labels: FxHashMap<u32, String>,
     /// Item game ids to the workshop each belongs to.
-    workshops: HashMap<u32, u32>,
+    workshops: FxHashMap<u32, u32>,
     /// Workshop game ids to the item each belongs to.
-    workshop_items: HashMap<u32, u32>,
+    workshop_items: FxHashMap<u32, u32>,
 }
 
 impl Names {
@@ -333,7 +335,7 @@ impl Names {
     /// The names with each item the game's data lacks, a mod's, called by
     /// the content id that names it.
     #[must_use]
-    pub fn with_content(mut self, content: &HashMap<u32, String>) -> Self {
+    pub fn with_content(mut self, content: &FxHashMap<u32, String>) -> Self {
         for (&id, name) in content {
             self.item_labels.entry(id).or_insert_with(|| name.clone());
         }
@@ -814,11 +816,12 @@ mod tests {
             outputs: vec![safe.id()],
             workshop: BENCH,
         });
-        let content: HashMap<u32, String> = [
+        let content: FxHashMap<u32, String> = [
             (copy.id(), "safes:safe.recipe".to_owned()),
             (safe.id(), "safes:safe".to_owned()),
         ]
-        .into();
+        .into_iter()
+        .collect();
         let index = Index::new(recipes).with_content(&content);
         let names = names().with_content(&content);
         assert_eq!(

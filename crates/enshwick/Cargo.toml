@@ -20,6 +20,7 @@ zune-png.workspace = true
 fastrand.workspace = true
 memchr.workspace = true
 postcard.workspace = true
+rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde.workspace = true
