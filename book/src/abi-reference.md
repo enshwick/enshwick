@@ -64,7 +64,7 @@ builds:
 | Field          | What it holds                                                                                     | Since minor |
 | -------------- | ------------------------------------------------------------------------------------------------- | ----------- |
 | `header`       | Size and version of the struct                                                                    | 0           |
-| `id`           | `[a-z0-9-]`, 1 to 64 characters; names the settings file and data folder                          | 0           |
+| `id`           | `<author>.<name>`, each of `[a-z0-9-]`, at most 64 characters; names settings and data (minor 70) | 0           |
 | `version`      | SemVer                                                                                            | 0           |
 | `side`         | `SERVER` (1), `CLIENT` (2) or `BOTH` (3)                                                          | 0           |
 | `flags`        | `JOIN` (1): counts in the join check; `RELOAD` (2, minor 53): may be reloaded                     | 0           |

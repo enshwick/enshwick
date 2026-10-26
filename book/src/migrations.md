@@ -19,7 +19,7 @@ use enshwick::migrations::Migrations;
 
 /// The GUID the Safe had before it got a content id.
 const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-const SAFE: Id = Id::new("safes:safe");
+const SAFE: Id = Id::new("you.safes:safe");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.migrate(
@@ -130,7 +130,7 @@ id as it is:
 use enshwick::content::{Guid, Id};
 use enshwick::migrations::current_id;
 
-const SAFE: Id = Id::new("safes:safe");
+const SAFE: Id = Id::new("you.safes:safe");
 
 fn is_safe(item: u32) -> bool {
     current_id(item) == SAFE.id()
@@ -148,7 +148,7 @@ is such a rename: keep each old GUID as the `from` of a `rename_content`.
 Before it changes anything the loader logs the plan under the mod's id:
 
 ```text
-info  [safes] migrations on world world0-d3a23c4a: safes 3: change setting limit, rename store owners to keepers, change store keepers
+info  [you.safes] migrations on world world0-d3a23c4a: safes 3: change setting limit, rename store owners to keepers, change store keepers
 ```
 
 With `migrations_dry_run = true` in `mod-configs/enshwick.toml` the loader
@@ -167,7 +167,7 @@ struct Safes;
 
 impl enshwick::Mod for Safes {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "safes", side: SERVER)
+        enshwick::manifest!(id: "you.safes", side: SERVER)
     }
 
     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

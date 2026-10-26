@@ -74,7 +74,7 @@ pub struct SafeViewers;
 impl Mod for SafeViewers {
     fn manifest() -> &'static enshwick::abi::Manifest {
         enshwick::manifest!(
-            id: "safe-viewers",
+            id: "you.safe-viewers",
             side: BOTH,
             recommends: ["safes" => ">=0.0.0-dev, <1.0"],
         )

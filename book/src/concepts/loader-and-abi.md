@@ -86,7 +86,7 @@ Fields go in this order; only `id` and `side` are required:
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "trading-post",             // 1 to 64 of [a-z0-9-]
+    id: "you.trading-post",         // <author>.<name>, each of [a-z0-9-]
     side: BOTH,                     // SERVER, CLIENT or BOTH
     version: "0.2.0",               // the crate's version when left out
     name: "Trading post",           // what players read; the id when left out
@@ -114,9 +114,11 @@ let manifest = enshwick::manifest!(
 # assert_eq!(manifest.author_count, 1);
 ```
 
-- `id` names the mod in logs, its settings file `mod-configs/<id>.toml` and
-  its data folder `mod-data/<id>`. An invalid id fails the build; `enshwick`
-  is the loader's own and is refused.
+- `id` is `<author>.<name>`, each part of `[a-z0-9-]`, at most 64 characters
+  in all. It names the mod in logs, its settings file `mod-configs/<id>.toml`
+  and its data folder `mod-data/<id>`, and is the namespace of its content,
+  stats, points, services and events (`you.trading-post:prices`). An invalid
+  id fails the build; `enshwick` is the loader's own and is refused.
 - `side`: see [Sides and hosting](sides-and-hosting.md).
 - `version` is SemVer. Leave it out so the DLL reports the version you
   release; the loader names it in every message about the mod.
@@ -187,7 +189,7 @@ struct Quiet;
 
 impl enshwick::Mod for Quiet {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "quiet", side: SERVER)
+        enshwick::manifest!(id: "you.quiet", side: SERVER)
     }
 
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
