@@ -9,7 +9,8 @@ use crate::engine_ids as ids;
 use crate::world::{ComponentType, Placed, World};
 
 /// Kinds of entities that hold items, for [`World::containers`]; combine
-/// them with `|`. The default is [`ContainerKinds::PLACED`].
+/// them with `|`, or [`ContainerKinds::union`] in a `const`. The default is
+/// [`ContainerKinds::PLACED`].
 ///
 /// # Examples
 ///
@@ -20,6 +21,9 @@ use crate::world::{ComponentType, Placed, World};
 /// assert!(kinds.contains(ContainerKinds::CHARACTERS));
 /// assert!(!kinds.contains(ContainerKinds::DROPS));
 /// assert_eq!(ContainerKinds::default(), ContainerKinds::PLACED);
+///
+/// const HELD: ContainerKinds = ContainerKinds::PLACED.union(ContainerKinds::LOOT);
+/// assert_eq!(HELD, ContainerKinds::PLACED | ContainerKinds::LOOT);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ContainerKinds(u32);
@@ -56,6 +60,16 @@ impl ContainerKinds {
     pub const fn contains(self, other: Self) -> bool {
         self.0 & other.0 == other.0
     }
+
+    /// Every kind of `self` and of `other`, as `|` gives, in a `const` too.
+    ///
+    /// # Examples
+    ///
+    /// See [`ContainerKinds`].
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
 }
 
 impl Default for ContainerKinds {
@@ -68,7 +82,7 @@ impl BitOr for ContainerKinds {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
-        Self(self.0 | other.0)
+        self.union(other)
     }
 }
 
