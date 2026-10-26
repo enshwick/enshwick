@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimitFn, HookFlags, Status};
-use enshwick::raw::{read_at, read_ptr_at};
+use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::Next;
@@ -163,13 +163,18 @@ static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Set at arming when every patch is written with the links.
 static RAISED: AtomicBool = AtomicBool::new(false);
 
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `GroupFn` is the signature of the base grouping the `GROUPING`
+// pattern finds, and `link` uses this slot only as that function's next.
 static GROUP_NEXT: Next<GroupFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `AddBaseFn` is the signature of the new base code the `NEW_BASE`
+// pattern finds, and `link` uses this slot only as that function's next.
 static ADD_BASE_NEXT: Next<AddBaseFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `CheckFn` is the signature of the placement cursor the `CURSOR`
+// pattern finds, and `link` uses this slot only as that function's next.
 static CHECK_NEXT: Next<CheckFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `MaxAltarsFn` is the signature of the build table's
+// `building.max_altars`, and `link` uses this slot only as that function's
+// next.
 static MAX_ALTARS_NEXT: Next<MaxAltarsFn> = unsafe { Next::new() };
 
 type GroupFn = unsafe extern "system" fn(bases: *mut u8, world: *mut u8);
@@ -404,21 +409,27 @@ unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
         && !crate::host::is_off(limit.owner)
     {
         let user = core::ptr::with_exposed_provenance_mut(limit.user);
-        // SAFETY: the callback lives in the mod's DLL and takes the pointer it
+        // SAFETY: the owner is not off, so the mod's DLL that holds the
+        // callback stays loaded; the callback gets the user pointer its mod
         // registered.
         return crate::profile::call(limit.owner, crate::profile::Feature::Altars, || unsafe {
             (limit.callback)(flame_level, user)
         });
     }
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: this detour runs only as the `building.max_altars` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     unsafe { MAX_ALTARS_NEXT.get()(balancing, flame_level) }
 }
 
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
-    // SAFETY: the original takes the arguments the game passed.
+    // SAFETY: this detour runs only as the base grouping's link, so the slot
+    // holds the next function of that signature; the game's arguments pass
+    // unchanged.
     unsafe { GROUP_NEXT.get()(bases, world) };
     if raised() && !bases.is_null() {
-        // SAFETY: the grouping just filled the bases object.
+        // SAFETY: `bases` is non-null by the check before it and is the bases
+        // object the grouping has just filled, on the grouping's thread.
         let _done = BASES_FUSE.run("the base grouping", || unsafe { keep(bases) });
     }
 }
@@ -427,17 +438,23 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
 ///
 /// # Safety
 ///
-/// `bases` is the bases object the grouping just filled.
+/// - `bases` is the non-null bases object the grouping has just filled,
+///   live for the call.
+/// - Called on the grouping's thread, right after it, with no writer
+///   meanwhile.
 unsafe fn keep(bases: *const u8) {
     let (Some(known), Some(sites)) = (ZONES.get(), SITES.get()) else {
         return;
     };
     let fields = sites.fields;
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees a live bases object; its u32 base count
+    // sits at the build table's `bases.count` offset.
     let count = unsafe { read_at::<u32>(bases, fields.count) };
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees a live bases object; its zone list
+    // pointer sits at the build table's `bases.zone_list` offset.
     let list = unsafe { read_ptr_at::<u8>(bases, fields.zone_list) }.cast_const();
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees a live bases object; its zone list
+    // length sits at the build table's `bases.zone_list_len` offset.
     let len = unsafe { read_at::<usize>(bases, fields.zone_list_len) };
     if (list.is_null() && len != 0) || len > MAX_LISTED {
         return;
@@ -445,14 +462,20 @@ unsafe fn keep(bases: *const u8) {
     let count = count.min(MAX_BASES);
     let mut members = 0u32;
     for base in 0..count as usize {
-        // SAFETY: base `base` is below the count, inside the array of 16.
+        // SAFETY: `base` is below the count, capped at the game's 16 bases,
+        // so its members mask lies inside the live object's base array of
+        // the build table's `bases.stride`, at `bases.members`.
         members |= unsafe { read_at::<u32>(bases, base * fields.stride + fields.members) };
     }
     let zone = |i: usize| -> Zone {
         let at = i * fields.zone_size;
-        // SAFETY: zone `i` is below the list's length.
+        // SAFETY: callers pass `i` below the list's length, which the check
+        // before it bounds and pairs with a non-null list; zone `i` of the build
+        // table's `bases.zone_size` starts with its low corner.
         let min = unsafe { read_at::<[f32; 3]>(list, at) };
-        // SAFETY: as above.
+        // SAFETY: callers pass `i` below the list's length, so zone `i` is in
+        // the list; its high corner sits at the build table's
+        // `bases.zone_high` offset.
         let max = unsafe { read_at::<[f32; 3]>(list, at + fields.zone_high) };
         Zone {
             bounds: Aabb { min, max },
@@ -492,12 +515,16 @@ unsafe fn keep(bases: *const u8) {
 unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) {
     let count = SITES.get().map(|sites| sites.fields.count);
     if let Some(count) = count.filter(|_| raised() && !bases.is_null())
-        // SAFETY: the grouping passes its bases object.
+        // SAFETY: `bases` is non-null by the filter before it and is the bases
+        // object the grouping passes; its u32 base count sits at the build
+        // table's `bases.count` offset.
         && unsafe { read_at::<u32>(bases, count) } >= MAX_BASES
     {
         return;
     }
-    // SAFETY: the original takes the arguments the game passed.
+    // SAFETY: this detour runs only as the new base code's link, so the slot
+    // holds the next function of that signature; the game's arguments pass
+    // unchanged.
     unsafe { ADD_BASE_NEXT.get()(bases, zone, index) };
 }
 
@@ -509,25 +536,35 @@ unsafe extern "system" fn check(
     mode: u64,
     extra: u64,
 ) {
-    // SAFETY: the original takes the arguments the game passed.
+    // SAFETY: this detour runs only as the placement cursor's link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     unsafe { CHECK_NEXT.get()(flags, ctx, transform, item, mode, extra) };
     if !raised() || flags.is_null() || ctx.is_null() || transform.is_null() || item.is_null() {
         return;
     }
-    // SAFETY: the cursor's arguments, after the original ran.
+    // SAFETY: the cursor's own arguments, each non-null by the check before it,
+    // on the cursor's thread after the original ran.
     let _done = BASES_FUSE.run("the placement check", || unsafe {
         refuse_17th(flags, ctx, transform, item);
     });
 }
 
+/// Sets the cursor's "too many altars" bit for an altar whose zone would
+/// stand apart from every base once the game holds its 16.
+///
 /// # Safety
 ///
-/// The placement cursor's live arguments.
+/// - `flags`, `ctx`, `transform` and `item` are the placement cursor's
+///   own, non-null arguments, live for the call.
+/// - Called on the cursor's thread after the original ran, which alone
+///   writes `flags` meanwhile.
 unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, item: *const u8) {
-    // SAFETY: the cursor's item definition.
+    // SAFETY: the caller guarantees the cursor's live item definition; its
+    // u8 altar flag sits at `ITEM_ALTAR` (1.0 build 1269579).
     let altar = unsafe { read_at::<u8>(item, ITEM_ALTAR) } != 0;
-    // SAFETY: the cursor's flags word.
-    if !altar || unsafe { flags.read() } & MAX_ALTARS_REACHED != 0 {
+    // SAFETY: the caller guarantees the cursor's live u32 flags word.
+    if !altar || unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } & MAX_ALTARS_REACHED != 0 {
         return;
     }
     let (Some(sites), Some(known), Some(engine)) =
@@ -539,22 +576,27 @@ unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, it
     if zones.bases < MAX_BASES {
         return;
     }
-    // SAFETY: the cursor context holds the balancing registry there.
+    // SAFETY: the caller guarantees the cursor's live context; its balancing
+    // registry word sits at the offset the `CURSOR_ALTAR` pattern read from
+    // the cursor's own code.
     let balancing = unsafe { read_at::<u64>(ctx, sites.balancing) };
     if balancing == 0 {
         return;
     }
-    // SAFETY: the balancing registry of the running cursor.
+    // SAFETY: `balancing` is the running cursor's non-zero balancing
+    // registry word, used on the cursor's thread.
     let Some(size) = (unsafe { engine.zone_size(balancing, 1) }) else {
         return;
     };
-    // SAFETY: the cursor's transform: the position first, three i64.
-    let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
+    // SAFETY: the caller guarantees the cursor's live transform, which
+    // starts with the position, three i64.
+    let fixed = unsafe { read_at::<[i64; 3]>(transform.cast(), 0) };
     let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
     if zones.refuses(&candidate) {
-        // SAFETY: as above.
-        let refused = unsafe { flags.read() } | MAX_ALTARS_REACHED;
-        // SAFETY: as above.
-        unsafe { flags.write(refused) };
+        // SAFETY: the caller guarantees the cursor's live u32 flags word.
+        let refused = unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } | MAX_ALTARS_REACHED;
+        // SAFETY: the caller guarantees the cursor's live u32 flags word,
+        // which only the cursor's thread writes meanwhile.
+        unsafe { write_at(flags.cast(), 0, refused) };
     }
 }

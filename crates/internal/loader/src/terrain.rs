@@ -144,12 +144,17 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 function("terrain.flatten")?,
             );
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the table's `terrain.add` is the address of the game
+                // function with the `AddFn` signature on this build, in the
+                // image, which stays mapped.
                 add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
-                // SAFETY: as above.
+                // SAFETY: the table's `terrain.dig` is the address of the game
+                // function with the `DigFn` signature on this build, in the
+                // image, which stays mapped.
                 dig: unsafe { core::mem::transmute::<usize, DigFn>(dig) },
-                // SAFETY: as above.
+                // SAFETY: the table's `terrain.flatten` is the address of the
+                // game function with the `FlattenFn` signature on this build,
+                // in the image, which stays mapped.
                 flatten: unsafe { core::mem::transmute::<usize, FlattenFn>(flatten) },
                 editor: loader.offset("terrain.editor")?,
                 world: loader.offset("terrain.voxel_world")?,
@@ -178,16 +183,24 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 /// the game thread.
 fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
     let server = crate::world::server()?;
-    // SAFETY: the server holds its voxel editor, voxel world and game object.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `terrain.editor` offset holds its
+    // voxel editor pointer.
     let editor: usize = unsafe { read(server, layout.editor) };
-    // SAFETY: as above.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `terrain.voxel_world` offset holds
+    // its voxel world pointer.
     let world: usize = unsafe { read(server, layout.world) };
-    // SAFETY: as above.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `server.player_infos` offset holds
+    // its game object pointer.
     let game: usize = unsafe { read(server, layout.game) };
     if editor == 0 || world == 0 || game == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the voxel world starts with its allocator.
+    // SAFETY: `world` is non-zero (`world == 0` returns first), the server's
+    // voxel world, which starts with its allocator pointer; read on the game
+    // thread.
     let alloc: usize = unsafe { read(world, 0) };
     if alloc == 0 {
         return Err(Status::MISSING);
@@ -199,22 +212,30 @@ fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
 pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, game) = editor(layout)?;
-    // SAFETY: the game object holds the terraforming registry, which holds
-    // its resource once loaded.
+    // SAFETY: `game` is the non-zero game object `editor` read on the game
+    // thread; the table's `terrain.registry` offset holds its terraforming
+    // registry pointer.
     let registry: usize = unsafe { read(game, layout.registry) };
     if registry == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: as above.
+    // SAFETY: `registry` is non-zero (`registry == 0` returns first); the
+    // table's `terrain.registry_resource` offset holds its resource pointer
+    // once loaded; read on the game thread.
     let resource: usize = unsafe { read(registry, layout.registry_resource) };
     if resource == 0 {
         return Err(Status::MISSING);
     }
     let header = resource + layout.configs;
-    // SAFETY: the resource's array of terrain configs: an offset from itself
-    // and a count.
+    // SAFETY: `resource` is non-zero (`resource == 0` returns first) and the
+    // reflected `terrainConfigs` field of
+    // `keen::TerraformingEfficiencyRegistryResource` is an array header at
+    // `header`: an `i32` offset from itself, then a `u32` count.
     let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: as above.
+    // SAFETY: `resource` is non-zero (`resource == 0` returns first) and the
+    // reflected `terrainConfigs` field of
+    // `keen::TerraformingEfficiencyRegistryResource` is an array header at
+    // `header`: an `i32` offset from itself, then a `u32` count.
     let count: u32 = unsafe { read(header, 4) };
     if offset == 0 {
         return Ok(Vec::new());
@@ -223,24 +244,39 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
     Ok((0..count as usize)
         .map(|i| {
             let config = start + i * layout.config_size;
-            // SAFETY: a config of the array, its fields as reflected.
+            // SAFETY: `config` is entry `i < count` of the array the header
+            // points at, `config_size` bytes each; the reflected
+            // `keen::TerrainTerraformingConfig` places its 16-byte
+            // `terrainItem` at `config_item`.
             let item: [u8; 16] = unsafe { read(config, layout.config_item) };
-            // SAFETY: as above.
+            // SAFETY: `config` is entry `i < count` of the array the header
+            // points at, `config_size` bytes each; the reflected
+            // `keen::TerrainTerraformingConfig` places its `canBeFlattened`
+            // byte at `config_flatten`.
             let flatten: u8 = unsafe { read(config, layout.config_flatten) };
             TerrainMaterialInfo {
                 header: Header::of::<TerrainMaterialInfo>(),
-                // SAFETY: as above.
+                // SAFETY: `config` is entry `i < count` of the array the
+                // header points at, `config_size` bytes each; the reflected
+                // `keen::TerrainTerraformingConfig` places its
+                // `terrainMaterial` at `config_id`.
                 id: unsafe { read(config, layout.config_id) },
                 flags: if flatten == 0 {
                     0
                 } else {
                     TerrainMaterialInfo::FLATTENS
                 },
-                // SAFETY: as above.
+                // SAFETY: `config` is entry `i < count` of the array the
+                // header points at, `config_size` bytes each; the reflected
+                // `keen::TerrainTerraformingConfig` places its `hardness` at
+                // `config_hardness`.
                 hardness: unsafe { read(config, layout.config_hardness) },
                 reserved: 0,
                 item: enshwick_reflect::fnv1a32(&item),
-                // SAFETY: as above.
+                // SAFETY: `config` is entry `i < count` of the array the
+                // header points at, `config_size` bytes each; the reflected
+                // `keen::TerrainTerraformingConfig` places its `healthPoints`
+                // at `config_health`.
                 health: unsafe { read(config, layout.config_health) },
             }
         })
@@ -295,8 +331,12 @@ fn add(layout: &Layout, site: &Site, request: &TerrainEdit) -> Result<f32, Statu
     if !(request.height.is_finite() && request.height > 0.0 && request.height <= MAX_RADIUS) {
         return Err(Status::BAD_ARGS);
     }
-    // SAFETY: the game's add on its live voxel editor and allocator, with no
-    // undo, on the game thread between steps.
+    // SAFETY: `add` is the table's `terrain.add`, called on the server's
+    // live, non-zero voxel editor and allocator (checked by `editor`) at a
+    // quiet moment on the game thread (checked by `crate::world::server`),
+    // with no undo; `site.position` is a 16-byte aligned `Vector` for the
+    // call, and the radius and height are positive and at most `MAX_RADIUS`
+    // (checked in `edit` and by the height check).
     let voxels = unsafe {
         (layout.add)(
             site.editor,
@@ -336,9 +376,12 @@ fn dig(layout: &Layout, site: &Site, protect: &[u8; 16]) -> f32 {
         removed: 0.0,
     };
     let direction = Vector([0.0; 4]);
-    // SAFETY: the game's dig on its live voxel editor and allocator, with no
-    // undo, tables of its size and a plain sphere or cube, on the game thread
-    // between steps.
+    // SAFETY: `dig` is the table's `terrain.dig`, called on the server's live,
+    // non-zero voxel editor and allocator (checked by `editor`) at a quiet
+    // moment on the game thread (checked by `crate::world::server`), with no
+    // undo; `out` and `table` point at `MATERIALS` entries each on this stack,
+    // the vectors are 16-byte aligned, the radius is positive and at most
+    // `MAX_RADIUS` and the shape a plain sphere or cube (checked in `edit`).
     unsafe {
         (layout.dig)(
             site.editor,
@@ -367,9 +410,13 @@ fn flatten(layout: &Layout, site: &Site, material: u32) -> Result<f32, Status> {
         count: MATERIALS as u64,
     };
     let normal = Vector([0.0, 1.0, 0.0, 0.0]);
-    // SAFETY: the game's flatten on its live voxel editor and allocator, with
-    // no undo, a table of its size and the vertical normal, on the game thread
-    // between steps.
+    // SAFETY: `flatten` is the table's `terrain.flatten`, called on the
+    // server's live, non-zero voxel editor and allocator (checked by `editor`)
+    // at a quiet moment on the game thread (checked by
+    // `crate::world::server`), with no undo; `table` points at `MATERIALS`
+    // entries on this stack, the vectors are 16-byte aligned, the radius is
+    // positive and at most `MAX_RADIUS` and the shape a plain sphere or cube
+    // (checked in `edit`).
     let changed = unsafe {
         (layout.flatten)(
             site.editor,

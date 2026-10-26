@@ -25,7 +25,7 @@ use enshwick::abi::{
     ZoneCheckFn,
 };
 use enshwick::altars::MAX_ZONES;
-use enshwick::raw::{read_at, read_ptr_at};
+use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use self::geometry::Placed;
 use crate::chains::Next;
@@ -200,9 +200,13 @@ static WORLD: AtomicU64 = AtomicU64::new(0);
 /// Set when the loader's own work in a link went wrong: from then on the
 /// links run vanilla.
 static OFF: AtomicBool = AtomicBool::new(false);
-// SAFETY: each slot joins the chain of an engine system, typed `SystemFn`.
+// SAFETY: `SystemFn` is the signature of every system entry, here the
+// reflected `add_buildzones_server`'s, and `link` uses this slot only as that
+// function's next.
 static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `SystemFn` is the signature of every system entry, here the
+// reflected `upgrade_building_range`'s, and `link` uses this slot only as
+// that function's next.
 static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 type Filter = Registered<ZoneCheckFn>;
@@ -220,7 +224,9 @@ struct SeamLayout {
 static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
-// SAFETY: the slot joins the chain of the seam check, typed `SeamFn`.
+// SAFETY: `SeamFn` is the signature of the build table's
+// `building.seam_check`, and `link_seam` uses this slot only as that
+// function's next.
 static SEAM_NEXT: Next<SeamFn> = unsafe { Next::new() };
 
 thread_local! {
@@ -512,17 +518,20 @@ fn turn_off(why: &str) {
 ///
 /// # Safety
 ///
-/// `ctx` is a live system context.
+/// - `ctx` is null or a live system context, used on its system's thread.
 unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool {
     if loader.side == Side::SERVER {
         return true;
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees a null or live system context on its
+    // thread, all `is_world` asks for.
     unsafe { engine.is_world(ctx, crate::world::server_world()) }
 }
 
 unsafe extern "system" fn add_zones(ctx: *mut u64) {
-    // SAFETY: the original system takes its own context.
+    // SAFETY: this detour runs only as the `add_buildzones_server` link, so
+    // the slot holds the next system entry; the system's own context passes
+    // unchanged.
     unsafe { ADD_ZONES_NEXT.get()(ctx) };
     if OFF.load(Ordering::Acquire) {
         return;
@@ -531,9 +540,11 @@ unsafe extern "system" fn add_zones(ctx: *mut u64) {
         return;
     };
     let run = || {
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the hooked system's own live context, on its
+        // thread.
         if unsafe { server_world(loader, engine, ctx) } {
-            // SAFETY: as above, after vanilla ran.
+            // SAFETY: `ctx` is the live context of `add_buildzones_server`,
+            // on its thread after vanilla ran.
             unsafe { observe(engine, ctx) };
         }
     };
@@ -546,30 +557,40 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
     let ready = (!OFF.load(Ordering::Acquire))
         .then(|| crate::host::loader().zip(crate::ecs::resolved()))
         .flatten()
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the hooked system's own live context, on its
+        // thread.
         .filter(|(loader, engine)| unsafe { server_world(loader, engine, ctx) });
     let Some((_, engine)) = ready else {
-        // SAFETY: the original system takes its own context.
+        // SAFETY: this detour runs only as the `upgrade_building_range` link,
+        // so the slot holds the next system entry; the system's own context
+        // passes unchanged.
         unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     };
     let controller = CONTROLLER.load(Ordering::Acquire);
     if controller != 0 && !crate::host::is_off(controller - 1) {
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
+        // its thread, and vanilla has not run this tick.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {
             return;
         }
         turn_off("the range pass panicked");
         // Hand the tick to vanilla from the first row.
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the hooked system's own live context, which only
+        // its thread writes.
         unsafe { engine.set_row(ctx, 0) };
-        // SAFETY: the original system takes its own context.
+        // SAFETY: this detour runs only as the `upgrade_building_range` link,
+        // so the slot holds the next system entry; the system's own context
+        // passes unchanged.
         unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     }
-    // SAFETY: the original system takes its own context.
+    // SAFETY: this detour runs only as the `upgrade_building_range` link, so
+    // the slot holds the next system entry; the system's own context passes
+    // unchanged.
     unsafe { UPGRADE_NEXT.get()(ctx) };
-    // SAFETY: the system's live context, after vanilla ran.
+    // SAFETY: `ctx` is the live context of `upgrade_building_range`, on its
+    // thread after vanilla ran.
     if std::panic::catch_unwind(|| unsafe { read_levels(engine, ctx) }).is_err() {
         turn_off("the level pass panicked");
     }
@@ -616,13 +637,15 @@ fn merge(
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of `add_buildzones_server`.
+/// - `ctx` is the live context of `add_buildzones_server`, used on its
+///   thread while the system runs.
 unsafe fn observe(engine: &Engine, ctx: *mut u64) {
     drop_stale_buffers();
     PLACED.with_borrow_mut(|placed| {
         BUILT.with_borrow_mut(|built| {
             LEVELS.with_borrow_mut(|levels| {
-                // SAFETY: forwarded from the caller.
+                // SAFETY: the caller guarantees the live context of
+                // `add_buildzones_server` on its thread.
                 unsafe { observe_into(engine, ctx, placed, built) };
                 merge(placed, built, levels);
             });
@@ -630,9 +653,12 @@ unsafe fn observe(engine: &Engine, ctx: *mut u64) {
     });
 }
 
+/// Walks `add_buildzones_server`'s rows again into `placed` and `built`.
+///
 /// # Safety
 ///
-/// `ctx` is the live context of `add_buildzones_server`.
+/// - `ctx` is the live context of `add_buildzones_server`, used on its
+///   thread while the system runs.
 unsafe fn observe_into(
     engine: &Engine,
     ctx: *mut u64,
@@ -644,11 +670,14 @@ unsafe fn observe_into(
     };
     // Vanilla left the row counter at the end: walk again from the start and
     // restore it.
-    // SAFETY: the system's live context.
+    // SAFETY: the caller guarantees the system's live context on its thread.
     let saved = unsafe { engine.row(ctx) };
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the system's live context on its
+    // thread, which alone writes it.
     unsafe { engine.set_row(ctx, 0) };
-    // SAFETY: as above, with the system's iterator size.
+    // SAFETY: the caller guarantees the system's live context on its thread;
+    // its iterator is `ZONES_WORDS` words, checked against the system's
+    // reflected components at link; the query ends inside this call.
     let mut query: Query<'_, ZONES_WORDS> = unsafe { engine.query(ctx) };
     while let Some(words) = query.next() {
         let transform = words[ZONES_TRANSFORM] as *const u8;
@@ -656,13 +685,19 @@ unsafe fn observe_into(
         if transform.is_null() || shape.is_null() {
             continue;
         }
-        // SAFETY: the system's live context.
+        // SAFETY: the caller guarantees the system's live context on its
+        // thread.
         let id = unsafe { engine.entity(ctx) };
-        // SAFETY: the row's trigger shape holds its half extents here.
+        // SAFETY: `shape` is the row's non-null `TriggerShape` by the check
+        // before it; its half extents sit at the reflected `rangeX` field.
         let range: [f32; 3] = unsafe { read_at(shape, fields.range) };
-        // SAFETY: the row's transform holds its position here.
+        // SAFETY: `transform` is the row's non-null `CurrentTransform` by
+        // the check before it; its position sits at the reflected
+        // `transform.position` field.
         let position: [i64; 3] = unsafe { read_at(transform, fields.position) };
-        // SAFETY: and its orientation here.
+        // SAFETY: `transform` is the row's non-null `CurrentTransform` by
+        // the check before it; its orientation sits at the reflected
+        // `transform.orientation` field.
         let orientation: [f32; 4] = unsafe { read_at(transform, fields.orientation) };
         built.push((id, range));
         placed.push((
@@ -673,7 +708,8 @@ unsafe fn observe_into(
             },
         ));
     }
-    // SAFETY: the system's live context.
+    // SAFETY: the caller guarantees the system's live context on its
+    // thread, which alone writes it.
     unsafe { engine.set_row(ctx, saved) };
 }
 
@@ -681,11 +717,13 @@ unsafe fn observe_into(
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of `upgrade_building_range`.
+/// - `ctx` is the live context of `upgrade_building_range`, used on its
+///   thread while the system runs.
 unsafe fn read_levels(engine: &Engine, ctx: *mut u64) {
     drop_stale_buffers();
     LEVELS.with_borrow_mut(|levels| {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees the live context of
+        // `upgrade_building_range` on its thread.
         unsafe { read_levels_into(engine, ctx, levels) };
         PLACED.with_borrow_mut(|placed| {
             BUILT.with_borrow_mut(|built| merge(placed, built, levels));
@@ -693,30 +731,40 @@ unsafe fn read_levels(engine: &Engine, ctx: *mut u64) {
     });
 }
 
+/// Walks `upgrade_building_range`'s rows again into `levels`.
+///
 /// # Safety
 ///
-/// `ctx` is the live context of `upgrade_building_range`.
+/// - `ctx` is the live context of `upgrade_building_range`, used on its
+///   thread while the system runs.
 unsafe fn read_levels_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
-    // SAFETY: the system's live context.
+    // SAFETY: the caller guarantees the system's live context on its thread.
     let saved = unsafe { engine.row(ctx) };
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the system's live context on its
+    // thread, which alone writes it.
     unsafe { engine.set_row(ctx, 0) };
-    // SAFETY: as above, with the system's iterator size.
+    // SAFETY: the caller guarantees the system's live context on its thread;
+    // its iterator is `UPGRADE_WORDS` words, checked against the system's
+    // reflected components at link; the query ends inside this call.
     let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
     while let Some(words) = query.next() {
         let words = *words;
-        // SAFETY: the words of the current row.
+        // SAFETY: `words` are the current row's iterator words of the live
+        // query, on the system's thread.
         let Some(level) = (unsafe { altar_level(engine, &words) }) else {
             continue;
         };
-        // SAFETY: as above.
+        // SAFETY: `words` are the current row's iterator words of the live
+        // query, on the system's thread.
         let Some((_, sizes)) = (unsafe { level_sizes(engine, &words, level) }) else {
             continue;
         };
-        // SAFETY: the system's live context.
+        // SAFETY: the caller guarantees the system's live context on its
+        // thread.
         levels.push((unsafe { engine.entity(ctx) }, sizes));
     }
-    // SAFETY: the system's live context.
+    // SAFETY: the caller guarantees the system's live context on its
+    // thread, which alone writes it.
     unsafe { engine.set_row(ctx, saved) };
 }
 
@@ -725,37 +773,48 @@ unsafe fn read_levels_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of `upgrade_building_range`.
+/// - `ctx` is the live context of `upgrade_building_range`, used on its
+///   thread in place of the system's own run.
 unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
     drop_stale_buffers();
     LEVELS.with_borrow_mut(|levels| {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees the live context of
+        // `upgrade_building_range` on its thread, in place of its run.
         unsafe { write_ranges_into(engine, ctx, levels) };
         merge(&mut Vec::new(), &mut Vec::new(), levels);
     });
 }
 
+/// Writes each row's range as [`write_ranges`] describes, into `levels` the
+/// sizes it saw.
+///
 /// # Safety
 ///
-/// `ctx` is the live context of `upgrade_building_range`.
+/// - `ctx` is the live context of `upgrade_building_range`, used on its
+///   thread in place of the system's own run.
 unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
     let Some(range_at) = FIELDS.get().map(|fields| fields.range) else {
         return;
     };
     let targets = TARGETS.load();
-    // SAFETY: the system's live context.
+    // SAFETY: the caller guarantees the system's live context on its thread;
+    // its iterator is `UPGRADE_WORDS` words, checked against the system's
+    // reflected components at link; the query ends inside this call.
     let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
     while let Some(words) = query.next() {
         let words = *words;
-        // SAFETY: the words of the current row.
+        // SAFETY: `words` are the current row's iterator words of the live
+        // query, on the system's thread.
         let Some(level) = (unsafe { altar_level(engine, &words) }) else {
             continue;
         };
-        // SAFETY: the balancing registry of the current row.
+        // SAFETY: `words` are the current row's iterator words of the live
+        // query, on the system's thread.
         let Some((current, sizes)) = (unsafe { level_sizes(engine, &words, level) }) else {
             continue;
         };
-        // SAFETY: the system's live context.
+        // SAFETY: the caller guarantees the system's live context on its
+        // thread.
         let id = unsafe { engine.entity(ctx) };
         let target = match targets.as_deref().and_then(|targets| targets.get(&id)) {
             Some(&(solved_level, range)) if solved_level == level => range,
@@ -766,10 +825,13 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
         if shape.is_null() {
             continue;
         }
-        // SAFETY: the trigger shape this system writes holds its range here.
+        // SAFETY: `shape` is the row's non-null `TriggerShape` by the check
+        // before it; its half extents sit at the reflected `rangeX` field.
         let written: [f32; 3] = unsafe { read_at(shape, range_at) };
         if written.map(f32::to_bits) != target.map(f32::to_bits) {
-            // SAFETY: the change-tracking words of the current row.
+            // SAFETY: the tracker, stamps, entity and kind are the current
+            // row's words of the live query, whose system writes
+            // `TriggerShape`, on its thread.
             unsafe {
                 engine.mark_changed(
                     words[UPGRADE_TRACKER],
@@ -779,13 +841,10 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
                     words[UPGRADE_KIND],
                 );
             }
-            // SAFETY: as above.
-            unsafe {
-                shape
-                    .wrapping_add(range_at)
-                    .cast::<[f32; 3]>()
-                    .write_unaligned(target);
-            }
+            // SAFETY: `shape` is the row's non-null `TriggerShape`, which
+            // this system writes, on its thread in place of its run; the half
+            // extents sit at the reflected `rangeX` field.
+            unsafe { write_at(shape, range_at, target) };
         }
     }
 }
@@ -794,10 +853,13 @@ unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u3
 ///
 /// # Safety
 ///
-/// `words` are the current row's iterator words.
+/// - `words` are the current row's iterator words of a live
+///   `upgrade_building_range` query, used on its system's thread.
 unsafe fn altar_level(engine: &Engine, words: &[u64; UPGRADE_WORDS]) -> Option<usize> {
     let level_component = words[UPGRADE_LEVEL] as *const u8;
-    // SAFETY: the row's `Level` component and attribute registry.
+    // SAFETY: the caller guarantees the current row's words, so these are
+    // the row's null or live `Level` attribute set and its attribute
+    // registry, on the system's thread.
     let value = unsafe { engine.level(words[UPGRADE_ATTRIBUTES], level_component) }?;
     // The level is the attribute's low byte.
     Some(usize::from(value.to_le_bytes()[0]))
@@ -808,7 +870,8 @@ unsafe fn altar_level(engine: &Engine, words: &[u64; UPGRADE_WORDS]) -> Option<u
 ///
 /// # Safety
 ///
-/// `words` are the current row's iterator words.
+/// - `words` are the current row's iterator words of a live
+///   `upgrade_building_range` query, used on its system's thread.
 unsafe fn level_sizes(
     engine: &Engine,
     words: &[u64; UPGRADE_WORDS],
@@ -817,7 +880,8 @@ unsafe fn level_sizes(
     if level > MAX_LEVELS {
         return None;
     }
-    // SAFETY: the balancing registry of the row.
+    // SAFETY: the caller guarantees the current row's words, so this is the
+    // live row's balancing registry word, on the system's thread.
     let size_of = |l: usize| unsafe { engine.zone_size(words[UPGRADE_BALANCING], l) };
     let mut sizes = Sizes::new();
     for l in 1..=level {
@@ -831,7 +895,9 @@ unsafe fn level_sizes(
 }
 
 unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f32) -> u8 {
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: this detour runs only as the `building.seam_check` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     let vanilla = unsafe { SEAM_NEXT.get()(zones, corners, margin) };
     if vanilla != 0 || zones.is_null() || corners.is_null() {
         return vanilla;
@@ -839,7 +905,9 @@ unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f3
     let (Some(layout), Some(filters)) = (SEAM.get(), SEALED.get()) else {
         return vanilla;
     };
-    // SAFETY: the game passes its zone list and an object's two corners.
+    // SAFETY: `zones` and `corners` are non-null by the check before it and are
+    // the seam check's own arguments, the engine's zone list and the
+    // object's two corners, live for the call.
     let accepted =
         std::panic::catch_unwind(|| unsafe { check(layout, filters, zones, corners, margin) });
     u8::from(accepted.unwrap_or(false))
@@ -849,7 +917,10 @@ unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f3
 ///
 /// # Safety
 ///
-/// `list` is the engine's zone list and `corners` two corner points.
+/// - `list` is the engine's live zone list, with the layout `layout` names.
+/// - `corners` is readable for two corner points of `layout.corner_size`
+///   bytes, each starting with three `i64`.
+/// - Nothing writes either during the call.
 #[expect(clippy::cast_possible_truncation, reason = "margins are a few metres")]
 unsafe fn check(
     layout: &SeamLayout,
@@ -858,9 +929,11 @@ unsafe fn check(
     corners: *const i64,
     margin: f32,
 ) -> bool {
-    // SAFETY: the list holds its entries pointer and count at these offsets.
+    // SAFETY: the caller guarantees the live zone list; its entries pointer
+    // sits at the build table's `building.zone_list_entries` offset.
     let entries = unsafe { read_ptr_at::<u8>(list, layout.entries) }.cast_const();
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the live zone list; its entry count sits
+    // at the build table's `building.zone_list_count` offset.
     let count: usize = unsafe { read_at(list, layout.count) };
     if entries.is_null() || count > MAX_ZONES {
         return false;
@@ -868,23 +941,31 @@ unsafe fn check(
     let mut zones: ArrayVec<Bounds, MAX_ZONES> = ArrayVec::new();
     for i in 0..count {
         let entry = entries.wrapping_add(i * layout.entry_size);
-        // SAFETY: `i < count` entries of `entry_size` bytes.
+        // SAFETY: `entries` is non-null by the check before it and `i` below the
+        // list's count, so `entry` is an entry of the build table's
+        // `building.zone_entry_size`; its u8 ignored mark sits at
+        // `building.zone_entry_ignored`.
         let ignored: u8 = unsafe { read_at(entry, layout.entry_ignored) };
-        // SAFETY: as above.
+        // SAFETY: `entry` is an entry of the live list, `i` below its count;
+        // its u8 shape sits at the build table's `building.zone_entry_shape`
+        // offset.
         let shape: u8 = unsafe { read_at(entry, layout.entry_shape) };
         if ignored != 0 || shape != 0 {
             continue;
         }
-        // SAFETY: an entry starts with min and max as six i64.
+        // SAFETY: `entry` is an entry of the live list, `i` below its count,
+        // and an entry starts with min and max as six i64.
         let bounds: [i64; 6] = unsafe { read_at(entry, 0) };
         zones.push(Bounds {
             min: [bounds[0], bounds[1], bounds[2]],
             max: [bounds[3], bounds[4], bounds[5]],
         });
     }
-    // SAFETY: the game passes two corners of three i64 each.
+    // SAFETY: the caller guarantees two readable corners, the first starting
+    // with three i64.
     let low: [i64; 3] = unsafe { read_at(corners.cast(), 0) };
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees two readable corners, the second
+    // `building.corner_size` bytes after the first, starting with three i64.
     let high: [i64; 3] = unsafe { read_at(corners.cast(), layout.corner_size) };
     let call = ZoneCheck {
         header: Header::of::<ZoneCheck>(),
@@ -897,8 +978,9 @@ unsafe fn check(
         margin: (f64::from(margin) * enshwick::ecs::FIXED_PER_METRE) as i64,
     };
     filters.iter().filter(|f| f.live()).any(|f| {
-        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-        // and takes the pointer it registered; the call is valid for it.
+        // SAFETY: `f` is live, so the mod's DLL that holds the callback stays
+        // loaded; the callback gets the user pointer its mod registered and
+        // `call`, which lives for the call.
         crate::profile::call(f.owner, crate::profile::Feature::Altars, || unsafe {
             (f.callback)(&raw const call, f.user()) != 0
         })

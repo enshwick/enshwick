@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
+use enshwick::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -75,9 +76,12 @@ struct State {
 static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
 /// Mod texts once sealed: tag id to `(language, text)`, read without a lock.
 static TEXTS: OnceLock<std::collections::HashMap<u32, Vec<(u32, &'static str)>>> = OnceLock::new();
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `TextFn` is the signature of the build table's `text.lookup`, and
+// `seal_texts` uses this slot only as that function's next.
 static TEXT_NEXT: Next<TextFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `TextFn` is the signature of the build table's
+// `text.lookup_english`, and `seal_texts` uses this slot only as that
+// function's next.
 static ENGLISH_NEXT: Next<TextFn> = unsafe { Next::new() };
 static POOL_LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// The language the game last asked a text in.
@@ -115,16 +119,23 @@ fn text_for(id: u32, language: u32) -> Option<&'static str> {
     pick(language).or_else(|| pick(0)).or_else(|| pick(ENGLISH))
 }
 
-fn answer(out: *mut [u64; 3], text: &str) -> *mut [u64; 3] {
+/// Answers a text lookup with `text`, which lives for the process.
+///
+/// # Safety
+///
+/// - `out` is null or the lookup's writable out record of three `u64`,
+///   which nothing else touches during the call.
+unsafe fn answer(out: *mut [u64; 3], text: &'static str) -> *mut [u64; 3] {
     if !out.is_null() {
-        // SAFETY: the game's out record: error 0, the UTF-8 text and its length.
-        unsafe {
-            out.write([
-                0,
-                text.as_ptr().expose_provenance() as u64,
-                text.len() as u64,
-            ]);
-        };
+        let record = [
+            0,
+            text.as_ptr().expose_provenance() as u64,
+            text.len() as u64,
+        ];
+        // SAFETY: `out` is non-null by the check before it, and the caller
+        // guarantees the lookup's writable out record: error 0, the UTF-8
+        // text and its length.
+        unsafe { write_at(out.cast(), 0, record) };
     }
     out
 }
@@ -140,15 +151,21 @@ unsafe extern "system" fn lookup(out: *mut [u64; 3], pool: *mut u8, id: u32) -> 
         let language = if pool.is_null() || offset == usize::MAX {
             ENGLISH
         } else {
-            // SAFETY: the pool holds its current language there.
-            unsafe { pool.wrapping_add(offset).cast::<u32>().read_unaligned() }
+            // SAFETY: `pool` is non-null by the check before it and is the
+            // lookup's text pool; its u32 current language sits at the build
+            // table's `text.pool_language` offset.
+            unsafe { read_at::<u32>(pool, offset) }
         };
         LANGUAGE.store(language, Ordering::Relaxed);
         text_for(id, language)
     });
     match found.flatten() {
-        Some(text) => answer(out, text),
-        // SAFETY: forwarded unchanged.
+        // SAFETY: `out` is the lookup's own out record argument, null or
+        // writable for the call.
+        Some(text) => unsafe { answer(out, text) },
+        // SAFETY: this detour runs only as the `text.lookup` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         None => unsafe { TEXT_NEXT.get()(out, pool, id) },
     }
 }
@@ -162,8 +179,12 @@ unsafe extern "system" fn lookup_english(
         .run("the English text lookup", || text_for(id, ENGLISH))
         .flatten()
     {
-        Some(text) => answer(out, text),
-        // SAFETY: forwarded unchanged.
+        // SAFETY: `out` is the lookup's own out record argument, null or
+        // writable for the call.
+        Some(text) => unsafe { answer(out, text) },
+        // SAFETY: this detour runs only as the `text.lookup_english` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         None => unsafe { ENGLISH_NEXT.get()(out, pool, id) },
     }
 }
@@ -220,11 +241,15 @@ static SERVED_LIST: OnceLock<Box<[Served]>> = OnceLock::new();
 /// Cloned templates ever served, clone GUID to vanilla GUID: read in place of
 /// a clone no mod serves now.
 static ALIASES: OnceLock<rustc_hash::FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `OpenFn` is the signature of the build table's `resource.open`,
+// and `seal_and_link` uses this slot only as that function's next.
 static OPEN_NEXT: Next<OpenFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `ResolveFn` is the signature of the build table's
+// `resource.resolve`, and `seal_and_link` uses this slot only as that
+// function's next.
 static RESOLVE_NEXT: Next<ResolveFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `KeyFn` is the signature of the build table's `resource.key_of`,
+// and `seal_and_link` uses this slot only as that function's next.
 static KEY_NEXT: Next<KeyFn> = unsafe { Next::new() };
 
 type OpenFn = unsafe extern "system" fn(
@@ -343,11 +368,13 @@ fn write_differences(held: usize, new: usize, len: usize) -> usize {
     for (at, &byte) in new.iter().enumerate() {
         let slot = held.wrapping_add(at);
         // SAFETY: `held` is the resource the game reads, `len` bytes a patch
-        // built and left writable for the process (`ResourcePatchFn`).
+        // built and left writable for the process (`ResourcePatchFn`), and
+        // `at` is below `len`.
         let old = unsafe { slot.read_volatile() };
         if old != byte {
-            // SAFETY: as above; one byte at a time, so a read meanwhile sees
-            // each byte old or new.
+            // SAFETY: `held` is the patch's build of `len` bytes, writable for
+            // the process (`ResourcePatchFn`), and `at` is below `len`; one
+            // byte at a time, so a read meanwhile sees each byte old or new.
             unsafe { slot.write_volatile(byte) };
             changed += 1;
         }
@@ -492,19 +519,27 @@ unsafe extern "system" fn build_stand_in(
     out: *mut *const u8,
     out_len: *mut usize,
 ) -> Status {
-    // SAFETY: `user` is the builder `serve_stand_ins` leaked for it.
+    // SAFETY: `user` is the builder `serve_stand_ins` leaked for it, which
+    // lives for the process.
     let builder = unsafe { &*user.cast::<crate::standins::Builder>() };
-    // SAFETY: the base's bytes, valid for the call.
-    let base = unsafe { core::slice::from_raw_parts(base, base_len) };
-    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
+    let base: Vec<u8> = (0..base_len)
+        .map(|at| {
+            // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at
+            // `base` for the call, and `at` is below `base_len`.
+            unsafe { read_at::<u8>(base, at) }
+        })
+        .collect();
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(&base)));
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
     };
     // The game reads the resource for the life of the process.
     let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
-    // SAFETY: the out pointers `build` passes.
+    // SAFETY: `run_patches` passes `out` pointing at a local
+    // `*const u8`, writable for the call.
     unsafe { out.write(bytes.as_ptr()) };
-    // SAFETY: as above.
+    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // writable for the call.
     unsafe { out_len.write(bytes.len()) };
     Status::OK
 }
@@ -653,49 +688,88 @@ fn owner_on(served: &Served) -> bool {
     served.patches.iter().any(|p| mod_on(p.owner))
 }
 
+/// Copies the game's resource key at `key`.
+///
+/// # Safety
+///
+/// - `key` is non-null and readable for `size_of::<ResourceKey>()` bytes,
+///   with no writer during the call.
+unsafe fn read_key(key: *const ResourceKey) -> ResourceKey {
+    let key = key.cast::<u8>();
+    ResourceKey {
+        // SAFETY: the caller guarantees a readable `ResourceKey`, whose GUID
+        // sits at its `offset_of!`.
+        guid: unsafe { read_at(key, core::mem::offset_of!(ResourceKey, guid)) },
+        // SAFETY: the caller guarantees a readable `ResourceKey`, whose u32
+        // type hash sits at its `offset_of!`.
+        type_hash: unsafe { read_at(key, core::mem::offset_of!(ResourceKey, type_hash)) },
+        // SAFETY: the caller guarantees a readable `ResourceKey`, whose u32
+        // part sits at its `offset_of!`.
+        part: unsafe { read_at(key, core::mem::offset_of!(ResourceKey, part)) },
+    }
+}
+
 unsafe extern "system" fn open(
     out: *mut u32,
     database: *mut u8,
     key: *const ResourceKey,
 ) -> *mut u32 {
-    // SAFETY: the game passes a key it owns for the call.
-    let wanted = unsafe { key.as_ref() };
+    let wanted = if key.is_null() {
+        None
+    } else {
+        // SAFETY: `key` is non-null by the check before it and is the key the
+        // game passes the open, which it owns for the call.
+        Some(unsafe { read_key(key) })
+    };
     let decided = RESOURCES_FUSE.run("a resource open", || {
-        let mut found = wanted.and_then(find);
+        let mut found = wanted.as_ref().and_then(find);
         let mut new = None;
         if found.is_none() {
-            new = wanted.and_then(renamed);
+            new = wanted.as_ref().and_then(renamed);
             found = new.as_ref().and_then(find);
         }
         let aliased = if found.is_none() && new.is_none() {
-            wanted.and_then(alias)
+            wanted.as_ref().and_then(alias)
         } else {
             None
         };
         (found, new, aliased)
     });
     let Some((found, new, aliased)) = decided else {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `resource.open` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     };
     let Some((index, entry)) = found else {
         if let Some(new) = new {
-            // SAFETY: the game's open with a key of ours, valid for the call.
+            // SAFETY: this detour runs only as the `resource.open` link, so
+            // the slot holds the next function of that signature; the game's
+            // out and database pass unchanged with a key on this stack.
             return unsafe { OPEN_NEXT.get()(out, database, &raw const new) };
         }
         if let Some(vanilla) = aliased {
-            // SAFETY: the game's open with a key of ours, valid for the call.
+            // SAFETY: this detour runs only as the `resource.open` link, so
+            // the slot holds the next function of that signature; the game's
+            // out and database pass unchanged with a key on this stack.
             return unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) };
         }
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `resource.open` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     };
     let mut base_handle = 0u32;
-    // SAFETY: the game's open with a key of ours, valid for the call.
+    // SAFETY: this detour runs only as the `resource.open` link, so the slot
+    // holds the next function of that signature; the game's database passes
+    // unchanged, with an out handle on this stack and the served entry's
+    // base key, which lives for the process.
     unsafe { OPEN_NEXT.get()(&raw mut base_handle, database, &raw const entry.base) };
     if base_handle == 0 {
         // No base in this archive: the served key stays missing.
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `resource.open` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     }
     entry
@@ -705,8 +779,9 @@ unsafe extern "system" fn open(
         .base_handle = base_handle;
     let handle = u32::try_from(index + 1).unwrap_or(0) | SERVED;
     if !out.is_null() {
-        // SAFETY: the game's out handle.
-        unsafe { out.write(handle) };
+        // SAFETY: `out` is non-null by the check before it and is the open's
+        // writable u32 out handle.
+        unsafe { write_at(out.cast(), 0, handle) };
     }
     out
 }
@@ -717,7 +792,9 @@ unsafe extern "system" fn resolve(
     handle: u32,
 ) -> *mut [u64; 3] {
     let Some(entry) = served(handle) else {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `resource.resolve` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { RESOLVE_NEXT.get()(out, database, handle) };
     };
     // A served handle never reaches the game's resolve, even once the
@@ -727,8 +804,9 @@ unsafe extern "system" fn resolve(
         .flatten()
         .map_or([0; 3], |(data, len)| [data as u64, len as u64, RESIDENT]);
     if !out.is_null() {
-        // SAFETY: the game's out triple.
-        unsafe { out.write(result) };
+        // SAFETY: `out` is non-null by the check before it and is the resolve's
+        // writable out triple of three u64.
+        unsafe { write_at(out.cast(), 0, result) };
     }
     out
 }
@@ -743,7 +821,10 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         return None;
     }
     let mut base = [0u64; 3];
-    // SAFETY: the game's resolve with the base's handle.
+    // SAFETY: `build` runs only inside the `resource.resolve` detour, so the
+    // slot holds the next function of that signature; the game's database
+    // passes with the base's own handle from its open and an out triple on
+    // this stack.
     unsafe { RESOLVE_NEXT.get()(&raw mut base, database, state.base_handle) };
     let (data, len) = (
         usize::try_from(base[0]).ok()?,
@@ -758,12 +839,15 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         return None;
     };
     if entry.keeps_base.load(Ordering::Relaxed) {
-        // SAFETY: the base the game resolved, `len` bytes, resident for the
-        // call.
-        let base = unsafe {
-            core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), len)
-        };
-        state.base = Some(base.into());
+        let base: Box<[u8]> = (0..len)
+            .map(|at| {
+                // SAFETY: the game resolved its base to `len` resident bytes
+                // at `data`, non-zero by the check before it, and `at` is below
+                // `len`.
+                unsafe { crate::memory::read::<u8>(data, at) }
+            })
+            .collect();
+        state.base = Some(base);
     }
     let result = (current, current_len);
     state.built = Some(result);
@@ -809,9 +893,10 @@ fn run_patches(
     let runs = |owner: usize| only.map_or_else(|| mod_on(owner), |only| only.contains(&owner));
     for patch in entry.patches.iter().filter(|p| runs(p.owner)) {
         let (mut built, mut built_len) = (core::ptr::null::<u8>(), 0usize);
-        // SAFETY: the mod's patch function with the bytes so far, valid for the call.
-        // SAFETY: the patch function with the bytes so far, valid for the
-        // call.
+        // SAFETY: `patch.apply` is a live mod's or the loader's
+        // `ResourcePatchFn`, given the `current_len` bytes so far at
+        // `current`, valid for the call, the user pointer it registered and
+        // out pointers to locals on this stack.
         let mut apply = || unsafe {
             (patch.apply)(
                 core::ptr::with_exposed_provenance(current),
@@ -858,7 +943,9 @@ fn hex(bytes: &[u8]) -> String {
 
 unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -> *mut u8 {
     let Some(entry) = served(handle) else {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `resource.key_of` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { KEY_NEXT.get()(out, database, handle) };
     };
     if !out.is_null() {
@@ -867,8 +954,9 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
         bytes[8..24].copy_from_slice(&entry.key.guid);
         bytes[24..28].copy_from_slice(&entry.key.type_hash.to_le_bytes());
         bytes[28..32].copy_from_slice(&entry.key.part.to_le_bytes());
-        // SAFETY: the game's out record of 0x28 bytes.
-        unsafe { out.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
+        // SAFETY: `out` is non-null by the check before it and is the key
+        // lookup's writable out record of 0x28 bytes.
+        unsafe { write_at(out, 0, bytes) };
     }
     out
 }
@@ -888,9 +976,11 @@ mod tests {
         let mut built = unsafe { core::slice::from_raw_parts(base, base_len) }.to_vec();
         built.push(1);
         let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-        // SAFETY: the out pointer of the call.
+        // SAFETY: `run_patches` passes `out` pointing at a local
+        // `*const u8`, writable for the call.
         unsafe { out.write(built.as_ptr()) };
-        // SAFETY: the out length of the call.
+        // SAFETY: `run_patches` passes `out_len` pointing at a local
+        // `usize`, writable for the call.
         unsafe { out_len.write(built.len()) };
         Status::OK
     }

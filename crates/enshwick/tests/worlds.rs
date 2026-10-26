@@ -42,7 +42,7 @@ mod tests {
             .server_world(SERVER_WORLD)
             .constant("ecs.context_entity_world", 0x30)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Shared)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let worlds = WORLDS.get().expect("resolved at init");
@@ -50,11 +50,13 @@ mod tests {
 
         let (_server_descriptor, mut server) = context(SERVER_WORLD);
         let (_client_descriptor, mut client) = context(0x1000);
-        // SAFETY: each context points at a live descriptor.
+        // SAFETY: `server` is a context whose first word points at the live
+        // `_server_descriptor`.
         assert!(unsafe { worlds.is_server(server.as_mut_ptr()) });
-        // SAFETY: as above.
+        // SAFETY: `client` is a context whose first word points at the live
+        // `_client_descriptor`.
         assert!(!unsafe { worlds.is_server(client.as_mut_ptr()) });
-        // SAFETY: null is refused without a read.
+        // SAFETY: `is_server` accepts a null context and reads nothing.
         assert!(!unsafe { worlds.is_server(core::ptr::null_mut()) });
     }
 }

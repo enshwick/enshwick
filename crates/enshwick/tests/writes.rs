@@ -93,7 +93,7 @@ mod tests {
             .template(7, [1; 16])
             .template(8, [2; 16])
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Writes)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let resolved = RESOLVED.get().unwrap();

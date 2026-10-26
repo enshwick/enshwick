@@ -35,7 +35,7 @@ mod tests {
     #[test]
     fn a_mid_function_hook_writes_registers_and_a_panic_leaves_them_whole() {
         let loader = FakeHost::new().symbol("site", SITE).install();
-        // SAFETY: the export of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Doubler)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.mid_hooks(), [SITE]);

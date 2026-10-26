@@ -56,7 +56,7 @@ mod tests {
             .field_offset(ping, "position", 16)
             .template(5, [5; 16])
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let effects = EFFECTS.get().unwrap();

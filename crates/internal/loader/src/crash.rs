@@ -329,7 +329,9 @@ static HANDED_ON: AtomicU32 = AtomicU32::new(0);
 /// The filter's line, used by one thread at a time under [`INSIDE`].
 struct Shared(UnsafeCell<Line>);
 
-// SAFETY: only the thread that set `INSIDE` touches the line.
+// SAFETY: `report` touches the line only after its `INSIDE.swap(true)`
+// returned false, which one thread in the process ever sees, so the line is
+// never shared.
 unsafe impl Sync for Shared {}
 
 static SHARED: Shared = Shared(UnsafeCell::new(Line {
@@ -359,7 +361,8 @@ static NEXT_NOTE: AtomicUsize = AtomicUsize::new(0);
 /// The callback the thread `thread` ran when it faulted at `at`: read here
 /// when this is the thread, else from what the first-chance handler noted.
 fn noted(thread: u32, at: usize) -> Option<(usize, crate::profile::Feature)> {
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentThreadId` takes no arguments and has no
+    // preconditions.
     if thread == unsafe { GetCurrentThreadId() } {
         return crate::profile::current_callback();
     }
@@ -374,9 +377,11 @@ fn noted(thread: u32, at: usize) -> Option<(usize, crate::profile::Feature)> {
 /// Notes the faulting thread's callback, for a report from another thread;
 /// handles nothing.
 unsafe extern "system" fn first_chance(pointers: *mut EXCEPTION_POINTERS) -> i32 {
-    // SAFETY: Windows passes the fault's pointers.
+    // SAFETY: Windows passes a vectored handler null or the fault's
+    // `EXCEPTION_POINTERS`, valid while the handler runs.
     let record = unsafe { pointers.as_ref() }.and_then(|p| {
-        // SAFETY: as above.
+        // SAFETY: the fault's `EXCEPTION_POINTERS` hold null or its
+        // `EXCEPTION_RECORD`, valid while the handler runs.
         unsafe { p.ExceptionRecord.as_ref() }
     });
     if let Some(record) = record
@@ -387,7 +392,8 @@ unsafe extern "system" fn first_chance(pointers: *mut EXCEPTION_POINTERS) -> i32
             .store(crate::profile::marker(), Ordering::Relaxed);
         slot.address
             .store(record.ExceptionAddress.addr(), Ordering::Relaxed);
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentThreadId` takes no arguments and has no
+        // preconditions.
         slot.thread
             .store(unsafe { GetCurrentThreadId() }, Ordering::Release);
     }
@@ -422,7 +428,8 @@ type DumpFn = unsafe extern "system" fn(
     callback: *const core::ffi::c_void,
 ) -> i32;
 
-// SAFETY: joins the chain of `MiniDumpWriteDump`, whose type it names.
+// SAFETY: `DumpFn` is the exact signature of `dbghelp.MiniDumpWriteDump`, and
+// the slot is used only as the `next` of the `dump` link on it.
 static DUMP_NEXT: Next<DumpFn> = unsafe { Next::new() };
 
 /// Whether a dump written for a fault coded `code` is of a crash: only the
@@ -437,11 +444,15 @@ fn fatal(code: NTSTATUS) -> bool {
 ///
 /// # Safety
 ///
-/// `pointers` is null or points at the fault's pointers in this process.
+/// - `pointers` is null or points at a fault's `EXCEPTION_POINTERS` in this
+///   process, whose `ExceptionRecord` is null or valid.
+/// - The faulting thread waits in the fault during the call.
 unsafe fn fault_code(pointers: *const EXCEPTION_POINTERS) -> Option<NTSTATUS> {
-    // SAFETY: as the caller guarantees.
+    // SAFETY: the caller's contract makes `pointers` null or the fault's
+    // valid `EXCEPTION_POINTERS`.
     let pointers = unsafe { pointers.as_ref() }?;
-    // SAFETY: the record of the fault, valid while its thread waits in it.
+    // SAFETY: the caller's contract makes the record null or valid while the
+    // faulting thread waits in the fault.
     let record = unsafe { pointers.ExceptionRecord.as_ref() }?;
     Some(record.ExceptionCode)
 }
@@ -459,20 +470,26 @@ unsafe extern "system" fn dump(
 ) -> i32 {
     // Pointers "in the client" are this process's own when the dump is of
     // this process, as the game's handler writes it.
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentProcessId` takes no arguments and has no
+    // preconditions.
     let ours = process_id == unsafe { GetCurrentProcessId() };
-    // SAFETY: the caller's parameter, null for a dump of no fault.
+    // SAFETY: the caller's `MINIDUMP_EXCEPTION_INFORMATION`, null for a dump
+    // of no fault, valid for the call.
     if let Some(exception) = unsafe { exception.as_ref() }
         && (exception.client_pointers == 0 || ours)
-        // SAFETY: pointers into this process, as checked above.
+        // SAFETY: the pointers are this process's own (`client_pointers` is 0,
+        // or the dump is of this process, checked first) and name the fault
+        // whose thread waits in it while its handler writes the dump.
         && unsafe { fault_code(exception.pointers) }.is_some_and(fatal)
     {
         let (pointers, thread) = (exception.pointers, exception.thread);
-        // SAFETY: pointers into this process, of the thread the dump names,
-        // which waits in the fault while its handler writes the dump.
+        // SAFETY: the fault's pointers in this process, of the thread the
+        // dump names, which waits in the fault while its handler writes the
+        // dump.
         unsafe { report(pointers, thread) };
     }
-    // SAFETY: the rest of the chain takes the caller's arguments.
+    // SAFETY: the caller's own arguments, passed on unchanged to the rest of
+    // the chain, which has `MiniDumpWriteDump`'s signature.
     unsafe {
         DUMP_NEXT.get()(
             process, process_id, file, kind, exception, streams, callback,
@@ -484,12 +501,14 @@ unsafe extern "system" fn dump(
 /// `dbghelp.dll`, loaded now if the game has not yet.
 pub(crate) fn link(loader: &Loader) {
     let name: Vec<u16> = "dbghelp.dll".encode_utf16().chain(Some(0)).collect();
-    // SAFETY: a NUL-terminated name; the module stays loaded for the process.
+    // SAFETY: `name` is a NUL-terminated UTF-16 string alive for the call;
+    // the module stays loaded for the process.
     let module = unsafe { LoadLibraryW(name.as_ptr()) };
     let found = if module.is_null() {
         None
     } else {
-        // SAFETY: a module handle and a NUL-terminated export name.
+        // SAFETY: `module` is a non-null loaded module handle and the export
+        // name a NUL-terminated C string.
         unsafe { GetProcAddress(module, c"MiniDumpWriteDump".as_ptr().cast()) }
     };
     let target = found.map(|f| f as *const () as u64);
@@ -512,9 +531,12 @@ pub(crate) fn range_of(module: HMODULE) -> Option<(usize, usize)> {
         SizeOfImage: 0,
         EntryPoint: core::ptr::null_mut(),
     };
-    // SAFETY: no preconditions; the pseudo handle needs no closing.
+    // SAFETY: `GetCurrentProcess` takes no arguments and has no
+    // preconditions; the pseudo handle needs no closing.
     let process = unsafe { GetCurrentProcess() };
-    // SAFETY: a loaded module and a writable struct of the given size.
+    // SAFETY: `process` is this process's pseudo handle, `module` the
+    // caller's loaded module, and `info` a writable `MODULEINFO` of the size
+    // passed.
     let ok = unsafe {
         GetModuleInformation(
             process,
@@ -535,7 +557,9 @@ fn open(path: &Path, access: u32) -> usize {
         .encode_utf16()
         .chain(Some(0))
         .collect();
-    // SAFETY: a NUL-terminated path; the handle stays open for the process.
+    // SAFETY: `wide` is a NUL-terminated UTF-16 path alive for the call, and
+    // the other arguments are plain values or null; the handle stays open for
+    // the process.
     let handle = unsafe {
         CreateFileW(
             wide.as_ptr(),
@@ -586,7 +610,8 @@ pub(crate) fn install(modules: &[(usize, String, usize, usize)], logs_dir: &Path
     if STATE.set(state).is_err() {
         return;
     }
-    // SAFETY: the handler is a plain function that never unwinds.
+    // SAFETY: `first_chance` has the `PVECTORED_EXCEPTION_HANDLER` signature,
+    // lives for the process and never unwinds.
     if unsafe { AddVectoredExceptionHandler(1, Some(first_chance)) }.is_null() {
         crate::log!(
             WARN,
@@ -602,7 +627,8 @@ pub(crate) fn reassert() {
     if STATE.get().is_none() {
         return;
     }
-    // SAFETY: the filter is a plain function that never unwinds.
+    // SAFETY: `filter` has the `LPTOP_LEVEL_EXCEPTION_FILTER` signature,
+    // lives for the process and never unwinds.
     let previous = unsafe { SetUnhandledExceptionFilter(Some(filter)) };
     let ours = filter as *const () as usize;
     if let Some(previous) = previous
@@ -655,7 +681,8 @@ fn readable(address: usize) -> Option<(usize, usize)> {
         Protect: 0,
         Type: 0,
     };
-    // SAFETY: querying any address is allowed; the struct is writable.
+    // SAFETY: `VirtualQuery` takes any address, and `info` is a writable
+    // `MEMORY_BASIC_INFORMATION` of the size passed.
     let known = unsafe {
         VirtualQuery(
             core::ptr::with_exposed_provenance(address),
@@ -676,8 +703,9 @@ fn read_word(address: usize) -> Option<u64> {
     if address.checked_add(8)? > end {
         return None;
     }
-    // SAFETY: the eight bytes lie in one committed, readable region.
-    Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
+    // SAFETY: the earlier check keeps the eight bytes at `address` inside one
+    // committed, readable region that `VirtualQuery` reported.
+    Some(unsafe { crate::memory::read(address, 0) })
 }
 
 /// What unwinding one function's frame reads, from its `UNWIND_INFO`.
@@ -749,19 +777,22 @@ fn reach(info: &[u8]) -> Option<Reach> {
 ///
 /// # Safety
 ///
-/// `entry` is the function entry Windows found in the loaded image at
-/// `image`.
+/// - `entry` is the function entry `RtlLookupFunctionEntry` returned for the
+///   loaded image at `image`, readable for an
+///   `IMAGE_RUNTIME_FUNCTION_ENTRY`.
+/// - The image stays loaded during the call.
 unsafe fn reach_of(image: usize, entry: *const IMAGE_RUNTIME_FUNCTION_ENTRY) -> Option<Reach> {
-    // SAFETY: as the caller guarantees.
-    let anonymous = unsafe { (*entry).Anonymous };
-    // SAFETY: every field of the union is the same `u32`.
-    let mut rva = unsafe { anonymous.UnwindData };
+    let unwind_data = core::mem::offset_of!(IMAGE_RUNTIME_FUNCTION_ENTRY, Anonymous);
+    // SAFETY: the caller's contract makes `entry` a readable function entry,
+    // whose union at `Anonymous` is the `u32` RVA of its unwind data.
+    let mut rva: u32 = unsafe { enshwick::raw::read_at(entry.cast(), unwind_data) };
     let mut total: Option<Reach> = None;
     for _ in 0..32 {
         let at = image.checked_add(rva as usize)?;
         let (_, end) = readable(at)?;
-        // SAFETY: the bytes up to `end` lie in one committed, readable
-        // region of the image.
+        // SAFETY: `readable` reported the bytes from `at` up to `end` as one
+        // committed, readable region of the image, which stays loaded by the
+        // caller's contract, and the slice is dropped within the loop.
         let info = unsafe {
             core::slice::from_raw_parts(
                 core::ptr::with_exposed_provenance::<u8>(at),
@@ -829,8 +860,8 @@ fn fits(reach: &Reach, rsp: usize, frame: Option<usize>, low: usize, end: usize)
 ///
 /// # Safety
 ///
-/// `context` is the context of a thread stopped in the fault or running
-/// this.
+/// - `context` is the context of a thread stopped in the fault or of the
+///   thread running this, so its stack does not change during the walk.
 unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
     let mut aligned = Aligned(*context);
     let context = &mut aligned.0;
@@ -847,7 +878,8 @@ unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
             break;
         };
         let mut image = 0u64;
-        // SAFETY: no preconditions beyond a readable out pointer.
+        // SAFETY: `RtlLookupFunctionEntry` takes any address, `image` is a
+        // writable `u64` and the history table may be null.
         let entry = unsafe { RtlLookupFunctionEntry(rip, &raw mut image, core::ptr::null_mut()) };
         if entry.is_null() {
             // A leaf function: its return address is on top of the stack.
@@ -860,7 +892,8 @@ unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
             let Ok(base) = usize::try_from(image) else {
                 break;
             };
-            // SAFETY: the function entry Windows found in the image at
+            // SAFETY: `entry` is the non-null function entry
+            // `RtlLookupFunctionEntry` just returned for the loaded image at
             // `base`.
             let Some(reach) = (unsafe { reach_of(base, entry) }) else {
                 break;
@@ -881,9 +914,9 @@ unsafe fn unwind(context: &CONTEXT, frames: &mut [usize; FRAMES]) -> usize {
                 break;
             }
             let (mut handler, mut establisher) = (core::ptr::null_mut(), 0u64);
-            // SAFETY: the function entry Windows found for `rip`, and a
-            // context whose stack holds every byte the entry's unwind
-            // codes read, as checked above.
+            // SAFETY: `entry` is the function entry found for `rip` in the
+            // image at `image`, and `fits` checked that the context's stack
+            // holds every byte the entry's unwind codes read.
             unsafe {
                 RtlVirtualUnwind(
                     UNW_FLAG_NHANDLER,
@@ -926,7 +959,9 @@ fn write(handle: usize, bytes: &[u8]) {
     }
     let handle: HANDLE = core::ptr::with_exposed_provenance_mut(handle);
     let mut written = 0u32;
-    // SAFETY: a handle opened at start for writing, and a readable buffer.
+    // SAFETY: `handle` is a non-zero file handle `open` returned, open for
+    // the process; `bytes` is readable for its length and `written` a
+    // writable `u32`.
     unsafe {
         WriteFile(
             handle,
@@ -936,7 +971,8 @@ fn write(handle: usize, bytes: &[u8]) {
             core::ptr::null_mut(),
         );
     }
-    // SAFETY: as above.
+    // SAFETY: `handle` is a non-zero file handle `open` returned, open for
+    // the process.
     unsafe { FlushFileBuffers(handle) };
 }
 
@@ -946,9 +982,11 @@ fn rewind(handle: usize) {
         return;
     }
     let handle: HANDLE = core::ptr::with_exposed_provenance_mut(handle);
-    // SAFETY: a handle opened at start for writing.
+    // SAFETY: `handle` is a non-zero file handle `open` returned, open for
+    // the process; the new position may be null.
     unsafe { SetFilePointerEx(handle, 0, core::ptr::null_mut(), FILE_BEGIN) };
-    // SAFETY: as above.
+    // SAFETY: `handle` is a non-zero file handle `open` returned, open for
+    // the process.
     unsafe { SetEndOfFile(handle) };
 }
 
@@ -956,8 +994,9 @@ fn rewind(handle: usize) {
 ///
 /// # Safety
 ///
-/// `pointers` is null or the fault's, its thread `thread` stopped in the
-/// fault or running this.
+/// - `pointers` is null or points at the fault's valid
+///   `EXCEPTION_POINTERS` in this process, whose records are null or valid.
+/// - The thread `thread` is stopped in the fault or is the one running this.
 unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
     if INSIDE.swap(true, Ordering::AcqRel) {
         return;
@@ -965,14 +1004,17 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
     let Some(state) = STATE.get() else {
         return;
     };
-    // SAFETY: as the caller guarantees.
+    // SAFETY: the caller's contract makes `pointers` null or the fault's
+    // valid `EXCEPTION_POINTERS`.
     let Some(pointers) = (unsafe { pointers.as_ref() }) else {
         return;
     };
-    // SAFETY: `INSIDE` gives this thread the line alone, for good.
+    // SAFETY: this thread's `INSIDE.swap(true)` returned false, which one
+    // thread in the process ever sees, so nothing else borrows the line.
     let line = unsafe { &mut *SHARED.0.get() };
     line.len = 0;
-    // SAFETY: as the caller guarantees.
+    // SAFETY: the caller's contract, passed on: the fault's valid pointers,
+    // and `thread` stopped in the fault or running this.
     unsafe { record(state, pointers, thread, line) };
     write(state.log, line.as_bytes());
     rewind(state.last);
@@ -980,12 +1022,14 @@ unsafe fn report(pointers: *const EXCEPTION_POINTERS, thread: u32) {
 }
 
 unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentThreadId` takes no arguments and has no
+    // preconditions.
     let thread = unsafe { GetCurrentThreadId() };
     if HANDED_ON.load(Ordering::Acquire) == thread {
         return CONTINUE_SEARCH;
     }
-    // SAFETY: Windows passes the fault's pointers on the faulting thread.
+    // SAFETY: Windows calls an unhandled exception filter on the faulting
+    // thread with null or the fault's valid `EXCEPTION_POINTERS`.
     unsafe { report(pointers, thread) };
     HANDED_ON.store(thread, Ordering::Release);
     let next = NEXT.load(Ordering::Acquire);
@@ -996,7 +1040,9 @@ unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
     // handed it back; it takes the same pointers.
     let next: LPTOP_LEVEL_EXCEPTION_FILTER = unsafe { core::mem::transmute::<usize, _>(next) };
     match next {
-        // SAFETY: as above.
+        // SAFETY: `next` is the filter the process had before the loader's,
+        // as `SetUnhandledExceptionFilter` handed it back, called on the
+        // faulting thread with the fault's own pointers.
         Some(next) => unsafe { next(pointers) },
         None => CONTINUE_SEARCH,
     }
@@ -1006,10 +1052,11 @@ unsafe extern "system" fn filter(pointers: *const EXCEPTION_POINTERS) -> i32 {
 ///
 /// # Safety
 ///
-/// `pointers` are the fault's, its thread `thread` stopped in the fault or
-/// running this.
+/// - `pointers` are the fault's, with records null or valid for the call.
+/// - The thread `thread` is stopped in the fault or is the one running this.
 unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line: &mut Line) {
-    // SAFETY: the fault's records, valid for the call.
+    // SAFETY: the caller's contract makes both records null or valid for the
+    // call.
     let (Some(record), Some(context)) = (unsafe { pointers.ExceptionRecord.as_ref() }, unsafe {
         pointers.ContextRecord.as_ref()
     }) else {
@@ -1022,7 +1069,8 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
     let found = if code == EXCEPTION_STACK_OVERFLOW {
         0
     } else {
-        // SAFETY: the faulting thread's context.
+        // SAFETY: `context` is the faulting thread's, which by the caller's
+        // contract is stopped in the fault or runs this.
         unsafe { unwind(context, &mut frames) }
     };
     let callback = noted(thread, at).map(|(owner, f)| (owner, f.name()));
@@ -1043,7 +1091,7 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
         wSecond: 0,
         wMilliseconds: 0,
     };
-    // SAFETY: a writable struct.
+    // SAFETY: `time` is a writable `SYSTEMTIME`.
     unsafe { GetSystemTime(&raw mut time) };
     describe(
         line,
@@ -1076,7 +1124,7 @@ mod tests {
             if CALLS.fetch_add(1, Ordering::Relaxed) > 4 {
                 return CONTINUE_SEARCH;
             }
-            // SAFETY: forwarded unchanged.
+            // SAFETY: the test's own null pointers, passed on unchanged.
             unsafe { filter(pointers) }
         }
         NEXT.store(other as *const () as usize, Ordering::Release);
@@ -1162,7 +1210,7 @@ mod tests {
         for code in [0x8000_0003_u32, 0xe06d_7363, 0x4001_0006] {
             assert!(!fatal(code.cast_signed()));
         }
-        // SAFETY: null pointers.
+        // SAFETY: a null pointer, which `fault_code` takes.
         assert_eq!(unsafe { fault_code(core::ptr::null()) }, None);
     }
 
@@ -1199,14 +1247,15 @@ mod tests {
             MEM_RELEASE, MEM_RESERVE, VirtualAlloc, VirtualFree,
         };
         let word = 0x1122_3344_5566_7788_u64;
-        assert_eq!(read_word((&raw const word).addr()), Some(word));
+        assert_eq!(read_word((&raw const word).expose_provenance()), Some(word));
         assert_eq!(read_word(0), None);
         assert_eq!(read_word(16), None);
-        // SAFETY: a fresh page, released below.
+        // SAFETY: `VirtualAlloc` reserves a fresh page for the test, which
+        // frees it at the end.
         let page = unsafe { VirtualAlloc(core::ptr::null(), 4096, MEM_RESERVE, PAGE_READWRITE) };
         assert!(!page.is_null());
         assert_eq!(read_word(page.addr()), None, "reserved, not committed");
-        // SAFETY: the page reserved above.
+        // SAFETY: `page` is the test's own reservation, released once.
         unsafe { VirtualFree(page, 0, MEM_RELEASE) };
         assert_eq!(read_word(page.addr()), None, "released");
     }

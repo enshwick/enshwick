@@ -23,7 +23,7 @@ mod tests {
     #[test]
     fn a_build_without_inventories_turns_the_mod_off() {
         let loader = FakeHost::new().without_inventories().install();
-        // SAFETY: the export of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Looter)`.
         assert_ne!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
         assert!(loader.inventory_requests().is_empty());
     }

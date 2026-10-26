@@ -8,7 +8,8 @@ use enshwick::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
     let manifest = query(dll)?;
     let text = describe(&manifest);
-    // SAFETY: the manifest's strings are static data in the loaded DLL.
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads,
+    // whose `enshwick_mod_query` export returns static strings.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
     match expected {
         Some(expected) if expected != version => Err(format!(
@@ -21,7 +22,8 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
 
 /// The manifest as lines of `key: value`.
 fn describe(manifest: &Manifest) -> String {
-    // SAFETY: a manifest's strings are static data next to it.
+    // SAFETY: every manifest `describe` gets comes from `manifest!` or a
+    // DLL never unloaded, so its strings are static.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or("<not UTF-8>").to_owned();
     let side = match manifest.side {
         Side::SERVER => "server",
@@ -38,7 +40,8 @@ fn describe(manifest: &Manifest) -> String {
         let authors = if manifest.authors.is_null() {
             &[][..]
         } else {
-            // SAFETY: the manifest points at `author_count` static names.
+            // SAFETY: null was refused; the manifest of `manifest!` or of a DLL
+            // never unloaded points at `author_count` static, aligned names.
             unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
         };
         let authors: Vec<String> = authors.iter().map(text).collect();
@@ -68,7 +71,8 @@ fn describe(manifest: &Manifest) -> String {
     let dependencies = if manifest.dependencies.is_null() {
         &[][..]
     } else {
-        // SAFETY: the manifest points at `dependency_count` static entries.
+        // SAFETY: null was refused; the manifest of `manifest!` or of a DLL
+        // never unloaded points at `dependency_count` static, aligned entries.
         unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
     };
     for dependency in dependencies {
@@ -95,13 +99,16 @@ fn describe(manifest: &Manifest) -> String {
 ///
 /// # Safety
 ///
-/// `raw` is null or points at a manifest readable for the size its header
-/// says, with static strings and lists.
+/// - `raw` is null, or points at a manifest readable for the size its header
+///   states.
+/// - No other thread writes that manifest during the copy.
+/// - Its strings and lists stay readable for the rest of the process.
 #[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
     // Every minor has the fields before `builds`.
     const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
-    // SAFETY: forwarded from the caller; an all-zero manifest is valid.
+    // SAFETY: the caller's contract is the one `read_headed` needs: null or
+    // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
     if manifest.header.abi_major != enshwick::abi::ABI_MAJOR {
@@ -120,18 +127,21 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     // system DLL of that name instead.
     let dll = std::path::absolute(dll).map_err(|e| format!("{}: {e}", dll.display()))?;
     let wide: Vec<u16> = dll.as_os_str().encode_wide().chain([0]).collect();
-    // SAFETY: a NUL-terminated path; the DLL stays loaded for the process.
+    // SAFETY: `wide` ends in the NUL chained onto it and lives across the call.
     let module = unsafe { LoadLibraryW(wide.as_ptr()) };
     if module.is_null() {
         return Err(format!("{} could not be loaded", dll.display()));
     }
     let name = format!("{}\0", enshwick::abi::exports::QUERY);
-    // SAFETY: a loaded module and a NUL-terminated name.
+    // SAFETY: `module` was checked non-null and is never freed; `name` ends in
+    // the NUL `format!` appended and lives across the call.
     let query = unsafe { GetProcAddress(module, name.as_ptr()) }
         .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
-    // SAFETY: a mod's query export has this signature.
+    // SAFETY: the ABI gives `exports::QUERY` the signature
+    // `extern "system" fn() -> *const Manifest`.
     let query: extern "system" fn() -> *const Manifest = unsafe { core::mem::transmute(query) };
-    // SAFETY: the export returns its static manifest or null.
+    // SAFETY: the ABI says `exports::QUERY` returns null or a static manifest,
+    // which no thread writes; the DLL is never unloaded, so its strings stay.
     unsafe { copy(query()) }
 }
 
@@ -148,7 +158,8 @@ mod tests {
     fn a_manifest_of_an_older_minor_is_copied_up_to_its_size() {
         let mut old = *enshwick::manifest!(id: "old-mod", side: SERVER, version: "1.0.0");
         old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
-        // SAFETY: a valid manifest, as long as its header says.
+        // SAFETY: `old` is a local manifest readable for the size its header
+        // states, with the static strings of `manifest!`.
         let copied = unsafe { copy(&raw const old) }.unwrap();
         assert!(copied.name.is_empty());
         assert_eq!(
@@ -159,9 +170,10 @@ side: server
 join check: no"
         );
         old.header.size = 8;
-        // SAFETY: as above.
+        // SAFETY: `old` is a local manifest readable for the eight bytes its
+        // header now states.
         assert!(unsafe { copy(&raw const old) }.is_err());
-        // SAFETY: null is refused.
+        // SAFETY: `copy` accepts null and reads nothing.
         assert!(unsafe { copy(core::ptr::null()) }.is_err());
     }
 

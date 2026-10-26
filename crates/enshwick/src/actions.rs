@@ -1122,20 +1122,36 @@ thread_local! {
     static REPLY: RefCell<String> = const { RefCell::new(String::new()) };
 }
 
+/// Answers one of the loader's questions about this mod's actions.
+///
+/// # Safety
+///
+/// - `call` is null or points at an [`ActionCall`] readable for the size its
+///   header states, with no other writer during the call.
+/// - `call`'s strings are null or point at their `len` bytes, alive and
+///   unchanged for the call.
+/// - `user` is the `Box<Arc<Registry>>` that [`Load::actions`] handed over,
+///   which the loader keeps for the process.
+/// - `out` is null or writable for one [`Str`], which the loader reads
+///   before it asks again on this thread.
 unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out: *mut Str) {
-    // SAFETY: the loader passes a valid call for the duration of this one;
-    // every field is there since the minor that added actions.
+    // SAFETY: the caller guarantees `call` is null or an `ActionCall`
+    // readable for the size its header states with no concurrent writer,
+    // which is the contract of `read_headed`.
     let Some(call) = (unsafe { read_headed(call, size_of::<ActionCall>()) }) else {
         return;
     };
-    // SAFETY: `user` is the leaked `Arc<Registry>` this function was
-    // registered with.
+    // SAFETY: the caller guarantees `user` is the boxed `Arc<Registry>` that
+    // `hand_over` leaked for the process, so it is aligned, alive and only
+    // read through shared references.
     let registry = unsafe { &*user.cast::<Arc<Registry>>() };
     let player = Player::from_info(&call.player);
     let language = Language(call.language);
-    // SAFETY: the loader's text, valid for the call.
+    // SAFETY: the caller keeps the action's bytes alive and unchanged for
+    // the call, and `action` is not used after it returns.
     let action = unsafe { call.action.as_str() }.unwrap_or("");
-    // SAFETY: as above.
+    // SAFETY: the caller keeps the arguments' bytes alive and unchanged for
+    // the call, and `args` is not used after it returns.
     let args = unsafe { call.args.as_str() }.unwrap_or("");
     let reply = crate::host::guard("panic in an action", String::new, || match call.kind {
         ActionCall::SHEET => registry.sheet(&player, language),
@@ -1152,8 +1168,10 @@ unsafe extern "system" fn answer(call: *const ActionCall, user: *mut c_void, out
     }
     REPLY.with_borrow_mut(|kept| {
         *kept = reply;
-        // SAFETY: the loader's out pointer; the text lives in this thread's
-        // buffer until the next question, after the loader copied it.
+        // SAFETY: `out` is not null, as the early return ensures, and the
+        // caller guarantees it is writable for one `Str`; the text lives in
+        // this thread's buffer until the next question, after the loader read
+        // it.
         unsafe { out.write(Str::new(kept)) };
     });
 }

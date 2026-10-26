@@ -466,7 +466,8 @@ impl StatDef {
     ///
     /// # Safety
     ///
-    /// `data.text` points at text that is alive for the call.
+    /// - `data.text` is null or points at its `len` bytes, alive and unchanged
+    ///   for the call.
     ///
     /// # Examples
     ///
@@ -475,7 +476,7 @@ impl StatDef {
     ///
     /// let haste = StatDef::multiplicative("stat.haste");
     /// let data = haste.to_data();
-    /// // SAFETY: the text is `haste`'s, alive here.
+    /// // SAFETY: `data.text` points into `haste`, alive and unchanged here.
     /// assert_eq!(unsafe { StatDef::from_data(&data) }, Some(haste));
     /// ```
     #[must_use]
@@ -491,7 +492,8 @@ impl StatDef {
             StatDefData::PERCENT => StatFormat::Percent,
             _ => StatFormat::Number,
         };
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller keeps the text's bytes alive and unchanged for the
+        // call, and `text` is copied before it returns.
         let text = unsafe { data.text.as_str() }?;
         let def = Self {
             ty,
@@ -1157,10 +1159,11 @@ impl Stats {
         if !status.is_ok() {
             return None;
         }
-        // SAFETY: the loader keeps its definitions' text and ids for the
-        // process.
+        // SAFETY: `stat_info` returned OK and pointed `def.text` at a text the
+        // loader keeps alive and unchanged for the process.
         let def = unsafe { StatDef::from_data(&def) }?;
-        // SAFETY: as above.
+        // SAFETY: `stat_info` returned OK and pointed `id` at an id the loader
+        // keeps alive and unchanged for the process; the id is copied.
         let id = unsafe { id.as_str() }?.to_owned();
         Some(StatInfo { id, def })
     }
@@ -1183,15 +1186,26 @@ impl Stats {
     }
 }
 
+/// Calls the stats handler `F` with one change the loader reports.
+///
+/// # Safety
+///
+/// - `change` is null or points at an aligned, whole change the loader
+///   wrote, alive and unchanged for the call.
+/// - `user` is the `Box<F>` that [`Load::on_stats_changed`] handed over,
+///   which the loader keeps for the process.
 unsafe extern "system" fn run_changed<F>(change: *const StatChangeData, user: *mut c_void)
 where
     F: Fn(&StatChange),
 {
-    // SAFETY: the loader passes a valid change for the duration of this call.
+    // SAFETY: the caller guarantees `change` is null or an aligned, whole
+    // change alive and unchanged for the call.
     let Some(change) = (unsafe { change.as_ref() }) else {
         return;
     };
-    // SAFETY: `user` is the leaked `F` this function was registered with.
+    // SAFETY: the caller guarantees `user` is the boxed `F` that `hand_over`
+    // leaked for the process, so it is aligned, alive and only read through
+    // shared references.
     let handler = unsafe { &*user.cast::<F>() };
     let change = StatChange {
         entity: Entity(change.entity),

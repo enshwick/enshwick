@@ -38,7 +38,7 @@ mod tests {
 
     #[hook(priority = 5, flags = HookFlags::EXCLUSIVE)]
     fn halve(next: Next<unsafe extern "system" fn(u32) -> u32>, value: u32) -> u32 {
-        // SAFETY: the original takes the value the game passed.
+        // SAFETY: the chain behind `HALVE` ends in `tripled`, which takes any value.
         unsafe { next.get()(value) / 2 }
     }
 
@@ -90,9 +90,9 @@ mod tests {
     #[test]
     fn a_mod_lives_its_whole_life() {
         let manifest = enshwick_mod_query();
-        // SAFETY: the manifest is static.
+        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of `manifest!`.
         let manifest = unsafe { &*manifest };
-        // SAFETY: static strings.
+        // SAFETY: the id points at a `'static` string literal of `manifest!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("test-mod"));
         assert_eq!(manifest.dependency_count, 1);
         assert_eq!(enshwick_mod_abi(), u32::from(enshwick::abi::ABI_MAJOR));
@@ -118,7 +118,7 @@ mod tests {
                 ..ModInfo::EMPTY
             })
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Test)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.handle(), ModHandle(1));
@@ -151,7 +151,8 @@ mod tests {
         assert_eq!(ORIGINAL_CALLS.load(Ordering::Relaxed), calls + 1);
         assert_eq!(loader.faults(), ["panic in hook DOUBLE"]);
 
-        // SAFETY: as for init.
+        // SAFETY: `enshwick_mod_ready` is the export of this file's `declare_mod!(Test)`,
+        // and its `enshwick_mod_init` returned `Status::OK`.
         unsafe { loader.ready(enshwick_mod_ready) };
 
         // A settings change reaches the handler; a broken file is skipped.

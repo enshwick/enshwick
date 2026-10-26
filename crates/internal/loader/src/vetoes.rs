@@ -22,6 +22,8 @@ use enshwick::abi::{
     BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status,
 };
 
+use enshwick::raw::{read_at, read_ptr_at, write_at};
+
 use crate::chains::Next;
 use crate::host::{Loader, Registered, take};
 
@@ -38,7 +40,9 @@ static CRAFT_SEALED: OnceLock<Box<[Registered<CraftCheckFn>]>> = OnceLock::new()
 static BUILD_SEALED: OnceLock<Box<[Registered<BuildCheckFn>]>> = OnceLock::new();
 static CRAFT: OnceLock<CraftLayout> = OnceLock::new();
 static BUILD: OnceLock<BuildLayout> = OnceLock::new();
-// SAFETY: the slot joins the chain of the cursor check, typed `CursorFn`.
+// SAFETY: `CursorFn` is the signature of the table's
+// `building.cursor_check`, and this slot is the `next` of the one link `link`
+// makes on it, whose detour `cursor` calls `get`.
 static CURSOR_NEXT: Next<CursorFn> = unsafe { Next::new() };
 
 type CursorFn = unsafe extern "system" fn(
@@ -186,8 +190,10 @@ pub(crate) fn link(loader: &'static Loader) {
 ///
 /// # Safety
 ///
-/// `payload` is a live event of `type_hash`, `size` bytes, on the game
-/// thread before the engine moves the streams.
+/// - `payload` is a live event of `type_hash`, readable and writable for
+///   `size` bytes.
+/// - Called on the game thread before the engine moves the streams, so
+///   nothing else reads or writes the event during the call.
 pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let (Some(layout), Some(filters)) = (CRAFT.get(), CRAFT_SEALED.get()) else {
         return;
@@ -195,22 +201,29 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     if type_hash != layout.hash || size < layout.size {
         return;
     }
-    let read = |at: usize| -> u32 {
-        // SAFETY: the field lies inside the event, as reflection says.
-        unsafe { payload.wrapping_add(at).cast::<u32>().read_unaligned() }
-    };
-    // SAFETY: as above; the amount is a u16.
-    let amount = unsafe {
-        payload
-            .wrapping_add(layout.amount)
-            .cast::<u16>()
-            .read_unaligned()
-    };
+    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
+    // (`size < layout.size` returns first), `size` readable bytes (the caller's
+    // contract), and reflection places its `u32` `craftingOperatorId` at
+    // `player`.
+    let player: u32 = unsafe { read_at(payload, layout.player) };
+    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
+    // (`size < layout.size` returns first), `size` readable bytes (the caller's
+    // contract), and reflection places its `u32` `craftingStationId` at
+    // `station`.
+    let station: u32 = unsafe { read_at(payload, layout.station) };
+    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
+    // (`size < layout.size` returns first), `size` readable bytes (the caller's
+    // contract), and reflection places its `u32` `recipeId` at `recipe`.
+    let recipe: u32 = unsafe { read_at(payload, layout.recipe) };
+    // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected size
+    // (`size < layout.size` returns first), `size` readable bytes (the caller's
+    // contract), and reflection places its `u16` `recipeAmount` at `amount`.
+    let amount: u16 = unsafe { read_at(payload, layout.amount) };
     let call = CraftCheck {
         header: Header::of::<CraftCheck>(),
-        player: read(layout.player),
-        station: read(layout.station),
-        recipe: read(layout.recipe),
+        player,
+        station,
+        recipe,
         amount: u32::from(amount),
     };
     if call.player == 0 {
@@ -219,28 +232,25 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let disabled = crate::recipes::is_disabled(call.recipe);
     let allowed = !disabled
         && filters.iter().filter(|f| f.live()).all(|f| {
-            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-            // and takes the pointer it registered; the call is valid for it.
+            // SAFETY: `callback` is a `CraftCheckFn` the mod registered, in
+            // its DLL, which stays loaded (`Registered`); `user` is the
+            // pointer it registered with it, and `call` lives on this stack
+            // for the call.
             crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
                 (f.callback)(&raw const call, f.user()) != 0
             })
         });
     if !allowed {
-        // SAFETY: as for the reads; the streams are the loader's to change
-        // until the engine moves them.
-        unsafe {
-            payload
-                .wrapping_add(layout.player)
-                .cast::<u32>()
-                .write_unaligned(0);
-        };
-        // SAFETY: as above.
-        unsafe {
-            payload
-                .wrapping_add(layout.amount)
-                .cast::<u16>()
-                .write_unaligned(0);
-        };
+        // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected
+        // size (`size < layout.size` returns first), `size` writable bytes
+        // nothing else touches until the engine moves the streams (the caller's
+        // contract), with its `u32` `craftingOperatorId` at `player`.
+        unsafe { write_at(payload, layout.player, 0u32) };
+        // SAFETY: the event is a `CraftRecipeEvent` of at least its reflected
+        // size (`size < layout.size` returns first), `size` writable bytes
+        // nothing else touches until the engine moves the streams (the caller's
+        // contract), with its `u16` `recipeAmount` at `amount`.
+        unsafe { write_at(payload, layout.amount, 0u16) };
         crate::log!(
             DEBUG,
             "craft of recipe {:#x} by player {} refused{}",
@@ -267,10 +277,13 @@ unsafe extern "system" fn cursor(
     b: u8,
     range: f32,
 ) {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's arguments to `building.cursor_check`, passed on
+    // unchanged to the rest of the chain, which the slot holds since the
+    // chain is wired before the target jumps here.
     unsafe { CURSOR_NEXT.get()(flags, cursor_context, placement, transform, a, b, range) };
     let _caught = VETOES_FUSE.run("the cursor", || {
-        // SAFETY: the game's arguments, after its own check.
+        // SAFETY: the game's arguments to `building.cursor_check`, after its
+        // own check returned, on the thread that ran it.
         unsafe { refuse(flags, cursor_context, placement, transform) };
     });
 }
@@ -279,7 +292,10 @@ unsafe extern "system" fn cursor(
 ///
 /// # Safety
 ///
-/// The cursor check's arguments, on the thread that ran it.
+/// - `flags`, `cursor`, `placement` and `transform` are the arguments the
+///   game passed to `building.cursor_check`, each null or live.
+/// - Called on the thread that ran the check, right after it returned, so
+///   nothing else writes them during the call.
 unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform: *const i64) {
     let (Some(layout), Some(filters), Some(engine)) =
         (BUILD.get(), BUILD_SEALED.get(), crate::ecs::resolved())
@@ -289,45 +305,53 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     if flags.is_null() || cursor.is_null() || placement.is_null() || transform.is_null() {
         return;
     }
-    // SAFETY: the game's flags word.
-    let current = unsafe { flags.read_unaligned() };
+    // SAFETY: `flags` is non-null (the null checks return first) and the
+    // check's live `u32` flags word (the caller's contract).
+    let current: u32 = unsafe { read_at(flags.cast(), 0) };
     if current & layout.no_permission != 0 {
         return;
     }
-    // SAFETY: the cursor context starts with its system context.
-    let system: *mut u64 = unsafe { cursor.cast::<*mut u64>().read_unaligned() };
-    // SAFETY: a live system context or null.
+    // SAFETY: `cursor` is non-null (the null checks return first) and the
+    // check's live cursor context (the caller's contract), which starts with
+    // its system context pointer.
+    let system = unsafe { read_ptr_at::<u64>(cursor, 0) };
+    // SAFETY: `system` is the cursor's system context, null or live, on the
+    // thread running that system (the caller's contract).
     let player = unsafe { engine.entity(system) };
-    // SAFETY: the placement holds the placed item's static data, or null.
-    let info: *const u8 = unsafe {
-        placement
-            .wrapping_add(layout.item_info)
-            .cast::<*const u8>()
-            .read_unaligned()
-    };
+    // SAFETY: `placement` is non-null (the null checks return first) and the
+    // check's live placement (the caller's contract); the table's
+    // `building.cursor_item_info` offset holds the placed item's static data
+    // pointer, or null.
+    let info = unsafe { read_ptr_at::<u8>(placement, layout.item_info) }.cast_const();
     let item = if info.is_null() {
         0
     } else {
-        // SAFETY: an item's static data starts with its id.
-        unsafe { info.cast::<u32>().read_unaligned() }
+        // SAFETY: `info` is non-null (the `is_null` branch gives 0) and an
+        // item's static data, which starts with its `u32` id and stays loaded.
+        unsafe { read_at::<u32>(info, 0) }
     };
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
         player,
         item,
-        // SAFETY: the cursor transform starts with its 32.32 position.
-        position: unsafe { transform.cast::<[i64; 3]>().read_unaligned() },
+        // SAFETY: `transform` is non-null (the null checks return first) and
+        // the check's live cursor transform (the caller's contract), which
+        // starts with its 32.32 position, three `i64`.
+        position: unsafe { read_at(transform.cast(), 0) },
     };
     let allowed = filters.iter().filter(|f| f.live()).all(|f| {
-        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-        // and takes the pointer it registered; the call is valid for it.
+        // SAFETY: `callback` is a `BuildCheckFn` the mod registered, in its
+        // DLL, which stays loaded (`Registered`); `user` is the pointer it
+        // registered with it, and `call` lives on this stack for the call.
         crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
             (f.callback)(&raw const call, f.user()) != 0
         })
     });
     if !allowed {
-        // SAFETY: the game's flags word, which its building systems read.
-        unsafe { flags.write_unaligned(current | layout.no_permission) };
+        // SAFETY: `flags` is non-null (the null checks return first) and the
+        // check's live `u32` flags word, which nothing else writes during the
+        // call (the caller's contract) and the building systems read after it.
+        unsafe { write_at(flags.cast(), 0, current | layout.no_permission) };
     }
 }
 
@@ -360,7 +384,8 @@ mod tests {
         let mut refused = request(5, 7, 3);
         let mut allowed = request(5, 8, 3);
         for bytes in [&mut refused, &mut allowed] {
-            // SAFETY: a request of the layout's size, on this thread.
+            // SAFETY: `bytes` is a request of the layout's 16 bytes on this
+            // stack, readable and writable, which only this thread touches.
             unsafe { screen(LAYOUT.hash, bytes.as_mut_ptr(), bytes.len()) };
         }
         assert_eq!(refused, request(0, 7, 0));

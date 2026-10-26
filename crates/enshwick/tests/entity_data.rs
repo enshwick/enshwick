@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn values_stay_with_their_entity() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (owners, nicknames) = (OWNERS.get().unwrap(), NICKNAMES.get().unwrap());

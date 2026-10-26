@@ -15,7 +15,7 @@ mod sealed {
 ///
 /// # Safety
 ///
-/// Implementors are function pointers of the size of `usize`.
+/// - Implementors are function pointers of the size of `usize`.
 ///
 /// # Examples
 ///
@@ -28,12 +28,13 @@ pub unsafe trait FnPtr: Copy + Send + Sync + 'static + sealed::Sealed {}
 macro_rules! fn_ptr {
     ($($arg:ident),*) => {
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed for extern "system" fn($($arg),*) -> R {}
-        // SAFETY: a function pointer has the size of `usize` on every target the
-        // game runs on.
+        // SAFETY: a function pointer has the size of `usize` on every target
+        // the game runs on.
         unsafe impl<R: 'static, $($arg: 'static),*> FnPtr for extern "system" fn($($arg),*) -> R {}
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed
             for unsafe extern "system" fn($($arg),*) -> R {}
-        // SAFETY: as above.
+        // SAFETY: an unsafe function pointer has the size of `usize` on every
+        // target the game runs on.
         unsafe impl<R: 'static, $($arg: 'static),*> FnPtr
             for unsafe extern "system" fn($($arg),*) -> R {}
     };

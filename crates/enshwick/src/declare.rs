@@ -54,13 +54,14 @@ mod unwind;
 /// assert_eq!(manifest.dependency_count, 3);
 /// assert_eq!(manifest.build_count, 1);
 /// assert_eq!(manifest.author_count, 1);
-/// // SAFETY: static strings.
+/// // SAFETY: `manifest!` points the name at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.name.as_str() }, Some("Survivors per Altar"));
-/// // SAFETY: as above; the license comes from this crate's Cargo.toml.
+/// // SAFETY: `manifest!` points the license at a literal from this crate's
+/// // Cargo.toml, alive for the process.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 ///
 /// let pinned = enshwick::manifest!(id: "safes", side: SERVER, version: "0.3.0");
-/// // SAFETY: a static string.
+/// // SAFETY: `manifest!` points the version at a string literal, alive for the process.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```
 #[macro_export]
@@ -227,13 +228,16 @@ macro_rules! declare_mod {
         ///
         /// # Safety
         ///
-        /// Called by the loader with its table and this mod's handle.
+        /// - `api` points at the loader's table, alive and unchanged for the
+        ///   process.
+        /// - `me` is the handle the loader gave this mod.
         #[unsafe(no_mangle)]
         pub unsafe extern "system" fn enshwick_mod_init(
             api: *const $crate::abi::HostApi,
             me: $crate::abi::ModHandle,
         ) -> $crate::abi::Status {
-            // SAFETY: the loader passes its process-wide table.
+            // SAFETY: the caller guarantees `api` is the loader's table, alive
+            // for the process, which is the contract of `init`.
             unsafe { $crate::__private::init::<$ty>(api, me, &__ENSHWICK_INSTANCE) }
         }
 
@@ -241,7 +245,7 @@ macro_rules! declare_mod {
         ///
         /// # Safety
         ///
-        /// Called by the loader after `enshwick_mod_init` succeeded.
+        /// - `enshwick_mod_init` of this mod returned OK before the call.
         #[unsafe(no_mangle)]
         pub unsafe extern "system" fn enshwick_mod_ready(
             _api: *const $crate::abi::HostApi,

@@ -33,7 +33,7 @@ mod tests {
     #[test]
     fn a_server_part_is_told_the_interface_is_for_clients() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Both)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(

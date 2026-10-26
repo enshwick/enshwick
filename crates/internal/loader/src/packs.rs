@@ -204,6 +204,10 @@ fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
 }
 
 /// A pack's `init`: reads its files and adds what they describe.
+///
+/// # Safety
+///
+/// - `api` is the loader's process-wide host table, valid for the process.
 pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) -> Status {
     let Some((_, _, id, dir)) = calling(me) else {
         return Status::BAD_ARGS;
@@ -222,7 +226,8 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
             return Status::REFUSED;
         }
     };
-    // SAFETY: the loader's own table, for the process.
+    // SAFETY: `api` is the loader's process-wide table, by this function's
+    // `# Safety` contract, which is what `init_pack` asks for.
     let status = unsafe { enshwick::__private::init_pack(api, me, |load| load.add_pack(&pack)) };
     if status.is_ok() {
         crate::log::write(
@@ -244,7 +249,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
 }
 
 /// A pack's `ready`: nothing to start.
-pub(crate) unsafe extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
+pub(crate) extern "system" fn ready(_api: *const HostApi, _me: ModHandle) {}
 
 /// Forgets the loot of pack `id`, which is off.
 pub(crate) fn forget(id: &str) {
@@ -347,14 +352,16 @@ mod tests {
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
-        // SAFETY: built above for the process.
+        // SAFETY: `manifest_of` leaks the manifest and every string and slice
+        // in it, so all its pointers are valid for the process.
         let candidate = unsafe { crate::manifest::parse(manifest) }.unwrap();
         assert_eq!(candidate.id, "lanterns");
         assert_eq!(candidate.version.to_string(), "1.2.0");
         assert_eq!(candidate.side, Side::BOTH);
         assert_eq!(candidate.dependencies.len(), 1);
         assert!(manifest.flags.contains(ManifestFlags::JOIN));
-        // SAFETY: as above.
+        // SAFETY: `manifest_of` leaks the manifest and every string and slice
+        // in it, so all its pointers are valid for the process.
         let meta = unsafe { crate::manifest::meta(manifest) };
         assert_eq!(meta.homepage, "https://example.com/lanterns");
     }
