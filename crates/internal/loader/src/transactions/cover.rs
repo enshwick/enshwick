@@ -42,6 +42,20 @@ pub(crate) struct Bricks {
 }
 
 impl Bricks {
+    /// The bricks the box of `size` voxels from `min` touches; the box is
+    /// not empty and ends within [`Voxel::END`].
+    pub(crate) const fn of_box(min: [u32; 3], size: [u32; 3]) -> Self {
+        let mut first = [0; 3];
+        let mut last = [0; 3];
+        let mut axis = 0;
+        while axis < 3 {
+            first[axis] = min[axis] / BRICK;
+            last[axis] = (min[axis] + size[axis] - 1) / BRICK;
+            axis += 1;
+        }
+        Self { first, last }
+    }
+
     /// How many bricks.
     pub(crate) fn count(self) -> usize {
         (0..3)
@@ -113,6 +127,25 @@ pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, Status> {
 ///
 /// `None` for a box past [`Voxel::END`].
 pub(crate) fn cover(edit: &TerrainEdit) -> Option<Bricks> {
+    let (low, high) = reach(edit);
+    let mut first = [0; 3];
+    let mut last = [0; 3];
+    for axis in 0..3 {
+        let min = voxel((low[axis] * PER_METRE).floor()).saturating_sub(MARGIN);
+        let max = voxel((high[axis] * PER_METRE).ceil()).checked_add(MARGIN)?;
+        if max >= u64::from(Voxel::END) {
+            return None;
+        }
+        first[axis] = u32::try_from(min / u64::from(BRICK)).ok()?;
+        last[axis] = u32::try_from(max / u64::from(BRICK)).ok()?;
+    }
+    Some(Bricks { first, last })
+}
+
+/// The box `edit` can write, in metres, lowest and highest corner, each
+/// bound at 0 or more as the game clamps them; [`cover`] widens it to
+/// bricks.
+pub(crate) fn reach(edit: &TerrainEdit) -> ([f64; 3], [f64; 3]) {
     let r = f64::from(edit.radius);
     let (below, above, across) = match edit.kind {
         TerrainEdit::ADD => (r - 0.5, r, r),
@@ -127,20 +160,9 @@ pub(crate) fn cover(edit: &TerrainEdit) -> Option<Bricks> {
         _ => (r, r, r),
     };
     let [x, y, z] = edit.position.map(f64::from);
-    let low = [x - across, y - below, z - across];
-    let high = [x + across, y + above, z + across];
-    let mut first = [0; 3];
-    let mut last = [0; 3];
-    for axis in 0..3 {
-        let min = voxel((low[axis].max(0.0) * PER_METRE).floor()).saturating_sub(MARGIN);
-        let max = voxel((high[axis].max(0.0) * PER_METRE).ceil()).checked_add(MARGIN)?;
-        if max >= u64::from(Voxel::END) {
-            return None;
-        }
-        first[axis] = u32::try_from(min / u64::from(BRICK)).ok()?;
-        last[axis] = u32::try_from(max / u64::from(BRICK)).ok()?;
-    }
-    Some(Bricks { first, last })
+    let low = [x - across, y - below, z - across].map(|metres| metres.max(0.0));
+    let high = [x + across, y + above, z + across].map(|metres| metres.max(0.0));
+    (low, high)
 }
 
 /// A whole, non-negative number of voxels as an index, saturating.

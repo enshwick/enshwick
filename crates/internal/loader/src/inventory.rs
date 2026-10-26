@@ -662,8 +662,9 @@ fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
     Some(option)
 }
 
-/// The static data of `item`, once the inventory system has run.
-pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
+/// The game's static data of `item`, its `ItemInfo`, once the inventory
+/// system has run; it lives as long as the item registry.
+pub(crate) fn item_info_at(loader: &Loader, item: u32) -> Result<*const u8, Status> {
     let executor = executor(loader).ok_or(Status::MISSING)?;
     let registry = REGISTRY.load(Ordering::Acquire);
     if registry == 0 || item == 0 {
@@ -675,6 +676,13 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
     if info.is_null() {
         return Err(Status::MISSING);
     }
+    Ok(info)
+}
+
+/// The static data of `item`, once the inventory system has run.
+pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
+    let executor = executor(loader).ok_or(Status::MISSING)?;
+    let info = item_info_at(loader, item)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
         id: item,

@@ -1,9 +1,11 @@
 use enshwick::abi::{Header, Status, TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{BRICK_VOXELS, Brick, Image, Ledger, Limits, Voxels};
+use super::{BRICK_VOXELS, Brick, Change, Image, Ledger, Limits, Voxels};
 use crate::mod_index::ModIndex;
+use crate::transactions::block::Block;
 use crate::transactions::cover;
+use crate::transactions::paste::{Erase, Paste, Region};
 use crate::voxels::WorldExtent;
 
 const ME: ModIndex = ModIndex::new(0);
@@ -28,6 +30,12 @@ struct World {
     unload_on_edit: Option<Brick>,
     /// What the next restore fails with.
     restore_fails: Option<Status>,
+    /// The refusal each actor meets, by entity; none for the rest.
+    refusals: FxHashMap<u32, u32>,
+    /// The boxes asked about, in metres.
+    asked: Vec<([f64; 3], [f64; 3])>,
+    /// What was announced: placed or torn down, and by whom.
+    announced: Vec<(&'static str, u32)>,
 }
 
 impl World {
@@ -64,6 +72,31 @@ impl World {
 }
 
 impl Voxels for World {
+    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
+        self.asked.push((min, max));
+        Ok(self.refusals.get(&actor).copied().unwrap_or(0))
+    }
+
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status> {
+        let word = u16::from(block.material) | 0xff00;
+        for brick in block.region.bricks().iter() {
+            let mut image = self.brick(brick);
+            Paste::new(
+                block.region.bounds().0,
+                block.region.bounds().1,
+                vec![word; block.region.len()],
+            )?
+            .overlay(brick, &mut image);
+            self.bricks.insert(brick, Box::new(image));
+        }
+        self.announced.push(("placed", actor));
+        Ok(())
+    }
+
+    fn erased(&mut self, _erase: &Erase, actor: u32) {
+        self.announced.push(("torn down", actor));
+    }
+
     fn extent(&mut self) -> Result<WorldExtent, Status> {
         WorldExtent::from_grid(32 << 3 | 32 << 35, self.pages, self.pages).ok_or(Status::MISSING)
     }
@@ -94,7 +127,7 @@ impl Voxels for World {
         Ok(())
     }
 
-    fn restore(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
         if let Some(reason) = self.restore_fails.take() {
             return Err(reason);
         }
@@ -105,7 +138,12 @@ impl Voxels for World {
 }
 
 /// A round dig of radius 4 at `at` metres on every axis: 64 bricks.
-fn dig(at: f32) -> TerrainEdit {
+fn dig(at: f32) -> Change {
+    Change::Terrain(terrain(at))
+}
+
+/// The edit of [`dig`].
+fn terrain(at: f32) -> TerrainEdit {
     TerrainEdit {
         header: Header::of::<TerrainEdit>(),
         kind: TerrainEdit::DIG,
@@ -132,10 +170,10 @@ fn applied(ledger: &Ledger, id: u64) -> u32 {
 fn a_transaction_writes_its_changes_in_order_and_its_undo_puts_every_brick_back() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    world.edit(&dig(30.0)).unwrap();
+    world.edit(&terrain(30.0)).unwrap();
     let before = world.snapshot();
 
-    let id = ledger.commit(ME, &[dig(20.0), dig(22.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0), dig(22.0)]).unwrap();
     assert_eq!(state(&ledger, id).0, TransactionInfo::PENDING);
     ledger.step(&mut world, 1000);
     assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, Status::OK));
@@ -161,7 +199,7 @@ fn the_budget_spreads_changes_over_steps_but_never_splits_one() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger
-        .commit(ME, &[dig(20.0), dig(40.0), dig(60.0)])
+        .commit(ME, None, vec![dig(20.0), dig(40.0), dig(60.0)])
         .unwrap();
 
     ledger.step(&mut world, 100);
@@ -187,7 +225,7 @@ fn a_transaction_over_an_unloaded_column_fails_before_writing_anything() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     world.unload(Brick([8, 0, 8]));
-    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0), dig(40.0)]).unwrap();
 
     ledger.step(&mut world, 1000);
     assert_eq!(
@@ -203,7 +241,7 @@ fn a_transaction_over_an_unloaded_column_fails_before_writing_anything() {
 fn a_column_unloaded_between_steps_stops_the_transaction_where_it_is() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0), dig(40.0)]).unwrap();
     ledger.step(&mut world, 64);
     world.unload(Brick([8, 0, 8]));
     ledger.step(&mut world, 64);
@@ -224,7 +262,7 @@ fn an_undo_while_writing_takes_back_what_was_written_and_stops() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let id = ledger
-        .commit(ME, &[dig(20.0), dig(40.0), dig(60.0)])
+        .commit(ME, None, vec![dig(20.0), dig(40.0), dig(60.0)])
         .unwrap();
     ledger.step(&mut world, 64);
     ledger.undo(ME, id).unwrap();
@@ -238,7 +276,7 @@ fn an_undo_while_writing_takes_back_what_was_written_and_stops() {
 fn an_undo_of_a_queued_transaction_drops_it() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.undo(ME, id).unwrap();
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     ledger.step(&mut world, 1000);
@@ -250,8 +288,8 @@ fn an_undo_of_a_queued_transaction_drops_it() {
 fn an_undo_is_refused_while_a_later_change_holds_its_bricks() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let first = ledger.commit(ME, &[dig(20.0)]).unwrap();
-    let second = ledger.commit(ME, &[dig(22.0)]).unwrap();
+    let first = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
+    let second = ledger.commit(ME, None, vec![dig(22.0)]).unwrap();
     ledger.step(&mut world, 1000);
     let both = world.snapshot();
 
@@ -275,7 +313,7 @@ fn an_undo_is_refused_while_a_later_change_holds_its_bricks() {
 fn an_undo_over_an_unloaded_column_is_refused_and_may_be_asked_again() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     world.unload(Brick([3, 0, 3]));
     ledger.undo(ME, id).unwrap();
@@ -295,7 +333,7 @@ fn an_undo_over_an_unloaded_column_is_refused_and_may_be_asked_again() {
 fn an_undo_begun_waits_for_a_column_that_unloads_and_then_finishes() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     ledger.undo(ME, id).unwrap();
     ledger.step(&mut world, 8);
@@ -315,7 +353,7 @@ fn the_oldest_undo_data_goes_first_once_the_cap_is_reached() {
     let ids: Vec<u64> = [20.0, 40.0, 60.0, 80.0, 100.0]
         .into_iter()
         .map(|at| {
-            let id = ledger.commit(ME, &[dig(at)]).unwrap();
+            let id = ledger.commit(ME, None, vec![dig(at)]).unwrap();
             ledger.step(&mut world, 1000);
             id
         })
@@ -332,26 +370,32 @@ fn the_oldest_undo_data_goes_first_once_the_cap_is_reached() {
 #[test]
 fn a_transaction_past_the_caps_is_refused_at_commit() {
     let mut ledger = Ledger::new(LIMITS);
-    assert_eq!(ledger.commit(ME, &[]), Err(Status::BAD_ARGS));
-    assert_eq!(ledger.commit(ME, &[dig(20.0); 9]), Err(Status::BAD_ARGS));
+    assert_eq!(ledger.commit(ME, None, vec![]), Err(Status::BAD_ARGS));
     assert_eq!(
-        ledger.commit(ME, &[dig(20.0); 5]),
+        ledger.commit(ME, None, vec![dig(20.0); 9]),
+        Err(Status::BAD_ARGS)
+    );
+    assert_eq!(
+        ledger.commit(ME, None, vec![dig(20.0); 5]),
         Err(Status::BAD_ARGS),
         "320 bricks"
     );
     let dry = TerrainEdit {
         flags: TerrainEdit::DRY_RUN,
-        ..dig(20.0)
+        ..terrain(20.0)
     };
-    assert_eq!(ledger.commit(ME, &[dry]), Err(Status::BAD_ARGS));
-
-    ledger.commit(ME, &[dig(20.0); 3]).unwrap();
     assert_eq!(
-        ledger.commit(ME, &[dig(20.0); 2]),
+        ledger.commit(ME, None, vec![Change::Terrain(dry)]),
+        Err(Status::BAD_ARGS)
+    );
+
+    ledger.commit(ME, None, vec![dig(20.0); 3]).unwrap();
+    assert_eq!(
+        ledger.commit(ME, None, vec![dig(20.0); 2]),
         Err(Status::REFUSED),
         "the queue claims 192 of 256 bricks"
     );
-    ledger.commit(ME, &[dig(20.0)]).unwrap();
+    ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
 }
 
 #[test]
@@ -361,15 +405,15 @@ fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
         records: 2,
         ..LIMITS
     });
-    let first = ledger.commit(ME, &[dig(20.0)]).unwrap();
-    let second = ledger.commit(ME, &[dig(40.0)]).unwrap();
+    let first = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
+    let second = ledger.commit(ME, None, vec![dig(40.0)]).unwrap();
     assert_eq!(
-        ledger.commit(ME, &[dig(60.0)]),
+        ledger.commit(ME, None, vec![dig(60.0)]),
         Err(Status::REFUSED),
         "both work"
     );
     ledger.step(&mut world, 1000);
-    let third = ledger.commit(ME, &[dig(60.0)]).unwrap();
+    let third = ledger.commit(ME, None, vec![dig(60.0)]).unwrap();
     assert_eq!(ledger.info(ME, first), None);
     assert!(ledger.info(ME, second).is_some());
     assert!(ledger.info(ME, third).is_some());
@@ -380,7 +424,7 @@ fn the_oldest_settled_transaction_is_forgotten_past_the_record_cap() {
 fn a_mod_sees_and_undoes_only_its_own_transactions() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     let other = ModIndex::new(1);
     assert_eq!(ledger.info(other, id), None);
@@ -392,9 +436,9 @@ fn a_mod_sees_and_undoes_only_its_own_transactions() {
 fn a_world_that_ends_fails_the_work_and_drops_the_undo_data() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let done = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let done = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
-    let queued = ledger.commit(ME, &[dig(40.0)]).unwrap();
+    let queued = ledger.commit(ME, None, vec![dig(40.0)]).unwrap();
     ledger.forget();
     assert_eq!(state(&ledger, done).0, TransactionInfo::EXPIRED);
     assert_eq!(
@@ -406,18 +450,20 @@ fn a_world_that_ends_fails_the_work_and_drops_the_undo_data() {
 }
 
 /// A dig of radius 4 whose box ends past the far edge of the test world.
-fn past_the_edge() -> TerrainEdit {
-    TerrainEdit {
+fn past_the_edge() -> Change {
+    Change::Terrain(TerrainEdit {
         position: [5119.0, 20.0, 20.0],
-        ..dig(20.0)
-    }
+        ..terrain(20.0)
+    })
 }
 
 #[test]
 fn a_transaction_leaving_the_world_fails_before_writing_anything() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0), past_the_edge()]).unwrap();
+    let id = ledger
+        .commit(ME, None, vec![dig(20.0), past_the_edge()])
+        .unwrap();
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
@@ -430,21 +476,24 @@ fn a_transaction_leaving_the_world_fails_before_writing_anything() {
 fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let first = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let first = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     assert_eq!(state(&ledger, first).0, TransactionInfo::APPLIED);
     assert_eq!(
-        ledger.commit(ME, &[dig(20.0), past_the_edge()]),
+        ledger.commit(ME, None, vec![dig(20.0), past_the_edge()]),
         Err(Status::OUTSIDE_WORLD)
     );
     let high = TerrainEdit {
         position: [20.0, 1023.0, 20.0],
-        ..dig(20.0)
+        ..terrain(20.0)
     };
-    assert_eq!(ledger.commit(ME, &[high]), Err(Status::OUTSIDE_WORLD));
+    assert_eq!(
+        ledger.commit(ME, None, vec![Change::Terrain(high)]),
+        Err(Status::OUTSIDE_WORLD)
+    );
     ledger.forget();
     assert!(
-        ledger.commit(ME, &[past_the_edge()]).is_ok(),
+        ledger.commit(ME, None, vec![past_the_edge()]).is_ok(),
         "a new world's extent is not known until its first step"
     );
 }
@@ -453,7 +502,7 @@ fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
 fn a_brick_changed_between_undo_steps_stops_the_undo_before_it() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     ledger.undo(ME, id).unwrap();
     ledger.step(&mut world, 8);
@@ -494,7 +543,7 @@ fn a_brick_that_cannot_be_read_after_its_edit_fails_the_transaction() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     world.unload_on_edit = Some(Brick([3, 0, 3]));
-    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0), dig(40.0)]).unwrap();
     ledger.step(&mut world, 1000);
     assert_eq!(
         state(&ledger, id),
@@ -517,11 +566,15 @@ fn an_undo_is_refused_while_queued_work_holds_the_cap() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
     let first = ledger
-        .commit(ME, &[dig(20.0), dig(40.0), dig(60.0), dig(80.0)])
+        .commit(ME, None, vec![dig(20.0), dig(40.0), dig(60.0), dig(80.0)])
         .unwrap();
     ledger.step(&mut world, 1000);
     let second = ledger
-        .commit(ME, &[dig(100.0), dig(120.0), dig(140.0), dig(160.0)])
+        .commit(
+            ME,
+            None,
+            vec![dig(100.0), dig(120.0), dig(140.0), dig(160.0)],
+        )
         .unwrap();
     assert_eq!(ledger.undo(ME, first), Err(Status::REFUSED));
     ledger.step(&mut world, 1000);
@@ -534,7 +587,7 @@ fn an_undo_is_refused_while_queued_work_holds_the_cap() {
 fn a_failed_restore_refuses_the_undo_and_a_new_one_finishes_it() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     ledger.undo(ME, id).unwrap();
     ledger.step(&mut world, 8);
@@ -556,7 +609,7 @@ fn a_failed_restore_refuses_the_undo_and_a_new_one_finishes_it() {
 fn an_undo_waits_a_limited_number_of_steps_for_a_column() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     ledger.step(&mut world, 1000);
     ledger.undo(ME, id).unwrap();
     ledger.step(&mut world, 8);
@@ -582,7 +635,7 @@ fn an_undo_waits_a_limited_number_of_steps_for_a_column() {
 fn an_undo_asked_while_a_change_is_in_hand_runs_once_it_is_back() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0), dig(40.0)]).unwrap();
     let mut pass = ledger.begin(world.extent().ok(), 64);
     let mut task = ledger.take(&mut pass).unwrap();
     assert_eq!(
@@ -603,7 +656,7 @@ fn an_undo_asked_while_a_change_is_in_hand_runs_once_it_is_back() {
 fn a_change_in_hand_when_the_world_ends_is_dropped_on_return() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
-    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
     let mut pass = ledger.begin(world.extent().ok(), 64);
     let mut task = ledger.take(&mut pass).unwrap();
     ledger.forget();
@@ -614,4 +667,171 @@ fn a_change_in_hand_when_the_world_ends_is_dropped_on_return() {
         (TransactionInfo::FAILED, Status::MISSING)
     );
     assert_eq!(ledger.kept(), 0);
+}
+
+/// A paste of `size` from `min` whose every voxel is `word`.
+fn paste(min: [u32; 3], size: [u32; 3], word: u16) -> Change {
+    let count = size.iter().product::<u32>() as usize;
+    Change::Voxels(Paste::new(min, size, vec![word; count]).unwrap())
+}
+
+#[test]
+fn a_paste_writes_its_voxels_over_the_bricks_and_its_undo_takes_them_back() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.edit(&terrain(20.0)).unwrap();
+    let before = world.snapshot();
+
+    let id = ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [4, 4, 4], 0xff83)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id), (TransactionInfo::APPLIED, Status::OK));
+    let brick = world.brick(Brick([3, 3, 3]));
+    assert_eq!(brick[6 + 8 * 6 + 64 * 6], 0xff83, "inside the paste");
+    assert_eq!(brick[0], 1, "the rest of the brick keeps what the dig left");
+    assert_eq!(
+        ledger.info(ME, id).unwrap().bricks,
+        8,
+        "a 4³ box across 2³ bricks"
+    );
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+    assert_eq!(world.snapshot(), before);
+}
+
+#[test]
+fn a_paste_over_an_unloaded_column_fails_before_writing_anything() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.unload(Brick([4, 0, 4]));
+    let id = ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [4, 4, 4], 0xff83)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::NOT_LOADED)
+    );
+    assert_eq!(world.snapshot(), Vec::new());
+}
+
+#[test]
+fn an_erase_clears_the_building_voxels_of_its_box_and_its_undo_brings_them_back() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let built = ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [4, 4, 4], 0xff83)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, built).0, TransactionInfo::APPLIED);
+    let before = world.snapshot();
+
+    let erase = Erase::new([31, 31, 31], [2, 2, 2]).unwrap();
+    let id = ledger.commit(ME, None, vec![Change::Erase(erase)]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    let brick = world.brick(Brick([3, 3, 3]));
+    assert_eq!(brick[7 + 8 * 7 + 64 * 7], 0, "inside the erase");
+    assert_eq!(brick[6 + 8 * 6 + 64 * 6], 0xff83, "outside it");
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(world.snapshot(), before);
+}
+
+/// A block of building material 0x83 filling the box of `size` from `min`.
+fn block(min: [u32; 3], size: [u32; 3]) -> Change {
+    Change::Block(Box::new(Block::for_tests(
+        Region::new(min, size).unwrap(),
+        0x83,
+    )))
+}
+
+#[test]
+fn a_block_is_placed_announced_and_taken_back_by_its_undo() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, Some(7), vec![block([30, 30, 30], [4, 4, 4])])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    assert_eq!(world.brick(Brick([3, 3, 3]))[6 + 8 * 6 + 64 * 6], 0xff83);
+    assert_eq!(world.announced, [("placed", 7)]);
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+    assert_eq!(world.snapshot(), Vec::new());
+}
+
+#[test]
+fn an_erase_is_announced_as_a_tear_down_by_its_actor_or_by_none() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let erase = || Change::Erase(Erase::new([30, 30, 30], [2, 2, 2]).unwrap());
+    ledger.commit(ME, Some(7), vec![erase()]).unwrap();
+    ledger.commit(ME, None, vec![erase()]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(world.announced, [("torn down", 7), ("torn down", 0)]);
+}
+
+#[test]
+fn an_actor_the_server_refuses_writes_nothing_and_the_status_says_why() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.refusals.insert(7, 2);
+    let id = ledger
+        .commit(
+            ME,
+            Some(7),
+            vec![dig(20.0), paste([30, 30, 30], [2, 2, 2], 0xff83)],
+        )
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.reason, info.refusal),
+        (TransactionInfo::FAILED, Status::REFUSED, 2)
+    );
+    assert_eq!(world.edits, 0);
+    assert_eq!(world.snapshot(), Vec::new());
+    assert_eq!(
+        world.asked.first(),
+        Some(&([16.0; 3], [24.0; 3])),
+        "the dig's own reach, not its bricks"
+    );
+}
+
+#[test]
+fn a_transaction_without_an_actor_asks_no_rights() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.refusals.insert(0, 1);
+    let id = ledger.commit(ME, None, vec![dig(20.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    assert!(world.asked.is_empty());
+}
+
+#[test]
+fn an_allowed_actor_is_asked_about_every_change_before_the_first_write() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(
+            ME,
+            Some(7),
+            vec![dig(20.0), paste([30, 30, 30], [2, 2, 2], 0xff83)],
+        )
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    assert_eq!(
+        world.asked,
+        [([16.0; 3], [24.0; 3]), ([15.0; 3], [16.0; 3])]
+    );
 }

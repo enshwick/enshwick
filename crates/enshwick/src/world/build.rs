@@ -98,19 +98,23 @@ impl World {
         };
         let status = (self.0.host.api().build_rights)(self.0.host.handle(), &raw mut check);
         WorldError::from_status(status)?;
-        Err(match check.refusal {
-            BuildRights::ALLOWED => return Ok(()),
-            BuildRights::NO_CAN_EDIT_WORLD => {
-                BuildRefusal::NoPermission(PlayerPermissions::CanEditWorld)
-            }
-            BuildRights::NO_CAN_EDIT_BASE => {
-                BuildRefusal::NoPermission(PlayerPermissions::CanEditBase)
-            }
-            BuildRights::OUTSIDE_BUILDING_ZONE => BuildRefusal::CursorOutsideBuildingZone,
+        BuildRefusal::from_code(check.refusal).map_or(Ok(()), Err)
+    }
+}
+
+impl BuildRefusal {
+    /// The refusal a [`BuildRights`] code stands for; `None` for
+    /// [`BuildRights::ALLOWED`].
+    pub(crate) const fn from_code(code: u32) -> Option<Self> {
+        Some(match code {
+            BuildRights::ALLOWED => return None,
+            BuildRights::NO_CAN_EDIT_WORLD => Self::NoPermission(PlayerPermissions::CanEditWorld),
+            BuildRights::NO_CAN_EDIT_BASE => Self::NoPermission(PlayerPermissions::CanEditBase),
+            BuildRights::OUTSIDE_BUILDING_ZONE => Self::CursorOutsideBuildingZone,
             BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE => {
-                BuildRefusal::CursorInsideStrictBuildInhibitorZone
+                Self::CursorInsideStrictBuildInhibitorZone
             }
-            _ => BuildRefusal::Unchecked(WorldError::Refused),
+            _ => Self::Unchecked(WorldError::Refused),
         })
     }
 }

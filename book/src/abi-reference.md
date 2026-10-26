@@ -363,3 +363,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_commit`     | Queues terrain edits as one transaction written at quiet moments, with undo; any thread              | 87          |
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
+| `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 88          |

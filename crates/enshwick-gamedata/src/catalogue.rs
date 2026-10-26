@@ -81,6 +81,40 @@ pub const ITEM_CATEGORY: &str = "item_info.category";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of the flag, a byte, that says an item places building voxels.
+pub const ITEM_BUILDING_VOXEL: &str = "item_info.building_voxel";
+/// The id of the voxel material an item places, a `u8`: 0x80 and up for a
+/// building material.
+pub const ITEM_PLACE_VOXEL_MATERIAL_ID: &str = "item_info.place_voxel_material_id";
+
+/// The id of the event the game raises when a building piece is placed.
+pub const BUILDING_PLACE_EVENT: &str = "building_place_event";
+/// The id of the event the game raises when building voxels are torn down.
+pub const BUILDING_TEAR_DOWN_EVENT: &str = "building_tear_down_event";
+/// The ids of a placed piece's fields, as the place event holds them:
+/// position, orientation, lowest and highest corner, material feedback,
+/// tracking item and owner.
+pub const BUILDING_PLACE_EVENT_FIELDS: [&str; 7] = [
+    "building_place_event.position",
+    "building_place_event.orientation",
+    "building_place_event.volume_min",
+    "building_place_event.volume_max",
+    "building_place_event.material",
+    "building_place_event.tracking_item_id",
+    "building_place_event.owner_id",
+];
+/// The ids of a torn-down piece's fields, as the tear-down event holds
+/// them: position, orientation, lowest and highest corner, material
+/// feedback and owner.
+pub const BUILDING_TEAR_DOWN_EVENT_FIELDS: [&str; 6] = [
+    "building_tear_down_event.position",
+    "building_tear_down_event.orientation",
+    "building_tear_down_event.volume_min",
+    "building_tear_down_event.volume_max",
+    "building_tear_down_event.material",
+    "building_tear_down_event.owner_id",
+];
+
 /// The id of a weapon's damage factor, an `f32`, in an item's static data.
 pub const ITEM_DAMAGE_MOD: &str = "item_info.damage_mod";
 /// The id of a weapon's attack speed factor, an `f32`.

@@ -1,10 +1,14 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
-use crate::Host;
-use crate::abi::{Header, Status, TerrainEdit, TransactionInfo, TransactionOp};
+use crate::abi::{
+    BlockPlace, Header, Status, TerrainEdit, TransactionInfo, TransactionOp, VoxelRegion,
+    VoxelWrite,
+};
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
+use crate::voxels::{VoxelBox, VoxelPos};
+use crate::{Host, ItemId};
 
-use super::{World, WorldError};
+use super::{BuildRefusal, Player, Transform, World, WorldError};
 
 /// The id of a committed [`Transaction`], for [`World::undo`] and
 /// [`World::transaction_status`]; valid while the server runs.
@@ -67,6 +71,10 @@ pub enum TransactionStatus {
     /// their undo data; a brick it could not read back after its change is
     /// never written over, so such an undo is refused.
     Failed(WorldError),
+    /// The server refused the player the transaction acts for
+    /// ([`World::transaction_for`]) before it wrote anything, for this
+    /// reason, as [`World::can_build`] gives it.
+    NotAllowed(BuildRefusal),
     /// Written whole, or with its undo refused, but the loader dropped what
     /// its undo needs, to stay within its memory cap or because the world
     /// ended; it can no longer be undone.
@@ -86,7 +94,10 @@ impl TransactionStatus {
             TransactionInfo::APPLIED => Self::Applied,
             TransactionInfo::UNDOING => Self::Undoing,
             TransactionInfo::UNDONE => Self::Undone,
-            TransactionInfo::FAILED => Self::Failed(reason().unwrap_or(WorldError::Missing)),
+            TransactionInfo::FAILED => match BuildRefusal::from_code(info.refusal) {
+                Some(refusal) => Self::NotAllowed(refusal),
+                None => Self::Failed(reason().unwrap_or(WorldError::Missing)),
+            },
             TransactionInfo::EXPIRED => Self::Expired,
             TransactionInfo::UNDO_REFUSED => {
                 Self::UndoRefused(reason().unwrap_or(WorldError::Refused))
@@ -130,7 +141,42 @@ impl TransactionStatus {
 #[must_use = "a transaction changes nothing until it is committed"]
 pub struct Transaction {
     host: Host,
-    terrain: Vec<TerrainEdit>,
+    changes: Vec<Change>,
+    /// The character of the player it acts for, 0 for the mod's own.
+    actor: u32,
+}
+
+/// A change as the loader takes it, with what it points at.
+#[derive(Debug)]
+enum Change {
+    Terrain(TerrainEdit),
+    Voxels(
+        VoxelWrite,
+        #[expect(
+            dead_code,
+            reason = "holds the voxels the write points at until the commit"
+        )]
+        Vec<crate::abi::Voxel>,
+    ),
+    Erase(VoxelRegion),
+    Block(BlockPlace),
+}
+
+impl Change {
+    /// The op the loader reads, pointing into this change.
+    fn op(&self) -> TransactionOp {
+        let (kind, data) = match self {
+            Self::Terrain(edit) => (TransactionOp::TERRAIN, (&raw const *edit).cast()),
+            Self::Voxels(write, _) => (TransactionOp::VOXELS, (&raw const *write).cast()),
+            Self::Erase(region) => (TransactionOp::ERASE, (&raw const *region).cast()),
+            Self::Block(block) => (TransactionOp::BLOCK, (&raw const *block).cast()),
+        };
+        TransactionOp {
+            kind,
+            reserved: 0,
+            data,
+        }
+    }
 }
 
 impl Transaction {
@@ -148,8 +194,9 @@ impl Transaction {
         material: u8,
         shape: Shape,
     ) -> Self {
-        self.terrain
-            .push(add_edit(position, radius, height, material, shape));
+        self.changes.push(Change::Terrain(add_edit(
+            position, radius, height, material, shape,
+        )));
         self
     }
 
@@ -166,8 +213,8 @@ impl Transaction {
         shape: Shape,
         protect: &[u8],
     ) -> Self {
-        self.terrain
-            .push(dig_edit(position, radius, shape, protect));
+        self.changes
+            .push(Change::Terrain(dig_edit(position, radius, shape, protect)));
         self
     }
 
@@ -196,8 +243,92 @@ impl Transaction {
         material: u8,
         shape: Shape,
     ) -> Self {
-        self.terrain
-            .push(flatten_edit(position, radius, material, shape));
+        self.changes.push(Change::Terrain(flatten_edit(
+            position, radius, material, shape,
+        )));
+        self
+    }
+
+    /// Writes `voxels` over their box, whatever was there: air, ground and
+    /// building blocks alike, each voxel with its fill. A box read with
+    /// [`Voxels::read`](crate::voxels::Voxels::read), moved with
+    /// [`VoxelBox::moved_to`], pastes it elsewhere.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{VoxelBox, VoxelPos, Voxels};
+    /// use enshwick::world::World;
+    ///
+    /// fn copy_up(world: World, voxels: Voxels, min: VoxelPos) -> bool {
+    ///     let Ok(block) = voxels.read(min, [8, 8, 8]) else {
+    ///         return false;
+    ///     };
+    ///     let [x, y, z] = min.to_array();
+    ///     let up = block.moved_to(VoxelPos::new(x, y + 16, z));
+    ///     world.transaction().write_voxels(&up).commit().is_ok()
+    /// }
+    /// ```
+    pub fn write_voxels(mut self, voxels: &VoxelBox) -> Self {
+        let raw: Vec<crate::abi::Voxel> = voxels.as_slice().iter().map(|v| v.to_abi()).collect();
+        let write = VoxelWrite {
+            header: Header::of::<VoxelWrite>(),
+            min: voxels.min().to_array(),
+            size: voxels.size(),
+            voxels: raw.as_ptr(),
+            count: raw.len() as u64,
+        };
+        self.changes.push(Change::Voxels(write, raw));
+        self
+    }
+
+    /// Tears down the building blocks in the box of `size` voxels from
+    /// `min`: their voxels turn to air, and the ground stays. The game's
+    /// `BuildingTearDownEvent` tells its listeners.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::VoxelPos;
+    ///
+    /// fn clear(world: enshwick::world::World, corner: VoxelPos) -> bool {
+    ///     world.transaction().erase_block(corner, [8, 8, 8]).commit().is_ok()
+    /// }
+    /// ```
+    pub fn erase_block(mut self, min: VoxelPos, size: [u32; 3]) -> Self {
+        self.changes.push(Change::Erase(VoxelRegion {
+            header: Header::of::<VoxelRegion>(),
+            min: min.to_array(),
+            size,
+        }));
+        self
+    }
+
+    /// Places a building block as a player's building tool does: the
+    /// `VoxelBlueprintItem` of `shape` in the building material `material`
+    /// places, centred on `at`'s position and turned by its rotation, which
+    /// the game keeps in quarter turns. The game's `BuildingPlaceEvent`
+    /// tells its listeners. It takes no cost from anyone.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ItemId;
+    /// use enshwick::world::{Transform, World};
+    ///
+    /// fn pillar(world: World, shape: ItemId, stone: ItemId, at: [f64; 3]) -> bool {
+    ///     let at = Transform { position: at, rotation: [0.0, 0.0, 0.0, 1.0] };
+    ///     world.transaction().place_block(shape, stone, at).commit().is_ok()
+    /// }
+    /// ```
+    pub fn place_block(mut self, shape: ItemId, material: ItemId, at: Transform) -> Self {
+        self.changes.push(Change::Block(BlockPlace {
+            header: Header::of::<BlockPlace>(),
+            shape: shape.0,
+            material: material.0,
+            position: at.position,
+            rotation: at.rotation,
+        }));
         self
     }
 
@@ -212,7 +343,7 @@ impl Transaction {
     /// ```
     #[must_use]
     pub fn len(&self) -> usize {
-        self.terrain.len()
+        self.changes.len()
     }
 
     /// Whether it holds no change yet.
@@ -222,7 +353,7 @@ impl Transaction {
     /// See [`Transaction::len`].
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.terrain.is_empty()
+        self.changes.is_empty()
     }
 
     /// Hands the changes to the loader, which writes them at the server's
@@ -242,23 +373,21 @@ impl Transaction {
     ///
     /// See [`Transaction`].
     pub fn commit(self) -> Result<TransactionId, WorldError> {
-        let ops: Vec<TransactionOp> = self
-            .terrain
-            .iter()
-            .map(|edit| TransactionOp {
-                kind: TransactionOp::TERRAIN,
-                reserved: 0,
-                data: (&raw const *edit).cast(),
-            })
-            .collect();
+        let ops: Vec<TransactionOp> = self.changes.iter().map(Change::op).collect();
         let count = u32::try_from(ops.len()).map_err(|_| WorldError::Refused)?;
         let mut id = 0u64;
-        let status = (self.host.api().transaction_commit)(
-            self.host.handle(),
-            ops.as_ptr(),
-            count,
-            &raw mut id,
-        );
+        let api = self.host.api();
+        let status = if self.actor == 0 {
+            (api.transaction_commit)(self.host.handle(), ops.as_ptr(), count, &raw mut id)
+        } else {
+            (api.transaction_commit_for)(
+                self.host.handle(),
+                self.actor,
+                ops.as_ptr(),
+                count,
+                &raw mut id,
+            )
+        };
         WorldError::from_status(status).map(|()| TransactionId(id))
     }
 }
@@ -272,7 +401,31 @@ impl World {
     pub fn transaction(self) -> Transaction {
         Transaction {
             host: self.0.host,
-            terrain: Vec::new(),
+            changes: Vec::new(),
+            actor: 0,
+        }
+    }
+
+    /// Starts a [`Transaction`] for `player`: before it writes anything,
+    /// the loader checks that the server lets the player edit the box of
+    /// every change, as [`World::can_build`] does, and a refusal fails it
+    /// with [`TransactionStatus::NotAllowed`]. Building events name the
+    /// player as the owner.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::VoxelPos;
+    /// use enshwick::world::{Player, World};
+    ///
+    /// fn clear_for(world: World, player: &Player, corner: VoxelPos) -> bool {
+    ///     world.transaction_for(player).erase_block(corner, [8, 8, 8]).commit().is_ok()
+    /// }
+    /// ```
+    pub fn transaction_for(self, player: &Player) -> Transaction {
+        Transaction {
+            actor: player.entity.0,
+            ..self.transaction()
         }
     }
 
@@ -319,6 +472,8 @@ impl World {
             ops: 0,
             applied: 0,
             bricks: 0,
+            refusal: 0,
+            reserved: 0,
         };
         let status = (host.api().transaction_status)(host.handle(), id.0, &raw mut info);
         status.is_ok().then(|| TransactionStatus::from_info(&info))

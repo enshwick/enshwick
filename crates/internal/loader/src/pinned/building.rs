@@ -22,3 +22,5 @@ pub(crate) const ZONE_ENTRY_SIZE: Constant = Constant::new("building.zone_entry_
 pub(crate) const ZONE_LIST_COUNT: Constant = Constant::new("building.zone_list_count");
 pub(crate) const ZONE_LIST_ENTRIES: Constant = Constant::new("building.zone_list_entries");
 pub(crate) const ZONE_TOUCHES: Symbol = Symbol::new("building.zone_touches");
+pub(crate) const BLOCK_BOX: Symbol = Symbol::new("building.block_box");
+pub(crate) const BLUEPRINT_LOOKUP: Symbol = Symbol::new("building.blueprint_lookup");

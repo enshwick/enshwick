@@ -139,6 +139,7 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 | `Undoing` | its undo is queued or written in part |
 | `Undone` | undone, or dropped before it wrote anything |
 | `Failed(why)` | stopped at an edit it could not write or read back; what it wrote stays and can be undone |
+| `NotAllowed(why)` | the server refused the player it acts for, before it wrote anything |
 | `Expired` | its undo data was dropped; it can no longer be undone |
 | `UndoRefused(why)` | the last undo stopped, keeping what it put back; ask again later |
 
@@ -174,6 +175,66 @@ bricks than the cap; a commit, or an undo, while queued work holds the
 cap is refused. The loader remembers the newest 4,096 transactions; the status of
 an older one is `None`. When the world ends, queued work fails with
 `Missing` and written transactions turn `Expired`.
+
+### Blocks and voxels
+
+A transaction also writes voxels and building blocks, with the same undo:
+
+| Call | What it does |
+| --- | --- |
+| `write_voxels(&block)` | writes a `VoxelBox` over its box: air, ground and building voxels alike, each with its fill |
+| `erase_block(min, size)` | tears down the building voxels of a box; the ground stays |
+| `place_block(shape, material, at)` | places a building block as a player's building tool does |
+
+```rust
+use enshwick::ItemId;
+use enshwick::voxels::{VoxelPos, Voxels};
+use enshwick::world::{Player, Transform, World};
+
+fn copy_up(world: World, voxels: Voxels, from: VoxelPos) -> bool {
+    let Ok(block) = voxels.read(from, [16, 16, 16]) else {
+        return false;
+    };
+    let [x, y, z] = from.to_array();
+    let copy = block.moved_to(VoxelPos::new(x, y + 32, z));
+    world.transaction().write_voxels(&copy).commit().is_ok()
+}
+
+fn wall_for(world: World, player: &Player, shape: ItemId, stone: ItemId, at: [f64; 3]) -> bool {
+    let [x, y, z] = at;
+    (0..4)
+        .fold(world.transaction_for(player), |wall, step| {
+            let at = Transform { position: [x + 2.0 * f64::from(step), y, z], rotation: [0.0, 0.0, 0.0, 1.0] };
+            wall.place_block(shape, stone, at)
+        })
+        .commit()
+        .is_ok()
+}
+```
+
+`VoxelBox::new` builds a box of voxels, `set` changes one, and `moved_to`
+gives the same voxels at another corner, so a box read in one place pastes
+somewhere else. A voxel's kind must be the one its material names.
+
+`place_block` takes the shape's item, which has a `VoxelBlueprintItem`,
+and the material's item, whose `ChangeVoxelData` places a building
+material; anything else is refused at commit. The block is centred on the
+transform's position, and its rotation is kept in quarter turns, as the
+game keeps it. It overwrites whatever lies in its box and takes no cost
+from anyone. `place_block` raises the game's `BuildingPlaceEvent` and
+`erase_block` its `BuildingTearDownEvent`, so the game's listeners and
+other mods see the change. `write_voxels` raises no event.
+
+### For a player
+
+`world.transaction_for(&player)` starts a transaction for a player. Before
+it writes anything, the loader checks that the server lets the player edit
+the box of every change, as `world.can_build` does. A refusal fails the
+transaction with `NotAllowed(why)`, and nothing is written. The building
+events name the player as the owner. A commit made on the game thread at a
+quiet moment checks at once and is refused; one made elsewhere is checked
+at its first step. A transaction from `world.transaction()` acts for the
+mod itself: it checks no rights, and its events name no owner.
 
 ## Reading voxels
 

@@ -53,6 +53,8 @@ ids! {
     BUILDING_PLACE_EVENT = "building_place_event";
     BUILDING_PLACE_EVENT_OWNER_ID = "building_place_event.owner_id";
     BUILDING_PLACE_EVENT_POSITION = "building_place_event.position";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_PLACE_EVENT_ORIENTATION = "building_place_event.orientation";
     BUILDING_PLACE_EVENT_VOLUME_MIN = "building_place_event.volume_min";
     BUILDING_PLACE_EVENT_VOLUME_MAX = "building_place_event.volume_max";
     BUILDING_PLACE_EVENT_MATERIAL = "building_place_event.material";
@@ -60,6 +62,8 @@ ids! {
     BUILDING_TEAR_DOWN_EVENT = "building_tear_down_event";
     BUILDING_TEAR_DOWN_EVENT_OWNER_ID = "building_tear_down_event.owner_id";
     BUILDING_TEAR_DOWN_EVENT_POSITION = "building_tear_down_event.position";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_TEAR_DOWN_EVENT_ORIENTATION = "building_tear_down_event.orientation";
     BUILDING_TEAR_DOWN_EVENT_VOLUME_MIN = "building_tear_down_event.volume_min";
     BUILDING_TEAR_DOWN_EVENT_VOLUME_MAX = "building_tear_down_event.volume_max";
     BUILDING_TEAR_DOWN_EVENT_MATERIAL = "building_tear_down_event.material";
@@ -116,6 +120,10 @@ ids! {
     ITEM_INFO_UI_VALUES = "item_info.ui_values";
     ITEM_INFO_ICON_IMAGE = "item_info.icon_image";
     ITEM_INFO_PLACED_ENTITY = "item_info.placed_entity";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_BUILDING_VOXEL = "item_info.building_voxel";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_PLACE_VOXEL_MATERIAL_ID = "item_info.place_voxel_material_id";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_EQUIPMENT_SLOT = "item_info.equipment_slot";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]

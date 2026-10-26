@@ -20,6 +20,16 @@ Each entry names the pull request that made the change.
 - `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
   edits and transactions past the world's edge or above 1,024 metres are
   refused, where the game would read air (#548).
+- `Transaction::write_voxels`, `erase_block` and `place_block` write voxels,
+  tear down building voxels and place building blocks inside a
+  transaction, with the same undo; blocks and tear-downs raise the game's
+  `BuildingPlaceEvent` and `BuildingTearDownEvent`. `VoxelBox::new`,
+  `set` and `moved_to` build boxes to write (#PR).
+- `World::transaction_for` acts for a player: the loader checks the
+  player's rights for every change before it writes, and a refusal shows
+  as `TransactionStatus::NotAllowed` (#PR).
+- `ItemId` names an item by the game's id, and `world::Transform` a
+  position and rotation (#PR).
 
 ### Changed
 

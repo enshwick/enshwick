@@ -282,8 +282,7 @@ impl Voxel {
         Self::new(material, raw.fill)
     }
 
-    /// The voxel as the loader writes it.
-    #[cfg(any(test, feature = "test"))]
+    /// The voxel as the loader writes it, and reads it from a mod.
     pub(crate) const fn to_abi(self) -> abi::Voxel {
         let (kind, material) = match self.material {
             VoxelMaterial::Air => (abi::Voxel::AIR, 0),
@@ -355,6 +354,72 @@ impl VoxelBox {
     /// ```
     #[must_use]
     pub fn get(&self, at: VoxelPos) -> Option<Voxel> {
+        self.voxels.get(self.index(at)?).copied()
+    }
+
+    /// Sets the voxel at `at`, a place in the world; whether `at` lies in
+    /// the box.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
+    ///
+    /// fn hollow(block: &mut VoxelBox) {
+    ///     let [x, y, z] = block.min().to_array();
+    ///     block.set(VoxelPos::new(x + 1, y + 1, z + 1), Voxel::new(VoxelMaterial::Air, 0));
+    /// }
+    /// ```
+    pub fn set(&mut self, at: VoxelPos, voxel: Voxel) -> bool {
+        let Some(slot) = self.index(at).and_then(|index| self.voxels.get_mut(index)) else {
+            return false;
+        };
+        *slot = voxel;
+        true
+    }
+
+    /// A box of `size` voxels from `min` holding `voxels`, x fastest, then
+    /// y, then z, to write with
+    /// [`Transaction::write_voxels`](crate::world::Transaction::write_voxels);
+    /// `None` for an empty box or `voxels` that do not fill it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
+    ///
+    /// let stone = Voxel::new(VoxelMaterial::Building(0x83), 255);
+    /// let pillar = VoxelBox::new(VoxelPos::new(200, 80, 200), [1, 4, 1], vec![stone; 4]);
+    /// assert!(pillar.is_some());
+    /// ```
+    #[must_use]
+    pub fn new(min: VoxelPos, size: [u32; 3], voxels: Vec<Voxel>) -> Option<Self> {
+        let count = size
+            .iter()
+            .try_fold(1usize, |count, &axis| count.checked_mul(axis as usize))?;
+        (count > 0 && count == voxels.len()).then_some(Self { min, size, voxels })
+    }
+
+    /// The same voxels with the box's lowest corner at `min`, to write
+    /// what was read in one place somewhere else.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{VoxelBox, VoxelPos};
+    ///
+    /// fn copy_up(block: &VoxelBox) -> VoxelBox {
+    ///     let [x, y, z] = block.min().to_array();
+    ///     block.clone().moved_to(VoxelPos::new(x, y + 20, z))
+    /// }
+    /// ```
+    #[must_use]
+    pub fn moved_to(self, min: VoxelPos) -> Self {
+        Self { min, ..self }
+    }
+
+    /// The index of `at` in the voxels; `None` outside the box.
+    fn index(&self, at: VoxelPos) -> Option<usize> {
         let mut index = 0usize;
         for axis in (0..3).rev() {
             let offset = at.to_array()[axis].checked_sub(self.min.to_array()[axis])?;
@@ -363,7 +428,7 @@ impl VoxelBox {
             }
             index = index * self.size[axis] as usize + offset as usize;
         }
-        self.voxels.get(index).copied()
+        Some(index)
     }
 
     /// Every voxel, x fastest, then y, then z.

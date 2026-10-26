@@ -8,5 +8,6 @@ pub(crate) mod inventory;
 pub(crate) mod mods;
 pub(crate) mod net;
 pub(crate) mod services;
+pub(crate) mod transactions;
 pub(crate) mod ui;
 pub(crate) mod world;

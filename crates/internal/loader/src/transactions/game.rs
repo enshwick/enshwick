@@ -1,13 +1,18 @@
-//! The game's side of transactions: brick reads, terrain edits and undo writes.
+//! The game's side of transactions: brick reads, terrain edits, blocks, rights and undo writes.
 
-use enshwick::abi::{Status, TerrainEdit};
+mod blocks;
 
+use enshwick::abi::{BuildRights, Header, Status, TerrainEdit};
+
+use super::block::Block;
 use super::cover::{BRICK, BRICK_VOXELS, Brick};
 use super::ledger::{Image, Voxels};
+use super::paste::Erase;
 use super::record::UndoRecord;
 use crate::host::Loader;
 use crate::pinned;
 use crate::voxels::ReadBox;
+pub(crate) use blocks::resolve;
 
 /// The editor's undo write: puts the voxels of `record`'s box back through
 /// the same write as an edit, which marks them for clients and the save;
@@ -38,6 +43,8 @@ pub(crate) struct Game<'a> {
     editor: *mut u8,
     alloc: *mut u8,
     undo_apply: UndoApplyFn,
+    write_block: Option<blocks::WriteBlockFn>,
+    events: blocks::Events,
 }
 
 impl<'a> Game<'a> {
@@ -57,11 +64,47 @@ impl<'a> Game<'a> {
             // game function with the `UndoApplyFn` signature on this build,
             // in the image, which stays mapped.
             undo_apply: unsafe { core::mem::transmute::<usize, UndoApplyFn>(function) },
+            write_block: loader
+                .address(pinned::voxel::WRITE_BLOCK)
+                .and_then(|address| usize::try_from(address).ok())
+                // SAFETY: the table's `voxel.write_block` is the address of
+                // the game function with the `WriteBlockFn` signature on this
+                // build, in the image, which stays mapped.
+                .map(|address| unsafe {
+                    core::mem::transmute::<usize, blocks::WriteBlockFn>(address)
+                }),
+            events: blocks::Events::new(loader),
         })
     }
 }
 
 impl Voxels for Game<'_> {
+    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
+        let check = BuildRights {
+            header: Header::of::<BuildRights>(),
+            player: actor,
+            refusal: BuildRights::ALLOWED,
+            min,
+            max,
+        };
+        crate::rights::check(self.loader, &check)
+    }
+
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status> {
+        let write = self.write_block.ok_or(Status::MISSING)?;
+        // SAFETY: `write` is the table's `voxel.write_block`; `editor` and
+        // `alloc` are the server's live voxel editor and allocator, checked
+        // by `crate::terrain::editor_and_allocator` when this step began on
+        // the game thread at a quiet moment.
+        unsafe { blocks::write(write, self.editor, self.alloc, block) };
+        self.events.placed(self.loader, block, actor);
+        Ok(())
+    }
+
+    fn erased(&mut self, erase: &Erase, actor: u32) {
+        self.events.torn_down(self.loader, erase.region(), actor);
+    }
+
     fn extent(&mut self) -> Result<crate::voxels::WorldExtent, Status> {
         crate::voxels::extent(self.loader)
     }
@@ -83,7 +126,7 @@ impl Voxels for Game<'_> {
         crate::terrain::edit(self.loader, edit).map(drop)
     }
 
-    fn restore(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
         let record = UndoRecord::brick(brick, image);
         // SAFETY: `undo_apply` is the table's `voxel.undo_apply`, called on
         // the game thread at a quiet moment with the server's live, non-zero

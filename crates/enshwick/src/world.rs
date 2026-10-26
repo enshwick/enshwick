@@ -14,6 +14,7 @@ mod players;
 mod rename;
 mod stats;
 mod transactions;
+mod transform;
 mod vitals;
 
 use core::ffi::c_void;
@@ -30,6 +31,7 @@ pub use geometry::near;
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
+pub use transform::Transform;
 
 /// A reflected ECS component type, resolved once at init.
 ///
