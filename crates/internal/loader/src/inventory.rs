@@ -469,12 +469,13 @@ fn build(loader: &Loader) -> Option<Executor> {
     checked(loader, executor, txn_size)
 }
 
+/// The symbols whose code the inventory hook relies on.
+const CHECKED: [Symbol; 2] = [pinned::inventory::ACTIONS_ROW, pinned::inventory::VIEW_FILL];
+
 /// `executor` with its scratch block, when the game code at the hook reads
 /// as the build table says.
 fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Executor> {
-    if !loader.code_holds(pinned::inventory::ACTIONS_ROW)
-        || !loader.code_holds(pinned::inventory::VIEW_FILL)
-    {
+    if !CHECKED.iter().all(|&symbol| loader.code_holds(symbol)) {
         crate::log!(
             WARN,
             "inventories off: the inventory system's code differs from the build table"
@@ -1211,6 +1212,21 @@ mod tests {
         assert!(seen[1..].iter().all(|n| n.load(Ordering::Relaxed) == 1));
         assert!(!queue.pending.load(Ordering::Relaxed));
         assert!(queue.claim().is_none());
+    }
+
+    #[test]
+    fn every_table_offers_a_check_for_the_code_the_hook_relies_on() {
+        for table in crate::builds::load() {
+            let resolved = table.resolve();
+            for symbol in CHECKED {
+                let bytes = format!("{symbol}.bytes");
+                assert!(
+                    resolved.head(symbol.id()).is_some() || resolved.constant(&bytes).is_some(),
+                    "{}: {symbol}",
+                    table.name()
+                );
+            }
+        }
     }
 
     #[test]
