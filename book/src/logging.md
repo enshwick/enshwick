@@ -44,6 +44,7 @@ The loader writes to `logs/enshwick/` beside the game:
 | `mods/<id>.log` | one mod's lines                                     |
 | `status.log`    | the latest [status summary](#status-summary)        |
 | `crash.log`     | each crash, blamed on a mod, the loader or the game |
+| `report.md`     | the report a player attaches to an issue            |
 
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. At start the
 files of the two sessions before are kept as `<name>.1.log` (the last) and
@@ -52,6 +53,13 @@ flushes every line, so a hook never waits on the disk and the last lines
 before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line
 written says how many were dropped.
+
+`report.md` gathers what an issue needs in one file: the loader version and
+the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, the
+status summary, the DLLs in `mods/` and `mods/chain/` with their sizes, and
+the latest 200 warnings and errors. The loader writes it once its log opens,
+again when it cannot serve the game, and with every status summary. The
+user's profile folder shows as `%USERPROFILE%`.
 
 ### Reading the log from the console
 

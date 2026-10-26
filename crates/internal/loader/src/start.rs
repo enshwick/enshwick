@@ -42,6 +42,12 @@ const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+/// Writes the player's report once the loader knows it cannot serve the game.
+fn no_game() -> Option<game::Game> {
+    crate::report::write(None);
+    None
+}
+
 /// Runs once, on the stub's thread.
 /// Seals what mods asked for and links the loader's own features; the
 /// client links the server's too, for the games it hosts.
@@ -85,7 +91,7 @@ pub(crate) fn start(
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
-    let Some(game) = game(&data_dir) else {
+    let Some(game) = game(&data_dir).or_else(no_game) else {
         return;
     };
     let (libraries, candidates) = libraries(&mods_dir);

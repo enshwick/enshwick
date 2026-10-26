@@ -12,6 +12,12 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `mods/<id>.log` | One mod's lines                                       |
 | `status.log`    | The latest status summary                             |
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
+| `report.md`     | One report to attach when you ask for help            |
+
+To ask for help, attach `report.md` to an issue. It holds the versions, your
+system, the status summary, the files in `mods/` and the latest warnings and
+errors, with your user name taken out of paths. Read it
+before you share it.
 
 `all.log`, `loader.log` and the mod logs start empty each session; the two
 sessions before stay as `all.1.log` and `all.2.log` (and so on for each

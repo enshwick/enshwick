@@ -20,6 +20,8 @@ keeps lines up to `error`, `warn`, `info` (the default) or `debug`, and
 watches `mod-configs/` and tells a mod when its file changes; its own file
 applies at once.
 
+`logs/enshwick/report.md` is the one file a player attaches to an issue:
+versions, system, status, mod files, the latest warnings and errors.
 `logs/enshwick/status.log` holds the latest status summary: the mods and
 whether they run, the mods turned off and why, what mods serve and patch, and
 with `diagnostics = true` the calls of every hooked function

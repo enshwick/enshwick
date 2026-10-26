@@ -99,6 +99,11 @@ pub mod recipes;
 #[cfg(windows)]
 mod reload;
 pub mod remote;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "written from the start, which runs on Windows")
+)]
+mod report;
 pub mod resolve;
 #[cfg(windows)]
 mod saves;

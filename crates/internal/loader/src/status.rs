@@ -189,9 +189,11 @@ fn write(loader: &Loader) {
         return;
     };
     let path = game_dir.join("logs").join(LOADER_ID).join("status.log");
-    if let Err(e) = std::fs::write(&path, summary(loader).render()) {
+    let text = summary(loader).render();
+    if let Err(e) = std::fs::write(&path, &text) {
         crate::log!(WARN, "status summary not written: {e}");
     }
+    crate::report::write(Some(text));
 }
 
 /// Starts the writer on a thread of its own.
