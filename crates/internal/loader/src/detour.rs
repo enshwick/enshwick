@@ -353,6 +353,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     let mut protections = Vec::with_capacity(writes.len());
     let mut threads = Threads::new();
     let mut tries = 0;
+    let checked = !moved.is_empty() || !patched.is_empty();
     let (unsettled, blind) = loop {
         if !threads.suspend() {
             threads.resume();
@@ -360,7 +361,12 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         }
         // A thread whose context Windows does not hand over can be neither
         // checked nor moved: the writes wait for it, then give up.
-        let blind = threads.iter().any(|thread| control(thread).is_none());
+        let blind = checked
+            .then(|| threads.iter().find(|&thread| control(thread).is_none()))
+            .flatten()
+            // SAFETY: `GetThreadId` only reads the id of a thread handle
+            // `suspend` opened with `THREAD_QUERY_LIMITED_INFORMATION`.
+            .map(|thread| unsafe { GetThreadId(thread) });
         let busy = !patched.is_empty()
             && threads
                 .iter()
@@ -368,19 +374,21 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
                 // process, `iter` yields each of them, and they stay suspended
                 // until `resume`.
                 .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
-        if !(busy || blind) || tries == SETTLE_TRIES {
+        if !(busy || blind.is_some()) || tries == SETTLE_TRIES {
             break (busy, blind);
         }
         threads.resume();
         tries += 1;
         std::thread::sleep(SETTLE_WAIT);
     };
-    if blind {
+    if let Some(thread) = blind {
         threads.resume();
         crate::log::write(
             Level::WARN,
             LOADER_ID,
-            "hooks not written: a thread's context could not be read to move it out of the code",
+            &format!(
+                "hooks not written: the context of thread {thread} could not be read to move it out of the code"
+            ),
         );
         return false;
     }
