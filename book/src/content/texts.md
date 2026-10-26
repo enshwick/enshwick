@@ -76,6 +76,26 @@ Texts are registered during `init` only; the loader refuses them later.
 Under the hood each text goes through
 [`add_text`](resources.md#one-text-for-one-tag).
 
+## The mod's own name
+
+The key `mod.name` names the mod and `mod.description` says what it does, in
+every language of the file. The Mods screen, the join check's notes, the
+console and the status summary show them in the player's language, and the
+manifest's `name` and `description` where the file lacks them:
+
+```toml
+[en]
+"mod.name" = "Better Altars"
+"mod.description" = "More altars per Flame level."
+
+[uk]
+"mod.name" = "Кращі олтарі"
+"mod.description" = "Більше олтарів на рівень Полум'я."
+```
+
+A server tells joining players the manifest's name of each of its mods, since
+it cannot know their languages.
+
 ## Texts the mod uses itself
 
 The returned

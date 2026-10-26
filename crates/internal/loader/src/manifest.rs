@@ -243,6 +243,34 @@ pub struct Meta {
 }
 
 impl Meta {
+    /// The name players read in `language`: the mod's text
+    /// [`MOD_NAME`](enshwick::i18n::MOD_NAME) in `texts`, else the manifest's
+    /// name; empty when neither names the mod.
+    #[must_use]
+    pub fn name_in(
+        &self,
+        texts: Option<&enshwick::i18n::Texts>,
+        language: enshwick::i18n::Language,
+    ) -> String {
+        texts
+            .and_then(|t| t.get(enshwick::i18n::MOD_NAME, language))
+            .map_or_else(|| self.name.clone(), str::to_owned)
+    }
+
+    /// What the mod does in `language`: the mod's text
+    /// [`MOD_DESCRIPTION`](enshwick::i18n::MOD_DESCRIPTION) in `texts`, else
+    /// the manifest's description.
+    #[must_use]
+    pub fn description_in(
+        &self,
+        texts: Option<&enshwick::i18n::Texts>,
+        language: enshwick::i18n::Language,
+    ) -> String {
+        texts
+            .and_then(|t| t.get(enshwick::i18n::MOD_DESCRIPTION, language))
+            .map_or_else(|| self.description.clone(), str::to_owned)
+    }
+
     /// The name players read, or the id when the manifest names none.
     #[must_use]
     pub fn label(&self, id: &str) -> String {
@@ -622,5 +650,29 @@ mod tests {
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         assert!(unsafe { parse(&older) }.is_ok());
+    }
+
+    #[test]
+    fn a_mod_s_texts_name_it_in_the_player_s_language() {
+        use enshwick::i18n::{Language, Texts};
+        let meta = Meta {
+            name: "Better Altars".to_owned(),
+            description: "More altars.".to_owned(),
+            ..Meta::default()
+        };
+        let texts = Texts::parse(
+            "[en]\n\"mod.name\" = \"Better Altars\"\n[uk]\n\"mod.name\" = \"Кращі олтарі\"\n\"mod.description\" = \"Більше олтарів.\"\n",
+        )
+        .unwrap();
+        assert_eq!(meta.name_in(Some(&texts), Language::UK_UA), "Кращі олтарі");
+        assert_eq!(
+            meta.description_in(Some(&texts), Language::UK_UA),
+            "Більше олтарів."
+        );
+        assert_eq!(
+            meta.description_in(Some(&texts), Language::FALLBACK),
+            "More altars."
+        );
+        assert_eq!(meta.name_in(None, Language::UK_UA), "Better Altars");
     }
 }

@@ -9,9 +9,9 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+use crate::registry::Registry;
 
 mod actions;
 mod demo;
@@ -21,8 +21,8 @@ mod map;
 mod mods;
 
 use core::cell::{Cell, RefCell};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 
@@ -170,14 +170,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 // uses this slot only as the `next` of `detour`, its link on that function.
 static NEXT: Next<PopupFn> = unsafe { Next::new() };
 static ENGINE: OnceLock<Engine> = OnceLock::new();
-/// Frame callbacks while mods initialise.
-static PENDING: Mutex<Vec<Frame>> = Mutex::new(Vec::new());
-/// The frame callbacks once sealed.
-static FRAMES: OnceLock<Box<[Frame]>> = OnceLock::new();
-/// HUD callbacks while mods initialise.
-static PENDING_HUD: Mutex<Vec<Frame>> = Mutex::new(Vec::new());
-/// The HUD callbacks once sealed.
-static HUDS: OnceLock<Box<[Frame]>> = OnceLock::new();
+/// Frame callbacks: open while mods initialise, sealed after.
+static FRAMES: Registry<Frame> = Registry::new();
+/// HUD callbacks: open while mods initialise, sealed after.
+static HUDS: Registry<Frame> = Registry::new();
 /// Frame and HUD callbacks of mods reloaded after sealing, swapped whole.
 static LATE_FRAMES: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
 static LATE_HUDS: ArcSwapOption<Vec<Frame>> = ArcSwapOption::const_empty();
@@ -330,15 +326,16 @@ pub(crate) fn register_frame(
     if loader.side != Side::CLIENT {
         return Status::MISSING;
     }
-    if FRAMES.get().is_some() {
+    if FRAMES.is_sealed() {
         if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING.relock().push(Frame::new(owner, callback, user));
-    Status::OK
+    FRAMES
+        .add(Frame::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Registers a mod's HUD callback; client only, during init.
@@ -351,15 +348,15 @@ pub(crate) fn register_hud(
     if loader.side != Side::CLIENT {
         return Status::MISSING;
     }
-    if HUDS.get().is_some() {
+    if HUDS.is_sealed() {
         if !crate::reload::reinitialising(owner.get()) {
             return Status::TOO_LATE;
         }
         add_late(&LATE_HUDS, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING_HUD.relock().push(Frame::new(owner, callback, user));
-    Status::OK
+    HUDS.add(Frame::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Queues a mod's dialog; client only.
@@ -408,12 +405,8 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 /// functions on this build, the interface stays off: mods draw nothing and
 /// dialogs show as system message boxes.
 pub(crate) fn link(loader: &'static Loader) {
-    let frames = crate::host::take(&PENDING);
-    let count = frames.len();
-    let _sealed = FRAMES.set(frames.into_boxed_slice());
-    let huds = crate::host::take(&PENDING_HUD);
-    let hud_count = huds.len();
-    let _sealed = HUDS.set(huds.into_boxed_slice());
+    let count = FRAMES.seal().len();
+    let hud_count = HUDS.seal().len();
     if loader.side != Side::CLIENT {
         return;
     }
@@ -581,7 +574,7 @@ fn anchor_align(anchor: u32) -> (u16, u16) {
 }
 
 fn hud(engine: &Engine, context: usize) {
-    let Some(huds) = HUDS.get() else {
+    let Some(huds) = HUDS.sealed() else {
         return;
     };
     HUD_ITEMS.with_borrow_mut(Vec::clear);
@@ -714,7 +707,7 @@ fn screen(state: u8) -> u32 {
 }
 
 fn frames(engine: &Engine, context: usize) {
-    let Some(frames) = FRAMES.get() else {
+    let Some(frames) = FRAMES.sealed() else {
         return;
     };
     let screen = screen(engine.app_state(context));

@@ -34,16 +34,13 @@ mod tools;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
 
-/// Mods whose data folder held the command file before the loader read it,
-/// newest first; their file is read too while no running mod has that id.
-pub const FORMER_HOMES: &[&str] = &["enshwick.admin-tools", "admin-tools", "dev-tools"];
-
 /// The command files a server reads in `data_dir`: the loader's own, then
-/// each former home's that no running mod (`running`) still owns.
+/// the one of each mod whose work the loader took over
+/// ([`RETIRED`](crate::resolve::RETIRED)), where scripts may still write.
 #[must_use]
-pub fn command_files(data_dir: &Path, running: impl Fn(&str) -> bool) -> Vec<PathBuf> {
+pub fn command_files(data_dir: &Path) -> Vec<PathBuf> {
     std::iter::once(LOADER_ID)
-        .chain(FORMER_HOMES.iter().copied().filter(|id| !running(id)))
+        .chain(crate::resolve::RETIRED.iter().copied())
         .map(|id| data_dir.join(id).join(file::FILE))
         .collect()
 }
@@ -339,15 +336,13 @@ mod tests {
     }
 
     #[test]
-    fn a_server_reads_its_own_command_file_and_each_former_home_no_mod_runs() {
+    fn a_server_reads_its_own_command_file_and_each_retired_mod_s() {
         let data = Path::new("mod-data");
-        let files = command_files(data, |id| id == FORMER_HOMES[0]);
+        let files = command_files(data);
         assert_eq!(files[0], data.join(LOADER_ID).join(file::FILE));
-        assert_eq!(files.len(), FORMER_HOMES.len());
-        assert!(!files.contains(&data.join(FORMER_HOMES[0]).join(file::FILE)));
-        let all = command_files(data, |_| false);
-        for home in FORMER_HOMES {
-            assert!(all.contains(&data.join(home).join(file::FILE)));
+        assert_eq!(files.len(), 1 + crate::resolve::RETIRED.len());
+        for id in crate::resolve::RETIRED {
+            assert!(files.contains(&data.join(id).join(file::FILE)));
         }
     }
 

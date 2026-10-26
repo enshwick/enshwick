@@ -57,11 +57,11 @@ use services::{
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
     actions, chat, component, component_write, destroy, emit, entities, entity_template,
-    event_types, forget_game_settings, game_event, game_settings, hosting, keep_game_settings,
-    notify, player, players, rename_filter, run_console, save_world, server_world,
-    set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
-    teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, weather_at,
-    weather_fronts, world_key,
+    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
+    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
+    weather_at, weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -113,6 +113,9 @@ pub(crate) struct State {
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
+    /// The mod's features as it last reported them: name and, when off,
+    /// the reason.
+    pub(crate) features: Vec<(String, Option<String>)>,
     /// The lines the mod ran on the console, in order.
     pub(crate) console: Vec<String>,
     /// The entities the mod asked to destroy, in order.
@@ -294,6 +297,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         labels: Vec::new(),
         rename_filters: Vec::new(),
         status_sources: Vec::new(),
+        features: Vec::new(),
         console: Vec::new(),
         destroyed: Vec::new(),
         saves: 0,
@@ -569,6 +573,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     actions,
     event_types,
     recipe_kind,
+    feature,
     rate,
     set_rate,
 };

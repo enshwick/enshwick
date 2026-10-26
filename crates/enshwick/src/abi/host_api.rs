@@ -1041,6 +1041,13 @@ pub struct HostApi {
     /// recipe registry is first built, and while the loader serves no
     /// resource. Any thread. Since minor 73.
     pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
+    /// Reports whether the mod's feature `name` runs on this game build:
+    /// off for the reason `off`, or on when `off` is empty. The loader
+    /// logs it and shows it in the status summary and on the Mods screen; a
+    /// later report of the same name replaces the earlier one.
+    /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
+    /// the call. Any thread. Since minor 74.
+    pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
     /// Declares that the calling mod multiplies `rate`, so the loader arms
     /// what the rate needs; its factor is 1 until
     /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
@@ -1049,7 +1056,7 @@ pub struct HostApi {
     /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
     /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
     /// [`Status::FAULTED`] for a mod that is off. Allowed during
-    /// `enshwick_mod_init` only. Since minor 74.
+    /// `enshwick_mod_init` only. Since minor 75.
     pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
     /// Puts `factor` in force as the calling mod's factor for `rate`: the
     /// game uses the product of every declaring mod's factor, held to 0 to
@@ -1057,6 +1064,6 @@ pub struct HostApi {
     /// a factor that is not finite or lies outside 0 to 100, or a rate the
     /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
     /// thread; neither allocates nor locks once
-    /// every mod is initialised. Since minor 74.
+    /// every mod is initialised. Since minor 75.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
 }

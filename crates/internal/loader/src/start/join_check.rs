@@ -22,8 +22,8 @@ pub(super) fn link_join(loader: &Loader) {
     let names = loader
         .mods
         .iter()
-        .filter(|m| !m.meta.name.is_empty())
-        .map(|m| (m.id.clone(), m.meta.name.clone()))
+        .map(|m| (m.id.clone(), m.name()))
+        .filter(|(_, name)| !name.is_empty())
         .collect();
     crate::join::set_names(names);
     crate::lobby::register();
@@ -139,6 +139,7 @@ pub(super) fn names(loader: &Loader) -> Vec<(String, String)> {
     loader
         .mods
         .iter()
+        // The manifest's name: players of any language read the list.
         .filter(|m| m.joins() && !m.meta.name.is_empty())
         .map(|m| (m.id.clone(), m.meta.name.clone()))
         .collect()

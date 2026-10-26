@@ -106,10 +106,11 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             let running = !record.off.load(Ordering::Acquire);
             ModStatus {
                 id: record.id.clone(),
-                name: record.meta.name.clone(),
+                name: record.name(),
                 version: record.version.clone(),
                 credits: record.meta.credits(),
                 notes: record.notes.clone(),
+                features: record.features.relock().clone(),
                 running,
                 lines: if running {
                     lines_of(&sources, ModIndex::new(index))

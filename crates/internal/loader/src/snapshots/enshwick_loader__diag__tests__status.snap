@@ -14,6 +14,8 @@ mods: 1 of 2 running
   Flame Altar Zones (you.lockers) 0.1.4
     by themaiby; MIT
     note: recommends you.lanterns, which is not loaded
+    feature glow off: symbol lantern.glow: missing on this game build
+    feature light on
     3 zones merged
   you.trading-post 0.1.1 (off)
   off in mods/enshwick/mods.toml: you.my-mod

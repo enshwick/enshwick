@@ -6,7 +6,9 @@
 //! whether it runs, why it was turned off, its hooks and their calls. A mod
 //! adds its own counters with [`Load::add_status`]: a closure returning a few
 //! lines, called only when the summary is written, so keeping the numbers
-//! (atomics, say) is the only cost while the game runs.
+//! (atomics, say) is the only cost while the game runs. A mod made of parts
+//! that can fail apart wraps each in [`Load::feature`], so a game build that
+//! lacks one part turns off only that part, and players see which.
 
 use core::ffi::c_void;
 use std::cell::RefCell;
@@ -68,6 +70,40 @@ impl Load<'_> {
             |user| (host.api().status)(host.handle(), run_source::<F>, user),
             "status source",
         )
+    }
+
+    /// Runs `init`, the setup of one optional part of the mod, and reports
+    /// it to the loader by `name`: on, or off with the reason `init` gave.
+    /// The log, the status summary and the Mods screen show it, and the mod
+    /// keeps running either way.
+    ///
+    /// Everything registered before `init` fails stays, so `init` looks up
+    /// what the part needs before it links hooks or adds content.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     if let Some(glow) = load.feature("glow", |load| load.symbol("lantern.glow")) {
+    ///         let _ = glow;
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn feature<T>(
+        &mut self,
+        name: &str,
+        init: impl FnOnce(&mut Self) -> Result<T, Off>,
+    ) -> Option<T> {
+        let outcome = init(self);
+        let reason = outcome.as_ref().err().map(ToString::to_string);
+        let host = self.host();
+        let _status = (host.api().feature)(
+            host.handle(),
+            Str::new(name),
+            Str::new(reason.as_deref().unwrap_or("")),
+        );
+        outcome.ok()
     }
 }
 

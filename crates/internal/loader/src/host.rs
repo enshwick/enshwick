@@ -55,7 +55,7 @@ use entries::services::{
 };
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template,
+    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
     forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
     players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
     set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
@@ -102,6 +102,8 @@ pub(crate) struct ModRecord {
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
     /// Whether it is a content pack, a folder of data the loader runs.
     pub(crate) pack: bool,
+    /// The features it reported on or off, in the order it named them.
+    pub(crate) features: Mutex<Vec<crate::features::Feature>>,
 }
 
 impl ModRecord {
@@ -124,9 +126,29 @@ impl ModRecord {
         self.id == namespace || self.former.iter().any(|f| f == namespace)
     }
 
-    /// The name players read, or the id when the manifest names none.
+    /// The name players read, from the mod's texts in their language, else
+    /// from its manifest; empty when neither names it.
+    pub(crate) fn name(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.name_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
+    }
+
+    /// The name players read, or the id when nothing names the mod.
     pub(crate) fn label(&self) -> String {
-        self.meta.label(&self.id)
+        enshwick::mods::label(&self.name(), &self.id)
+    }
+
+    /// What the mod does, from its texts in the player's language, else
+    /// from its manifest.
+    pub(crate) fn description(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.description_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
     }
 
     /// Whether it takes part in the join check while it runs.
@@ -708,6 +730,7 @@ pub(crate) static API: HostApi = HostApi {
     actions,
     event_types,
     recipe_kind,
+    feature,
     rate,
     set_rate,
 };

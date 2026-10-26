@@ -118,7 +118,10 @@ mod tests {
         }
         files
             .iter()
-            .filter(|p| !p.to_string_lossy().ends_with("_tests.rs"))
+            .filter(|p| {
+                let name = p.to_string_lossy();
+                !name.ends_with("_tests.rs") && !name.ends_with("/tests.rs")
+            })
             .map(|p: &PathBuf| {
                 let text = std::fs::read_to_string(p).unwrap();
                 match text.find("#[cfg(test)]\nmod tests") {
