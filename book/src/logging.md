@@ -172,7 +172,7 @@ time and its four costliest items; the loader's own links count under
 ```text
 per-mod costs over 1m 00s (since start), work per second of time:
   enshwick 0.92 ms/s: hook comfort.base_register 0.39 ms/s in 366110 calls; hook server.post_step 0.18 ms/s in 1456 calls
-  furniture-comfort 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
+  game-rates 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
 ```
 
 The console asks for the five costliest with `enshwick profile`, and starts
