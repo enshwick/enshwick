@@ -241,7 +241,7 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
     // SAFETY: `payload` is non-null, checked by the guard before it, and the
     // game's push handed out `size` writable bytes for the event, `size` being
     // `bytes.len()`; nothing else touches them before the next step.
-    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), payload, bytes.len()) };
+    unsafe { enshwick::raw::write_bytes_at(payload, 0, bytes) };
     // SAFETY: the same `size` bytes of the event; `time_offset + 8` is at
     // most `size`, checked at the top, and the event's reflected `timeStamp`
     // is an `i64`.
@@ -328,12 +328,6 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     // SAFETY: the same record of `size` writable bytes, `size` being
     // `ecs.command_set_data + data.len()`, so the component's bytes fit
     // after its header.
-    unsafe {
-        core::ptr::copy_nonoverlapping(
-            data.as_ptr(),
-            record.wrapping_add(layout.record_data),
-            data.len(),
-        );
-    };
+    unsafe { enshwick::raw::write_bytes_at(record, layout.record_data, &data) };
     Ok(())
 }

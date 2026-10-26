@@ -148,6 +148,43 @@ pub unsafe fn write_ptr_at<T>(base: *mut u8, offset: usize, value: *mut T) {
     }
 }
 
+/// Loads the `u32` at `offset` bytes past `base` as one atomic read, for a
+/// word another game thread may write meanwhile; `None` when it is not
+/// aligned to four bytes, where no atomic read is possible.
+///
+/// # Safety
+///
+/// - `base + offset` is readable for four bytes.
+/// - Any thread that writes those bytes meanwhile writes all four at once.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::raw::read_u32_atomic_at;
+///
+/// let words = [7u32, 9];
+/// // SAFETY: the array holds an aligned u32 at offset 4.
+/// assert_eq!(unsafe { read_u32_atomic_at(words.as_ptr().cast(), 4) }, Some(9));
+/// ```
+#[inline]
+#[must_use]
+pub unsafe fn read_u32_atomic_at(base: *const u8, offset: usize) -> Option<u32> {
+    let at = base.wrapping_add(offset);
+    if !at.addr().is_multiple_of(align_of::<u32>()) {
+        return None;
+    }
+    #[expect(
+        clippy::cast_ptr_alignment,
+        reason = "the address is a multiple of the u32 alignment, checked before"
+    )]
+    let at = at.cast::<u32>();
+    // SAFETY: `at` is aligned, checked before, and readable for four bytes by
+    // the caller's contract; every writer writes the word whole, so an atomic
+    // load observes the word from before or after a write.
+    let word = unsafe { core::sync::atomic::AtomicU32::from_ptr(at.cast_mut()) };
+    Some(word.load(core::sync::atomic::Ordering::Relaxed))
+}
+
 /// Copies `out.len()` bytes at `offset` bytes past `base` into `out`, for a
 /// span of game memory such as a string or a payload; no reference into game
 /// memory is made.

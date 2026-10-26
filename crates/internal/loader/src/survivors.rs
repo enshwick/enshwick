@@ -1183,16 +1183,14 @@ fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
     let Some(data) = ty.and_then(|ty| crate::world::component(loader, pide, ty).ok()) else {
         return [0; 2];
     };
-    if !data.cast::<u32>().is_aligned() {
-        return [0; 2];
-    }
     // SAFETY: `world::component` returned the item's live `NetworkFuel`, two
-    // `u16` that make one four-byte word, aligned by the check before it. Its
-    // one writer, the `fuel_network` system, may run on another task worker
-    // during this spawn (server 399), so the word is loaded atomically: the
-    // meter from before or after that write.
-    let word = unsafe { core::sync::atomic::AtomicU32::from_ptr(data.cast::<u32>().cast_mut()) };
-    let both = word.load(Ordering::Relaxed);
+    // `u16` that make one four-byte word. Its one writer, the `fuel_network`
+    // system, may run on another task worker during this spawn (server 399)
+    // and writes the word whole, so the atomic load gives the meter from
+    // before or after that write.
+    let Some(both) = (unsafe { enshwick::raw::read_u32_atomic_at(data.cast(), 0) }) else {
+        return [0; 2];
+    };
     let [a, b, c, d] = both.to_le_bytes();
     [u16::from_le_bytes([a, b]), u16::from_le_bytes([c, d])]
 }
