@@ -89,6 +89,8 @@ mod mid;
 pub mod migrations;
 pub mod modlist;
 #[cfg(windows)]
+mod module;
+#[cfg(windows)]
 mod net;
 #[cfg(windows)]
 mod notices;

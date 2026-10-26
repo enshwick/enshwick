@@ -8,9 +8,14 @@ and on Windows the MSVC build tools.
 
 ```bash
 bun install                                 # repository tools and the git hooks
+bun run lint:md                             # markdownlint on every document, as the hooks run it
 cargo install --locked cargo-nextest@0.9.149
 cargo nextest run --workspace
 ```
+
+markdownlint runs from `node_modules` at the version `bun.lock` pins. A
+plain `bunx markdownlint-cli2` before `bun install` fetches the newest
+release instead, whose formatter fails to load.
 
 The hooks check formatting, spelling, Markdown and commit messages before a
 commit, and again before a push, with cargo-deny when a manifest changed; none
