@@ -821,3 +821,5 @@ mod tests {
 
 #[cfg(test)]
 mod layout_tests;
+#[cfg(test)]
+mod proofs;
