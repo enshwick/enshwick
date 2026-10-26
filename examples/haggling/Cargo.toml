@@ -1,7 +1,7 @@
 [package]
-name = "enshwick-example-safe-viewers"
+name = "enshwick-example-haggling"
 version = "0.0.0-dev"
-description = "Example: a mod that extends the Safes mod's access rule through its extension point"
+description = "Example: a mod that changes the trading post's prices at its extension point"
 keywords = ["enshrouded", "mod", "example"]
 categories = ["game-development"]
 readme = "../README.md"
