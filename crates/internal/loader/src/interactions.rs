@@ -535,24 +535,45 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
     unsafe { SORT_NEXT.get()(ctx, state) }
 }
 
-thread_local! {
-    /// Filtered copies of the base stock lists, kept for the process: the
-    /// game may read a list it was handed long after, and the same filtered
-    /// list comes back for every later ask.
-    static STOCK: RefCell<rustc_hash::FxHashSet<&'static [u32]>> =
-        RefCell::new(rustc_hash::FxHashSet::default());
+/// Filtered copies of the base stock lists one thread handed out in one
+/// world step, by their ids.
+#[derive(Default)]
+struct Stock {
+    step: u64,
+    lists: rustc_hash::FxHashSet<Box<[u32]>>,
 }
 
-/// `list`, kept for the process on this thread: the same address for the
-/// same ids.
-fn kept_list(list: &[u32]) -> &'static [u32] {
+thread_local! {
+    /// This thread's filtered stock lists of the current step: the same
+    /// list for the same ids within the step. The game's callers walk a list
+    /// before they return, so a new step retires the old step's lists.
+    static STOCK: RefCell<Stock> = RefCell::new(Stock::default());
+}
+
+/// A copy of `list` that stays unchanged at its address for the rest of
+/// this step and [`crate::retire::GRACE`] steps after: its address and
+/// length.
+fn kept_list(list: &[u32]) -> (*const u32, usize) {
+    kept_in_step(list, crate::retire::current())
+}
+
+/// [`kept_list`] in world step `step`.
+fn kept_in_step(list: &[u32], step: u64) -> (*const u32, usize) {
     STOCK.with_borrow_mut(|kept| {
-        if let Some(&found) = kept.get(list) {
-            return found;
+        if kept.step != step {
+            let old = std::mem::take(&mut kept.lists);
+            if !old.is_empty() {
+                crate::retire::retire(old);
+            }
+            kept.step = step;
         }
-        let leaked: &'static [u32] = Box::leak(list.into());
-        kept.insert(leaked);
-        leaked
+        if let Some(found) = kept.lists.get(list) {
+            return (found.as_ptr(), found.len());
+        }
+        let copy: Box<[u32]> = list.into();
+        let at = (copy.as_ptr(), copy.len());
+        kept.lists.insert(copy);
+        at
     })
 }
 
@@ -646,12 +667,13 @@ unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
                 copy.push(id);
             }
         }
-        let kept = kept_list(&copy);
-        found[at] = kept.as_ptr().expose_provenance() as u64;
-        found[at + 1] = kept.len() as u64;
+        let (kept, len) = kept_list(&copy);
+        found[at] = kept.expose_provenance() as u64;
+        found[at + 1] = len as u64;
     }
     // SAFETY: the caller guarantees `lists` is writable and only this thread
-    // writes it; the copies it now names live for the process.
+    // writes it; the copies it now names stay unchanged until the world has
+    // stepped past this caller, which reads them before it returns.
     unsafe { write_at(lists.cast(), 0, found) };
 }
 
@@ -795,12 +817,28 @@ unsafe fn refuse_pending(ctx: *mut u64) {
 mod tests {
     use super::*;
 
+    /// The ids at a kept list's address.
+    fn ids((at, len): (*const u32, usize)) -> Vec<u32> {
+        // SAFETY: `at` and `len` come from `kept_in_step` in the same step on
+        // this thread, so the copy is in this thread's cache, unchanged.
+        unsafe { core::slice::from_raw_parts(at, len) }.to_vec()
+    }
+
     #[test]
-    fn a_filtered_stock_list_keeps_its_address_for_every_later_ask() {
-        let first = kept_list(&[3, 5, 8]);
-        let other = kept_list(&[3, 5]);
-        let again = kept_list(&[3, 5, 8]);
-        assert_eq!(first.as_ptr(), again.as_ptr());
-        assert_eq!((first, other), (&[3, 5, 8][..], &[3, 5][..]));
+    fn a_filtered_stock_list_keeps_its_address_within_a_step() {
+        let first = kept_in_step(&[3, 5, 8], 1_000);
+        let other = kept_in_step(&[3, 5], 1_000);
+        let again = kept_in_step(&[3, 5, 8], 1_000);
+        assert_eq!(first, again);
+        assert_eq!((ids(first), ids(other)), (vec![3, 5, 8], vec![3, 5]));
+    }
+
+    #[test]
+    fn a_new_step_retires_the_old_lists_and_copies_again() {
+        let first = kept_in_step(&[4, 6], 2_000);
+        assert_eq!(ids(first), [4, 6]);
+        let next = kept_in_step(&[4, 6], 2_001);
+        assert_eq!(ids(next), [4, 6]);
+        STOCK.with_borrow(|kept| assert_eq!((kept.step, kept.lists.len()), (2_001, 1)));
     }
 }

@@ -10,16 +10,16 @@
 //! of the next step, as the game does. A player whose client lacks Enshwick
 //! gets the text in chat instead.
 
-use crate::pinned;
-use crate::pinned::Symbol;
-use enshwick::ecs::Entity;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::Status;
+use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
+use crate::pinned::Symbol;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -53,14 +53,44 @@ const TAGS: [[u8; 16]; SLOTS] = {
     tags
 };
 
-/// Each slot's text: an interned text, which never moves or changes, so the
-/// game may read it whenever it asks, while the slot points at another.
-static SLOT_TEXTS: [AtomicPtr<&'static str>; SLOTS] =
-    [const { AtomicPtr::new(core::ptr::null_mut()) }; SLOTS];
-/// Every notice text shown, kept for the process, so a repeated text takes
-/// no more memory.
-static INTERNED: Mutex<Option<rustc_hash::FxHashMap<&'static str, &'static &'static str>>> =
-    Mutex::new(None);
+/// One slot's text, in a buffer of its own that never moves: the game may
+/// keep a view of it while the notice is on screen. Writing the slot again
+/// overwrites the buffer in place, so a kept view never dangles; at worst a
+/// notice still showing when its slot comes round again shows the new text,
+/// as reusing its tag already does.
+struct SlotText {
+    /// The text, at most [`MAX_TEXT`] bytes, and a zero after it.
+    bytes: [AtomicU8; MAX_TEXT + 1],
+    /// How many bytes of `bytes` the text takes; 0 while the slot is unset.
+    len: AtomicUsize,
+}
+
+impl SlotText {
+    const fn new() -> Self {
+        Self {
+            bytes: [const { AtomicU8::new(0) }; MAX_TEXT + 1],
+            len: AtomicUsize::new(0),
+        }
+    }
+
+    /// Writes `text`, at most [`MAX_TEXT`] bytes, over the slot's text.
+    fn write(&self, text: &str) {
+        let text = &text.as_bytes()[..text.len().min(MAX_TEXT)];
+        for (byte, &new) in self.bytes.iter().zip(text) {
+            byte.store(new, Ordering::Relaxed);
+        }
+        self.bytes[text.len()].store(0, Ordering::Relaxed);
+        self.len.store(text.len(), Ordering::Release);
+    }
+
+    /// The slot's text as a view the game may keep; `None` while unset.
+    fn view(&self) -> Option<crate::content::Handed> {
+        let len = self.len.load(Ordering::Acquire);
+        (len != 0).then(|| crate::content::Handed::new(self.bytes.as_ptr().cast::<u8>(), len))
+    }
+}
+
+static SLOT_TEXTS: [SlotText; SLOTS] = [const { SlotText::new() }; SLOTS];
 static NEXT_SLOT: AtomicUsize = AtomicUsize::new(0);
 /// Notices waiting for the client's next step: entity and text.
 static WAITING: Mutex<Vec<(u32, String)>> = Mutex::new(Vec::new());
@@ -126,27 +156,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// The text of a notice text tag, by its id, while one is set.
-pub(crate) fn text(id: u32) -> Option<&'static str> {
+pub(crate) fn text(id: u32) -> Option<crate::content::Handed> {
     let slot = TAGS
         .iter()
         .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
-    let text = SLOT_TEXTS[slot].load(Ordering::Acquire);
-    // SAFETY: a non-null slot holds a pointer `take_slot` made from an
-    // `intern` reference, leaked for the process and never written again.
-    (!text.is_null()).then(|| unsafe { *text })
-}
-
-/// `text`, kept for the process: the same address for the same text.
-fn intern(text: &str) -> &'static &'static str {
-    let mut interned = INTERNED.relock();
-    let interned = interned.get_or_insert_with(rustc_hash::FxHashMap::default);
-    if let Some(&kept) = interned.get(text) {
-        return kept;
-    }
-    let owned: &'static str = Box::leak(text.into());
-    let kept: &'static &'static str = Box::leak(Box::new(owned));
-    interned.insert(owned, kept);
-    kept
+    SLOT_TEXTS[slot].view()
 }
 
 /// Queues a notice the server sent for the client's next step.
@@ -169,8 +183,7 @@ fn cut(text: &str) -> &str {
 /// Writes `text` into the next notice text tag; its GUID.
 fn take_slot(text: &str) -> [u8; 16] {
     let index = NEXT_SLOT.fetch_add(1, Ordering::Relaxed) % SLOTS;
-    let kept = intern(cut(text));
-    SLOT_TEXTS[index].store(core::ptr::from_ref(kept).cast_mut(), Ordering::Release);
+    SLOT_TEXTS[index].write(cut(text));
     TAGS[index]
 }
 
@@ -265,16 +278,33 @@ mod tests {
         assert_eq!(crate::net::control_frames(&data).map(|f| f.len()), Some(1));
     }
 
+    /// Serialises the tests that take slots, which all tests share.
+    static SLOTS_IN_TEST: Mutex<()> = Mutex::new(());
+
+    /// The text of the slot with tag id `id`, read as the game would.
+    fn read(id: u32) -> Option<String> {
+        let slot = TAGS
+            .iter()
+            .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
+        let slot = &SLOT_TEXTS[slot];
+        let len = slot.len.load(Ordering::Acquire);
+        let bytes: Vec<u8> = slot.bytes[..len]
+            .iter()
+            .map(|b| b.load(Ordering::Relaxed))
+            .collect();
+        (len != 0).then(|| String::from_utf8(bytes).unwrap())
+    }
+
     #[test]
     fn a_slot_takes_a_text_cut_at_a_character_and_its_tag_finds_it() {
+        let _alone = SLOTS_IN_TEST.relock();
         let long = "ж".repeat(200);
         let tag = take_slot(&long);
-        let id = enshwick_gamedata::reflect::fnv1a32(&tag);
-        let text = text(id).unwrap();
+        let text = read(enshwick_gamedata::reflect::fnv1a32(&tag)).unwrap();
         assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
         let tag = take_slot("Low fuel");
         assert_eq!(
-            super::text(enshwick_gamedata::reflect::fnv1a32(&tag)),
+            read(enshwick_gamedata::reflect::fnv1a32(&tag)).as_deref(),
             Some("Low fuel")
         );
         assert_eq!(super::text(1), None);
@@ -286,13 +316,22 @@ mod tests {
     }
 
     #[test]
-    fn a_text_once_shown_keeps_its_address_while_its_slot_moves_on() {
-        let first = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
-        for n in 0..SLOTS * 3 {
+    fn a_slot_keeps_its_buffer_and_a_new_text_overwrites_it_in_place() {
+        let _alone = SLOTS_IN_TEST.relock();
+        let id = enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"));
+        let first = text(id).unwrap();
+        for n in 1..SLOTS {
             take_slot(&format!("other {n}"));
         }
-        assert_eq!(first, "Kept text");
-        let again = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
-        assert_eq!(again.as_ptr(), first.as_ptr());
+        let again = enshwick_gamedata::reflect::fnv1a32(&take_slot("Next"));
+        assert_eq!(again, id, "the slots go round");
+        let next = text(id).unwrap();
+        assert_eq!(next.at(), first.at(), "the buffer stays where it was");
+        assert_eq!(read(id).as_deref(), Some("Next"));
+        let index = TAGS
+            .iter()
+            .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)
+            .unwrap();
+        assert_eq!(SLOT_TEXTS[index].bytes[4].load(Ordering::Relaxed), 0);
     }
 }

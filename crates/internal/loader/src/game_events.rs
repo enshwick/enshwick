@@ -218,6 +218,14 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     let ours = LOADED
         .get()
         .filter(|_| !EVENTS_FUSE.is_off() && is_server(entity_world));
+    // The process's own world: the server's on a dedicated server, the
+    // client's own on a client, hosting or not.
+    let own_world = LOADED.get().is_some_and(|(loader, _)| match loader.side {
+        Side::CLIENT => {
+            !entity_world.is_null() && entity_world.addr() as u64 != crate::world::server_world()
+        }
+        _ => is_server(entity_world),
+    });
     if let Some((_, layout)) = ours {
         let _quiet = crate::world::Quiet::enter();
         // SAFETY: `entity_world` is the running server's entity world and this
@@ -243,6 +251,9 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
     // passed on unchanged to the rest of the chain, which the slot holds
     // since the chain is wired before the target jumps here.
     unsafe { MERGE_NEXT.get()(entity_world) };
+    if own_world {
+        crate::retire::step();
+    }
     if let Some((loader, _)) = ours {
         let _quiet = crate::world::Quiet::enter();
         let _delivered = EVENTS_FUSE.run("the event link's delivery", || deliver(loader));
