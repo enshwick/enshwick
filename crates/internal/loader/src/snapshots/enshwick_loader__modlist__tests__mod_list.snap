@@ -1,0 +1,17 @@
+---
+source: crates/internal/loader/src/modlist.rs
+expression: list.render()
+---
+# The mods Enshwick found in mods/. Set enabled = false to turn one off
+# without deleting its DLL; the loader then never loads that file. Mods found
+# later are added here, turned on. links_off = ["you.trading-post:price"]
+# keeps a mod on but its link on that extension point off. Changes take
+# effect at the next start.
+
+["you.trading-post"]
+enabled = true
+file = "trading_post.dll"
+
+["you.lockers"]
+enabled = true
+file = "lockers.dll"

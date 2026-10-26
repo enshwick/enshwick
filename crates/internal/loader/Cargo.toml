@@ -55,6 +55,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 bytemuck.workspace = true
+insta.workspace = true
 
 [package.metadata.enshwick]
 # Most of it runs only on Windows: off Windows, `cargo xtask check` runs its

@@ -450,6 +450,7 @@ dependencies = [
  "enshwick",
  "enshwick-gamedata",
  "iced-x86",
+ "insta",
  "postcard",
  "rustc-hash",
  "semver",
