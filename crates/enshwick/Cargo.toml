@@ -30,6 +30,7 @@ toml.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+insta.workspace = true
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -37,6 +38,10 @@ serde = { workspace = true, features = ["derive"] }
 test = []
 # `packs::schemas`: the JSON Schemas of a content pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
+
+[[test]]
+name = "pack_schemas"
+required-features = ["schema"]
 
 [[test]]
 name = "actions"

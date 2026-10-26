@@ -1,0 +1,176 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: shape
+---
+{
+  "$defs": {
+    "FormatEntry": {
+      "enum": [
+        "number",
+        "signed",
+        "percent"
+      ],
+      "type": "string"
+    },
+    "IconEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "like": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "png": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tint": {
+          "items": {
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ItemEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "debug_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IconEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "like": {
+          "type": "string"
+        },
+        "meter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeterEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stats": {
+          "items": {
+            "$ref": "#/$defs/StatEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "like"
+      ],
+      "type": "object"
+    },
+    "MeterEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "max": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "start": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "max"
+      ],
+      "type": "object"
+    },
+    "StatEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/FormatEntry"
+        },
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "label",
+        "value"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "items": {
+        "$ref": "#/$defs/ItemEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "Items",
+  "type": "object"
+}
