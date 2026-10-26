@@ -30,6 +30,8 @@ toml.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+libloading = "0.9.0"
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -37,6 +39,10 @@ serde = { workspace = true, features = ["derive"] }
 test = []
 # `packs::schemas`: the JSON Schemas of a content pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
+
+[[test]]
+name = "old_mods"
+required-features = ["test"]
 
 [[test]]
 name = "actions"
