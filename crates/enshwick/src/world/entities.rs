@@ -20,13 +20,13 @@ impl World {
     /// ```
     #[must_use]
     pub fn entities(&self, ty: ComponentType) -> Vec<Placed> {
-        let entities = self.host.api().entities;
+        let entities = self.0.host.api().entities;
         let mut capacity = 1024u32;
         loop {
             let mut places = vec![EntityPlace::default(); capacity as usize];
             let mut count = 0u32;
             let status = entities(
-                self.host.handle(),
+                self.0.host.handle(),
                 ty.0,
                 places.as_mut_ptr(),
                 capacity,
@@ -56,7 +56,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn near(&self, point: [f64; 3], radius: f64, ty: ComponentType) -> Vec<Placed> {
+    pub fn near(self, point: [f64; 3], radius: f64, ty: ComponentType) -> Vec<Placed> {
         let mut found: Vec<(f64, Placed)> = self
             .entities(ty)
             .into_iter()
@@ -73,8 +73,8 @@ impl World {
     ///
     /// See [`World::near`].
     #[must_use]
-    pub const fn transform_type(&self) -> ComponentType {
-        self.transform
+    pub const fn transform_type(self) -> ComponentType {
+        self.0.transform
     }
 
     /// The world's containers of a kind in `kinds`, with their places: by
@@ -100,8 +100,9 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn containers(&self, kinds: ContainerKinds) -> Vec<Placed> {
-        self.containers
+    pub fn containers(self, kinds: ContainerKinds) -> Vec<Placed> {
+        self.0
+            .containers
             .map(|containers| containers.of(self, kinds))
             .unwrap_or_default()
     }
@@ -125,9 +126,9 @@ impl World {
     ///     }
     /// }
     /// ```
-    pub fn destroy(&self, entity: Entity) -> Result<(), WorldError> {
+    pub fn destroy(self, entity: Entity) -> Result<(), WorldError> {
         WorldError::check(
-            (self.host.api().destroy)(self.host.handle(), entity.0),
+            (self.0.host.api().destroy)(self.0.host.handle(), entity.0),
             WorldError::Gone,
         )
     }

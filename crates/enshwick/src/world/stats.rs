@@ -7,8 +7,8 @@
 use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
-use crate::world::{ComponentType, World, WorldError};
-use crate::{Load, Off};
+use crate::world::{ComponentType, World, WorldError, WritableType};
+use crate::{Host, Load, Off};
 
 /// The attribute set's flag bit that marks it initialised.
 const SET_INITIALISED: u8 = 1;
@@ -161,14 +161,14 @@ static SKILLS: crate::fresh::Fresh<(ComponentType, usize, usize)> = crate::fresh
 
 impl Stats {
     /// The stat reads for the running build.
-    pub(crate) fn resolve(load: &Load<'_>, world: &World) -> Result<Self, Off> {
+    pub(crate) fn resolve(load: &Load<'_>, host: Host) -> Result<Self, Off> {
         let value = |name: &str| {
             load.constant(name).and_then(|v| {
                 u32::try_from(v).map_err(|_| Off::new(format!("constant {name}: out of range")))
             })
         };
         let slot = |name: &str| value(name).map(|v| v as usize);
-        let set = |ty: &str| world.component_type(load, ty);
+        let set = |ty: &str| super::type_named(host, ty);
         let skills = (|| {
             let ty = ids::SKILL_NODES;
             let at = |id: &str| {
@@ -233,9 +233,12 @@ impl Stats {
             })()
             .ok(),
             in_shroud: (|| {
-                let field = world
-                    .writable_type(load, ids::BASE_ACTOR)?
-                    .field_by_id::<u64>(load, ids::BASE_ACTOR_STATE)?;
+                let actor = WritableType {
+                    ty: super::type_named(host, ids::BASE_ACTOR)?,
+                    size: load.type_size(ids::BASE_ACTOR)?,
+                    name: ids::BASE_ACTOR,
+                };
+                let field = actor.field_by_id::<u64>(load, ids::BASE_ACTOR_STATE)?;
                 Ok::<_, Off>((field, load.constant("actor.state_in_shroud")?))
             })()
             .ok(),
@@ -244,12 +247,7 @@ impl Stats {
 
     /// The values in `set`'s slots on `entity`, when its set is initialised
     /// and is the one expected.
-    fn read<const N: usize>(
-        &self,
-        world: &World,
-        entity: Entity,
-        set: &Set<N>,
-    ) -> Option<[u32; N]> {
+    fn read<const N: usize>(&self, world: World, entity: Entity, set: &Set<N>) -> Option<[u32; N]> {
         let data = world.component(entity, set.ty)?.cast::<u8>();
         // SAFETY: `component` returned the entity's live attribute set, valid
         // until the game thread moves on; the set starts with the u32 id of
@@ -286,7 +284,7 @@ impl Stats {
     /// already dead is refused: death and revival stay the game's.
     pub(crate) fn write(
         &self,
-        world: &World,
+        world: World,
         entity: Entity,
         pool: Pool,
         change: impl FnOnce(i32) -> i32,
@@ -337,7 +335,7 @@ impl Stats {
         Ok(Meter { current: new, max })
     }
 
-    pub(crate) fn vitals(&self, world: &World, entity: Entity) -> Option<Vitals> {
+    pub(crate) fn vitals(&self, world: World, entity: Entity) -> Option<Vitals> {
         let meter = |[current, max]: [u32; 2]| Meter {
             current: current.cast_signed(),
             max: max.cast_signed(),
@@ -349,7 +347,7 @@ impl Stats {
         })
     }
 
-    pub(crate) fn shroud(&self, world: &World, entity: Entity) -> Option<Meter> {
+    pub(crate) fn shroud(&self, world: World, entity: Entity) -> Option<Meter> {
         let [current, max] = self.read(world, entity, self.shroud.as_ref()?)?;
         Some(Meter {
             current: current.cast_signed(),
@@ -357,7 +355,7 @@ impl Stats {
         })
     }
 
-    pub(crate) fn skills(world: &World, entity: Entity) -> Option<Vec<Skill>> {
+    pub(crate) fn skills(world: World, entity: Entity) -> Option<Vec<Skill>> {
         let &(ty, ids, levels) = SKILLS.get()?;
         let data = world.component(entity, ty)?.cast::<u8>();
         Some(
@@ -381,12 +379,12 @@ impl Stats {
         )
     }
 
-    pub(crate) fn in_shroud(&self, world: &World, entity: Entity) -> Option<bool> {
+    pub(crate) fn in_shroud(&self, world: World, entity: Entity) -> Option<bool> {
         let (field, bit) = self.in_shroud?;
         world.get(entity, field).map(|state| state & bit != 0)
     }
 
-    pub(crate) fn meter(&self, world: &World, pide: Entity) -> Option<Meter> {
+    pub(crate) fn meter(&self, world: World, pide: Entity) -> Option<Meter> {
         let [current, max] = self.read(world, pide, self.meter.as_ref()?)?;
         Some(Meter {
             current: current.cast_signed(),
@@ -394,7 +392,7 @@ impl Stats {
         })
     }
 
-    pub(crate) fn progress(&self, world: &World, entity: Entity) -> Option<Progress> {
+    pub(crate) fn progress(&self, world: World, entity: Entity) -> Option<Progress> {
         let [level] = self.read(world, entity, &self.level)?;
         let [experience, experience_needed] = self.read(world, entity, &self.experience)?;
         Some(Progress {

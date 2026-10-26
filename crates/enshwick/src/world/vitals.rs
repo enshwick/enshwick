@@ -21,8 +21,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn vitals(&self, entity: Entity) -> Option<Vitals> {
-        self.stats?.vitals(self, entity)
+    pub fn vitals(self, entity: Entity) -> Option<Vitals> {
+        self.0.stats?.vitals(self, entity)
     }
 
     /// Sets `entity`'s health to `value`, kept between 1 and its maximum, so
@@ -52,7 +52,7 @@ impl World {
     ///     })
     /// }
     /// ```
-    pub fn set_health(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+    pub fn set_health(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Health, |_| value)
     }
 
@@ -76,7 +76,7 @@ impl World {
     ///     })
     /// }
     /// ```
-    pub fn heal(&self, entity: Entity, amount: i32) -> Result<Meter, WorldError> {
+    pub fn heal(self, entity: Entity, amount: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Health, |current| {
             current.saturating_add(amount)
         })
@@ -98,7 +98,7 @@ impl World {
     ///     let _refreshed = world.set_stamina(player.entity, max);
     /// }
     /// ```
-    pub fn set_stamina(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+    pub fn set_stamina(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Stamina, |_| value)
     }
 
@@ -116,7 +116,7 @@ impl World {
     ///     let _drained = world.set_mana(player.entity, 0);
     /// }
     /// ```
-    pub fn set_mana(&self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
+    pub fn set_mana(self, entity: Entity, value: i32) -> Result<Meter, WorldError> {
         self.write_stat(entity, stats::Pool::Mana, |_| value)
     }
 
@@ -133,8 +133,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn item_meter(&self, pide: Entity) -> Option<Meter> {
-        self.stats?.meter(self, pide)
+    pub fn item_meter(self, pide: Entity) -> Option<Meter> {
+        self.0.stats?.meter(self, pide)
     }
 
     /// Sets the meter of an item's own entity to what `change` makes of it,
@@ -156,7 +156,7 @@ impl World {
     /// }
     /// ```
     pub fn change_item_meter(
-        &self,
+        self,
         pide: Entity,
         change: impl FnOnce(i32) -> i32,
     ) -> Result<Meter, WorldError> {
@@ -176,8 +176,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn shroud_time(&self, entity: Entity) -> Option<Meter> {
-        self.stats?.shroud(self, entity)
+    pub fn shroud_time(self, entity: Entity) -> Option<Meter> {
+        self.0.stats?.shroud(self, entity)
     }
 
     /// Sets how long `entity` holds out in the shroud to what `change` makes
@@ -199,7 +199,7 @@ impl World {
     /// }
     /// ```
     pub fn change_shroud_time(
-        &self,
+        self,
         entity: Entity,
         change: impl FnOnce(i32) -> i32,
     ) -> Result<Meter, WorldError> {
@@ -218,8 +218,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn in_shroud(&self, entity: Entity) -> Option<bool> {
-        self.stats?.in_shroud(self, entity)
+    pub fn in_shroud(self, entity: Entity) -> Option<bool> {
+        self.0.stats?.in_shroud(self, entity)
     }
 
     /// The skill nodes `entity`, a character, unlocked, with their levels;
@@ -234,18 +234,19 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn skills(&self, entity: Entity) -> Option<Vec<Skill>> {
-        self.stats?;
+    pub fn skills(self, entity: Entity) -> Option<Vec<Skill>> {
+        self.0.stats?;
         stats::Stats::skills(self, entity)
     }
 
     pub(super) fn write_stat(
-        &self,
+        self,
         entity: Entity,
         pool: stats::Pool,
         change: impl FnOnce(i32) -> i32,
     ) -> Result<Meter, WorldError> {
-        self.stats
+        self.0
+            .stats
             .ok_or(WorldError::Missing)?
             .write(self, entity, pool, change)
     }
@@ -261,7 +262,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn progress(&self, entity: Entity) -> Option<Progress> {
-        self.stats?.progress(self, entity)
+    pub fn progress(self, entity: Entity) -> Option<Progress> {
+        self.0.stats?.progress(self, entity)
     }
 }
