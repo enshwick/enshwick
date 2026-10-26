@@ -1,0 +1,9 @@
+[[change]]
+items = [
+    "Material_T1_Wood_Logs",
+    "Material_T2_Wood_Planks",
+    "Build_TerrainMaterial_T1_Stone",
+    "Material_T1_Resin",
+    "Material_T1_Charcoal",
+]
+max_stack = 999
