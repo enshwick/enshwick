@@ -74,8 +74,10 @@ pub enum SetChangeError {
     /// The loader refused it: the mod is off.
     #[error("the loader refused the value")]
     Refused,
-    /// The value takes a restart: what it reaches does not build again in
-    /// place. The value is dropped and the old one stays in force.
+    /// The value takes a restart: it reaches something the loader did not
+    /// patch at start, and the old value stays in force; or a resource does
+    /// not build again in place, and the value is in force only for what
+    /// did, until a restart.
     #[error("the value takes a restart")]
     Restart,
 }

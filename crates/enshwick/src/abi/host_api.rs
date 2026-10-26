@@ -1167,9 +1167,11 @@ pub struct HostApi {
     /// value counts from the first read. [`Status::BAD_ARGS`] for an id
     /// the mod did not declare, an unknown operation, or a value the field
     /// does not take; [`Status::FAULTED`] for a mod that is off;
-    /// [`Status::TOO_LATE`] when the value reaches something the loader did
-    /// not patch at start or cannot build again in place: the value is then
-    /// dropped, the old one stays in force, and the log says so. Any
+    /// [`Status::TOO_LATE`] when the value takes a restart, and the log says
+    /// why: it reaches something the loader did not patch at start (the
+    /// value is dropped and the old one stays in force), or a resource does
+    /// not build again in place (the value is in force for what did build
+    /// and for every first read, the rest until a restart). Any
     /// thread; it allocates and builds resources, so it is no per-frame
     /// call. Since minor 84.
     pub set_change:
