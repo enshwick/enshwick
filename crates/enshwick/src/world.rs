@@ -147,10 +147,6 @@ impl WritableType {
     }
 }
 
-/// Name prefixes of the components the game derives for clients from the
-/// server's own, overwriting them every step.
-const DERIVED: [&str; 2] = ["keen::ecs::Network", "keen::ecs::Client"];
-
 /// A connected player, as the server sees them.
 ///
 /// # Examples
@@ -412,24 +408,18 @@ impl World {
     }
 
     /// The component type named `name` for writes, such as
-    /// `keen::ecs::CombatFlags`: one the server owns. The `Network*` and
-    /// `Client*` copies the game keeps for clients are refused, since the
-    /// game overwrites them from the server's own every step.
+    /// `keen::ecs::CombatFlags`: one the server owns. Writes to the copies
+    /// the game keeps for clients are refused with [`WorldError::Refused`],
+    /// since the game overwrites them from the server's own every step.
     ///
     /// # Errors
     ///
-    /// [`Off`] for a copy the game keeps for clients, or a type not
-    /// reflected on this build.
+    /// [`Off`] for a type not reflected on this build.
     ///
     /// # Examples
     ///
     /// See [`WritableType`].
     pub fn writable_type(&self, load: &Load<'_>, name: &'static str) -> Result<WritableType, Off> {
-        if DERIVED.iter().any(|prefix| name.starts_with(prefix)) {
-            return Err(Off::new(format!(
-                "component type {name}: a copy the game keeps for clients; write the server's own"
-            )));
-        }
         Ok(WritableType {
             ty: self.component_type(load, name)?,
             size: load.type_size(name)?,
