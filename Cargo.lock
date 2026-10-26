@@ -120,7 +120,6 @@ dependencies = [
  "clap",
  "enshwick",
  "enshwick-gamedata",
- "enshwick-reflect",
  "iced-x86",
  "memchr",
  "semver",
@@ -373,12 +372,15 @@ dependencies = [
  "enshwick-macros",
  "fastrand",
  "insta",
+ "libloading",
  "memchr",
  "postcard",
+ "rustc-hash",
  "schemars",
  "serde",
  "serde_json",
  "strsim",
+ "syn 3.0.9",
  "thiserror",
  "toml",
  "zune-core",
@@ -393,7 +395,6 @@ dependencies = [
  "enshwick",
  "enshwick-gamedata",
  "enshwick-loader",
- "enshwick-reflect",
  "memchr",
  "serde",
  "serde_json",
@@ -444,7 +445,6 @@ version = "1.0.0-alpha.2"
 dependencies = [
  "criterion",
  "enshwick",
- "enshwick-reflect",
  "rustc-hash",
  "ruzstd",
  "serde",
@@ -462,7 +462,6 @@ dependencies = [
  "bytemuck",
  "enshwick",
  "enshwick-gamedata",
- "enshwick-reflect",
  "iced-x86",
  "postcard",
  "rustc-hash",
@@ -490,15 +489,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
-]
-
-[[package]]
-name = "enshwick-reflect"
-version = "1.0.0-alpha.2"
-dependencies = [
- "criterion",
- "rustc-hash",
- "thiserror",
 ]
 
 [[package]]
@@ -664,6 +654,16 @@ name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "libloading"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "754ca22de805bb5744484a5b151a9e1a8e837d5dc232c2d7d8c2e3492edc8b60"
+dependencies = [
+ "cfg-if",
+ "windows-link",
+]
 
 [[package]]
 name = "linux-raw-sys"

@@ -73,7 +73,8 @@ mod runtime {
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
     use enshwick::abi::UiDialog;
-    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    use crate::module::Export;
 
     /// Steam's callback id of `LobbyEnter_t`: matchmaking callbacks start at
     /// 500, and it is the fourth.
@@ -91,7 +92,6 @@ mod runtime {
     /// `k_EChatRoomEnterResponseSuccess`.
     const ENTERED: u32 = 1;
 
-    type Export = unsafe extern "system" fn() -> isize;
     type Matchmaking = unsafe extern "C" fn() -> *mut c_void;
     type GetLobbyData =
         unsafe extern "C" fn(this: *mut c_void, lobby: u64, key: *const c_char) -> *const c_char;
@@ -216,20 +216,8 @@ mod runtime {
     }
 
     fn load() -> Option<(Api, RegisterCallback)> {
-        let module_name: Vec<u16> = "steam_api64.dll".encode_utf16().chain([0]).collect();
-        // SAFETY: `module_name` is a live NUL-terminated UTF-16 string, and
-        // the call takes no reference on the module.
-        let module = unsafe { GetModuleHandleW(module_name.as_ptr()) };
-        if module.is_null() {
-            return None;
-        }
-        let get = |name: &str| {
-            let name = CString::new(name).ok()?;
-            // SAFETY: `module` is non-null, checked by the guard before it, and
-            // is `steam_api64.dll`, which the game keeps loaded for the
-            // process; `name` is a live NUL-terminated string.
-            unsafe { GetProcAddress(module, name.as_ptr().cast()) }
-        };
+        let module = crate::module::Module::loaded("steam_api64.dll")?;
+        let get = |name: &str| module.export(name);
         let matchmaking = get("SteamAPI_SteamMatchmaking_v009")?;
         let get_data = get("SteamAPI_ISteamMatchmaking_GetLobbyData")?;
         let set_data = get("SteamAPI_ISteamMatchmaking_SetLobbyData")?;

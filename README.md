@@ -16,10 +16,9 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
 - **Mods**, grouped by purpose below.
 
 The crates under [`crates/internal`](crates/internal) (the loader DLL and the
-stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros),
-[`enshwick-reflect`](crates/enshwick-reflect) and
-[`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, the reflection
-reader and the build tables) are published for `enshwick` and
+stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros)
+and [`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, and the
+build tables with the reflection reader) are published for `enshwick` and
 `cargo enshwick` to build on.
 [`examples`](examples) holds small mods that show one part of the API each;
 they are never released.

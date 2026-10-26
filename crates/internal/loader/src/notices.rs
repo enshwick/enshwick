@@ -122,7 +122,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let slot = TAGS
         .iter()
-        .position(|tag| enshwick_reflect::fnv1a32(tag) == id)?;
+        .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
     let text = SLOT_TEXTS[slot].load(Ordering::Acquire);
     // SAFETY: a non-null slot holds a pointer `take_slot` made from an
     // `intern` reference, leaked for the process and never written again.
@@ -262,28 +262,30 @@ mod tests {
     fn a_slot_takes_a_text_cut_at_a_character_and_its_tag_finds_it() {
         let long = "ж".repeat(200);
         let tag = take_slot(&long);
-        let id = enshwick_reflect::fnv1a32(&tag);
+        let id = enshwick_gamedata::reflect::fnv1a32(&tag);
         let text = text(id).unwrap();
         assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
         let tag = take_slot("Low fuel");
         assert_eq!(
-            super::text(enshwick_reflect::fnv1a32(&tag)),
+            super::text(enshwick_gamedata::reflect::fnv1a32(&tag)),
             Some("Low fuel")
         );
         assert_eq!(super::text(1), None);
-        let ids: std::collections::HashSet<u32> =
-            TAGS.iter().map(|t| enshwick_reflect::fnv1a32(t)).collect();
+        let ids: std::collections::HashSet<u32> = TAGS
+            .iter()
+            .map(|t| enshwick_gamedata::reflect::fnv1a32(t))
+            .collect();
         assert_eq!(ids.len(), SLOTS);
     }
 
     #[test]
     fn a_text_once_shown_keeps_its_address_while_its_slot_moves_on() {
-        let first = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let first = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         for n in 0..SLOTS * 3 {
             take_slot(&format!("other {n}"));
         }
         assert_eq!(first, "Kept text");
-        let again = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let again = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         assert_eq!(again.as_ptr(), first.as_ptr());
     }
 }
