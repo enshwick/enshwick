@@ -341,7 +341,6 @@ pub enum PackSide {
 /// id = "lanterns"
 /// version = "1.0.0"
 /// name = "Lanterns"
-/// updates = "github:ann/lanterns:lanterns"
 ///
 /// [requires]
 /// safes = ">=0.5, <1.0"
@@ -384,13 +383,6 @@ pub struct PackManifest {
     /// play together; on unless the pack says otherwise.
     #[serde(default = "yes")]
     pub join: bool,
-    /// Where new releases come from: `github:<owner/name>:<component>` or an
-    /// `https://` address of a release document, as a mod's `updates:`.
-    #[serde(default)]
-    pub updates: String,
-    /// The minisign public keys the author signs releases with, at most two.
-    #[serde(default)]
-    pub signed_by: Vec<String>,
     /// Mods and packs it needs, by id, each with a Cargo-style version
     /// requirement (empty for any).
     #[serde(default)]
@@ -425,28 +417,6 @@ impl PackManifest {
                 text,
                 find(text, "id"),
                 "id is 1 to 64 of [a-z0-9-]",
-            ));
-        }
-        if manifest.signed_by.len() > 2
-            || !manifest
-                .signed_by
-                .iter()
-                .all(|key| crate::mods::is_author_key(key))
-        {
-            return Err(PackError::at(
-                MANIFEST_FILE,
-                text,
-                find(text, "signed_by"),
-                "signed_by holds at most two minisign public keys, RW... (56 characters)",
-            ));
-        }
-        if !manifest.updates.is_empty() && crate::mods::Updates::parse(&manifest.updates).is_none()
-        {
-            return Err(PackError::at(
-                MANIFEST_FILE,
-                text,
-                find(text, "updates"),
-                "updates is github:<owner/name>:<component> or an https:// address",
             ));
         }
         Ok(manifest)

@@ -221,7 +221,7 @@ file afresh at every start:
 - `loader.log`: the loader's lines, such as which mods loaded, were skipped or
   turned off, and why;
 - `mods/<id>.log`: one mod's lines;
-- `status.log`, `crash.log` and `stub.log`: see
+- `status.log` and `crash.log`: see
   [Logging and diagnostics](logging.md).
 
 A mod writes there with `enshwick_loader_api::info!` and the other log macros.

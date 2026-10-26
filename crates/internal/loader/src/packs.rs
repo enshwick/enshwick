@@ -1,6 +1,6 @@
 //! Content packs as mods: a folder `mods/<id>/` with a `pack.toml` and no
 //! DLL. The loader gives each pack a record like a mod's, built from its
-//! manifest, so the mod list, the lock, the join check and the updater see
+//! manifest, so the mod list, the lock and the join check see
 //! it as they see a DLL, and runs it through the API's [`Load::add_pack`]
 //! during init. The dedicated server watches a pack's files and applies a
 //! changed `loot.toml` at once; other changes wait for a restart.
@@ -12,9 +12,8 @@ use std::sync::{Mutex, PoisonError};
 
 use enshwick_loader_api::abi::{
     Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Relation, Side, Status,
-    Str, UpdateKind, UpdateSource,
+    Str,
 };
-use enshwick_loader_api::mods::Updates;
 use enshwick_loader_api::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
@@ -74,31 +73,6 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         })
         .collect();
     let (dependencies, dependency_count) = keep_slice(dependencies);
-    let updates = Updates::parse(&manifest.updates).map_or(core::ptr::null(), |updates| {
-        let source = match updates {
-            Updates::GitHub {
-                repository,
-                component,
-            } => UpdateSource {
-                header: Header::of::<UpdateSource>(),
-                kind: UpdateKind::GITHUB,
-                location: keep(&repository),
-                component: keep(&component),
-            },
-            Updates::Url(url) => UpdateSource {
-                header: Header::of::<UpdateSource>(),
-                kind: UpdateKind::URL,
-                location: keep(&url),
-                component: Str::EMPTY,
-            },
-        };
-        let source: &'static UpdateSource = Box::leak(Box::new(source));
-        core::ptr::from_ref(source)
-    });
-    let mut signed_by = [Str::EMPTY; 2];
-    for (slot, key) in signed_by.iter_mut().zip(&manifest.signed_by) {
-        *slot = keep(key);
-    }
     let authors: Vec<Str> = manifest.authors.iter().map(|a| keep(a)).collect();
     let (authors, author_count) = keep_slice(authors);
     Box::leak(Box::new(Manifest {
@@ -115,8 +89,6 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
         dependency_count,
         builds: core::ptr::null(),
         build_count: 0,
-        updates,
-        signed_by,
         name: keep(&manifest.name),
         description: keep(&manifest.description),
         authors,
@@ -372,7 +344,7 @@ mod tests {
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nupdates = \"github:ann/lanterns:lanterns\"\n[requires]\nsafes = \">=0.5\"\n",
+            "id = \"lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\nsafes = \">=0.5\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
@@ -384,7 +356,7 @@ mod tests {
         assert_eq!(candidate.dependencies.len(), 1);
         assert!(manifest.flags.contains(ManifestFlags::JOIN));
         // SAFETY: as above.
-        let source = unsafe { crate::manifest::updates(manifest) }.unwrap();
-        assert_eq!(source.kind, UpdateKind::GITHUB);
+        let meta = unsafe { crate::manifest::meta(manifest) };
+        assert_eq!(meta.homepage, "https://example.com/lanterns");
     }
 }

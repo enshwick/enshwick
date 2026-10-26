@@ -44,12 +44,6 @@ they are never released.
 | [Admin tools](mods/enshwick-admin-tools) | `/admin` commands and a command file run as the server console            |
 | [Optimizer](mods/enshwick-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
 
-### For players
-
-| Mod                              | What it does                                                             |
-| -------------------------------- | ------------------------------------------------------------------------ |
-| [Updater](mods/enshwick-updater) | updates of the mods you have, from their releases, with your consent     |
-
 ## Install
 
 1. Download
@@ -79,10 +73,6 @@ each DLL's SHA-256, in `mods/enshwick/enshwick.lock`.
 
 On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
 game's launch options.
-
-Every archive has a [minisign](https://jedisct1.github.io/minisign/)
-signature (`.minisig`) beside it, by Enshwick's public key
-`RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF`.
 
 A server in Docker or Kubernetes: see
 [Running a server in Docker or Kubernetes](book/src/servers.md).
