@@ -4,7 +4,8 @@
 //! names a mod, whose actions take the rest of the line.
 //!
 //! On a dedicated server the loader feeds it from the command file
-//! ([`file`]). Reading a line is pure logic here; the run module answers it
+//! ([`file`]) and from the server's own console window or terminal
+//! ([`input`]). Reading a line is pure logic here; the run module answers it
 //! on the game thread, after the step.
 
 use std::path::{Path, PathBuf};
@@ -17,6 +18,7 @@ use crate::locks::Relock;
 use crate::settings::LOADER_ID;
 
 pub mod file;
+pub mod input;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
@@ -36,13 +38,31 @@ pub fn command_files(data_dir: &Path, running: impl Fn(&str) -> bool) -> Vec<Pat
         .collect()
 }
 
+/// Where a console line came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Source {
+    /// A command file, as the log names it.
+    File(String),
+    /// The server's console window or terminal, which also reads the answer.
+    Input,
+}
+
+impl std::fmt::Display for Source {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::File(name) => f.write_str(name),
+            Self::Input => f.write_str("console"),
+        }
+    }
+}
+
 /// A console line waiting for the game thread, and where it came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pending {
     /// The line, trimmed.
     pub line: String,
-    /// Where it came from, as the log names it.
-    pub source: String,
+    /// Where it came from.
+    pub source: Source,
 }
 
 /// Lines waiting for the game thread.
@@ -51,7 +71,7 @@ static PENDING: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
 static WAITING: AtomicBool = AtomicBool::new(false);
 
 /// Queues `line` from `source` for the game thread.
-pub fn submit(line: String, source: String) {
+pub fn submit(line: String, source: Source) {
     let mut pending = PENDING.relock();
     pending.push(Pending { line, source });
     WAITING.store(true, Ordering::Release);
@@ -233,8 +253,8 @@ mod tests {
 
     #[test]
     fn queued_lines_come_out_once_in_order() {
-        submit("enshwick status".into(), "a".into());
-        submit("enshwick help".into(), "b".into());
+        submit("enshwick status".into(), Source::File("a".into()));
+        submit("enshwick help".into(), Source::Input);
         let lines: Vec<String> = take().into_iter().map(|p| p.line).collect();
         assert_eq!(lines, ["enshwick status", "enshwick help"]);
         assert!(take().is_empty());
