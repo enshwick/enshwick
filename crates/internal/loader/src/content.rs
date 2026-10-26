@@ -14,6 +14,7 @@
 //! address, so a rebuild must come out the same length.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -27,12 +28,12 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "resource.key_of",
-    "resource.open",
-    "resource.resolve",
-    "text.lookup",
-    "text.lookup_english",
-    "text.pool_language",
+    pinned::resource::KEY_OF.id(),
+    pinned::resource::OPEN.id(),
+    pinned::resource::RESOLVE.id(),
+    pinned::text::LOOKUP.id(),
+    pinned::text::LOOKUP_ENGLISH.id(),
+    pinned::text::POOL_LANGUAGE.id(),
 ];
 
 /// Marks a handle the loader made.
@@ -204,9 +205,9 @@ fn seal_texts(loader: &'static Loader) {
     }
     // Only the client shows text; the server has no lookups to link.
     let (Some(lookup_rva), Some(english_rva), Some(offset)) = (
-        loader.build.symbol("text.lookup"),
-        loader.build.symbol("text.lookup_english"),
-        loader.build.constant("text.pool_language"),
+        loader.build.symbol(pinned::text::LOOKUP.id()),
+        loader.build.symbol(pinned::text::LOOKUP_ENGLISH.id()),
+        loader.build.constant(pinned::text::POOL_LANGUAGE.id()),
     ) else {
         return;
     };
@@ -422,19 +423,19 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let _linked = loader.link_feature(
         "served resources (resource.open)",
-        loader.address("resource.open"),
+        loader.address(pinned::resource::OPEN),
         &OPEN_NEXT,
         open,
         none,
     ) && loader.link_feature(
         "served resources (resource.resolve)",
-        loader.address("resource.resolve"),
+        loader.address(pinned::resource::RESOLVE),
         &RESOLVE_NEXT,
         resolve,
         none,
     ) && loader.link_feature(
         "served resources (resource.key_of)",
-        loader.address("resource.key_of"),
+        loader.address(pinned::resource::KEY_OF),
         &KEY_NEXT,
         key_of,
         none,
@@ -486,7 +487,8 @@ fn serve_stand_ins(
             rebuilding: Mutex::new(()),
         });
     }
-    let key = enshwick::content::items::ITEM_REGISTRY.key(enshwick::content::types::ITEM_REGISTRY);
+    let key =
+        enshwick::content::items::ITEM_REGISTRY.key_by_hash(crate::catalogue::types::ITEM_REGISTRY);
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
         None => served.push(Served {
@@ -565,7 +567,7 @@ pub(crate) fn shared() -> Vec<(String, Vec<ModIndex>)> {
 /// A resource key in words: the registries by name, others as type and
 /// GUID.
 fn key_name(key: &ResourceKey) -> String {
-    use enshwick::content::types;
+    use crate::catalogue::types;
     let kind = match key.type_hash {
         types::ITEM_REGISTRY => return "the item registry".to_owned(),
         types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
@@ -599,7 +601,7 @@ pub(crate) fn summary() -> crate::diag::Served {
 
 /// The vanilla template to read for `key`, a cloned template no mod serves.
 fn alias(key: &ResourceKey) -> Option<ResourceKey> {
-    if key.type_hash != enshwick::content::types::TEMPLATE {
+    if key.type_hash != crate::catalogue::types::TEMPLATE {
         return None;
     }
     let vanilla = ALIASES.get()?.get(&key.guid)?;
@@ -630,8 +632,10 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 
 /// The game's recipe registry.
 fn recipe_registry() -> ResourceKey {
-    use enshwick::content::{recipes::RECIPE_REGISTRY, types};
-    RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)
+    use enshwick::content::recipes::RECIPE_REGISTRY;
+
+    use crate::catalogue::types;
+    RECIPE_REGISTRY.key_by_hash(types::RECIPE_REGISTRY)
 }
 
 /// Whether mods that are on serve the recipe registry and its build has

@@ -5,11 +5,6 @@ use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
-/// The ABI minor from which a mod id must carry its author,
-/// `<author>.<name>`; an older mod's id without one still loads, with a
-/// warning, until every published mod is rebuilt.
-const AUTHOR_IDS: u16 = 70;
-
 /// Where the fields every manifest has end: an older minor lacks `builds`,
 /// which defaults to none.
 const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
@@ -194,9 +189,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     if id == crate::settings::LOADER_ID {
         return Err(ManifestError::LoadersId(id.to_owned()));
     }
-    let without_author =
-        manifest.header.abi_minor < AUTHOR_IDS && enshwick::abi::is_valid_former_id(id);
-    if !enshwick::abi::is_valid_id(id) && !without_author {
+    if !enshwick::abi::is_valid_id(id) {
         return Err(ManifestError::BadId(id.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's strings readable and
@@ -607,13 +600,9 @@ mod tests {
     }
 
     #[test]
-    fn an_id_without_an_author_loads_only_from_an_older_minor() {
+    fn an_id_without_an_author_is_refused_from_every_minor() {
         let mut old = manifest("lanterns", "0.1.0");
-        old.header.abi_minor = AUTHOR_IDS - 1;
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        assert_eq!(unsafe { parse(&old) }.unwrap().id, "lanterns");
-        old.header.abi_minor = AUTHOR_IDS;
+        old.header.abi_minor = 69;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let why = unsafe { parse(&old) }.unwrap_err().to_string();

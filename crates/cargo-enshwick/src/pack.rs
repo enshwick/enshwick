@@ -57,9 +57,7 @@ pub(crate) fn run(command: &Command) -> anyhow::Result<String> {
 /// The vanilla content of the game in `game`: the layouts from its
 /// executable's reflection, the data from its archive.
 fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
-    use enshwick::Off;
-    use enshwick::content::items::ItemLayout;
-    use enshwick::content::workshops::WorkshopLayout;
+    use enshwick_gamedata::catalogue::Reflected;
     use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     let (exe, name) = ["enshrouded", "enshrouded_server"]
@@ -75,27 +73,11 @@ fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
     let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
     let image = Image::parse(&bytes, Layout::File, None)?;
     let reflection = Reflection::scan(&image);
-    let field = |ty: &str, name: &str| {
-        reflection
-            .field_offset(ty, name)
-            .ok()
-            .and_then(|o| usize::try_from(o).ok())
-            .ok_or_else(|| Off::new(format!("{ty}.{name} is not reflected")))
-    };
-    let size = |ty: &str| {
-        reflection
-            .type_info(ty)
-            .ok()
-            .and_then(|info| usize::try_from(info.size()).ok())
-            .ok_or_else(|| Off::new(format!("{ty} is not reflected")))
-    };
-    let items = ItemLayout::with_lookup(field, size)?;
-    let workshops = WorkshopLayout::with_lookup(field, size)?;
     let archive = enshwick_gamedata::archive::Archive::open(game, name)
         .with_context(|| format!("{}: {name}.kfc does not read", game.display()))?;
-    Ok(Vanilla::new(items, workshops, move |key| {
+    Ok(Vanilla::new(&Reflected(&reflection), move |key| {
         archive.resource(&key)
-    }))
+    })?)
 }
 
 /// Reads and checks the pack in `dir`, with the game's vanilla names when

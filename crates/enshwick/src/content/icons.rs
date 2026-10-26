@@ -11,12 +11,9 @@
 //! item keeps its vanilla icon anywhere else, the dedicated server
 //! included, where no icon shows anyway.
 
-use super::{Blob, Guid, Id};
+use super::{Blob, Guid, Id, types};
 use crate::abi::HostApi;
 use crate::{Load, Off};
-
-/// The type hash of the client's UI image resource, an icon.
-pub const UI_IMAGE: u32 = 0xf9e8_6997;
 
 /// An item's own icon, for [`NewItem::icon`](super::items::NewItem::icon).
 ///
@@ -414,14 +411,16 @@ impl Load<'_> {
         self.declare(icon.id)?;
         // A build without the layout, such as the dedicated server, shows
         // no icons: the item keeps its vanilla one.
-        let Ok(layout) = ImageLayout::resolve(self) else {
+        let (Ok(layout), Ok(key), Ok(like)) = (
+            ImageLayout::resolve(self),
+            icon.id.key(types::UI_IMAGE),
+            icon.like.key(types::UI_IMAGE),
+        ) else {
             return Ok(());
         };
-        self.serve(
-            icon.id.key(UI_IMAGE),
-            icon.like.key(UI_IMAGE),
-            move |base| Some(build(&layout, base, icon.pixels)),
-        )
+        self.serve(key, like, move |base| {
+            Some(build(&layout, base, icon.pixels))
+        })
     }
 }
 

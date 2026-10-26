@@ -156,8 +156,9 @@ assert!(Rates::schema().field("comfort.multiplier").is_some());
 ```
 
 A mod that used to keep a setting at the top of the file moves it into a
-group with a [migration](migrations.md#settings-from-another-mod):
-`take_setting` takes a flat key of another mod into a dotted one.
+group with a [migration](migrations.md): `rename_setting("cost",
+"recipes.cost")`, and `take_setting` brings another mod's flat key into a
+dotted one.
 
 ## Settings per world
 

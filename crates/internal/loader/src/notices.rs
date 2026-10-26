@@ -10,6 +10,9 @@
 //! of the next step, as the game does. A player whose client lacks Enshwick
 //! gets the text in chat instead.
 
+use crate::pinned;
+use crate::pinned::Symbol;
+use enshwick::ecs::Entity;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -20,10 +23,10 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.event_push",
-    "ecs.event_streams",
-    "world.entities",
-    "world.time",
+    pinned::ecs::EVENT_PUSH.id(),
+    pinned::ecs::EVENT_STREAMS.id(),
+    pinned::world::ENTITIES.id(),
+    pinned::world::TIME.id(),
 ];
 
 /// The longest notice text, in bytes.
@@ -93,12 +96,15 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|v| usize::try_from(v).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let (push, time) = (function("ecs.event_push")?, function("world.time")?);
+            let (push, time) = (
+                function(pinned::ecs::EVENT_PUSH)?,
+                function(pinned::world::TIME)?,
+            );
             Some(Layout {
                 // SAFETY: the build table's `ecs.event_push` is the address
                 // of the game function with the `PushFn` signature on this
@@ -112,8 +118,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 time_offset: offset("keen::ecs::GameEvent", "timeStamp")?,
                 player: offset(name, "playerEntityId")?,
                 tag: offset(name, "messageLocaTag")?,
-                streams: loader.offset("ecs.event_streams")?,
-                world_entities: loader.offset("world.entities")?,
+                streams: loader.offset(pinned::ecs::EVENT_STREAMS)?,
+                world_entities: loader.offset(pinned::world::ENTITIES)?,
             })
         })
         .as_ref()
@@ -144,10 +150,10 @@ fn intern(text: &str) -> &'static &'static str {
 }
 
 /// Queues a notice the server sent for the client's next step.
-pub(crate) fn queue(entity: u32, text: &str) {
+pub(crate) fn queue(entity: Entity, text: &str) {
     let mut waiting = WAITING.relock();
     if waiting.len() < MAX_WAITING {
-        waiting.push((entity, text.to_owned()));
+        waiting.push((entity.0, text.to_owned()));
     }
 }
 
@@ -242,7 +248,7 @@ pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), Status> 
     }
     // Cut here too: a longer text would take several frames, which the
     // client does not read as a notice.
-    crate::net::notice(key, player.entity, cut(text))
+    crate::net::notice(key, Entity(player.entity), cut(text))
 }
 
 #[cfg(test)]

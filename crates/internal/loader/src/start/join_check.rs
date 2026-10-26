@@ -1,18 +1,19 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
 use crate::host::Loader;
+use crate::pinned;
 
 use super::game::identify;
 
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
 pub(crate) const TABLE_IDS: &[&str] = &[
-    crate::join::provider::JOIN_ID,
-    crate::join::provider::TABLE_ID,
-    crate::join::provider::SLOT_ID,
-    crate::join::interaction::START_ID,
-    crate::join::interaction::KIND_ID,
-    crate::join::interaction::JOIN_FAILED_ID,
+    pinned::net::JOIN_GAME.id(),
+    pinned::net::PROVIDER_VTABLE.id(),
+    pinned::net::PROVIDER_JOIN_SLOT.id(),
+    pinned::user::START_INTERACTION.id(),
+    pinned::user::INTERACTION_KIND.id(),
+    pinned::user::JOIN_FAILED_KIND.id(),
 ];
 
 /// Links the loader's join check on the client's join. The lobby module and
@@ -52,7 +53,7 @@ pub(super) fn link_join(loader: &Loader) {
 /// with the pinned bytes. Without it a refused join shows the game's dialog
 /// before the loader's.
 fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
-    use crate::join::interaction::{self, BYTES_ID, JOIN_FAILED_ID, KIND_ID, START_ID};
+    use crate::join::interaction::{self, BYTES_ID};
     let read = |va: u64| {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
@@ -60,7 +61,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         Some(unsafe { crate::memory::read::<u64>(address, 0) })
     };
     let start = interaction::verify(
-        loader.address(START_ID),
+        loader.address(pinned::user::START_INTERACTION),
         loader.build.constant(BYTES_ID),
         read,
         code,
@@ -77,13 +78,15 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         }
     };
     if !interaction::set_layout(
-        loader.build.constant(KIND_ID),
-        loader.build.constant(JOIN_FAILED_ID),
+        loader.build.constant(pinned::user::INTERACTION_KIND.id()),
+        loader.build.constant(pinned::user::JOIN_FAILED_KIND.id()),
     ) {
         crate::log!(
             WARN,
-            "join dialog hold off on {}: the build table pins no {KIND_ID} or {JOIN_FAILED_ID}; nothing patched",
-            loader.build.name
+            "join dialog hold off on {}: the build table pins no {} or {}; nothing patched",
+            loader.build.name,
+            pinned::user::INTERACTION_KIND,
+            pinned::user::JOIN_FAILED_KIND,
         );
         return;
     }

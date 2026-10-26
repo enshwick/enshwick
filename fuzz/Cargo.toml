@@ -87,6 +87,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "mod_manifests"
+path = "fuzz_targets/mod_manifests.rs"
+test = false
+doc = false
+bench = false
+
 [lints]
 workspace = true
 

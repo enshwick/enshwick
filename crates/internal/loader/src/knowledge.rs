@@ -18,6 +18,9 @@
 //! reads them after the step for the change events. A quest's id is a
 //! player's bool the game sets when it rewards the quest.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -29,43 +32,43 @@ use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "knowledge.connection_created",
-    "knowledge.connection_loaded",
-    "knowledge.connection_size",
-    "knowledge.defs",
-    "knowledge.defs_blob",
-    "knowledge.input_action",
-    "knowledge.input_check",
-    "knowledge.journal",
-    "knowledge.journal_blob",
-    "knowledge.journal_blob_get",
-    "knowledge.log_entry_size",
-    "knowledge.object",
-    "knowledge.player_value",
-    "knowledge.push",
-    "knowledge.queue",
-    "knowledge.record_active",
-    "knowledge.record_changes",
-    "knowledge.record_count",
-    "knowledge.record_log",
-    "knowledge.record_log_count",
-    "knowledge.record_size",
-    "knowledge.records",
-    "knowledge.replication",
-    "knowledge.request_kind",
-    "knowledge.request_target",
-    "knowledge.request_value",
-    "knowledge.resend_player",
-    "knowledge.resend_world",
-    "knowledge.set_values",
-    "knowledge.set_world",
-    "knowledge.state",
-    "knowledge.step",
-    "knowledge.world_log",
-    "knowledge.world_log_count",
-    "knowledge.world_touched",
-    "knowledge.world_value",
-    "server.player_infos",
+    pinned::knowledge::CONNECTION_CREATED.id(),
+    pinned::knowledge::CONNECTION_LOADED.id(),
+    pinned::knowledge::CONNECTION_SIZE.id(),
+    pinned::knowledge::DEFS.id(),
+    pinned::knowledge::DEFS_BLOB.id(),
+    pinned::knowledge::INPUT_ACTION.id(),
+    pinned::knowledge::INPUT_CHECK.id(),
+    pinned::knowledge::JOURNAL.id(),
+    pinned::knowledge::JOURNAL_BLOB.id(),
+    pinned::knowledge::JOURNAL_BLOB_GET.id(),
+    pinned::knowledge::LOG_ENTRY_SIZE.id(),
+    pinned::knowledge::OBJECT.id(),
+    pinned::knowledge::PLAYER_VALUE.id(),
+    pinned::knowledge::PUSH.id(),
+    pinned::knowledge::QUEUE.id(),
+    pinned::knowledge::RECORD_ACTIVE.id(),
+    pinned::knowledge::RECORD_CHANGES.id(),
+    pinned::knowledge::RECORD_COUNT.id(),
+    pinned::knowledge::RECORD_LOG.id(),
+    pinned::knowledge::RECORD_LOG_COUNT.id(),
+    pinned::knowledge::RECORD_SIZE.id(),
+    pinned::knowledge::RECORDS.id(),
+    pinned::knowledge::REPLICATION.id(),
+    pinned::knowledge::REQUEST_KIND.id(),
+    pinned::knowledge::REQUEST_TARGET.id(),
+    pinned::knowledge::REQUEST_VALUE.id(),
+    pinned::knowledge::RESEND_PLAYER.id(),
+    pinned::knowledge::RESEND_WORLD.id(),
+    pinned::knowledge::SET_VALUES.id(),
+    pinned::knowledge::SET_WORLD.id(),
+    pinned::knowledge::STATE.id(),
+    pinned::knowledge::STEP.id(),
+    pinned::knowledge::WORLD_LOG.id(),
+    pinned::knowledge::WORLD_LOG_COUNT.id(),
+    pinned::knowledge::WORLD_TOUCHED.id(),
+    pinned::knowledge::WORLD_VALUE.id(),
+    pinned::server::PLAYER_INFOS.id(),
 ];
 
 pub(crate) mod changes;
@@ -146,16 +149,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     .ok()
                     .and_then(|info| usize::try_from(info.size()).ok())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let offset = |name: &str| loader.offset(name);
+            let offset = |name: Constant| loader.offset(name);
             let (player_value, world_value, push) = (
-                function("knowledge.player_value")?,
-                function("knowledge.world_value")?,
-                function("knowledge.push")?,
+                function(pinned::knowledge::PLAYER_VALUE)?,
+                function(pinned::knowledge::WORLD_VALUE)?,
+                function(pinned::knowledge::PUSH)?,
             );
             let defs = "keen::GameKnowledgeResource";
             let def = "keen::KnowledgeObjectResource";
@@ -169,27 +172,27 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // SAFETY: the build table's `knowledge.push` is the game function
                 // with the `PushFn` signature on this build.
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
-                game: offset("server.player_infos")?,
-                object: offset("knowledge.object")?,
-                state: offset("knowledge.state")?,
-                defs: offset("knowledge.defs")?,
-                defs_blob: offset("knowledge.defs_blob")?,
-                queue: offset("knowledge.queue")?,
-                records: offset("knowledge.records")?,
-                record_count: offset("knowledge.record_count")?,
-                record_size: offset("knowledge.record_size")?,
-                record_active: offset("knowledge.record_active")?,
-                step: offset("knowledge.step")?,
-                world_log: offset("knowledge.world_log")?,
-                world_log_count: offset("knowledge.world_log_count")?,
-                record_log: offset("knowledge.record_log")?,
-                record_log_count: offset("knowledge.record_log_count")?,
-                log_entry: offset("knowledge.log_entry_size")?,
-                request_kind: offset("knowledge.request_kind")?,
-                request_value: offset("knowledge.request_value")?,
-                request_target: offset("knowledge.request_target")?,
-                journal: offset("knowledge.journal")?,
-                journal_blob: offset("knowledge.journal_blob")?,
+                game: offset(pinned::server::PLAYER_INFOS)?,
+                object: offset(pinned::knowledge::OBJECT)?,
+                state: offset(pinned::knowledge::STATE)?,
+                defs: offset(pinned::knowledge::DEFS)?,
+                defs_blob: offset(pinned::knowledge::DEFS_BLOB)?,
+                queue: offset(pinned::knowledge::QUEUE)?,
+                records: offset(pinned::knowledge::RECORDS)?,
+                record_count: offset(pinned::knowledge::RECORD_COUNT)?,
+                record_size: offset(pinned::knowledge::RECORD_SIZE)?,
+                record_active: offset(pinned::knowledge::RECORD_ACTIVE)?,
+                step: offset(pinned::knowledge::STEP)?,
+                world_log: offset(pinned::knowledge::WORLD_LOG)?,
+                world_log_count: offset(pinned::knowledge::WORLD_LOG_COUNT)?,
+                record_log: offset(pinned::knowledge::RECORD_LOG)?,
+                record_log_count: offset(pinned::knowledge::RECORD_LOG_COUNT)?,
+                log_entry: offset(pinned::knowledge::LOG_ENTRY_SIZE)?,
+                request_kind: offset(pinned::knowledge::REQUEST_KIND)?,
+                request_value: offset(pinned::knowledge::REQUEST_VALUE)?,
+                request_target: offset(pinned::knowledge::REQUEST_TARGET)?,
+                journal: offset(pinned::knowledge::JOURNAL)?,
+                journal_blob: offset(pinned::knowledge::JOURNAL_BLOB)?,
                 world_map: field(defs, "worldKnowledge")?,
                 player_map: field(defs, "playerKnowledge")?,
                 world_def: size("keen::WorldKnowledgeObjectResource")?,
@@ -323,14 +326,14 @@ fn records(layout: &Layout, state: usize) -> usize {
 }
 
 /// The player record of the character `entity`, active, or why not.
-fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
+fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, Status> {
     // SAFETY: `state` is the live store `store_of` found; its record array
     // pointer sits at the build table's `knowledge.records` offset.
     let records: usize = unsafe { read(state, layout.records) };
     // SAFETY: `state` is the live store `store_of` found; its u64 record
     // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
-    let index = (entity as usize).checked_sub(1).ok_or(Status::REFUSED)?;
+    let index = (entity.0 as usize).checked_sub(1).ok_or(Status::REFUSED)?;
     if records == 0 || index as u64 >= count {
         return Err(Status::REFUSED);
     }
@@ -347,11 +350,11 @@ fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
 }
 
 /// Knowledge `id` of the character `entity`, or of the world.
-pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeInfo, Status> {
+pub(crate) fn value(loader: &Loader, entity: Entity, id: u32) -> Result<KnowledgeInfo, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::MISSING)?;
-    let raw = if scope == KnowledgeInfo::WORLD || entity == 0 {
+    let raw = if scope == KnowledgeInfo::WORLD || entity == Entity(0) {
         if scope == KnowledgeInfo::PLAYER {
             return Err(Status::REFUSED);
         }
@@ -369,7 +372,7 @@ pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeIn
             (layout.player_value)(
                 core::ptr::with_exposed_provenance(state),
                 &raw const id,
-                entity,
+                entity.0,
             )
         }
     };
@@ -415,8 +418,8 @@ pub(crate) fn grant(
         return Err(Status::BAD_ARGS);
     }
     let target = if scope == KnowledgeInfo::PLAYER {
-        record(layout, state, entity)?;
-        if !changes::character_loaded(loader, entity) {
+        record(layout, state, Entity(entity))?;
+        if !changes::character_loaded(loader, Entity(entity)) {
             return Err(Status::REFUSED);
         }
         // One player: a 1 in the low byte and the character in the high
@@ -537,7 +540,7 @@ pub(crate) fn after_step(loader: &Loader) {
     // its u32 world log count sits at the build table's
     // `knowledge.world_log_count` offset.
     let count: u32 = unsafe { read(state, layout.world_log_count) };
-    raise(loader, layout, game, 0, log, count);
+    raise(loader, layout, game, Entity(0), log, count);
     // SAFETY: `state` is the live store `store` found on the game thread;
     // its record array pointer sits at the build table's `knowledge.records`
     // offset.
@@ -567,12 +570,12 @@ pub(crate) fn after_step(loader: &Loader) {
         // offset.
         let count: u32 = unsafe { read(record, layout.record_log_count) };
         let entity = u32::try_from(index + 1).unwrap_or(0);
-        raise(loader, layout, game, entity, log, count);
+        raise(loader, layout, game, Entity(entity), log, count);
     }
 }
 
 /// Raises the changes of one log, and the quests among a player's.
-fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize, count: u32) {
+fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usize, count: u32) {
     if log == 0 || count > MAX_LOG {
         return;
     }
@@ -590,16 +593,18 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize,
         }
         let data = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
-            entity,
+            entity: entity.0,
             id,
             value,
         };
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const data).cast());
-        if entity != 0 && value != 0 && quest_set(layout, game).is_some_and(|set| set.contains(&id))
+        if entity != Entity(0)
+            && value != 0
+            && quest_set(layout, game).is_some_and(|set| set.contains(&id))
         {
             let quest = QuestData {
                 header: Header::of::<QuestData>(),
-                entity,
+                entity: entity.0,
                 quest: id,
             };
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());
