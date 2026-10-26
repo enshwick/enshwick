@@ -727,3 +727,209 @@ fn duplicate_and_exclusive_handlers_are_refused() {
     );
     assert_eq!(mids.len(), 2);
 }
+
+// TEMPORARY PROBE: records the state in use and the stub's path.
+
+type Probe = extern "system" fn(*mut u64) -> u32;
+
+/// rcx: a buffer. [0] state in use at the mark, [1] k1..k7 ORed (low 16
+/// bits), [2] low qword of xmm16 | xmm31, [4] state in use after the mark;
+/// [7] nonzero: zero zmm16-31 and the masks first.
+#[unsafe(naked)]
+extern "system" fn probe_upper(buffer: *mut u64) -> u32 {
+    core::arch::naked_asm!(
+        "mov r8, rcx",
+        "vzeroupper",
+        "cmp qword ptr [r8 + 56], 0",
+        "je 2f",
+        "vpxord xmm16, xmm16, xmm16",
+        "vpxord xmm17, xmm17, xmm17",
+        "vpxord xmm18, xmm18, xmm18",
+        "vpxord xmm19, xmm19, xmm19",
+        "vpxord xmm20, xmm20, xmm20",
+        "vpxord xmm21, xmm21, xmm21",
+        "vpxord xmm22, xmm22, xmm22",
+        "vpxord xmm23, xmm23, xmm23",
+        "vpxord xmm24, xmm24, xmm24",
+        "vpxord xmm25, xmm25, xmm25",
+        "vpxord xmm26, xmm26, xmm26",
+        "vpxord xmm27, xmm27, xmm27",
+        "vpxord xmm28, xmm28, xmm28",
+        "vpxord xmm29, xmm29, xmm29",
+        "vpxord xmm30, xmm30, xmm30",
+        "vpxord xmm31, xmm31, xmm31",
+        "kxorw k0, k0, k0",
+        "kxorw k1, k1, k1",
+        "kxorw k2, k2, k2",
+        "kxorw k3, k3, k3",
+        "kxorw k4, k4, k4",
+        "kxorw k5, k5, k5",
+        "kxorw k6, k6, k6",
+        "kxorw k7, k7, k7",
+        "2:",
+        "kmovw eax, k1",
+        "kmovw edx, k2",
+        "or eax, edx",
+        "kmovw edx, k3",
+        "or eax, edx",
+        "kmovw edx, k4",
+        "or eax, edx",
+        "kmovw edx, k5",
+        "or eax, edx",
+        "kmovw edx, k6",
+        "or eax, edx",
+        "kmovw edx, k7",
+        "or eax, edx",
+        "mov [r8 + 8], rax",
+        "vmovq rax, xmm16",
+        "vmovq rdx, xmm31",
+        "or rax, rdx",
+        "mov [r8 + 16], rax",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8], rax",
+        "mov rcx, r8",
+        ".byte 0x0f, 0x1f, 0x44, 0x00, 0x00",
+        "mov r8, rcx",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 32], rax",
+        "and eax, 4",
+        "ret",
+        ".fill 64, 1, 0xcc",
+    )
+}
+
+/// Records `r12` (the stub's path) at [5] and the state in use at [6],
+/// then dirties the upper half of `ymm4`.
+#[unsafe(naked)]
+extern "system" fn probe_handler(_registers: *mut Registers, _context: usize) {
+    core::arch::naked_asm!(
+        "mov r8, [rcx + 8]",
+        "mov [r8 + 40], r12",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 48], rax",
+        "vcmptrueps ymm4, ymm4, ymm4",
+        "ret",
+    )
+}
+
+/// The state in use after each step of `steps`, into rcx[0..12].
+#[unsafe(naked)]
+extern "system" fn probe_cpu(buffer: *mut u64) {
+    core::arch::naked_asm!(
+        "mov r8, rcx",
+        "vzeroupper",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8], rax",
+        "vpxord xmm16, xmm16, xmm16",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 8], rax",
+        "kxorw k1, k1, k1",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 16], rax",
+        "vpxord zmm0, zmm0, zmm0",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 24], rax",
+        "vzeroupper",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 32], rax",
+        "vmovdqu64 zmm0, [r8 + 128]",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 40], rax",
+        "vzeroupper",
+        "vmovdqu64 zmm17, [r8 + 128]",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 48], rax",
+        "vmovdqu ymm0, [r8 + 128]",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 56], rax",
+        "vzeroupper",
+        "vpternlogd zmm0, zmm0, zmm0, 0xff",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 64], rax",
+        "vzeroupper",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 72], rax",
+        "vpternlogd zmm16, zmm16, zmm16, 0xff",
+        "vpxord xmm16, xmm16, xmm16",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 80], rax",
+        "kxnorw k1, k1, k1",
+        "kxorw k1, k1, k1",
+        "mov ecx, 1",
+        "xgetbv",
+        "mov [r8 + 88], rax",
+        "ret",
+    )
+}
+
+#[test]
+fn clear_probe_records_the_state_in_use() {
+    if masks().is_none() {
+        return;
+    }
+    let v = core::arch::x86_64::__cpuid(0);
+    let mut name = [0u8; 12];
+    name[..4].copy_from_slice(&v.ebx.to_le_bytes());
+    name[4..8].copy_from_slice(&v.edx.to_le_bytes());
+    name[8..].copy_from_slice(&v.ecx.to_le_bytes());
+    println!(
+        "PROBE vendor {} chosen {:?}",
+        String::from_utf8_lossy(&name),
+        Vectors::current()
+    );
+    let handler = (probe_handler as *const ()).addr();
+    for zeroed in [false, true] {
+        for (name, vectors) in avx_kinds() {
+            let hooked = hook_mark(
+                // SAFETY: probe only; the copy is called with its own type.
+                unsafe { core::mem::transmute::<Probe, Unary>(probe_upper) },
+                handler,
+                vectors,
+            );
+            // SAFETY: the copy of `probe_upper` takes a buffer pointer.
+            let hooked = unsafe { core::mem::transmute::<Unary, Probe>(hooked) };
+            for hit in 0..3 {
+                let mut b = [0u64; 8];
+                b[7] = u64::from(zeroed);
+                let r = hooked(b.as_mut_ptr());
+                println!(
+                    "PROBE zeroed={zeroed} {name} hit {hit}: in use at mark {:#x}, masks {:#x}, xmm16|31 {:#x}, path r12 {:#x}, in handler {:#x}, after {:#x}, result {r}",
+                    b[0], b[1], b[2], b[5], b[6], b[4]
+                );
+            }
+        }
+    }
+    let mut b = [0u64; 32];
+    probe_cpu(b.as_mut_ptr());
+    let steps = [
+        "vzeroupper",
+        "vpxord xmm16",
+        "kxorw k1",
+        "vpxord zmm0 (zero)",
+        "vzeroupper",
+        "vmovdqu64 zmm0 <- zeros",
+        "vzeroupper; vmovdqu64 zmm17 <- zeros",
+        "vmovdqu ymm0 <- zeros",
+        "vzeroupper; vpternlogd zmm0 ones",
+        "vzeroupper",
+        "zmm16 ones then vpxord xmm16",
+        "k1 ones then kxorw k1",
+    ];
+    for (i, step) in steps.iter().enumerate() {
+        println!("PROBE cpu after {step}: {:#x}", b[i]);
+    }
+}
