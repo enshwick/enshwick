@@ -169,31 +169,31 @@ join check: no"
     #[test]
     fn a_manifest_reads_as_lines() {
         let manifest = enshwick::manifest!(
-            id: "you.survivors-per-altar",
+            id: "you.market-stalls",
             side: BOTH,
             version: "0.2.0",
-            name: "Survivors per Altar",
-            description: "More survivors per altar",
+            name: "Market Stalls",
+            description: "Stalls that sell what players craft",
             authors: ["themaiby", "a friend"],
             license: "MIT",
             homepage: "https://github.com/enshwick/enshwick",
             join: true,
-            requires: ["flame-altar-zones" => ">=0.1, <1.0"],
-            after: ["flame-altar-count"],
-            recommends: ["flame-altar-count" => ""],
-            breaks: ["old-survivors" => "<0.3"],
-            replaces: ["survivors"],
-            was: ["survivor-copies"],
+            requires: ["you.trading-post" => ">=0.1, <1.0"],
+            after: ["you.lanterns"],
+            recommends: ["you.lanterns" => ""],
+            breaks: ["old-stalls" => "<0.3"],
+            replaces: ["stalls"],
+            was: ["market"],
         );
         assert_eq!(
             describe(manifest),
-            "id: you.survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
-             description: More survivors per altar\nauthors: themaiby, a friend\n\
+            "id: you.market-stalls\nversion: 0.2.0\nname: Market Stalls\n\
+             description: Stalls that sell what players craft\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
              side: both\njoin check: yes\n\
-             requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
-             recommends: flame-altar-count\nbreaks: old-survivors <0.3\n\
-             replaces: survivors\nwas: survivor-copies"
+             requires: you.trading-post >=0.1, <1.0\nafter: you.lanterns\n\
+             recommends: you.lanterns\nbreaks: old-stalls <0.3\n\
+             replaces: stalls\nwas: market"
         );
     }
 }

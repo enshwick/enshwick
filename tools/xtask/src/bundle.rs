@@ -410,17 +410,19 @@ mod tests {
 
     #[test]
     fn a_mod_comes_from_its_dev_prerelease_once_its_repository_has_one() {
-        let list = [listed("safes"), listed("zones")];
-        let sources = plan(&list, &workspace(&["safes", "zones"]), |repository| {
-            Ok(repository == "enshwick/mod-safes")
-        })
+        let list = [listed("trading-post"), listed("zones")];
+        let sources = plan(
+            &list,
+            &workspace(&["trading-post", "zones"]),
+            |repository| Ok(repository == "enshwick/mod-trading-post"),
+        )
         .unwrap();
         assert_eq!(
             sources,
             [
                 Source::Released {
-                    package: "safes".into(),
-                    repository: "enshwick/mod-safes".into()
+                    package: "trading-post".into(),
+                    repository: "enshwick/mod-trading-post".into()
                 },
                 Source::Built {
                     package: "zones".into(),
@@ -432,24 +434,26 @@ mod tests {
 
     #[test]
     fn a_mod_that_left_the_workspace_needs_its_dev_prerelease() {
-        let list = [listed("safes")];
+        let list = [listed("trading-post")];
         assert!(plan(&list, &workspace(&[]), |_| Ok(false)).is_err());
         assert!(plan(&list, &workspace(&[]), |_| Ok(true)).is_ok());
     }
 
     #[test]
     fn a_lookup_that_cannot_run_stops_the_plan() {
-        let failed = plan(&[listed("safes")], &workspace(&["safes"]), |_| {
-            Err("gh: not found".to_owned())
-        });
+        let failed = plan(
+            &[listed("trading-post")],
+            &workspace(&["trading-post"]),
+            |_| Err("gh: not found".to_owned()),
+        );
         assert_eq!(failed, Err("gh: not found".to_owned()));
     }
 
     #[test]
     fn a_workspace_mod_missing_from_the_list_is_an_error() {
         let error = plan(
-            &[listed("safes")],
-            &workspace(&["safes", "new-mod"]),
+            &[listed("trading-post")],
+            &workspace(&["trading-post", "new-mod"]),
             |_| Ok(false),
         );
         assert_eq!(error, Err(format!("{MODS} lacks new-mod")));
@@ -476,7 +480,7 @@ mod tests {
             license: b"MIT".to_vec(),
             mods: vec![
                 Mod {
-                    package: "safes".into(),
+                    package: "trading-post".into(),
                     dll: b"s".to_vec(),
                     built: true,
                 },
@@ -492,14 +496,14 @@ mod tests {
             |archive: &str| -> Vec<&str> { archives[archive].keys().map(String::as_str).collect() };
         assert_eq!(
             archives.keys().map(String::as_str).collect::<Vec<_>>(),
-            ["enshwick-loader.zip", "enshwick.zip", "safes.zip"]
+            ["enshwick-loader.zip", "enshwick.zip", "trading-post.zip"]
         );
         assert_eq!(
             names("enshwick.zip"),
             [
                 "LICENSE",
                 "mods/enshwick/enshwick.dll",
-                "mods/safes.dll",
+                "mods/trading-post.dll",
                 "mods/zones.dll",
                 "powrprof.dll"
             ]
@@ -508,19 +512,22 @@ mod tests {
             names("enshwick-loader.zip"),
             ["LICENSE", "mods/enshwick/enshwick.dll", "powrprof.dll"]
         );
-        assert_eq!(names("safes.zip"), ["LICENSE", "mods/safes.dll"]);
+        assert_eq!(
+            names("trading-post.zip"),
+            ["LICENSE", "mods/trading-post.dll"]
+        );
     }
 
     #[test]
     fn a_released_mod_s_dll_comes_out_of_its_single_mod_archive() {
         let archive = zip(&[
             ("LICENSE".to_owned(), b"MIT".to_vec()),
-            ("mods/safes.dll".to_owned(), b"dll".to_vec()),
+            ("mods/trading-post.dll".to_owned(), b"dll".to_vec()),
         ]
         .into_iter()
         .collect())
         .unwrap();
-        assert_eq!(dll_in(&archive, "safes").unwrap(), b"dll");
+        assert_eq!(dll_in(&archive, "trading-post").unwrap(), b"dll");
         assert!(dll_in(&archive, "zones").is_err());
     }
 
@@ -529,7 +536,7 @@ mod tests {
         let entries: BTreeMap<String, Vec<u8>> = [
             ("powrprof.dll", b"stub".as_slice()),
             ("mods/enshwick/enshwick.dll", b"loader"),
-            ("mods/safes.dll", b"mod"),
+            ("mods/trading-post.dll", b"mod"),
         ]
         .into_iter()
         .map(|(path, content)| (path.to_owned(), content.to_vec()))
@@ -545,7 +552,7 @@ mod tests {
             names,
             [
                 "mods/enshwick/enshwick.dll",
-                "mods/safes.dll",
+                "mods/trading-post.dll",
                 "powrprof.dll"
             ]
         );

@@ -447,10 +447,10 @@ mod tests {
         let text = "[workspace]\nmembers = [\"mods/*\"]\nexclude = [\"scratch\"]\n";
         std::fs::write(&manifest, text).unwrap();
         create(&dir.join("mods"), "you.lockers", Side::Server).unwrap();
-        create(&dir.join("scratch"), "you.probe", Side::Server).unwrap();
+        create(&dir.join("scratch"), "you.my-mod", Side::Server).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
-        let probe = std::fs::read_to_string(dir.join("scratch/probe/Cargo.toml")).unwrap();
-        assert!(probe.contains("[profile.release]") && probe.ends_with("\n[workspace]\n"));
+        let created = std::fs::read_to_string(dir.join("scratch/my-mod/Cargo.toml")).unwrap();
+        assert!(created.contains("[profile.release]") && created.ends_with("\n[workspace]\n"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -460,7 +460,7 @@ mod tests {
         let manifest = dir.join("Cargo.toml");
         let text = "[workspace]\nmembers = []\nexclude = [\"./scratch/\"]\n";
         std::fs::write(&manifest, text).unwrap();
-        create(&dir.join("scratch"), "you.probe", Side::Server).unwrap();
+        create(&dir.join("scratch"), "you.my-mod", Side::Server).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
         std::fs::remove_dir_all(&dir).unwrap();
     }
