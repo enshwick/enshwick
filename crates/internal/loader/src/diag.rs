@@ -484,7 +484,7 @@ conflicts:"
 }
 
 /// `hh:mm:ssZ` of a Unix time.
-fn clock(at: u64) -> String {
+pub(crate) fn clock(at: u64) -> String {
     format!("{:02}:{:02}:{:02}Z", at / 3600 % 24, at / 60 % 60, at % 60)
 }
 
