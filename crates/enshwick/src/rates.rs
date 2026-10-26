@@ -95,7 +95,8 @@ pub enum Rate {
     /// too, for the points their skill tree shows, and the server checks
     /// every unlock against its own count, so only a mod with
     /// `join: true` declares it, set from a synced setting. Lowering it
-    /// mid-game can leave a character with more points spent than it has.
+    /// mid-game leaves a character that spent more than its new total
+    /// unable to unlock more skills until it resets its tree.
     SkillPoints,
     /// How many items each stack of random loot holds, rounded and held
     /// to the item's stack size: the loot of chests, corpses and animals and

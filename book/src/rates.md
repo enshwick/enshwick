@@ -73,8 +73,9 @@ of the product at once.
 
 Clients count `WorkshopSpeed` and `SkillPoints` too, for the time and the
 points their screens show, and the server checks every skill unlock against
-its own count, so lowering `SkillPoints` mid-game can leave a character
-with more points spent than it has. Only a
+its own count. Lowering `SkillPoints` mid-game leaves a character that spent
+more than its new total unable to unlock more skills until it resets its
+tree. Only a
 mod with `join: true` may declare it, and `Rate::seen_by_clients` says which
 rates need it. Set such a rate from a `sync` setting: every player who joins
 then runs the mod with the server's factor, and a player without the mod
