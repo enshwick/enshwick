@@ -497,8 +497,9 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     if let Some(list) = list {
         // SAFETY: the caller's contract makes `out` writable for a `[u64; 2]`
         // span for the call. The list it now names stays in `LISTS` while its
-        // generation is current and is retired, not dropped, after: the
-        // game's callers read it before they return, within the step.
+        // generation is current and is retired after, freed only once the
+        // world has stepped `retire::GRACE` times and `retire::MIN_AGE` has
+        // passed; the game's callers read it before they return.
         unsafe {
             enshwick::raw::write_at(
                 out.cast(),
