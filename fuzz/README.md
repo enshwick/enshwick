@@ -35,4 +35,5 @@ holds the small seed corpus kept in the repository. A crash is written to
 `cargo +nightly fuzz run -O --target-dir target/fuzz <target> <file>`.
 A crash becomes a regression test beside the code it found, then a fix.
 
-The nightly CI lane runs every target for a few minutes.
+The nightly CI lane runs every target for a few minutes; a pull request that
+changes what the targets read runs each for a few seconds.
