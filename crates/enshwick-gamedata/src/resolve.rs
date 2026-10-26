@@ -1,5 +1,7 @@
 //! A table resolved for the running build, and choosing that table.
 
+use enshwick::code::Pattern;
+
 use crate::reflect::Fingerprint;
 use crate::{Side, Table};
 
@@ -23,9 +25,22 @@ pub struct Resolved {
     pub(crate) missing: Vec<String>,
     pub(crate) uncarried: Vec<String>,
     pub(crate) attributes: Vec<(String, String)>,
+    pub(crate) heads: Vec<(String, Pattern, u64)>,
 }
 
 impl Resolved {
+    /// The pattern of symbol `id` and how many bytes before the symbol it
+    /// starts, for a symbol its pattern finds directly: a hook checks the
+    /// code there before it patches. `None` for a symbol without one, or
+    /// one its pattern finds through a displacement.
+    #[must_use]
+    pub fn head(&self, id: &str) -> Option<(&Pattern, u64)> {
+        self.heads
+            .iter()
+            .find(|(head, ..)| head == id)
+            .map(|(_, pattern, at)| (pattern, *at))
+    }
+
     /// The name the log shows.
     #[must_use]
     pub fn name(&self) -> &str {

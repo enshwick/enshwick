@@ -66,9 +66,10 @@ fn warn_unloaded(others: &[crate::others::OtherDll]) {
     for dll in chained {
         crate::log!(
             WARN,
-            "{}/{} did not load",
+            "{}/{} did not load ({})",
             crate::others::CHAIN_DIR,
-            dll.file
+            dll.file,
+            crate::errors::CHAIN_NOT_LOADED
         );
     }
 }
@@ -109,6 +110,7 @@ fn link_features(loader: &'static Loader) {
     crate::survivors::link(loader);
     crate::textures::link(loader);
     crate::interactions::link(loader);
+    crate::rate_links::link(loader);
     crate::progress::link(loader);
     crate::bases::link(loader);
     crate::ui::link(loader);

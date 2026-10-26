@@ -28,6 +28,7 @@ chapters! {
     Effects => "effects.md",
     Daytime => "daytime.md",
     GameSettings => "game-settings.md",
+    Rates => "rates.md",
     Damage => "damage.md",
     Buffs => "buffs.md",
     Knowledge => "knowledge.md",

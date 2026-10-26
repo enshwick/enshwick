@@ -53,8 +53,11 @@ it, the tombstone mode on the next death, the weather frequency on the next
 change of weather. A new day or night length keeps the clock's hour and only
 changes its pace ([time of day](daytime.md)).
 
-A change lasts until the server stops: the game writes it nowhere, and the
-configuration's values return with the next start. `keep(|s| ...)` (minor
+A change lasts until the server stops, and the configuration's values return
+with the next start, unless the game saves its configuration first. A
+dedicated server writes `gameSettings` back to `enshrouded_server.json`
+whenever its configuration changes, such as after a ban, an unban or an
+admin's settings change, and a change made here may then reach the file. `keep(|s| ...)` (minor
 57) changes the settings the same way and keeps the fields whose value it
 changed with the running world: the loader applies them again each time that
 world loads, by the end of its first step, over what the configuration says.

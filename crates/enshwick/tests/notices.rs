@@ -42,8 +42,8 @@ mod tests {
     #[test]
     fn a_notice_shows_on_screen_where_it_can_and_goes_to_chat_elsewhere() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("keen::ecs::CurrentTransform", 1)
-            .type_hash("keen::ecs::UsedItem", 2)
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
             .player(player(2, 20))
             .player(player(3, 30))
             .net_peer(Peer::Player(20))

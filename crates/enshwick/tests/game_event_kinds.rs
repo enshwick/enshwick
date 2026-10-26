@@ -99,8 +99,8 @@ mod tests {
             .type_size("hit_history", 152)
             .type_hash("experience_credit", CREDIT)
             .type_size("experience_credit", 8)
-            .type_hash("keen::ecs::CurrentTransform", 1)
-            .type_hash("keen::ecs::UsedItem", 2)
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
     }
 
     #[test]

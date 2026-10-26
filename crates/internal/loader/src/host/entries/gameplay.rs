@@ -1,12 +1,12 @@
-//! Host functions for altars, survivors, stats, affixes, buffs, knowledge and the game's checks.
+//! Host functions for altars, survivors, stats, affixes, buffs, knowledge, game rates and the game's checks.
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{ModHandle, Status, Str};
+use enshwick::abi::{ModHandle, RateId, Status, Str};
 use enshwick::ecs::Entity;
 
 use crate::host::entries::mods::list;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
-use crate::host::{caller, caller_index, entry};
+use crate::host::{caller, caller_index, calling, entry};
 
 pub(crate) extern "system" fn altars_open(me: ModHandle) -> Status {
     entry("altars_open", || {
@@ -819,5 +819,26 @@ pub(crate) extern "system" fn quests(
             }
             Err(status) => status,
         }
+    })
+}
+
+pub(crate) extern "system" fn rate(me: ModHandle, rate: RateId) -> Status {
+    entry("rate", || match calling(me) {
+        Ok((loader, index, record)) => {
+            let links = crate::rates::links(rate);
+            let available = links.iter().all(|&symbol| loader.address(symbol).is_some())
+                // The loot rate reads stack sizes from the item registry,
+                // which the inventory link finds.
+                && (rate != RateId::LOOT || crate::inventory::open(loader).is_ok());
+            crate::rates::RATES.declare(index, rate, available, record.joins_when_on())
+        }
+        Err(status) => status,
+    })
+}
+
+pub(crate) extern "system" fn set_rate(me: ModHandle, rate: RateId, factor: f32) -> Status {
+    entry("set_rate", || match caller_index(me) {
+        Ok((_, index)) => crate::rates::RATES.set(index, rate, factor),
+        Err(status) => status,
     })
 }

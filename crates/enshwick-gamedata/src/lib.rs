@@ -192,6 +192,14 @@ mod tests {
         assert_eq!(resolved.constant("c.used"), Some(0x48));
         assert_eq!(resolved.checks(), [("a_system".to_owned(), 0x10)]);
         assert!(resolved.missing().is_empty());
+        let (head, at) = resolved.head("f.found").unwrap();
+        assert_eq!(at, 1);
+        assert!(head.matches(&[0x11, 0x22, 0x00, 0x44]));
+        assert!(resolved.head("f.plain").is_none(), "no pattern");
+        assert!(
+            resolved.head("f.called").is_none(),
+            "found through a displacement"
+        );
     }
 
     #[test]

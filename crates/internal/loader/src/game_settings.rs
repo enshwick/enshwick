@@ -9,8 +9,10 @@
 //! their own world, and it also marks the settings for the server's next
 //! info message, which every client takes too. The game validates no
 //! change, so the loader refuses day and night lengths of zero or less,
-//! which the clock divides by. The game writes no change to disk: the
-//! configuration's values return with the next start.
+//! which the clock divides by. A dedicated server writes `gameSettings`
+//! back to `enshrouded_server.json` whenever its configuration changes (a
+//! ban, an unban, an admin's settings change; server 399), so a change may
+//! outlast a restart.
 //!
 //! Fields mods keep are the loader's to keep: by reflected name, with the
 //! world, in `mod-data/enshwick/worlds/<key>/game-settings.toml`. When a
