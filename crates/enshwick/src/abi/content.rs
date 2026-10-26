@@ -173,7 +173,7 @@ impl ChangeOp {
     pub const TIMES: Self = Self(1);
     /// The mod's value is taken out, as if it never set one; `value` is
     /// ignored. Only [`HostApi::set_change`](super::HostApi::set_change)
-    /// takes it. Since minor 84.
+    /// takes it. Since minor 85.
     pub const RESET: Self = Self(2);
 }
 

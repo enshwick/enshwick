@@ -202,6 +202,11 @@ mod textures;
 mod ui;
 #[cfg(windows)]
 mod vetoes;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build reads the game's voxels")
+)]
+mod voxels;
 #[cfg(windows)]
 mod watch;
 #[cfg(windows)]

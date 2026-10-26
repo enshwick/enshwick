@@ -39,6 +39,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("textures", crate::textures::TABLE_IDS),
     ("ui", crate::ui::TABLE_IDS),
     ("vetoes", crate::vetoes::TABLE_IDS),
+    ("voxels", crate::voxels::TABLE_IDS),
     ("weather", crate::weather::TABLE_IDS),
     ("world", crate::world::TABLE_IDS),
     ("writes", crate::writes::TABLE_IDS),

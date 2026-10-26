@@ -16,7 +16,7 @@ use crate::abi::{
     ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
+    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1145,6 +1145,26 @@ pub struct HostApi {
     /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
     /// Since minor 82.
     pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
+    /// Reads the voxels of the server's world in the box of `size` voxels
+    /// from `min`, in voxels of half a metre from the world's corner, into
+    /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
+    /// entries. `min` and `size` are borrowed for the call; `out` points at
+    /// `capacity` writable entries, untouched unless the call returns
+    /// [`Status::OK`]. Voxels past the world's edge read as air.
+    /// [`Status::BAD_ARGS`] for a null pointer, an empty box, one past
+    /// [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or a `capacity`
+    /// below them; [`Status::NOT_LOADED`] while part of the box is not
+    /// loaded, far from every player; [`Status::MISSING`] before a world
+    /// runs or on a build without the read. On the server's game thread at
+    /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
+    /// inside a step. Since minor 84.
+    pub voxel_read: extern "system" fn(
+        me: ModHandle,
+        min: *const [u32; 3],
+        size: *const [u32; 3],
+        out: *mut Voxel,
+        capacity: u64,
+    ) -> Status,
     /// Declares a change of a vanilla value, as
     /// [`HostApi::change_data`] does, whose value the mod sets later with
     /// [`HostApi::set_change`]; until then the mod changes nothing. The
@@ -1156,7 +1176,7 @@ pub struct HostApi {
     /// length; [`Status::MISSING`] when the build does not reflect the
     /// field; [`Status::REFUSED`] for a field clients read in a mod without
     /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN); [`Status::TOO_LATE`] after
-    /// `enshwick_mod_init`. Since minor 84.
+    /// `enshwick_mod_init`. Since minor 85.
     pub declare_change:
         extern "system" fn(me: ModHandle, change: *const DataChange, out: *mut ChangeId) -> Status,
     /// Puts `value` in force for the calling mod's change `id` by `op`:
@@ -1173,7 +1193,7 @@ pub struct HostApi {
     /// not build again in place (the value is in force for what did build
     /// and for every first read, the rest until a restart). Any
     /// thread; it allocates and builds resources, so it is no per-frame
-    /// call. Since minor 84.
+    /// call. Since minor 85.
     pub set_change:
         extern "system" fn(me: ModHandle, id: ChangeId, op: ChangeOp, value: f64) -> Status,
 }
