@@ -9,6 +9,10 @@ use enshwick::i18n::{Language, Texts};
 /// freely and round.
 pub const MAX_STOPS: u32 = 32;
 
+/// The longest list of numbers that gets a row per element; a longer one
+/// shows as a line and is changed in the file.
+pub const MAX_LIST_ROWS: usize = 16;
+
 /// How a setting shows.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Widget {
@@ -36,8 +40,9 @@ pub enum Widget {
         /// them.
         index: usize,
     },
-    /// A line with the value, for a setting no row edits: text, lists,
-    /// tables and numbers without a range.
+    /// A line with the value, for a setting no row edits: text, tables,
+    /// numbers without a range and lists other than short lists of numbers
+    /// with a range.
     Text(String),
 }
 
@@ -55,7 +60,7 @@ pub enum Lock {
 /// One row of a settings page.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
-    /// The key in the settings file.
+    /// The key in the settings file; `key[i]` for element `i` of a list.
     pub key: String,
     /// The label players read: the key in words, after its group's title
     /// for a setting in a group.
@@ -190,7 +195,7 @@ pub fn rows(
     schema
         .fields
         .iter()
-        .map(|field| {
+        .flat_map(|field| {
             let from_server =
                 field.follows_server() && server.is_some_and(|s| value_at(s, &field.key).is_some());
             let value = server
@@ -200,41 +205,78 @@ pub fn rows(
                 .cloned()
                 .or_else(|| default(field))
                 .unwrap_or_else(|| toml::Value::String(String::new()));
-            let widget = widget(field, &value, words);
-            let lock = if from_server {
-                Lock::Server
-            } else if matches!(widget, Widget::Text(_)) {
-                Lock::File
-            } else {
-                Lock::Open
-            };
-            let group = schema.group_of(&field.key);
-            let own = field.key.rsplit('.').next().unwrap_or(&field.key);
-            let label = words
-                .and_then(|w| w.get(&field.text))
-                .unwrap_or_else(|| key_words(own));
-            let label = match group {
-                Some(group) => {
-                    let title = words
-                        .and_then(|w| w.get(&group.text))
-                        .unwrap_or_else(|| key_words(&group.key.replace('.', " ")));
-                    format!("{title}: {label}")
+            let (label, group) = label(schema, field, words);
+            let doc = words
+                .and_then(|w| w.get(&format!("{}.doc", field.text)))
+                .unwrap_or_else(|| field.doc.clone());
+            let row = |key: String, label: String, widget: Widget| {
+                let lock = if from_server {
+                    Lock::Server
+                } else if matches!(widget, Widget::Text(_)) {
+                    Lock::File
+                } else {
+                    Lock::Open
+                };
+                Row {
+                    key,
+                    label,
+                    group: group.clone(),
+                    doc: doc.clone(),
+                    widget,
+                    lock,
+                    stage: field.stage,
                 }
-                None => label,
             };
-            Row {
-                key: field.key.clone(),
-                label,
-                group: group.map(|g| g.key.clone()),
-                doc: words
-                    .and_then(|w| w.get(&format!("{}.doc", field.text)))
-                    .unwrap_or_else(|| field.doc.clone()),
-                widget,
-                lock,
-                stage: field.stage,
+            match element_field(field, &value) {
+                Some((element, items)) => items
+                    .iter()
+                    .enumerate()
+                    .map(|(i, item)| {
+                        row(
+                            format!("{}[{i}]", field.key),
+                            format!("{label} {}", i + 1),
+                            widget(&element, item, words),
+                        )
+                    })
+                    .collect(),
+                None => vec![row(field.key.clone(), label, widget(field, &value, words))],
             }
         })
         .collect()
+}
+
+/// The label of `field`'s row, after its group's title for a field in a
+/// group, and the group's key.
+fn label(schema: &Schema, field: &Field, words: Option<Words<'_>>) -> (String, Option<String>) {
+    let group = schema.group_of(&field.key);
+    let own = field.key.rsplit('.').next().unwrap_or(&field.key);
+    let label = words
+        .and_then(|w| w.get(&field.text))
+        .unwrap_or_else(|| key_words(own));
+    match group {
+        Some(group) => {
+            let title = words
+                .and_then(|w| w.get(&group.text))
+                .unwrap_or_else(|| key_words(&group.key.replace('.', " ")));
+            (format!("{title}: {label}"), Some(group.key.clone()))
+        }
+        None => (label, None),
+    }
+}
+
+/// For a list of numbers with a range, short enough for a row per element:
+/// the field each element is, and the elements.
+fn element_field<'a>(field: &Field, value: &'a toml::Value) -> Option<(Field, &'a [toml::Value])> {
+    let items = value.as_array()?;
+    let kind = field.element_kind()?;
+    let numbers = matches!(kind, Kind::Integer | Kind::Float);
+    let ranged = field.min.is_some() && field.max.is_some();
+    if !numbers || !ranged || !field.choices.is_empty() || items.len() > MAX_LIST_ROWS {
+        return None;
+    }
+    let mut element = field.clone();
+    element.kind = Some(kind);
+    Some((element, items))
 }
 
 fn default(field: &Field) -> Option<toml::Value> {
@@ -432,5 +474,32 @@ mod tests {
         assert!(
             matches!(rows[0].widget, Widget::Slider { value, .. } if (value - 2.5).abs() < 1e-6)
         );
+    }
+
+    #[test]
+    fn a_short_list_of_numbers_gets_a_slider_per_element() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("per_level", Stage::Startup, &[2, 4]).with_range(Some(1.0), Some(32.0)),
+                Field::new("names", Stage::Runtime, &["a"]),
+            ],
+        );
+        let shown = rows(&schema, "per_level = [2, 30, 5]\n", None, None);
+        let keys: Vec<&str> = shown.iter().map(|r| r.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["per_level[0]", "per_level[1]", "per_level[2]", "names"]
+        );
+        assert_eq!(shown[1].label, "Per level 2");
+        assert!(matches!(
+            shown[1].widget,
+            Widget::Slider { value, steps: 32, whole: true, .. } if (value - 30.0).abs() < 1e-6
+        ));
+        assert_eq!(shown[1].lock, Lock::Open);
+        assert_eq!(shown[3].lock, Lock::File);
+        let long = format!("per_level = {:?}\n", vec![1; MAX_LIST_ROWS + 1]);
+        assert_eq!(rows(&schema, &long, None, None)[0].lock, Lock::File);
     }
 }

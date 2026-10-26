@@ -106,10 +106,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let (spawn, time) = (function("ecs.spawn_request")?, function("world.time")?);
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `ecs.spawn_request` is the address
+                // of the game function with the `SpawnFn` signature on this
+                // build.
                 spawn: unsafe { core::mem::transmute::<usize, SpawnFn>(spawn) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `world.time` is the address of the
+                // game function with the `TimeFn` signature on this build.
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
                 command_buffers: loader.offset("ecs.command_buffers")?,
                 world_entities: loader.offset("world.entities")?,
@@ -152,8 +154,10 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Stat
     if request.template == [0; 16] {
         return Err(Status::BAD_ARGS);
     }
-    // SAFETY: the World holds its time where the game's own function reads
-    // it; the entity world lies inside the World.
+    // SAFETY: `world::server` checked the caller is on the server's game
+    // thread and `world` is non-null; the entity world lies inside the World
+    // at the table's `world.entities`, so the subtraction gives the World the
+    // game's own time function takes.
     let now = unsafe {
         (layout.time)(core::ptr::with_exposed_provenance(
             world - layout.world_entities,
@@ -222,23 +226,19 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Stat
         initial_count: entries.len() as u64,
         reserved_tail: [0; 8],
     };
-    // SAFETY: the entity world holds a pointer to its command buffers.
-    let buffer: usize = unsafe { crate::world::read(world, layout.command_buffers) };
-    if buffer == 0 {
+    // SAFETY: `world::server` checked the caller is on the server's game
+    // thread and `world` is non-null; the entity world holds the pointer to
+    // its command buffers at the table's `ecs.command_buffers`.
+    let buffer = unsafe { crate::memory::read_ptr::<u8>(world, layout.command_buffers) };
+    if buffer.is_null() {
         return Err(Status::MISSING);
     }
     let mut entity = 0u32;
-    // SAFETY: the world's first command buffer on the game thread between
-    // steps, where no system writes it; the request and its components stay
-    // alive for the call, which copies them.
-    unsafe {
-        (layout.spawn)(
-            core::ptr::with_exposed_provenance_mut(buffer),
-            &raw mut entity,
-            0,
-            &raw const engine_request,
-        );
-    };
+    // SAFETY: `buffer` is the world's first command buffer, non-null by the
+    // earlier check, used on the game thread between steps, where no system
+    // writes it; the request and its components stay alive for the call,
+    // which copies them.
+    unsafe { (layout.spawn)(buffer, &raw mut entity, 0, &raw const engine_request) };
     if entity == 0 {
         return Err(Status::REFUSED);
     }

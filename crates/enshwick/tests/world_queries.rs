@@ -65,7 +65,7 @@ mod tests {
             .data_dir(data.to_str().unwrap())
             .world_key("world0-1a2b3c4d")
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Queries)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();

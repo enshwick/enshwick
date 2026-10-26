@@ -83,7 +83,7 @@ mod tests {
     fn the_mod_allows_reloads_and_stops_its_ticker() {
         assert!(HotReload::manifest().flags.contains(ManifestFlags::RELOAD));
         let loader = FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this crate's `declare_mod!(HotReload)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         enshwick_mod_shutdown();

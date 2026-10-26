@@ -41,7 +41,11 @@ impl Answerer {
         match self {
             Self::Mod(registered) => {
                 if registered.live() {
-                    // SAFETY: the mod's callback with its own pointer, once.
+                    // SAFETY: `registered.live()` says the mod still runs, so
+                    // its DLL and the callback in it are loaded; the callback
+                    // gets the pointer its mod registered with it, once, as
+                    // `self` is consumed; an `extern "system"` function aborts
+                    // rather than unwinds.
                     crate::profile::call(
                         registered.owner,
                         crate::profile::Feature::Interface,
@@ -158,9 +162,10 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     } else {
         &texts.message
     };
-    // SAFETY: the texts stay in `SHOWN` for the next `KEPT - 1` dialogs, and
-    // the game reads a tag's text only while drawing its dialog, which shows
-    // one at a time.
+    // SAFETY: the `Box<str>` stays in `SHOWN` until `KEPT` more dialogs
+    // showed, and the game reads a tag's text only while drawing its dialog,
+    // which shows one at a time. The `'static` is wider than that: a caller
+    // that keeps the text past `KEPT` dialogs reads freed memory.
     Some(unsafe { &*core::ptr::from_ref::<str>(text) })
 }
 
@@ -218,8 +223,10 @@ pub(crate) fn armed(in_game: bool) {
 ///
 /// # Safety
 ///
-/// Inside a frame, on its thread, no popup of the game's showing; `next` is
-/// the rest of the popup's chain.
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No popup of the game's is active.
+/// - `next` is the rest of the chain on the game's `ui.popup`.
 pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
     let Some(layout) = engine.dialog else {
         return;
@@ -235,26 +242,40 @@ pub(super) unsafe fn draw(engine: &Engine, next: PopupFn, context: usize) {
         let Some(shown) = current.as_mut() else {
             return;
         };
-        // SAFETY: the host's answer flag, on the thread that draws it.
-        let pending = unsafe { crate::world::read::<u8>(host, layout.answered) };
+        // SAFETY: `host` is non-zero, checked by the guard before it, and is
+        // the interface host read from the frame's live context; its answer
+        // flag sits at the table's `ui.host_answered`, and only this thread,
+        // which draws the frame, writes it.
+        let pending = unsafe { crate::memory::read::<u8>(host, layout.answered) };
         if pending != 0 {
             // An answer of the game's own waits for its flow.
             return;
         }
         let nav = engine.nav(context);
-        // SAFETY: inside the frame, the loader's own popup state.
+        // SAFETY: `next` is the rest of `ui.popup`'s chain and this runs in
+        // the frame on its thread, by this function's `# Safety`; the state
+        // is the loader's own boxed `POPUP_SIZE` bytes, which hold the
+        // table's `ui.popup_extent` (`DialogLayout::read`).
         unsafe { next(shown.state.ptr()) };
         engine.restore_nav(context, nav);
-        // SAFETY: as above.
-        let answered = unsafe { crate::world::read::<u8>(host, layout.answered) };
+        // SAFETY: `host` is non-zero, checked by the guard before it, and is
+        // the interface host read from the frame's live context; its answer
+        // flag sits at the table's `ui.host_answered`, and only this thread,
+        // which draws the frame, writes it.
+        let answered = unsafe { crate::memory::read::<u8>(host, layout.answered) };
         if answered == 0 {
             return;
         }
-        // SAFETY: as above.
-        let index = unsafe { crate::world::read::<u8>(host, layout.answer) };
-        let flag = core::ptr::with_exposed_provenance_mut::<u8>(host + layout.answered);
-        // SAFETY: the flag the click set, cleared on the thread that draws.
-        unsafe { flag.write(0) };
+        // SAFETY: `host` is non-zero, checked by the guard before it, and is
+        // the interface host read from the frame's live context; the clicked
+        // button's index sits at the table's `ui.host_answer`, written only on
+        // this thread.
+        let index = unsafe { crate::memory::read::<u8>(host, layout.answer) };
+        // SAFETY: `host` is non-zero, checked by the guard before it, and is
+        // the interface host read from the frame's live context; the answer
+        // flag at the table's `ui.host_answered` is a byte the game reads and
+        // writes only on this thread, which draws the frame.
+        unsafe { crate::memory::write(host, layout.answered, 0u8) };
         if let Some(done) = current.take() {
             done.answerer.answer(u32::from(index));
         }
@@ -359,7 +380,8 @@ fn system_box(dialog: Pending) {
             }
             let text: Vec<u16> = body.encode_utf16().chain([0]).collect();
             let title: Vec<u16> = dialog.title.encode_utf16().chain([0]).collect();
-            // SAFETY: NUL-terminated strings and no owner window.
+            // SAFETY: `text` and `title` are live NUL-terminated UTF-16
+            // buffers built above, and a null owner window is allowed.
             let result = unsafe {
                 MessageBoxW(
                     core::ptr::null_mut(),

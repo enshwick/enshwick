@@ -140,7 +140,8 @@ struct Watched {
     copies: u32,
 }
 
-// SAFETY: a module handle is an address the watcher thread alone uses.
+// SAFETY: the only non-`Send` field is the `HMODULE`, a process-wide
+// handle with no thread affinity, and only the watcher thread uses it.
 unsafe impl Send for Watched {}
 
 /// Readies the per-mod state for `mods` mods.
@@ -351,7 +352,9 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         let _gone = std::fs::remove_file(&copy);
         return Err("the new DLL did not load as a mod (see above)".into());
     };
-    // SAFETY: the manifest is the loader's own copy.
+    // SAFETY: `load_copy` returned the loader's copy of the manifest, whose
+    // strings point into the new DLL's static data; the DLL stays loaded
+    // until the `FreeLibrary` below, after the last use of `new_id`.
     let new_id = unsafe { new.manifest.id.as_str() }.unwrap_or_default();
     let refused = if new_id != record.id {
         Some("the new DLL is another mod".to_owned())
@@ -361,7 +364,9 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         None
     };
     if let Some(why) = refused {
-        // SAFETY: loaded above; none of its code ran.
+        // SAFETY: `load_copy` loaded `new.module` and none of its code ran but
+        // its query exports, which start nothing; nothing reads `new` after
+        // this.
         unsafe { FreeLibrary(new.module) };
         let _gone = std::fs::remove_file(&copy);
         return Err(why);
@@ -389,8 +394,9 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     record.off.store(false, Ordering::Release);
     REINIT.store(index, Ordering::Release);
     let status = initialising(index, || {
-        // SAFETY: the new DLL exports `init` with this signature; the table
-        // lives for the process.
+        // SAFETY: `load_copy` typed `new.init` from the DLL's `init` export,
+        // which `enshwick::abi::exports` declares with this signature; the
+        // DLL stays loaded for the process, and `host::API` is a `static`.
         unsafe { (new.init)(&raw const host::API, host::handle(index)) }
     });
     REINIT.store(NONE, Ordering::Release);
@@ -403,9 +409,13 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         loader.turn_off(index, &format!("reload: init returned {}", status.0));
         return Err(format!("its init returned {}", status.0));
     }
-    // SAFETY: as above, after a successful init.
+    // SAFETY: `load_copy` typed `new.ready` from the DLL's `ready` export,
+    // which `enshwick::abi::exports` declares with this signature; it runs
+    // after `init` returned OK, checked by the guard before it, the DLL stays
+    // loaded for the process, and `host::API` is a `static`.
     unsafe { (new.ready)(&raw const host::API, host::handle(index)) };
-    // SAFETY: the new manifest is the loader's copy.
+    // SAFETY: `load_copy` returned the loader's copy of the manifest, whose
+    // strings point into the new DLL's static data, loaded for the process.
     let version = unsafe { new.manifest.version.as_str() }.unwrap_or_default();
     Ok(if version == record.version {
         String::new()
@@ -439,12 +449,13 @@ fn unlink(loader: &Loader, index: usize) {
 /// Runs the `shutdown` export of `module`, when it has one.
 fn shutdown(module: HMODULE) {
     let name = format!("{}\0", exports::SHUTDOWN);
-    // SAFETY: a loaded module and a NUL-terminated name.
+    // SAFETY: `module` is the copy the watcher loaded and never frees, and
+    // `name` ends in the NUL pushed by the `format!` above.
     let Some(found) = (unsafe { GetProcAddress(module, name.as_ptr()) }) else {
         return;
     };
-    // SAFETY: the export has the signature `exports::SHUTDOWN` documents,
-    // and catches its own panics.
+    // SAFETY: `enshwick::abi::exports::SHUTDOWN` documents the export as an
+    // `extern "system" fn()`, which aborts rather than unwinds.
     let shutdown = unsafe {
         core::mem::transmute::<unsafe extern "system" fn() -> isize, extern "system" fn()>(found)
     };

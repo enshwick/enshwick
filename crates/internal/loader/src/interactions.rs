@@ -7,9 +7,9 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
-
 use arc_swap::ArcSwapOption;
+use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
+use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
@@ -79,17 +79,27 @@ static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new()
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
 
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `OfferFn` is the signature of the build table's
+// `access.offer_test`, and `link` uses this slot only as that function's
+// next.
 static OFFER_NEXT: Next<OfferFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `ActionFn` is the signature of the build table's
+// `access.transfer`, and `link` uses this slot only as that function's next.
 static TRANSFER_NEXT: Next<ActionFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `ActionFn` is the signature of the build table's `access.sort`,
+// and `link` uses this slot only as that function's next.
 static SORT_NEXT: Next<ActionFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `StockFn` is the signature of the build table's
+// `access.base_stock`, and `link` uses this slot only as that function's
+// next.
 static STOCK_NEXT: Next<StockFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `DismantleFn` is the signature of the build table's
+// `access.dismantle_method`, and `link` uses this slot only as that
+// function's next.
 static DISMANTLE_NEXT: Next<DismantleFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `ActionsFn` is the signature of a system entry, here the
+// reflected `inventory_actions` system's, and `link` uses this slot only as
+// that function's next.
 static ACTIONS_NEXT: Next<ActionsFn> = unsafe { Next::new() };
 
 type OfferFn =
@@ -239,23 +249,14 @@ pub(crate) fn forget() {
     PLAYERS.store(None);
 }
 
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
-}
-
 fn allowed(call: &Interaction) -> bool {
     let Some(filters) = SEALED.get() else {
         return true;
     };
     filters.iter().filter(|f| f.live()).all(|f| {
-        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-        // and takes the pointer it registered; the call is valid for it.
+        // SAFETY: `f` is live, so the mod's DLL that holds the callback stays
+        // loaded; the callback gets the user pointer its mod registered and
+        // `call`, which lives for the call.
         crate::profile::call(f.owner, crate::profile::Feature::Interactions, || unsafe {
             (f.callback)(call, f.user()) != 0
         })
@@ -267,8 +268,8 @@ fn allowed(call: &Interaction) -> bool {
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of a running system, used on its thread, or
-/// null.
+/// - `ctx` is null or the live context of a running system, used on its
+///   thread.
 unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Interaction {
     let mut call = Interaction {
         header: Header::of::<Interaction>(),
@@ -283,15 +284,19 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
     if let Some((_, layout, components)) = LOADED.get()
         && !ctx.is_null()
     {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `ctx` is non-null by the check before it and, by the caller's
+        // contract, a running system's live context on its thread.
         let item = unsafe { components.component(ctx, target, layout.used_item) };
-        // SAFETY: as above.
+        // SAFETY: `ctx` is non-null by the check before it and, by the caller's
+        // contract, a running system's live context on its thread.
         let transform = unsafe { components.component(ctx, target, layout.transform) };
         if let (Some(item), Some(transform)) = (item, transform) {
-            // SAFETY: UsedItem is the item id alone.
-            call.item = unsafe { read(item, 0) };
-            // SAFETY: a transform starts with its 32.32 position.
-            let fixed: [i64; 3] = unsafe { read(transform, 0) };
+            // SAFETY: `item` is the target's live `UsedItem` component, which
+            // is the u32 item id alone.
+            call.item = unsafe { read_at(item, 0) };
+            // SAFETY: `transform` is the target's live `CurrentTransform`
+            // component, which starts with its 32.32 position, three i64.
+            let fixed: [i64; 3] = unsafe { read_at(transform, 0) };
             call.position = enshwick::ecs::metres(fixed);
             call.known = 1;
         }
@@ -303,10 +308,12 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of a running system, or null.
+/// - `ctx` is null or the live context of a running system, used on its
+///   thread.
 unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool {
     loader.side == Side::SERVER
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees a null or live system context on its
+        // thread, all `is_world` asks for.
         || unsafe { engine.is_world(ctx, crate::world::server_world()) }
 }
 
@@ -314,18 +321,21 @@ unsafe fn server_world(loader: &Loader, engine: &Engine, ctx: *mut u64) -> bool 
 ///
 /// # Safety
 ///
-/// `ctx` is the live context of a running system, or null.
+/// - `ctx` is null or the live context of a running system, used on its
+///   thread.
 unsafe fn server_player(ctx: *mut u64) -> Option<u32> {
     let (loader, _, _) = LOADED.get()?;
     let engine = crate::ecs::resolved()?;
     if ctx.is_null() {
         return None;
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees a null or live system context on its
+    // thread, all `server_world` asks for.
     if !unsafe { server_world(loader, engine, ctx) } {
         return None;
     }
-    // SAFETY: as above.
+    // SAFETY: `ctx` is non-null by the check before it and, by the caller's
+    // contract, a running system's live context on its thread.
     Some(unsafe { engine.entity(ctx) })
 }
 
@@ -346,28 +356,38 @@ unsafe extern "system" fn offer(
         && !query.is_null()
         && INTERACTIONS_FUSE
             .run("the offer", || {
-                // SAFETY: the query state starts with the system context.
-                let ctx: *mut u64 = unsafe { read(query, 0) };
-                // SAFETY: the offer test runs inside its system, on its thread.
+                // SAFETY: `query` is non-null by the check before it and is the
+                // offer test's query state, which starts with its system
+                // context pointer.
+                let ctx = unsafe { read_ptr_at::<u64>(query, 0) };
+                // SAFETY: `ctx` is null or the system context of the running
+                // offer test, which runs inside its system on its thread.
                 let Some(player) = (unsafe { server_player(ctx) }) else {
                     return false;
                 };
-                // SAFETY: as above.
+                // SAFETY: `ctx` is the system context of the running offer
+                // test, on its system's thread.
                 !allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) })
             })
             .unwrap_or(false);
     if refused {
-        // SAFETY: the offer's 0x14-byte out record.
-        unsafe { write(out, 0, NOT_OFFERED) };
-        // SAFETY: as above.
-        unsafe { write(out, 4, 0u32) };
-        // SAFETY: as above.
-        unsafe { write(out, 8, 0u64) };
-        // SAFETY: as above.
-        unsafe { write(out, 0x10, 0u32) };
+        // SAFETY: `out` is non-null by the check before it and is the offer
+        // test's 0x14-byte out record, which starts with its u8 result.
+        unsafe { write_at(out, 0, NOT_OFFERED) };
+        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes 4..8
+        // are inside it.
+        unsafe { write_at(out, 4, 0u32) };
+        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes
+        // 8..0x10 are inside it.
+        unsafe { write_at(out, 8, 0u64) };
+        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes
+        // 0x10..0x14 are inside it.
+        unsafe { write_at(out, 0x10, 0u32) };
         return out;
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `access.offer_test` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     unsafe {
         OFFER_NEXT.get()(
             out,
@@ -387,7 +407,9 @@ unsafe extern "system" fn offer(
 ///
 /// # Safety
 ///
-/// `ctx` and `state` are a running inventory action's.
+/// - `ctx` is null or the live system context of a running inventory
+///   action, used on its thread.
+/// - `state` is that action's live, non-null state.
 unsafe fn may_touch(
     kind: u32,
     ctx: *mut u64,
@@ -398,14 +420,19 @@ unsafe fn may_touch(
     let Some((_, layout, components)) = LOADED.get() else {
         return true;
     };
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees a null or live system context on its
+    // thread, all `server_player` asks for.
     let Some(player) = (unsafe { server_player(ctx) }) else {
         return true;
     };
-    // SAFETY: the action state holds the system's OwnerRelationship index.
-    let owner_index: u64 = unsafe { read(state, layout.state_owner_index) };
+    // SAFETY: the caller guarantees the action's live state; its
+    // `OwnerRelationship` index sits at the build table's
+    // `access.state_owner_index` offset.
+    let owner_index: u64 = unsafe { read_at(state, layout.state_owner_index) };
     let roots = slots.iter().filter(|&&slot| slot != 0).filter_map(|&slot| {
-        // SAFETY: as above.
+        // SAFETY: `server_player` found a player, so `ctx` is non-null and,
+        // by the caller's contract, the live context on its thread;
+        // `owner_index` comes from the same system's action state.
         unsafe { components.slot_root(ctx, slot, owner_index) }
     });
     targets
@@ -413,7 +440,8 @@ unsafe fn may_touch(
         .copied()
         .chain(roots)
         .filter(|&target| target != 0)
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees `ctx` is null or the live system
+        // context on its thread.
         .all(|target| allowed(&unsafe { interaction(kind, player, target, ctx) }))
 }
 
@@ -422,20 +450,33 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
         !state.is_null()
             && INTERACTIONS_FUSE
                 .run("the transfer", || {
-                    // SAFETY: the action state points at the player's input.
-                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    // SAFETY: `state` is non-null by the check before it and is
+                    // the transfer's action state; its pointer to the
+                    // player's input sits at the build table's
+                    // `access.state_input` offset.
+                    let input =
+                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
                     if input.is_null() {
                         return false;
                     }
-                    // SAFETY: the input holds the transfer at these offsets.
-                    let source: u32 = unsafe { read(input, layout.transfer_source) };
-                    // SAFETY: as above.
-                    let target: u32 = unsafe { read(input, layout.transfer_target) };
-                    // SAFETY: as above.
-                    let source_slot: u64 = unsafe { read(input, layout.transfer_source_slot) };
-                    // SAFETY: as above.
-                    let target_slot: u64 = unsafe { read(input, layout.transfer_target_slot) };
-                    // SAFETY: the running action's context and state.
+                    // SAFETY: `input` is the player's non-null input by the
+                    // check before it; its u32 source sits at the build table's
+                    // `access.transfer_source` offset.
+                    let source: u32 = unsafe { read_at(input, layout.transfer_source) };
+                    // SAFETY: `input` is the player's non-null input; its u32
+                    // target sits at the build table's
+                    // `access.transfer_target` offset.
+                    let target: u32 = unsafe { read_at(input, layout.transfer_target) };
+                    // SAFETY: `input` is the player's non-null input; its u64
+                    // source slot sits at the build table's
+                    // `access.transfer_source_slot` offset.
+                    let source_slot: u64 = unsafe { read_at(input, layout.transfer_source_slot) };
+                    // SAFETY: `input` is the player's non-null input; its u64
+                    // target slot sits at the build table's
+                    // `access.transfer_target_slot` offset.
+                    let target_slot: u64 = unsafe { read_at(input, layout.transfer_target_slot) };
+                    // SAFETY: `ctx` and `state` are the running transfer's own
+                    // arguments, on its system's thread; `state` is non-null.
                     !unsafe {
                         may_touch(
                             Interaction::MOVE,
@@ -453,7 +494,9 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
         // inventories, undoing the client's move.
         return;
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `access.transfer` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     unsafe { TRANSFER_NEXT.get()(ctx, state) }
 }
 
@@ -462,14 +505,21 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
         !state.is_null()
             && INTERACTIONS_FUSE
                 .run("the sort", || {
-                    // SAFETY: as for the transfer.
-                    let input: *const u8 = unsafe { read(state, layout.state_input) };
+                    // SAFETY: `state` is non-null by the check before it and is
+                    // the sort's action state; its pointer to the player's
+                    // input sits at the build table's `access.state_input`
+                    // offset.
+                    let input =
+                        unsafe { read_ptr_at::<u8>(state, layout.state_input) }.cast_const();
                     if input.is_null() {
                         return false;
                     }
-                    // SAFETY: the input holds the sort's target there.
-                    let target: u32 = unsafe { read(input, layout.sort_target) };
-                    // SAFETY: the running action's context and state.
+                    // SAFETY: `input` is the player's non-null input by the
+                    // check before it; its u32 sort target sits at the build
+                    // table's `access.sort_target` offset.
+                    let target: u32 = unsafe { read_at(input, layout.sort_target) };
+                    // SAFETY: `ctx` and `state` are the running sort's own
+                    // arguments, on its system's thread; `state` is non-null.
                     !unsafe { may_touch(Interaction::SORT, ctx, state, &[target], &[]) }
                 })
                 .unwrap_or(false)
@@ -477,7 +527,9 @@ unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
     if refused {
         return;
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `access.sort` link, so the slot
+    // holds the next function of that signature; the game's arguments pass
+    // unchanged.
     unsafe { SORT_NEXT.get()(ctx, state) }
 }
 
@@ -517,16 +569,24 @@ unsafe extern "system" fn stock(
             return false;
         }
         let frame = (loader.caller_frame)();
-        // SAFETY: the frame was taken at entry of this chain.
+        // SAFETY: the link asks for `CALLER_FRAME` when `stock_ui_return` is
+        // set, so the frame was taken at entry of this chain and `rsp`,
+        // non-zero by the check before it, points at the live return
+        // address.
         frame.rsp != 0 && unsafe { frame.return_address() } == layout.stock_ui_return
     });
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `access.base_stock` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     let result = unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
-    // SAFETY: the first byte is the game's error code, 0 for success.
-    if ui || out.is_null() || lists.is_null() || unsafe { out.read() } != 0 {
+    // SAFETY: `out` is non-null by the check before it and is the base
+    // stock's result, whose first byte is the game's error code, 0 for
+    // success.
+    if ui || out.is_null() || lists.is_null() || unsafe { read_at::<u8>(out, 0) } != 0 {
         return result;
     }
-    // SAFETY: the game's lists, filled for this call.
+    // SAFETY: `lists` is non-null by the check before it and is the base stock's
+    // lists argument, which the game has just filled, on its thread.
     let _done = INTERACTIONS_FUSE.run("the stock", || unsafe { filter_stock(lists, player) });
     result
 }
@@ -535,25 +595,37 @@ unsafe extern "system" fn stock(
 ///
 /// # Safety
 ///
-/// `lists` holds the stock ids and count and the fuel ids and count the game
-/// just filled.
+/// - `lists` is the non-null, writable `[u64; 4]` the game's base stock has
+///   just filled: the stock ids and count, then the fuel ids and count.
+/// - Each ids pointer is null or readable for its count of `u32` ids, alive
+///   for the call.
+/// - Called on the base stock's thread, which alone writes `lists`
+///   meanwhile.
 unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
-    // SAFETY: forwarded from the caller.
-    let mut found = unsafe { lists.read() };
-    let list = |ptr: u64, count: u64| -> &[u32] {
-        let ptr = core::ptr::with_exposed_provenance::<u32>(usize::try_from(ptr).unwrap_or(0));
-        if ptr.is_null() {
-            return &[];
-        }
-        // SAFETY: the base's arrays hold `count` ids, valid for this call.
-        unsafe { core::slice::from_raw_parts(ptr, usize::try_from(count).unwrap_or(0)) }
+    // SAFETY: the caller guarantees `lists` is the readable `[u64; 4]` the
+    // game has just filled.
+    let mut found: [u64; 4] = unsafe { read_at(lists.cast_const().cast(), 0) };
+    let ids = |ptr: u64, count: u64| {
+        let ptr = core::ptr::with_exposed_provenance::<u8>(usize::try_from(ptr).unwrap_or(0));
+        let count = if ptr.is_null() {
+            0
+        } else {
+            usize::try_from(count).unwrap_or(0)
+        };
+        (0..count).map(move |i| {
+            // SAFETY: `ptr` is non-null whenever `count` is, and the caller
+            // guarantees it holds `count` readable u32 ids; `i` is below
+            // `count`.
+            unsafe { read_at::<u32>(ptr, i * 4) }
+        })
     };
-    let (stock, fuel) = (list(found[0], found[1]), list(found[2], found[3]));
+    let (stock, fuel) = (ids(found[0], found[1]), ids(found[2], found[3]));
     let refused = |id: u32| {
-        // SAFETY: no context: the call carries no item or position.
+        // SAFETY: a null context, which `interaction` takes: the call carries
+        // no item or position.
         !allowed(&unsafe { interaction(Interaction::STOCK, player, id, core::ptr::null_mut()) })
     };
-    let Some(first) = stock.iter().chain(fuel).position(|&id| refused(id)) else {
+    let Some(first) = stock.clone().chain(fuel.clone()).position(refused) else {
         return;
     };
     // Never filter in place: every player reads the same arrays.
@@ -561,7 +633,7 @@ unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
     let mut copy = Vec::new();
     for (source, at) in [(stock, 0), (fuel, 2)] {
         copy.clear();
-        for &id in source {
+        for id in source {
             let keep = match index.cmp(&first) {
                 core::cmp::Ordering::Less => true,
                 core::cmp::Ordering::Equal => false,
@@ -576,8 +648,9 @@ unsafe fn filter_stock(lists: *mut [u64; 4], player: u32) {
         found[at] = kept.as_ptr().expose_provenance() as u64;
         found[at + 1] = kept.len() as u64;
     }
-    // SAFETY: the game's lists, rewritten to the filtered copies.
-    unsafe { lists.write(found) };
+    // SAFETY: the caller guarantees `lists` is writable and only this thread
+    // writes it; the copies it now names live for the process.
+    unsafe { write_at(lists.cast(), 0, found) };
 }
 
 unsafe extern "system" fn dismantle(
@@ -586,7 +659,9 @@ unsafe extern "system" fn dismantle(
     held: *mut u8,
     permissions: u8,
 ) -> u64 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `access.dismantle_method` link, so
+    // the slot holds the next function of that signature; the game's
+    // arguments pass unchanged.
     let method = unsafe { DISMANTLE_NEXT.get()(ctx, object, held, permissions) };
     if method.trailing_zeros() >= 8 || ctx.is_null() || object.is_null() {
         return method;
@@ -596,16 +671,22 @@ unsafe extern "system" fn dismantle(
     };
     let refused = INTERACTIONS_FUSE
         .run("the dismantle", || {
-            // SAFETY: the object describes an entity when its kind word is 0.
-            let id: u64 = unsafe { read(object, layout.object_id) };
-            // SAFETY: as above.
-            let kind: u64 = unsafe { read(object, layout.object_kind) };
+            // SAFETY: `object` is non-null by the check before it and is the
+            // dismantle's object; its u64 id sits at the build table's
+            // `access.object_id` offset.
+            let id: u64 = unsafe { read_at(object, layout.object_id) };
+            // SAFETY: `object` is non-null by the check before it and is the
+            // dismantle's object; its u64 kind, 0 for an entity, sits at the
+            // build table's `access.object_kind` offset.
+            let kind: u64 = unsafe { read_at(object, layout.object_kind) };
             if kind != 0 {
                 return false;
             }
-            // SAFETY: the cursor context starts with the system context.
-            let system: *mut u64 = unsafe { read(ctx, 0) };
-            // SAFETY: the cursor runs inside its system, on its thread.
+            // SAFETY: `ctx` is non-null by the check before it and is the
+            // cursor context, which starts with its system context pointer.
+            let system = unsafe { read_ptr_at::<u64>(ctx, 0) };
+            // SAFETY: `system` is null or the system context of the running
+            // cursor, which runs inside its system on its thread.
             let Some(player) = (unsafe { server_player(system) }) else {
                 return false;
             };
@@ -614,7 +695,8 @@ unsafe extern "system" fn dismantle(
                 reason = "the entity id is the low half"
             )]
             let target = id as u32;
-            // SAFETY: as above.
+            // SAFETY: `system` is the running cursor's system context, on
+            // its thread.
             !allowed(&unsafe { interaction(Interaction::DISMANTLE, player, target, system) })
         })
         .unwrap_or(false);
@@ -626,23 +708,30 @@ unsafe extern "system" fn dismantle(
 /// handled.
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
     if LOADED.get().is_some() && !ctx.is_null() {
-        // SAFETY: the system's context, at its entry on its thread.
+        // SAFETY: `ctx` is non-null by the check before it and is the system's
+        // own context, at its entry on its thread.
         let _done =
             INTERACTIONS_FUSE.run("the inventory actions", || unsafe { refuse_pending(ctx) });
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `inventory_actions` system's link,
+    // so the slot holds the next function of that signature; the game's
+    // context passes unchanged.
     unsafe { ACTIONS_NEXT.get()(ctx) }
 }
 
+/// Marks the pending Quick Stash switches and upgrades a filter refuses as
+/// already handled.
+///
 /// # Safety
 ///
-/// `ctx` is the inventory system's live context, at its entry.
+/// - `ctx` is the inventory system's live, non-null context, at its entry
+///   on its thread.
 unsafe fn refuse_pending(ctx: *mut u64) {
     let (Some((loader, layout, components)), Some(engine)) = (LOADED.get(), crate::ecs::resolved())
     else {
         return;
     };
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees the system's live context on its thread.
     if !unsafe { server_world(loader, engine, ctx) } {
         return;
     }
@@ -651,9 +740,11 @@ unsafe fn refuse_pending(ctx: *mut u64) {
         return;
     };
     for &player in players {
-        // SAFETY: the system's context, at its entry on its thread.
+        // SAFETY: the caller guarantees the system's live context, at its
+        // entry on its thread.
         let input = unsafe { components.component(ctx, player, layout.player_input) };
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees the system's live context, at its
+        // entry on its thread.
         let consumed = unsafe { components.component(ctx, player, layout.consumed_input) };
         let (Some(input), Some(consumed)) = (input, consumed) else {
             continue;
@@ -672,17 +763,27 @@ unsafe fn refuse_pending(ctx: *mut u64) {
                 layout.consumed_upgrade,
             ),
         ] {
-            // SAFETY: the player's input and its server-side consumed record.
-            let version: u32 = unsafe { read(input, version_at) };
-            // SAFETY: as above.
-            let done: u32 = unsafe { read(consumed, done_at) };
-            // SAFETY: as above.
-            let target: u32 = unsafe { read(input, target_at) };
-            // SAFETY: inside the system, on its thread.
+            // SAFETY: `input` is the player's live `PlayerInput` component;
+            // its u32 version sits at the build table's
+            // `access.deposit_version` or `access.upgrade_version` offset.
+            let version: u32 = unsafe { read_at(input, version_at) };
+            // SAFETY: `consumed` is the player's live
+            // `ServerConsumedPlayerInput` component; its u32 handled version
+            // sits at the build table's `access.consumed_deposit` or
+            // `access.consumed_upgrade` offset.
+            let done: u32 = unsafe { read_at(consumed, done_at) };
+            // SAFETY: `input` is the player's live `PlayerInput` component;
+            // its u32 target sits at the build table's
+            // `access.deposit_target` or `access.upgrade_target` offset.
+            let target: u32 = unsafe { read_at(input, target_at) };
+            // SAFETY: the caller guarantees the system's live context, on its
+            // thread.
             if version != done && !allowed(&unsafe { interaction(kind, player, target, ctx) }) {
-                // SAFETY: the consumed record is server-only; no client sees
-                // it change.
-                unsafe { write(consumed, done_at, version) };
+                // SAFETY: `consumed` is the player's live, server-only
+                // consumed record, written at the system's entry on its
+                // thread before the system reads it; no client sees it
+                // change.
+                unsafe { write_at(consumed, done_at, version) };
             }
         }
     }

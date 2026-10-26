@@ -20,8 +20,9 @@ keeps lines up to `error`, `warn`, `info` (the default) or `debug`, and
 watches `mod-configs/` and tells a mod when its file changes; its own file
 applies at once.
 
-`logs/enshwick/status.log` holds the latest status summary: the mods and
-whether they run, the mods turned off and why, what mods serve and patch, and
+`logs/enshwick/status.log` holds the latest status summary: the loader
+features this game build lacks table entries for, the mods and whether they
+run, the mods turned off and why, what mods serve and patch, and
 with `diagnostics = true` the calls of every hooked function
 (`diagnostics_timing = true` times one call in 256 too). It is written every
 `status_minutes` (10 by default) and for `enshwick status` in the

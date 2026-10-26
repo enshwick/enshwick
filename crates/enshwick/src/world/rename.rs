@@ -26,9 +26,12 @@ pub struct Rename {
 ///
 /// # Safety
 ///
-/// `value` is a string the loader passed, valid for as long as `'a`.
+/// - Unless `value` is empty or its pointer null, its pointer is readable
+///   for its length in bytes.
+/// - Those bytes stay alive and unchanged for `'a`.
 unsafe fn text_of<'a>(value: Str) -> &'a str {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `Str::as_str` needs the bytes readable and unchanged for `'a`,
+    // which this function's `# Safety` bullets guarantee.
     unsafe { value.as_str() }.unwrap_or("")
 }
 

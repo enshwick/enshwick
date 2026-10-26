@@ -14,6 +14,9 @@ use std::collections::BTreeMap;
 use enshwick::code::Pattern;
 
 pub mod archive;
+mod parts;
+
+pub use parts::{Part, PartState};
 
 pub use enshwick_reflect::Fingerprint;
 

@@ -165,8 +165,9 @@ fn filter(check: &mut DamageCheck) {
         return;
     };
     for f in filters.iter().filter(|f| f.live()) {
-        // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-        // and takes the pointer it registered; the check is valid for it.
+        // SAFETY: `callback` is a `DamageFilterFn` the mod registered, in its
+        // DLL, which stays loaded (`Registered`); `user` is the pointer it
+        // registered with it, and `check` is borrowed for the call.
         crate::profile::call(f.owner, crate::profile::Feature::Damage, || unsafe {
             (f.callback)(&raw mut *check, f.user());
         });
@@ -208,20 +209,20 @@ fn address(register: u64) -> usize {
 ///
 /// # Safety
 ///
-/// `r15` holds the context of the system running the site.
+/// - `r15` is null or the live query context of the system running the
+///   site, which runs on this thread.
 unsafe fn row_entity(r15: u64) -> u32 {
     let Some(engine) = crate::ecs::resolved() else {
         return 0;
     };
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `r15` is null or the live query context
+    // of the system running on this thread, all `Engine::entity` asks for.
     unsafe { engine.entity(core::ptr::with_exposed_provenance_mut(address(r15))) }
 }
 
-/// The health slot the site writes: `[r8 + rcx * 4]`.
-fn health_slot(registers: &Registers) -> *mut i32 {
-    core::ptr::with_exposed_provenance_mut::<i32>(
-        address(registers.r8).wrapping_add(address(registers.rcx).wrapping_mul(4)),
-    )
+/// The address of the health slot the site writes: `[r8 + rcx * 4]`.
+fn health_slot(registers: &Registers) -> usize {
+    address(registers.r8).wrapping_add(address(registers.rcx).wrapping_mul(4))
 }
 
 /// Damage `damage` after the filters, rounded as the game rounds health.
@@ -242,7 +243,9 @@ static DAMAGE_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("damage filters")
 
 unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the hit site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_ref() }) else {
             return;
         };
@@ -250,15 +253,19 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
             return;
         };
         let rbp = address(registers.rbp);
-        let vector =
-            core::ptr::with_exposed_provenance_mut::<[f32; TYPES]>(rbp.wrapping_sub(layout.vector));
-        // SAFETY: at the site the node's frame holds its damage vector below
-        // `rbp` and the target and source above it, on 1.0 build 1269579.
-        let target: u32 = unsafe { crate::world::read(rbp, layout.target) };
-        // SAFETY: as above.
-        let source: u32 = unsafe { crate::world::read(rbp, layout.source) };
-        // SAFETY: as above.
-        let amounts = unsafe { vector.read_unaligned() };
+        let vector = rbp.wrapping_sub(layout.vector);
+        // SAFETY: at the site the node's frame on this thread's stack holds
+        // the hit's `u32` target at the table's `damage.hit_target` offset
+        // above `rbp`; 1.0 build 1269579.
+        let target: u32 = unsafe { crate::memory::read(rbp, layout.target) };
+        // SAFETY: at the site the node's frame on this thread's stack holds
+        // the hit's `u32` source at the table's `damage.hit_source` offset
+        // above `rbp`; 1.0 build 1269579.
+        let source: u32 = unsafe { crate::memory::read(rbp, layout.source) };
+        // SAFETY: at the site the node's frame on this thread's stack holds
+        // the hit's damage vector, `TYPES` floats, at the table's
+        // `damage.hit_vector` offset below `rbp`; 1.0 build 1269579.
+        let amounts: [f32; TYPES] = unsafe { crate::memory::read(vector, 0) };
         let mut check = blank(DamageCheck::HIT, target);
         // At the site `r12d` holds the root of the hitting impact, the
         // attacker, worked out before it; 1.0 build 1269579.
@@ -282,27 +289,34 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
             .zip(&amounts)
             .any(|(a, b)| a.to_bits() != b.to_bits())
         {
-            // SAFETY: as above; the node reads the vector after the site.
-            unsafe { vector.write_unaligned(after) };
+            // SAFETY: at the site the node's frame on this thread's stack
+            // holds the hit's damage vector, `TYPES` floats, at the table's
+            // `damage.hit_vector` offset below `rbp`, which only this thread
+            // touches and the node reads after the site; 1.0 build 1269579.
+            unsafe { crate::memory::write(vector, 0, after) };
         }
     });
 }
 
 unsafe extern "system" fn fall(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the fall site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
-        // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current
-        // health, about to be overwritten with `r9d`; 1.0 build 1269579.
-        let current = unsafe { health_slot(registers).read_unaligned() };
+        // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current `i32`
+        // health, about to be overwritten with `r9d` by this thread, whose
+        // system writes it; 1.0 build 1269579.
+        let current: i32 = unsafe { crate::memory::read(health_slot(registers), 0) };
         let new = low(registers.r9);
         let damage = current.saturating_sub(new);
         if damage <= 0 {
             return;
         }
-        // SAFETY: r15 is the system's context at the site.
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::FALL, target, damage);
         registers.r9 = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
@@ -311,7 +325,9 @@ unsafe extern "system" fn fall(registers: *mut Registers, _user: *mut c_void) {
 
 unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the shroud site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -319,7 +335,8 @@ unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) 
         if damage <= 0 {
             return;
         }
-        // SAFETY: r15 is the system's context at the site.
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::SHROUD, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
@@ -328,19 +345,23 @@ unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) 
 
 unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the shroud death site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
-        // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current
-        // health, about to be overwritten with `edx`; 1.0 build 1269579.
-        let current = unsafe { health_slot(registers).read_unaligned() };
+        // SAFETY: at the site `[r8 + rcx * 4]` is the entity's current `i32`
+        // health, about to be overwritten with `edx` by this thread, whose
+        // system writes it; 1.0 build 1269579.
+        let current: i32 = unsafe { crate::memory::read(health_slot(registers), 0) };
         let new = low(registers.rdx);
         let damage = current.saturating_sub(new);
         if damage <= 0 {
             return;
         }
-        // SAFETY: r15 is the system's context at the site.
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::SHROUD_DEATH, target, damage);
         registers.rdx = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
@@ -349,7 +370,9 @@ unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_
 
 unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the drowning site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -359,7 +382,8 @@ unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void
         if damage <= 0 {
             return;
         }
-        // SAFETY: r15 is the system's context at the site.
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::DROWNING, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
@@ -368,20 +392,24 @@ unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void
 
 unsafe extern "system" fn drowning_death(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the drowning death site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
-        // SAFETY: at the site `[r8 + rcx * 4]` is a creature's current
-        // health, about to be overwritten with `r14d` (0), which the system
-        // loads again for each row; 1.0 build 1269579.
-        let current = unsafe { health_slot(registers).read_unaligned() };
+        // SAFETY: at the site `[r8 + rcx * 4]` is a creature's current `i32`
+        // health, about to be overwritten with `r14d` (0) by this thread,
+        // whose system writes it and loads `r14d` again for each row; 1.0
+        // build 1269579.
+        let current: i32 = unsafe { crate::memory::read(health_slot(registers), 0) };
         let new = low(registers.r14);
         let damage = current.saturating_sub(new);
         if damage <= 0 {
             return;
         }
-        // SAFETY: r15 is the system's context at the site.
+        // SAFETY: at the site `r15` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
         let damage = filtered(DamageCheck::DROWNING_DEATH, target, damage);
         let kept = current.saturating_sub(damage).max(0).cast_unsigned();
@@ -391,7 +419,9 @@ unsafe extern "system" fn drowning_death(registers: *mut Registers, _user: *mut 
 
 unsafe extern "system" fn freezing(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the freezing site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -401,7 +431,8 @@ unsafe extern "system" fn freezing(registers: *mut Registers, _user: *mut c_void
         if damage <= 0 {
             return;
         }
-        // SAFETY: r14 is the system's context at the site.
+        // SAFETY: at the site `r14` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r14) };
         let damage = filtered(DamageCheck::FREEZING, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
@@ -418,7 +449,9 @@ fn kill_allowed(target: u32) -> bool {
 
 unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the admin kill site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -426,22 +459,25 @@ unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_vo
         if at == 0 {
             return;
         }
-        // SAFETY: at the site `rax` points at the target's health component
-        // pointer, which `admin_player` tests next: null skips the kill;
-        // `ebx` is the target; 1.0 build 1269579.
-        let health: u64 = unsafe { crate::world::read(at, 0) };
+        // SAFETY: `at` is non-zero (`at == 0` returns first); at the site `rax`
+        // points at the target's health component pointer, which `admin_player`
+        // tests next: null skips the kill; `ebx` is the target; 1.0 build
+        // 1269579.
+        let health: u64 = unsafe { crate::memory::read(at, 0) };
         if health == 0 {
             return;
         }
         if !kill_allowed(low(registers.rbx).cast_unsigned()) {
-            registers.rax = (&raw const NO_HEALTH).addr() as u64;
+            registers.rax = (&raw const NO_HEALTH).expose_provenance() as u64;
         }
     });
 }
 
 unsafe extern "system" fn faction_kill(registers: *mut Registers, _user: *mut c_void) {
     let _caught = DAMAGE_FUSE.run("the faction kill site", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: `registers` is null or the block the mid-hook stub saved on
+        // this thread's stack for the handler call, which nothing else
+        // touches during it.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -451,7 +487,8 @@ unsafe extern "system" fn faction_kill(registers: *mut Registers, _user: *mut c_
         if registers.rflags & CARRY == 0 {
             return;
         }
-        // SAFETY: r14 is the system's context at the site.
+        // SAFETY: at the site `r14` holds the live query context of the
+        // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r14) };
         if !kill_allowed(target) {
             registers.rflags &= !CARRY;

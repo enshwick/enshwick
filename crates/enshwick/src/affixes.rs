@@ -369,7 +369,10 @@ impl AffixDef {
     ///
     /// # Safety
     ///
-    /// `data`'s text, group and ranges are alive for the call.
+    /// - `data.text` and `data.group` are null or point at their `len` bytes,
+    ///   alive and unchanged for the call.
+    /// - `data.modifiers` is null or points at `modifier_count` initialised
+    ///   ranges, aligned and alive for the call.
     ///
     /// # Examples
     ///
@@ -382,7 +385,7 @@ impl AffixDef {
     /// let def = AffixDef::new("bear", Categories::EQUIPMENT).with(Range::new(health, Op::Add, 1.0, 2.0));
     /// let ranges = def.to_ranges();
     /// let data = def.to_data(&ranges);
-    /// // SAFETY: `def` and `ranges` are alive here.
+    /// // SAFETY: `data` points into `def` and `ranges`, both alive and unchanged here.
     /// let back = unsafe { AffixDef::from_data(&data, |i| (i == 0).then_some(health)) };
     /// assert_eq!(back, Some(def));
     /// ```
@@ -391,16 +394,20 @@ impl AffixDef {
         data: &AffixDefData,
         stat: impl Fn(u32) -> Option<Stat>,
     ) -> Option<Self> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller keeps the text's bytes alive and unchanged for the
+        // call, and the text is copied at once.
         let text = unsafe { data.text.as_str() }?.to_owned();
-        // SAFETY: as above.
+        // SAFETY: the caller keeps the group's bytes alive and unchanged for
+        // the call, and `group` is copied before it returns.
         let group = unsafe { data.group.as_str() }?;
         let ranges = if data.modifier_count == 0 {
             &[][..]
         } else if data.modifiers.is_null() {
             return None;
         } else {
-            // SAFETY: as above; `modifier_count` ranges at `modifiers`.
+            // SAFETY: `modifiers` is not null in this branch, and the caller
+            // guarantees `modifier_count` aligned, initialised ranges there,
+            // alive for the call.
             unsafe { core::slice::from_raw_parts(data.modifiers, data.modifier_count as usize) }
         };
         let def = Self {
@@ -896,7 +903,8 @@ impl Affixes {
         if !status.is_ok() {
             return None;
         }
-        // SAFETY: the loader keeps its affixes' texts for the process.
+        // SAFETY: `affix_info` returned OK, and the loader keeps its affixes'
+        // texts alive and unchanged for the process; the text is copied.
         let text = unsafe { text.as_str() }?.to_owned();
         Some(AffixInfo {
             text,

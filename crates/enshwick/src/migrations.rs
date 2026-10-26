@@ -196,7 +196,8 @@ impl Migration {
     /// let loader = enshwick::test::FakeHost::new()
     ///     .other_settings("comfort", "multiplier = 2.5\n")
     ///     .install();
-    /// // SAFETY: the exports of `declare_mod!` above.
+    /// // SAFETY: `enshwick_mod_init` and `enshwick_mod_ready` are the exports
+    /// // `declare_mod!` generated in this example.
     /// let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
     /// assert!(status.is_ok());
     /// assert_eq!(
@@ -486,6 +487,11 @@ fn renamed_from(list: &[Migration], id: u32) -> u32 {
 }
 
 /// Runs a step's map for the loader.
+///
+/// # Safety
+///
+/// - `input` is readable for its length and unchanged for the call.
+/// - `out` is null or points at a writable, aligned `Str`.
 unsafe extern "system" fn run_map(
     _user: *mut core::ffi::c_void,
     migration: u32,
@@ -504,7 +510,8 @@ unsafe extern "system" fn run_map(
     let Some(map) = map else {
         return Status::MISSING;
     };
-    // SAFETY: the loader's text is valid for the call.
+    // SAFETY: the caller guarantees `input` readable and unchanged for the
+    // call; it is not kept past it.
     let Some(input) = (unsafe { input.as_str() }) else {
         return Status::BAD_ARGS;
     };
@@ -519,8 +526,9 @@ unsafe extern "system" fn run_map(
     OUT.with_borrow_mut(|held| {
         *held = text;
         if !out.is_null() {
-            // SAFETY: the loader's out pointer; the text stays in this
-            // thread's `OUT` until the thread's next call.
+            // SAFETY: `out` is non-null, checked just before, and the caller
+            // guarantees it a writable, aligned `Str`; the text it points at
+            // stays in this thread's `OUT` until the thread's next call.
             unsafe { out.write(Str::new(held)) };
         }
     });
@@ -585,7 +593,7 @@ impl Load<'_> {
             header: abi::Header::of::<abi::MigrationSet>(),
             migrations: list.as_ptr(),
             count: u32::try_from(list.len()).unwrap_or(u32::MAX),
-            map: run_map,
+            map: Some(run_map),
             user: core::ptr::null_mut(),
         };
         let host = self.host();
