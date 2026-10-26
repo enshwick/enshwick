@@ -634,25 +634,35 @@ unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, it
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::sync::Mutex;
 
-    unsafe extern "system" fn twice(limit: *mut AltarLimit, _user: *mut c_void) {
+    use super::*;
+    use crate::locks::Relock;
+
+    /// The level each run of `plus_vanilla` saw, in order.
+    static SEEN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+    unsafe extern "system" fn plus_vanilla(limit: *mut AltarLimit, _user: *mut c_void) {
         // SAFETY: the loader's limit, writable for the call.
         let limit = unsafe { &mut *limit };
-        limit.allowed = limit.allowed.saturating_mul(2);
+        SEEN.relock().push(limit.flame_level);
+        limit.allowed = limit.allowed.saturating_add(limit.vanilla);
         limit.vanilla = 0;
+        limit.flame_level = 99;
     }
 
     #[test]
     fn limit_filters_chain_on_the_count_so_far_within_the_zones() {
-        let filter = LimitFilter::new(ModIndex::new(0), twice, core::ptr::null_mut());
+        let filter = LimitFilter::new(ModIndex::new(0), plus_vanilla, core::ptr::null_mut());
         assert_eq!(chain_limit(3, 6, 16, core::iter::empty()), 6);
         assert_eq!(chain_limit(3, 6, 32, [&filter].into_iter()), 12);
+        SEEN.relock().clear();
         assert_eq!(
             chain_limit(3, 6, 32, [&filter, &filter].into_iter()),
-            24,
+            18,
             "each filter sees the game's own count"
         );
+        assert_eq!(*SEEN.relock(), [3, 3], "each filter sees the level");
         assert_eq!(chain_limit(3, 6, 16, [&filter, &filter].into_iter()), 16);
     }
 }

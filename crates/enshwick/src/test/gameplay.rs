@@ -675,6 +675,8 @@ impl Installed {
         for (callback, user) in filters {
             // SAFETY: a valid limit; `user` is the mod's pointer.
             unsafe { callback(&raw mut limit, core::ptr::with_exposed_provenance_mut(user)) };
+            limit.flame_level = flame_level;
+            limit.vanilla = vanilla;
         }
         let (zones, _) = table::gameplay::zones_and_bases();
         limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
@@ -690,7 +692,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn base_limit_raised(&self) -> bool {
-        table::with(false, |s| s.base_limit_raised)
+        table::with(false, |s| s.base_limit.raised)
     }
 
     /// Makes the last grouping find `zones` altar zones in `bases` bases.

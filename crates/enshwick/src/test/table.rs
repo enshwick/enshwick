@@ -233,7 +233,9 @@ pub(crate) struct State {
     pub(crate) pacing: Pacing,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limits: Vec<(AltarLimitFilterFn, usize)>,
-    pub(crate) base_limit_raised: bool,
+    /// Whether the mod raised the base limit, and whether the hooks are
+    /// armed, from which on the raised limit holds.
+    pub(crate) base_limit: BaseLimitState,
     pub(crate) grouping: Option<(u32, u32)>,
     /// The answer `run_console` last handed out, alive until the next call.
     run_out: Option<Box<str>>,
@@ -273,6 +275,15 @@ fn take_turn() -> MutexGuard<'static, ()> {
 }
 
 /// The mod's altar zone filters, and how often it asked for a new sizing.
+/// Whether the mod raised the base limit, and whether the hooks are armed.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct BaseLimitState {
+    /// The mod raised the limit.
+    pub(crate) raised: bool,
+    /// The mod's init returned and its hooks are armed.
+    pub(crate) armed: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct ZoneSizing {
     /// The filters and their pointers.
@@ -388,7 +399,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         pacing: Pacing::default(),
         experience_filters: Vec::new(),
         altar_limits: Vec::new(),
-        base_limit_raised: false,
+        base_limit: BaseLimitState::default(),
         grouping: None,
         run_out: None,
         settings: Vec::new(),

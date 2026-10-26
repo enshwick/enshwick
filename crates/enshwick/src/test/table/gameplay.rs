@@ -213,10 +213,10 @@ pub(crate) extern "system" fn altar_limit_filter(
     })
 }
 
-/// The zones and bases the fake's game groups: 16 and 16, 32 and 16 once
-/// the mod raised the limit, as the loader's.
+/// The zones and bases the fake's game groups, as the loader's: 16 and 16,
+/// 32 and 16 once the mod raised the limit and its hooks are armed.
 pub(crate) fn zones_and_bases() -> (u32, u32) {
-    if with(false, |s| s.base_limit_raised) {
+    if with(false, |s| s.base_limit.raised && s.base_limit.armed) {
         (32, 16)
     } else {
         (16, 16)
@@ -238,7 +238,7 @@ pub(crate) extern "system" fn base_limit(
 
 pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        s.base_limit_raised = true;
+        s.base_limit.raised = true;
         Status::OK
     })
 }

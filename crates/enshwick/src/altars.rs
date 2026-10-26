@@ -551,9 +551,12 @@ pub struct BaseLimit {
     pub bases: u32,
 }
 
-/// The most altar zones and bases the game groups now: its own, or once
-/// [`Load::raise_base_limit`] is in force the loader's maximum; `None`
-/// without a loader. Any thread.
+/// The most altar zones and bases the game groups now; `None` without a
+/// loader. Any thread.
+///
+/// That is the game's own, or the loader's maximum once
+/// [`Load::raise_base_limit`] is in force, which is from
+/// [`Mod::ready`](crate::Mod::ready) on, after the loader arms the patches.
 ///
 /// # Examples
 ///
@@ -755,8 +758,17 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    crate::host::guard("panic in an altar limit", || (), || filter(&mut limit));
-    raw.allowed = limit.allowed;
+    let returned = crate::host::guard(
+        "panic in an altar limit",
+        || false,
+        || {
+            filter(&mut limit);
+            true
+        },
+    );
+    if returned {
+        raw.allowed = limit.allowed;
+    }
 }
 
 impl Load<'_> {
@@ -805,9 +817,8 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     if load.raise_base_limit()? {
-    ///         let zones = enshwick::altars::base_limit().map_or(0, |l| l.zones);
-    ///         enshwick::info!("up to {zones} altar zones");
+    ///     if !load.raise_base_limit()? {
+    ///         enshwick::info!("the game keeps its own altar zones on this build");
     ///     }
     ///     Ok(())
     /// }

@@ -1125,18 +1125,23 @@ pub struct HostApi {
     /// altar zone filter. Since minor 78.
     pub altar_zones_changed: extern "system" fn(me: ModHandle) -> Status,
     /// Calls `callback` with `user` when the game asks how many altars a
-    /// Flame level allows, on both sides. Each filter, in load order, sees
-    /// the game's own count and the count so far and may change it; the
-    /// loader keeps the answer within the zones the game can group
-    /// ([`HostApi::base_limit`]). Allowed during `enshwick_mod_init` only.
-    /// Since minor 82.
+    /// Flame level allows, on whichever thread asks: the placement cursor
+    /// while a player aims an altar and the server's placement. Each filter,
+    /// in load order, sees the game's own count and the count so far and may
+    /// change `allowed`; the level and the game's count stay. The loader keeps
+    /// the answer within the zones the game can group
+    /// ([`HostApi::base_limit`]). A filter runs often: keep it cheap; it may
+    /// call the host. [`Status::TOO_LATE`] after `enshwick_mod_init`,
+    /// [`Status::MISSING`] on a build without the game's lookup. Since minor
+    /// 82.
     pub altar_limit_filter: extern "system" fn(
         me: ModHandle,
         callback: AltarLimitFilterFn,
         user: *mut c_void,
     ) -> Status,
     /// Writes the most altar zones and bases the game groups now: its own
-    /// 16 and 16, or once [`HostApi::raise_base_limit`] is in force the
-    /// loader's maximum. Any thread. Since minor 82.
+    /// 16 and 16, or the loader's maximum once [`HostApi::raise_base_limit`]
+    /// is in force, from `enshwick_mod_ready` on. Both pointers are written;
+    /// [`Status::BAD_ARGS`] for a null one. Any thread. Since minor 82.
     pub base_limit: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
 }
