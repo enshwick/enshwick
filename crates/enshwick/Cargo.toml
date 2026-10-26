@@ -14,6 +14,7 @@ publish = true
 [dependencies]
 enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.2" }
 bcdec_rs.workspace = true
+bytemuck.workspace = true
 const-sha1.workspace = true
 const_format.workspace = true
 zune-core.workspace = true

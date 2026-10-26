@@ -20,9 +20,10 @@ use crate::shape::ShapeHasher;
 ///
 /// # Safety
 ///
-/// Implemented by [`#[service]`](macro@crate::service) only: [`LAYOUT`]
-/// must list every field of the `repr(C)` type in order, with its offset,
-/// size and alignment in the hash.
+/// - Implemented by [`#[service]`](macro@crate::service) only.
+/// - The type is `repr(C)`.
+/// - [`LAYOUT`] lists every field of the type in order, with its offset,
+///   size and alignment in the hash.
 ///
 /// [`LAYOUT`]: Service::LAYOUT
 ///
@@ -52,9 +53,10 @@ pub unsafe trait Service: Sync + 'static {
 ///
 /// # Safety
 ///
-/// Implemented by [`#[event]`](macro@crate::event) only: [`LAYOUT`] must
-/// list every field of the `repr(C)` type in order, with its offset, size
-/// and alignment in the hash.
+/// - Implemented by [`#[event]`](macro@crate::event) only.
+/// - The type is `repr(C)`.
+/// - [`LAYOUT`] lists every field of the type in order, with its offset,
+///   size and alignment in the hash.
 ///
 /// [`LAYOUT`]: ModEvent::LAYOUT
 ///
@@ -194,8 +196,10 @@ pub fn compare(wanted: &[(&str, u64)], offered: &[(&str, u64)]) -> Result<(), La
 ///
 /// # Safety
 ///
-/// `layout.fields` points at `layout.count` fields whose names are valid
-/// for the call.
+/// - Unless `layout.count` is zero or `layout.fields` null, `layout.fields`
+///   points at `layout.count` aligned [`LayoutField`]s, readable and
+///   unchanged for the call.
+/// - Each field's `name` is readable for its length, unchanged for the call.
 ///
 /// # Examples
 ///
@@ -218,11 +222,14 @@ pub unsafe fn read_layout(layout: &Layout) -> Option<Vec<(String, u64)>> {
     if layout.fields.is_null() {
         return None;
     }
-    // SAFETY: the caller guarantees `count` readable fields.
+    // SAFETY: `count` is non-zero and `fields` non-null, both checked before,
+    // so the first bullet of this function's `# Safety` gives `count`
+    // aligned fields, readable and unchanged for the call.
     let fields = unsafe { core::slice::from_raw_parts(layout.fields, layout.count as usize) };
     fields
         .iter()
-        // SAFETY: the caller guarantees the names are valid for the call.
+        // SAFETY: each name is readable for its length and unchanged for the
+        // call by the second bullet of this function's `# Safety`.
         .map(|f| unsafe { f.name.as_str() }.map(|name| (name.to_owned(), f.hash)))
         .collect()
 }

@@ -25,6 +25,7 @@ use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Stat
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
+use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -159,12 +160,14 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let defs = "keen::GameKnowledgeResource";
             let def = "keen::KnowledgeObjectResource";
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `knowledge.player_value` is the game function
+                // with the `PlayerValueFn` signature on this build.
                 player_value: unsafe { core::mem::transmute::<usize, PlayerValueFn>(player_value) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `knowledge.world_value` is the game function
+                // with the `WorldValueFn` signature on this build.
                 world_value: unsafe { core::mem::transmute::<usize, WorldValueFn>(world_value) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `knowledge.push` is the game function
+                // with the `PushFn` signature on this build.
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
                 game: offset("server.player_infos")?,
                 object: offset("knowledge.object")?,
@@ -201,25 +204,19 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
-/// Reads a `T` at `base + at`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: usize, at: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { crate::world::read(base, at) }
-}
-
 /// A blob array at `header`: where its elements start and how many.
 ///
 /// # Safety
 ///
-/// `header` is a live blob array header: an offset from itself and a count.
+/// - `header` is a live blob array header, readable for 8 bytes: an `i32`
+///   offset from itself, then a `u32` count.
+/// - Nothing writes the header during the call.
 unsafe fn blob_array(header: usize) -> (usize, usize) {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees 8 readable bytes of a live header,
+    // starting with its i32 offset.
     let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees 8 readable bytes of a live header, with
+    // its u32 count at 4.
     let count: u32 = unsafe { read(header, 4) };
     let start = if offset == 0 {
         0
@@ -234,19 +231,26 @@ fn store(layout: &Layout) -> Result<(usize, usize), Status> {
     store_of(layout, crate::world::server()?)
 }
 
-/// The game object and its knowledge store of `server`.
+/// The game object and its knowledge store of `server`, the running server
+/// from [`crate::world::server`] or [`crate::world::SERVER`].
 fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
-    // SAFETY: the server holds its game object.
+    // SAFETY: callers pass the running server, non-zero and live while its
+    // world runs; its game object pointer sits at the build table's
+    // `server.player_infos` offset.
     let game: usize = unsafe { read(server, layout.game) };
     if game == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the game object holds its knowledge object from its start.
+    // SAFETY: `game` is the server's non-null game object by the check
+    // before it; its knowledge object pointer sits at the build table's
+    // `knowledge.object` offset.
     let object: usize = unsafe { read(game, layout.object) };
     if object == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the knowledge object holds its store.
+    // SAFETY: `object` is the game's non-null knowledge object by the check
+    // before it; its store pointer sits at the build table's `knowledge.state`
+    // offset.
     let state: usize = unsafe { read(object, layout.state) };
     if state == 0 {
         return Err(Status::MISSING);
@@ -254,15 +258,18 @@ fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
     Ok((game, state))
 }
 
-/// The definition of `id`: its scope and its data, or `None` for an id the
-/// game does not know.
+/// The definition of `id` in the live store `state` from [`store_of`]: its
+/// scope and its data, or `None` for an id the game does not know.
 fn definition(layout: &Layout, state: usize, id: u32) -> Option<(u8, usize)> {
-    // SAFETY: the store holds its definitions' holder, which holds the blob.
+    // SAFETY: `state` is the live store `store_of` found; its definitions'
+    // holder pointer sits at the build table's `knowledge.defs` offset.
     let holder: usize = unsafe { read(state, layout.defs) };
     if holder == 0 {
         return None;
     }
-    // SAFETY: as above.
+    // SAFETY: `holder` is the store's non-null definitions' holder by the
+    // check before it; its blob pointer sits at the build table's
+    // `knowledge.defs_blob` offset.
     let blob: usize = unsafe { read(holder, layout.defs_blob) };
     if blob == 0 {
         return None;
@@ -277,46 +284,61 @@ fn definition(layout: &Layout, state: usize, id: u32) -> Option<(u8, usize)> {
 /// Finds `id` in a static hash map of the blob, its elements `stride`
 /// bytes: buckets of `{start, count}`, keys and values as blob arrays.
 fn lookup(map: usize, id: u32, stride: usize) -> Option<usize> {
-    // SAFETY: a live map of the definitions' blob.
+    // SAFETY: `map` is a reflected map field of the live definitions' blob
+    // (`definition`'s callers), and a static map starts with the blob array
+    // header of its buckets.
     let (buckets, bucket_count) = unsafe { blob_array(map) };
     if bucket_count == 0 || buckets == 0 {
         return None;
     }
     let bucket = id as usize & (bucket_count - 1);
-    // SAFETY: the bucket lies inside the bucket array.
+    // SAFETY: `bucket` is `id` masked by the non-zero bucket count less one,
+    // the game's own bucket pick, so its 8-byte `{start, count}` lies inside
+    // the bucket array of a power-of-two count.
     let start: u32 = unsafe { read(buckets, bucket * 8) };
-    // SAFETY: as above.
+    // SAFETY: `bucket` is `id` masked by the non-zero bucket count less one,
+    // the game's own bucket pick, so its u32 count at 4 lies inside the
+    // bucket array of a power-of-two count.
     let count: u32 = unsafe { read(buckets, bucket * 8 + 4) };
-    // SAFETY: the map's key and value arrays follow its bucket array.
+    // SAFETY: the map's key array header follows its bucket array header,
+    // 8 bytes into the live map.
     let (keys, _) = unsafe { blob_array(map + 8) };
-    // SAFETY: as above.
+    // SAFETY: the map's value array header follows its key array header,
+    // 16 bytes into the live map.
     let (values, _) = unsafe { blob_array(map + 16) };
     (start..start.saturating_add(count))
         .map(|i| i as usize)
-        // SAFETY: a key of the bucket.
+        // SAFETY: the bucket's `{start, count}` names keys of the map's key
+        // array, each a u32.
         .find(|&i| unsafe { read::<u32>(keys, i * 4) } == id)
         .map(|i| values + i * stride)
 }
 
 /// How many player records the store holds.
 fn records(layout: &Layout, state: usize) -> usize {
-    // SAFETY: the store holds the number of its player records.
+    // SAFETY: `state` is the live store `store_of` found; its u64 record
+    // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
     usize::try_from(count).unwrap_or(0)
 }
 
 /// The player record of the character `entity`, active, or why not.
 fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
-    // SAFETY: the store holds its player records and their number.
+    // SAFETY: `state` is the live store `store_of` found; its record array
+    // pointer sits at the build table's `knowledge.records` offset.
     let records: usize = unsafe { read(state, layout.records) };
-    // SAFETY: as above.
+    // SAFETY: `state` is the live store `store_of` found; its u64 record
+    // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
     let index = (entity as usize).checked_sub(1).ok_or(Status::REFUSED)?;
     if records == 0 || index as u64 >= count {
         return Err(Status::REFUSED);
     }
     let record = records + index * layout.record_size;
-    // SAFETY: a record of the array.
+    // SAFETY: `records` is non-null and `index` below the record count by
+    // the check before it, so `record` is a record of the array, of the build
+    // table's `knowledge.record_size`; its u8 active mark sits at
+    // `knowledge.record_active`.
     let active: u8 = unsafe { read(record, layout.record_active) };
     if active == 0 {
         return Err(Status::REFUSED);
@@ -333,11 +355,16 @@ pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeIn
         if scope == KnowledgeInfo::PLAYER {
             return Err(Status::REFUSED);
         }
-        // SAFETY: the game's getter on its live store, on the game thread.
+        // SAFETY: `state` is the live store `store` found through
+        // `world::server`, which put this call on the game thread at a quiet
+        // moment; `id` lives on this stack for the call.
         unsafe { (layout.world_value)(core::ptr::with_exposed_provenance(state), &raw const id) }
     } else {
         record(layout, state, entity)?;
-        // SAFETY: as above, for a player record that exists and is active.
+        // SAFETY: `state` is the live store `store` found through
+        // `world::server`, which put this call on the game thread at a quiet
+        // moment; `record` checked the character's record exists and is
+        // active; `id` lives on this stack for the call.
         unsafe {
             (layout.player_value)(
                 core::ptr::with_exposed_provenance(state),
@@ -349,13 +376,15 @@ pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeIn
     Ok(KnowledgeInfo {
         header: Header::of::<KnowledgeInfo>(),
         id,
-        // SAFETY: the definition's fields, as reflected.
+        // SAFETY: `def` is the definition `definition` found in the live
+        // blob; its kind sits at the reflected `type` field.
         kind: unsafe { read(def, layout.def_kind) },
         scope,
         reserved: 0,
         #[expect(clippy::cast_possible_truncation, reason = "the value is the low half")]
         value: raw as u32,
-        // SAFETY: as above.
+        // SAFETY: `def` is the definition `definition` found in the live
+        // blob; its flags sit at the reflected `expectedFlags` field.
         flags: unsafe { read(def, layout.def_flags) },
     })
 }
@@ -371,9 +400,11 @@ pub(crate) fn grant(
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (game, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::BAD_ARGS)?;
-    // SAFETY: the definition's fields, as reflected.
+    // SAFETY: `def` is the definition `definition` found in the live blob;
+    // its u8 kind sits at the reflected `type` field.
     let def_kind: u8 = unsafe { read(def, layout.def_kind) };
-    // SAFETY: as above.
+    // SAFETY: `def` is the definition `definition` found in the live blob;
+    // its u32 flags sit at the reflected `expectedFlags` field.
     let expected: u32 = unsafe { read(def, layout.def_flags) };
     if u32::from(def_kind) != kind {
         return Err(Status::BAD_ARGS);
@@ -404,12 +435,15 @@ pub(crate) fn grant(
     put(layout.request_kind, &[def_kind]);
     put(layout.request_value, &value.to_le_bytes());
     put(layout.request_target, &target.to_le_bytes());
-    // SAFETY: the game object holds its knowledge trigger queue.
+    // SAFETY: `game` is the live game object `store` found; its trigger
+    // queue pointer sits at the build table's `knowledge.queue` offset.
     let queue: usize = unsafe { read(game, layout.queue) };
     if queue == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the game's push into its own queue, safe from any thread.
+    // SAFETY: `queue` is the game's non-null trigger queue by the check
+    // before it, which the game's workers push into from any thread; the push
+    // copies the 16 bytes of `request`, which live on this stack.
     let pushed = unsafe {
         (layout.push)(
             core::ptr::with_exposed_provenance_mut(queue),
@@ -438,24 +472,29 @@ fn quest_set(layout: &Layout, game: usize) -> Option<&'static FxHashSet<u32>> {
     if let Some(set) = QUESTS.get() {
         return Some(set);
     }
-    // SAFETY: the game object holds its journal registry, which holds the
-    // journal's blob.
+    // SAFETY: `game` is the live game object `store_of` found; its journal
+    // registry pointer sits at the build table's `knowledge.journal` offset.
     let journal: usize = unsafe { read(game, layout.journal) };
     if journal == 0 {
         return None;
     }
-    // SAFETY: as above.
+    // SAFETY: `journal` is the game's non-null journal registry by the check
+    // before it; its blob pointer sits at the build table's
+    // `knowledge.journal_blob` offset.
     let blob: usize = unsafe { read(journal, layout.journal_blob) };
     if blob == 0 {
         return None;
     }
-    // SAFETY: the blob's quest array.
+    // SAFETY: `blob` is the journal's non-null blob by the check before it, and
+    // its reflected `quests` field is a blob array header.
     let (start, count) = unsafe { blob_array(blob + layout.quests) };
     if start == 0 || count == 0 {
         return None;
     }
     let set = (0..count)
-        // SAFETY: a quest of the array; its id as reflected.
+        // SAFETY: `i` is below the quest array's count, so this is a quest of
+        // the array, of the reflected `JournalQuestResource` size; its u32
+        // id sits at the reflected `entryId` field.
         .map(|i| unsafe { read::<u32>(start + i * layout.quest_size, layout.quest_id) })
         .collect();
     Some(QUESTS.get_or_init(|| set))
@@ -479,7 +518,9 @@ pub(crate) fn after_step(loader: &Loader) {
     let Ok((game, state)) = store(layout) else {
         return;
     };
-    // SAFETY: the store's update counter.
+    // SAFETY: `state` is the live store `store` found on the game thread;
+    // its u32 update counter sits at the build table's `knowledge.step`
+    // offset.
     let step: u32 = unsafe { read(state, layout.step) };
     let first_look = UNSEEN.load(Ordering::Relaxed);
     if first_look {
@@ -488,28 +529,42 @@ pub(crate) fn after_step(loader: &Loader) {
     if SEEN_STEP.swap(step, Ordering::Relaxed) == step || first_look {
         return;
     }
-    // SAFETY: the store's world log of the last update.
+    // SAFETY: `state` is the live store `store` found on the game thread;
+    // its world log pointer sits at the build table's `knowledge.world_log`
+    // offset.
     let log: usize = unsafe { read(state, layout.world_log) };
-    // SAFETY: as above.
+    // SAFETY: `state` is the live store `store` found on the game thread;
+    // its u32 world log count sits at the build table's
+    // `knowledge.world_log_count` offset.
     let count: u32 = unsafe { read(state, layout.world_log_count) };
     raise(loader, layout, game, 0, log, count);
-    // SAFETY: the store's player records and their number.
+    // SAFETY: `state` is the live store `store` found on the game thread;
+    // its record array pointer sits at the build table's `knowledge.records`
+    // offset.
     let records: usize = unsafe { read(state, layout.records) };
-    // SAFETY: as above.
+    // SAFETY: `state` is the live store `store` found on the game thread;
+    // its u64 record count sits at the build table's
+    // `knowledge.record_count` offset.
     let record_count: u64 = unsafe { read(state, layout.record_count) };
     if records == 0 || record_count > MAX_RECORDS {
         return;
     }
     for index in 0..usize::try_from(record_count).unwrap_or(0) {
         let record = records + index * layout.record_size;
-        // SAFETY: a record of the array.
+        // SAFETY: `records` is non-null by the check before it and `index` below
+        // the record count, so `record` is a record of the array; its u8
+        // active mark sits at the build table's `knowledge.record_active`
+        // offset.
         let active: u8 = unsafe { read(record, layout.record_active) };
         if active == 0 {
             continue;
         }
-        // SAFETY: the record's log of the last update.
+        // SAFETY: `record` is an active record of the array; its log pointer
+        // sits at the build table's `knowledge.record_log` offset.
         let log: usize = unsafe { read(record, layout.record_log) };
-        // SAFETY: as above.
+        // SAFETY: `record` is an active record of the array; its u32 log
+        // count sits at the build table's `knowledge.record_log_count`
+        // offset.
         let count: u32 = unsafe { read(record, layout.record_log_count) };
         let entity = u32::try_from(index + 1).unwrap_or(0);
         raise(loader, layout, game, entity, log, count);
@@ -523,9 +578,12 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize,
     }
     for i in 0..count as usize {
         let entry = log + i * layout.log_entry;
-        // SAFETY: an entry of the log: its id and the new value.
+        // SAFETY: `log` is non-null and `i` below its count by the check
+        // before it, so `entry` is an entry of the log, of the build table's
+        // `knowledge.log_entry_size`, which starts with its u32 id.
         let id: u32 = unsafe { read(entry, 0) };
-        // SAFETY: as above.
+        // SAFETY: `entry` is an entry of the live log, its u32 new value
+        // after the id.
         let value: u32 = unsafe { read(entry, 4) };
         if id == 0 {
             continue;

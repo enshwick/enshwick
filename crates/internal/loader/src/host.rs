@@ -655,7 +655,8 @@ impl Loader {
 
     fn resolve_symbol(&self, index: usize, name: &str) -> Option<u64> {
         let own = self.own_rows(index).find_map(|row| {
-            // SAFETY: the row points at `symbol_count` static symbols.
+            // SAFETY: a manifest's build row points at `symbol_count` symbols in
+            // the mod's statics, and the mod's DLL stays loaded for the process.
             let symbols = unsafe { slice(row.symbols, row.symbol_count) };
             find(symbols, name)
         });
@@ -665,7 +666,9 @@ impl Loader {
 
     fn resolve_constant(&self, index: usize, name: &str) -> Option<u64> {
         let own = self.own_rows(index).find_map(|row| {
-            // SAFETY: the row points at `constant_count` static constants.
+            // SAFETY: a manifest's build row points at `constant_count`
+            // constants in the mod's statics, and the mod's DLL stays loaded for
+            // the process.
             let constants = unsafe { slice(row.constants, row.constant_count) };
             find(constants, name)
         });
@@ -821,16 +824,21 @@ pub(crate) static API: HostApi = HostApi {
     actions,
 };
 
-/// A static slice from a pointer and a count, empty for a null pointer.
+/// A slice from a pointer and a count, empty for a null pointer.
 ///
 /// # Safety
 ///
-/// A non-null `ptr` points at `count` static values.
-unsafe fn slice<T>(ptr: *const T, count: usize) -> &'static [T] {
+/// - A non-null `ptr` with a nonzero `count` points at `count` initialised,
+///   aligned values.
+/// - Those values stay alive and unchanged for the lifetime `'a` the caller
+///   picks.
+unsafe fn slice<'a, T>(ptr: *const T, count: usize) -> &'a [T] {
     if ptr.is_null() || count == 0 {
         return &[];
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `ptr` is non-null and `count` nonzero, checked just before; the
+    // caller guarantees `count` aligned values there, alive and unchanged for
+    // `'a`.
     unsafe { core::slice::from_raw_parts(ptr, count) }
 }
 
@@ -843,9 +851,17 @@ fn find(symbols: &[enshwick::abi::Symbol], name: &str) -> Option<u64> {
 
 /// Writes `value`, a struct that starts with a [`Header`], through `out`, as
 /// far as the mod's header says its struct reaches.
-fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
-    // SAFETY: a non-null out pointer from a mod points at its own version of
-    // the struct, its header saying how far it reaches.
+///
+/// # Safety
+///
+/// - `out` is null or points at the mod's version of `T`, starting with its
+///   header and writable for the size that header states; no alignment is
+///   needed.
+/// - No other thread reads or writes that struct during the call.
+unsafe fn put_headed<T: enshwick::abi::Headed>(out: *mut T, value: T) -> Status {
+    // SAFETY: `write_headed` needs `out` null or writable for its header's
+    // size with no concurrent access, which this function's `# Safety`
+    // bullets guarantee.
     if unsafe { enshwick::abi::write_headed(out, value) } {
         Status::OK
     } else {
@@ -859,11 +875,12 @@ fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
 ///
 /// # Safety
 ///
-/// `raw` is null or points at the mod's version of the struct, readable for
-/// the size its header gives; every bit pattern of the bytes past `required`
-/// is valid for `T`, zero included.
-unsafe fn get_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
-    // SAFETY: forwarded from the caller.
+/// - `raw` is null or points at the mod's version of the struct, readable
+///   for the size its header gives; no alignment is needed.
+/// - No other thread writes that struct during the copy.
+unsafe fn get_headed<T: enshwick::abi::Headed>(raw: *const T, required: usize) -> Option<T> {
+    // SAFETY: the caller guarantees `raw` null or readable for the size its
+    // header gives, with no concurrent writer, as `read_headed` requires.
     unsafe { enshwick::abi::read_headed(raw, required) }
 }
 
@@ -872,9 +889,12 @@ unsafe fn get_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
 ///
 /// # Safety
 ///
-/// `out` points at an entry that starts with a [`Header`].
+/// - `out` is readable for the eight bytes of a [`Header`]; no alignment is
+///   needed.
+/// - No other thread writes those bytes during the read.
 unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `out` readable for a `Header`'s eight
+    // bytes with no concurrent writer; the read is unaligned.
     let size = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
     (size >= size_of::<Header>()).then_some(size)
 }
@@ -882,30 +902,55 @@ unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
 /// Writes `items` into a mod's list of `capacity` entries, each as large as
 /// the header of its first entry says, as far as both sides know an entry,
 /// and their total through `count`.
-fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+///
+/// # Safety
+///
+/// - Unless `out` is null or `capacity` zero, `out` points at `capacity`
+///   consecutive entries of the mod's version of `T`, each starting with its
+///   header and writable for the size the first entry's header states; no
+///   alignment is needed.
+/// - `count` is null or points at a writable, aligned `u32`.
+/// - No other thread reads or writes the list or `count` during the call.
+unsafe fn put_headed_list<T: enshwick::abi::Headed>(
+    items: &[T],
+    out: *mut T,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
     };
     if !out.is_null() && capacity > 0 {
-        // SAFETY: a non-null list from a mod holds `capacity` entries of its
-        // version of the struct, each starting with its header.
+        // SAFETY: `out` is non-null and `capacity` non-zero, checked just
+        // above, so the first bullet of this function's `# Safety` gives a
+        // first entry starting with its header the mod filled in, and the
+        // last bullet no concurrent writer.
         let Some(stride) = (unsafe { stride_of(out) }) else {
             return Status::BAD_ARGS;
         };
         let known = stride.min(size_of::<T>());
         let size = u32::try_from(known).unwrap_or(u32::MAX);
         for (index, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            // SAFETY: `index` is below `capacity`, and this function's
+            // `# Safety` gives `capacity` entries of `stride` bytes at `out`,
+            // so entry `index` starts `index * stride` bytes into the same
+            // allocation.
             let entry = unsafe { out.cast::<u8>().add(index * stride) };
-            // SAFETY: as above; `known` bytes fit both the entry and `item`.
+            // SAFETY: `entry` is writable for `stride` bytes by this
+            // function's `# Safety`, `item` is readable for `size_of::<T>()`,
+            // `known` is at most both, and the loader's `items` do not overlap
+            // the mod's list.
             unsafe {
                 core::ptr::copy_nonoverlapping((&raw const *item).cast::<u8>(), entry, known);
             }
-            // SAFETY: the header's size is the entry's first field.
+            // SAFETY: the header's `size` is the entry's first field, inside the
+            // `stride` bytes, at least a `Header`, that `stride_of` checked.
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
-    put(count, total)
+    // SAFETY: `count` is null or a writable, aligned `u32` that no other thread
+    // touches during the call, by this function's `# Safety`.
+    unsafe { put(count, total) }
 }
 
 /// Copies a mod's list of `count` entries at `raw`, each as large as the
@@ -914,28 +959,38 @@ fn put_headed_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut
 ///
 /// # Safety
 ///
-/// `raw` is null with `count` zero, or points at `count` entries of the
-/// mod's version of the struct, each starting with its header; every bit
-/// pattern of the bytes past `required` is valid for `T`, zero included.
-unsafe fn get_headed_list<T: Copy>(raw: *const T, count: u32, required: usize) -> Option<Vec<T>> {
+/// - `count` is zero, or `raw` is null or points at `count` consecutive
+///   entries of the mod's version of the struct.
+/// - Each entry starts with its header and is readable for the size the
+///   first entry's header gives; no alignment is needed.
+/// - No other thread writes the list during the copy.
+unsafe fn get_headed_list<T: enshwick::abi::Headed>(
+    raw: *const T,
+    count: u32,
+    required: usize,
+) -> Option<Vec<T>> {
     if count == 0 {
         return Some(Vec::new());
     }
     if raw.is_null() {
         return None;
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `raw` is non-null, checked just before, and `count` is nonzero,
+    // so the caller guarantees a first entry that starts with its header.
     let stride = unsafe { stride_of(raw) }?;
     (0..count as usize)
         .map(|index| {
-            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            // SAFETY: `index` is below `count`, and the caller guarantees
+            // `count` entries, each as large as the first entry's header says,
+            // so entry `index` starts `index * stride` bytes into the list.
             let entry = unsafe { raw.cast::<u8>().add(index * stride) }.cast::<T>();
-            // SAFETY: as above; an entry is readable for `stride` bytes, which
-            // its header must give too.
+            // SAFETY: `entry` starts one of the caller's `count` entries, each
+            // starting with its header.
             if unsafe { stride_of(entry) } != Some(stride) {
                 return None;
             }
-            // SAFETY: as above.
+            // SAFETY: `entry` starts one of the caller's entries, readable for
+            // `stride` bytes, the size its own header gives as just checked.
             unsafe { get_headed(entry, required) }
         })
         .collect()
@@ -949,11 +1004,17 @@ fn text<'a>(value: Str) -> Option<&'a str> {
 }
 
 /// Writes `value` through `out` when `out` is not null.
-fn put<T>(out: *mut T, value: T) -> Status {
+///
+/// # Safety
+///
+/// - `out` is null or points at a `T` that is writable and aligned.
+/// - No other thread reads or writes that `T` during the call.
+unsafe fn put<T>(out: *mut T, value: T) -> Status {
     if out.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: a non-null out pointer from a mod points at a writable `T`.
+    // SAFETY: `out` is non-null, checked just before, so this function's
+    // `# Safety` makes it a writable, aligned `T` with no concurrent access.
     unsafe { out.write(value) };
     Status::OK
 }
@@ -963,22 +1024,27 @@ extern "system" fn build(out: *mut BuildInfo) {
         let Some(loader) = loader() else {
             return;
         };
-        let _written = put_headed(
-            out,
-            BuildInfo {
-                header: Header::of::<BuildInfo>(),
-                side: loader.side,
-                base: loader.base,
-                fingerprint: enshwick::abi::Fingerprint {
-                    guid: loader.fingerprint.guid(),
-                    age: loader.fingerprint.age(),
+        // SAFETY: `HostApi::build` has the mod pass `out` null or pointing at
+        // its version of `BuildInfo`, writable for the size its header states,
+        // that no other thread touches during the call.
+        let _written = unsafe {
+            put_headed(
+                out,
+                BuildInfo {
+                    header: Header::of::<BuildInfo>(),
+                    side: loader.side,
+                    base: loader.base,
+                    fingerprint: enshwick::abi::Fingerprint {
+                        guid: loader.fingerprint.guid(),
+                        age: loader.fingerprint.age(),
+                    },
+                    table: match loader.build.kind {
+                        crate::builds::Kind::Exact => enshwick::abi::BuildTable::EXACT,
+                        crate::builds::Kind::Fallback => enshwick::abi::BuildTable::PATTERNS,
+                    },
                 },
-                table: match loader.build.kind {
-                    crate::builds::Kind::Exact => enshwick::abi::BuildTable::EXACT,
-                    crate::builds::Kind::Fallback => enshwick::abi::BuildTable::PATTERNS,
-                },
-            },
-        );
+            )
+        };
     });
 }
 
@@ -994,7 +1060,10 @@ extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
             .resolve_symbol(index, name)
             .map_or(Status::MISSING, |address| {
                 crate::diag::name(address, name);
-                put(out, address)
+                // SAFETY: `HostApi::symbol` has the mod pass `out` null or
+                // pointing at a writable, aligned `u64` that no other thread
+                // touches during the call.
+                unsafe { put(out, address) }
             })
     })
 }
@@ -1014,7 +1083,10 @@ extern "system" fn system(name: Str, out: *mut u64) -> Status {
         match loader.reflection.system(name) {
             Ok(found) if found.entry() != 0 => {
                 crate::diag::name(found.entry(), name);
-                put(out, found.entry())
+                // SAFETY: `HostApi::system` has the mod pass `out` null or
+                // pointing at a writable, aligned `u64` that no other thread
+                // touches during the call.
+                unsafe { put(out, found.entry()) }
             }
             Ok(_) => Status::MISSING,
             Err(error) => lookup(&error),
@@ -1032,7 +1104,10 @@ extern "system" fn field_offset(type_name: Str, field: Str, out: *mut u64) -> St
             .reflection
             .field_offset(crate::catalogue::type_name(type_name), field)
         {
-            Ok(offset) => put(out, offset),
+            // SAFETY: `HostApi::field_offset` has the mod pass `out` null or
+            // pointing at a writable, aligned `u64` that no other thread
+            // touches during the call.
+            Ok(offset) => unsafe { put(out, offset) },
             Err(error) => lookup(&error),
         }
     })
@@ -1047,7 +1122,10 @@ extern "system" fn type_size(type_name: Str, out: *mut u32) -> Status {
             .reflection
             .type_info(crate::catalogue::type_name(type_name))
         {
-            Ok(info) => put(out, info.size()),
+            // SAFETY: `HostApi::type_size` has the mod pass `out` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(info) => unsafe { put(out, info.size()) },
             Err(error) => lookup(&error),
         }
     })
@@ -1117,7 +1195,10 @@ extern "system" fn caller_frame(out: *mut api_frame::CallerFrame) {
         let frame = loader()
             .map(|loader| (loader.caller_frame)())
             .unwrap_or_default();
-        let _written = put(out, frame);
+        // SAFETY: `HostApi::caller_frame` has the mod pass `out` null or
+        // pointing at a writable, aligned `CallerFrame` that no other thread
+        // touches during the call.
+        let _written = unsafe { put(out, frame) };
     });
 }
 
@@ -1188,7 +1269,10 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
         };
         let content = crate::worlds::effective(loader, record, &content);
         match record.settings.keep(&content) {
-            Some(kept) => put(out, kept),
+            // SAFETY: `HostApi::settings` has the mod pass `out` null or
+            // pointing at a writable, aligned `Str` that no other thread
+            // touches during the call.
+            Some(kept) => unsafe { put(out, kept) },
             None => Status::REFUSED,
         }
     })
@@ -1222,13 +1306,16 @@ impl crate::services::Names for Loader {
 ///
 /// # Safety
 ///
-/// `name` and `layout` come from a spec valid for the call.
+/// - `name` is borrowed and unchanged for the call.
+/// - `layout` points at `count` fields readable for the call, each name
+///   borrowed and unchanged for the call, as a spec the safe layer passed.
 unsafe fn spec_parts(
     name: Str,
     layout: &api_frame::Layout,
 ) -> Option<(&str, crate::services::Fields)> {
     let name = text(name)?;
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `layout`'s fields and their names readable
+    // and unchanged for the call.
     let fields = unsafe { enshwick::services::read_layout(layout) }?;
     Some((name, fields))
 }
@@ -1244,7 +1331,8 @@ extern "system" fn publish(me: ModHandle, spec: *const api_frame::ServiceSpec) -
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::ServiceSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1285,7 +1373,8 @@ extern "system" fn service(
         else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1305,7 +1394,10 @@ extern "system" fn service(
                 status
             }
         };
-        match put_headed(out, answer) {
+        // SAFETY: `HostApi::service` has the mod pass `out` null or pointing at
+        // its version of `ServiceFound`, writable for the size its header
+        // states, that no other thread touches during the call.
+        match unsafe { put_headed(out, answer) } {
             Status::OK => status,
             refused => refused,
         }
@@ -1330,7 +1422,8 @@ extern "system" fn define_event(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1339,7 +1432,10 @@ extern "system" fn define_event(
         }
         let defined = crate::services::registry().define(index, &record.names(), name, fields);
         match defined {
-            Ok(id) => put(out, id),
+            // SAFETY: `HostApi::define_event` has the mod pass `out` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(id) => unsafe { put(out, id) },
             Err(reason) => {
                 crate::log::write(Level::WARN, &record.id, &reason);
                 Status::REFUSED
@@ -1367,7 +1463,8 @@ extern "system" fn subscribe_event(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1386,11 +1483,16 @@ extern "system" fn subscribe_event(
 ///
 /// # Safety
 ///
-/// `spec` is null or a mod's version of the spec, valid for the call.
+/// - `spec` is null or points at a mod's version of the spec, readable for
+///   the size its header gives, with no concurrent writer.
+/// - Its name and both layouts, with their fields and names, are readable
+///   and unchanged for the call.
 unsafe fn point_parts(spec: *const api_frame::PointSpec) -> Option<crate::points::Declared> {
-    // SAFETY: forwarded from the caller; all of the spec is required.
+    // SAFETY: the caller guarantees `spec` null or readable for the size its
+    // header gives, with no concurrent writer; all of the spec is required.
     let spec = unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }?;
-    // SAFETY: the spec is valid for the call.
+    // SAFETY: the caller guarantees the spec's name and layouts readable and
+    // unchanged for the call; `spec` is a copy holding the same pointers.
     unsafe { declared(&spec) }
 }
 
@@ -1398,11 +1500,15 @@ unsafe fn point_parts(spec: *const api_frame::PointSpec) -> Option<crate::points
 ///
 /// # Safety
 ///
-/// The spec's name and layouts are valid for the call.
+/// - The spec's name is borrowed and unchanged for the call.
+/// - Its `input` and `output` layouts point at fields readable for the call,
+///   each name borrowed and unchanged for the call.
 unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declared> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees the spec's name and its `input` layout
+    // readable and unchanged for the call.
     let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the spec's `output` layout, its fields and
+    // their names, readable and unchanged for the call.
     let output = unsafe { enshwick::services::read_layout(&spec.output) }?;
     Some(crate::points::Declared {
         name: name.to_owned(),
@@ -1417,7 +1523,8 @@ unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declare
 ///
 /// # Safety
 ///
-/// `raw` is null or points at `count` strings valid for the call.
+/// - `raw` is null or points at `count` aligned `Str`s readable for the call.
+/// - Each string's bytes are borrowed and unchanged for the call.
 unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
     if count == 0 {
         return Some(Vec::new());
@@ -1425,7 +1532,8 @@ unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
     if raw.is_null() {
         return None;
     }
-    // SAFETY: the caller guarantees `count` readable strings.
+    // SAFETY: `raw` is non-null and `count` nonzero, checked just before; the
+    // caller guarantees `count` aligned `Str`s there, readable for the call.
     let ids = unsafe { core::slice::from_raw_parts(raw, count as usize) };
     ids.iter().map(|id| text(*id).map(str::to_owned)).collect()
 }
@@ -1448,7 +1556,8 @@ extern "system" fn define_point(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layouts, with
+        // their fields and names, readable and unchanged for the call.
         let Some(declared) = (unsafe { declared(&spec) }) else {
             return Status::BAD_ARGS;
         };
@@ -1461,14 +1570,19 @@ extern "system" fn define_point(
         }
         let defined = crate::points::registry().define(index, &record.names(), declared);
         match defined {
-            Ok((id, live)) => put_headed(
-                out,
-                api_frame::PointHandle {
-                    header: Header::of::<api_frame::PointHandle>(),
-                    id,
-                    live,
-                },
-            ),
+            // SAFETY: `HostApi::define_point` has the mod pass `out` null or
+            // pointing at its version of `PointHandle`, writable for the size
+            // its header states, that no other thread touches during the call.
+            Ok((id, live)) => unsafe {
+                put_headed(
+                    out,
+                    api_frame::PointHandle {
+                        header: Header::of::<api_frame::PointHandle>(),
+                        id,
+                        live,
+                    },
+                )
+            },
             Err(reason) => {
                 crate::log::write(Level::WARN, &record.id, &reason);
                 Status::REFUSED
@@ -1496,11 +1610,15 @@ extern "system" fn attach_point(
         let Some(link) = (unsafe { get_headed(link, size_of::<api_frame::PointLink>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the link's spec is valid for the call.
+        // SAFETY: the ABI has the mod pass `link.point` null or its version of
+        // the spec, with its name and layouts readable and unchanged for the
+        // call.
         let declared = unsafe { point_parts(link.point) };
-        // SAFETY: the link's ids are valid for the call.
+        // SAFETY: the ABI has the mod pass `link.before` null or pointing at
+        // `before_count` strings readable and unchanged for the call.
         let before = unsafe { point_ids(link.before, link.before_count) };
-        // SAFETY: as above.
+        // SAFETY: the ABI has the mod pass `link.after` null or pointing at
+        // `after_count` strings readable and unchanged for the call.
         let after = unsafe { point_ids(link.after, link.after_count) };
         let parts = (declared, before, after);
         let (Some(declared), Some(before), Some(after)) = parts else {
@@ -1538,7 +1656,10 @@ extern "system" fn run_point(
             Err(status) => return status,
         };
         match crate::points::run(index, point, input, value) {
-            Ok(answer) => put(verdict, answer),
+            // SAFETY: `HostApi::run_point` has the mod pass `verdict` null or
+            // pointing at a writable, aligned `PointVerdict` that no other
+            // thread touches during the call.
+            Ok(answer) => unsafe { put(verdict, answer) },
             Err(status) => status,
         }
     })
@@ -1575,7 +1696,10 @@ extern "system" fn declare_content(me: ModHandle, id: Str, out: *mut [u8; 16]) -
             return Status::BAD_ARGS;
         };
         match crate::ids::declare_content(&record.names(), id) {
-            Ok(guid) => put(out, guid.0),
+            // SAFETY: `HostApi::declare_content` has the mod pass `out` null or
+            // pointing at a writable, aligned `[u8; 16]` that no other thread
+            // touches during the call.
+            Ok(guid) => unsafe { put(out, guid.0) },
             Err(why) => {
                 loader.turn_off(index, &why);
                 Status::REFUSED
@@ -1601,7 +1725,10 @@ extern "system" fn constant(me: ModHandle, name: Str, out: *mut u64) -> Status {
         };
         loader
             .resolve_constant(index, name)
-            .map_or(Status::MISSING, |value| put(out, value))
+            // SAFETY: `HostApi::constant` has the mod pass `out` null or
+            // pointing at a writable, aligned `u64` that no other thread
+            // touches during the call.
+            .map_or(Status::MISSING, |value| unsafe { put(out, value) })
     })
 }
 
@@ -1618,7 +1745,10 @@ extern "system" fn data_dir(me: ModHandle, out: *mut Str) -> Status {
             return Status::REFUSED;
         }
         // The path lives for the process: the mod keeps it as long as it likes.
-        put(out, Str::new(keep(&dir.to_string_lossy())))
+        // SAFETY: `HostApi::data_dir` has the mod pass `out` null or pointing
+        // at a writable, aligned `Str` that no other thread touches during the
+        // call.
+        unsafe { put(out, Str::new(keep(&dir.to_string_lossy()))) }
     })
 }
 
@@ -1676,7 +1806,11 @@ extern "system" fn type_hash(type_name: Str, out: *mut u32) -> Status {
             .reflection
             .type_info(crate::catalogue::type_name(type_name))
         {
-            Ok(info) => crate::world::type_hash(info.va()).map_or(Status::MISSING, |h| put(out, h)),
+            // SAFETY: `HostApi::type_hash` has the mod pass `out` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(info) => crate::world::type_hash(info.va())
+                .map_or(Status::MISSING, |h| unsafe { put(out, h) }),
             Err(error) => lookup(&error),
         }
     })
@@ -1776,7 +1910,10 @@ extern "system" fn component(
 ) -> Status {
     entry("component", || {
         match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
-            Ok(data) => put(out, data),
+            // SAFETY: `HostApi::component` has the mod pass `out` null or
+            // pointing at a writable, aligned `c_void` that no other thread
+            // touches during the call.
+            Ok(data) => unsafe { put(out, data) },
             Err(status) => status,
         }
     })
@@ -1785,7 +1922,10 @@ extern "system" fn component(
 extern "system" fn entity_template(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status {
     entry("entity_template", || {
         match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
-            Ok(guid) => put(out, guid),
+            // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
+            // pointing at a writable, aligned `[u8; 16]` that no other thread
+            // touches during the call.
+            Ok(guid) => unsafe { put(out, guid) },
             Err(status) => status,
         }
     })
@@ -1802,7 +1942,10 @@ extern "system" fn player(me: ModHandle, entity: u32, out: *mut api_frame::Playe
                     .ok_or(Status::MISSING)
             });
         match found {
-            Ok(info) => put_headed(out, info),
+            // SAFETY: `HostApi::player` has the mod pass `out` null or pointing
+            // at its version of `PlayerInfo`, writable for the size its header
+            // states, that no other thread touches during the call.
+            Ok(info) => unsafe { put_headed(out, info) },
             Err(status) => status,
         }
     })
@@ -1819,7 +1962,12 @@ extern "system" fn players(
             Ok(players) => players,
             Err(status) => return status,
         };
-        put_headed_list(&players, out, capacity, count)
+        // SAFETY: `HostApi::players` has the mod pass `out` null or pointing at
+        // `capacity` entries of its version of `PlayerInfo`, each writable for
+        // the size the first entry's header states, and `count` null or
+        // pointing at a writable, aligned `u32`, neither touched by another
+        // thread during the call.
+        unsafe { put_headed_list(&players, out, capacity, count) }
     })
 }
 
@@ -1883,7 +2031,8 @@ extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *mut u32) ->
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller's out value, checked for null.
+        // SAFETY: `out` is non-null, checked just before; the ABI has the mod
+        // pass it pointing at a writable, aligned `u32`.
         unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe))) };
         Status::OK
     })
@@ -1907,11 +2056,17 @@ extern "system" fn code_range(start: *mut u64, len: *mut u64) -> Status {
         else {
             return Status::MISSING;
         };
-        let status = put(start, address as u64);
+        // SAFETY: `HostApi::code_range` has the mod pass `start` null or
+        // pointing at a writable, aligned `u64` that no other thread touches
+        // during the call.
+        let status = unsafe { put(start, address as u64) };
         if !status.is_ok() {
             return status;
         }
-        put(len, size as u64)
+        // SAFETY: `HostApi::code_range` has the mod pass `len` null or pointing
+        // at a writable, aligned `u64` that no other thread touches during the
+        // call.
+        unsafe { put(len, size as u64) }
     })
 }
 
@@ -1931,10 +2086,13 @@ extern "system" fn patch_code(
         else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the mod passes `len` readable bytes behind each pointer,
-        // copied before the call returns.
+        // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
+        // `expected`, unchanged for the call; `register` copies them into a box
+        // before it returns.
         let expected = unsafe { slice(expected, len) };
-        // SAFETY: as above.
+        // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
+        // `replacement`, unchanged for the call; `register` copies them into a
+        // box before it returns.
         let replacement = unsafe { slice(replacement, len) };
         crate::code::register(
             crate::code::CodePatch {
@@ -1963,7 +2121,10 @@ extern "system" fn inventory_open(me: ModHandle) -> Status {
 extern "system" fn item_info(me: ModHandle, item: u32, out: *mut api_frame::ItemData) -> Status {
     entry("item_info", || {
         match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
-            Ok(data) => put_headed(out, data),
+            // SAFETY: `HostApi::item_info` has the mod pass `out` null or
+            // pointing at its version of `ItemData`, writable for the size its
+            // header states, that no other thread touches during the call.
+            Ok(data) => unsafe { put_headed(out, data) },
             Err(status) => status,
         }
     })
@@ -2050,7 +2211,9 @@ extern "system" fn mods(
         let infos: Vec<ModInfo> = core::iter::once(loader_info())
             .chain(loader.mods.iter().map(mod_info))
             .collect();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
     })
 }
@@ -2088,7 +2251,9 @@ extern "system" fn join_missing(
                 ..ModInfo::EMPTY
             })
             .collect();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
     })
 }
@@ -2125,7 +2290,9 @@ extern "system" fn replaced(
                 })
                 .collect()
         });
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(infos, out, entry_size, capacity, count) }
     })
 }
@@ -2135,7 +2302,10 @@ extern "system" fn replaced(
 ///
 /// # Safety
 ///
-/// A non-null `out` has room for `capacity` entries of `entry_size` bytes.
+/// - A non-null `out` is writable for `capacity` entries of `entry_size`
+///   bytes each; no alignment is needed.
+/// - A non-null `count` points at a writable, aligned `u32`.
+/// - Nothing else reads or writes those entries during the call.
 unsafe fn list<T: Copy>(
     infos: &[T],
     out: *mut T,
@@ -2151,19 +2321,25 @@ unsafe fn list<T: Copy>(
         let copied = stride.min(size_of::<T>());
         let size = u32::try_from(copied).unwrap_or(u32::MAX);
         for (index, info) in infos.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries of
-            // `entry_size` bytes each.
+            // SAFETY: `index` is below `capacity`, and the caller guarantees
+            // `capacity` entries of `stride` bytes at the non-null `out`, so
+            // entry `index` starts inside that list.
             let entry = unsafe { out.cast::<u8>().add(index * stride) };
-            // SAFETY: as above; `copied` bytes fit both the entry and `info`.
+            // SAFETY: the caller guarantees `entry` writable for `stride` bytes,
+            // `info` is readable for `size_of::<T>()`, `copied` is at most
+            // both, and the loader's `infos` do not overlap the mod's list.
             unsafe {
                 core::ptr::copy_nonoverlapping((&raw const *info).cast::<u8>(), entry, copied);
             };
             // The header says what the entry holds, never more than it has.
-            // SAFETY: the header's size is the entry's first field.
+            // SAFETY: the header's `size` is the entry's first field, inside the
+            // `stride` bytes, at least a `Header` as checked before the loop.
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
-    put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX))
+    // SAFETY: `HostApi::replaced` has the mod pass `count` null or pointing at
+    // a writable, aligned `u32` that no other thread touches during the call.
+    unsafe { put(count, u32::try_from(infos.len()).unwrap_or(u32::MAX)) }
 }
 
 extern "system" fn config_schema(me: ModHandle, schema: Str) -> Status {
@@ -2213,7 +2389,10 @@ extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) -> Status {
             .and_then(|held| held.clone())
             .unwrap_or_default();
         match record.sync_out.keep(&server) {
-            Some(kept) => put(out, kept),
+            // SAFETY: `HostApi::sync` has the mod pass `out` null or pointing
+            // at a writable, aligned `Str` that no other thread touches during
+            // the call.
+            Some(kept) => unsafe { put(out, kept) },
             None => Status::REFUSED,
         }
     })
@@ -2336,7 +2515,10 @@ extern "system" fn run_console(me: ModHandle, line: Str, out: *mut Str) -> Statu
             Ok(reply) => CONSOLE_REPLY.with_borrow_mut(|kept| {
                 *kept = reply;
                 // The text stays in this thread's buffer until its next call.
-                put(out, Str::new(kept))
+                // SAFETY: `HostApi::run_console` has the mod pass `out` null or
+                // pointing at a writable, aligned `Str` that no other thread
+                // touches during the call.
+                unsafe { put(out, Str::new(kept)) }
             }),
             Err(status) => status,
         }
@@ -2369,7 +2551,9 @@ extern "system" fn altars(
             return Status::REFUSED;
         }
         let altars = crate::altars::list();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&altars, out, entry_size, capacity, count) }
     })
 }
@@ -2496,7 +2680,10 @@ extern "system" fn item_data_open(me: ModHandle, id: Str, out: *mut u32) -> Stat
         };
         match caller_index(me).and_then(|(loader, index)| crate::item_data::open(loader, index, id))
         {
-            Ok(kind) => put(out, kind),
+            // SAFETY: `HostApi::item_data_open` has the mod pass `out` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(kind) => unsafe { put(out, kind) },
             Err(status) => status,
         }
     })
@@ -2516,7 +2703,10 @@ extern "system" fn entity_data_open(
         match caller_index(me)
             .and_then(|(loader, index)| crate::item_data::open_entity(loader, index, id, sent))
         {
-            Ok(kind) => put(out, kind),
+            // SAFETY: `HostApi::entity_data_open` has the mod pass `out` null
+            // or pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(kind) => unsafe { put(out, kind) },
             Err(status) => status,
         }
     })
@@ -2541,13 +2731,16 @@ extern "system" fn item_data_get(
         };
         let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
         Status::OK
     })
@@ -2602,7 +2795,10 @@ extern "system" fn content_serve(
         // SAFETY: the caller passes `len` bytes at `data` for the call.
         let bytes = unsafe { core::slice::from_raw_parts(data, len) };
         match crate::textures::serve(bytes) {
-            Ok(hash) => put(out, hash),
+            // SAFETY: `HostApi::content_serve` has the mod pass `out` null or
+            // pointing at a writable, aligned `[u32; 4]` that no other thread
+            // touches during the call.
+            Ok(hash) => unsafe { put(out, hash) },
             Err(status) => status,
         }
     })
@@ -2629,13 +2825,16 @@ extern "system" fn content_read(
         };
         let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         Status::OK
     })
@@ -2661,13 +2860,16 @@ extern "system" fn resource_read(
         };
         let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         Status::OK
     })
@@ -2679,7 +2881,10 @@ extern "system" fn game_text(me: ModHandle, id: u32, language: u32, out: *mut St
             return status;
         }
         match crate::game_texts::text(id, language) {
-            Some(text) => put(out, Str::new(text)),
+            // SAFETY: `HostApi::game_text` has the mod pass `out` null or
+            // pointing at a writable, aligned `Str` that no other thread
+            // touches during the call.
+            Some(text) => unsafe { put(out, Str::new(text)) },
             None => Status::MISSING,
         }
     })
@@ -2725,7 +2930,10 @@ extern "system" fn stat_open(
         match caller_index(me)
             .and_then(|(loader, index)| crate::stats::open(loader, index, id, def))
         {
-            Ok(stat) => put(out, stat),
+            // SAFETY: `HostApi::stat_open` has the mod pass `out` null or
+            // pointing at a writable, aligned `StatRef` that no other thread
+            // touches during the call.
+            Ok(stat) => unsafe { put(out, stat) },
             Err(status) => status,
         }
     })
@@ -2743,9 +2951,16 @@ extern "system" fn stat_info(
         }
         match crate::stats::info(stat) {
             Ok((data, name)) => {
-                let status = put_headed(def, data);
+                // SAFETY: `HostApi::stat_info` has the mod pass `def` null or
+                // pointing at its version of `StatDefData`, writable for the
+                // size its header states, that no other thread touches during
+                // the call.
+                let status = unsafe { put_headed(def, data) };
                 if status.is_ok() {
-                    put(id, name)
+                    // SAFETY: `HostApi::stat_info` has the mod pass `id` null
+                    // or pointing at a writable, aligned `Str` that no other
+                    // thread touches during the call.
+                    unsafe { put(id, name) }
                 } else {
                     status
                 }
@@ -2761,7 +2976,10 @@ extern "system" fn stat_value(me: ModHandle, entity: u32, stat: u32, out: *mut f
             return status;
         }
         match crate::stats::value(entity, stat) {
-            Ok(value) => put(out, value),
+            // SAFETY: `HostApi::stat_value` has the mod pass `out` null or
+            // pointing at a writable, aligned `f32` that no other thread
+            // touches during the call.
+            Ok(value) => unsafe { put(out, value) },
             Err(status) => status,
         }
     })
@@ -2837,7 +3055,11 @@ extern "system" fn stat_sources(
             Err(status) => return status,
         };
         match crate::stats::sources(loader, entity, stat) {
-            Ok(list) => put_list(&list, out, capacity, count),
+            // SAFETY: `HostApi::stat_sources` has the mod pass `out` null or
+            // pointing at `capacity` writable, aligned `StatSource`s, and
+            // `count` null or pointing at a writable, aligned `u32`, neither
+            // touched by another thread during the call.
+            Ok(list) => unsafe { put_list(&list, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -2873,7 +3095,10 @@ extern "system" fn affix_open(
         match caller_index(me)
             .and_then(|(loader, index)| crate::stats::open_affix(loader, index, id, &def))
         {
-            Ok(affix) => put(out, affix),
+            // SAFETY: `HostApi::affix_open` has the mod pass `out` null or
+            // pointing at a writable, aligned `StatRef` that no other thread
+            // touches during the call.
+            Ok(affix) => unsafe { put(out, affix) },
             Err(status) => status,
         }
     })
@@ -2895,7 +3120,10 @@ extern "system" fn affix_roll(
             return Status::BAD_ARGS;
         };
         match crate::stats::roll(loader, &roll) {
-            Ok(rolled) => put(count, rolled),
+            // SAFETY: `HostApi::affix_roll` has the mod pass `count` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(rolled) => unsafe { put(count, rolled) },
             Err(status) => status,
         }
     })
@@ -2914,7 +3142,11 @@ extern "system" fn item_lines(
             return status;
         }
         match crate::stats::item_lines(pide, item) {
-            Ok(lines) => put_list(&lines, out, capacity, count),
+            // SAFETY: `HostApi::item_lines` has the mod pass `out` null or
+            // pointing at `capacity` writable, aligned `ItemLine`s, and `count`
+            // null or pointing at a writable, aligned `u32`, neither touched by
+            // another thread during the call.
+            Ok(lines) => unsafe { put_list(&lines, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -2932,9 +3164,15 @@ extern "system" fn affix_info(
         }
         match crate::stats::affix_info(affix) {
             Ok((name, rare)) => {
-                let status = put(text, name);
+                // SAFETY: `HostApi::affix_info` has the mod pass `text` null or
+                // pointing at a writable, aligned `Str` that no other thread
+                // touches during the call.
+                let status = unsafe { put(text, name) };
                 if status.is_ok() {
-                    put(rarity, rare)
+                    // SAFETY: `HostApi::affix_info` has the mod pass `rarity`
+                    // null or pointing at a writable, aligned `u8` that no
+                    // other thread touches during the call.
+                    unsafe { put(rarity, rare) }
                 } else {
                     status
                 }
@@ -3063,11 +3301,17 @@ extern "system" fn base_zones(me: ModHandle, zones: *mut u32, bases: *mut u32) -
         let Some((zone_count, base_count)) = crate::bases::zones() else {
             return Status::MISSING;
         };
-        let status = put(zones, zone_count);
+        // SAFETY: `HostApi::base_zones` has the mod pass `zones` null or
+        // pointing at a writable, aligned `u32` that no other thread touches
+        // during the call.
+        let status = unsafe { put(zones, zone_count) };
         if !status.is_ok() {
             return status;
         }
-        put(bases, base_count)
+        // SAFETY: `HostApi::base_zones` has the mod pass `bases` null or
+        // pointing at a writable, aligned `u32` that no other thread touches
+        // during the call.
+        unsafe { put(bases, base_count) }
     })
 }
 
@@ -3102,11 +3346,16 @@ extern "system" fn entities(
         };
         if !out.is_null() {
             for (index, place) in found.iter().take(capacity as usize).enumerate() {
-                // SAFETY: the caller passes room for `capacity` entries.
+                // SAFETY: `out` is non-null, checked just before, and `index` is
+                // below `capacity`; the ABI has the mod pass `capacity` writable,
+                // aligned entries at `out`.
                 unsafe { out.wrapping_add(index).write(*place) };
             }
         }
-        put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+        // SAFETY: `HostApi::entities` has the mod pass `count` null or pointing
+        // at a writable, aligned `u32` that no other thread touches during the
+        // call.
+        unsafe { put(count, u32::try_from(found.len()).unwrap_or(u32::MAX)) }
     })
 }
 
@@ -3131,7 +3380,11 @@ extern "system" fn save_world(me: ModHandle) -> Status {
 extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status {
     entry("world_key", || match caller(me) {
         Ok(loader) => {
-            crate::saves::world_key(loader).map_or(Status::MISSING, |key| put(out, Str::new(key)))
+            // SAFETY: `HostApi::world_key` has the mod pass `out` null or
+            // pointing at a writable, aligned `Str` that no other thread
+            // touches during the call.
+            crate::saves::world_key(loader)
+                .map_or(Status::MISSING, |key| unsafe { put(out, Str::new(key)) })
         }
         Err(status) => status,
     })
@@ -3146,7 +3399,10 @@ extern "system" fn component_write(
     entry("component_write", || {
         match caller(me).and_then(|loader| crate::writes::component_mut(loader, entity, type_hash))
         {
-            Ok(data) => put(out, data),
+            // SAFETY: `HostApi::component_write` has the mod pass `out` null or
+            // pointing at a writable, aligned `c_void` that no other thread
+            // touches during the call.
+            Ok(data) => unsafe { put(out, data) },
             Err(status) => status,
         }
     })
@@ -3202,7 +3458,10 @@ extern "system" fn spawn(
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::spawns::spawn(loader, &request)) {
-            Ok(entity) => put(out, entity),
+            // SAFETY: `HostApi::spawn` has the mod pass `out` null or pointing
+            // at a writable, aligned `u32` that no other thread touches during
+            // the call.
+            Ok(entity) => unsafe { put(out, entity) },
             Err(status) => status,
         }
     })
@@ -3257,7 +3516,10 @@ extern "system" fn net_channel(
             return Status::BAD_ARGS;
         };
         match crate::net::open(loader, index, name, callback, user) {
-            Ok(id) => put(out, id),
+            // SAFETY: `HostApi::net_channel` has the mod pass `out` null or
+            // pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(id) => unsafe { put(out, id) },
             Err(status) => status,
         }
     })
@@ -3318,7 +3580,10 @@ extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
 extern "system" fn time_of_day(me: ModHandle, out: *mut enshwick::abi::DaytimeInfo) -> Status {
     entry("time_of_day", || {
         match caller(me).and_then(crate::daytime::info) {
-            Ok(info) => put_headed(out, info),
+            // SAFETY: `HostApi::time_of_day` has the mod pass `out` null or
+            // pointing at its version of `DaytimeInfo`, writable for the size
+            // its header states, that no other thread touches during the call.
+            Ok(info) => unsafe { put_headed(out, info) },
             Err(status) => status,
         }
     })
@@ -3372,7 +3637,10 @@ extern "system" fn game_settings(
         // SAFETY: the caller passes `size` writable bytes at `out` for the call.
         let out = unsafe { core::slice::from_raw_parts_mut(out, len) };
         match caller(me).and_then(|loader| crate::game_settings::read(loader, out)) {
-            Ok(value) => put(preset, u32::from(value)),
+            // SAFETY: `HostApi::game_settings` has the mod pass `preset` null
+            // or pointing at a writable, aligned `u32` that no other thread
+            // touches during the call.
+            Ok(value) => unsafe { put(preset, u32::from(value)) },
             Err(status) => status,
         }
     })
@@ -3408,9 +3676,11 @@ extern "system" fn keep_game_settings(
         let Ok(len) = usize::try_from(size) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the caller passes `size` bytes at each, valid for the call.
+        // SAFETY: `data` is non-null, checked at the top; the ABI has the mod
+        // pass `size` readable bytes there, unchanged for the call.
         let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        // SAFETY: as above.
+        // SAFETY: `mask` is non-null, checked at the top; the ABI has the mod
+        // pass `size` readable bytes there, unchanged for the call.
         let mask = unsafe { core::slice::from_raw_parts(mask, len) };
         match caller(me).and_then(|loader| crate::game_settings::keep(loader, bytes, mask)) {
             Ok(()) => Status::OK,
@@ -3461,19 +3731,33 @@ extern "system" fn knowledge_input_filter(
 }
 
 /// Writes up to `capacity` of `items` to `out` and their number to `count`.
-fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
+///
+/// # Safety
+///
+/// - `out` is null or points at `capacity` consecutive writable, aligned
+///   `T`s.
+/// - `count` is null or points at a writable, aligned `u32`.
+/// - No other thread reads or writes those entries or `count` during the
+///   call.
+unsafe fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -> Status {
     let Ok(total) = u32::try_from(items.len()) else {
         return Status::BAD_ARGS;
     };
     if !out.is_null() {
         for (i, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries at `out`.
+            // SAFETY: `out` is non-null, checked just before, and `i` is below
+            // `capacity`; this function's `# Safety` gives `capacity` entries
+            // at `out`, so the offset stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned entries
+            // at `out` that this function's `# Safety` gives, with no
+            // concurrent access.
             unsafe { slot.write(*item) };
         }
     }
-    put(count, total)
+    // SAFETY: `count` is null or a writable, aligned `u32` that no other thread
+    // touches during the call, by this function's `# Safety`.
+    unsafe { put(count, total) }
 }
 
 extern "system" fn buff_types(
@@ -3484,7 +3768,12 @@ extern "system" fn buff_types(
 ) -> Status {
     entry("buff_types", || {
         match caller(me).and_then(crate::buffs::types) {
-            Ok(types) => put_headed_list(&types, out, capacity, count),
+            // SAFETY: `HostApi::buff_types` has the mod pass `out` null or
+            // pointing at `capacity` entries of its version of `BuffTypeInfo`,
+            // each writable for the size the first entry's header states, and
+            // `count` null or pointing at a writable, aligned `u32`, neither
+            // touched by another thread during the call.
+            Ok(types) => unsafe { put_headed_list(&types, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -3499,7 +3788,12 @@ extern "system" fn buffs(
 ) -> Status {
     entry("buffs", || {
         match caller(me).and_then(|loader| crate::buffs::of(loader, entity)) {
-            Ok(list) => put_headed_list(&list, out, capacity, count),
+            // SAFETY: `HostApi::buffs` has the mod pass `out` null or pointing
+            // at `capacity` entries of its version of `ActiveBuff`, each
+            // writable for the size the first entry's header states, and
+            // `count` null or pointing at a writable, aligned `u32`, neither
+            // touched by another thread during the call.
+            Ok(list) => unsafe { put_headed_list(&list, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -3524,7 +3818,10 @@ extern "system" fn apply_buff(me: ModHandle, request: *const enshwick::abi::Buff
 extern "system" fn remove_buff(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status {
     entry("remove_buff", || {
         match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
-            Ok(had) => put(removed, u8::from(had)),
+            // SAFETY: `HostApi::remove_buff` has the mod pass `removed` null or
+            // pointing at a writable, aligned `u8` that no other thread touches
+            // during the call.
+            Ok(had) => unsafe { put(removed, u8::from(had)) },
             Err(status) => status,
         }
     })
@@ -3538,7 +3835,10 @@ extern "system" fn knowledge(
 ) -> Status {
     entry("knowledge", || {
         match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
-            Ok(info) => put_headed(out, info),
+            // SAFETY: `HostApi::knowledge` has the mod pass `out` null or
+            // pointing at its version of `KnowledgeInfo`, writable for the size
+            // its header states, that no other thread touches during the call.
+            Ok(info) => unsafe { put_headed(out, info) },
             Err(status) => status,
         }
     })
@@ -3601,13 +3901,19 @@ extern "system" fn quests(me: ModHandle, out: *mut u32, capacity: u32, count: *m
             Ok(ids) => {
                 if !out.is_null() {
                     for (i, id) in ids.iter().take(capacity as usize).enumerate() {
-                        // SAFETY: the caller passes room for `capacity` ids at `out`.
+                        // SAFETY: `out` is non-null, checked just before, and
+                        // `i` is below `capacity`; the ABI has the mod pass
+                        // `capacity` ids at `out`, so the offset stays inside.
                         let slot = unsafe { out.add(i) };
-                        // SAFETY: as above.
+                        // SAFETY: `slot` is inside the `capacity` writable,
+                        // aligned ids the ABI has the mod pass at `out`.
                         unsafe { slot.write(*id) };
                     }
                 }
-                put(count, u32::try_from(ids.len()).unwrap_or(u32::MAX))
+                // SAFETY: `HostApi::quests` has the mod pass `count` null or
+                // pointing at a writable, aligned `u32` that no other thread
+                // touches during the call.
+                unsafe { put(count, u32::try_from(ids.len()).unwrap_or(u32::MAX)) }
             }
             Err(status) => status,
         }
@@ -3625,7 +3931,10 @@ extern "system" fn weather_at(
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::weather::sample(loader, position)) {
-            Ok(weights) => put(out, weights),
+            // SAFETY: `HostApi::weather_at` has the mod pass `out` null or
+            // pointing at a writable, aligned `[f32; 4]` that no other thread
+            // touches during the call.
+            Ok(weights) => unsafe { put(out, weights) },
             Err(status) => status,
         }
     })
@@ -3639,7 +3948,12 @@ extern "system" fn weather_fronts(
 ) -> Status {
     entry("weather_fronts", || {
         match caller(me).and_then(crate::weather::fronts) {
-            Ok(fronts) => put_headed_list(&fronts, out, capacity, count),
+            // SAFETY: `HostApi::weather_fronts` has the mod pass `out` null or
+            // pointing at `capacity` entries of its version of `WeatherFront`,
+            // each writable for the size the first entry's header states, and
+            // `count` null or pointing at a writable, aligned `u32`, neither
+            // touched by another thread during the call.
+            Ok(fronts) => unsafe { put_headed_list(&fronts, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -3662,7 +3976,13 @@ extern "system" fn terrain_materials(
 ) -> Status {
     entry("terrain_materials", || {
         match caller(me).and_then(crate::terrain::materials) {
-            Ok(materials) => put_headed_list(&materials, out, capacity, count),
+            // SAFETY: `HostApi::terrain_materials` has the mod pass `out` null
+            // or pointing at `capacity` entries of its version of
+            // `TerrainMaterialInfo`, each writable for the size the first
+            // entry's header states, and `count` null or pointing at a
+            // writable, aligned `u32`, neither touched by another thread during
+            // the call.
+            Ok(materials) => unsafe { put_headed_list(&materials, out, capacity, count) },
             Err(status) => status,
         }
     })
@@ -3682,7 +4002,10 @@ extern "system" fn terrain_edit(
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::terrain::edit(loader, &edit)) {
-            Ok(changed) => put(amount, changed),
+            // SAFETY: `HostApi::terrain_edit` has the mod pass `amount` null or
+            // pointing at a writable, aligned `f32` that no other thread
+            // touches during the call.
+            Ok(changed) => unsafe { put(amount, changed) },
             Err(status) => status,
         }
     })
@@ -3716,7 +4039,10 @@ extern "system" fn ui_widget(
             return Status::BAD_ARGS;
         };
         let status = crate::ui::widget(loader, index, frame, &mut copy);
-        match put_headed(widget, copy) {
+        // SAFETY: `HostApi::ui_widget` has the mod pass `widget` null or
+        // pointing at its version of `UiWidget`, writable for the size its
+        // header states, that no other thread touches during the call.
+        match unsafe { put_headed(widget, copy) } {
             Status::OK => status,
             refused => refused,
         }

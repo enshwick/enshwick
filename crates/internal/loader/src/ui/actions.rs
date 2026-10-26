@@ -79,15 +79,18 @@ fn focused() -> bool {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GetForegroundWindow, GetWindowThreadProcessId,
     };
-    // SAFETY: plain queries without pointers kept.
+    // SAFETY: `GetForegroundWindow` takes no arguments and may return null,
+    // checked below.
     let window = unsafe { GetForegroundWindow() };
     if window.is_null() {
         return false;
     }
     let mut process = 0u32;
-    // SAFETY: a window handle and a writable out value.
+    // SAFETY: `window` is a non-null handle, checked by the guard before it,
+    // and `process` is a live `u32` the call writes; a handle that closed
+    // meanwhile only fails the call, leaving `process` 0.
     unsafe { GetWindowThreadProcessId(window, &raw mut process) };
-    // SAFETY: no arguments.
+    // SAFETY: `GetCurrentProcessId` takes no arguments and cannot fail.
     process == unsafe { GetCurrentProcessId() }
 }
 
@@ -97,7 +100,8 @@ fn pressed(key: u32) -> bool {
     let Ok(key) = i32::try_from(key) else {
         return false;
     };
-    // SAFETY: a plain query of the key's state.
+    // SAFETY: `GetAsyncKeyState` takes a key code by value and keeps no
+    // pointer; an unknown code returns 0.
     let down = unsafe { GetAsyncKeyState(key) } < 0;
     let was = WAS_DOWN.swap(down, Ordering::Relaxed);
     down && !was && focused()
@@ -518,7 +522,9 @@ thread_local! {
 ///
 /// # Safety
 ///
-/// Inside a frame, on its thread, with no other window open.
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
     if let Some((id, action)) = OPEN.lock().unwrap_or_else(PoisonError::into_inner).take() {
         WINDOW.set(Some(Open {
@@ -532,14 +538,20 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         };
         let title = copy(&[open.view.title().as_bytes()]);
         let name = copy(&[b"enshwick/loader/actions"]);
-        // SAFETY: forwarded from the caller; the window object lives in the
-        // thread's storage until the window ends below.
+        // SAFETY: this function's `# Safety` gives the frame, its thread and
+        // its `context`; `open.window` stays in the thread-local `WINDOW`,
+        // borrowed and unmoved until `window_end` below, and `name` and
+        // `title` live in the frame's text arena.
         unsafe { engine.window_begin(context, &mut open.window, &name, &title) };
-        // SAFETY: inside the window just started, until it ends below.
+        // SAFETY: the window started one call earlier in this frame, on its
+        // thread, with the frame's `context`, and `paint` is not used after
+        // `window_end` below.
         let paint = unsafe { Painter::new(engine, context) };
         body(&paint, &mut open.view);
         let close = paint.button(texts::text("actions.close").as_bytes(), true);
-        // SAFETY: the window started above, in this frame.
+        // SAFETY: `window_begin` started `open.window` in this frame, on this
+        // thread, with this `context`; it did not move, and the painter's
+        // widgets close every frame they open.
         unsafe { engine.window_end(context, &mut open.window) };
         if close {
             *slot = None;

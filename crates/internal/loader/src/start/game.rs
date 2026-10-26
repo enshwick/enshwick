@@ -45,6 +45,11 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
         EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
     };
 
+    /// # Safety
+    ///
+    /// - `EnumWindows` calls it with a window handle valid for the call.
+    /// - `found` is the exposed address of a writable `bool` alive for the
+    ///   whole enumeration.
     unsafe extern "system" fn ours(window: HWND, found: LPARAM) -> i32 {
         let mut process = 0u32;
         // SAFETY: a window Windows enumerates; the out word is ours.
@@ -55,7 +60,9 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
         let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentProcessId() };
         if visible && process == me {
             let flag = core::ptr::with_exposed_provenance_mut::<bool>(found.cast_unsigned());
-            // SAFETY: `found` is the address of the caller's flag.
+            // SAFETY: `found` is the exposed address of the `found` flag that
+            // `wait_for_window` passed `EnumWindows`, alive for the whole
+            // enumeration.
             unsafe { flag.write(true) };
             return 0;
         }
@@ -65,7 +72,8 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
     let started = std::time::Instant::now();
     while started.elapsed() < limit {
         let mut found = false;
-        // SAFETY: the callback only writes the flag, which outlives the call.
+        // SAFETY: `ours` matches `WNDENUMPROC` and writes only the flag whose
+        // address goes in as `LPARAM`, a local that outlives the call.
         unsafe {
             EnumWindows(
                 Some(ours),
@@ -132,7 +140,8 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         );
         return None;
     };
-    // SAFETY: the game's image stays mapped for the life of the process.
+    // SAFETY: `identify` found `image_len` bytes of the game's image at
+    // `base`, whose provenance it exposed, mapped for the life of the process.
     let bytes: &'static [u8] = unsafe { core::slice::from_raw_parts(base as *const u8, image_len) };
     let Ok(image) = Image::parse(bytes, Layout::Mapped, Some(base)) else {
         crate::log!(ERROR, "the game's image could not be read; nothing loads");
@@ -254,9 +263,11 @@ pub(super) fn identify() -> Option<(Side, u64, usize)> {
     if module.is_null() {
         return None;
     }
-    let base = module.addr();
-    // SAFETY: the executable's headers are mapped at its base.
-    let header = unsafe { core::slice::from_raw_parts(base as *const u8, HEADER_PAGE) };
+    let base = module.expose_provenance();
+    // SAFETY: `module` is the executable's base, non-null as checked just
+    // before, where Windows maps its read-only header page of `HEADER_PAGE`
+    // bytes for the life of the process.
+    let header = unsafe { core::slice::from_raw_parts(module.cast::<u8>(), HEADER_PAGE) };
     let optional = usize::try_from(pe::u32_at(header, pe::PE_POINTER)?).ok()? + pe::OPTIONAL;
     let len = usize::try_from(pe::u32_at(header, optional + pe::SIZE_OF_IMAGE)?).ok()?;
     Some((side, u64::try_from(base).ok()?, len))

@@ -326,10 +326,14 @@ where
 ///
 /// # Safety
 ///
-/// `summon` is null or valid for the call.
+/// - `summon` is null, or points at a summon the loader wrote, readable for
+///   the size its header states.
+/// - No other thread writes that summon during the call.
 unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
-    // SAFETY: forwarded from the caller; the fields up to the target are
-    // there since minor 16.
+    // SAFETY: `read_headed` needs `summon` null or readable for its header's
+    // size with no concurrent writer, which this function's `# Safety`
+    // bullets guarantee; the fields up to the target are there since minor
+    // 16.
     let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
     Some(Summon::from_raw(&raw))
 }

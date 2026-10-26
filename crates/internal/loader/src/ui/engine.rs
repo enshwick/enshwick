@@ -695,9 +695,10 @@ impl Engine {
                 .constant(&format!("{name}.bytes"))
                 .ok_or(Missing::Bytes(name))?;
             let address = usize::try_from(address).map_err(|_| Missing::Entry(name))?;
-            // SAFETY: the address lies in the game's code, mapped for the
-            // process; eight bytes read from a function's entry.
-            let found = unsafe { crate::world::read::<u64>(address, 0) };
+            // SAFETY: `loader.address` resolves `name` to a function in the
+            // game's executable, mapped for the process, so eight bytes at
+            // its entry are readable; code is not written while it runs.
+            let found = unsafe { crate::memory::read::<u64>(address, 0) };
             if found != expected {
                 return Err(Missing::Bytes(name));
             }
@@ -720,8 +721,10 @@ impl Engine {
         macro_rules! function {
             ($name:literal, $ty:ty) => {{
                 let address = at($name);
-                // SAFETY: the symbol is the game function of the field's
-                // type on this build, checked by its first bytes above.
+                // SAFETY: the loop over `FUNCTIONS` returned unless every
+                // function's first eight bytes match its `<name>.bytes`
+                // constant, so the address is the game function the build table
+                // types as `$ty`.
                 unsafe { core::mem::transmute::<usize, $ty>(address) }
             }};
         }
@@ -778,51 +781,66 @@ impl Engine {
 
     /// The interface context of the frame being drawn; 0 outside one.
     pub(super) fn context(&self) -> usize {
-        // SAFETY: the global holds the context pointer, or 0 outside a frame.
-        unsafe { crate::world::read::<usize>(self.context, 0) }
+        // SAFETY: `self.context` is the address of the game's `ui.context`
+        // global from the build table, eight bytes of the executable's data
+        // mapped for the process; it holds the context or 0 outside a frame.
+        unsafe { crate::memory::read::<usize>(self.context, 0) }
     }
 
     fn bundle(&self, context: usize) -> usize {
-        // SAFETY: a live context holds its look bundle.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_bundle) }
+        // SAFETY: every caller passes the non-zero context `Engine::context`
+        // read in this frame, which lives until the frame ends; its bundle
+        // pointer sits at the table's `ui.context_bundle`.
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_bundle) }
     }
 
     /// The interface host of `context`.
     pub(super) fn host(&self, context: usize) -> usize {
-        // SAFETY: a live context holds its host.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_host) }
+        // SAFETY: every caller passes the non-zero context `Engine::context`
+        // read in this frame, which lives until the frame ends; its host
+        // pointer sits at the table's `ui.context_host`.
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_host) }
     }
 
     /// The screen byte of the context's play state: 1 to 3 menus, 4 and 5
     /// slideshows, 6 loading, 7 in game; 0 when it cannot be read.
     pub(super) fn app_state(&self, context: usize) -> u8 {
-        // SAFETY: a live context holds its play state pointer.
-        let state = unsafe { crate::world::read::<usize>(context, self.layout.context_state) };
+        // SAFETY: every caller passes the non-zero context `Engine::context`
+        // read in this frame, which lives until the frame ends; its play
+        // state pointer sits at the table's `ui.context_state`.
+        let state = unsafe { crate::memory::read::<usize>(context, self.layout.context_state) };
         if state == 0 {
             return 0;
         }
-        // SAFETY: the pointer names the play state's record.
-        let record = unsafe { crate::world::read::<usize>(state, 0) };
+        // SAFETY: `state` is non-zero, checked by the guard before it, and
+        // points at the play state, whose first eight bytes hold its record
+        // pointer.
+        let record = unsafe { crate::memory::read::<usize>(state, 0) };
         if record == 0 {
             return 0;
         }
-        // SAFETY: the record holds its screen byte.
-        unsafe { crate::world::read::<u8>(record, self.layout.state_screen) }
+        // SAFETY: `record` is non-zero, checked by the guard before it, and
+        // points at the play state's record, whose screen byte sits at the
+        // table's `ui.state_screen`.
+        unsafe { crate::memory::read::<u8>(record, self.layout.state_screen) }
     }
 
     /// The navigation group the context points at.
     pub(super) fn nav(&self, context: usize) -> usize {
-        // SAFETY: a live context holds its navigation group pointer.
-        unsafe { crate::world::read::<usize>(context, self.layout.context_nav) }
+        // SAFETY: every caller passes the non-zero context `Engine::context`
+        // read in this frame, which lives until the frame ends; its
+        // navigation group pointer sits at the table's `ui.context_nav`.
+        unsafe { crate::memory::read::<usize>(context, self.layout.context_nav) }
     }
 
     /// Points the context back at `nav`, after a draw that left it at an
     /// object of its own stack.
     pub(super) fn restore_nav(&self, context: usize, nav: usize) {
-        let slot =
-            core::ptr::with_exposed_provenance_mut::<usize>(context + self.layout.context_nav);
-        // SAFETY: a live context, on the thread that draws it.
-        unsafe { slot.write_unaligned(nav) };
+        // SAFETY: every caller passes the non-zero context `Engine::context`
+        // read in this frame, on the thread that draws it, after the game's
+        // own draw returned, so nothing else touches the navigation pointer
+        // at the table's `ui.context_nav`.
+        unsafe { crate::memory::write(context, self.layout.context_nav, nav) };
     }
 
     /// The node of a frame the game opened in `frame`.
@@ -836,8 +854,10 @@ impl Engine {
         if node == 0 {
             return 0;
         }
-        // SAFETY: a node the game made for the panel in the last frame.
-        unsafe { crate::world::read::<u64>(node, self.layout.node_id) }
+        // SAFETY: `node` is non-zero, checked by the guard before it: the game
+        // wrote it into the panel frame when the window was drawn, and its id
+        // sits at the table's `ui.node_id`.
+        unsafe { crate::memory::read::<u64>(node, self.layout.node_id) }
     }
 
     /// Starts a window: the game's popup panel over a dimmed screen, `width`
@@ -845,8 +865,13 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a frame, on its thread, with `window` kept in place until
-    /// [`Engine::window_end`]; `name` and `title` outlive the frame.
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - `window` stays in place until [`Engine::window_end`] ends it in the
+    ///   same frame.
+    /// - The bytes `name` and `title` point at outlive the frame.
     pub(super) unsafe fn window_begin(
         &self,
         context: usize,
@@ -856,8 +881,12 @@ impl Engine {
     ) {
         window.saved_nav = self.nav(context);
         let name = [name.ptr.expose_provenance() as u64, name.len];
-        // SAFETY: the window object and its name, as the popup passes them:
-        // full screen, its layer, all input, flags 1.
+        // SAFETY: `self.window_begin` is the game's `ui.window_begin`, its
+        // entry bytes checked in `Engine::resolve`, called in a frame on its
+        // thread by this function's `# Safety`; `window.object` holds the
+        // table's `ui.window_extent` bytes (`Layout::read`), and `name` is a
+        // live local over bytes that outlive the frame. The arguments are
+        // the game popup's: full screen, its layer, all input, flags 1.
         unsafe {
             (self.window_begin)(
                 window.object.ptr(),
@@ -869,36 +898,57 @@ impl Engine {
             );
         }
         let node = window.object.read_usize(self.layout.window_node);
-        // SAFETY: a frame over the window's node.
+        // SAFETY: `self.frame_from_node` is the game's `ui.frame_from_node`,
+        // its entry bytes checked in `Engine::resolve`; `node` is the one the
+        // game just wrote into the window object, and `window.backdrop` holds
+        // the table's `ui.frame_extent` bytes (`Layout::read`).
         unsafe { (self.frame_from_node)(window.backdrop.ptr(), node) };
-        // SAFETY: the frame just opened.
+        // SAFETY: `self.frame_stretch` is the game's `ui.frame_stretch`, its
+        // entry bytes checked in `Engine::resolve`, on the backdrop frame the
+        // game filled one call earlier.
         unsafe { (self.frame_stretch)(window.backdrop.ptr()) };
         let dim: u64 = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
-        // SAFETY: the frame and a colour, half-transparent black.
+        // SAFETY: `self.frame_color` is the game's `ui.frame_color`, its
+        // entry bytes checked in `Engine::resolve`, on the filled backdrop
+        // frame, with `dim` a live local the game reads eight bytes of.
         unsafe { (self.frame_color)(window.backdrop.ptr(), &raw const dim) };
-        // SAFETY: an unnamed frame inside the backdrop.
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, its entry
+        // bytes checked in `Engine::resolve`; `window.panel` holds the
+        // table's `ui.frame_extent` bytes (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(window.panel.ptr(), 0) };
         let panel = self.frame_node(&window.panel);
         let padding = [90.0f32, 60.0, 90.0, 60.0];
-        // SAFETY: the panel's node and four edges.
+        // SAFETY: `self.node_padding` is the game's `ui.node_padding`, its
+        // entry bytes checked in `Engine::resolve`, on the node the game just
+        // wrote into the panel frame, with four live floats.
         unsafe { (self.node_padding)(panel, &raw const padding) };
         let gap = [0.0f32, window.gap];
-        // SAFETY: the panel's node and its gap between children.
+        // SAFETY: `self.node_spacing` is the game's `ui.node_spacing`, its
+        // entry bytes checked in `Engine::resolve`, on the panel's node, with
+        // two live floats.
         unsafe { (self.node_spacing)(panel, &raw const gap, 0) };
         let centre: u16 = 0x202;
-        // SAFETY: the panel's node and an alignment word.
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, its entry
+        // bytes checked in `Engine::resolve`, on the panel's node, with a
+        // live alignment word.
         unsafe { (self.node_align)(panel, &raw const centre) };
-        // SAFETY: the panel's node and its width.
+        // SAFETY: `self.node_width` is the game's `ui.node_width`, its entry
+        // bytes checked in `Engine::resolve`, on the panel's node.
         unsafe { (self.node_width)(panel, WINDOW_WIDTH) };
-        // SAFETY: the panel's node and no stretch.
+        // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, its
+        // entry bytes checked in `Engine::resolve`, on the panel's node.
         unsafe { (self.node_stretch)(panel, 0) };
         let mut look = Buf::<PANEL_CONFIG>::zeroed();
         look.u32(self.layout.panel_kind, 9);
         look.f32(self.layout.panel_alpha, 1.0);
-        // SAFETY: the panel frame and its background, kind 9 as the popup's.
+        // SAFETY: `self.panel` is the game's `ui.panel`, its entry bytes
+        // checked in `Engine::resolve`, on the opened panel frame; `look`
+        // holds the table's `ui.panel_extent` bytes (`Layout::read`).
         unsafe { (self.panel)(window.panel.ptr(), look.ptr()) };
         if title.len > 0 {
-            // SAFETY: forwarded from the caller.
+            // SAFETY: this function's `# Safety` gives a frame on its thread,
+            // the frame's `context` and a `title` that outlives the frame, and
+            // the panel frame opened above is the window `title` asks for.
             unsafe { self.title(context, title) };
         }
         let mut nav = Buf::<NAV_CONFIG>::zeroed();
@@ -910,14 +960,24 @@ impl Engine {
         nav.u32(input, 2);
         nav.u16(layer, 0x1b);
         nav.u16(sound, 1);
-        // SAFETY: the navigation group and its config, as the popup's.
+        // SAFETY: `self.nav_init` is the game's `ui.nav_init`, its entry bytes
+        // checked in `Engine::resolve`; `window.nav` holds the table's
+        // `ui.nav_extent` bytes and `nav` its `ui.nav_config_size`
+        // (`Layout::read`).
         unsafe { (self.nav_init)(window.nav.ptr(), nav.ptr()) };
         let mut input = [0u64; 2];
-        // SAFETY: the config, the player's navigation input written to `input`.
+        // SAFETY: `self.nav_input` is the game's `ui.nav_input`, its entry
+        // bytes checked in `Engine::resolve`; it writes sixteen bytes to the
+        // live `input` and reads the `ui.nav_config_size` bytes of `nav`.
         unsafe { (self.nav_input)(&raw mut input, nav.ptr(), 1) };
-        // SAFETY: the group and the input.
+        // SAFETY: `self.nav_set` is the game's `ui.nav_set`, its entry bytes
+        // checked in `Engine::resolve`, on the group `nav_init` filled, with
+        // the live `input`.
         unsafe { (self.nav_set)(window.nav.ptr(), &raw const input) };
-        // SAFETY: the context and the group, current until the window ends.
+        // SAFETY: `self.nav_push` is the game's `ui.nav_push`, its entry bytes
+        // checked in `Engine::resolve`, on the frame's `context` by this
+        // function's `# Safety`; the group stays in place in `window` until
+        // `Engine::window_end` drops it, by the same contract.
         unsafe { (self.nav_push)(context, window.nav.ptr()) };
     }
 
@@ -925,38 +985,70 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// As for [`Engine::window_begin`], in the same frame.
+    /// - Called on the frame's thread in the frame whose
+    ///   [`Engine::window_begin`] started `window`, with the same `context`.
+    /// - `window` did not move since it started.
+    /// - Every frame opened inside `window` is closed.
     pub(super) unsafe fn window_end(&self, context: usize, window: &mut Window) {
-        // SAFETY: the group the window started.
+        // SAFETY: `self.nav_end` is the game's `ui.nav_end`, its entry bytes
+        // checked in `Engine::resolve`, on the group `window_begin` pushed in
+        // this frame, unmoved by this function's `# Safety`.
         unsafe { (self.nav_end)(window.nav.ptr(), 0) };
-        // SAFETY: as above.
+        // SAFETY: `self.nav_drop` is the game's `ui.nav_drop`, its entry bytes
+        // checked in `Engine::resolve`, on the group `window_begin` pushed in
+        // this frame and `nav_end` just ended.
         unsafe { (self.nav_drop)(window.nav.ptr()) };
         self.restore_nav(context, window.saved_nav);
-        // SAFETY: the frames and window the start opened, innermost first.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, its entry
+        // bytes checked in `Engine::resolve`, on the panel frame
+        // `window_begin` opened; every frame inside it is closed by this
+        // function's `# Safety`.
         unsafe { (self.frame_close)(window.panel.ptr()) };
-        // SAFETY: as above.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, its entry
+        // bytes checked in `Engine::resolve`, on the backdrop frame
+        // `window_begin` made, whose inner panel frame closed one call
+        // earlier.
         unsafe { (self.frame_close)(window.backdrop.ptr()) };
-        // SAFETY: as above.
+        // SAFETY: `self.window_end` is the game's `ui.window_end`, its entry
+        // bytes checked in `Engine::resolve`, on the window object
+        // `window_begin` started, whose frames are now closed.
         unsafe { (self.window_end)(window.object.ptr()) };
     }
 
+    /// Draws the window's title in the popup's title style.
+    ///
+    /// # Safety
+    ///
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
     unsafe fn title(&self, context: usize, text: &UiText) {
         let layout = &self.layout;
         let bundle = self.bundle(context);
         let mut label = Buf::<LABEL_SIZE>::zeroed();
-        // SAFETY: a label over `text` in the popup's title style.
+        // SAFETY: `self.label_new` is the game's `ui.label_new`, its entry
+        // bytes checked in `Engine::resolve`; `label` holds the table's
+        // `ui.label_extent` bytes (`Layout::read`), `text` outlives the frame
+        // by this function's `# Safety`, and the style is the reflected
+        // `header1` offset inside the frame's look bundle.
         unsafe { (self.label_new)(label.ptr(), text, bundle + self.looks.title, 0) };
         label.u8(layout.label_shown, 1);
         let node = self.frame_node(&label);
         let centre: u16 = 0x202;
-        // SAFETY: the label's node and an alignment word.
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, its entry
+        // bytes checked in `Engine::resolve`, on the node the game just wrote
+        // into `label`, with a live alignment word.
         unsafe { (self.node_align)(node, &raw const centre) };
         label.u16(layout.label_align, centre);
-        // SAFETY: the bundle holds the font size, a float.
-        let size = unsafe { crate::world::read::<f32>(bundle, self.looks.title_size) };
+        // SAFETY: `bundle` is the frame's look bundle, read from the live
+        // context, and `title_size` the reflected offset of its
+        // `caps_large` font size, a float.
+        let size = unsafe { crate::memory::read::<f32>(bundle, self.looks.title_size) };
         label.f32(layout.label_font_size, size);
         label.u16(layout.label_flags, label.read_u16(layout.label_flags) | 8);
-        // SAFETY: the label just made.
+        // SAFETY: `self.label_draw` is the game's `ui.label_draw`, its entry
+        // bytes checked in `Engine::resolve`, on the label `label_new` filled.
         unsafe { (self.label_draw)(label.ptr()) };
     }
 
@@ -964,7 +1056,10 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread; `text` outlives the frame.
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
     pub(super) unsafe fn label(
         &self,
         context: usize,
@@ -981,19 +1076,29 @@ impl Engine {
             .copied()
             .unwrap_or(self.looks.styles[0]);
         let mut label = Buf::<LABEL_SIZE>::zeroed();
-        // SAFETY: a label over `text` in a style of the bundle.
+        // SAFETY: `self.label_new` is the game's `ui.label_new`, checked in
+        // `Engine::resolve`; `label` holds the table's `ui.label_extent` bytes
+        // (`Layout::read`), `text` outlives the frame by this function's
+        // `# Safety`, and `style` is a reflected style offset inside the
+        // frame's look bundle.
         unsafe { (self.label_new)(label.ptr(), text, bundle + style, u8::from(wrap)) };
         label.u8(self.layout.label_shown, 1);
         let node = self.frame_node(&label);
         let align: u16 = if center { 0x202 } else { 0x201 };
-        // SAFETY: the label's node and an alignment word.
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
+        // `Engine::resolve`, on the node the game just wrote into `label`,
+        // with a live alignment word.
         unsafe { (self.node_align)(node, &raw const align) };
         label.u16(self.layout.label_align, align);
         if wrap {
-            // SAFETY: the label's node, stretched to the window's width.
+            // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`,
+            // checked in `Engine::resolve`, on the node the game just wrote
+            // into `label`.
             unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
         }
-        // SAFETY: the label just made.
+        // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
+        // `Engine::resolve`, on the label `label_new` filled, inside the
+        // window this function's `# Safety` gives.
         unsafe { (self.label_draw)(label.ptr()) };
     }
 
@@ -1001,7 +1106,8 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread; `text` outlives the frame.
+    /// - Called inside a window, on the frame's thread.
+    /// - The bytes `text` points at outlive the frame.
     pub(super) unsafe fn button(&self, text: &UiText, enabled: bool) -> bool {
         let layout = &self.layout;
         let mut config = Buf::<BUTTON_CONFIG>::zeroed();
@@ -1013,7 +1119,10 @@ impl Engine {
         config.f32(layout.button_padding[1], 5.0);
         config.f32(layout.button_scale, 1.0);
         config.u8(layout.button_sound, 1);
-        // SAFETY: the button config the popup fills, and the label.
+        // SAFETY: `self.button` is the game's `ui.button`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `config` holds the table's `ui.button_extent` bytes
+        // (`Layout::read`) and `text` outlives the frame by the same contract.
         let clicked = unsafe { (self.button)(config.ptr(), text) } != 0;
         clicked && enabled
     }
@@ -1021,11 +1130,14 @@ impl Engine {
     fn setting_texts(&self, context: usize) -> [UiText; TOGGLE_ENTRIES] {
         let bundle = self.bundle(context);
         [self.looks.setting_off, self.looks.setting_on].map(|offset| {
-            // SAFETY: a loca reference of the bundle.
+            // SAFETY: `self.loca_id` is the game's `ui.loca_id`, checked in
+            // `Engine::resolve`; `offset` is the reflected offset of a loca
+            // reference inside the frame's look bundle.
             let id = unsafe { (self.loca_id)(bundle + offset) };
             let mut text = UiText::EMPTY;
-            // SAFETY: the text of a loca id, written to `text`; it points at
-            // the game's loca storage.
+            // SAFETY: `self.loca_text` is the game's `ui.loca_text`, checked
+            // in `Engine::resolve`; it writes a `UiText` to the live `text`,
+            // pointing at the game's loca storage.
             unsafe { (self.loca_text)(&raw mut text, id) };
             text
         })
@@ -1035,7 +1147,10 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread; `label` outlives the frame.
+    /// - Called inside a window, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `label` points at outlive the frame.
     pub(super) unsafe fn toggle(
         &self,
         context: usize,
@@ -1057,8 +1172,11 @@ impl Engine {
         config.u8(layout.toggle_explain, 1);
         config.u8(layout.toggle_enabled, u8::from(!read_only));
         let mut value = u8::from(on);
-        // SAFETY: the selector config the game's settings pages fill, with
-        // two entries.
+        // SAFETY: `self.toggle` is the game's `ui.toggle`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `config` holds the table's `ui.toggle_extent` bytes and its
+        // two entries fit before `ui.toggle_count` (`Layout::read`), and
+        // `value` is a live byte the game writes.
         let changed = unsafe { (self.toggle)(config.ptr(), &raw mut value) } != 0;
         (changed && !read_only).then_some(value != 0)
     }
@@ -1067,7 +1185,8 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread; `label` outlives the frame.
+    /// - Called inside a window, on the frame's thread.
+    /// - The bytes `label` points at outlive the frame.
     pub(super) unsafe fn slider(
         &self,
         label: &UiText,
@@ -1079,7 +1198,11 @@ impl Engine {
     ) -> Option<f32> {
         let layout = &self.layout;
         let mut config = Buf::<SLIDER_CONFIG>::zeroed();
-        // SAFETY: the slider's constructor fills its defaults.
+        // SAFETY: `self.slider_init` is the game's `ui.slider_init`, checked
+        // in `Engine::resolve`; it fills the `SLIDER_CONFIG` bytes of
+        // `config`, a size from the game's own slider pages (the table has no
+        // extent for it; `Layout::checked` keeps the stops inside it), and
+        // `label` outlives the frame by this function's `# Safety`.
         unsafe { (self.slider_init)(config.ptr(), label) };
         config.f32(layout.slider_min, min);
         config.f32(layout.slider_max, max);
@@ -1100,8 +1223,10 @@ impl Engine {
             config.u32(layout.slider_steps, steps - 1);
         }
         let mut current = value;
-        // SAFETY: the config the constructor made, the value, no gamepad
-        // state.
+        // SAFETY: `self.slider` is the game's `ui.slider`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives, on the config `slider_init` filled; `current` is a live float
+        // the game writes, and the gamepad state may be null.
         let changed =
             unsafe { (self.slider)(config.ptr(), &raw mut current, core::ptr::null_mut()) } != 0;
         (changed && !read_only).then_some(current)
@@ -1111,7 +1236,9 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread; the texts outlive the frame.
+    /// - Called inside a window, on the frame's thread.
+    /// - The bytes `label` and every text of `options` point at outlive the
+    ///   frame.
     pub(super) unsafe fn dropdown(
         &self,
         label: &UiText,
@@ -1124,7 +1251,10 @@ impl Engine {
         }
         let layout = &self.layout;
         let mut config = Buf::<DROPDOWN_CONFIG>::zeroed();
-        // SAFETY: the dropdown's constructor fills its defaults.
+        // SAFETY: `self.dropdown_init` is the game's `ui.dropdown_init`,
+        // checked in `Engine::resolve`; it fills `config`, which holds the
+        // table's `ui.dropdown_extent` bytes (`Layout::read`), and `label`
+        // outlives the frame by this function's `# Safety`.
         unsafe { (self.dropdown_init)(config.ptr(), label) };
         let capacity = layout.dropdown_capacity;
         let count = options.len().min(capacity);
@@ -1140,7 +1270,11 @@ impl Engine {
         let last = count.min(capacity.saturating_sub(1));
         let shown = index.min(u32::try_from(last).unwrap_or(0));
         let mut value = i32::try_from(shown).unwrap_or(0);
-        // SAFETY: the config the constructor made with its entries, the value.
+        // SAFETY: `self.dropdown` is the game's `ui.dropdown`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; at most `ui.dropdown_capacity` entries fill the config before
+        // `ui.dropdown_count` (`Layout::checked`), `value` is a live integer
+        // the game writes, and the open state may be null.
         let changed =
             unsafe { (self.dropdown)(config.ptr(), &raw mut value, core::ptr::null_mut()) } != 0;
         (changed && !read_only)
@@ -1153,21 +1287,30 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a window, on the frame's thread.
+    /// - Called inside a window or a HUD column, on the frame's thread.
     pub(super) unsafe fn progress(&self, value: f32, min: f32, max: f32) {
         let mut frame = Buf::<FRAME_SIZE>::zeroed();
-        // SAFETY: an unnamed frame to size the bar.
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`, inside the window this function's `# Safety`
+        // gives; `frame` holds the table's `ui.frame_extent` bytes
+        // (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(frame.ptr(), 0) };
         let node = self.frame_node(&frame);
-        // SAFETY: the frame's node and its height.
+        // SAFETY: `self.node_height` is the game's `ui.node_height`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `frame`.
         unsafe { (self.node_height)(node, BAR_HEIGHT) };
-        // SAFETY: the frame's node, stretched to the window's width.
+        // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `frame`.
         unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
         let white = 0xffff_ffff | u64::from(1.0f32.to_bits()) << 32;
         let shade = 0x8000_0000 | u64::from(1.0f32.to_bits()) << 32;
-        // SAFETY: value, range and the game's own fill and background.
+        // SAFETY: `self.progress` is the game's `ui.progress`, checked in
+        // `Engine::resolve`, inside the frame opened above; it takes values
+        // only.
         unsafe { (self.progress)(value - min, max - min, white, shade) };
-        // SAFETY: the frame opened above.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame `frame_open` opened above, with
+        // nothing opened inside it.
         unsafe { (self.frame_close)(frame.ptr()) };
     }
 
@@ -1177,10 +1320,12 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a frame, on its thread.
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
     pub(super) unsafe fn hud_visible(&self) -> bool {
-        // SAFETY: forwarded from the caller; the game reads the interface
-        // context itself.
+        // SAFETY: `self.hud_visible` is the game's `ui.hud_visible`, checked
+        // in `Engine::resolve`, called in a frame on its thread by this
+        // function's `# Safety`; it reads the frame's context itself.
         unsafe { (self.hud_visible)(HUD_MASK) != 0 }
     }
 
@@ -1189,23 +1334,39 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a frame, on its thread, with `hud` kept in place until
-    /// [`Engine::hud_end`]; `name` outlives the frame.
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
+    /// - `hud` stays in place until [`Engine::hud_end`] ends it in the same
+    ///   frame.
+    /// - The bytes `name` points at outlive the frame.
     pub(super) unsafe fn hud_begin(&self, hud: &mut HudWindow, name: &UiText) {
         let name = [name.ptr.expose_provenance() as u64, name.len];
-        // SAFETY: the window object and its name, as the game's own HUD
-        // windows pass them: full screen, the HUD's layer 5, flags 0.
+        // SAFETY: `self.window_begin` is the game's `ui.window_begin`, checked
+        // in `Engine::resolve`, called in a frame on its thread by this
+        // function's `# Safety`; `hud.object` holds the table's
+        // `ui.window_extent` bytes (`Layout::read`) and `name` is a live
+        // local over bytes that outlive the frame. The arguments are the
+        // game's own HUD windows': full screen, layer 5, flags 0.
         unsafe { (self.window_begin)(hud.object.ptr(), &raw const name, 1, 5, u32::MAX, 0) };
         let node = hud.object.read_usize(self.layout.window_node);
-        // SAFETY: a frame over the window's node.
+        // SAFETY: `self.frame_from_node` is the game's `ui.frame_from_node`,
+        // checked in `Engine::resolve`; `node` is the one the game just wrote
+        // into the window object, and `hud.root` holds the table's
+        // `ui.frame_extent` bytes (`Layout::read`).
         unsafe { (self.frame_from_node)(hud.root.ptr(), node) };
-        // SAFETY: an unnamed frame inside it.
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`; `hud.safe` holds the table's `ui.frame_extent`
+        // bytes (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(hud.safe.ptr(), 0) };
         let safe = self.frame_node(&hud.safe);
-        // SAFETY: the frame's node, filling the screen.
+        // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, checked
+        // in `Engine::resolve`, on the node the game just wrote into
+        // `hud.safe`.
         unsafe { (self.node_stretch)(safe, stretch(1.0, 1.0)) };
         let margin = [HUD_MARGIN; 4];
-        // SAFETY: the frame's node and its four margins.
+        // SAFETY: `self.node_padding` is the game's `ui.node_padding`, checked
+        // in `Engine::resolve`, on the node the game just wrote into
+        // `hud.safe`, with four live floats.
         unsafe { (self.node_padding)(safe, &raw const margin) };
     }
 
@@ -1213,13 +1374,22 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// As for [`Engine::hud_begin`], in the same frame.
+    /// - Called on the frame's thread in the frame whose
+    ///   [`Engine::hud_begin`] started `hud`.
+    /// - `hud` did not move since it started.
+    /// - Every column opened inside `hud` is closed.
     pub(super) unsafe fn hud_end(&self, hud: &mut HudWindow) {
-        // SAFETY: the frames and window the start opened, innermost first.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame `hud_begin` opened in this frame;
+        // every column inside it is closed by this function's `# Safety`.
         unsafe { (self.frame_close)(hud.safe.ptr()) };
-        // SAFETY: as above.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the root frame `hud_begin` made, whose
+        // inner frame closed one call earlier.
         unsafe { (self.frame_close)(hud.root.ptr()) };
-        // SAFETY: as above.
+        // SAFETY: `self.window_end` is the game's `ui.window_end`, checked in
+        // `Engine::resolve`, on the window object `hud_begin` started, whose
+        // frames are now closed.
         unsafe { (self.window_end)(hud.object.ptr()) };
     }
 
@@ -1228,21 +1398,32 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside the HUD window, on the frame's thread.
+    /// - Called inside the HUD window, on the frame's thread.
+    /// - `draw` closes every frame it opens.
     pub(super) unsafe fn hud_column(&self, align: u16, draw: impl FnOnce()) {
         let mut column = Buf::<FRAME_SIZE>::zeroed();
-        // SAFETY: an unnamed frame inside the HUD window.
+        // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
+        // `Engine::resolve`, inside the HUD window this function's `# Safety`
+        // gives; `column` holds the table's `ui.frame_extent` bytes
+        // (`Layout::read`), name 0 for none.
         unsafe { (self.frame_open)(column.ptr(), 0) };
         let node = self.frame_node(&column);
-        // SAFETY: the column's node and its alignment in the window.
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
+        // `Engine::resolve`, on the node the game just wrote into `column`,
+        // with a live alignment word.
         unsafe { (self.node_align)(node, &raw const align) };
-        // SAFETY: the column's node and its width.
+        // SAFETY: `self.node_width` is the game's `ui.node_width`, checked in
+        // `Engine::resolve`, on the node the game just wrote into `column`.
         unsafe { (self.node_width)(node, HUD_WIDTH) };
         let gap = [0.0f32, HUD_GAP];
-        // SAFETY: the column's node, stacking its items.
+        // SAFETY: `self.node_spacing` is the game's `ui.node_spacing`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `column`,
+        // with two live floats.
         unsafe { (self.node_spacing)(node, &raw const gap, 0) };
         draw();
-        // SAFETY: the column opened above.
+        // SAFETY: `self.frame_close` is the game's `ui.frame_close`, checked
+        // in `Engine::resolve`, on the frame opened above; `draw` closed every
+        // frame it opened, by this function's `# Safety`.
         unsafe { (self.frame_close)(column.ptr()) };
     }
 
@@ -1250,8 +1431,10 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a HUD column, on the frame's thread; `text` outlives the
-    /// frame.
+    /// - Called inside a HUD column, on the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
     pub(super) unsafe fn hud_label(&self, context: usize, text: &UiText, style: u32, align: u16) {
         let style = if style == 0 {
             self.looks.outline
@@ -1263,17 +1446,25 @@ impl Engine {
                 .unwrap_or(self.looks.outline)
         };
         let mut label = Buf::<LABEL_SIZE>::zeroed();
-        // SAFETY: a label over `text` in a style of the bundle, wrapped at
-        // the column's width.
+        // SAFETY: `self.label_new` is the game's `ui.label_new`, checked in
+        // `Engine::resolve`; `label` holds the table's `ui.label_extent` bytes
+        // (`Layout::read`), `text` outlives the frame by this function's
+        // `# Safety`, and `style` is a reflected style offset inside the
+        // frame's look bundle.
         unsafe { (self.label_new)(label.ptr(), text, self.bundle(context) + style, 1) };
         label.u8(self.layout.label_shown, 1);
         let node = self.frame_node(&label);
-        // SAFETY: the label's node and its alignment in the column.
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
+        // `Engine::resolve`, on the node the game just wrote into `label`,
+        // with a live alignment word.
         unsafe { (self.node_align)(node, &raw const align) };
         label.u16(self.layout.label_align, align);
-        // SAFETY: the label's node, stretched to the column's width.
+        // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`, checked
+        // in `Engine::resolve`, on the node the game just wrote into `label`.
         unsafe { (self.node_stretch)(node, stretch(1.0, 0.0)) };
-        // SAFETY: the label just made.
+        // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
+        // `Engine::resolve`, on the label `label_new` filled, inside the HUD
+        // column this function's `# Safety` gives.
         unsafe { (self.label_draw)(label.ptr()) };
     }
 
@@ -1282,14 +1473,19 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// In the main menu's drawing, at the loader's hook before its Credits
-    /// entry; `menu` is the menu state there; `text` outlives the frame.
+    /// - Called in the main menu's drawing, at the loader's hook before its
+    ///   Credits entry, on the frame's thread.
+    /// - `menu` is the menu state the hooked code holds there.
+    /// - The bytes `text` points at outlive the frame.
     pub(super) unsafe fn main_menu_entry(&self, menu: usize, text: &UiText) -> bool {
         let mut entry = Buf::<MENU_ENTRY>::zeroed();
         entry.text(self.layout.menu_entry_text, text);
         entry.u8(self.layout.menu_entry_font, 1);
-        // SAFETY: forwarded from the caller; the entry as the menu's own
-        // Settings entry is built: label, normal font.
+        // SAFETY: `self.main_entry` is the game's `ui.main_entry`, checked in
+        // `Engine::resolve`, called at the menu's hook with its state `menu`
+        // by this function's `# Safety`; `entry` holds the table's
+        // `ui.menu_entry_extent` bytes (`Layout::read`), filled as the menu's
+        // own Settings entry is: label, normal font.
         unsafe { (self.main_entry)(menu, entry.ptr()) != 0 }
     }
 
@@ -1298,10 +1494,14 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// In the pause menu's drawing, at the loader's hook after its Settings
-    /// entry; `text` outlives the frame.
+    /// - Called in the pause menu's drawing, at the loader's hook after its
+    ///   Settings entry, on the frame's thread.
+    /// - The bytes `text` points at outlive the frame.
     pub(super) unsafe fn pause_menu_entry(&self, text: &UiText) -> bool {
-        // SAFETY: forwarded from the caller; enabled, no attention badge.
+        // SAFETY: `self.pause_entry` is the game's `ui.pause_entry`, checked
+        // in `Engine::resolve`, called at the pause menu's hook with a `text`
+        // that outlives the frame, by this function's `# Safety`; enabled, no
+        // attention badge.
         unsafe { (self.pause_entry)(text, 1, 0) != 0 }
     }
 
@@ -1310,14 +1510,20 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a frame, on its thread.
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
     pub(super) unsafe fn back_pressed(&self, node: u64) -> bool {
         let mut spec = Buf::<ACTION_SPEC>::zeroed();
-        // SAFETY: the action spec for Back (1), as the pause menu builds it.
+        // SAFETY: `self.action_new` is the game's `ui.action_new`, checked in
+        // `Engine::resolve`, in a frame on its thread by this function's
+        // `# Safety`; `spec` holds the table's `ui.action_extent` bytes
+        // (`Layout::read`). Action 1 is Back, as the pause menu builds it.
         unsafe { (self.action_new)(spec.ptr(), 1, 1) };
         spec.u64(self.layout.action_node, node);
         spec.u8(self.layout.action_bound, 1);
-        // SAFETY: the spec just built, no details out, the menus' modality.
+        // SAFETY: `self.action_query` is the game's `ui.action_query`, checked
+        // in `Engine::resolve`, on the spec `action_new` filled; the details
+        // out may be null, 0x10 is the menus' modality.
         unsafe { (self.action_query)(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
     }
 
@@ -1325,13 +1531,18 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// Inside a frame, on its thread.
+    /// - Called inside a frame of the game's interface update, on its
+    ///   thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
     pub(super) unsafe fn sound(&self, context: usize, sound: u32) {
         let Some(&offset) = self.looks.sounds.get(sound as usize) else {
             return;
         };
-        // SAFETY: the context and a sound of its bundle; the game queues a
-        // copy.
+        // SAFETY: `self.sound` is the game's `ui.sound`, checked in
+        // `Engine::resolve`, on the frame's `context` by this function's
+        // `# Safety`; `offset` is a reflected sound offset inside its look
+        // bundle, and the game queues a copy.
         unsafe { (self.sound)(context, self.bundle(context) + offset) };
     }
 }

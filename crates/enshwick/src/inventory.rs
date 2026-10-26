@@ -842,7 +842,13 @@ impl Outcome {
         }
     }
 
-    fn from_raw(result: &InventoryResult) -> Self {
+    /// The outcome the loader reported in `result`.
+    ///
+    /// # Safety
+    ///
+    /// - `result.ops` is null or points at `op_count` initialised, aligned
+    ///   op results, alive for the call.
+    unsafe fn from_raw(result: &InventoryResult) -> Self {
         let done = match result.outcome {
             InventoryResult::COMMITTED => Done::Committed,
             InventoryResult::ROLLED_BACK => Done::RolledBack,
@@ -852,7 +858,9 @@ impl Outcome {
         let ops = if result.ops.is_null() || result.op_count == 0 {
             &[][..]
         } else {
-            // SAFETY: the loader passes `op_count` results, valid for the call.
+            // SAFETY: `ops` is not null in this branch, and the caller
+            // guarantees `op_count` aligned op results there, alive for the
+            // call.
             unsafe { core::slice::from_raw_parts(result.ops, result.op_count as usize) }
         };
         Self {
@@ -926,18 +934,33 @@ impl Pending {
     }
 }
 
+/// Completes the request whose `Pending` the loader hands back.
+///
+/// # Safety
+///
+/// - `user` is null or the `Box<Pending>` that [`Inventories::submit`] handed
+///   over, passed back once.
+/// - `result` is null or points at an [`InventoryResult`] readable for the
+///   size its header states, with no other writer during the call.
+/// - The result's `ops` is null or points at `op_count` aligned op results,
+///   alive for the call.
 unsafe extern "system" fn deliver(result: *const InventoryResult, user: *mut c_void) {
     if user.is_null() {
         return;
     }
-    // SAFETY: `user` is the leaked `Pending` of `submit`, handed back once.
+    // SAFETY: `user` is not null, as the early return ensures, and the caller
+    // guarantees it is the `Box<Pending>` that `submit` leaked, passed back
+    // once, so this is its only owner.
     let pending = unsafe { Box::from_raw(user.cast::<Pending>()) };
-    // SAFETY: the loader's result, valid for the call; an all-zero result is
-    // valid.
+    // SAFETY: the caller guarantees `result` is null or an `InventoryResult`
+    // readable for the size its header states with no concurrent writer,
+    // which is the contract of `read_headed`.
     let outcome = unsafe { crate::abi::read_headed(result, size_of::<InventoryResult>()) }
         .map_or_else(
             || Outcome::not_run(Done::Unavailable),
-            |r| Outcome::from_raw(&r),
+            // SAFETY: the caller guarantees the result's `ops` is null or
+            // `op_count` aligned op results alive for the call.
+            |r| unsafe { Outcome::from_raw(&r) },
         );
     crate::host::guard(
         "panic in an inventory callback",
@@ -1060,14 +1083,15 @@ impl Inventories {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live context of the hooked system, and the reader is
-    /// used on its thread during the hook.
+    /// - `ctx` is the live query context the hooked system was called with.
+    /// - The reader and every copy of it are used on that system's thread
+    ///   during the hook only.
     ///
     /// # Examples
     ///
     /// ```
     /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::ecs::Entity) -> u32 {
-    ///     // SAFETY: called from a system's hook with its context.
+    ///     // SAFETY: called from a system's hook with its live context, used at once.
     ///     unsafe { inventories.read_in(ctx) }.count(player, 0x0c01)
     /// }
     /// ```
@@ -1151,7 +1175,8 @@ impl Inventories {
             user.cast(),
         );
         if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
+            // refused it, so it keeps no copy and this is the only owner.
             let pending = unsafe { Box::from_raw(user) };
             self.later(*pending, Done::Unavailable);
         }
@@ -1343,7 +1368,9 @@ impl Reader<'_> {
                 .component(entity, ty)
                 .map(<*const c_void>::cast)
         } else {
-            // SAFETY: `read_in`'s caller vouches for the context and thread.
+            // SAFETY: a non-null `ctx` comes only from `read_in`, whose caller
+            // guarantees the hooked system's live context, used on its thread
+            // during the hook, which is the contract of `component`.
             unsafe {
                 self.inventories
                     .components
@@ -1366,7 +1393,9 @@ impl Reader<'_> {
         let skip = if layout.skip == 0 {
             0
         } else {
-            // SAFETY: a global entity id in the game's image.
+            // SAFETY: `skip` is not 0 in this branch, and is the build table's
+            // `inventory.skip_entity`, a u32 entity id in the game's image,
+            // mapped for the process.
             unsafe { read_at::<u32>(core::ptr::with_exposed_provenance(layout.skip), 0) }
         };
         let mut out = Vec::new();
@@ -1379,12 +1408,15 @@ impl Reader<'_> {
         let Some(setup) = self.component(root, layout.setup) else {
             return;
         };
-        // SAFETY: a live InventorySetup holds its initialised flag.
+        // SAFETY: `component` returned the entity's live InventorySetup, whose
+        // `isInitialized` byte sits at the reflected offset `initialized`.
         if unsafe { read_at::<u8>(setup, layout.initialized) } == 0 {
             return;
         }
         for i in 0..LINKS {
-            // SAFETY: the setup holds 16 links and 16 categories.
+            // SAFETY: `setup` is the live InventorySetup, whose `LINKS` u32
+            // `linksEntities` start at the reflected offset `links`, and
+            // `i < LINKS`.
             let link: u32 = unsafe { read_at(setup, layout.links + i * size_of::<u32>()) };
             if link == 0 {
                 break;
@@ -1392,7 +1424,9 @@ impl Reader<'_> {
             if link == skip {
                 continue;
             }
-            // SAFETY: as above.
+            // SAFETY: `setup` is the live InventorySetup, whose `LINKS`
+            // `linksCategories` bytes start at the reflected offset
+            // `categories`, and `i < LINKS`.
             let category = Category(unsafe { read_at(setup, layout.categories + i) });
             if category == Category::VIRTUAL {
                 if depth < MAX_DEPTH {
@@ -1402,7 +1436,8 @@ impl Reader<'_> {
             }
             if let Some(slots) = self.component(Entity(link), layout.inventory) {
                 out.extend((0..SLOTS).map(|index| {
-                    // SAFETY: an Inventory holds 8 stacks.
+                    // SAFETY: `component` returned the link's live Inventory,
+                    // which holds `SLOTS` stacks, and `index < SLOTS`.
                     unsafe { self.stack(slots, Entity(link), index, category) }
                 }));
             }
@@ -1413,7 +1448,9 @@ impl Reader<'_> {
     ///
     /// # Safety
     ///
-    /// `slots` is a live `Inventory` and `index` below 8.
+    /// - `slots` points at a live `Inventory`, read while it is valid with no
+    ///   concurrent writer.
+    /// - `index` is below `SLOTS`.
     unsafe fn stack(
         &self,
         slots: *const u8,
@@ -1426,11 +1463,17 @@ impl Reader<'_> {
         Slot {
             at: SlotRef::new(inventory, index),
             category,
-            // SAFETY: forwarded from the caller.
+            // SAFETY: the caller guarantees a live `Inventory` and an index
+            // below `SLOTS`; stack `index` starts at `at`, `index` times the
+            // reflected `ItemStack` size, with its u32 item id.
             item: unsafe { read_at(slots, at) },
-            // SAFETY: as above.
+            // SAFETY: the caller guarantees a live `Inventory` and an index
+            // below `SLOTS`; the stack's u32 count sits at the reflected
+            // offset of `ItemStack.data`.
             count: unsafe { read_at(slots, at + layout.stack_count) },
-            // SAFETY: as above.
+            // SAFETY: the caller guarantees a live `Inventory` and an index
+            // below `SLOTS`; the stack's u32 item entity follows its count in
+            // `ItemStack.data`.
             pide: Entity::from_raw(unsafe { read_at(slots, at + layout.stack_pide) }),
         }
     }
@@ -1450,7 +1493,8 @@ impl Reader<'_> {
             return None;
         }
         let slots = self.component(slot.inventory(), self.inventories.layout.inventory)?;
-        // SAFETY: a live Inventory and an index below 8.
+        // SAFETY: `component` returned the inventory's live Inventory, and
+        // `index < SLOTS` was checked above.
         Some(unsafe { self.stack(slots, slot.inventory(), slot.index(), Category::UNKNOWN) })
     }
 
@@ -1488,7 +1532,8 @@ impl Reader<'_> {
             let Some(owner) = self.component(entity, self.inventories.layout.owner) else {
                 break;
             };
-            // SAFETY: OwnerRelationship is the owner's entity id alone.
+            // SAFETY: `component` returned the entity's live
+            // OwnerRelationship, which is the owner's u32 entity id alone.
             let owner = Entity(unsafe { read_at(owner, 0) });
             if owner.is_none() || owner == entity {
                 break;
@@ -1534,9 +1579,12 @@ impl Reader<'_> {
     fn bar(&self, pide: Entity, ty: ComponentType, max: usize) -> Option<Bar> {
         let data = self.component(pide, ty)?;
         Some(Bar {
-            // SAFETY: a live NetworkDurability or NetworkFuel holds both values.
+            // SAFETY: `component` returned the item's live NetworkDurability
+            // or NetworkFuel, which starts with its u16 current value.
             current: unsafe { read_at(data, 0) },
-            // SAFETY: as above.
+            // SAFETY: `data` is the item's live NetworkDurability or
+            // NetworkFuel, whose u16 maximum sits at the reflected offset
+            // `max`.
             max: unsafe { read_at(data, max) },
         })
     }
@@ -1716,7 +1764,8 @@ mod tests {
             op_count: 2,
             ops: ops.as_ptr(),
         };
-        let outcome = Outcome::from_raw(&raw);
+        // SAFETY: `raw.ops` points at the two results of `ops`, alive here.
+        let outcome = unsafe { Outcome::from_raw(&raw) };
         assert_eq!(outcome.done, Done::RolledBack);
         assert!(!outcome.is_committed());
         assert_eq!(
@@ -1732,6 +1781,8 @@ mod tests {
             ops: core::ptr::null(),
             ..raw
         };
-        assert_eq!(Outcome::from_raw(&empty), Outcome::not_run(Done::TimedOut));
+        // SAFETY: `empty.ops` is null.
+        let outcome = unsafe { Outcome::from_raw(&empty) };
+        assert_eq!(outcome, Outcome::not_run(Done::TimedOut));
     }
 }
