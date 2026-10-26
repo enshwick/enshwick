@@ -267,7 +267,8 @@ impl Voxel {
     }
 
     /// How full it is, 0 to 255, which shapes the ground's surface between
-    /// voxels. The name is enshwick's: the game does not name it.
+    /// voxels; the game's building voxels carry 0. The name is enshwick's:
+    /// the game does not name it.
     ///
     /// # Examples
     ///
@@ -488,7 +489,7 @@ impl VoxelBox {
     /// ```
     /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     ///
-    /// let stone = Voxel::new(VoxelMaterial::Building(0x83), 255);
+    /// let stone = Voxel::new(VoxelMaterial::Building(0x83), 0);
     /// let pillar = VoxelBox::new(VoxelPos::new(200, 80, 200), [1, 4, 1], vec![stone; 4]);
     /// assert!(pillar.is_some());
     /// ```

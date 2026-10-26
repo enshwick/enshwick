@@ -67,7 +67,8 @@ impl Installed {
     /// is written: pending ones turn applied, undoing ones undone. One for
     /// a player whom the fake's players, zones and building area refuse
     /// for a change's box fails instead, with the refusal, as the loader's
-    /// rights check does. The fake keeps the bricks of each change's box as
+    /// rights check does at a transaction's first step; neither refuses a
+    /// player at the commit. The fake keeps the bricks of each change's box as
     /// undo data, and changes nothing it answers reads from.
     ///
     /// # Examples

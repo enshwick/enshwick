@@ -35,7 +35,7 @@ pub(crate) trait Voxels {
     /// means nothing was written.
     fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status>;
     /// Announces that `erase` tore down building voxels for `actor` (0 for
-    /// none).
+    /// none); called only when it cleared some and wrote every brick.
     fn erased(&mut self, erase: &Erase, actor: u32);
     /// The world's extent.
     fn extent(&mut self) -> Result<WorldExtent, Status>;
@@ -92,7 +92,7 @@ impl Change {
     }
 
     /// The box it can write, in metres, lowest and highest corner.
-    pub(crate) fn reach(&self) -> ([f64; 3], [f64; 3]) {
+    fn reach(&self) -> ([f64; 3], [f64; 3]) {
         match self {
             Self::Terrain(edit) => cover::reach(edit),
             Self::Voxels(paste) => paste.region().metres(),
@@ -575,7 +575,7 @@ impl Ledger {
 fn write_over(
     world: &mut impl Voxels,
     images: &[(Brick, Image)],
-    change: impl Fn(Brick, &mut [u16; BRICK_VOXELS]),
+    mut change: impl FnMut(Brick, &mut [u16; BRICK_VOXELS]),
 ) -> Option<Status> {
     images
         .iter()
@@ -659,10 +659,13 @@ impl Task {
                     paste.overlay(brick, image);
                 }),
                 Change::Erase(erase) => {
+                    let mut cleared = 0;
                     let lost = write_over(world, &images, |brick, image| {
-                        erase.overlay(brick, image);
+                        cleared += erase.overlay(brick, image);
                     });
-                    world.erased(erase, actor);
+                    if lost.is_none() && cleared > 0 {
+                        world.erased(erase, actor);
+                    }
                     lost
                 }
             };

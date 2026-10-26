@@ -27,7 +27,7 @@ mod tests {
     enshwick::declare_mod!(Surveyor);
 
     const ROCK: Voxel = Voxel::new(VoxelMaterial::Terrain(9), 255);
-    const WALL: Voxel = Voxel::new(VoxelMaterial::Building(0x83), 255);
+    const WALL: Voxel = Voxel::new(VoxelMaterial::Building(0x83), 0);
     const AIR: Voxel = Voxel::new(VoxelMaterial::Air, 0);
 
     /// A loaded box of 2 × 2 × 2 from (10, 20, 30): rock below, air above,

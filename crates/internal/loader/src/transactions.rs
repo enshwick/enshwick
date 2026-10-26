@@ -115,19 +115,6 @@ pub(crate) fn commit(
     if STATE.fuse.is_off() || !game::ready(loader) {
         return Err(Status::MISSING);
     }
-    if let Some(actor) = actor
-        && crate::world::server().is_ok()
-    {
-        use ledger::Voxels;
-
-        let mut world = game::Game::new(loader)?;
-        for change in &changes {
-            let (min, max) = change.reach();
-            if world.rights(actor, min, max)? != 0 {
-                return Err(Status::REFUSED);
-            }
-        }
-    }
     let mut ledger = STATE.ledger.relock();
     let id = ledger.commit(owner, actor, changes)?;
     STATE.busy.store(true, Ordering::Release);

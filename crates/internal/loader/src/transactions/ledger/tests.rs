@@ -772,8 +772,15 @@ fn a_block_is_placed_announced_and_taken_back_by_its_undo() {
 fn an_erase_is_announced_as_a_tear_down_by_its_actor_or_by_none() {
     let mut world = World::new();
     let mut ledger = Ledger::new(LIMITS);
+    ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [2, 2, 2], 0xff83)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
     let erase = || Change::Erase(Erase::new([30, 30, 30], [2, 2, 2]).unwrap());
     ledger.commit(ME, Some(7), vec![erase()]).unwrap();
+    ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [2, 2, 2], 0xff83)])
+        .unwrap();
     ledger.commit(ME, None, vec![erase()]).unwrap();
     ledger.step(&mut world, 1000);
     assert_eq!(world.announced, [("torn down", 7), ("torn down", 0)]);
@@ -834,4 +841,33 @@ fn an_allowed_actor_is_asked_about_every_change_before_the_first_write() {
         world.asked,
         [([16.0; 3], [24.0; 3]), ([15.0; 3], [16.0; 3])]
     );
+}
+
+#[test]
+fn an_erase_that_clears_nothing_raises_no_event() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let erase = Change::Erase(Erase::new([30, 30, 30], [2, 2, 2]).unwrap());
+    ledger.commit(ME, None, vec![erase]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert!(world.announced.is_empty(), "only air was there");
+}
+
+#[test]
+fn an_erase_whose_write_fails_raises_no_event() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    ledger
+        .commit(ME, None, vec![paste([30, 30, 30], [2, 2, 2], 0xff83)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    world.restore_fails = Some(Status::MISSING);
+    let erase = Change::Erase(Erase::new([30, 30, 30], [2, 2, 2]).unwrap());
+    let id = ledger.commit(ME, None, vec![erase]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::MISSING)
+    );
+    assert!(world.announced.is_empty());
 }

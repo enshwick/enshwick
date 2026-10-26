@@ -99,11 +99,13 @@ impl Voxels for Game<'_> {
             Some(replace) => replace,
             None => *self.replace.insert(blocks::replaceable(self.loader)?),
         };
+        let game = blocks::rebuild(self.loader, block)?;
         // SAFETY: `write` is the table's `voxel.write_block`; `editor` and
         // `alloc` are the server's live voxel editor and allocator, checked
         // by `crate::terrain::editor_and_allocator` when this step began on
-        // the game thread at a quiet moment.
-        unsafe { blocks::write(write, self.editor, self.alloc, &replace, block) };
+        // the game thread at a quiet moment; `game` comes from `rebuild` in
+        // this step.
+        unsafe { blocks::write(write, self.editor, self.alloc, &replace, block, &game) };
         self.events.placed(self.loader, block, actor);
         Ok(())
     }

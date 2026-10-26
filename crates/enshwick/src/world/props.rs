@@ -85,8 +85,7 @@ impl World {
     ///
     /// [`WorldError::Refused`] for a corner that is not finite;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs, before the game
-    /// first ran its inventories (a player was online) or on a game build
+    /// step; [`WorldError::Missing`] before a world runs or on a game build
     /// without the reads.
     ///
     /// # Examples

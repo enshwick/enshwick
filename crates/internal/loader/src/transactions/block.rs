@@ -1,4 +1,4 @@
-//! A building block a transaction places: resolved at commit, written by the game.
+//! A building block a transaction places: checked at commit, written by the game at its step.
 
 use enshwick::abi::Status;
 
@@ -169,10 +169,9 @@ pub(crate) struct Block {
     pub(crate) position: [f64; 3],
     /// Its rotation, a quaternion x, y, z, w.
     pub(crate) rotation: [f32; 4],
-    /// The voxels it writes, from the game's box.
+    /// The voxels it writes, from the game's box at commit; the step
+    /// builds the box again and writes only if it gives the same.
     pub(crate) region: Region,
-    /// The game's box.
-    pub(crate) game: GameBox,
 }
 
 impl Block {
@@ -187,7 +186,6 @@ impl Block {
             position: [0, 1, 2].map(|axis| f64::midpoint(min[axis], max[axis])),
             rotation: [0.0, 0.0, 0.0, 1.0],
             region,
-            game: GameBox([0; GameBox::SIZE]),
         }
     }
 }

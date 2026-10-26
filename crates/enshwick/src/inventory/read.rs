@@ -147,8 +147,8 @@ impl Inventories {
         }
     }
 
-    /// The static data of `item`; `None` for an unknown item, or before the
-    /// game first ran its inventory system (a player was online). Any thread.
+    /// The static data of `item`; `None` for an unknown item, or while no
+    /// world runs. Any thread.
     ///
     /// # Examples
     ///

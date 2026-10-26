@@ -90,8 +90,7 @@ item's GUID.
 [`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
 gives an item's static data from any thread: `max_stack_size`, and flags with
 `has_pide()`, `is_container()` and `is_blueprint()`. It returns `None` for
-an unknown item, and before the game first ran its inventory system, which
-needs a player online.
+an unknown item, and while no world runs.
 
 ## Changes
 

@@ -156,7 +156,7 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
             let voxels = unsafe { core::slice::from_raw_parts(write.voxels, len) }.to_vec();
             voxels
                 .iter()
-                .all(|voxel| crate::voxels::Voxel::from_abi(*voxel).to_abi() == *voxel)
+                .all(|voxel| voxel_encodes(*voxel))
                 .then_some(FakeChange::Voxels {
                     min: write.min,
                     size: write.size,
@@ -186,6 +186,18 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
         }
         _ => None,
     }
+}
+
+/// Whether the loader encodes `voxel`: its kind is the one its material
+/// names (air for 0, terrain for 1 to 0x7f, building from 0x80) and its
+/// reserved byte is 0.
+fn voxel_encodes(voxel: Voxel) -> bool {
+    let kind = match voxel.material {
+        0 => Voxel::AIR,
+        1..0x80 => Voxel::TERRAIN,
+        _ => Voxel::BUILDING,
+    };
+    voxel.kind == kind && voxel.reserved == 0
 }
 
 /// The voxels of the box of `size` from `min`: not empty and within

@@ -224,8 +224,8 @@ pub struct HostApi {
     pub inventory_open: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the static data of the item `item`, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches;
-    /// [`Status::MISSING`] for an unknown item, or before the game first ran
-    /// its inventories. Any thread. Since minor 12.
+    /// [`Status::MISSING`] for an unknown item, or while no world runs.
+    /// Any thread. Since minor 12.
     pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
     /// Queues `request`, from any thread, for the game's inventory system,
     /// which runs it as one transaction: all or nothing. `done` gets the
@@ -1263,10 +1263,9 @@ pub struct HostApi {
     /// server lets the player edit the box of every change, as
     /// [`HostApi::build_rights`] does, and marks building events with the
     /// player. A refusal fails it with [`Status::REFUSED`] and the reason in
-    /// [`TransactionInfo::refusal`]. The check runs at its first step on the
-    /// server's game thread; a commit made there at a quiet moment checks
-    /// at once and answers [`Status::REFUSED`]. [`Status::BAD_ARGS`] for an
-    /// `actor` of 0. Any thread. Since minor 89.
+    /// [`TransactionInfo::refusal`]; nothing is written. The check runs at
+    /// its first step on the server's game thread, never at the commit.
+    /// [`Status::BAD_ARGS`] for an `actor` of 0. Any thread. Since minor 89.
     pub transaction_commit_for: extern "system" fn(
         me: ModHandle,
         actor: u32,

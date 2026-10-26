@@ -775,7 +775,7 @@ impl TransactionOp {
 /// ```
 /// use enshwick::abi::{Header, Voxel, VoxelWrite};
 ///
-/// let stone = [Voxel { kind: Voxel::BUILDING, material: 0x83, fill: 0xff, reserved: 0 }; 8];
+/// let stone = [Voxel { kind: Voxel::BUILDING, material: 0x83, fill: 0, reserved: 0 }; 8];
 /// let write = VoxelWrite {
 ///     header: Header::of::<VoxelWrite>(),
 ///     min: [200, 80, 200],

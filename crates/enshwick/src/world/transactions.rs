@@ -375,7 +375,9 @@ impl Transaction {
     /// [`WorldError::OutsideWorld`] for a change past the world's edge or
     /// above 1,024 metres, once the loader has met the world (before, the
     /// transaction fails with it instead); [`WorldError::Missing`] while no
-    /// world runs or on a build without the edits or the undo.
+    /// world runs or on a build without the edits or the undo. A player's
+    /// rights ([`World::transaction_for`]) are checked at the first step,
+    /// not here: a refusal shows as [`TransactionStatus::NotAllowed`].
     ///
     /// # Examples
     ///
@@ -417,7 +419,10 @@ impl World {
     /// Starts a [`Transaction`] for `player`: before it writes anything,
     /// the loader checks that the server lets the player edit the box of
     /// every change, as [`World::can_build`] does, and a refusal fails it
-    /// with [`TransactionStatus::NotAllowed`]. Building events name the
+    /// with [`TransactionStatus::NotAllowed`] and the reason, writing
+    /// nothing. The check runs at the transaction's first step on the
+    /// server's game thread, so [`Transaction::commit`] does not refuse a
+    /// player; [`World::transaction_status`] tells. Building events name the
     /// player as the owner.
     ///
     /// # Examples

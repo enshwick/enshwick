@@ -144,15 +144,19 @@ impl Erase {
         self.region
     }
 
-    /// Clears the building voxels of the part of the box inside `brick`.
-    pub(crate) fn overlay(&self, brick: Brick, image: &mut [u16; BRICK_VOXELS]) {
+    /// Clears the building voxels of the part of the box inside `brick`;
+    /// how many it cleared.
+    pub(crate) fn overlay(&self, brick: Brick, image: &mut [u16; BRICK_VOXELS]) -> usize {
+        let mut cleared = 0;
         self.region.rows(brick, |_, to, run| {
             for word in &mut image[to..to + run] {
                 if crate::voxels::decode(*word).kind == Voxel::BUILDING {
                     *word = 0;
+                    cleared += 1;
                 }
             }
         });
+        cleared
     }
 }
 

@@ -630,6 +630,9 @@ revision = 1
 # The game-systems holder (`server.player_infos`) keeps its voxel
 # blueprint registry here.
 "server.blueprint_registry" = { value = 0x270, pattern = "48 8D 05 ?? ?? ?? ?? C6 85 20 17 00 00 01 C6 85 48 17 00 00 00 4C 8D 8D 20 17 00 00 48 89 9D 50 17 00 00 48 8D 95 00 03 00 00 4C 8B 87 70 02 00 00 48 8B CE", at = 45, size = 4 }
+# The game-systems holder keeps its item registry here, the one the
+# game's item lookup takes, from world start.
+"server.item_registry" = { value = 0x1d8, pattern = "48 8D 05 ?? ?? ?? ?? C6 85 80 14 00 00 01 C6 85 A8 14 00 00 00 4C 8D 8D 80 14 00 00 48 89 9D B0 14 00 00 48 8D 95 30 02 00 00 4C 8B 87 D8 01 00 00 48 8B CE", at = 45, size = 4 }
 "terrain.registry" = { value = 0x258, pattern = "0F 29 85 ?? ?? ?? ?? 49 8B 56 ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 49 8B CF 4D 8B 86 ?? ?? ?? ?? 49 8B 56 ?? 49 81 C0 40 01 00 00", at = 19, size = 4 }
 "terrain.registry_resource" = { value = 0x38, pattern = "F2 0F 10 05 ?? ?? ?? ?? F2 0F 11 44 24 ?? 48 89 46 ?? E8 ?? ?? ?? ?? 48 85 ED", at = 17, size = 1 }
 # The client's own chat: the game client holds it here.

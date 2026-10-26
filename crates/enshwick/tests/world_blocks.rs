@@ -79,7 +79,7 @@ mod tests {
     }
 
     fn stone() -> Voxel {
-        Voxel::new(VoxelMaterial::Building(0x83), 255)
+        Voxel::new(VoxelMaterial::Building(0x83), 0)
     }
 
     #[test]
@@ -230,5 +230,56 @@ mod tests {
             &raw mut id,
         );
         assert_eq!(status, Status::BAD_ARGS);
+    }
+
+    #[test]
+    fn the_fake_refuses_voxels_whose_kind_is_not_their_material_s() {
+        use enshwick::abi::{TransactionOp, Voxel as Raw, VoxelWrite};
+
+        let (loader, _world) = started();
+        // SAFETY: `api` points at the fake's table, which lives for the
+        // process.
+        let api = unsafe { &*loader.api() };
+        let raw = |kind, material, reserved| Raw {
+            kind,
+            material,
+            fill: 0,
+            reserved,
+        };
+        let commit = |voxel: Raw| {
+            let voxels = [voxel];
+            let write = VoxelWrite {
+                header: Header::of::<VoxelWrite>(),
+                min: [200, 80, 200],
+                size: [1, 1, 1],
+                voxels: voxels.as_ptr(),
+                count: 1,
+            };
+            let op = TransactionOp {
+                kind: TransactionOp::VOXELS,
+                reserved: 0,
+                data: (&raw const write).cast(),
+            };
+            let mut id = 0u64;
+            (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id)
+        };
+        for good in [
+            raw(Raw::AIR, 0, 0),
+            raw(Raw::TERRAIN, 1, 0),
+            raw(Raw::TERRAIN, 0x7f, 0),
+            raw(Raw::BUILDING, 0x80, 0),
+        ] {
+            assert_eq!(commit(good), Status::OK, "{good:?}");
+        }
+        for bad in [
+            raw(Raw::AIR, 5, 0),
+            raw(Raw::TERRAIN, 0, 0),
+            raw(Raw::TERRAIN, 0x80, 0),
+            raw(Raw::BUILDING, 0x7f, 0),
+            raw(3, 0, 0),
+            raw(Raw::AIR, 0, 1),
+        ] {
+            assert_eq!(commit(bad), Status::BAD_ARGS, "{bad:?}");
+        }
     }
 }

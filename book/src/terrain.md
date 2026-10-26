@@ -231,10 +231,10 @@ other mods see the change. `write_voxels` raises no event.
 `world.transaction_for(&player)` starts a transaction for a player. Before
 it writes anything, the loader checks that the server lets the player edit
 the box of every change, as `world.can_build` does. A refusal fails the
-transaction with `NotAllowed(why)`, and nothing is written. The building
-events name the player as the owner. A commit made on the game thread at a
-quiet moment checks at once and is refused; one made elsewhere is checked
-at its first step. A transaction from `world.transaction()` acts for the
+transaction with `NotAllowed(why)`, and nothing is written. The check runs
+at the transaction's first step on the game thread, never at the commit,
+so `commit` succeeds and `transaction_status` tells. The building events
+name the player as the owner. A transaction from `world.transaction()` acts for the
 mod itself: it checks no rights, and its events name no owner.
 
 ## Reading voxels
@@ -306,8 +306,8 @@ in metres and its orientation, a quaternion x, y, z then w with y up.
 A prop is told apart by its template, the one its item places, so the
 notes and animals a world comes with are not props even where they carry
 an item. The call walks every entity with a `UsedItem`, so call it now and
-then, not every step. Before the game first ran its inventories, a box
-holding things to check fails with `Missing`.
+then, not every step. While no world runs, a box holding things to check
+fails with `Missing`.
 
 `world.capture(a, b)` takes the region between two voxels, both included,
 as plain data: a `Capture` with its voxels and its props, both counted from

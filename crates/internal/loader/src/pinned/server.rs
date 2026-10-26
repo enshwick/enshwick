@@ -32,3 +32,4 @@ pub(crate) const SESSION: Constant = Constant::new("server.session");
 pub(crate) const SET_STATE: Symbol = Symbol::new("server.set_state");
 pub(crate) const WORLD: Constant = Constant::new("server.world");
 pub(crate) const BLUEPRINT_REGISTRY: Constant = Constant::new("server.blueprint_registry");
+pub(crate) const ITEM_REGISTRY: Constant = Constant::new("server.item_registry");
