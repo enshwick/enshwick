@@ -447,7 +447,8 @@ fn unlink(loader: &Loader, index: usize) {
 
 /// Runs the `shutdown` export of `module`, when it has one.
 fn shutdown(module: HMODULE) {
-    // SAFETY: `module` is the copy the watcher loaded and never frees.
+    // SAFETY: `module` is the non-null handle of the copy the watcher loaded
+    // and never frees.
     let module = unsafe { crate::module::Module::from_handle(module) };
     let Some(found) = module.export(exports::SHUTDOWN) else {
         return;
