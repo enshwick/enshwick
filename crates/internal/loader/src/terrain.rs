@@ -210,6 +210,14 @@ fn editor(layout: &Layout) -> Result<(usize, usize, usize), Status> {
     Ok((editor, alloc, game))
 }
 
+/// The server's voxel editor and its voxel world's allocator, on the game
+/// thread at a quiet moment.
+pub(crate) fn editor_and_allocator(loader: &Loader) -> Result<(usize, usize), Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let (editor, alloc, _) = editor(layout)?;
+    Ok((editor, alloc))
+}
+
 /// The terrain materials of the running game.
 pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;

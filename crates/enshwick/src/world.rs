@@ -1,6 +1,6 @@
 //! The server's world: components, templates, positions and players, component
 //! writes, entity queries, labels and rename filters, chat lines, notices,
-//! destroy requests and saves.
+//! destroy requests, saves and [`Transaction`]s.
 //!
 //! Most calls belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
@@ -13,6 +13,7 @@ mod geometry;
 mod players;
 mod rename;
 mod stats;
+mod transactions;
 mod vitals;
 
 use core::ffi::c_void;
@@ -27,6 +28,7 @@ pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
+pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
 /// A reflected ECS component type, resolved once at init.
 ///

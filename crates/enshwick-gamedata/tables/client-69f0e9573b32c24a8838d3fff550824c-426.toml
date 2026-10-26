@@ -180,6 +180,7 @@ revision = 1
 "terrain.dig" = { rva = 0xa8_6210, pattern = "48 8B C4 48 89 58 ?? 48 89 48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 60 02 00 00" }
 "terrain.flatten" = { rva = 0xa8_5f10, pattern = "48 8B C4 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 48 89 48 ?? 55 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ??" }
 "voxel.read_box" = { rva = 0x109_7570, pattern = "44 89 4C 24 ?? 4C 89 44 24 ?? 48 89 4C 24 ?? 55 53 56 57 41 54 41 55 41 56 48 8D AC 24 ?? ?? ?? ?? 48 81 EC C0 05 00 00" }
+"voxel.undo_apply" = { rva = 0xa9_05f0, pattern = "48 8B C4 48 81 EC A8 00 00 00 44 8B 4A 08 4C 8B D1 F2 0F 10 02 8B 4A 0C 0F 10 4A 10 66 C7 40 ?? 00 00 F2 0F 11 40 ?? 03" }
 "chat.receive_return_a" = { rva = 0x84_1d89, pattern = "C6 45 ?? 01 E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 85 C9 74 10 80 7C 24 ?? 00", at = 9 }
 "chat.receive_return_b" = { rva = 0x86_ad5b, pattern = "C6 85 ?? ?? ?? ?? 01 E8 ?? ?? ?? ?? 48 8B 4C 24 ?? 48 85 C9 0F 84 ?? ?? ?? ?? 48 8D 1D ?? ?? ?? ??", at = 12 }
 "chat.client_send" = { rva = 0x86_7710, pattern = "40 55 53 56 48 8D AC 24 ?? ?? ?? ?? 48 81 EC F0 04 00 00 48 8B F1" }

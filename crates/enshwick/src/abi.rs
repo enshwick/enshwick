@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 84;
+pub const ABI_MINOR: u16 = 85;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -446,7 +446,7 @@ impl Str {
 /// assert!(!Status::MISSING.is_ok());
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Status(pub u32);
 
 impl Status {
@@ -684,8 +684,13 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 155 * 8);
+    assert!(size_of::<HostApi>() == 24 + 158 * 8);
     assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 154 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 155 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 157 * 8);
+    // Frozen: read as an array.
+    assert!(size_of::<TransactionOp>() == 16);
+    assert!(size_of::<TransactionInfo>() == 8 + 16 + 8);
     // Frozen: written as an array.
     assert!(size_of::<Voxel>() == 4);
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);

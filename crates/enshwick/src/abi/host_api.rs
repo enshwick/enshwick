@@ -15,8 +15,9 @@ use crate::abi::{
     RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
     ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
     StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TransactionInfo,
+    TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1165,4 +1166,40 @@ pub struct HostApi {
         out: *mut Voxel,
         capacity: u64,
     ) -> Status,
+    /// Queues the `count` changes at `ops` as one transaction of the
+    /// server's world and writes its id to `id`: the loader writes them in
+    /// order on the server's game thread at quiet moments, a budget of
+    /// bricks a step, keeping the earlier state of every brick a change can
+    /// touch so [`HostApi::transaction_undo`] can put it back. `ops` and the
+    /// records they point at are borrowed for the call. [`Status::BAD_ARGS`]
+    /// for a null pointer, no changes, a kind or record the loader refuses
+    /// (as [`HostApi::terrain_edit`] does, and a dry run), or more than its
+    /// cap of changes or bricks; [`Status::REFUSED`] while the queue is
+    /// full; [`Status::MISSING`] while no world runs or on a build without
+    /// the edits, the voxel read or the undo write. Any thread. Since minor
+    /// 85.
+    pub transaction_commit: extern "system" fn(
+        me: ModHandle,
+        ops: *const TransactionOp,
+        count: u32,
+        id: *mut u64,
+    ) -> Status,
+    /// Queues the undo of transaction `id` of this mod: a queued one is
+    /// dropped, one written in whole or in part gets each brick it touched
+    /// back as it was, in reverse order, on the server's game thread at
+    /// quiet moments. Before writing, the undo checks that every brick still
+    /// holds what the transaction left there and that all of them are
+    /// loaded; otherwise it writes nothing and the state turns
+    /// [`TransactionInfo::UNDO_REFUSED`]. [`Status::OK`] when queued or
+    /// already undoing; [`Status::REFUSED`] for an id this mod did not get,
+    /// one the loader forgot, one undone, or one whose undo data is gone.
+    /// Any thread. Since minor 85.
+    pub transaction_undo: extern "system" fn(me: ModHandle, id: u64) -> Status,
+    /// Writes where transaction `id` of this mod stands to `out`, a
+    /// [`TransactionInfo`] with its header. [`Status::BAD_ARGS`] for a null
+    /// `out`; [`Status::MISSING`] for an id this mod did not get or one the
+    /// loader forgot (it keeps the newest few thousand). Any thread. Since
+    /// minor 85.
+    pub transaction_status:
+        extern "system" fn(me: ModHandle, id: u64, out: *mut TransactionInfo) -> Status,
 }

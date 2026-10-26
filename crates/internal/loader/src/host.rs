@@ -62,8 +62,8 @@ use entries::world::{
     forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
     players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
     set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
-    terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
-    world_key,
+    terrain_materials, time_of_day, time_speed_control, transaction_commit, transaction_status,
+    transaction_undo, voxel_read, weather_at, weather_fronts, world_key,
 };
 pub(crate) use join::{
     Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
@@ -768,6 +768,9 @@ pub(crate) static API: HostApi = HostApi {
     altar_limit_filter,
     base_limit,
     voxel_read,
+    transaction_commit,
+    transaction_undo,
+    transaction_status,
 };
 
 /// The loader and the calling mod, when the mod is on.

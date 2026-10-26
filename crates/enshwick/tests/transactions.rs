@@ -1,0 +1,221 @@
+//! Transactions of the world: commits, statuses and undo, as the loader holds them.
+
+#[cfg(test)]
+mod tests {
+    use std::sync::OnceLock;
+
+    use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo, TransactionInfo};
+    use enshwick::terrain::Shape;
+    use enshwick::world::{TransactionStatus, World, WorldError};
+    use enshwick::{Load, Mod, Off};
+
+    static WORLD: OnceLock<World> = OnceLock::new();
+
+    struct Builder;
+
+    impl Mod for Builder {
+        fn manifest() -> &'static enshwick::abi::Manifest {
+            enshwick::manifest!(id: "you.builder", side: SERVER)
+        }
+
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let _first = WORLD.set(load.world()?);
+            Ok(Self)
+        }
+    }
+
+    enshwick::declare_mod!(Builder);
+
+    fn rock() -> TerrainMaterialInfo {
+        TerrainMaterialInfo {
+            header: Header::of::<TerrainMaterialInfo>(),
+            id: 9,
+            flags: 0,
+            hardness: 3,
+            reserved: 0,
+            item: 77,
+            health: 500,
+        }
+    }
+
+    fn started() -> (enshwick::test::Installed, World) {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Builder)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        (loader, *WORLD.get().unwrap())
+    }
+
+    #[test]
+    fn a_transaction_reaches_the_loader_in_order_and_is_applied_on_its_steps() {
+        let (loader, world) = started();
+        let at = [10.0, 20.0, 30.0];
+        assert_eq!(
+            world
+                .transaction()
+                .terrain_dig(at, 2.0, Shape::Round, &[])
+                .commit(),
+            Err(WorldError::Missing),
+            "no world runs yet"
+        );
+        loader.set_terrain(&[rock()]);
+
+        let transaction = world
+            .transaction()
+            .terrain_dig(at, 4.0, Shape::Square, &[9])
+            .terrain_add(at, 3.0, 1.5, 9, Shape::Round)
+            .terrain_flatten(at, 2.0, 9, Shape::Round);
+        assert_eq!(transaction.len(), 3);
+        let id = transaction.commit().unwrap();
+        assert_eq!(
+            world.transaction_status(id),
+            Some(TransactionStatus::Pending)
+        );
+
+        let held = loader.transactions();
+        assert_eq!(held.len(), 1);
+        assert_eq!(held[0].id, id.get());
+        let kinds: Vec<u32> = held[0].terrain.iter().map(|edit| edit.kind).collect();
+        assert_eq!(
+            kinds,
+            [TerrainEdit::DIG, TerrainEdit::ADD, TerrainEdit::FLATTEN]
+        );
+        assert_eq!(
+            held[0].terrain[0].protect[1],
+            1 << 1,
+            "material 9 is protected"
+        );
+        assert!(
+            loader.terrain_edits().is_empty(),
+            "a transaction is no direct edit"
+        );
+
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(id),
+            Some(TransactionStatus::Applied)
+        );
+    }
+
+    #[test]
+    fn an_undo_takes_back_an_applied_transaction_and_drops_a_queued_one() {
+        let (loader, world) = started();
+        loader.set_terrain(&[rock()]);
+        let at = [10.0, 20.0, 30.0];
+
+        let applied = world
+            .transaction()
+            .terrain_dig(at, 2.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        world.undo(applied).unwrap();
+        assert_eq!(
+            world.transaction_status(applied),
+            Some(TransactionStatus::Undoing)
+        );
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(applied),
+            Some(TransactionStatus::Undone)
+        );
+        assert_eq!(world.undo(applied), Err(WorldError::Refused), "undone once");
+
+        let queued = world
+            .transaction()
+            .terrain_dig(at, 2.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        world.undo(queued).unwrap();
+        assert_eq!(
+            world.transaction_status(queued),
+            Some(TransactionStatus::Undone),
+            "nothing was written, so nothing waits"
+        );
+    }
+
+    #[test]
+    fn failures_and_refused_undos_show_in_the_status() {
+        let (loader, world) = started();
+        loader.set_terrain(&[rock()]);
+        let at = [10.0, 20.0, 30.0];
+
+        let far = world
+            .transaction()
+            .terrain_dig(at, 2.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        loader.fail_transaction(far.get(), Status::NOT_LOADED);
+        assert_eq!(
+            world.transaction_status(far),
+            Some(TransactionStatus::Failed(WorldError::NotLoaded))
+        );
+        assert_eq!(
+            world.undo(far),
+            Err(WorldError::Refused),
+            "it wrote nothing to take back"
+        );
+
+        let changed = world
+            .transaction()
+            .terrain_add(at, 2.0, 1.0, 9, Shape::Round)
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        world.undo(changed).unwrap();
+        loader.fail_transaction(changed.get(), Status::REFUSED);
+        assert_eq!(
+            world.transaction_status(changed),
+            Some(TransactionStatus::UndoRefused(WorldError::Refused))
+        );
+        world.undo(changed).unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(changed),
+            Some(TransactionStatus::Undone),
+            "a refused undo may be asked again"
+        );
+    }
+
+    #[test]
+    fn the_loader_refuses_what_it_cannot_write() {
+        let (loader, world) = started();
+        loader.set_terrain(&[rock()]);
+        let at = [10.0, 20.0, 30.0];
+
+        assert_eq!(world.transaction().commit(), Err(WorldError::Refused));
+        let refused = [
+            world.transaction().terrain_dig(at, 0.0, Shape::Round, &[]),
+            world
+                .transaction()
+                .terrain_dig([-1.0, 0.0, 0.0], 2.0, Shape::Round, &[]),
+            world
+                .transaction()
+                .terrain_add(at, 2.0, 1.0, 0x80, Shape::Round),
+            world
+                .transaction()
+                .terrain_add(at, 2.0, 17.0, 9, Shape::Round),
+            world
+                .transaction()
+                .terrain_dig(at, 2.0, Shape::Round, &[])
+                .terrain_flatten(at, 17.0, 9, Shape::Round),
+        ];
+        for transaction in refused {
+            assert_eq!(transaction.commit(), Err(WorldError::Refused));
+        }
+        assert!(loader.transactions().is_empty(), "nothing half-queued");
+        let accepted = world
+            .transaction()
+            .terrain_dig(at, 1.0, Shape::Round, &[])
+            .commit()
+            .unwrap();
+        assert_eq!(
+            loader.transactions()[0].info.state,
+            TransactionInfo::PENDING
+        );
+        assert!(world.transaction_status(accepted).is_some());
+    }
+}

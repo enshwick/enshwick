@@ -61,7 +61,95 @@ Each call fails with a [`WorldError`](world.md#writing-components):
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
 none of that, so a mod adds what it needs, for example with
-[altar zones](altars.md) and [inventory transactions](inventories.md).
+[altar zones](altars.md) and [inventory transactions](inventories.md). For
+an undo, write the edits as a transaction.
+
+## Transactions and undo
+
+`world.transaction()` starts a `Transaction`: edits of the world the loader
+writes as one and can take back as one. `terrain_add`, `terrain_dig` and
+`terrain_flatten` take the same arguments as the `Terrain` calls; `commit`
+hands the edits to the loader and returns a `TransactionId`. Any thread may
+commit.
+
+```rust
+use std::sync::Mutex;
+
+use enshwick::actions::{Action, Outcome};
+use enshwick::terrain::Shape;
+use enshwick::world::TransactionId;
+
+static LAST: Mutex<Option<TransactionId>> = Mutex::new(None);
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let world = load.world()?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
+    actions.add(Action::new("moat", "Dig a moat around you").admins(), move |request| {
+        let Some([x, y, z]) = world.position(request.player.entity) else {
+            return Outcome::refused("You are nowhere");
+        };
+        let moat = [[8.0, 0.0], [-8.0, 0.0], [0.0, 8.0], [0.0, -8.0]]
+            .into_iter()
+            .fold(world.transaction(), |moat, [dx, dz]| {
+                moat.terrain_dig([x + dx, y - 2.0, z + dz], 3.0, Shape::Square, &[])
+            });
+        match moat.commit() {
+            Ok(id) => {
+                *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some(id);
+                Outcome::done("Digging")
+            }
+            Err(why) => Outcome::refused(format!("{why}")),
+        }
+    })?;
+    actions.add(Action::new("unmoat", "Fill the last moat in").admins(), move |_| {
+        let last = LAST.lock().unwrap_or_else(|e| e.into_inner()).take();
+        match last.map(|id| world.undo(id)) {
+            Some(Ok(())) => Outcome::done("Filling"),
+            Some(Err(why)) => Outcome::refused(format!("{why}")),
+            None => Outcome::refused("No moat to fill"),
+        }
+    })
+}
+```
+
+The loader writes the edits in order on the server's game thread between
+steps, 64 bricks of 8³ voxels (4 metres a side) a step, so a large
+transaction spreads over several steps and never stalls one; an edit is
+never split, and one larger than the budget takes a step of its own.
+Before an edit writes, the loader keeps every brick it can touch, 1 KiB a
+brick. `world.transaction_status(id)` tells where a transaction stands:
+
+| Status | Meaning |
+| --- | --- |
+| `Pending` | queued, or written in part |
+| `Applied` | written whole; it can be undone |
+| `Undoing` | its undo is queued or written in part |
+| `Undone` | undone, or dropped before it wrote anything |
+| `Failed(why)` | stopped before an edit it could not write; what it wrote before stays and can be undone |
+| `Expired` | written whole, but its undo data was dropped |
+| `UndoRefused(why)` | the last undo wrote nothing; ask again later |
+
+A transaction checks that its whole region is loaded before it writes
+anything: if a part is not, it fails with `NotLoaded` and the world is as
+it was. A region can still unload while a large transaction is under way;
+it then stops before the next edit, and an undo takes back what it wrote.
+
+`world.undo(id)` drops a queued transaction and takes back one written in
+whole or in part, putting every brick back as it was, newest edit first,
+again at 64 bricks a step. Clients see the undo, and the save keeps it, as
+any edit. Before it writes, the undo checks that every brick still holds
+what the transaction left there. If a player, another mod or a later
+transaction has changed one since, or part of the region is not loaded,
+the undo writes nothing and the status turns `UndoRefused` with `Refused`
+or `NotLoaded`. Undo overlapping transactions newest first.
+
+The loader keeps up to 64 MiB of undo data, 65,536 bricks, over all
+transactions; past that, the oldest written transactions lose theirs and
+turn `Expired`. A transaction holds up to 1,024 edits and may touch no more
+bricks than the cap; a commit while queued transactions hold the cap is
+refused. The loader remembers the newest 4,096 transactions; the status of
+an older one is `None`. When the world ends, queued work fails with
+`Missing` and written transactions turn `Expired`.
 
 ## Reading voxels
 
