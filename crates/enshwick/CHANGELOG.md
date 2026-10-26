@@ -18,6 +18,11 @@ Each entry names the pull request that made the change.
   (`set`, `reset`); the loader merges it with every mod's and pack's
   changes and builds what it reaches again in place, so a stack size or
   chest size can follow a per-world setting (#542).
+- The loader keeps every stack size above the game's that a world was saved
+  with (`mod-data/enshwick/kept-stacks.toml`) and serves at least that size
+  from the start, so lowering a size or removing the mod that raised it
+  never cuts a saved stack; while any size is kept it holds the game on a
+  build it would leave vanilla.
 
 ## [1.0.0-alpha.6] - 2026-10-26
 

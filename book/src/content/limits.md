@@ -53,7 +53,21 @@ upgrades moves every item it holds.
 
 ## Stack sizes and saved worlds
 
-The game cuts saved stacks above an item's stack size when a world loads.
-A mod that raised a stack size sets its own [hold](../state.md#holds),
-as [data packs](packs.md#stack-sizes-and-saved-worlds) do through the
-loader.
+The game cuts saved stacks above an item's stack size when a world loads,
+before any per-world setting applies. So the loader keeps every stack size
+above the game's that was in force when a world was saved, in
+`mod-data/enshwick/kept-stacks.toml`, and serves at least that size from the
+start, for every mod and pack and without them:
+
+```text
+info  stacks of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 stay at 999, not 100: a saved world may hold stacks that large
+```
+
+- A lower value from a mod or pack takes effect only above the kept size.
+  To lower it, split every larger stack, then delete the item's line in the
+  file while the game is stopped.
+- Removing the mod that raised a size keeps the size too: the loader still
+  serves it.
+- While any size is kept, the loader [holds](../state.md#holds) the game:
+  on a game build it does not know, which it would leave vanilla, the game
+  stops before a world loads and cuts nothing.
