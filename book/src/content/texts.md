@@ -21,7 +21,7 @@ module reads it, and a server owner can add to it or change it.
 
 - Each table is a language code:
   [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
-  lists the 35 the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
+  lists every language the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
 - `en` is the fallback: a language without a text of its own for a key gets
@@ -88,6 +88,9 @@ also serves the mod's own strings, such as chat replies:
   replaced by its value in `args`, or the key itself when no language has a
   text for it, so a missing text shows rather than vanishes;
 - `translations(key)` lists every language with a text for the key;
+- `languages()` lists every language the file has a table for;
+- `untranslated()` lists each language and key where another language has
+  a text and this one lacks it;
 - `merge(other)` adds `other`'s texts over these;
 - `Texts::parse(toml)` reads a texts file without a `Load`, for tests.
 
@@ -101,6 +104,20 @@ assert_eq!(texts.get("greeting", Language::DE_DE), Some("Hello"));
 texts.merge(Texts::parse("[en]\ngreeting = \"Hi\"\n").unwrap());
 assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
+```
+
+A test holds the file complete without naming its languages, so a new
+language is a new table and no change to the test:
+
+```rust
+use enshwick::i18n::Texts;
+
+// In a mod: const TEXTS: &str = include_str!("texts.toml");
+const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
+
+// The body of the mod's test `every_text_exists_in_all_languages`.
+let texts = Texts::parse(TEXTS).unwrap();
+assert_eq!(texts.untranslated(), []);
 ```
 
 On a client,
@@ -172,7 +189,7 @@ without rebuilding it.
 
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
-name of an item whose mod is gone, ship in English and Ukrainian in
+name of an item whose mod is gone, ship in
 [`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
 and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.
