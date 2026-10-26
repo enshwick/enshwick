@@ -2,6 +2,7 @@
 //! per item from the game's data when the loader seals the changes, and
 //! the summary of the conflicts many items share.
 
+use enshwick::abi::ChangeId;
 use enshwick::content::Guid;
 use enshwick::content::changes::{Field, ItemTraits, ItemsChange};
 
@@ -22,6 +23,9 @@ pub enum Pending {
         change: ItemsChange,
         /// Its source; may be empty.
         source: String,
+        /// The change a mod sets later it is; `None` for one whose value
+        /// was given at init.
+        live: Option<ChangeId>,
     },
 }
 
@@ -52,6 +56,7 @@ pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Decla
                 owner,
                 change,
                 source,
+                live,
             } => {
                 let before = declared.len();
                 declared.extend(
@@ -62,6 +67,7 @@ pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Decla
                             owner,
                             change: change.of(*item),
                             source: source.clone(),
+                            live,
                         }),
                 );
                 picked.push(Picked {
@@ -183,6 +189,7 @@ mod tests {
             owner: ModIndex::new(owner),
             change: Change::new(entry, Field::MaxStackSize, value),
             source: "items.toml:2".to_owned(),
+            live: None,
         })
     }
 
@@ -191,6 +198,7 @@ mod tests {
             owner: ModIndex::new(owner),
             change: ItemsChange::new(items, field, value),
             source: format!("mod {owner}"),
+            live: None,
         }
     }
 

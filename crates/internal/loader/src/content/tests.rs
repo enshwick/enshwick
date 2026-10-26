@@ -116,7 +116,10 @@ fn the_rate_patch_runs_last_and_keeps_the_base() {
     let key = recipe_registry();
     let mut served = vec![served_by(key, &[1])];
     let change = core::ptr::without_provenance_mut::<c_void>(1);
-    assert_eq!(serve_changes(&mut served, vec![(key, add_one, change)]), 1);
+    assert_eq!(
+        serve_changes(&mut served, vec![(key, add_one, change)], false),
+        1
+    );
     assert_eq!(serve_rates(&mut served, Some(no_patch)), 1);
     let entry = &served[0];
     let owners: Vec<ModIndex> = entry.patches.iter().map(|p| p.owner).collect();
@@ -127,6 +130,24 @@ fn the_rate_patch_runs_last_and_keeps_the_base() {
     assert_eq!(entry.patches[0].user, 1, "the data change first");
     assert_eq!(entry.patches[2].user, 0, "the rates last");
     assert!(entry.keeps_base.load(Ordering::Relaxed));
+}
+
+#[test]
+fn a_change_a_mod_sets_later_keeps_the_base_of_a_new_resource() {
+    let key = recipe_registry();
+    let mut served = Vec::new();
+    let change = core::ptr::without_provenance_mut::<c_void>(1);
+    assert_eq!(
+        serve_changes(&mut served, vec![(key, add_one, change)], true),
+        1
+    );
+    assert!(served[0].keeps_base.load(Ordering::Relaxed));
+    let mut plain = Vec::new();
+    assert_eq!(
+        serve_changes(&mut plain, vec![(key, add_one, change)], false),
+        1
+    );
+    assert!(!plain[0].keeps_base.load(Ordering::Relaxed));
 }
 
 #[test]

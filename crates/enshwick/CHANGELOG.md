@@ -6,6 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Load::change_items` changes a stack size or container slots of every
+  vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
+  `Items::Containers`), read from the game's data by the loader;
+  `ItemCategoryMask` moved to `content::categories` and names every item
+  category (#540).
+- `Load::declare_change` declares a change of a vanilla value at init whose
+  value the mod sets any time later through its `ChangeHandle`
+  (`set`, `reset`); the loader merges it with every mod's and pack's
+  changes and builds what it reaches again in place, so a stack size or
+  chest size can follow a per-world setting (#542).
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Added
@@ -19,11 +32,6 @@ Each entry names the pull request that made the change.
 - `ContainerKinds`, `ItemCategoryMask` and the event masks have a
   `const fn union`, so a combined set can be a `const`; `|` gives the same
   (#539).
-- `Load::change_items` changes a stack size or container slots of every
-  vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
-  `Items::Containers`), read from the game's data by the loader;
-  `ItemCategoryMask` moved to `content::categories` and names every item
-  category.
 
 ### Changed
 
