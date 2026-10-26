@@ -454,7 +454,7 @@ impl Loader {
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
         ) && (crate::item_data::wanted()
             || crate::stats::wanted()
-            || crate::data_changes::wanted());
+            || crate::data_changes::wanted(self));
         item_data
             || self
                 .delivery

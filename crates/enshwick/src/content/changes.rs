@@ -328,7 +328,9 @@ impl Load<'_> {
     /// `items.toml:12`, which the conflict reports name. The loader merges it
     /// with every mod's changes as the [module](self) says, and applies it on
     /// this side; a value players' games read needs the same change on
-    /// every side, so such a mod is a join mod.
+    /// every side, so such a mod is a join mod. A mod that raises a stack
+    /// size keeps a [`Hold`](crate::state::Hold) of its own for the worlds
+    /// it saves; the loader holds the game for data packs only.
     ///
     /// # Errors
     ///

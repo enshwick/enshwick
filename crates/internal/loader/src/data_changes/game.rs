@@ -11,7 +11,7 @@ use enshwick::content::changes::{Change, Field};
 use enshwick::state::Hold;
 use rustc_hash::FxHashMap;
 
-use super::{Declared, Merged, merge};
+use super::{Declared, HoldStep, Merged, Raised, credited, hold_step, merge};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -38,13 +38,6 @@ static CHANGES: Changes = Changes {
     raised: Mutex::new(None),
 };
 
-/// The stack sizes one mod raised.
-#[derive(Clone, Debug)]
-struct Raised {
-    count: usize,
-    first: (String, u16, u16),
-}
-
 /// What the loader's patch of one item needs: the item and where its stack
 /// size sits.
 struct ItemPatch {
@@ -65,12 +58,17 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
     Status::OK
 }
 
-/// Whether any mod declared a change, so the loader follows the world.
-pub(crate) fn wanted() -> bool {
-    CHANGES.sealed.get().map_or_else(
+/// Whether the loader follows the world for changes: some mod declared one,
+/// or a pack holds the game and may need its hold released.
+pub(crate) fn wanted(loader: &Loader) -> bool {
+    let declared = CHANGES.sealed.get().map_or_else(
         || !CHANGES.declared.relock().is_empty(),
         |sealed| !sealed.merged.is_empty(),
-    )
+    );
+    declared
+        || enshwick::state::holds(&loader.data_dir)
+            .iter()
+            .any(|(id, _)| loader.mods.iter().any(|m| m.pack && &m.id == id))
 }
 
 /// Whether mod `index` is on.
@@ -242,62 +240,61 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     let new = new as u16;
     field.copy_from_slice(&new.to_le_bytes());
     if new > old {
+        let without = |m: ModIndex| {
+            merged
+                .value(patch.item, Field::MaxStack, f64::from(old), |o| {
+                    live(o) && o != m
+                })
+                .unwrap_or(f64::from(old))
+        };
+        let owners = merged.owners(patch.item, Field::MaxStack, live);
         let label = labels
             .get(&patch.item)
             .cloned()
             .unwrap_or_else(|| patch.item.to_string());
         let mut raised = CHANGES.raised.relock();
         let raised = raised.get_or_insert_with(FxHashMap::default);
-        for owner in merged.owners(patch.item, Field::MaxStack, live) {
+        for owner in credited(&owners, f64::from(new), without) {
             raised
                 .entry(owner)
-                .and_modify(|r| r.count += 1)
-                .or_insert_with(|| Raised {
-                    count: 1,
-                    first: (label.clone(), old, new),
-                });
+                .and_modify(|r| r.note(patch.item))
+                .or_insert_with(|| Raised::new(patch.item, label.clone(), old, new));
         }
     }
 }
 
-/// The hold's reason for a mod that raised `raised`.
-fn reason(raised: &Raised) -> String {
-    let (label, old, new) = &raised.first;
-    let more = match raised.count {
-        0 | 1 => String::new(),
-        n => format!(" and {} more items", n - 1),
-    };
-    format!(
-        "it lets {label}{more} stack past the game's own size ({old} to {new}); without it the game deletes the excess of every larger stack in this world, so split such stacks to the game's size before you remove it"
-    )
-}
-
 /// On the side that keeps the world, when it loads: sets the hold of every
-/// mod that raised a stack size, and releases that of a pack that changes
-/// stack sizes but raises none now.
+/// pack that raised a stack size, and releases that of every other pack
+/// still on. A mod with code keeps its own hold.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
-    let Some(sealed) = CHANGES.sealed.get() else {
-        return;
-    };
-    if event != Event::WORLD_LOADED || sealed.merged.is_empty() {
+    if event != Event::WORLD_LOADED {
         return;
     }
     let raised = CHANGES.raised.relock().clone().unwrap_or_default();
-    let changers = sealed.merged.changers(Field::MaxStack);
-    for index in changers {
-        let Some(record) = loader.mods.get(index.get()) else {
+    for (index, record) in loader.mods.iter().enumerate() {
+        let index = ModIndex::new(index);
+        if !on(loader, index) {
             continue;
-        };
+        }
         let hold = Hold::new(&loader.data_dir.join(&record.id));
-        let result = match raised.get(&index) {
-            Some(raised) => hold.set(&reason(raised)),
-            None if record.pack => hold.clear(),
-            None => Ok(()),
+        let result = match hold_step(record.pack, raised.get(&index)) {
+            HoldStep::Set(reason) => hold.set(&reason),
+            HoldStep::Release => hold.clear(),
+            HoldStep::Keep => Ok(()),
         };
         if let Err(why) = result {
             crate::log::write(Level::WARN, &record.id, &format!("hold not kept: {why}"));
         }
     }
+}
+
+/// Whether the running build reflects what `field` changes.
+pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
+    let id = match field {
+        Field::MaxStack => enshwick_gamedata::catalogue::ITEM_MAX_STACK,
+        _ => return false,
+    };
+    enshwick_gamedata::catalogue::constant(id, &loader.reflection).is_some()
 }
 
 #[cfg(test)]
@@ -308,21 +305,5 @@ mod tests {
     fn a_label_is_the_name_in_parentheses() {
         assert_eq!(label("items.toml:12 (Wood_Log)"), Some("Wood_Log"));
         assert_eq!(label("items.toml:12"), None);
-    }
-
-    #[test]
-    fn the_reason_names_the_first_item_and_how_many_more() {
-        let raised = Raised {
-            count: 3,
-            first: ("Wood_Log".to_owned(), 20, 999),
-        };
-        let text = reason(&raised);
-        assert!(
-            text.starts_with(
-                "it lets Wood_Log and 2 more items stack past the game's own size (20 to 999)"
-            ),
-            "{text}"
-        );
-        assert!(!text.contains('\n'));
     }
 }

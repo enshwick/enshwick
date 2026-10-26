@@ -138,7 +138,7 @@ later pack [requires](#packtoml) the other, it overrides it on purpose and
 the line is information:
 
 ```text
-warn  [you.stacks] max_stack of 3a054369-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Wood_Log), which overrides 500 from ann.bags items.toml:7 (Wood_Log)
+warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Wood_Log), which overrides 500 from ann.bags items.toml:7 (Wood_Log)
 ```
 
 A Rust mod declares the same changes with

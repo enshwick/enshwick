@@ -4,6 +4,8 @@
 //! set another mod overrides, and works out each value from the changes of
 //! the mods still on when the game first reads the resource.
 
+use std::collections::BTreeSet;
+
 use rustc_hash::FxHashMap;
 
 use enshwick::content::Guid;
@@ -14,7 +16,7 @@ use crate::mod_index::ModIndex;
 #[cfg(windows)]
 mod game;
 #[cfg(windows)]
-pub(crate) use game::{declare, serve, wanted, world_event};
+pub(crate) use game::{declare, reachable, serve, wanted, world_event};
 
 /// A change one mod declared, with where it came from.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,7 +32,7 @@ pub struct Declared {
 /// A set that a later mod's set of the same field overrides.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Conflict {
-    /// The entry and the field.
+    /// The entry.
     pub entry: Guid,
     /// The field.
     pub field: Field,
@@ -184,6 +186,88 @@ pub fn merge(
     (merged, conflicts)
 }
 
+/// The stack sizes one pack raised past the game's: the items, and the
+/// first one's label with the game's and the new size.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Raised {
+    items: BTreeSet<[u8; 16]>,
+    first: (String, u16, u16),
+}
+
+impl Raised {
+    /// The first raise: `item`, named `label`, from `old` to `new`.
+    #[must_use]
+    pub fn new(item: Guid, label: String, old: u16, new: u16) -> Self {
+        Self {
+            items: BTreeSet::from([item.0]),
+            first: (label, old, new),
+        }
+    }
+
+    /// Notes a raise of `item`; one item counts once however often the game
+    /// builds it.
+    pub fn note(&mut self, item: Guid) {
+        self.items.insert(item.0);
+    }
+
+    /// The hold's reason: one line naming the first item and how many more.
+    #[must_use]
+    pub fn reason(&self) -> String {
+        let (label, old, new) = &self.first;
+        let more = match self.items.len() {
+            0 | 1 => String::new(),
+            n => format!(" and {} more items", n - 1),
+        };
+        format!(
+            "it lets {label}{more} stack past the game's own size ({old} to {new}); without it the game deletes the excess of every larger stack in this world, so split such stacks to the game's size before you remove it"
+        )
+    }
+}
+
+/// The owners in `owners` whose changes raise a value to `new`: those
+/// without whom it would come out lower, as `without` works it out.
+#[must_use]
+pub fn credited(owners: &[ModIndex], new: f64, without: impl Fn(ModIndex) -> f64) -> Vec<ModIndex> {
+    owners
+        .iter()
+        .copied()
+        .filter(|&owner| without(owner) < new)
+        .collect()
+}
+
+/// What happens to a mod's hold when a world loads on the side that keeps
+/// it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HoldStep {
+    /// Set it with this reason.
+    Set(String),
+    /// Release it.
+    Release,
+    /// Leave it: a mod with code keeps its own hold.
+    Keep,
+}
+
+/// The step for a mod that is a pack or not and raised `raised`: the loader
+/// holds and releases for packs alone, which have no code to keep a hold.
+#[must_use]
+pub fn hold_step(is_pack: bool, raised: Option<&Raised>) -> HoldStep {
+    match (is_pack, raised) {
+        (false, _) => HoldStep::Keep,
+        (true, Some(raised)) => HoldStep::Set(raised.reason()),
+        (true, None) => HoldStep::Release,
+    }
+}
+
+/// Whether the loader's patch of a changed value runs before the mods'
+/// patches of `key`, served from `base`.
+///
+/// It goes first on a vanilla resource, so mods patch the changed value, and
+/// last on a mod's new resource, after the mod built it.
+#[must_use]
+pub fn goes_first(key: &enshwick::abi::ResourceKey, base: &enshwick::abi::ResourceKey) -> bool {
+    key == base
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,6 +355,59 @@ mod tests {
         let (merged, _) = merge(&[declared(0, WOOD, Value::Set(5.0), "")], no_requires);
         assert_eq!(merged.value(STONE, Field::MaxStack, 20.0, |_| true), None);
         assert_eq!(merged.entries(Field::MaxStack).collect::<Vec<_>>(), [WOOD]);
+    }
+
+    #[test]
+    fn a_pack_that_only_lowers_a_raised_value_is_not_credited() {
+        let all = [
+            declared(0, WOOD, Value::Set(999.0), ""),
+            declared(1, WOOD, Value::Times(0.5), ""),
+        ];
+        let (merged, _) = merge(&all, no_requires);
+        let new = merged.value(WOOD, Field::MaxStack, 20.0, |_| true).unwrap();
+        let owners = merged.owners(WOOD, Field::MaxStack, |_| true);
+        let without = |m: ModIndex| {
+            merged
+                .value(WOOD, Field::MaxStack, 20.0, |o| o != m)
+                .unwrap_or(20.0)
+        };
+        assert_eq!(credited(&owners, new, without), [ModIndex::new(0)]);
+    }
+
+    #[test]
+    fn an_item_built_again_counts_once_in_the_reason() {
+        let mut raised = Raised::new(WOOD, "Wood_Log".to_owned(), 20, 999);
+        raised.note(WOOD);
+        raised.note(STONE);
+        raised.note(STONE);
+        let reason = raised.reason();
+        assert!(
+            reason.starts_with(
+                "it lets Wood_Log and 1 more items stack past the game's own size (20 to 999)"
+            ),
+            "{reason}"
+        );
+        assert!(!reason.contains('\n'));
+    }
+
+    #[test]
+    fn a_pack_without_raises_releases_its_hold_and_a_mod_keeps_its_own() {
+        let raised = Raised::new(WOOD, "Wood_Log".to_owned(), 20, 999);
+        assert!(matches!(hold_step(true, Some(&raised)), HoldStep::Set(_)));
+        assert_eq!(hold_step(true, None), HoldStep::Release);
+        assert_eq!(hold_step(false, Some(&raised)), HoldStep::Keep);
+        assert_eq!(hold_step(false, None), HoldStep::Keep);
+    }
+
+    #[test]
+    fn the_loader_s_patch_goes_first_on_a_vanilla_key_and_last_on_a_new_one() {
+        let key = |b: u8| enshwick::abi::ResourceKey {
+            guid: [b; 16],
+            type_hash: 1,
+            part: 0,
+        };
+        assert!(goes_first(&key(1), &key(1)));
+        assert!(!goes_first(&key(2), &key(1)));
     }
 
     #[test]

@@ -520,7 +520,9 @@ fn serve_changes(
             user: user.expose_provenance(),
         };
         match served.iter_mut().find(|s| s.key == key) {
-            Some(entry) if entry.base == key => entry.patches.insert(0, patch),
+            Some(entry) if crate::data_changes::goes_first(&key, &entry.base) => {
+                entry.patches.insert(0, patch);
+            }
             Some(entry) => entry.patches.push(patch),
             None => served.push(Served {
                 key,
