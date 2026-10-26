@@ -18,7 +18,8 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::affixes::{AffixDef, AffixLoot, ItemCategoryMask, Range, ItemRarity};
+//! use enshwick::affixes::{AffixDef, AffixLoot, Range, ItemRarity};
+//! use enshwick::content::categories::ItemCategoryMask;
 //! use enshwick::loot::Source;
 //! use enshwick::stats::{Op, builtin};
 //!

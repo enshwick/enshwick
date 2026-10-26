@@ -16,6 +16,7 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `table` | a build table, its patterns run over code |
 | `archive` | the game's archive: its maps, resources across chunks and contents |
 | `reflection` | a game image's headers and reflection data |
+| `migrations` | a mod's settings migrations on an edited file, and the record of what ran |
 | `mod_manifests` | mod manifests, resolved into a load order |
 | `point_schemas` | another mod's point schemas, from its DLL or as text, written as definitions |
 | `settings_files` | the mod list, its lock, a settings schema, texts, a pack manifest |

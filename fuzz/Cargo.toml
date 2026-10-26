@@ -24,7 +24,8 @@ enshwick-gamedata = { path = "../crates/enshwick-gamedata" }
 enshwick-loader = { path = "../crates/internal/loader" }
 libfuzzer-sys = { version = "0.4.13", default-features = false, features = ["link_libfuzzer"] }
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
-toml = { version = "1.1.8", default-features = false, features = ["std", "parse"] }
+toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
+toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 
 [[bin]]
 name = "action_sheet"
@@ -106,6 +107,13 @@ bench = false
 [[bin]]
 name = "archive"
 path = "fuzz_targets/archive.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "migrations"
+path = "fuzz_targets/migrations.rs"
 test = false
 doc = false
 bench = false

@@ -189,6 +189,10 @@ pub enum MigrationError {
         /// Why the map gave none.
         reason: MapError,
     },
+    /// The migrated settings would not read back, such as a key nested
+    /// deeper than the reader takes; the file is left as it was.
+    #[error("settings after the migration: {0}")]
+    Unreadable(toml_edit::TomlError),
     /// A file could not be written or removed.
     #[error("{file}: {reason}")]
     File {
@@ -225,11 +229,34 @@ impl Record {
     /// short leaves it: an empty record would run every migration again.
     pub fn read(data_dir: &Path) -> Result<Self, RecordError> {
         match std::fs::read_to_string(data_dir.join(RECORD)) {
-            Ok(text) if text.trim().is_empty() => Err(RecordError::Empty),
-            Ok(text) => Ok(toml::from_str(&text)?),
+            Ok(text) => Self::parse(&text),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Reads the record's text.
+    ///
+    /// # Errors
+    ///
+    /// When the text is no record, or is empty, as a write cut short leaves
+    /// it: an empty record would run every migration again.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::migrations::{Record, RecordError};
+    ///
+    /// let record = Record::parse("[settings]\n\"you.zones\" = [\"radius\"]\n")?;
+    /// assert_eq!(record.settings["you.zones"], ["radius"]);
+    /// assert!(matches!(Record::parse(" \n"), Err(RecordError::Empty)));
+    /// # Ok::<(), RecordError>(())
+    /// ```
+    pub fn parse(text: &str) -> Result<Self, RecordError> {
+        if text.trim().is_empty() {
+            return Err(RecordError::Empty);
+        }
+        Ok(toml::from_str(text)?)
     }
 
     /// Writes the record to `data_dir`, through a temporary file.
@@ -368,7 +395,11 @@ pub fn apply_settings(
             _ => {}
         }
     }
-    Ok(doc.to_string())
+    let migrated = doc.to_string();
+    migrated
+        .parse::<DocumentMut>()
+        .map_err(MigrationError::Unreadable)?;
+    Ok(migrated)
 }
 
 /// Sets `to` in `doc` from `from`, `<mod id>:<key>`, in the file `source`

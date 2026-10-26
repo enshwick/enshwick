@@ -214,7 +214,26 @@ warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from
 
 A Rust mod declares the same changes with
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`.
+during `init`. With `Load::change_items` it changes a stack size or
+container slots of every vanilla item a selection picks: the items of some
+categories, every item that stacks, or every item that places a container.
+The loader reads the selection from the game's data and merges one change
+per item in the mod's place in load order:
+
+```rust
+use enshwick::content::categories::ItemCategoryMask;
+use enshwick::content::changes::{Field, Items, ItemsChange, Value};
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let materials = Items::Category(ItemCategoryMask::MATERIALS);
+    load.change_items(&ItemsChange::new(materials, Field::MaxStackSize, Value::Times(4.0)), "stacks")
+}
+```
+
+A stack size reaches only items that already stack and keep no state of
+their own, such as durability; weapons and armour stay at one. Overlapping
+selections of two mods report one conflict line per pair, with the count of
+items it covers.
 
 ### Stack sizes and saved worlds
 

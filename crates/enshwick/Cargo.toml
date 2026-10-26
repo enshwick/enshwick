@@ -1,6 +1,6 @@
 [package]
 name = "enshwick"
-version = "1.0.0-alpha.5"
+version = "1.0.0-alpha.6"
 description = "The Enshwick Loader's modding API for Enshrouded: the one crate mods are written against"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -12,7 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.5" }
+enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.6" }
 bcdec_rs.workspace = true
 bytemuck.workspace = true
 const-sha1.workspace = true
@@ -126,6 +126,10 @@ required-features = ["test"]
 
 [[test]]
 name = "rates_join"
+required-features = ["test"]
+
+[[test]]
+name = "item_changes"
 required-features = ["test"]
 
 [[test]]

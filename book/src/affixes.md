@@ -9,7 +9,8 @@ gets the modifiers. The
 module holds the API.
 
 ```rust
-use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, ItemCategoryMask, Range, ItemRarity, RollRules};
+use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Range, ItemRarity, RollRules};
+use enshwick::content::categories::ItemCategoryMask;
 use enshwick::loot::Source;
 use enshwick::stats::{Op, builtin};
 

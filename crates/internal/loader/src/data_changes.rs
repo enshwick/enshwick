@@ -15,8 +15,11 @@ use crate::mod_index::ModIndex;
 
 #[cfg(windows)]
 mod game;
+mod select;
+
 #[cfg(windows)]
-pub(crate) use game::{declare, reachable, reload, serve, wanted, world_event};
+pub(crate) use game::{declare, declare_items, reachable, reload, serve, wanted, world_event};
+pub use select::{Pending, Picked, TraitOffsets, expand, grouped, traits_of};
 
 /// A change one mod declared, with where it came from.
 #[derive(Clone, Debug, PartialEq)]

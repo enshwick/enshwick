@@ -109,6 +109,8 @@ ids! {
     ITEM_INFO_DESCRIPTION = "item_info.description";
     ITEM_INFO_FLAGS = "item_info.flags";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_CATEGORY = "item_info.category";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_MAX_STACK = "item_info.max_stack";
     ITEM_INFO_PID_ENTITY = "item_info.pid_entity";
     ITEM_INFO_UI_VALUES = "item_info.ui_values";

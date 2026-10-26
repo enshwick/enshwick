@@ -1,4 +1,5 @@
 use crate::abi::{AffixDefData, AffixModifierData, Header, Str};
+use crate::content::categories::ItemCategoryMask;
 use crate::stats::{Op, Stat};
 
 /// How rare an affix is.
@@ -53,62 +54,6 @@ impl ItemRarity {
             4 => Some(Self::Legendary),
             _ => None,
         }
-    }
-}
-
-/// Item categories, a bit per the game's `ItemCategory`.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::affixes::ItemCategoryMask;
-///
-/// let gear = ItemCategoryMask::EQUIPMENT | ItemCategoryMask::WEAPONS;
-/// assert!(gear.contains(ItemCategoryMask::WEAPONS));
-/// assert!(gear.holds(2));
-/// assert!(!gear.holds(3));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ItemCategoryMask(pub u32);
-
-impl ItemCategoryMask {
-    /// Armour and rings, the game's `Equipment`.
-    pub const EQUIPMENT: Self = Self(1 << 1);
-    /// Weapons.
-    pub const WEAPONS: Self = Self(1 << 2);
-    /// Tools.
-    pub const TOOLS: Self = Self(1 << 3);
-    /// Instruments.
-    pub const INSTRUMENT: Self = Self(1 << 4);
-    /// Fishing rods.
-    pub const FISHING_ROD: Self = Self(1 << 5);
-
-    /// Whether every category of `other` is here.
-    ///
-    /// # Examples
-    ///
-    /// See [`ItemCategoryMask`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-
-    /// Whether the game's `ItemCategory` numbered `category` is here.
-    ///
-    /// # Examples
-    ///
-    /// See [`ItemCategoryMask`].
-    #[must_use]
-    pub const fn holds(self, category: u8) -> bool {
-        category < 32 && self.0 & (1 << category) != 0
-    }
-}
-
-impl core::ops::BitOr for ItemCategoryMask {
-    type Output = Self;
-
-    fn bitor(self, other: Self) -> Self {
-        Self(self.0 | other.0)
     }
 }
 
@@ -235,7 +180,8 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
+    /// use enshwick::affixes::AffixDef;
+    /// use enshwick::content::categories::ItemCategoryMask;
     ///
     /// assert_eq!(AffixDef::new("a", ItemCategoryMask::WEAPONS).weight(5).weight, 5);
     /// ```
@@ -261,7 +207,8 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
+    /// use enshwick::affixes::AffixDef;
+    /// use enshwick::content::categories::ItemCategoryMask;
     ///
     /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS).group("element");
     /// assert_eq!(def.group.as_deref(), Some("element"));
@@ -294,7 +241,8 @@ impl AffixDef {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::affixes::{AffixDef, ItemCategoryMask};
+    /// use enshwick::affixes::AffixDef;
+    /// use enshwick::content::categories::ItemCategoryMask;
     ///
     /// let def = AffixDef::new("a", ItemCategoryMask::WEAPONS);
     /// let ranges = def.to_ranges();
@@ -329,7 +277,8 @@ impl AffixDef {
     ///
     /// ```
     /// use enshwick::abi::StatRef;
-    /// use enshwick::affixes::{AffixDef, ItemCategoryMask, Range};
+    /// use enshwick::affixes::{AffixDef, Range};
+    /// use enshwick::content::categories::ItemCategoryMask;
     /// use enshwick::stats::{Op, Stat};
     ///
     /// let health = Stat::from_ref(StatRef { index: 0, key: 9 });
