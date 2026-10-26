@@ -320,30 +320,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-probe"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "serde",
-]
-
-[[package]]
 name = "enshwick-reflect"
 version = "1.0.0-alpha.2"
 dependencies = [
  "rustc-hash",
  "thiserror",
-]
-
-[[package]]
-name = "enshwick-research"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "enshwick-reflect",
- "rustc-hash",
- "serde",
- "windows-sys",
 ]
 
 [[package]]

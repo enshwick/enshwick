@@ -106,7 +106,7 @@ A row applies only when its side and both parts of its fingerprint match the
 running binary. Rows for other builds are ignored, so a mod can carry rows for
 several builds at once.
 
-[`enshwick-research`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-research/src/lib.rs)
+[`enshwick-research`](https://github.com/enshwick/devtools-mods/blob/main/enshwick-research/src/lib.rs)
 pins the client functions it studies in a `CLIENT` row and two server
 functions in a `SERVER` row.
 

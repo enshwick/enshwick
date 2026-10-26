@@ -7,7 +7,6 @@ members = [
     "crates/enshwick-macros",
     "crates/enshwick-reflect",
     "crates/internal/*",
-    "mods/*",
     # Listed one by one: release-please reads every glob match as a crate,
     # and examples/README.md is none.
     "examples/hot-reload",

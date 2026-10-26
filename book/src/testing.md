@@ -289,11 +289,11 @@ one people play on, with a copy of a world:
 - [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
   runs each line appended to its command file on the server's console, so a
   mod's actions run without anyone joining;
-- [`enshwick-probe`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-probe),
+- [`enshwick-probe`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
   `logs/enshwick/mods/probe.log`;
-- [`enshwick-research`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-research),
+- [`enshwick-research`](https://github.com/enshwick/devtools-mods/tree/main/enshwick-research),
   another development mod, logs what a running client hands its item
   tooltip and what a refused join leaves behind, to
   `logs/enshwick/mods/research.log`.
