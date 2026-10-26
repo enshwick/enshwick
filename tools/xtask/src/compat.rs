@@ -58,6 +58,47 @@ pub(crate) struct RunArgs {
 /// The exit code when the run worked but something does not.
 pub(crate) const BROKEN: u8 = 2;
 
+/// The compat task's command line.
+#[derive(Debug, clap::Parser)]
+#[command(
+    name = "cargo xtask compat",
+    about = "What works on a game build: which loader features have every table entry they name, and how given mods start"
+)]
+struct Cli {
+    #[command(flatten)]
+    args: Option<Args>,
+    #[command(subcommand)]
+    step: Option<Step>,
+}
+
+/// A step the task runs in a process of its own.
+#[derive(Debug, clap::Subcommand)]
+enum Step {
+    /// Runs the loader on a prepared game folder.
+    #[command(hide = true)]
+    Run(RunArgs),
+}
+
+/// Runs `cargo xtask compat` with `args`; whether everything works.
+pub(crate) fn main(args: &[String]) -> Result<bool, String> {
+    use clap::Parser as _;
+    let cli = match Cli::try_parse_from(
+        std::iter::once("cargo xtask compat".to_owned()).chain(args.iter().cloned()),
+    ) {
+        Ok(cli) => cli,
+        Err(error) if !error.use_stderr() => {
+            error.print().map_err(|e| e.to_string())?;
+            return Ok(true);
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    match (cli.step, cli.args) {
+        (Some(Step::Run(args)), _) => run_loader(&args).map(|()| true),
+        (None, Some(args)) => run(&args),
+        (None, None) => Err("name a game executable; --help lists the options".to_owned()),
+    }
+}
+
 /// The game build as the loader would see it.
 struct Build {
     side: tables::Side,
@@ -476,7 +517,7 @@ fn start_mods(args: &Args, dlls: &[PathBuf]) -> Result<Vec<ModOutcome>, String> 
     let me = std::env::current_exe().map_err(|e| e.to_string())?;
     let mut command = std::process::Command::new(me);
     command
-        .args(["run", "--exe"])
+        .args(["compat", "run", "--exe"])
         .arg(&args.exe)
         .arg("--game")
         .arg(&game);

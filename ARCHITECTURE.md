@@ -15,8 +15,7 @@ ABI in a safe API.
 | `enshwick-macros` | `crates/enshwick-macros` | `#[hook]`, `#[derive(Config)]` and the other macros of the API | yes |
 | `enshwick-gamedata` | `crates/enshwick-gamedata` | the build tables of every game build, the engine's reflection reader (`reflect`) and the game archive reader (`archive`) | yes |
 | `cargo-enshwick` | `crates/cargo-enshwick` | the one tool for mod authors: new mods, install, manifests, content packs, point definitions, porting a table to a new build | yes |
-| `xtask` | `tools/xtask` | repository checks and the dev bundle | no |
-| `enshwick-compat` | `tools/compat` | the maintainers' report of what works on a game build | no |
+| `xtask` | `tools/xtask` | repository checks, the dev bundle and `cargo xtask compat`, the maintainers' report of what works on a game build | no |
 | examples | `examples/*` | small mods, one part of the API each | no |
 
 ## Layers
@@ -29,7 +28,7 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
 ```
 
 - The loader depends on `enshwick` for the ABI types and on
-  `enshwick-gamedata`. Nothing depends on the loader except the compat tool;
+  `enshwick-gamedata`. Nothing depends on the loader except xtask's `compat` feature;
   cargo-deny refuses it anywhere else.
 - `enshwick` never depends on the loader or on `enshwick-gamedata`: a mod
   links the API alone.

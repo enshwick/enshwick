@@ -17,6 +17,8 @@
 mod affected;
 mod book;
 mod bundle;
+#[cfg(feature = "compat")]
+mod compat;
 mod ranges;
 mod wine;
 
@@ -28,14 +30,18 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local] | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
-/// loader, and without the feature cargo skips them without a word.
-const TEST_FEATURE: &str = "enshwick/test";
+/// loader, and without the feature cargo skips them without a word; the
+/// compat task is linted and tested with the rest.
+const TEST_FEATURE: &str = "enshwick/test,xtask/compat";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(("compat", rest)) = args.split_first().map(|(task, rest)| (task.as_str(), rest)) {
+        return compat_task(rest);
+    }
     match run(&args) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -185,6 +191,48 @@ fn git(args: &[&str]) -> Option<String> {
         .status
         .success()
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// `cargo xtask compat`: what works on a game build, from its executable.
+#[cfg(feature = "compat")]
+fn compat_task(args: &[String]) -> ExitCode {
+    match compat::main(args) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::from(compat::BROKEN),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `cargo xtask compat` runs this tool again built with the loader, which
+/// plain `cargo xtask` leaves out to stay quick to build.
+#[cfg(not(feature = "compat"))]
+fn compat_task(args: &[String]) -> ExitCode {
+    let status = Command::new(cargo())
+        .args([
+            "run",
+            "--quiet",
+            "--package",
+            "xtask",
+            "--features",
+            "compat",
+            "--",
+            "compat",
+        ])
+        .args(args)
+        .status();
+    match status {
+        Ok(status) => status
+            .code()
+            .and_then(|code| u8::try_from(code).ok())
+            .map_or(ExitCode::FAILURE, ExitCode::from),
+        Err(error) => {
+            let _shown = writeln!(std::io::stderr(), "xtask: running cargo: {error}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn cargo() -> String {
