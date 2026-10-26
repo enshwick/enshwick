@@ -229,9 +229,11 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 }
 
 /// The recipe registry with a derived copy after the others for each vanilla
-/// recipe `choose` picks. With a workshop `limit` other than [`usize::MAX`],
-/// copies stop [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`]
-/// serves it; `salt` marks the copies as in [`derived_guid`].
+/// recipe `choose` picks.
+///
+/// With a workshop `limit` other than [`usize::MAX`], copies stop
+/// [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`] serves it;
+/// `salt` marks the copies as in [`derived_guid`].
 ///
 /// # Examples
 ///
