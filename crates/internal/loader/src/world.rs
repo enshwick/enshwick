@@ -10,6 +10,7 @@
 
 use core::cell::Cell;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
@@ -328,7 +329,11 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
 }
 
 /// A component's data pointer, or why not.
-pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*const c_void, Status> {
+pub(crate) fn component(
+    loader: &Loader,
+    entity: Entity,
+    hash: u32,
+) -> Result<*const c_void, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (world, index) = type_index(loader, hash)?;
     let mut out = [0usize; 2];
@@ -341,7 +346,7 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
             &raw mut out,
             core::ptr::with_exposed_provenance(world),
             index,
-            entity,
+            entity.0,
         );
     };
     match out[0] {
@@ -351,7 +356,7 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
 }
 
 /// An entity's template GUID.
-pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status> {
+pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is the
@@ -361,7 +366,7 @@ pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status>
     let slot = unsafe {
         (layout.entity_slot)(
             core::ptr::with_exposed_provenance(world + layout.entity_map),
-            &raw const entity,
+            &raw const entity.0,
         )
     };
     // SAFETY: `world` is the non-zero entity world; the table's
@@ -401,7 +406,7 @@ pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status>
 
 /// Where `entity` stands, in 32.32 fixed-point metres, from its
 /// `CurrentTransform`; on the server's game thread.
-pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
+pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]> {
     let info = loader
         .reflection
         .type_info("keen::ecs::CurrentTransform")
@@ -442,7 +447,7 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
             // on the game thread (checked by `reader`).
             let entity: u32 = unsafe { read(slot, layout.slot_entity) };
             (handle != 0 && state == SLOT_IN_GAME && entity != 0)
-                .then(|| player_at(layout, slot, index, entity, infos))
+                .then(|| player_at(layout, slot, index, Entity(entity), infos))
         })
         .collect())
 }
@@ -516,7 +521,13 @@ pub(crate) fn live_keys() -> Option<Vec<u64>> {
 /// Entries in the player infos' permission table, one per entity id from 1.
 const PERMISSION_ENTRIES: usize = 0x3ff;
 
-fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usize) -> PlayerInfo {
+fn player_at(
+    layout: &Layout,
+    slot: usize,
+    index: usize,
+    entity: Entity,
+    infos: usize,
+) -> PlayerInfo {
     let mut name = [0u8; 64];
     // SAFETY: `slot` is a player slot `players` found in the server on the
     // game thread; the table's `server.player_slot_name` offset holds the
@@ -539,7 +550,7 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
         0
     } else {
         let table = infos + layout.permission_table;
-        let index = (entity as usize).wrapping_sub(1);
+        let index = (entity.0 as usize).wrapping_sub(1);
         if index < PERMISSION_ENTRIES {
             let entry = table + index * layout.permission_entry;
             // SAFETY: `infos` is non-zero (`infos == 0` gives 0 first); the
@@ -548,7 +559,7 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
             // (the enclosing condition), and each starts with its `u32` entity;
             // read on the game thread.
             let owner: u32 = unsafe { read(entry, 0) };
-            if owner == entity {
+            if owner == entity.0 {
                 // SAFETY: `entry` is a permission entry inside the table
                 // (`index < PERMISSION_ENTRIES`, the enclosing condition); the
                 // table's `server.permission_mask` offset holds its mask byte;
@@ -564,7 +575,7 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::try_from(index).unwrap_or(u32::MAX),
-        entity,
+        entity: entity.0,
         // SAFETY: `slot` is a player slot `players` found in the server on
         // the game thread; the table's `server.player_slot_key` offset holds
         // its `u64` account key.

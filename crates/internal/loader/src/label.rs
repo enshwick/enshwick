@@ -10,6 +10,7 @@
 
 use crate::mod_index::ModIndex;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 
@@ -175,7 +176,7 @@ fn cut(text: &str, max: usize) -> &str {
 }
 
 /// Gives `entity` the label `text`; on the game thread only.
-pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
+pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     let Some(layout) = layout(loader) else {
         return Status::MISSING;
     };
@@ -203,7 +204,7 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
     // SAFETY: the game's component lookup at the table's `label.find`, with
     // the non-null world checked earlier and our own four-word out record, on
     // the game thread at a quiet moment, outside systems.
-    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity) };
+    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity.0) };
     // SAFETY: the lookup returns its out record, whose first word is the
     // component pointer or null.
     let component = unsafe { enshwick::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
@@ -238,7 +239,7 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
         // the non-null world checked earlier and a span over `id`, which
         // outlives the call; called as the game's rename path calls it, on the
         // game thread at a quiet moment.
-        let _added = unsafe { (layout.add)(world, entity, layout.label_type, &raw const data) };
+        let _added = unsafe { (layout.add)(world, entity.0, layout.label_type, &raw const data) };
     }
     Status::OK
 }

@@ -1,5 +1,6 @@
 //! Answers console lines on the server's game thread.
 
+use enshwick::ecs::Entity;
 use std::sync::atomic::Ordering;
 
 use enshwick::abi::{Header, PlayerInfo, Status};
@@ -292,7 +293,7 @@ fn ui_demo(loader: &Loader, name: &str) -> String {
     };
     match crate::net::ui_demo(
         player.key,
-        crate::world::fixed_position(loader, player.entity),
+        crate::world::fixed_position(loader, Entity(player.entity)),
     ) {
         Ok(()) => texts::fill("ui-demo.opening", &[("name", name)]),
         Err(_) => texts::fill("ui-demo.no-client", &[("name", name)]),

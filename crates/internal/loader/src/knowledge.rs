@@ -18,6 +18,7 @@
 //! reads them after the step for the change events. A quest's id is a
 //! player's bool the game sets when it rewards the quest.
 
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
@@ -323,14 +324,14 @@ fn records(layout: &Layout, state: usize) -> usize {
 }
 
 /// The player record of the character `entity`, active, or why not.
-fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
+fn record(layout: &Layout, state: usize, entity: Entity) -> Result<usize, Status> {
     // SAFETY: `state` is the live store `store_of` found; its record array
     // pointer sits at the build table's `knowledge.records` offset.
     let records: usize = unsafe { read(state, layout.records) };
     // SAFETY: `state` is the live store `store_of` found; its u64 record
     // count sits at the build table's `knowledge.record_count` offset.
     let count: u64 = unsafe { read(state, layout.record_count) };
-    let index = (entity as usize).checked_sub(1).ok_or(Status::REFUSED)?;
+    let index = (entity.0 as usize).checked_sub(1).ok_or(Status::REFUSED)?;
     if records == 0 || index as u64 >= count {
         return Err(Status::REFUSED);
     }
@@ -347,11 +348,11 @@ fn record(layout: &Layout, state: usize, entity: u32) -> Result<usize, Status> {
 }
 
 /// Knowledge `id` of the character `entity`, or of the world.
-pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeInfo, Status> {
+pub(crate) fn value(loader: &Loader, entity: Entity, id: u32) -> Result<KnowledgeInfo, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, state) = store(layout)?;
     let (scope, def) = definition(layout, state, id).ok_or(Status::MISSING)?;
-    let raw = if scope == KnowledgeInfo::WORLD || entity == 0 {
+    let raw = if scope == KnowledgeInfo::WORLD || entity == Entity(0) {
         if scope == KnowledgeInfo::PLAYER {
             return Err(Status::REFUSED);
         }
@@ -369,7 +370,7 @@ pub(crate) fn value(loader: &Loader, entity: u32, id: u32) -> Result<KnowledgeIn
             (layout.player_value)(
                 core::ptr::with_exposed_provenance(state),
                 &raw const id,
-                entity,
+                entity.0,
             )
         }
     };
@@ -415,8 +416,8 @@ pub(crate) fn grant(
         return Err(Status::BAD_ARGS);
     }
     let target = if scope == KnowledgeInfo::PLAYER {
-        record(layout, state, entity)?;
-        if !changes::character_loaded(loader, entity) {
+        record(layout, state, Entity(entity))?;
+        if !changes::character_loaded(loader, Entity(entity)) {
             return Err(Status::REFUSED);
         }
         // One player: a 1 in the low byte and the character in the high
@@ -537,7 +538,7 @@ pub(crate) fn after_step(loader: &Loader) {
     // its u32 world log count sits at the build table's
     // `knowledge.world_log_count` offset.
     let count: u32 = unsafe { read(state, layout.world_log_count) };
-    raise(loader, layout, game, 0, log, count);
+    raise(loader, layout, game, Entity(0), log, count);
     // SAFETY: `state` is the live store `store` found on the game thread;
     // its record array pointer sits at the build table's `knowledge.records`
     // offset.
@@ -567,12 +568,12 @@ pub(crate) fn after_step(loader: &Loader) {
         // offset.
         let count: u32 = unsafe { read(record, layout.record_log_count) };
         let entity = u32::try_from(index + 1).unwrap_or(0);
-        raise(loader, layout, game, entity, log, count);
+        raise(loader, layout, game, Entity(entity), log, count);
     }
 }
 
 /// Raises the changes of one log, and the quests among a player's.
-fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize, count: u32) {
+fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usize, count: u32) {
     if log == 0 || count > MAX_LOG {
         return;
     }
@@ -590,16 +591,18 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: u32, log: usize,
         }
         let data = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
-            entity,
+            entity: entity.0,
             id,
             value,
         };
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const data).cast());
-        if entity != 0 && value != 0 && quest_set(layout, game).is_some_and(|set| set.contains(&id))
+        if entity != Entity(0)
+            && value != 0
+            && quest_set(layout, game).is_some_and(|set| set.contains(&id))
         {
             let quest = QuestData {
                 header: Header::of::<QuestData>(),
-                entity,
+                entity: entity.0,
                 quest: id,
             };
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());

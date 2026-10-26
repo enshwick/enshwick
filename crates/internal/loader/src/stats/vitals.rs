@@ -4,6 +4,7 @@
 //! of perks, buffs and gear change the adder by their own deltas, so the
 //! loader adds and takes back only its own.
 
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::raw::{read_at, write_at};
@@ -82,12 +83,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 /// Adds `delta` to `entity`'s maximum of `pool`, through its adder; false
 /// when the entity has no such set or the build lacks the layout. On the
 /// game thread, between steps.
-pub(super) fn add_max(loader: &Loader, entity: u32, pool: Pool, delta: i32) -> bool {
+pub(super) fn add_max(loader: &Loader, entity: Entity, pool: Pool, delta: i32) -> bool {
     let Some(layout) = layout(loader) else {
         return false;
     };
     let set = layout.sets[pool as usize];
-    let Ok(data) = crate::writes::component_mut(loader, entity, set.ty) else {
+    let Ok(data) = crate::writes::component_mut(loader, entity.0, set.ty) else {
         return false;
     };
     let data = data.cast::<u8>();
