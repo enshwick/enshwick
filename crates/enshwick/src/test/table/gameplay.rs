@@ -3,10 +3,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header, InteractionFn,
-    KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneFn, AltarZoneSize, BedCheckFn, BuffRequest,
+    BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header,
+    InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -32,29 +32,38 @@ pub(crate) extern "system" fn altars(
 }
 
 pub(crate) extern "system" fn altar_zones_control(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        s.altars_opened = true;
-        s.zone_control = true;
-        Status::OK
-    })
+    Status::REFUSED
 }
 
 pub(crate) extern "system" fn set_altar_zones(
     _me: ModHandle,
-    sizes: *const AltarZoneSize,
-    count: usize,
+    _sizes: *const AltarZoneSize,
+    _count: usize,
 ) -> Status {
-    let sizes = if count == 0 || sizes.is_null() {
-        Vec::new()
-    } else {
-        // SAFETY: the safe layer passes `count` sizes, valid for the call.
-        unsafe { core::slice::from_raw_parts(sizes, count) }.to_vec()
-    };
+    Status::REFUSED
+}
+
+pub(crate) extern "system" fn altar_zone_filter(
+    _me: ModHandle,
+    callback: AltarZoneFn,
+    user: *mut c_void,
+) -> Status {
+    with(Status::MISSING, |s| {
+        s.altars_opened = true;
+        s.zone_control = true;
+        s.zone_sizing
+            .filters
+            .push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn altar_zones_changed(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
         if !s.zone_control {
             return Status::REFUSED;
         }
-        s.zone_sizes = sizes;
+        s.zone_sizing.resizes += 1;
         Status::OK
     })
 }
