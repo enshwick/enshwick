@@ -118,7 +118,7 @@ impl<T> Fresh<T> {
             .compare_exchange(kept, fresh, Ordering::AcqRel, Ordering::Acquire)
             .is_err()
         {
-            // SAFETY: `fresh` came from `Box::into_raw` above and no other
+            // SAFETY: `fresh` came from `Box::into_raw` in this call and no other
             // thread saw it.
             let (_, value) = *unsafe { Box::from_raw(fresh) };
             return Err(value);

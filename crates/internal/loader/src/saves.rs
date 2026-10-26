@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick_reflect::fnv1a32;
+use enshwick_gamedata::reflect::fnv1a32;
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -63,7 +63,8 @@ struct Layout {
 const SAVE_ALLOWED: u8 = 1 << 2;
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `PathFn` is the signature of the game's `save.path`, and `link`
+// uses this slot only as the `next` of `built`, its link on that function.
 static PATH_NEXT: Next<PathFn> = unsafe { Next::new() };
 
 /// The world key built last, and on a client whether a hosted game names
@@ -115,8 +116,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let request =
                 usize::try_from(loader.base + loader.build.symbol("server.save_request")?).ok()?;
             Some(Layout {
-                // SAFETY: the symbol is the game function with this signature
-                // on this build.
+                // SAFETY: `request` is the build table's `server.save_request`
+                // in the loaded executable, the game function `RequestFn`
+                // types.
                 request: unsafe { core::mem::transmute::<usize, RequestFn>(request) },
                 save_system: constant("server.save_system")?,
                 blocked: constant("server.save_blocked")?,
@@ -144,17 +146,28 @@ pub(crate) fn link(loader: &'static Loader) {
 /// The switch of the save path notes.
 static SAVES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("save path notes");
 
+/// The loader's link on the game's save path builder: notes the world key
+/// of each world save path the game builds.
+///
+/// # Safety
+///
+/// - Called only by the game through the chain on `save.path`, with its own
+///   result, path and slot arguments.
 unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -> *mut u8 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: `PATH_NEXT` holds the rest of `save.path`'s chain while this
+    // detour runs, and the arguments are the game's own, passed on unchanged.
     let out = unsafe { PATH_NEXT.get()(result, path, slot) };
     let layout = LAYOUT.get().copied().flatten();
-    // SAFETY: the game wrote its result's first byte, 0 on success.
-    let code = (!result.is_null()).then(|| unsafe { result.read() });
+    // SAFETY: `result` is non-null, checked first, and is the result the game
+    // passed to `save.path`, whose first byte it wrote, 0 on success.
+    let code = (!result.is_null()).then(|| unsafe { enshwick::raw::read_at::<u8>(result, 0) });
     if let Some(layout) = layout {
         let _caught = SAVES_FUSE.run("the built", || {
-            // SAFETY: the path the game has just built.
+            // SAFETY: `path` is the game's own argument to `save.path`, null
+            // or the engine path it just built, owned by the caller of this
+            // detour on this thread.
             let text = unsafe { read_path(&layout, path) };
-            // SAFETY: no preconditions.
+            // SAFETY: `GetCurrentThreadId` takes no arguments and cannot fail.
             let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
             crate::log!(
                 DEBUG,
@@ -174,17 +187,24 @@ unsafe extern "system" fn built(result: *mut u8, path: *mut u8, slot: *mut u8) -
 ///
 /// # Safety
 ///
-/// `path` is null or an engine path.
+/// - `path` is null or points at an engine path of the running build: its
+///   buffer pointer at `save.path_data`, `save.path_parts` lengths from
+///   `save.path_lengths`, and a buffer that many bytes long.
+/// - No other thread writes the path or its buffer during the call.
 unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     if path.is_null() {
         return None;
     }
-    let path = path.addr();
-    // SAFETY: an engine path points at its buffer.
-    let data: usize = unsafe { crate::world::read(path, layout.path_data) };
+    let path = path.expose_provenance();
+    // SAFETY: `path` is non-null, checked by the guard before it, and is an
+    // engine path by this function's `# Safety`, holding its buffer pointer at
+    // the table's `save.path_data`.
+    let data: usize = unsafe { crate::memory::read(path, layout.path_data) };
     let len = (0..layout.path_parts)
-        // SAFETY: the path holds the lengths of its parts one after another.
-        .map(|part| unsafe { crate::world::read::<u64>(path, layout.path_lengths + part * 8) })
+        // SAFETY: `path` is a non-null engine path by this function's
+        // `# Safety`, holding `save.path_parts` lengths of eight bytes from
+        // the table's `save.path_lengths`.
+        .map(|part| unsafe { crate::memory::read::<u64>(path, layout.path_lengths + part * 8) })
         .try_fold(0u64, u64::checked_add)?;
     let len = usize::try_from(len)
         .ok()
@@ -192,10 +212,14 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     if data == 0 {
         return None;
     }
-    // SAFETY: the buffer holds `len` bytes of the path.
-    let bytes =
-        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), len) };
-    core::str::from_utf8(bytes).ok().map(str::to_owned)
+    let mut bytes = vec![0u8; len];
+    // SAFETY: `data` is non-null, checked by the guard before it, and the
+    // engine path's buffer holds the sum of its part lengths, `len`, by this
+    // function's `# Safety`.
+    unsafe {
+        enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(data), 0, &mut bytes);
+    }
+    String::from_utf8(bytes).ok()
 }
 
 /// Keeps the key of `path` when it names a world save.
@@ -276,25 +300,34 @@ pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
 pub(crate) fn request(loader: &Loader) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
-    // SAFETY: the server's flag that refuses saves, on its game thread.
-    let blocked: u8 = unsafe { crate::world::read(server, layout.blocked) };
-    // SAFETY: the server holds its save system.
-    let system: usize = unsafe { crate::world::read(server, layout.save_system) };
+    // SAFETY: `world::server` returned the live server on its game thread
+    // between steps, where nothing else writes it; its byte that refuses
+    // saves sits at the table's `server.save_blocked`.
+    let blocked: u8 = unsafe { crate::memory::read(server, layout.blocked) };
+    // SAFETY: `world::server` returned the live server on its game thread
+    // between steps; the pointer to its save system sits at the table's
+    // `server.save_system`.
+    let system: usize = unsafe { crate::memory::read(server, layout.save_system) };
     if blocked != 0 || system == 0 {
         return Err(Status::REFUSED);
     }
-    // SAFETY: the save system's phase.
-    let phase: u8 = unsafe { crate::world::read(system, layout.phase) };
-    // SAFETY: and its flags.
-    let flags: u8 = unsafe { crate::world::read(system, layout.flags) };
+    // SAFETY: `system` is non-zero, checked by the guard before it, and is the
+    // live server's save system, read on its game thread; its phase byte sits
+    // at the table's `save.phase`.
+    let phase: u8 = unsafe { crate::memory::read(system, layout.phase) };
+    // SAFETY: `system` is non-zero, checked by the guard before it, and is the
+    // live server's save system, read on its game thread; its flags byte sits
+    // at the table's `save.flags`.
+    let flags: u8 = unsafe { crate::memory::read(system, layout.flags) };
     if phase != 0 {
         return Ok(());
     }
     if flags & SAVE_ALLOWED == 0 {
         return Err(Status::REFUSED);
     }
-    // SAFETY: the server, on its game thread between steps, as the server's
-    // own loop asks for its timed saves.
+    // SAFETY: `layout.request` is the table's `server.save_request`, called
+    // with the live server on its game thread between steps
+    // (`world::server`), as the server's own loop asks for its timed saves.
     unsafe { (layout.request)(core::ptr::with_exposed_provenance_mut(server)) };
     Ok(())
 }

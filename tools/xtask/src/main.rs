@@ -15,6 +15,7 @@
 //! folder ([`bundle`]).
 
 mod affected;
+mod book;
 mod bundle;
 mod ranges;
 mod wine;
@@ -67,9 +68,17 @@ fn run(args: &[String]) -> Result<bool, String> {
     }
     let packages = packages()?;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let problems = ranges::check(&root, &packages);
+    let mut problems: Vec<String> = ranges::check(&root, &packages)
+        .into_iter()
+        .map(|problem| format!("manifest range: {problem}"))
+        .collect();
+    problems.extend(
+        book::check(&root)
+            .into_iter()
+            .map(|problem| format!("book: {problem}")),
+    );
     for problem in &problems {
-        say(&format!("manifest range: {problem}"));
+        say(problem);
     }
     if !problems.is_empty() {
         return Ok(false);

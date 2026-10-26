@@ -99,10 +99,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let (push, time) = (function("ecs.event_push")?, function("world.time")?);
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `ecs.event_push` is the address
+                // of the game function with the `PushFn` signature on this
+                // build.
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `world.time` is the address of the
+                // game function with the `TimeFn` signature on this build.
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
                 hash: crate::world::type_hash(info.va())?,
                 size: info.size(),
@@ -120,10 +122,10 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let slot = TAGS
         .iter()
-        .position(|tag| enshwick_reflect::fnv1a32(tag) == id)?;
+        .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
     let text = SLOT_TEXTS[slot].load(Ordering::Acquire);
-    // SAFETY: a non-null slot points at an interned text, leaked for the
-    // process and never written again.
+    // SAFETY: a non-null slot holds a pointer `take_slot` made from an
+    // `intern` reference, leaked for the process and never written again.
     (!text.is_null()).then(|| unsafe { *text })
 }
 
@@ -170,8 +172,9 @@ fn take_slot(text: &str) -> [u8; 16] {
 ///
 /// # Safety
 ///
-/// `entity_world` is the client's own entity world, on its thread, before
-/// the engine moves its streams.
+/// - `entity_world` is the address of the client's own live entity world.
+/// - The call runs on the client's game thread, before the engine moves its
+///   event streams, so no system pushes into them during the call.
 pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let waiting = {
         let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
@@ -183,14 +186,17 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let Some(layout) = layout(loader) else {
         return;
     };
-    // SAFETY: the entity world holds its stream array; the first stream is
-    // the one the game's own game-thread code pushes into.
-    let stream: usize = unsafe { crate::world::read(entity_world, layout.streams) };
-    if stream == 0 {
+    // SAFETY: the caller's contract makes `entity_world` the client's live
+    // entity world on its game thread; it holds the pointer to its first event
+    // stream at the table's `ecs.event_streams`.
+    let stream = unsafe { crate::memory::read_ptr::<u8>(entity_world, layout.streams) };
+    if stream.is_null() {
         return;
     }
-    // SAFETY: the World holds its time where the game's own function reads
-    // it; the entity world lies inside the World.
+    // SAFETY: the caller's contract makes `entity_world` the client's live
+    // entity world on its game thread; it lies inside the World at the
+    // table's `world.entities`, so the subtraction gives the World the game's
+    // own time function takes.
     let now = unsafe {
         (layout.time)(core::ptr::with_exposed_provenance(
             entity_world - layout.world_entities,
@@ -198,25 +204,22 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     };
     for (entity, text) in waiting {
         let tag = take_slot(&text);
-        // SAFETY: the client's first stream on its thread before the move,
-        // where no system pushes; the size is under 256 as reflection says.
-        let payload = unsafe {
-            (layout.push)(
-                core::ptr::with_exposed_provenance_mut(stream),
-                layout.hash,
-                layout.size,
-                0,
-            )
-        };
+        // SAFETY: `stream` is the client's first event stream, non-null by
+        // the earlier check; by the caller's contract the call runs on the
+        // client's game thread before the engine moves the streams, so no
+        // system pushes; `hash` and `size` are the reflected event type's.
+        let payload = unsafe { (layout.push)(stream, layout.hash, layout.size, 0) };
         if payload.is_null() {
             return;
         }
         let size = usize::try_from(layout.size).unwrap_or(0);
-        // SAFETY: the game handed out `size` zeroed bytes for the event.
-        let out = unsafe { core::slice::from_raw_parts_mut(payload, size) };
-        let mut put = |at: usize, bytes: &[u8]| {
-            if let Some(slot) = out.get_mut(at..at + bytes.len()) {
-                slot.copy_from_slice(bytes);
+        let put = |at: usize, bytes: &[u8]| {
+            if at + bytes.len() <= size {
+                // SAFETY: the push returned a non-null payload (checked
+                // earlier) of `size` bytes reserved for this event, which
+                // nothing else touches until the engine moves the stream after
+                // this call; the span ends inside it, checked before.
+                unsafe { enshwick::raw::write_bytes_at(payload, at, bytes) };
             }
         };
         put(layout.time_offset, &now.to_le_bytes());
@@ -259,28 +262,30 @@ mod tests {
     fn a_slot_takes_a_text_cut_at_a_character_and_its_tag_finds_it() {
         let long = "ж".repeat(200);
         let tag = take_slot(&long);
-        let id = enshwick_reflect::fnv1a32(&tag);
+        let id = enshwick_gamedata::reflect::fnv1a32(&tag);
         let text = text(id).unwrap();
         assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
         let tag = take_slot("Low fuel");
         assert_eq!(
-            super::text(enshwick_reflect::fnv1a32(&tag)),
+            super::text(enshwick_gamedata::reflect::fnv1a32(&tag)),
             Some("Low fuel")
         );
         assert_eq!(super::text(1), None);
-        let ids: std::collections::HashSet<u32> =
-            TAGS.iter().map(|t| enshwick_reflect::fnv1a32(t)).collect();
+        let ids: std::collections::HashSet<u32> = TAGS
+            .iter()
+            .map(|t| enshwick_gamedata::reflect::fnv1a32(t))
+            .collect();
         assert_eq!(ids.len(), SLOTS);
     }
 
     #[test]
     fn a_text_once_shown_keeps_its_address_while_its_slot_moves_on() {
-        let first = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let first = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         for n in 0..SLOTS * 3 {
             take_slot(&format!("other {n}"));
         }
         assert_eq!(first, "Kept text");
-        let again = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let again = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         assert_eq!(again.as_ptr(), first.as_ptr());
     }
 }

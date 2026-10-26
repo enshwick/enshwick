@@ -119,7 +119,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes/blob/main/src/lib.rs)
+[`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes/blob/main/src/lib.rs)
 gets the `InventorySetup` type this way to find the world's Safes.
 
 ### Positions

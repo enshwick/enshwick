@@ -5,7 +5,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 fn scan(c: &mut Criterion) {
     let mut group = c.benchmark_group("reflection_scan");

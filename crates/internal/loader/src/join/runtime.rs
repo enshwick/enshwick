@@ -12,7 +12,8 @@ use enshwick::abi::UiDialog;
 /// change, whose `bool` it returns in `al` (client builds 410 and 426).
 pub(crate) type JoinGame = unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8;
 
-// SAFETY: the slot joins the chain of the join, typed `JoinGame`.
+// SAFETY: the slot is linked only into the chain of the provider's join,
+// whose functions all have the `JoinGame` signature.
 /// The rest of the chain after the loader's link.
 pub(crate) static NEXT: Next<JoinGame> = unsafe { Next::new() };
 
@@ -29,16 +30,25 @@ pub(crate) fn names() -> super::Names {
 }
 
 /// The loader's link on the online provider's join.
+///
+/// # Safety
+///
+/// - The game calls it in place of its join, on the thread that joins.
+/// - `target` is null or the join target, at least `TARGET_BYTES` bytes,
+///   readable and writable for the call.
 pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) -> u8 {
     let allowed = target.is_null() || {
-        // SAFETY: the game's join target holds at least `TARGET_BYTES`
-        // of plain data (client builds 410 and 426).
-        let head = unsafe { target.cast::<super::Target>().read_unaligned() };
+        // SAFETY: `target` is non-null, checked just before, and is the join
+        // target the game passes the hooked join, at least `TARGET_BYTES` of
+        // plain data the caller holds for the call (client builds 410 and
+        // 426).
+        let head: super::Target = unsafe { enshwick::raw::read_at(target.cast_const(), 0) };
         std::panic::catch_unwind(|| check(&head)).unwrap_or(true)
     };
     if allowed {
         super::interaction::joining(false);
-        // SAFETY: forwarded unchanged.
+        // SAFETY: the chain's rest takes the provider and target the game
+        // passed this link, unchanged.
         return unsafe { NEXT.get()(provider, target) };
     }
     crate::log!(WARN, "join refused: the server runs mods this client lacks");
@@ -46,22 +56,24 @@ pub(crate) unsafe extern "system" fn detour(provider: *mut u8, target: *mut u8) 
     // The provider copies the target into its own state before it
     // returns, and the caller keeps its target, so the caller's copy
     // gets its host back (client builds 410 and 426).
-    // SAFETY: the target is the caller's join target, writable for the
-    // length of this call and not null; the reference ends here, before
-    // the game reads the target.
-    let host = super::refuse(unsafe { &mut *target.cast::<super::Target>() });
-    // SAFETY: forwarded with the host taken out.
+    // SAFETY: `target` is non-null, since a null one sets `allowed`, which
+    // returns early, and is the join target the game passes the hooked join,
+    // at least `TARGET_BYTES` of plain data the caller holds for the call
+    // (client builds 410 and 426).
+    let mut head: super::Target = unsafe { enshwick::raw::read_at(target.cast_const(), 0) };
+    let host = super::refuse(&mut head);
+    // SAFETY: the same target, writable for the length of this call, and the
+    // game reads it only once the chain's rest runs; `head` is the target's
+    // own bytes with only the host cleared.
+    unsafe { enshwick::raw::write_at(target, 0, head) };
+    // SAFETY: the chain's rest takes the provider the game passed and the
+    // target with its host cleared.
     let state_changed = unsafe { NEXT.get()(provider, target) };
     // SAFETY: the caller's target outlives this call, which its caller
     // makes with the target in hand, and the game holds no reference to
     // it once the provider returned (client builds 410 and 426); its
-    // host id is an unaligned u64 at `HOST`.
-    unsafe {
-        target
-            .wrapping_add(super::HOST)
-            .cast::<u64>()
-            .write_unaligned(host);
-    }
+    // host id is a u64 at `HOST`.
+    unsafe { enshwick::raw::write_at(target, super::HOST, host) };
     state_changed
 }
 
@@ -172,6 +184,16 @@ fn check(target: &super::Target) -> bool {
 /// client out, and tells the client's mods.
 #[cold]
 fn refused(missing: &[crate::admission::Need], reply: &[u8], names: &super::Names) {
+    let needed: Vec<String> = missing
+        .iter()
+        .map(|need| format!("{} {}", need.id, need.version))
+        .collect();
+    crate::log!(
+        WARN,
+        "the server runs join mods this game lacks: {}; the join is refused ({})",
+        needed.join(", "),
+        crate::errors::JOIN_MISSING
+    );
     let off = super::refusal::Off {
         by_player: crate::modlist::disabled().to_vec(),
         this_game: crate::host::join_mods_off(),

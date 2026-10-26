@@ -1,7 +1,6 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, PoisonError};
@@ -223,7 +222,7 @@ fn names(loader: &Loader) -> Arc<Names> {
 }
 
 /// The mods' content ids by the game id of their GUID.
-fn content_names() -> HashMap<u32, String> {
+fn content_names() -> FxHashMap<u32, String> {
     crate::ids::with(|ids| {
         ids.content()
             .into_iter()
@@ -376,7 +375,9 @@ pub(crate) fn registry_built(data: usize, len: usize) {
     let Some(layout) = layout() else {
         return;
     };
-    // SAFETY: the served registry lives for the process.
+    // SAFETY: the one caller, the content build of the recipe registry,
+    // passes the registry it served the game: `len` readable bytes at `data`
+    // that live for the process and are not written again.
     let registry = unsafe { core::slice::from_raw_parts(data as *const u8, len) };
     let Some(index) = Index::read(layout, registry) else {
         crate::log!(
@@ -483,8 +484,11 @@ pub(crate) fn hello(key: u64) {
 ///
 /// # Safety
 ///
-/// `out` is the lookup's out span, written by the game for the call; the
-/// list's entries point at the game's recipes.
+/// - `out` is readable and writable for a `[u64; 2]` span `[address, length]`
+///   for the call, and nothing else touches it during the call.
+/// - The span's `address` is 0 or the address of `length` readable `u64`
+///   recipe addresses, each 0 or a recipe of the game's live registry,
+///   unchanged during the call.
 pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     let disabled = DISABLED.load();
     if disabled.ids.is_empty() {
@@ -493,8 +497,9 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
     let Some(layout) = layout() else {
         return;
     };
-    // SAFETY: the game's span, as the caller says.
-    let [address, len] = unsafe { out.read() };
+    // SAFETY: the caller's contract makes `out` readable for a `[u64; 2]`
+    // span for the call.
+    let [address, len] = unsafe { enshwick::raw::read_at::<[u64; 2]>(out.cast(), 0) };
     if address == 0 || len == 0 {
         return;
     }
@@ -506,7 +511,11 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
         None
     };
     let list = known.unwrap_or_else(|| {
-        let list = filtered(address, len, layout.id, &disabled.ids);
+        // SAFETY: the caller's contract makes the non-zero `address` (checked
+        // earlier) the start of `len` readable recipe addresses, each 0 or a
+        // live recipe, unchanged during the call; `layout.id` is the
+        // reflected offset of a recipe's `u32` id.
+        let list = unsafe { filtered(address, len, layout.id, &disabled.ids) };
         LISTS.rcu(|old| {
             let mut lists = if old.generation == disabled.generation {
                 old.lists.clone()
@@ -522,40 +531,52 @@ pub(crate) unsafe fn filter(workshop: u32, out: *mut [u64; 2]) {
         list
     });
     if let Some(list) = list {
-        // SAFETY: the game's out span; the list is never freed.
-        unsafe { out.write([list.as_ptr().addr() as u64, list.len() as u64]) };
+        // SAFETY: the caller's contract makes `out` writable for a `[u64; 2]`
+        // span for the call; the leaked list it now names is never freed.
+        unsafe {
+            enshwick::raw::write_at(
+                out.cast(),
+                0,
+                [list.as_ptr().expose_provenance() as u64, list.len() as u64],
+            );
+        };
     }
 }
 
 /// The recipes of the `len` at `address` that are not disabled, kept for
 /// the process since the game reads what the lookup hands out; `None` when
 /// none is disabled.
+///
+/// # Safety
+///
+/// - `address` is the start of `len` readable `u64` recipe addresses,
+///   unchanged during the call.
+/// - Each entry is 0 or a live recipe readable for a `u32` at `id`.
 #[cold]
-fn filtered(
+unsafe fn filtered(
     address: u64,
     len: u64,
     id: usize,
     disabled: &FxHashSet<u32>,
 ) -> Option<&'static [u64]> {
     let len = usize::try_from(len).ok()?;
-    let address = usize::try_from(address).ok()?;
-    // SAFETY: the game's list of `len` recipe addresses, live while the
-    // registry is.
-    let list = unsafe {
-        core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u64>(address), len)
-    };
+    let list = core::ptr::with_exposed_provenance::<u8>(usize::try_from(address).ok()?);
     let recipe_id = |recipe: u64| -> Option<u32> {
-        let at = usize::try_from(recipe).ok()?.checked_add(id)?;
-        // SAFETY: each entry is a recipe of the registry, whose id sits at
-        // `id`.
-        Some(unsafe { core::ptr::with_exposed_provenance::<u32>(at).read_unaligned() })
+        let recipe = core::ptr::with_exposed_provenance::<u8>(usize::try_from(recipe).ok()?);
+        // SAFETY: the caller's contract makes each non-zero entry (the filter
+        // below passes 0 by) a live recipe readable for a `u32` at `id`.
+        Some(unsafe { enshwick::raw::read_at(recipe, id) })
     };
-    let kept: Vec<u64> = list
-        .iter()
-        .copied()
-        .filter(|&recipe| recipe == 0 || recipe_id(recipe).is_none_or(|id| !disabled.contains(&id)))
-        .collect();
-    (kept.len() != list.len()).then(|| &*Box::leak(kept.into_boxed_slice()))
+    let mut kept = Vec::new();
+    for index in 0..len {
+        // SAFETY: the caller's contract makes `address` the start of `len`
+        // readable `u64` entries, and `index` is below `len`.
+        let recipe: u64 = unsafe { enshwick::raw::read_at(list, index * size_of::<u64>()) };
+        if recipe == 0 || recipe_id(recipe).is_none_or(|id| !disabled.contains(&id)) {
+            kept.push(recipe);
+        }
+    }
+    (kept.len() != len).then(|| &*Box::leak(kept.into_boxed_slice()))
 }
 
 /// `enshwick recipes ...` on the server's console.

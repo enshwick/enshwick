@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, anyhow};
-use enshwick_reflect::{Image, Layout};
+use enshwick_gamedata::reflect::{Image, Layout};
 use serde::Deserialize;
 
 /// The section of a mod DLL that holds its point schemas.

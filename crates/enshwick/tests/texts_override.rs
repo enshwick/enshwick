@@ -39,7 +39,7 @@ mod tests {
         let loader = enshwick::test::FakeHost::new()
             .data_dir(data.to_str().unwrap())
             .install();
-        // SAFETY: the export of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Texty)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
         assert_eq!(status, Status::REFUSED);
         assert!(

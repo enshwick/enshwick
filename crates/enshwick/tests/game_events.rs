@@ -46,7 +46,7 @@ mod tests {
             .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
             .field_offset("keen::ecs::EntityDiedEvent", "late", 12)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.game_event_types(), [DIED, 0]);

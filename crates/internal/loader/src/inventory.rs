@@ -31,6 +31,7 @@ use enshwick::abi::{
 
 use crate::chains::LOADER;
 use crate::host::Loader;
+use crate::memory::{read, read_ptr, write};
 use crate::mid::MidLink;
 
 /// The build table ids this part of the loader names.
@@ -342,11 +343,15 @@ fn executor(loader: &Loader) -> Option<&'static Executor> {
 ///
 /// # Safety
 ///
-/// `address` is a function of type `F`.
+/// - `F` is a function pointer type.
+/// - `address` is 0 or the address of a function with `F`'s exact signature
+///   and calling convention, mapped for the process.
 unsafe fn function<F: Copy>(address: u64) -> Option<F> {
+    const { assert!(size_of::<F>() == size_of::<usize>()) };
     let address = usize::try_from(address).ok()?;
-    // SAFETY: the caller guarantees the type; `F` is a function pointer the
-    // size of `usize`.
+    // SAFETY: `F` is a function pointer the size of `usize` (asserted earlier),
+    // and the caller's contract makes the non-zero `address` a function of
+    // that type.
     (address != 0).then(|| unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
@@ -474,7 +479,8 @@ fn checked(loader: &Loader, executor: Executor, txn_size: usize) -> Option<Execu
         return None;
     }
     let layout = std::alloc::Layout::from_size_align(DESC_AREA + txn_size, 16).ok()?;
-    // SAFETY: a non-zero size; the block is never freed.
+    // SAFETY: `layout` has a non-zero size, at least `DESC_AREA` bytes; the
+    // block is never freed.
     let scratch = unsafe { std::alloc::alloc_zeroed(layout) };
     if scratch.is_null() {
         return None;
@@ -495,29 +501,11 @@ fn code_matches(loader: &Loader, symbol: &str) -> bool {
     let Ok(address) = usize::try_from(loader.base + rva) else {
         return false;
     };
-    // SAFETY: an address inside the game's image, which stays mapped.
-    let found = unsafe { read::<u64>(address) };
+    // SAFETY: `address` is the game's image base plus the table's offset of
+    // `symbol`, eight bytes of code inside the image, which stays mapped and
+    // is not patched before the hook this check guards.
+    let found = unsafe { read::<u64>(address, 0) };
     found == expected
-}
-
-/// Reads a `T` at `address`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(address: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance::<T>(address).read_unaligned() }
-}
-
-/// Writes `value` at `address`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(address: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance_mut::<T>(address).write_unaligned(value) };
 }
 
 /// A mod asks for inventories: allowed during init, on a build that has them.
@@ -618,7 +606,8 @@ pub(crate) fn submit(
     if request.ops.is_null() || count == 0 || count > MAX_OPS {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the mod passes `op_count` operations, read during the call.
+    // SAFETY: the mod's request carries a non-null `ops` (checked earlier) of
+    // `op_count` operations, borrowed for this call and copied here.
     let ops = unsafe { core::slice::from_raw_parts(request.ops, count) }.to_vec();
     if ops.iter().any(|op| !valid(op)) {
         return Status::BAD_ARGS;
@@ -698,23 +687,27 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
     if registry == 0 || item == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the game's lookup in its item registry, a hash map read.
+    // SAFETY: the game's lookup at the table's `item.info`, a read of the
+    // non-zero item registry (checked earlier) the inventory system last saw.
     let info = unsafe { (executor.item_lookup)(item, registry) };
     if info.is_null() {
         return Err(Status::MISSING);
     }
-    let info = info.addr();
     Ok(ItemData {
         header: Header::of::<ItemData>(),
         id: item,
-        // SAFETY: a live ItemInfo holds these fields.
-        max_stack: unsafe { read(info + executor.item_max_stack) },
-        // SAFETY: as above.
-        category: unsafe { read(info + executor.item_category) },
-        // SAFETY: as above.
-        rarity: unsafe { read(info + executor.item_rarity) },
-        // SAFETY: as above.
-        flags: unsafe { read(info + executor.item_flags) },
+        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
+        // (checked earlier), with `maxStackSize` at the reflected offset.
+        max_stack: unsafe { enshwick::raw::read_at(info, executor.item_max_stack) },
+        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
+        // (checked earlier), with `category` at the reflected offset.
+        category: unsafe { enshwick::raw::read_at(info, executor.item_category) },
+        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
+        // (checked earlier), with `rarity` at the reflected offset.
+        rarity: unsafe { enshwick::raw::read_at(info, executor.item_rarity) },
+        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
+        // (checked earlier), with `flags` at the reflected offset.
+        flags: unsafe { enshwick::raw::read_at(info, executor.item_flags) },
     })
 }
 
@@ -746,8 +739,10 @@ pub(crate) fn deliver() {
             op_count: u32::try_from(result.results.len()).unwrap_or(0),
             ops: result.results.as_ptr(),
         };
-        // SAFETY: the mod's callback with its pointer; the safe layer catches
-        // its panics. The result lives for the call.
+        // SAFETY: the request's `InventoryResultFn` lives in the mod's DLL,
+        // which stays loaded for the process, and takes the `user` word the
+        // mod passed; `data` and its results outlive the call, and the mod's
+        // safe layer catches its panics.
         crate::profile::call(
             result.owner,
             crate::profile::Feature::Inventory,
@@ -774,7 +769,8 @@ static INVENTORY_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("inventory req
 
 /// The row hook: runs the queued requests inside the inventory system.
 unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
-    // SAFETY: the stub passes its saved registers, valid for the call.
+    // SAFETY: the loader's mid-function stub passes null or its own saved
+    // registers, valid and unaliased for the call.
     let Some(registers) = (unsafe { registers.as_ref() }) else {
         return;
     };
@@ -782,15 +778,20 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         return;
     };
     let ctx = usize::try_from(registers.r13).unwrap_or(0);
-    // SAFETY: the system's live context, on its thread.
+    // SAFETY: at the table's `inventory.actions_row` (its bytes checked by
+    // `code_matches`), `r13` holds the inventory system's live context, used
+    // here on the system's thread while it runs.
     if executor.check_world && !unsafe { in_server_world(executor, ctx) } {
         return;
     }
     let view = usize::try_from(registers.rbp)
         .unwrap_or(0)
         .wrapping_sub(executor.view_frame);
-    // SAFETY: the view is filled before the loop and lives on the frame.
-    let registry: usize = unsafe { read(view + executor.view_item_registry) };
+    // SAFETY: at the table's `inventory.actions_row`, the system's view lies
+    // `inventory.view_frame` below `rbp` in its live frame, filled before the
+    // row loop (`inventory.view_fill` checked by `code_matches`); it holds the
+    // item registry pointer at the table's `inventory.view_item_registry`.
+    let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
     REGISTRY.store(registry, Ordering::Release);
     if !QUEUE.pending.load(Ordering::Acquire) {
         return;
@@ -803,7 +804,10 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
             if crate::host::is_off(request.owner) {
                 continue;
             }
-            // SAFETY: inside the inventory system, with its context and view.
+            // SAFETY: this runs in the row hook on the inventory system's
+            // thread inside its row loop, with the system's live context in
+            // `ctx` and its filled view at `view`, and `Turn` lets one
+            // transaction run at a time.
             let finished = unsafe { run(executor, ctx, view, &request) };
             finish([finished]);
         }
@@ -814,59 +818,77 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
 ///
 /// # Safety
 ///
-/// `ctx` is a live system context, used on its thread.
+/// - `ctx` is 0 or the address of a live system context, used on its
+///   system's thread while the system runs.
 unsafe fn in_server_world(executor: &Executor, ctx: usize) -> bool {
     let server = crate::world::server_world();
     if server == 0 || ctx == 0 {
         return false;
     }
-    // SAFETY: a context starts with its query descriptor.
-    let descriptor: usize = unsafe { read(ctx) };
-    if descriptor == 0 {
+    // SAFETY: the caller's contract makes the non-zero `ctx` (checked earlier)
+    // a live context, whose first word is its query descriptor pointer.
+    let descriptor = unsafe { read_ptr::<u8>(ctx, 0) }.cast_const();
+    if descriptor.is_null() {
         return false;
     }
-    // SAFETY: the descriptor holds its entity world.
-    let world: usize = unsafe { read(descriptor + executor.entity_world) };
-    world as u64 == server
+    // SAFETY: `descriptor` is the context's non-null live query descriptor
+    // (checked earlier), which keeps its entity world pointer at the table's
+    // `ecs.context_entity_world`.
+    let world = unsafe { enshwick::raw::read_ptr_at::<u8>(descriptor, executor.entity_world) };
+    world.addr() as u64 == server
 }
 
 /// Runs one request as one transaction.
 ///
 /// # Safety
 ///
-/// On the inventory system's thread, inside its row loop: `ctx` is its
-/// context and `view` its filled view.
+/// - The call runs on the inventory system's thread, inside its row loop,
+///   while the system runs.
+/// - `ctx` is the address of the system's live context and `view` of its
+///   view, filled before the row loop.
+/// - No other transaction runs on the scratch block during the call.
 unsafe fn run(executor: &Executor, ctx: usize, view: usize, request: &Request) -> Finished {
-    // SAFETY: the view's handles, filled before the loop.
-    let replication: usize = unsafe { read(view + executor.view_replication) };
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller's contract makes `view` the system's filled view,
+    // which holds the replication resource pointer at the table's
+    // `inventory.view_replication`.
+    let replication =
+        unsafe { read_ptr::<u8>(view, executor.view_replication) }.expose_provenance();
+    // SAFETY: this function's own contract, passed on: the system's thread
+    // inside its row loop, its live context and its filled view.
     let (mut touched, source) = unsafe { touched(executor, ctx, view, &request.ops) };
     let actor = if request.actor == 0 {
         let mut entity = 0u32;
-        // SAFETY: the current row's entity, from the system context.
+        // SAFETY: the game's `ecs.row_entity` on the system's live context,
+        // on its thread inside the row loop, with our own out word.
         let found = unsafe { (executor.row_entity)(ctx, &raw mut entity) };
         if found.is_null() {
             0
         } else {
-            // SAFETY: the game returns a pointer to the entity id.
-            unsafe { found.read() }
+            // SAFETY: `ecs.row_entity` returned a non-null (checked earlier)
+            // pointer to the row's `u32` entity id, live for the row.
+            unsafe { enshwick::raw::read_at(found.cast(), 0) }
         }
     } else {
         request.actor
     };
     let notify = request.flags & InventoryRequest::NOTIFY != 0;
-    // SAFETY: forwarded from the caller.
+    // SAFETY: this function's own contract, passed on: the system's thread
+    // inside its row loop, its live context and its filled view, and the
+    // scratch block free.
     unsafe { describe(executor, ctx, view, notify, actor, source) };
     let desc_ptr = core::ptr::with_exposed_provenance_mut::<u8>(executor.scratch);
     let txn_ptr = core::ptr::with_exposed_provenance_mut::<u8>(executor.scratch + DESC_AREA);
-    // SAFETY: the transaction's 16-aligned storage, sized from the table.
+    // SAFETY: `txn_ptr` is the scratch block's 16-aligned transaction area of
+    // the table's `inventory.txn_size` bytes, free by the caller's contract.
     unsafe { (executor.txn_new)(txn_ptr) };
-    // SAFETY: a constructed transaction and a filled descriptor.
+    // SAFETY: `txn_ptr` holds the transaction `txn_new` just constructed and
+    // `desc_ptr` the descriptor `describe` just filled.
     unsafe { (executor.txn_init)(txn_ptr, desc_ptr) };
     let allow_partial = request.flags & InventoryRequest::ALLOW_PARTIAL != 0;
     let mut results = Vec::with_capacity(request.ops.len());
     for op in &request.ops {
-        // SAFETY: an initialised transaction inside the system.
+        // SAFETY: `txn_ptr` holds the transaction `txn_init` initialised, on
+        // the inventory system's thread inside its row loop.
         let result = unsafe { apply(executor, txn_ptr, op) };
         results.push(result);
         if result.error != 0 || (!allow_partial && result.remaining != 0) {
@@ -882,20 +904,26 @@ unsafe fn run(executor: &Executor, ctx: usize, view: usize, request: &Request) -
         },
     );
     if committed {
-        // SAFETY: as above; commit consumes the op log.
+        // SAFETY: `txn_ptr` holds the initialised transaction, on the
+        // inventory system's thread inside its row loop; commit consumes the
+        // op log.
         unsafe { (executor.commit)(txn_ptr) };
     } else {
-        // SAFETY: as above; rollback restores every slot the ops wrote.
+        // SAFETY: `txn_ptr` holds the initialised transaction, on the
+        // inventory system's thread inside its row loop; rollback restores
+        // every slot the ops wrote.
         unsafe { (executor.rollback)(txn_ptr) };
     }
-    // SAFETY: the transaction, done with.
+    // SAFETY: `txn_ptr` holds the transaction, committed or rolled back and
+    // not used again before the next `txn_new`.
     unsafe { (executor.txn_drop)(txn_ptr) };
     touched.sort_unstable();
     touched.dedup();
     if replication != 0 {
         for &entity in touched.iter().filter(|&&e| e != 0) {
-            // SAFETY: the system's own replication resource, as vanilla
-            // resends after a transfer.
+            // SAFETY: `replication` is the system's own non-zero (checked
+            // earlier) replication resource from its view, used on its thread as
+            // vanilla resends after a transfer.
             unsafe { (executor.resend)(replication, entity) };
         }
     }
@@ -917,7 +945,10 @@ unsafe fn run(executor: &Executor, ctx: usize, view: usize, request: &Request) -
 ///
 /// # Safety
 ///
-/// As for [`run`].
+/// - The call runs on the inventory system's thread, inside its row loop,
+///   while the system runs.
+/// - `ctx` is the address of the system's live context and `view` of its
+///   view, filled before the row loop.
 #[expect(clippy::cast_possible_truncation, reason = "checked entity ids")]
 unsafe fn touched(
     executor: &Executor,
@@ -925,11 +956,15 @@ unsafe fn touched(
     view: usize,
     ops: &[InventoryOp],
 ) -> (Vec<u32>, u32) {
-    // SAFETY: the view's handles, filled before the loop.
-    let owners: u64 = unsafe { read(view + executor.view_owners) };
+    // SAFETY: the caller's contract makes `view` the system's filled view,
+    // which holds its `u64` owners handle at the table's
+    // `inventory.view_owners`.
+    let owners: u64 = unsafe { read(view, executor.view_owners) };
     let root = |slot: u64| {
         let mut out: Res = [0; 2];
-        // SAFETY: the game's walk up `OwnerRelationship`, inside the system.
+        // SAFETY: the game's walk up `OwnerRelationship` at the table's
+        // `ecs.slot_root`, with the view's owners handle and the system's live
+        // context, on its thread inside the row loop, into our own record.
         unsafe { (executor.slot_root)(&raw mut out, slot, owners, ctx) };
         let (error, root) = (out[0] as u8, out[1] as u32);
         if error == 0 { root } else { 0 }
@@ -966,7 +1001,11 @@ unsafe fn touched(
 ///
 /// # Safety
 ///
-/// As for [`run`].
+/// - The call runs on the inventory system's thread, inside its row loop,
+///   while the system runs.
+/// - `ctx` is the address of the system's live context and `view` of its
+///   view, filled before the row loop.
+/// - No other transaction runs on the scratch block during the call.
 unsafe fn describe(
     executor: &Executor,
     ctx: usize,
@@ -976,38 +1015,54 @@ unsafe fn describe(
     source: u32,
 ) {
     let desc = executor.scratch;
-    // SAFETY: the scratch block holds `desc_size` bytes from `desc`.
+    // SAFETY: the scratch block, free by the caller's contract, holds
+    // `DESC_AREA` bytes from `desc`, at least the table's
+    // `inventory.desc_size` that `desc_zero` clears.
     unsafe { (executor.desc_zero)(core::ptr::with_exposed_provenance_mut(desc)) };
     let mut flags = if notify { NOTIFY_FLAGS } else { 0 };
-    // SAFETY: the view's handles, filled before the loop.
-    let actors: u64 = unsafe { read(view + executor.view_actors) };
-    // SAFETY: the game's actor check, as its transfer handler calls it.
+    // SAFETY: the caller's contract makes `view` the system's filled view,
+    // which holds its `u64` actors handle at the table's
+    // `inventory.view_actors`.
+    let actors: u64 = unsafe { read(view, executor.view_actors) };
+    // SAFETY: the game's actor check at the table's `inventory.actor_flag`,
+    // with the system's live context and the view's actors handle, called as
+    // its transfer handler calls it, on the system's thread.
     if unsafe { (executor.actor_flag)(ctx, actors, actor) } != 0 {
         flags |= ACTOR_FLAG;
     }
     for &(at, from) in &executor.copies {
         if at + 8 <= executor.desc_size {
-            // SAFETY: a handle of the view.
-            let value: u64 = unsafe { read(view + from) };
-            // SAFETY: inside the descriptor.
-            unsafe { write(desc + at, value) };
+            // SAFETY: the caller's contract makes `view` the system's filled
+            // view, which holds a `u64` handle at the table's
+            // `inventory.copy_*.view` offset `from`.
+            let value: u64 = unsafe { read(view, from) };
+            // SAFETY: the eight bytes at `at` lie inside the descriptor's
+            // `desc_size` bytes (checked earlier), in the free scratch block.
+            unsafe { write(desc, at, value) };
         }
     }
-    // SAFETY: the descriptor's fields, inside it.
-    unsafe { write(desc, flags) };
-    // SAFETY: as above.
-    unsafe { write(desc + executor.desc_context, ctx) };
-    // SAFETY: as above.
-    unsafe { write(desc + executor.desc_actor, actor) };
-    // SAFETY: as above.
-    unsafe { write(desc + executor.desc_other, source) };
+    // SAFETY: the descriptor in the free scratch block starts with its
+    // one-byte flags.
+    unsafe { write(desc, 0, flags) };
+    // SAFETY: the descriptor in the free scratch block keeps the context at
+    // the table's `inventory.desc_context`, inside its `DESC_AREA` bytes.
+    unsafe { write(desc, executor.desc_context, ctx) };
+    // SAFETY: the descriptor in the free scratch block keeps the `u32` actor
+    // at the table's `inventory.desc_actor`, inside its `DESC_AREA` bytes.
+    unsafe { write(desc, executor.desc_actor, actor) };
+    // SAFETY: the descriptor in the free scratch block keeps the `u32` source
+    // at the table's `inventory.desc_other`, inside its `DESC_AREA` bytes.
+    unsafe { write(desc, executor.desc_other, source) };
 }
 
 /// Runs one operation in the transaction.
 ///
 /// # Safety
 ///
-/// `txn` is initialised, inside the inventory system.
+/// - `txn` holds a transaction `txn_init` initialised and not yet committed,
+///   rolled back or dropped.
+/// - The call runs on the inventory system's thread, inside its row loop,
+///   while the system runs.
 #[expect(clippy::cast_possible_truncation, reason = "checked by `valid`")]
 unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> InventoryOpResult {
     let mut res: Res = [0; 2];
@@ -1017,9 +1072,10 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
         InventoryOp::GIVE => {
             // `valid` refused a fill out of range.
             let fill = fill(op).unwrap_or(absent);
-            // SAFETY: the game's add with no level or rarity; its last
-            // option is the new items' fuel fill, which it puts on each new
-            // item's entity.
+            // SAFETY: the game's add at the table's `inventory.give` on the
+            // caller's live transaction, with our own result record and
+            // options, no level or rarity; its last option is the new items'
+            // fuel fill, which it puts on each new item's entity.
             unsafe {
                 (executor.give)(
                     out,
@@ -1035,21 +1091,28 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
             };
         }
         InventoryOp::TAKE => {
-            // SAFETY: the game's consume across the sub-inventories.
+            // SAFETY: the game's consume at the table's `inventory.take`
+            // across the sub-inventories, on the caller's live transaction,
+            // with our own result record.
             unsafe { (executor.take)(out, txn, op.target as u32, op.item, 0, op.count) };
         }
         InventoryOp::DESTROY_SLOT => {
-            // SAFETY: the game's destroy of one stack.
+            // SAFETY: the game's destroy of one stack at the table's
+            // `inventory.destroy_slot`, on the caller's live transaction,
+            // with our own result record.
             unsafe { (executor.destroy)(out, txn, op.target) };
         }
         InventoryOp::RENEW => {
-            // SAFETY: the game's destroy of one stack.
+            // SAFETY: the game's destroy of one stack at the table's
+            // `inventory.destroy_slot`, on the caller's live transaction,
+            // with our own result record.
             unsafe { (executor.destroy)(out, txn, op.target) };
             if res[0] as u8 == 0 {
                 let give = renew_give(op);
                 let fill = fill(&give).unwrap_or(absent);
-                // SAFETY: the game's add, asked for the slot just emptied,
-                // with the new items' fuel fill.
+                // SAFETY: the game's add at the table's `inventory.give` on
+                // the caller's live transaction, asked for the slot just
+                // emptied, with our own result record and options.
                 unsafe {
                     (executor.give)(
                         out,
@@ -1066,11 +1129,15 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
             }
         }
         InventoryOp::MOVE_SLOT if op.count == 0 => {
-            // SAFETY: the whole stack, a remainder back to the source.
+            // SAFETY: the game's move of the whole stack at the table's
+            // `inventory.move_slot`, on the caller's live transaction, with
+            // our own result record; a remainder goes back to the source.
             unsafe { (executor.move_slot)(out, txn, op.target, op.other as u32, 0, 1, 1, 1) };
         }
         InventoryOp::MOVE_SLOT => {
-            // SAFETY: `count` of the stack, a remainder back to the source.
+            // SAFETY: the game's move of `count` of the stack at the table's
+            // `inventory.move_amount`, on the caller's live transaction, with
+            // our own result record; a remainder goes back to the source.
             unsafe {
                 (executor.move_amount)(
                     out,
@@ -1086,7 +1153,9 @@ unsafe fn apply(executor: &Executor, txn: *mut u8, op: &InventoryOp) -> Inventor
         }
         _ => {
             let special = u8::from(op.flags & InventoryOp::INCLUDE_SPECIAL != 0);
-            // SAFETY: the game's take-all, remainders left in the source.
+            // SAFETY: the game's take-all at the table's
+            // `inventory.move_all`, on the caller's live transaction, with our
+            // own result record; remainders stay in the source.
             unsafe {
                 (executor.move_all)(out, txn, op.target as u32, op.other as u32, 1, special);
             };

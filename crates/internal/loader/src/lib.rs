@@ -54,6 +54,7 @@ mod ecs;
 mod emits;
 #[cfg(windows)]
 mod entities;
+pub mod errors;
 #[cfg(windows)]
 mod events;
 #[cfg_attr(
@@ -93,16 +94,25 @@ mod label;
 mod lobby;
 pub mod log;
 pub mod manifest;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build reads game memory")
+)]
+mod memory;
 #[cfg(windows)]
 mod mid;
 pub mod migrations;
 pub mod modlist;
+#[cfg(windows)]
+mod module;
 #[cfg(windows)]
 mod net;
 #[cfg(windows)]
 mod notices;
 #[cfg(windows)]
 mod packs;
+#[cfg(windows)]
+mod pages;
 #[cfg(windows)]
 mod patch;
 #[cfg_attr(
@@ -168,8 +178,10 @@ mod writes;
 ///
 /// # Safety
 ///
-/// Called by the stub, once, outside the Windows loader lock; `release` is
-/// valid from a stub of contract 2 or later.
+/// - Called by the stub, once per process.
+/// - Called outside the Windows loader lock.
+/// - When `stub_abi` is 2 or more, `release` is the stub's function that
+///   lets the server's own code go on; below 2 it is never called.
 #[cfg(windows)]
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn enshwick_start(

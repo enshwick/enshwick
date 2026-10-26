@@ -101,8 +101,8 @@ pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, Strin
         .and_then(|address| usize::try_from(address).ok())
         .zip(loader.offset(SESSION))
         .map(|(address, session)| Kick {
-            // SAFETY: the table's kick is the game's kick, with this
-            // signature, on this build.
+            // SAFETY: the table's `KICK` address is the game's kick on this
+            // build, whose signature `KickFn` states.
             call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
             session,
             host_machine: loader.offset(HOST_MACHINE),
@@ -343,30 +343,27 @@ fn disconnect(
 ) -> Result<u32, &'static str> {
     let server = crate::world::reader().map_err(|_| "not on the game thread")?;
     let machines = crate::world::machines(loader).map_err(|_| "the player slots do not read")?;
-    // SAFETY: the offset lies inside the server object, as the pattern
-    // that pins it reads it from the server in the game's own kick; the
-    // server is read on its own thread.
-    let session: usize = unsafe { crate::world::read(server, kick.session) };
-    if session == 0 {
+    // SAFETY: the session pointer lies at `kick.session` inside the server
+    // object, as the table's pattern for that offset reads it from the server
+    // in the game's own kick; `world::reader` succeeded, so this runs on the
+    // game thread, which alone writes the server.
+    let session = unsafe { crate::memory::read_ptr::<u8>(server, kick.session) };
+    if session.is_null() {
         return Err("the server has no session");
     }
     let host_machine = kick.host_machine.map(|offset| {
-        // SAFETY: a `u32` machine handle inside the live session, as the
-        // pattern that pins the offset finds the game's own kick compare
-        // it with the machine to kick; read on the game thread.
-        unsafe { crate::world::read::<u32>(session, offset) }
+        // SAFETY: `session` is non-null, checked just before, and holds a
+        // `u32` machine handle at `offset`, as the table's pattern for it finds
+        // the game's own kick compare it with the machine to kick; read on
+        // the game thread, which alone writes the session.
+        unsafe { crate::memory::read::<u32>(session.expose_provenance(), offset) }
     });
     let host_machine = host_machine.and_then(super::own_machine);
     let machine = super::machine_to_kick(&machines, key, host, host_machine)?;
-    // SAFETY: the game's kick with the server's session and the machine
-    // of one of its player slots, on the game thread, as the server's
-    // own account actions call it.
-    unsafe {
-        (kick.call)(
-            core::ptr::with_exposed_provenance_mut(session),
-            machine,
-            false,
-        );
-    };
+    // SAFETY: `kick.call` is the table's kick, typed `KickFn` on this build,
+    // called with the server's non-null session and the machine of one of
+    // its player slots, on the game thread, as the server's own account
+    // actions call it.
+    unsafe { (kick.call)(session, machine, false) };
     Ok(machine)
 }

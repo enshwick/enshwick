@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn sources_add_up_in_order_and_changes_are_raised_once() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Rpg)`.
         let started = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(started, Status::OK);
         let Kit {

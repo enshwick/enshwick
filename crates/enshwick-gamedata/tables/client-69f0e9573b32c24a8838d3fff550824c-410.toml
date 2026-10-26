@@ -1,5 +1,5 @@
 # The engine addresses Enshwick pins on one game build. `cargo enshwick
-# pin` writes it; the release workflow signs it with the project key.
+# pin` writes it, and the loader embeds it when it is built.
 
 name = "1.0 client (1269579)"
 side = "client"
