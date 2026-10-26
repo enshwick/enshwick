@@ -17,10 +17,9 @@
 //! and a server that runs join mods disconnects it. A client never says
 //! hello to a game that names no Enshwick, whose chat would show the line.
 //!
-//! A frame is base64 of a small header and up to one line's worth of the
-//! message; a message of up to [`MAX_MESSAGE`] bytes takes up to
-//! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
-//! over it, counting the drops for the status summary.
+//! The frames and control messages are in [`wire`](crate::wire). Each side keeps
+//! a rate per peer and drops what is over it, counting the drops for the
+//! status summary.
 
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
@@ -37,37 +36,12 @@ use rustc_hash::FxHashMap;
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 
-mod frame;
-mod peer;
+use crate::wire::{
+    CONTROL, Frame, ITEM_DATA, NOTICE, PART_BYTES, PREFIX, Peer, UI_DEMO, WELCOME, assemble,
+    control, demo_position, frames, hello, parse, read_hello, remote_message,
+};
+pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE, frame_body, is_frame};
 
-use frame::{Frame, assemble, frames, parse};
-use peer::Peer;
-
-/// The prefix of a frame line, both ways.
-const PREFIX: &str = "/enshwick-net ";
-/// The version of the frame protocol.
-const PROTOCOL: u8 = 1;
-/// The largest message a mod may send, in bytes.
-pub(crate) const MAX_MESSAGE: usize = 4096;
-/// The most frames one message takes.
-const MAX_PARTS: usize = 8;
-/// Message bytes in one frame: a line holds 1024 bytes, less the prefix,
-/// as base64 of the header and the part.
-const PART_BYTES: usize = 720;
-/// The channel of the protocol's own frames.
-const CONTROL: u32 = 0;
-/// Control frames: a client's hello and the server's answer.
-const HELLO: u8 = 1;
-const WELCOME: u8 = 2;
-/// A control frame from the server: a notice for the client to show.
-const NOTICE: u8 = 3;
-/// A control frame from the server: item data records.
-const ITEM_DATA: u8 = 4;
-/// A control frame from the server: open the interface demo.
-const UI_DEMO: u8 = 5;
-/// Messages each peer may send per second, and in one burst.
-const RATE: f64 = 20.0;
-const BURST: f64 = 40.0;
 /// Frames waiting to leave at most, per side.
 const MAX_WAITING: usize = 512;
 /// Frames a client takes from its server per second, and in one burst. The
@@ -229,11 +203,6 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
     );
 }
 
-/// A control frame's message: its kind and the protocol version.
-fn control(kind: u8) -> Vec<u8> {
-    vec![kind, PROTOCOL]
-}
-
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
 pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status> {
@@ -287,17 +256,6 @@ pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
     Ok(())
 }
 
-/// The position a demo frame carries: three little-endian `i64`.
-fn demo_position(bytes: &[u8]) -> Option<[i64; 3]> {
-    let (axes, _) = bytes.as_chunks::<8>();
-    match axes {
-        [x, y, z, ..] => Some([x, y, z].map(|a| i64::from_le_bytes(*a))),
-        _ => None,
-    }
-}
-
-/// The longest control message, in bytes, with its kind and version.
-pub(crate) const MAX_CONTROL: usize = PART_BYTES * MAX_PARTS - 2;
 /// Numbers the multi-part control messages this side sends.
 static CONTROL_MESSAGE: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(1);
 
@@ -363,70 +321,12 @@ pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
     })
 }
 
-/// A control message's kind and body, when it is a settings message.
-fn remote_message(data: &[u8]) -> Option<crate::remote::Message> {
-    let (&kind, rest) = data.split_first()?;
-    let (&version, body) = rest.split_first()?;
-    if version != PROTOCOL {
-        return None;
-    }
-    crate::remote::Message::read(kind, body)
-}
-
-/// Bit of a hello's flags: the mod list is whole.
-const HELLO_COMPLETE: u8 = 1;
-/// A hello's flags and host number, after its kind and version.
-const HELLO_HEAD: usize = 1 + 8;
-
-/// A client's hello: the control kind and version, flags, the host number
-/// `nonce` (0 unless the client hosts the game), then the client's join
-/// mods, `id@version,...`, cut after the last whole entry that fits.
-fn hello(mods: &str, nonce: u64) -> Vec<u8> {
-    let mut data = control(HELLO);
-    let room = MAX_CONTROL - data.len() - HELLO_HEAD;
-    let kept = if mods.len() <= room {
-        mods
-    } else {
-        let cut = mods.as_bytes()[..=room]
-            .iter()
-            .rposition(|&b| b == b',')
-            .unwrap_or(0);
-        &mods[..cut]
-    };
-    data.push(if kept.len() == mods.len() {
-        HELLO_COMPLETE
-    } else {
-        0
-    });
-    data.extend_from_slice(&nonce.to_le_bytes());
-    data.extend_from_slice(kept.as_bytes());
-    data
-}
-
-/// What a hello says; `None` when `data` is no hello. A hello without its
-/// head reads as a whole empty list, an unreadable list as empty.
-fn read_hello(data: &[u8]) -> Option<crate::admission::Hello> {
-    let rest = data.strip_prefix(control(HELLO).as_slice())?;
-    let Some((&flags, rest)) = rest.split_first() else {
-        return Some(crate::admission::Hello {
-            complete: true,
-            ..crate::admission::Hello::default()
-        });
-    };
-    let (nonce, mods) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
-    Some(crate::admission::Hello {
-        mods: core::str::from_utf8(mods).unwrap_or_default().to_owned(),
-        complete: flags & HELLO_COMPLETE != 0,
-        nonce: u64::from_le_bytes(*nonce),
-    })
-}
-
 /// Makes `key` a peer after its hello; true for a new one.
 fn greet(state: &mut State, key: u64) -> bool {
     let pending = state.greeting.remove(&key);
     match state.peers.entry(key) {
         std::collections::hash_map::Entry::Vacant(entry) => {
-            entry.insert(pending.unwrap_or_else(Peer::new));
+            entry.insert(pending.unwrap_or_default());
             true
         }
         std::collections::hash_map::Entry::Occupied(_) => false,
@@ -445,7 +345,7 @@ fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>
     let peer = if known {
         state.peers.get_mut(&key)?
     } else {
-        if frame.channel != CONTROL {
+        if frame.channel() != CONTROL {
             return None;
         }
         let room = state.greeting.len() < MAX_GREETING;
@@ -456,7 +356,7 @@ fn take_frame(state: &mut State, key: u64, frame: Frame) -> Option<(u32, Vec<u8>
         }
     };
     // A peer's message takes one from its rate; a stranger's every frame.
-    if (frame.index == 0 || !known) && !peer.admit() {
+    if (frame.index() == 0 || !known) && !peer.admit() {
         dropped();
         return None;
     }
@@ -555,26 +455,27 @@ pub(crate) fn client_received(text: &str) -> bool {
         dropped();
         return true;
     };
-    if frame.channel == CONTROL {
+    if frame.channel() == CONTROL {
         // Only the remote settings messages take more than one frame.
-        let single = frame.total == 1;
-        if single && frame.part == control(WELCOME) {
+        let single = frame.total() == 1;
+        if single && frame.part() == control(WELCOME) {
             let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
                 crate::actions::joined();
             }
         } else if single
-            && let Some(records) = frame.part.strip_prefix(control(ITEM_DATA).as_slice())
+            && let Some(records) = frame.part().strip_prefix(control(ITEM_DATA).as_slice())
         {
             crate::item_data::received(records);
         } else if single
-            && let Some(rest) = frame.part.strip_prefix(control(NOTICE).as_slice())
+            && let Some(rest) = frame.part().strip_prefix(control(NOTICE).as_slice())
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
             crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
-        } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
+        } else if single && let Some(rest) = frame.part().strip_prefix(control(UI_DEMO).as_slice())
+        {
             crate::ui::open_demo(demo_position(rest));
         } else {
             let whole = state(|s| {
@@ -607,16 +508,6 @@ fn admit_from_server(state: &mut State, now: Instant) -> bool {
         .incoming
         .get_or_insert_with(|| Peer::with_tokens(SERVER_FRAME_BURST))
         .admit_at(now, SERVER_FRAME_RATE, SERVER_FRAME_BURST)
-}
-
-/// Whether `text` is a frame line, which no chat shows.
-pub(crate) fn is_frame(text: &[u8]) -> bool {
-    text.starts_with(PREFIX.as_bytes())
-}
-
-/// The frame a frame line carries, after its prefix.
-pub(crate) fn frame_body(line: &str) -> Option<&str> {
-    line.strip_prefix(PREFIX).map(str::trim)
 }
 
 /// Notes whether the server the client joins advertises Enshwick, and
@@ -790,8 +681,8 @@ fn dropped() {
 
 #[cfg(test)]
 mod tests {
-    use super::frame::Partial;
     use super::*;
+    use crate::wire::Partial;
 
     pub(super) fn parsed(lines: &[String]) -> Vec<Frame> {
         lines
@@ -820,26 +711,6 @@ mod tests {
         assert!(hellos < 50, "{hellos}");
         assert!(!greet(&mut state, 7));
         assert_eq!(state.peers[&7].partial.len(), 1);
-    }
-
-    #[test]
-    fn a_hello_names_the_join_mods_within_its_frames() {
-        let said = read_hello(&hello("you.trading-post@0.3.0,zones@0.1.0", 9)).unwrap();
-        assert_eq!(said.mods, "you.trading-post@0.3.0,zones@0.1.0");
-        assert!(said.complete);
-        assert_eq!(said.nonce, 9);
-        let bare = read_hello(&control(HELLO)).unwrap();
-        assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
-        assert_eq!(read_hello(&control(WELCOME)), None);
-        let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
-        let long = hello(&many.join(","), 0);
-        assert!(control_frames(&long).is_some());
-        let cut = read_hello(&long).unwrap();
-        assert!(!cut.complete, "a cut list says so");
-        assert!(
-            cut.mods.split(',').all(|entry| entry.ends_with("@1.0.0")),
-            "cut at an entry"
-        );
     }
 
     #[test]
@@ -944,17 +815,6 @@ mod tests {
             let at = start + std::time::Duration::from_secs_f64(f64::from(step) / 60.0);
             (0..16).all(|_| admit_from_server(&mut honest, at))
         }));
-    }
-
-    #[test]
-    fn a_demo_frame_carries_a_position_or_none() {
-        let mut data = Vec::new();
-        for axis in [1i64 << 32, -5, 7] {
-            data.extend_from_slice(&axis.to_le_bytes());
-        }
-        assert_eq!(demo_position(&data), Some([1 << 32, -5, 7]));
-        assert_eq!(demo_position(&data[..16]), None);
-        assert_eq!(demo_position(&[]), None);
     }
 
     #[test]
