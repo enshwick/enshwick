@@ -55,6 +55,7 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 bytemuck.workspace = true
+criterion.workspace = true
 insta.workspace = true
 
 [package.metadata.enshwick]
@@ -64,3 +65,7 @@ windows-tests = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "item_kinds"
+harness = false

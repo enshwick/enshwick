@@ -380,6 +380,7 @@ fn write_differences(held: usize, new: usize, len: usize) -> usize {
 /// Ends registration and links the database when anything is served.
 pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
+    crate::item_kinds::seal(&loader.reflection);
     let renames = crate::migrations::renamed(loader);
     let stand_ins = {
         let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
@@ -727,22 +728,33 @@ unsafe extern "system" fn open(
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     };
     let Some((index, entry)) = found else {
-        if let Some(new) = new {
+        let opened = if let Some(new) = new {
             // SAFETY: this detour runs only as the `resource.open` link, so
             // the slot holds the next function of that signature; the game's
             // out and database pass unchanged with a key on this stack.
-            return unsafe { OPEN_NEXT.get()(out, database, &raw const new) };
-        }
-        if let Some(vanilla) = aliased {
+            unsafe { OPEN_NEXT.get()(out, database, &raw const new) }
+        } else if let Some(vanilla) = aliased {
             // SAFETY: this detour runs only as the `resource.open` link, so
             // the slot holds the next function of that signature; the game's
             // out and database pass unchanged with a key on this stack.
-            return unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) };
+            unsafe { OPEN_NEXT.get()(out, database, &raw const vanilla) }
+        } else {
+            // SAFETY: this detour runs only as the `resource.open` link, so
+            // the slot holds the next function of that signature; the game's
+            // arguments pass unchanged.
+            unsafe { OPEN_NEXT.get()(out, database, key) }
+        };
+        if wanted
+            .as_ref()
+            .is_some_and(|key| key.type_hash == crate::catalogue::types::ITEM_INFO)
+            && !out.is_null()
+        {
+            // SAFETY: `out` is non-null by the check before it and is the
+            // open's u32 out handle, which the game's open just wrote; zero
+            // when the open failed, which `opened` skips.
+            crate::item_kinds::ITEMS.opened(unsafe { read_at(out.cast_const().cast(), 0) });
         }
-        // SAFETY: this detour runs only as the `resource.open` link, so the
-        // slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        return unsafe { OPEN_NEXT.get()(out, database, key) };
+        return opened;
     };
     let mut base_handle = 0u32;
     // SAFETY: this detour runs only as the `resource.open` link, so the slot
@@ -776,7 +788,17 @@ unsafe extern "system" fn resolve(
         // SAFETY: this detour runs only as the `resource.resolve` link, so
         // the slot holds the next function of that signature; the game's
         // arguments pass unchanged.
-        return unsafe { RESOLVE_NEXT.get()(out, database, handle) };
+        let resolved = unsafe { RESOLVE_NEXT.get()(out, database, handle) };
+        if crate::item_kinds::ITEMS.pending() && !out.is_null() {
+            // SAFETY: `out` is non-null by the check before it and is the
+            // resolve's out triple of three u64, which the game's resolve
+            // just wrote.
+            let [data, len, _] = unsafe { read_at::<[u64; 3]>(out.cast_const().cast(), 0) };
+            if data != 0 && crate::item_kinds::ITEMS.take_opened(handle) {
+                record_item(data, len);
+            }
+        }
+        return resolved;
     };
     // A served handle never reaches the game's resolve, even once the
     // resources are off: it would read past the game's table.
@@ -829,6 +851,9 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     let result = (current, current_len);
     state.built = Some(result);
     state.built_by.clone_from(&applied);
+    if entry.key.type_hash == crate::catalogue::types::ITEM_INFO {
+        record_item(current as u64, current_len as u64);
+    }
     if entry.key == recipe_registry() {
         crate::code::recipes_served(current, current_len);
         crate::recipes::registry_built(current, current_len);
@@ -853,6 +878,29 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         );
     }
     Some(result)
+}
+
+/// Records the equipment slot of the item whose resolved `ItemInfo` is the
+/// `len` bytes at `data`; nothing when it is not resident or too short.
+fn record_item(data: u64, len: u64) {
+    let (Ok(data), Ok(len)) = (usize::try_from(data), usize::try_from(len)) else {
+        return;
+    };
+    let Some((id_at, slot_at)) = crate::item_kinds::ITEMS.offsets() else {
+        return;
+    };
+    if data == 0 || id_at.saturating_add(4) > len || slot_at >= len {
+        return;
+    }
+    let info = core::ptr::with_exposed_provenance::<u8>(data);
+    // SAFETY: the game resolved this `ItemInfo` to `len` resident bytes at
+    // `data`, non-zero by the check before it, and its u32 item id at the
+    // reflected `id_at` ends within them, checked before it.
+    let item: u32 = unsafe { read_at(info, id_at) };
+    // SAFETY: as for the item id: the reflected `slot_at`, below `len` by the
+    // check before it, holds the one-byte equipment slot `seal` checked.
+    let slot: u8 = unsafe { read_at(info, slot_at) };
+    crate::item_kinds::ITEMS.record(item, slot);
 }
 
 /// Runs the patches of the mods still on, or of the mods `only` names,

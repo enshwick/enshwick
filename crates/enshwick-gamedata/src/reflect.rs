@@ -54,6 +54,7 @@ pub struct TypeInfo<'a> {
     align: u16,
     base: Option<&'a str>,
     fields: Vec<Field<'a>>,
+    enum_values: Vec<EnumValue<'a>>,
 }
 
 impl<'a> TypeInfo<'a> {
@@ -128,6 +129,63 @@ impl<'a> TypeInfo<'a> {
     #[must_use]
     pub fn fields(&self) -> &[Field<'a>] {
         &self.fields
+    }
+
+    /// The named constants of an enum type, in the engine's order; empty
+    /// for any other type.
+    ///
+    /// # Examples
+    ///
+    /// See [`EnumValue`].
+    #[must_use]
+    pub fn enum_values(&self) -> &[EnumValue<'a>] {
+        &self.enum_values
+    }
+}
+
+/// A named constant of a reflected enum type.
+///
+/// # Examples
+///
+/// ```no_run
+/// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let bytes = std::fs::read("enshrouded_server.exe")?;
+/// let image = Image::parse(&bytes, Layout::File, None)?;
+/// let reflection = Reflection::scan(&image);
+/// let slots = reflection.type_info("keen::EquipmentSlotType")?;
+/// let invalid = slots.enum_values().iter().find(|v| v.name() == "Invalid").ok_or("no Invalid")?;
+/// assert_eq!(invalid.value(), 0);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EnumValue<'a> {
+    name: &'a str,
+    value: u64,
+}
+
+impl<'a> EnumValue<'a> {
+    /// The constant's name, without its type.
+    ///
+    /// # Examples
+    ///
+    /// See [`EnumValue`].
+    #[must_use]
+    pub fn name(&self) -> &'a str {
+        self.name
+    }
+
+    /// Its value; the type's [`size`](TypeInfo::size) says how wide the
+    /// engine stores it.
+    ///
+    /// # Examples
+    ///
+    /// See [`EnumValue`].
+    #[must_use]
+    pub fn value(&self) -> u64 {
+        self.value
     }
 }
 
@@ -298,11 +356,14 @@ const DESCRIPTOR_FULL_NAME: u64 = 0x60;
 /// The inner type: a struct's base, an array's element.
 const DESCRIPTOR_INNER: u64 = 0x78;
 const DESCRIPTOR_SIZE_ALIGN: u64 = 0x80;
+/// The count of fields, or of constants in an enum.
 const DESCRIPTOR_FIELD_COUNT: u64 = 0x88;
+/// The type's kind byte: [`KIND_STRUCT`], [`KIND_ENUM`] and others.
 const DESCRIPTOR_KIND: u64 = 0x8c;
 /// The kind byte of a struct; arrays, strings and handles also carry an
 /// inner type, which is not a base.
 const KIND_STRUCT: u8 = 0x12;
+const KIND_ENUM: u8 = 0x0c;
 /// Bases deeper than this are taken for a loop in bad data.
 const MAX_BASES: usize = 32;
 /// Where a type descriptor holds its hash, whose low 32 bits are the
@@ -313,6 +374,10 @@ const DESCRIPTOR_FIELDS: u64 = 0x98;
 const FIELD_RECORD: u64 = 48;
 const FIELD_TYPE: u64 = 16;
 const FIELD_OFFSET: u64 = 24;
+/// An enum's constants: records of a name slice, then the value as a u64.
+const DESCRIPTOR_ENUM_VALUES: u64 = 0xa0;
+const ENUM_RECORD: u64 = 0x28;
+const ENUM_VALUE: u64 = 16;
 const SYSTEM_ENTRY: u64 = 0x10;
 /// Component lists in a system record: triggers, reads, writes.
 const SYSTEM_LISTS: [u64; 3] = [0x18, 0x38, 0x58];
@@ -483,6 +548,37 @@ impl<'a> Reflection<'a> {
             })
     }
 
+    /// The value of the constant `name` of the enum type named `type_name`,
+    /// such as `Invalid` in `keen::EquipmentSlotType`.
+    ///
+    /// # Errors
+    ///
+    /// [`LookupError`] when the type or the constant is missing or
+    /// ambiguous.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// assert_eq!(reflection.enum_value("keen::EquipmentSlotType", "Invalid")?, 0);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn enum_value(&self, type_name: &str, name: &str) -> Result<u64, LookupError> {
+        let info = self.type_info(type_name)?;
+        let mut found = info.enum_values.iter().filter(|v| v.name == name);
+        match (found.next(), found.next()) {
+            (Some(v), None) => Ok(v.value),
+            (None, _) => Err(LookupError::Missing(format!("{type_name}::{name}"))),
+            (Some(_), Some(_)) => Err(LookupError::Ambiguous(format!("{type_name}::{name}"))),
+        }
+    }
+
     /// Every type name found, in no set order.
     ///
     /// # Examples
@@ -578,12 +674,16 @@ impl<'a> Reader<'_, 'a> {
         let size = self.image.u32(at(DESCRIPTOR_SIZE_ALIGN)?)?;
         let align = self.image.u16(at(DESCRIPTOR_SIZE_ALIGN + 4)?)?;
         let count = self.image.u32(at(DESCRIPTOR_FIELD_COUNT)?)?;
-        let fields = if count > 0 && count <= MAX_FIELDS {
-            self.fields(self.image.u64(at(DESCRIPTOR_FIELDS)?)?, count)
-        } else {
-            Vec::new()
-        };
-        let base = if self.image.read(at(DESCRIPTOR_KIND)?, 1)? == [KIND_STRUCT] {
+        let kind = self.image.read(at(DESCRIPTOR_KIND)?, 1)?;
+        let (mut fields, mut enum_values) = (Vec::new(), Vec::new());
+        if count > 0 && count <= MAX_FIELDS {
+            if kind == [KIND_ENUM] {
+                enum_values = self.enum_values(self.image.u64(at(DESCRIPTOR_ENUM_VALUES)?)?, count);
+            } else {
+                fields = self.fields(self.image.u64(at(DESCRIPTOR_FIELDS)?)?, count);
+            }
+        }
+        let base = if kind == [KIND_STRUCT] {
             self.type_name(self.image.u64(at(DESCRIPTOR_INNER)?)?)
         } else {
             None
@@ -595,7 +695,20 @@ impl<'a> Reader<'_, 'a> {
             align,
             base,
             fields,
+            enum_values,
         })
+    }
+
+    fn enum_values(&self, table: u64, count: u32) -> Vec<EnumValue<'a>> {
+        (0..u64::from(count))
+            .filter_map(|i| {
+                let record = table.checked_add(i * ENUM_RECORD)?;
+                Some(EnumValue {
+                    name: self.slice(record)?,
+                    value: self.image.u64(record.checked_add(ENUM_VALUE)?)?,
+                })
+            })
+            .collect()
     }
 
     /// The full name of the descriptor whose short name slot `ptr` points
@@ -911,6 +1024,106 @@ mod tests {
             0,
             "a loop of bases ends"
         );
+    }
+
+    /// Writes an enum descriptor named `name` at `descriptor` with the
+    /// constants `values`, its strings from `strings` on.
+    fn put_enum(
+        fake: &mut Fake,
+        descriptor: u64,
+        strings: u64,
+        name: &str,
+        values: &[(&str, u64)],
+    ) {
+        fake.slice(descriptor + DESCRIPTOR_SHORT_NAME, strings, "Slot");
+        fake.slice(descriptor + DESCRIPTOR_FULL_NAME, strings + 0x10, name);
+        fake.put(descriptor + DESCRIPTOR_SIZE_ALIGN, &1u32.to_le_bytes());
+        fake.put(descriptor + DESCRIPTOR_SIZE_ALIGN + 4, &1u16.to_le_bytes());
+        let count = u32::try_from(values.len()).unwrap();
+        fake.put(descriptor + DESCRIPTOR_FIELD_COUNT, &count.to_le_bytes());
+        fake.put(descriptor + DESCRIPTOR_KIND, &[KIND_ENUM]);
+        fake.put(
+            descriptor + DESCRIPTOR_HASH,
+            &fnv1a32(name.as_bytes()).to_le_bytes(),
+        );
+        let table = strings + 0x100;
+        fake.put_u64(descriptor + DESCRIPTOR_ENUM_VALUES, table);
+        for (i, &(constant, value)) in values.iter().enumerate() {
+            let record = table + i as u64 * ENUM_RECORD;
+            fake.slice(record, strings + 0x40 + i as u64 * 0x20, constant);
+            fake.put_u64(record + ENUM_VALUE, value);
+        }
+    }
+
+    #[test]
+    fn an_enum_s_constants_are_found_by_name() {
+        let mut fake = Fake::new();
+        let name = "keen::EquipmentSlotType";
+        put_enum(
+            &mut fake,
+            rdata(0x100),
+            rdata(0x800),
+            name,
+            &[("Invalid", 0), ("Roof", 11), ("Overgrowth", 12)],
+        );
+
+        let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let info = reflection.type_info(name).unwrap();
+        assert!(info.fields().is_empty());
+        let names: Vec<&str> = info.enum_values().iter().map(EnumValue::name).collect();
+        assert_eq!(names, ["Invalid", "Roof", "Overgrowth"]);
+        assert_eq!(reflection.enum_value(name, "Roof"), Ok(11));
+        assert_eq!(
+            reflection.enum_value(name, "Terrain"),
+            Err(LookupError::Missing(format!("{name}::Terrain")))
+        );
+        assert_eq!(
+            reflection.enum_value("keen::NoSuchEnum", "Roof"),
+            Err(LookupError::Missing("keen::NoSuchEnum".into()))
+        );
+    }
+
+    #[test]
+    fn a_struct_reads_no_enum_constants_and_an_enum_no_fields() {
+        let mut fake = Fake::new();
+        let name = "keen::EquipmentSlotType";
+        put_enum(&mut fake, rdata(0x100), rdata(0x800), name, &[("Roof", 11)]);
+        // The same descriptor without the enum kind is a struct whose field
+        // table is null.
+        fake.put(rdata(0x100) + DESCRIPTOR_KIND, &[0]);
+
+        let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let info = reflection.type_info(name).unwrap();
+        assert!(info.enum_values().is_empty());
+        assert!(info.fields().is_empty());
+        assert_eq!(
+            reflection.enum_value(name, "Roof"),
+            Err(LookupError::Missing(format!("{name}::Roof")))
+        );
+    }
+
+    #[test]
+    fn an_unreadable_enum_record_drops_that_constant_only() {
+        let mut fake = Fake::new();
+        let name = "keen::EquipmentSlotType";
+        put_enum(
+            &mut fake,
+            rdata(0x100),
+            rdata(0x800),
+            name,
+            &[("Invalid", 0), ("Roof", 11), ("Overgrowth", 12)],
+        );
+        // The second record's name points outside the image.
+        let table = rdata(0x900);
+        fake.put_u64(table + ENUM_RECORD, 0x10);
+
+        let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+        let reflection = Reflection::scan(&image);
+        let info = reflection.type_info(name).unwrap();
+        assert_eq!(info.enum_values().len(), 2);
+        assert_eq!(reflection.enum_value(name, "Overgrowth"), Ok(12));
     }
 
     #[test]

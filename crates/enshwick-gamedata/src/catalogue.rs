@@ -8,6 +8,7 @@
 use crate::reflect::{Reflection, TypeInfo};
 use enshwick::Off;
 use enshwick::content::EngineFacts;
+use enshwick::content::recipes::RecipeKind;
 
 /// How one engine fact is found.
 ///
@@ -407,6 +408,14 @@ pub const FACTS: &[(&str, Fact)] = &[
             ("keen::EquipmentSetup", "placedEntity"),
         ]),
     ),
+    (
+        "item_info.equipment_slot",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "slot"),
+        ]),
+    ),
+    ("equipment_slot", Fact::Type("keen::EquipmentSlotType")),
     ("item_stat", Fact::Type("keen::ImpactUiValue")),
     ("item_stat.label", offset("keen::ImpactUiValue", "locaId")),
     (
@@ -594,6 +603,57 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::FbUiCraftingRecipeSet", "entries"),
     ),
 ];
+
+/// The id of the enum an item's equipment slot holds, which
+/// [`RECIPE_KINDS`] names constants of.
+pub const SLOT_TYPE: &str = "equipment_slot";
+
+/// The id of the offset of the item id in an item's static data.
+pub const ITEM_ID: &str = "item_info.id";
+
+/// The id of the offset of the equipment slot in an item's static data.
+pub const ITEM_SLOT: &str = "item_info.equipment_slot";
+
+/// The kind of the recipes that make an item, by the name of the constant
+/// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is
+/// [`RecipeKind::Other`]. A new kind is a row here.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::recipes::RecipeKind;
+/// use enshwick_gamedata::catalogue::RECIPE_KINDS;
+///
+/// assert!(RECIPE_KINDS.iter().any(|&(_, kind)| kind == RecipeKind::Roof));
+/// ```
+pub const RECIPE_KINDS: &[(&str, RecipeKind)] = &[
+    ("BlueprintMaterial_Default", RecipeKind::BuildingBlock),
+    ("BlueprintMaterial_Roof", RecipeKind::Roof),
+    ("OvergrowthMaterial", RecipeKind::Overgrowth),
+    ("TerrainMaterial", RecipeKind::Terrain),
+];
+
+/// The slot value each row of [`RECIPE_KINDS`] has in `reflection`, with
+/// its kind; a constant the build does not reflect is left out.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::catalogue::recipe_kind_slots;
+/// use enshwick_gamedata::reflect::Reflection;
+///
+/// fn slots(reflection: &Reflection<'_>) -> usize {
+///     recipe_kind_slots(reflection).len()
+/// }
+/// ```
+#[must_use]
+pub fn recipe_kind_slots(reflection: &Reflection<'_>) -> Vec<(u64, RecipeKind)> {
+    let slot = type_name(SLOT_TYPE);
+    RECIPE_KINDS
+        .iter()
+        .filter_map(|&(name, kind)| Some((reflection.enum_value(slot, name).ok()?, kind)))
+        .collect()
+}
 
 const fn offset(ty: &'static str, field: &'static str) -> Fact {
     Fact::Offset { ty, field, plus: 0 }
@@ -845,6 +905,40 @@ mod tests {
                     assert!(steps.iter().all(|(ty, _)| ty.starts_with("keen::")), "{id}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn each_slot_constant_names_one_kind() {
+        let mut names: Vec<&str> = RECIPE_KINDS.iter().map(|&(name, _)| name).collect();
+        names.sort_unstable();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), before);
+        assert!(matches!(fact(SLOT_TYPE), Some(Fact::Type(_))));
+        assert!(matches!(fact(ITEM_ID), Some(Fact::Offset { .. })));
+        assert!(matches!(fact(ITEM_SLOT), Some(Fact::Path(_))));
+    }
+
+    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
+    /// (skipped without them), every slot constant of the kinds resolves,
+    /// each to a value of its own.
+    #[test]
+    fn every_recipe_kind_s_slot_is_reflected() {
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image =
+                crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let slots = recipe_kind_slots(&reflection);
+            assert_eq!(slots.len(), RECIPE_KINDS.len(), "{var}");
+            let mut values: Vec<u64> = slots.iter().map(|&(value, _)| value).collect();
+            values.sort_unstable();
+            values.dedup();
+            assert_eq!(values.len(), RECIPE_KINDS.len(), "{var}");
         }
     }
 
