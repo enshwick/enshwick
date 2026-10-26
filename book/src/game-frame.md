@@ -12,7 +12,7 @@ In the common case a hook does not allocate, lock, format or log.
 
 - **No allocation.** No `Vec`, `String`, `Box` or `format!` per call. Use stack
   arrays, or a `thread_local!` value reused between calls, as
-  [`enshwick-survivors-per-altar`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-survivors-per-altar/src/policy.rs)
+  [`enshwick-survivors-per-altar`](https://github.com/enshwick/mod-survivors-per-altar/blob/main/src/policy.rs)
   does for its plan.
 - **No locks** on the fast path. A lock held by another thread stalls the
   frame; a lock the hook already holds, entered again through a nested hooked
