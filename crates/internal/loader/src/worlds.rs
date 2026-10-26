@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::config::{Schema, Scope, Stage};
+use enshwick::config::{Schema, Scope, Stage};
 use toml_edit::DocumentMut;
 
 /// The key of the world this process runs, while one runs.
@@ -168,8 +168,8 @@ pub(crate) use live::{effective, load, show_text, target_text, unload, write_tar
 mod live {
     use std::path::PathBuf;
 
-    use enshwick_loader_api::abi::Event;
-    use enshwick_loader_api::config::Schema;
+    use enshwick::abi::Event;
+    use enshwick::config::Schema;
 
     use super::{Destination, compose, current, next_file, prepare, set_current, world_file};
     use crate::host::{Loader, ModRecord};
@@ -271,7 +271,7 @@ mod live {
             if let Some(text) = prepare(&global, read(&world_path).as_deref(), next.as_deref()) {
                 if let Err(e) = write(&world_path, &text) {
                     crate::log::write(
-                        enshwick_loader_api::abi::Level::WARN,
+                        enshwick::abi::Level::WARN,
                         &record.id,
                         &format!("world settings not written: {e}"),
                     );
@@ -303,7 +303,7 @@ mod live {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_loader_api::config::Field;
+    use enshwick::config::Field;
 
     fn schema() -> Schema {
         Schema::new(

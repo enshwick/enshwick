@@ -14,15 +14,15 @@ mod solver;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted};
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::events::{AltarsChanged, ShutdownStarted};
+use enshwick::{Load, Mod, Off};
 
 /// Whether pieces may be placed across seams, from the settings in force:
 /// the server's on a joined client.
 static SEAMS: AtomicBool = AtomicBool::new(true);
 
 /// Flame altar zones settings, in `mod-configs/flame-altar-zones.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Altars whose zones touch grow together and share their area. Each
@@ -49,8 +49,8 @@ impl Default for Settings {
 pub struct FlameAltarZones;
 
 impl Mod for FlameAltarZones {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "flame-altar-zones",
             side: BOTH,
             name: "Flame altar zones",
@@ -71,7 +71,7 @@ impl Mod for FlameAltarZones {
         load.on_config_change(move |settings: Settings| {
             let on = settings.building_across_seams;
             if SEAMS.swap(on, Ordering::Relaxed) != on {
-                enshwick_loader_api::info!("building across seams {on}");
+                enshwick::info!("building across seams {on}");
             }
             solver::switch(control, settings.clusters);
         })?;
@@ -82,12 +82,12 @@ impl Mod for FlameAltarZones {
         Ok(Self)
     }
 
-    fn ready(&'static self, _host: enshwick_loader_api::Host) {
-        enshwick_loader_api::info!("building across seams {}", SEAMS.load(Ordering::Relaxed));
+    fn ready(&'static self, _host: enshwick::Host) {
+        enshwick::info!("building across seams {}", SEAMS.load(Ordering::Relaxed));
     }
 }
 
-enshwick_loader_api::declare_mod!(FlameAltarZones);
+enshwick::declare_mod!(FlameAltarZones);
 
 #[cfg(test)]
 mod tests {
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        use enshwick_loader_api::config::Config as _;
+        use enshwick::config::Config as _;
 
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!(settings.clusters && settings.building_across_seams);
@@ -103,10 +103,10 @@ mod tests {
 
     #[test]
     fn it_sizes_the_zones_of_touching_altars_and_accepts_a_box_across_them() {
-        use enshwick_loader_api::abi::{AltarInfo, Bounds, Status};
+        use enshwick::abi::{AltarInfo, Bounds, Status};
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
-            .settings(&<Settings as enshwick_loader_api::config::Config>::template())
+        let loader = enshwick::test::FakeHost::new()
+            .settings(&<Settings as enshwick::config::Config>::template())
             .install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -160,10 +160,10 @@ mod tests {
 
     #[test]
     fn a_world_s_own_clusters_value_applies_when_it_loads() {
-        use enshwick_loader_api::abi::{AltarInfo, Bounds, Status};
-        use enshwick_loader_api::events::SettingsReplaced;
+        use enshwick::abi::{AltarInfo, Bounds, Status};
+        use enshwick::events::SettingsReplaced;
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .settings(
                 "clusters = false
 building_across_seams = true
@@ -215,7 +215,7 @@ building_across_seams = true
 
     #[test]
     fn a_joined_player_takes_the_server_s_seams() {
-        use enshwick_loader_api::config::Config as _;
+        use enshwick::config::Config as _;
 
         let server = Settings {
             building_across_seams: false,

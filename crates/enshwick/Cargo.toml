@@ -1,0 +1,239 @@
+[package]
+name = "enshwick"
+version = "1.0.0-alpha.1"
+description = "The Enshwick Loader's modding API for Enshrouded: the one crate mods are written against"
+keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
+categories = ["game-development", "api-bindings"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[dependencies]
+enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.1" }
+bcdec_rs.workspace = true
+const-sha1.workspace = true
+zune-core.workspace = true
+zune-png.workspace = true
+fastrand.workspace = true
+memchr.workspace = true
+postcard.workspace = true
+schemars = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+serde.workspace = true
+strsim.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive"] }
+
+[features]
+# `enshwick::test`: a fake loader for a mod's unit tests.
+test = []
+# `packs::schemas`: the JSON Schemas of a content pack's files, for tools.
+schema = ["dep:schemars", "dep:serde_json"]
+
+[[test]]
+name = "actions"
+required-features = ["test"]
+
+[[test]]
+name = "effects"
+required-features = ["test"]
+
+[[test]]
+name = "hook_macro"
+required-features = ["test"]
+
+[[test]]
+name = "texts_override"
+required-features = ["test"]
+
+[[test]]
+name = "affixes"
+required-features = ["test"]
+
+[[test]]
+name = "entity_data"
+required-features = ["test"]
+
+[[test]]
+name = "item_data"
+required-features = ["test"]
+
+[[test]]
+name = "icons"
+required-features = ["test"]
+
+[[test]]
+name = "icons_hidden"
+required-features = ["test"]
+
+[[test]]
+name = "daytime"
+required-features = ["test"]
+
+[[test]]
+name = "damage"
+required-features = ["test"]
+
+[[test]]
+name = "buffs"
+required-features = ["test"]
+
+[[test]]
+name = "config_check"
+required-features = ["test"]
+
+[[test]]
+name = "game_events"
+required-features = ["test"]
+
+[[test]]
+name = "game_settings"
+required-features = ["test"]
+
+[[test]]
+name = "hud"
+required-features = ["test"]
+
+[[test]]
+name = "inventory"
+required-features = ["test"]
+
+[[test]]
+name = "knowledge"
+required-features = ["test"]
+
+[[test]]
+name = "lifecycle"
+required-features = ["test"]
+
+[[test]]
+name = "migrations"
+required-features = ["test"]
+
+[[test]]
+name = "mid_hook"
+required-features = ["test"]
+
+[[test]]
+name = "net"
+required-features = ["test"]
+
+[[test]]
+name = "no_ui"
+required-features = ["test"]
+
+[[test]]
+name = "no_inventories"
+required-features = ["test"]
+
+[[test]]
+name = "notices"
+required-features = ["test"]
+
+[[test]]
+name = "packs"
+required-features = ["test"]
+
+[[test]]
+name = "players"
+required-features = ["test"]
+
+[[test]]
+name = "services"
+required-features = ["test"]
+
+[[test]]
+name = "stats"
+required-features = ["test"]
+
+[[test]]
+name = "published_texts"
+required-features = ["test"]
+
+[[test]]
+name = "language"
+required-features = ["test"]
+
+[[test]]
+name = "recipe_menu"
+required-features = ["test"]
+
+[[test]]
+name = "recipe_rules"
+required-features = ["test"]
+
+[[test]]
+name = "stat_kinds"
+required-features = ["test"]
+
+[[test]]
+name = "symbols"
+required-features = ["test"]
+
+[[test]]
+name = "world_queries"
+required-features = ["test"]
+
+[[test]]
+name = "terrain"
+required-features = ["test"]
+
+[[test]]
+name = "ui"
+required-features = ["test"]
+
+[[test]]
+name = "vetoes"
+required-features = ["test"]
+
+[[test]]
+name = "weather"
+required-features = ["test"]
+
+[[test]]
+name = "startup_sync"
+required-features = ["test"]
+
+[[test]]
+name = "world_settings"
+required-features = ["test"]
+
+[[test]]
+name = "worlds"
+required-features = ["test"]
+
+[[test]]
+name = "writes"
+required-features = ["test"]
+
+[[test]]
+name = "step_clock"
+required-features = ["test"]
+
+[[test]]
+name = "points_owner"
+required-features = ["test"]
+
+[[test]]
+name = "shapes"
+required-features = ["test"]
+
+[[test]]
+name = "task_workers"
+required-features = ["test"]
+
+[[test]]
+name = "points_links"
+required-features = ["test"]
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc"]

@@ -11,8 +11,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use enshwick_loader_api::abi::ResourceKey;
-use enshwick_loader_api::content::{Guid, types};
+use enshwick::abi::ResourceKey;
+use enshwick::content::{Guid, types};
 use rustc_hash::FxHashMap;
 
 /// The record file, under the `mod-data` folder.

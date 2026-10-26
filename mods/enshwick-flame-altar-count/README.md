@@ -56,11 +56,11 @@ at your own risk, delete `mod-data/flame-altar-count/hold.txt`.
 
 ## Install
 
-Download [`enshwick-flame-altar-count.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-flame-altar-count.zip)
+Download [`enshwick-flame-altar-count.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-flame-altar-count.zip)
 and extract it into the folder that holds `enshrouded.exe` or
 `enshrouded_server.exe`. It needs Enshwick Loader:
-[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-loader.zip)
-alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip)
+[`enshwick-loader.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip)
 with every mod. These are development builds of the newest commit: until
 the first release, 1.0.0, there are no others.
 
@@ -76,6 +76,6 @@ table, whatever their own file says.
 
 Other mods change how many altars a Flame level allows at the extension
 point `flame-altar-count:limit`; the answer stays between 1 and the cap. See
-[Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
+[Extending other mods](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md).
 
 Licensed under [MIT](../../LICENSE).

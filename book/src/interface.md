@@ -9,16 +9,16 @@ here is client only; on a server, `load.ui()` and `load.on_frame` return
 ## Frames
 
 The game redraws its interface every frame from code, and a mod draws its own
-the same way. [`load.on_frame(draw)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui.rs)
+the same way. [`load.on_frame(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui.rs)
 registers a callback during `init`; it runs once per frame, on the thread
 that draws the interface, from the title screen on, and draws through the
 `Frame` it is handed. A widget's state lives with the mod: a toggle draws the
 `bool` it is handed and returns true in the frame the player changes it.
 
 ```rust
-use enshwick_loader_api::ui::{Dropdown, Label, Slider, Style, Toggle};
+use enshwick::ui::{Dropdown, Label, Slider, Style, Toggle};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let mut open = true;
     let mut fast = false;
     let mut volume = 0.5f32;
@@ -77,7 +77,7 @@ it left open.
 
 ## The HUD
 
-[`load.on_hud(draw)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui/hud.rs)
+[`load.on_hud(draw)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/hud.rs)
 registers a callback that runs once per frame while the game draws its HUD.
 It draws lines and bars at an `Anchor`, a corner or the middle of the top or
 bottom edge; items at one anchor stack in the order drawn, in a column the
@@ -87,9 +87,9 @@ with the HUD turned off, in full-screen menus, in screenshot mode and in a
 dialog with a character. Body text gets the game's outlined HUD style.
 
 ```rust
-use enshwick_loader_api::ui::{Anchor, Label, Style};
+use enshwick::ui::{Anchor, Label, Style};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let mut seconds = 120u32;
     load.on_hud(move |hud| {
         seconds = seconds.saturating_sub(1);
@@ -103,7 +103,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 ## Map markers
 
-[`Ui::set_markers`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui/map.rs)
+[`Ui::set_markers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/map.rs)
 shows the mod's markers on the map, at most 256, each with a position in
 metres, a label and one of the game's eight custom marker colours; the next
 call replaces them all, and `clear_markers` takes them off. It works from any
@@ -114,7 +114,7 @@ loader runs by patterns the markers stay off and `set_markers` has no
 effect.
 
 ```rust
-use enshwick_loader_api::ui::{Marker, MarkerColor, Ui};
+use enshwick::ui::{Marker, MarkerColor, Ui};
 
 fn mark_safes(ui: Ui, safes: &[([f64; 3], String)]) {
     let markers: Vec<Marker<'_>> = safes
@@ -127,7 +127,7 @@ fn mark_safes(ui: Ui, safes: &[([f64; 3], String)]) {
 
 ## Dialogs
 
-[`Ui::dialog`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ui.rs)
+[`Ui::dialog`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui.rs)
 queues a dialog in the game's own style, the one it shows for its own errors:
 a title, a message, smaller detail text and buttons the game labels in the
 player's language. It works from any thread; the answer callback runs on the
@@ -135,16 +135,16 @@ thread that draws the interface. Dialogs show one at a time, in order, and
 never over one of the game's own.
 
 ```rust
-use enshwick_loader_api::ui::{Dialog, Response};
+use enshwick::ui::{Dialog, Response};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let ui = load.ui()?;
     let dialog = Dialog::new("Survivors", "Move every survivor to this altar?")
         .detail("Survivors with a bed elsewhere keep it.")
         .buttons(&[Response::Ok, Response::Cancel]);
     let _queued = ui.dialog(&dialog, |answer| {
         if answer == Some(Response::Ok) {
-            enshwick_loader_api::info!("moving survivors");
+            enshwick::info!("moving survivors");
         }
     });
     Ok(())

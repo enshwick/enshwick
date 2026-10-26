@@ -8,13 +8,13 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::progress::{AIRBORNE_ARCHITECT, SkillGate};
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::progress::{AIRBORNE_ARCHITECT, SkillGate};
+use enshwick::{Load, Mod, Off};
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
 /// Build camera settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Every player may use the building fly mode near a base without the
@@ -36,7 +36,7 @@ impl Default for Settings {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::progress::SkillGate;
+/// use enshwick::progress::SkillGate;
 ///
 /// assert_eq!(enshwick_build_camera::lifts(SkillGate::FlyMode, true), Some(true));
 /// assert_eq!(enshwick_build_camera::lifts(SkillGate::FlyMode, false), None);
@@ -54,7 +54,7 @@ pub struct BuildCamera;
 fn apply(settings: &Settings) {
     let was = ENABLED.swap(settings.enabled, Ordering::Relaxed);
     if was != settings.enabled {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "fly mode without the skill: {}",
             if settings.enabled { "on" } else { "off" }
         );
@@ -62,8 +62,8 @@ fn apply(settings: &Settings) {
 }
 
 impl Mod for BuildCamera {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "build-camera",
             side: BOTH,
             name: "Build camera",
@@ -82,13 +82,13 @@ impl Mod for BuildCamera {
     }
 }
 
-enshwick_loader_api::declare_mod!(BuildCamera);
+enshwick::declare_mod!(BuildCamera);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{Header, SkillCheck as RawCheck, Status};
-    use enshwick_loader_api::config::Config as _;
-    use enshwick_loader_api::events;
+    use enshwick::abi::{Header, SkillCheck as RawCheck, Status};
+    use enshwick::config::Config as _;
+    use enshwick::events;
 
     use super::*;
 
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn the_gate_follows_the_settings_and_the_servers_join_value() {
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .settings("enabled = true\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.

@@ -5,16 +5,16 @@
 //! during init. The dedicated server watches a pack's files and applies a
 //! changed `loot.toml` at once; other changes wait for a restart.
 //!
-//! [`Load::add_pack`]: enshwick_loader_api::Load::add_pack
+//! [`Load::add_pack`]: enshwick::Load::add_pack
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     Dependency, Header, HostApi, Level, Manifest, ManifestFlags, ModHandle, Relation, Side, Status,
     Str,
 };
-use enshwick_loader_api::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
+use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest, PackSide};
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
@@ -188,7 +188,7 @@ pub(crate) fn sha256_of(id: &str) -> Option<String> {
 }
 
 /// Logs every problem of a pack under its id, one line each.
-fn report(id: &str, errors: &enshwick_loader_api::packs::ParsePackError) {
+fn report(id: &str, errors: &enshwick::packs::ParsePackError) {
     for error in errors.list() {
         crate::log::write(Level::ERROR, id, &error.to_string());
     }
@@ -223,8 +223,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
         }
     };
     // SAFETY: the loader's own table, for the process.
-    let status =
-        unsafe { enshwick_loader_api::__private::init_pack(api, me, |load| load.add_pack(&pack)) };
+    let status = unsafe { enshwick::__private::init_pack(api, me, |load| load.add_pack(&pack)) };
     if status.is_ok() {
         crate::log::write(
             Level::INFO,
@@ -251,7 +250,7 @@ pub(crate) unsafe extern "system" fn ready(_api: *const HostApi, _me: ModHandle)
 pub(crate) fn forget(id: &str) {
     let known = with(|packs| packs.remove(id).is_some());
     if known {
-        let _forgotten = enshwick_loader_api::packs::reload_loot(id, Vec::new());
+        let _forgotten = enshwick::packs::reload_loot(id, Vec::new());
     }
 }
 
@@ -267,7 +266,7 @@ pub(crate) fn watched(loader: &Loader) -> Vec<(usize, PathBuf)> {
             Some((index, dir))
         })
         .flat_map(|(index, dir)| {
-            enshwick_loader_api::packs::FILES
+            enshwick::packs::FILES
                 .iter()
                 .map(move |file| (index, dir.join(file)))
         })
@@ -320,7 +319,7 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             "content pack changed beyond its loot: items, recipes, workshops and texts change at the next start",
         );
     }
-    match enshwick_loader_api::packs::reload_loot(id, pack.drops().to_vec()) {
+    match enshwick::packs::reload_loot(id, pack.drops().to_vec()) {
         Ok(()) => crate::log::write(
             Level::INFO,
             id,

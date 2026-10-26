@@ -12,17 +12,17 @@ A mod is a Windows DLL. You need:
   `x86_64-pc-windows-msvc`;
 - on Windows, the MSVC build tools;
 - the Enshwick loader in the game's folder: extract
-  [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip),
+  [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip),
   the development build until the first release, 1.0.0, next to
   `enshrouded.exe` or `enshrouded_server.exe`.
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
-cargo install --git https://github.com/themaiby/enshwick cargo-enshwick
+cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
 ```
 
 The second line installs
-[`cargo enshwick`](https://github.com/themaiby/enshwick/tree/main/crates/cargo-enshwick),
+[`cargo enshwick`](https://github.com/enshwick/enshwick/tree/main/crates/cargo-enshwick),
 a Cargo subcommand that starts a mod, installs it and reads a built one.
 
 ## A new mod
@@ -36,7 +36,7 @@ current one by default) and `--side` is `server` (the default), `client` or
 `both`. The id is 1 to 64 characters of `[a-z0-9-]`, starting with a letter, since
 it names the crate too. The crate holds:
 
-- `Cargo.toml`: a `cdylib` named after the id, `enshwick-loader-api` from this
+- `Cargo.toml`: a `cdylib` named after the id, `enshwick` from this
   repository's git tag for the API version the tool was built with (from its
   `main` branch while the tool is a development build, before 1.0.0), `serde`,
   and a release profile with `panic = "unwind"`, which every hook needs to
@@ -89,10 +89,10 @@ settings.
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::{Load, Mod, Off};
 
 /// Flame Altar settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Altars allowed at every Flame level, 1 to 16.
@@ -115,8 +115,8 @@ fn apply(settings: &Settings) {
 struct AltarCount;
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join: true)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -124,12 +124,12 @@ impl Mod for AltarCount {
         apply(&settings);
         load.on_altar_limit(|_flame_level| ALTARS.load(Ordering::Relaxed))?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
-        enshwick_loader_api::info!("{} altars per Flame level", settings.altars);
+        enshwick::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
     }
 }
 
-enshwick_loader_api::declare_mod!(AltarCount);
+enshwick::declare_mod!(AltarCount);
 ```
 
 What each piece does:
@@ -150,7 +150,7 @@ What each piece does:
   reads an atomic, so the handler can change it under a running game.
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
+[`enshwick-flame-altar-count`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-flame-altar-count)
 is this mod in full: a table per Flame level swapped with `arc-swap`, the
 table as a join value, and more than 16 altars.
 
@@ -168,13 +168,13 @@ for the function's type. The same limit as a hook on the game's own lookup:
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Next, Off};
+use enshwick::{Load, Mod, Next, Off};
 
 static ALTARS: AtomicU8 = AtomicU8::new(16);
 
 struct AltarCount;
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
@@ -187,8 +187,8 @@ fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: 
 }
 
 impl Mod for AltarCount {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "my-altar-count", side: BOTH, join: true)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "my-altar-count", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -199,7 +199,7 @@ impl Mod for AltarCount {
     }
 }
 
-enshwick_loader_api::declare_mod!(AltarCount);
+enshwick::declare_mod!(AltarCount);
 ```
 
 - `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
@@ -224,7 +224,7 @@ file afresh at every start:
 - `status.log` and `crash.log`: see
   [Logging and diagnostics](logging.md).
 
-A mod writes there with `enshwick_loader_api::info!` and the other log macros.
+A mod writes there with `enshwick::info!` and the other log macros.
 `mod-configs/enshwick.toml` sets how much is kept.
 
 ## What to read next

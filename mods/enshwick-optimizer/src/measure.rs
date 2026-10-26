@@ -457,12 +457,12 @@ pub(crate) fn run(wine: bool) {
             let game = crate::env::parse_game_log(&game_log_text());
             if !game.workers.is_empty() {
                 workers_told = true;
-                enshwick_loader_api::info!("{}", game.started());
+                enshwick::info!("{}", game.started());
             }
         }
         if ON.load(Ordering::Relaxed) {
             let text = format!("{}; {}", context(), line(&minute));
-            enshwick_loader_api::info!("measure: {text}");
+            enshwick::info!("measure: {text}");
             *LAST.lock().unwrap_or_else(PoisonError::into_inner) = text;
         }
     }

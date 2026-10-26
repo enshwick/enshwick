@@ -9,7 +9,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use crate::chains::Next;
 use crate::host::{Registered, take};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
     SkillCheck, SkillCheckFn, Status,
 };
@@ -209,7 +209,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Ok(()) => loader
             .reflection
             .system("player_level")
-            .map_or(0, enshwick_loader_reflect::System::entry),
+            .map_or(0, enshwick_reflect::System::entry),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");

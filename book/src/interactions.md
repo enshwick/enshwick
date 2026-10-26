@@ -1,15 +1,15 @@
 # Interactions
 
 A mod has a say before the game lets a player interact with an entity.
-[`load.on_interaction`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/interactions.rs)
+[`load.on_interaction`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/interactions.rs)
 runs a filter with an `Interaction`: what the player does (`kind`), the
 player, the target, and the item the target was placed from and where it
 stands, when the platform could read them. Returning `false` refuses it.
 
 ```rust
-use enshwick_loader_api::interactions::Kind;
+use enshwick::interactions::Kind;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     const LOCKED_CHEST: u32 = 0x5e01;
     load.on_interaction(|i| !(i.item == Some(LOCKED_CHEST) && matches!(i.kind, Kind::Open | Kind::Move | Kind::Sort)))
 }

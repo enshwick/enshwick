@@ -1,8 +1,6 @@
 //! Reading a mod's manifest into a resolver candidate.
 
-use enshwick_loader_api::abi::{
-    ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, read_headed,
-};
+use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, read_headed};
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
@@ -57,7 +55,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         let owned: Vec<T> = items.iter().map(|&item| each(item)).collect();
         Box::leak(owned.into_boxed_slice()).as_ptr()
     }
-    let symbol = |s: enshwick_loader_api::abi::Symbol| enshwick_loader_api::abi::Symbol {
+    let symbol = |s: enshwick::abi::Symbol| enshwick::abi::Symbol {
         name: text(s.name),
         ..s
     };
@@ -71,7 +69,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         }
     });
     manifest.builds = list(manifest.builds, manifest.build_count, |row| {
-        enshwick_loader_api::abi::BuildRow {
+        enshwick::abi::BuildRow {
             symbols: list(row.symbols, row.symbol_count, symbol),
             constants: list(row.constants, row.constant_count, symbol),
             ..row
@@ -115,7 +113,7 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     }
     // SAFETY: the caller keeps the manifest's strings alive for the call.
     let id = unsafe { manifest.id.as_str() }.ok_or("the id is not UTF-8")?;
-    if !enshwick_loader_api::abi::is_valid_id(id) {
+    if !enshwick::abi::is_valid_id(id) {
         return Err(format!("the id {id:?} is not [a-z0-9-]+"));
     }
     if id == crate::settings::LOADER_ID {
@@ -167,7 +165,7 @@ impl Meta {
     /// The name players read, or the id when the manifest names none.
     #[must_use]
     pub fn label(&self, id: &str) -> String {
-        enshwick_loader_api::mods::label(&self.name, id)
+        enshwick::mods::label(&self.name, id)
     }
 
     /// `by A, B; MIT; https://...`: what is known of authors, licence and
@@ -263,7 +261,7 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{Header, ManifestFlags, Str};
+    use enshwick::abi::{Header, ManifestFlags, Str};
 
     use super::*;
 
@@ -303,7 +301,7 @@ mod tests {
         m.authors = AUTHORS.as_ptr();
         m.author_count = AUTHORS.len();
         m.license = Str::new("MIT");
-        m.homepage = Str::new("github.com/themaiby/enshwick");
+        m.homepage = Str::new("github.com/enshwick/enshwick");
         // SAFETY: static data.
         let meta = unsafe { meta(&m) };
         assert_eq!(meta.label("safes"), "Safes");
@@ -326,7 +324,7 @@ mod tests {
         flags: ManifestFlags,
         dependencies: *const Dependency,
         dependency_count: usize,
-        builds: *const enshwick_loader_api::abi::BuildRow,
+        builds: *const enshwick::abi::BuildRow,
         build_count: usize,
     }
 

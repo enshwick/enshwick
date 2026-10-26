@@ -78,11 +78,11 @@ hosts has its own; files from 0.1 load as they are.
 
 ## Install
 
-Download [`enshwick-safes.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-safes.zip)
+Download [`enshwick-safes.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-safes.zip)
 and extract it into the folder that holds `enshrouded.exe` or
 `enshrouded_server.exe`. It needs Enshwick Loader:
-[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-loader.zip)
-alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip)
+[`enshwick-loader.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip)
 with every mod. These are development builds of the newest commit: until
 the first release, 1.0.0, there are no others.
 
@@ -96,6 +96,6 @@ side, and the mod counts in the join check.
 Other mods change who may open, use, remove or rename a Safe, and who may
 manage the list of players at it, at the extension point
 `safes:access`, and may refuse outright. See
-[Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
+[Extending other mods](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md).
 
 Licensed under [MIT](../../LICENSE).

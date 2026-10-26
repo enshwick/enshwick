@@ -20,11 +20,11 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     AltarInfo, AltarZoneSize, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
     ZoneCheckFn,
 };
-use enshwick_loader_api::altars::MAX_ZONES;
+use enshwick::altars::MAX_ZONES;
 
 use self::geometry::Placed;
 use crate::chains::Next;
@@ -326,7 +326,7 @@ pub(crate) fn list() -> Vec<AltarInfo> {
 fn info(id: u32, placed: &Placed, built: Option<&[f32; 3]>, levels: Option<&Sizes>) -> AltarInfo {
     let mut altar = AltarInfo::EMPTY;
     altar.entity = id;
-    altar.position = enshwick_loader_api::ecs::metres(placed.position);
+    altar.position = enshwick::ecs::metres(placed.position);
     if let Some(levels) = levels {
         altar.level = u8::try_from(levels.len()).unwrap_or(u8::MAX);
     }
@@ -893,7 +893,7 @@ unsafe fn check(
             min: [0, 1, 2].map(|a| low[a].min(high[a])),
             max: [0, 1, 2].map(|a| low[a].max(high[a])),
         },
-        margin: (f64::from(margin) * enshwick_loader_api::ecs::FIXED_PER_METRE) as i64,
+        margin: (f64::from(margin) * enshwick::ecs::FIXED_PER_METRE) as i64,
     };
     filters.iter().filter(|f| f.live()).any(|f| {
         // SAFETY: the callback lives in the mod's DLL, which stays loaded,

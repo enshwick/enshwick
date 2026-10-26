@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use enshwick_loader_builds::{Symbol, Table};
+use enshwick_gamedata::{Symbol, Table};
 
 use super::anchor::{self, Anchor};
 use super::exe::Exe;

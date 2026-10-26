@@ -27,7 +27,7 @@ const HOLD: Duration = Duration::from_secs(5);
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::interaction::Hold;
+/// use enshwick_loader::join::interaction::Hold;
 ///
 /// let hold = Hold::new();
 /// hold.arm(1_000);
@@ -46,7 +46,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// assert!(!Hold::new().armed());
     /// ```
@@ -63,7 +63,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// let hold = Hold::new();
     /// hold.arm(0);
@@ -80,7 +80,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// let hold = Hold::new();
     /// hold.arm(0);
@@ -99,7 +99,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// let hold = Hold::new();
     /// hold.join(true, 0);
@@ -120,7 +120,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// let hold = Hold::new();
     /// hold.arm(0);
@@ -137,7 +137,7 @@ impl Hold {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::interaction::Hold;
+    /// use enshwick_loader::join::interaction::Hold;
     ///
     /// let hold = Hold::new();
     /// hold.arm(0);
@@ -163,7 +163,7 @@ impl Hold {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::interaction::Error;
+/// use enshwick_loader::join::interaction::Error;
 ///
 /// assert!(Error::Missing("user.start_interaction").to_string().contains("no `user"));
 /// ```
@@ -201,7 +201,7 @@ pub enum Error {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::interaction::verify;
+/// use enshwick_loader::join::interaction::verify;
 ///
 /// let read = |va| (va == 0x4000).then_some(0x5540_u64);
 /// assert_eq!(verify(Some(0x4000), Some(0x5540), read, 0x1000..0x8000), Ok(0x4000));

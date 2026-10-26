@@ -1,7 +1,7 @@
 # Pacing and threads
 
 The engine paces its loops with waits on handles and sizes its thread pools
-from the CPUs it sees. [`pacing`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/pacing.rs)
+from the CPUs it sees. [`pacing`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs)
 names the places a mod can change to make the game use less CPU. Each
 function hooks its site during `init`, finds it by its bytes on the running
 build and tells whether it was found.
@@ -21,14 +21,14 @@ instead saves the polling; it must never sleep past `left_ns`, and it leaves
 the wait itself to the game, which then sees every event:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let found = load.on_loop_wait(|wait| {
         if wait.ms == 0 && wait.left_ns > 0 {
             // Sleep a little less than `left_ns` here.
         }
     })?;
     if !found.handles {
-        enshwick_loader_api::warn!("the event loop's wait was not found");
+        enshwick::warn!("the event loop's wait was not found");
     }
     Ok(())
 }
@@ -47,9 +47,9 @@ simulation steps, and up to that much more latency for what arrives between
 them.
 
 ```rust
-use enshwick_loader_api::pacing;
+use enshwick::pacing;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_server_wait(|wait_ns| {
         if *wait_ns == pacing::SERVER_ONLINE_WAIT_NS {
             *wait_ns = 2 * pacing::SERVER_ONLINE_WAIT_NS;
@@ -70,16 +70,16 @@ the dedicated server starts it after the loader arms its hooks (see
 Worker:…`.
 
 ```rust
-use enshwick_loader_api::pacing::TaskWorkers;
+use enshwick::pacing::TaskWorkers;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     if !load.cap_task_workers(TaskWorkers::at_most(4))? {
-        enshwick_loader_api::info!("the task workers stay as the game sizes them");
+        enshwick::info!("the task workers stay as the game sizes them");
     }
     Ok(())
 }
 ```
 
-[`SERVER_IDLE_WAIT_NS`]: https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/pacing.rs
-[`SERVER_ONLINE_WAIT_NS`]: https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/pacing.rs
-[`SERVER_SLOW_WAIT_NS`]: https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/pacing.rs
+[`SERVER_IDLE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
+[`SERVER_ONLINE_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs
+[`SERVER_SLOW_WAIT_NS`]: https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs

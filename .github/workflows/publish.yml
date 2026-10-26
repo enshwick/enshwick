@@ -1,0 +1,23 @@
+# Publishes the platform's crates to crates.io, run by hand: each in turn,
+# after the ones it depends on, and only a version crates.io does not have.
+name: publish
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    permissions:
+      contents: read
+    # The runner group admits the organization's workflows from main only.
+    uses: enshwick/.github/.github/workflows/publish-crates.yml@main # zizmor: ignore[unpinned-uses]
+    with:
+      packages: enshwick-macros enshwick-reflect enshwick enshwick-gamedata cargo-enshwick
+    secrets:
+      CRATES_IO_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}

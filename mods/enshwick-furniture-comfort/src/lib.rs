@@ -9,10 +9,10 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::{Load, Mod, Off};
 
 /// Furniture comfort settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor,
@@ -50,8 +50,8 @@ pub fn scaled(comfort: i32, multiplier: f32) -> i32 {
 pub struct FurnitureComfort;
 
 impl Mod for FurnitureComfort {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "furniture-comfort",
             side: SERVER,
             name: "Furniture comfort",
@@ -69,14 +69,14 @@ impl Mod for FurnitureComfort {
         })?;
         load.on_config_change(|settings: Settings| {
             MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-            enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
+            enshwick::info!("furniture comfort x{}", settings.multiplier);
         })?;
-        enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
+        enshwick::info!("furniture comfort x{}", settings.multiplier);
         Ok(Self)
     }
 }
 
-enshwick_loader_api::declare_mod!(FurnitureComfort);
+enshwick::declare_mod!(FurnitureComfort);
 
 #[cfg(test)]
 mod tests {
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn the_default_settings_parse() {
-        use enshwick_loader_api::config::Config;
+        use enshwick::config::Config;
         let settings: Settings = toml::from_str(&Settings::template()).unwrap();
         assert!((settings.multiplier - 2.0).abs() < f32::EPSILON);
         assert!(settings.validate().is_ok());

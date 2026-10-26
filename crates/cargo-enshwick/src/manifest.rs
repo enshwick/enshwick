@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use enshwick_loader_api::abi::{Manifest, ManifestFlags, Relation, Side, Str};
+use enshwick::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
@@ -102,9 +102,9 @@ unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
     // Every minor has the fields before `builds`.
     const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
     // SAFETY: forwarded from the caller; an all-zero manifest is valid.
-    let manifest = unsafe { enshwick_loader_api::abi::read_headed(raw, REQUIRED) }
+    let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
         .ok_or("the mod returned no manifest, or a truncated one")?;
-    if manifest.header.abi_major != enshwick_loader_api::abi::ABI_MAJOR {
+    if manifest.header.abi_major != enshwick::abi::ABI_MAJOR {
         return Err(format!("built for ABI {}", manifest.header.abi_major));
     }
     Ok(manifest)
@@ -125,7 +125,7 @@ fn query(dll: &Path) -> Result<Manifest, String> {
     if module.is_null() {
         return Err(format!("{} could not be loaded", dll.display()));
     }
-    let name = format!("{}\0", enshwick_loader_api::abi::exports::QUERY);
+    let name = format!("{}\0", enshwick::abi::exports::QUERY);
     // SAFETY: a loaded module and a NUL-terminated name.
     let query = unsafe { GetProcAddress(module, name.as_ptr()) }
         .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
@@ -146,8 +146,7 @@ mod tests {
 
     #[test]
     fn a_manifest_of_an_older_minor_is_copied_up_to_its_size() {
-        let mut old =
-            *enshwick_loader_api::manifest!(id: "old-mod", side: SERVER, version: "1.0.0");
+        let mut old = *enshwick::manifest!(id: "old-mod", side: SERVER, version: "1.0.0");
         old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
         // SAFETY: a valid manifest, as long as its header says.
         let copied = unsafe { copy(&raw const old) }.unwrap();
@@ -168,7 +167,7 @@ join check: no"
 
     #[test]
     fn a_manifest_reads_as_lines() {
-        let manifest = enshwick_loader_api::manifest!(
+        let manifest = enshwick::manifest!(
             id: "survivors-per-altar",
             side: BOTH,
             version: "0.2.0",
@@ -176,7 +175,7 @@ join check: no"
             description: "More survivors per altar",
             authors: ["themaiby", "a friend"],
             license: "MIT",
-            homepage: "https://github.com/themaiby/enshwick",
+            homepage: "https://github.com/enshwick/enshwick",
             join: true,
             requires: ["flame-altar-zones" => ">=0.1, <1.0"],
             after: ["flame-altar-count"],
@@ -188,7 +187,7 @@ join check: no"
             describe(manifest),
             "id: survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
              description: More survivors per altar\nauthors: themaiby, a friend\n\
-             license: MIT\nhomepage: https://github.com/themaiby/enshwick\n\
+             license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\
              side: both\njoin check: yes\n\
              requires: flame-altar-zones >=0.1, <1.0\nafter: flame-altar-count\n\
              recommends: flame-altar-count\nbreaks: old-survivors <0.3\n\

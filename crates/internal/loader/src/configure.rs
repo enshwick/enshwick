@@ -4,7 +4,7 @@
 //! The answer and the file edit are pure logic here; the chat module runs
 //! the command, writes the file and raises the mod's settings event.
 
-use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
+use enshwick::config::{Field, Kind, Schema, Stage};
 use toml_edit::DocumentMut;
 
 use crate::texts;

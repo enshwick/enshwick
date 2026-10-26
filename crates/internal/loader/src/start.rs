@@ -5,8 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use enshwick_loader_api::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Side, Status, exports};
-use enshwick_loader_reflect::{Image, Layout, Reflection};
+use enshwick::abi::{ABI_MAJOR, HostApi, Manifest, ModHandle, Side, Status, exports};
+use enshwick_reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
     GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -92,7 +92,7 @@ pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
 struct Game {
     side: Side,
     base: u64,
-    fingerprint: enshwick_loader_reflect::Fingerprint,
+    fingerprint: enshwick_reflect::Fingerprint,
     build: &'static builds::KnownBuild,
     reflection: Reflection<'static>,
 }
@@ -181,7 +181,7 @@ pub(crate) fn start(
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
     // SAFETY: the loader's table lives for the process.
     unsafe {
-        enshwick_loader_api::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
+        enshwick::__private::install_host(&raw const host::API, host::LOADER_HANDLE);
     }
     attribute_crashes(loader, &order);
     crate::reload::prepare(loader.mods.len());
@@ -444,7 +444,7 @@ fn link_join(loader: &Loader) {
                 Some(join),
                 &crate::join::NEXT,
                 crate::join::detour,
-                enshwick_loader_api::abi::HookFlags::NONE,
+                enshwick::abi::HookFlags::NONE,
             );
             if linked {
                 link_join_hold(loader, code);
@@ -503,7 +503,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         Some(start),
         &interaction::NEXT,
         interaction::detour,
-        enshwick_loader_api::abi::HookFlags::NONE,
+        enshwick::abi::HookFlags::NONE,
     );
 }
 
@@ -641,7 +641,7 @@ fn game(data_dir: &Path) -> Option<Game> {
     for (name, rva) in build.checks() {
         let entry = reflection
             .system(name)
-            .map_or(0, enshwick_loader_reflect::System::entry);
+            .map_or(0, enshwick_reflect::System::entry);
         if entry != base + rva {
             crate::log!(
                 ERROR,
@@ -963,7 +963,7 @@ fn ready(loader: &Loader, order: &[&Library]) {
     crate::archive::trim_game();
 }
 
-fn read_frame() -> enshwick_loader_api::abi::CallerFrame {
+fn read_frame() -> enshwick::abi::CallerFrame {
     FRAME
         .get()
         .copied()
@@ -1116,7 +1116,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         crate::log!(WARN, "{file} is not an Enshwick mod");
         return None;
     };
-    // SAFETY: each export has the signature `enshwick_loader_api::abi::exports` documents.
+    // SAFETY: each export has the signature `enshwick::abi::exports` documents.
     let abi = unsafe { core::mem::transmute::<Export, AbiFn>(abi) };
     // SAFETY: as above.
     let query = unsafe { core::mem::transmute::<Export, QueryFn>(query) };
@@ -1165,7 +1165,7 @@ pub struct DryRun {
     /// Every mod in `mods/`, in load order, then the skipped ones.
     pub mods: Vec<DryMod>,
     /// Every line the loader and the mods logged.
-    pub lines: Vec<(enshwick_loader_api::abi::Level, String, String)>,
+    pub lines: Vec<(enshwick::abi::Level, String, String)>,
 }
 
 /// How one mod fared in a [`DryRun`].
@@ -1276,7 +1276,7 @@ fn outcomes(
     libraries: &[Library],
     candidates: &[Candidate],
     plan: &resolve::Plan,
-    lines: &[(enshwick_loader_api::abi::Level, String, String)],
+    lines: &[(enshwick::abi::Level, String, String)],
 ) -> Vec<DryMod> {
     let reason_of = |id: &str| {
         lines

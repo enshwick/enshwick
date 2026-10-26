@@ -1,5 +1,5 @@
 //! The two waits the mod changes, both in the engine's event loop, found
-//! through [`enshwick_loader_api::pacing`].
+//! through [`enshwick::pacing`].
 //!
 //! **Exact waits.** With less than a millisecond before its deadline the
 //! event loop waits 0 ms on its handles, again and again, until the deadline
@@ -24,8 +24,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
-use enshwick_loader_api::pacing::{self, LoopWait};
-use enshwick_loader_api::{Load, Off};
+use enshwick::pacing::{self, LoopWait};
+use enshwick::{Load, Off};
 
 use crate::sys;
 
@@ -257,16 +257,16 @@ pub(crate) fn link(
             linked.exact = found.handles;
             linked.message = found.messages;
             if !found.handles {
-                enshwick_loader_api::warn!("exact waits: the event loop's wait was not found");
+                enshwick::warn!("exact waits: the event loop's wait was not found");
             }
         } else {
-            enshwick_loader_api::warn!("exact waits: ntdll has no NtDelayExecution");
+            enshwick::warn!("exact waits: ntdll has no NtDelayExecution");
         }
     }
     if server_loop {
         linked.server = load.on_server_wait(server)?;
         if !linked.server {
-            enshwick_loader_api::warn!("the server loop's wait was not found");
+            enshwick::warn!("the server loop's wait was not found");
         }
     }
     Ok(linked)

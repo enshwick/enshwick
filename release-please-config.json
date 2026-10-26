@@ -17,10 +17,10 @@
       "components": [
         "enshwick-loader",
         "enshwick-loader-stub",
-        "enshwick-loader-api",
-        "enshwick-loader-macros",
-        "enshwick-loader-reflect",
-        "enshwick-loader-builds",
+        "enshwick",
+        "enshwick-macros",
+        "enshwick-reflect",
+        "enshwick-gamedata",
         "cargo-enshwick"
       ],
       "merge": false
@@ -81,9 +81,9 @@
       "package-name": "cargo-enshwick",
       "component": "cargo-enshwick"
     },
-    "crates/enshwick-loader-api": {
-      "package-name": "enshwick-loader-api",
-      "component": "enshwick-loader-api",
+    "crates/enshwick": {
+      "package-name": "enshwick",
+      "component": "enshwick",
       "extra-files": [
         {
           "type": "generic",
@@ -115,17 +115,17 @@
       "package-name": "enshwick-furniture-comfort",
       "component": "enshwick-furniture-comfort"
     },
-    "crates/internal/macros": {
-      "package-name": "enshwick-loader-macros",
-      "component": "enshwick-loader-macros"
+    "crates/enshwick-macros": {
+      "package-name": "enshwick-macros",
+      "component": "enshwick-macros"
     },
-    "crates/internal/reflect": {
-      "package-name": "enshwick-loader-reflect",
-      "component": "enshwick-loader-reflect"
+    "crates/enshwick-reflect": {
+      "package-name": "enshwick-reflect",
+      "component": "enshwick-reflect"
     },
-    "crates/internal/builds": {
-      "package-name": "enshwick-loader-builds",
-      "component": "enshwick-loader-builds"
+    "crates/enshwick-gamedata": {
+      "package-name": "enshwick-gamedata",
+      "component": "enshwick-gamedata"
     },
     "mods/enshwick-safes": {
       "package-name": "enshwick-safes",

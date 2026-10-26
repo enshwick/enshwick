@@ -6,7 +6,7 @@ keywords = ["enshrouded", "mod", "altar"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count"
+homepage = "https://github.com/enshwick/enshwick/tree/main/mods/enshwick-flame-altar-count"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -18,12 +18,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 arc-swap.workspace = true
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 serde.workspace = true
 
 [lints]
 workspace = true
 
 [dev-dependencies]
-enshwick-loader-api = { workspace = true, features = ["test"] }
+enshwick = { workspace = true, features = ["test"] }
 toml.workspace = true

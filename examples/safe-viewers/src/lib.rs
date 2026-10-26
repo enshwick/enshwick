@@ -5,12 +5,12 @@
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::points::safes::{Access, SafeAction};
-use enshwick_loader_api::points::{Order, Verdict};
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::points::safes::{Access, SafeAction};
+use enshwick::points::{Order, Verdict};
+use enshwick::{Load, Mod, Off};
 
 /// Safe viewers settings.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Account keys, 16 hex digits as the Safes mod's owners file lists
@@ -38,7 +38,7 @@ impl Rules {
             .filter_map(|key| {
                 let parsed = u64::from_str_radix(key.trim(), 16).ok();
                 if parsed.is_none() {
-                    enshwick_loader_api::warn!("viewer {key:?} is no account key; skipped");
+                    enshwick::warn!("viewer {key:?} is no account key; skipped");
                 }
                 parsed
             })
@@ -72,8 +72,8 @@ static RULES: std::sync::LazyLock<ArcSwap<Rules>> =
 pub struct SafeViewers;
 
 impl Mod for SafeViewers {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "safe-viewers",
             side: BOTH,
             recommends: ["safes" => ">=0.0.0-dev, <1.0"],
@@ -93,14 +93,14 @@ impl Mod for SafeViewers {
     }
 }
 
-enshwick_loader_api::declare_mod!(SafeViewers);
+enshwick::declare_mod!(SafeViewers);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::Status;
-    use enshwick_loader_api::ecs::Entity;
-    use enshwick_loader_api::points::Decision;
-    use enshwick_loader_api::points::safes::{Access, SafeAction};
+    use enshwick::abi::Status;
+    use enshwick::ecs::Entity;
+    use enshwick::points::Decision;
+    use enshwick::points::safes::{Access, SafeAction};
 
     const OWNER: u64 = 0x1;
     const VIEWER: u64 = 0x00ab_cdef_0123_4567;
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn viewers_open_and_only_owners_remove() {
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .settings("viewers = [\"00abcdef01234567\", \"nope\"]\nowner_removes_only = true\n")
             .install();
         // SAFETY: the exports of `declare_mod!` above.

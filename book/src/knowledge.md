@@ -1,21 +1,21 @@
 # Knowledge and quests
 
-[`load.knowledge()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/knowledge.rs)
+[`load.knowledge()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
 returns the
-[`Knowledge`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/knowledge.rs)
+[`Knowledge`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/knowledge.rs)
 of the server's world: the values the game keeps for the world and for each
 player, which recipes, quests, journal pages, skill points and much more
 read. It is `Copy`; get it during `init` and move it into handlers, tasks and
 commands.
 
 ```rust
-use enshwick_loader_api::events::QuestCompleted;
+use enshwick::events::QuestCompleted;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let knowledge = load.knowledge();
     let world = load.world()?;
     load.on::<QuestCompleted>(move |done| {
-        let entity = enshwick_loader_api::ecs::Entity(done.entity);
+        let entity = enshwick::ecs::Entity(done.entity);
         let total = knowledge.quests().into_iter().filter(|&q| knowledge.completed(entity, q)).count();
         if let Some(player) = world.player(entity) {
             world.broadcast(&format!("{} completed a quest ({total} so far)", player.name));
@@ -85,11 +85,11 @@ the account's next character has loaded in that world, whichever character
 it is. Only a player's ids qualify.
 
 ```rust
-use enshwick_loader_api::knowledge::Grant;
+use enshwick::knowledge::Grant;
 
-fn reward(knowledge: &enshwick_loader_api::knowledge::Knowledge, account: u64, quest_reward: u32) {
+fn reward(knowledge: &enshwick::knowledge::Knowledge, account: u64, quest_reward: u32) {
     if let Err(why) = knowledge.grant_account(account, quest_reward, Grant::Set) {
-        enshwick_loader_api::warn!("no reward: {why}");
+        enshwick::warn!("no reward: {why}");
     }
 }
 ```
@@ -124,9 +124,9 @@ requests allowed. Filters run in load order on the server's worker threads,
 only when a client asks.
 
 ```rust
-use enshwick_loader_api::knowledge::Refusal;
+use enshwick::knowledge::Refusal;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_knowledge_input(|request| request.allowed && request.refusal != Some(Refusal::FlagBit))
 }
 ```

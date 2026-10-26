@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
-use enshwick_loader_api::abi::{Event, Level, Side};
-use enshwick_loader_api::config::Stage;
+use enshwick::abi::{Event, Level, Side};
+use enshwick::config::Stage;
 
 use crate::host::Loader;
 use crate::settings::{LOADER_ID, Settings};

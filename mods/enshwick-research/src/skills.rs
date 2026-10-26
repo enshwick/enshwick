@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick::{Load, Next, Off};
 
 use crate::memory;
 
@@ -23,7 +23,7 @@ static SEEN: AtomicU32 = AtomicU32::new(0);
 
 type Change = unsafe extern "system" fn(node: u32, nodes: *mut u8, add: u8, view: *const u8) -> u8;
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static CHANGE: unsafe extern "system" fn(
         node: u32,
         nodes: *mut u8,
@@ -47,7 +47,7 @@ fn change(next: Next<Change>, node: u32, nodes: *mut u8, add: u8, view: *const u
     if number <= MOST {
         let after = level(nodes.addr(), node);
         let unlocked = count(nodes.addr());
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R19 skill change {number}: node {node:#010x}, add {add}, answer {answer}, level {before:?} -> {after:?}, {unlocked:?} nodes unlocked"
         );
     }

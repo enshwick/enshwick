@@ -6,12 +6,12 @@ This chapter covers what a mod writes there and where to look.
 
 ## Log macros
 
-`enshwick_loader_api::error!`, `warn!`, `info!` and `debug!` write a line under the
+`enshwick::error!`, `warn!`, `info!` and `debug!` write a line under the
 mod's id, formatted like `format!`:
 
 ```rust
-enshwick_loader_api::info!("{} altars merged", 3);
-enshwick_loader_api::debug!("bed {} checked", 1210);
+enshwick::info!("{} altars merged", 3);
+enshwick::debug!("bed {} checked", 1210);
 ```
 
 For lines that may repeat:
@@ -25,7 +25,7 @@ For lines that may repeat:
 use std::time::Duration;
 
 for bed in 0..100 {
-    enshwick_loader_api::warn_every!(Duration::from_secs(60), "bed {bed} has no owner");
+    enshwick::warn_every!(Duration::from_secs(60), "bed {bed} has no owner");
 }
 ```
 
@@ -124,7 +124,7 @@ after start, then every `status_minutes`, and whenever an administrator types
 form of it.
 
 A mod adds its own lines with
-[`load.add_status(|| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/status.rs).
+[`load.add_status(|| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
 The closure returns a `String`; each non-empty line shows under the mod. It
 runs only when the summary is written, on a loader thread or the game thread,
 never inside a hook, and only while the mod runs. Keep what it reports in
@@ -135,7 +135,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static MERGED: AtomicU64 = AtomicU64::new(0);
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
 }
 ```

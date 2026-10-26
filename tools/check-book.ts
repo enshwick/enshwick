@@ -1,13 +1,13 @@
 // Checks the modding book's structure: every chapter SUMMARY.md links exists,
 // every chapter is in SUMMARY.md, and every chapter's Rust examples compile
-// as doctests (crates/enshwick-loader-api/src/book.rs, or src/test.rs for testing).
+// as doctests (crates/enshwick/src/book.rs, or src/test.rs for testing).
 // Usage: bun tools/check-book.ts
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const SRC = 'book/src';
-const HARNESSES = ['crates/enshwick-loader-api/src/book.rs', 'crates/enshwick-loader-api/src/test.rs'];
+const HARNESSES = ['crates/enshwick/src/book.rs', 'crates/enshwick/src/test.rs'];
 
 const chapters = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

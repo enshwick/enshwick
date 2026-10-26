@@ -93,7 +93,7 @@ macro_rules! each {
 const NO_ZERO: [&str; 2] = ["HostApi", "MigrationSet"];
 
 /// The source of the ABI module.
-const ABI: &str = include_str!("../../../../enshwick-loader-api/src/abi.rs");
+const ABI: &str = include_str!("../../../../enshwick/src/abi.rs");
 /// The source of the loader's entry points.
 const HOST: &str = include_str!("../host.rs");
 

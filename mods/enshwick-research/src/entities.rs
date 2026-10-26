@@ -21,9 +21,9 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::ecs::{Entity, metres};
-use enshwick_loader_api::world::{ComponentType, Placed, World};
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick::ecs::{Entity, metres};
+use enshwick::world::{ComponentType, Placed, World};
+use enshwick::{Load, Next, Off};
 
 use crate::memory;
 
@@ -123,7 +123,7 @@ static LAST_SWEEP: AtomicU64 = AtomicU64::new(0);
 static FIRST_CALL: AtomicBool = AtomicBool::new(true);
 static SERVER_EMPTY_SWEPT: AtomicBool = AtomicBool::new(false);
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static CLIENT_CURSOR: unsafe extern "system" fn(ctx: *mut u64) = client_cursor;
 }
 
@@ -277,7 +277,7 @@ fn server_around(
         .filter(|&(distance, _)| distance <= RADIUS)
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "R11 server sweep: {who} at {}; {} entities with a transform, {} within {RADIUS} m (up to {MAX_LOGGED} shown)",
         position(at),
         all.len(),
@@ -296,7 +296,7 @@ fn server_around(
                 Some(format!("{name}={} ({names})", id(target)))
             })
             .collect();
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R11 server entity {} template {} at {} d={distance:.1}{}",
             id(entity.0),
             world
@@ -327,11 +327,11 @@ fn client_cursor(next: Next<System>, ctx: *mut u64) {
         return;
     }
     let Some(world) = client_world(ctx) else {
-        enshwick_loader_api::warn!("R11 client: the cursor system's context leads to no world");
+        enshwick::warn!("R11 client: the cursor system's context leads to no world");
         return;
     };
     if FIRST_CALL.swap(false, Ordering::Relaxed) {
-        enshwick_loader_api::info!("R11 client world at {world:#x}, from the cursor system");
+        enshwick::info!("R11 client world at {world:#x}, from the cursor system");
     }
     client_sweep(engine, world);
 }
@@ -459,7 +459,7 @@ fn component(engine: &Engine, world: usize, entity: u32, hash: u32) -> Option<us
 
 fn client_sweep(engine: &Engine, world: usize) {
     let Some(&(player, at)) = walk(engine, world, engine.local_player).first() else {
-        enshwick_loader_api::info!("R11 client sweep: no local player in the client world yet");
+        enshwick::info!("R11 client sweep: no local player in the client world yet");
         return;
     };
     let all = walk(engine, world, engine.transform);
@@ -469,7 +469,7 @@ fn client_sweep(engine: &Engine, world: usize) {
         .filter(|&(d, ..)| d <= RADIUS)
         .collect();
     near.sort_by(|a, b| a.0.total_cmp(&b.0));
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "R11 client sweep: local player entity {} at {}; {} entities with a transform, {} within {RADIUS} m (up to {MAX_LOGGED} shown)",
         id(player),
         position(at),
@@ -494,7 +494,7 @@ fn client_sweep(engine: &Engine, world: usize) {
                 Some(format!("{name}={} ({names})", id(target)))
             })
             .collect();
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R11 client entity {} slot {slot} template {template} at {} d={d:.1}{}",
             id(entity),
             position(place),
@@ -504,7 +504,7 @@ fn client_sweep(engine: &Engine, world: usize) {
             let mut bytes = [0u8; layout::RECORD_SHOWN];
             let read = memory::read(address, &mut bytes);
             for line in memory::words("record", &bytes[..read]) {
-                enshwick_loader_api::info!("{line}");
+                enshwick::info!("{line}");
             }
         }
     }

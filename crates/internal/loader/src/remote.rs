@@ -9,7 +9,7 @@
 
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::config::Schema;
+use enshwick::config::Schema;
 
 use crate::texts;
 
@@ -378,8 +378,8 @@ mod live {
     use std::sync::{Mutex, PoisonError};
     use std::time::Instant;
 
-    use enshwick_loader_api::abi::PlayerInfo;
-    use enshwick_loader_api::config::Schema;
+    use enshwick::abi::PlayerInfo;
+    use enshwick::config::Schema;
 
     use super::{Message, admit, texts, values_text, without_secrets};
     use crate::host::Loader;
@@ -664,7 +664,7 @@ mod tests {
             matches!(&messages[0], Message::Sync { id, values } if id == "safes" && values == "{cost = 5}")
         );
     }
-    use enshwick_loader_api::config::{Field, Stage};
+    use enshwick::config::{Field, Stage};
 
     fn schema() -> Schema {
         Schema::new(

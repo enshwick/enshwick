@@ -1,0 +1,23 @@
+[package]
+name = "enshwick-macros"
+version = "1.0.0-alpha.1"
+description = "Internal, not for mods: the macros enshwick re-exports"
+keywords = ["enshrouded", "modding", "derive", "hooks"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { version = "1.0.107", default-features = false, features = ["proc-macro"] }
+quote = { version = "1.0.47", default-features = false, features = ["proc-macro"] }
+syn = { version = "3.0.9", default-features = false, features = ["clone-impls", "derive", "full", "parsing", "printing", "proc-macro"] }
+
+[lints]
+workspace = true

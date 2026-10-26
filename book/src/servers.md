@@ -13,7 +13,7 @@ volume mounted there, from files you keep:
   `enshwick-loader.zip` holds the loader alone, and `enshwick-<id>.zip` a
   single mod;
 - until the first release, 1.0.0, these exist only as the development build,
-  `https://github.com/themaiby/enshwick/releases/download/dev/<file>`, which
+  `https://github.com/enshwick/enshwick/releases/download/dev/<file>`, which
   every new build replaces. Download the files once, keep them in your own
   storage (an artifact store, a bucket, the image's build context) and build
   from there, so that a rebuild of the image gets the same files;
@@ -74,6 +74,6 @@ override so that the game loads Enshwick's `powrprof.dll`:
 ENV WINEDLLOVERRIDES="powrprof=n,b"
 ```
 
-[The optimizer](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-optimizer)
+[The optimizer](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-optimizer)
 lowers the server's CPU under Wine and Proton, and with a container CPU limit
 starts no more task workers than the limit allows.

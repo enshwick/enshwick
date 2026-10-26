@@ -8,8 +8,8 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use enshwick_loader_api::altars::{ZoneControl, ZoneSize};
-use enshwick_loader_api::ecs::Entity;
+use enshwick::altars::{ZoneControl, ZoneSize};
+use enshwick::ecs::Entity;
 
 use crate::geometry::{Altar, Box3, clusters};
 
@@ -91,11 +91,11 @@ pub(crate) fn switch(control: ZoneControl, on: bool) {
     if !state.switch(on) {
         return;
     }
-    enshwick_loader_api::info!("clusters {on}");
+    enshwick::info!("clusters {on}");
     if on {
         maybe_solve(&mut state, control);
     } else if let Err(error) = control.set(&[]) {
-        enshwick_loader_api::warn!("{error}");
+        enshwick::warn!("{error}");
     }
 }
 
@@ -113,7 +113,7 @@ fn input(control: ZoneControl) -> Input {
         .into_iter()
         .filter(|altar| {
             if altar.tilted {
-                enshwick_loader_api::warn!(
+                enshwick::warn!(
                     "altar {} is tilted; it keeps its vanilla zone",
                     altar.entity.0
                 );
@@ -140,7 +140,7 @@ fn maybe_solve(state: &mut State, control: ZoneControl) {
         return;
     }
     let levels: Vec<(u32, usize)> = input.iter().map(|(id, l)| (*id, l.len())).collect();
-    enshwick_loader_api::info!("{} altars placed, levelled {levels:?}", input.len());
+    enshwick::info!("{} altars placed, levelled {levels:?}", input.len());
     state.solving = true;
     let game = state.game;
     let spawned = std::thread::Builder::new()
@@ -152,13 +152,13 @@ fn maybe_solve(state: &mut State, control: ZoneControl) {
             };
             let Ok(sizes) = solved else {
                 state.solving = false;
-                enshwick_loader_api::warn!("the solver panicked; vanilla zones stay");
+                enshwick::warn!("the solver panicked; vanilla zones stay");
                 return;
             };
             if state.finish(game, input)
                 && let Err(error) = control.set(&sizes)
             {
-                enshwick_loader_api::warn!("{error}");
+                enshwick::warn!("{error}");
             }
             // The altars may have moved on while this ran.
             maybe_solve(&mut state, control);
@@ -181,9 +181,7 @@ pub(crate) fn sizes(input: &Input) -> Vec<ZoneSize> {
     let placements = match clusters(&altars) {
         Ok(placements) => placements,
         Err(error) => {
-            enshwick_loader_api::warn!(
-                "cluster input rejected: {error}; altars keep vanilla zones"
-            );
+            enshwick::warn!("cluster input rejected: {error}; altars keep vanilla zones");
             return Vec::new();
         }
     };
@@ -196,7 +194,7 @@ pub(crate) fn sizes(input: &Input) -> Vec<ZoneSize> {
             continue;
         };
         let height = placement.zone.max[1] - placement.zone.min[1];
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "altar {id} level {level}: cluster {}, growth {} cells, height {height}",
             placement.cluster,
             placement.growth
@@ -208,7 +206,7 @@ pub(crate) fn sizes(input: &Input) -> Vec<ZoneSize> {
             height,
         });
     }
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "solved {} altars in {:?}",
         placements.len(),
         started.elapsed()
