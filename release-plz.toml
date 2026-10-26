@@ -1,0 +1,54 @@
+# release-plz: versions from conventional commits and cargo-semver-checks,
+# changelogs, tags `<package>-v<version>`. Runs only by hand through the
+# release-plz workflow; the dev builds come from dev-build.yml.
+
+[workspace]
+# `release` acts only when the newest commit on main is a merged release pull
+# request, so a stray run publishes nothing.
+release_always = false
+# A version with a prerelease part (`1.0.0-alpha.3`) makes a GitHub prerelease.
+git_release_type = "auto"
+# Only our own crates move in a release pull request; Renovate moves the rest.
+dependencies_update = false
+pr_labels = ["release"]
+
+# The loader DLL and the proxy stub are not published to crates.io: their
+# versions live in git tags, and their release carries the dev bundle's files.
+[[package]]
+name = "enshwick-loader"
+git_only = true
+publish = false
+
+[[package]]
+name = "enshwick-loader-stub"
+git_only = true
+publish = false
+
+# Examples and tools never release.
+[[package]]
+name = "enshwick-example-hot-reload"
+release = false
+
+[[package]]
+name = "enshwick-example-market-stalls"
+release = false
+
+[[package]]
+name = "enshwick-example-safe-viewers"
+release = false
+
+[[package]]
+name = "enshwick-example-trading-post"
+release = false
+
+[[package]]
+name = "enshwick-example-trading-post-api"
+release = false
+
+[[package]]
+name = "enshwick-compat"
+release = false
+
+[[package]]
+name = "xtask"
+release = false

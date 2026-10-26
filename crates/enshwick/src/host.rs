@@ -1,7 +1,6 @@
 //! The loader as one mod sees it.
 
 use core::ffi::c_void;
-use std::sync::OnceLock;
 
 use crate::Off;
 use crate::abi::{
@@ -9,7 +8,7 @@ use crate::abi::{
     Status, Str,
 };
 
-static HOST: OnceLock<Host> = OnceLock::new();
+static HOST: crate::fresh::Fresh<Host> = crate::fresh::Fresh::new();
 
 /// The loader's services for this mod, valid for the life of the process.
 ///

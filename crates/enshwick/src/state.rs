@@ -614,3 +614,76 @@ mod tests {
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Process-wide state of a mod that starts afresh with every mod life: once
+/// per load in the game, once per install under the fake host.
+///
+/// A `static` keeps mod state outside the mod's own type, such as an
+/// extension point's handle or a world store. In a `ModLocal` it reads as
+/// empty again when the next test installs the fake host, so tests that
+/// share a process under `cargo test` each see their own mod. A value is
+/// never dropped, so a reference to it lives for the process.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::state::ModLocal;
+///
+/// static LIMIT: ModLocal<u32> = ModLocal::new();
+///
+/// assert_eq!(LIMIT.get(), None);
+/// assert_eq!(LIMIT.get_or_init(|| 4), &4);
+/// assert_eq!(LIMIT.set(5), Err(5));
+/// ```
+#[derive(Debug)]
+pub struct ModLocal<T>(crate::fresh::Fresh<T>);
+
+impl<T> ModLocal<T> {
+    /// An empty cell, for a `static`.
+    ///
+    /// # Examples
+    ///
+    /// See [`ModLocal`].
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(crate::fresh::Fresh::new())
+    }
+
+    /// The value of this mod life, once set.
+    ///
+    /// # Examples
+    ///
+    /// See [`ModLocal`].
+    #[must_use]
+    pub fn get(&self) -> Option<&T> {
+        self.0.get()
+    }
+
+    /// Sets the value of this mod life.
+    ///
+    /// # Errors
+    ///
+    /// Hands `value` back when this life has a value already.
+    ///
+    /// # Examples
+    ///
+    /// See [`ModLocal`].
+    pub fn set(&self, value: T) -> Result<(), T> {
+        self.0.set(value)
+    }
+
+    /// The value of this mod life, made by `init` when there is none yet.
+    ///
+    /// # Examples
+    ///
+    /// See [`ModLocal`].
+    pub fn get_or_init(&self, init: impl FnOnce() -> T) -> &T {
+        self.0.get_or_init(init)
+    }
+}
+
+impl<T> Default for ModLocal<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
