@@ -56,9 +56,9 @@ pub(crate) extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) ->
     })
 }
 
-pub(crate) fn lookup(error: &enshwick_reflect::LookupError) -> Status {
+pub(crate) fn lookup(error: &enshwick_gamedata::reflect::LookupError) -> Status {
     match error {
-        enshwick_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
+        enshwick_gamedata::reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
         _ => Status::MISSING,
     }
 }

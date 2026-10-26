@@ -3,7 +3,7 @@
 //! so a game update that renames or moves something changes this table, not
 //! the mods.
 
-use enshwick_reflect::Reflection;
+use enshwick_gamedata::reflect::Reflection;
 
 /// How the loader finds one engine fact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -179,8 +179,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let reflection = Reflection::scan(&image);
         for &(id, fact) in FACTS {
             match fact {

@@ -34,8 +34,8 @@ rules the hooks enforce, and the ones they cannot, are in this file:
 
 - a change to a hot path names its numbers before and after, from the
   criterion benchmarks: `cargo bench -p enshwick --features test` for hook
-  dispatch and pattern scans, `-p enshwick-reflect` for reflection and
-  `-p enshwick-gamedata` for the archive; benchmarks that read the game set
+  dispatch and pattern scans, `-p enshwick-gamedata` for reflection and the
+  archive; benchmarks that read the game set
   `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` to its executables and are skipped
   without them;
 

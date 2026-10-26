@@ -483,7 +483,7 @@ fn menu_system(loader: &Loader) -> Option<u64> {
             .reflection
             .system("ui_npc_status")
             .ok()
-            .map(enshwick_reflect::System::entry),
+            .map(enshwick_gamedata::reflect::System::entry),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
             None

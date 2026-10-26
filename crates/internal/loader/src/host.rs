@@ -9,7 +9,7 @@ use enshwick::abi::{
     Event, EventFn, Header, HookFlags, HostApi, Level, Manifest, ManifestFlags, ModHandle, Side,
     Status, Str,
 };
-use enshwick_reflect::{Fingerprint, Reflection};
+use enshwick_gamedata::reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};

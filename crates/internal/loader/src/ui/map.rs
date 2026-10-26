@@ -190,7 +190,7 @@ pub(crate) fn link(loader: &Loader) {
         .reflection
         .system("replicate_map_markers_for_ui")
         .ok()
-        .map(enshwick_reflect::System::entry);
+        .map(enshwick_gamedata::reflect::System::entry);
     loader.link_feature(
         "map markers",
         target,

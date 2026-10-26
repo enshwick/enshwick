@@ -13,8 +13,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Side;
+use enshwick_gamedata::reflect::Fingerprint;
 use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Table};
-use enshwick_reflect::Fingerprint;
 
 pub use enshwick_gamedata::Kind;
 
@@ -274,8 +274,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let tables = load();
         let client =
             tables::exact(&tables, tables::Side::Client, image.fingerprint().unwrap()).unwrap();
@@ -293,7 +297,7 @@ mod tests {
             }
         }
         assert!(checked >= 42);
-        let reflection = enshwick_reflect::Reflection::scan(&image);
+        let reflection = enshwick_gamedata::reflect::Reflection::scan(&image);
         for (ty, field, offset) in [
             ("keen::FbUiBundle", "namedStyles", 0x10a0c),
             ("keen::FbUiBundle", "sounds", 0x12060),
@@ -326,8 +330,12 @@ mod tests {
             return;
         };
         let bytes = std::fs::read(path).unwrap();
-        let image =
-            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
         let text = image.section(".text").unwrap();
         let range = image.range(text);
         let code = image.read(range.start, range.end - range.start).unwrap();

@@ -1,8 +1,8 @@
 [package]
 name = "enshwick-gamedata"
 version = "1.0.0-alpha.2"
-description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, embedded as data"
-keywords = ["enshrouded", "modding", "address-library"]
+description = "Internal, not for mods: the per-build tables of engine addresses the Enshwick loader pins, and the reader of the engine's reflection data"
+keywords = ["enshrouded", "modding", "address-library", "reflection"]
 categories = ["game-development"]
 readme = "README.md"
 edition.workspace = true
@@ -13,7 +13,6 @@ publish = true
 
 [dependencies]
 enshwick.workspace = true
-enshwick-reflect.workspace = true
 ruzstd.workspace = true
 rustc-hash.workspace = true
 serde.workspace = true
@@ -28,4 +27,8 @@ workspace = true
 
 [[bench]]
 name = "archive_decode"
+harness = false
+
+[[bench]]
+name = "reflection_scan"
 harness = false
