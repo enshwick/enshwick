@@ -2,26 +2,26 @@
 
 The game's own systems tell each other what happens through ECS events: a
 hit resolved, an entity died, a player levelled up, a workshop finished a
-recipe. [`game_events`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/game_events.rs)
+recipe. [`game_events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_events.rs)
 lets a mod observe them, typed for the common ones and by reflected name for
 any other.
 
 ## Typed events
 
-[`load.on_game::<E>(|event| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.on_game::<E>(|event| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 runs a handler on every event of kind `E`:
 
 ```rust
-use enshwick_loader_api::game_events::{Died, LevelGained};
+use enshwick::game_events::{Died, LevelGained};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on_game::<Died>(move |died| {
         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-            enshwick_loader_api::info!("{} killed entity {}", player.name, died.entity.0);
+            enshwick::info!("{} killed entity {}", player.name, died.entity.0);
         }
     })?;
-    load.on_game::<LevelGained>(|up| enshwick_loader_api::info!("entity {} reached level {}", up.player.0, up.level))
+    load.on_game::<LevelGained>(|up| enshwick::info!("entity {} reached level {}", up.player.0, up.level))
 }
 ```
 
@@ -52,14 +52,14 @@ fields you read once, at init; each `Field` reads its value for the running
 build:
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
+use enshwick::ecs::Entity;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let pushed = load.event_type("keen::ecs::ApplyPushBackEvent")?;
     let target = pushed.field::<Entity>(load, "targetId")?;
     load.on_raw_game_event(pushed, move |event| {
         if let Some(target) = event.get(target) {
-            enshwick_loader_api::debug!("entity {} pushed back", target.0);
+            enshwick::debug!("entity {} pushed back", target.0);
         }
     })
 }
@@ -76,7 +76,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 `load.on_every_raw_game_event(|event| ...)` receives every event of every type,
 for finding out what the game raises; the
-[probe](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe)
+[probe](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-probe)
 uses it to count them, naming the types in `game_events::EVENT_TYPE_NAMES`.
 Each event is copied for the mod, so leave it to development builds.
 

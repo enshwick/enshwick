@@ -11,7 +11,7 @@
 //! alike takes `d / (|c| + |s|)` more on both `rx` and `rz`, which is how a
 //! mod's growth turns back into a range the engine can use.
 
-use enshwick_loader_api::abi::Bounds;
+use enshwick::abi::Bounds;
 
 const CELLS_PER_METRE: f64 = 2.0;
 /// How far an orientation may stray from a pure turn about the vertical.
@@ -67,7 +67,7 @@ pub(crate) fn centre(placed: &Placed) -> Option<[f64; 3]> {
         ]
     };
     let shift = rotate([0.25, 0.0, 0.25]);
-    let p = enshwick_loader_api::ecs::metres(placed.position);
+    let p = enshwick::ecs::metres(placed.position);
     Some([p[0] + shift[0], p[1] + shift[1], p[2] + shift[2]])
 }
 
@@ -121,7 +121,7 @@ pub(crate) fn grown_range(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use enshwick_loader_api::ecs::FIXED_PER_METRE;
+    use enshwick::ecs::FIXED_PER_METRE;
 
     const UPRIGHT: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
     /// Half a turn about the vertical, as one live altar has it.

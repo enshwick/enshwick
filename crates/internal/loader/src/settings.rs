@@ -3,11 +3,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use enshwick_loader_api::abi::Level;
-use enshwick_loader_api::config::Config as _;
+use enshwick::abi::Level;
+use enshwick::config::Config as _;
 
 /// The id the loader logs and keeps settings under; no mod may take it.
-pub use enshwick_loader_api::mods::LOADER_ID;
+pub use enshwick::mods::LOADER_ID;
 
 /// Minutes between status summaries by default.
 pub const STATUS_MINUTES: u32 = 10;
@@ -17,9 +17,7 @@ pub const JOIN_HELLO_SECONDS: u32 = 30;
 pub const JOIN_NOTE_SECONDS: u32 = 10;
 
 /// Enshwick loader settings.
-#[derive(
-    Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config,
-)]
+#[derive(Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(default, deny_unknown_fields)]
 #[expect(
     clippy::struct_excessive_bools,

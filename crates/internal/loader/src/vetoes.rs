@@ -18,7 +18,7 @@
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{
+use enshwick::abi::{
     BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status,
 };
 

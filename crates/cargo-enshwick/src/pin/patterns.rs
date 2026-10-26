@@ -18,7 +18,7 @@
 
 use std::ops::Range;
 
-use enshwick_loader_builds::Locate;
+use enshwick_gamedata::Locate;
 
 use super::exe::Exe;
 use super::signature::{Insn, Masked, Owned, Reference};

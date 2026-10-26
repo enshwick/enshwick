@@ -1,13 +1,13 @@
 //! What the mod remembers of the loot containers it saw: whether each was
 //! empty, who last opened it and since when, where it stands, and which ones
 //! a take in flight holds. Times are the API's step clock
-//! ([`enshwick_loader_api::time::StepClock`]).
+//! ([`enshwick::time::StepClock`]).
 
 use std::collections::HashMap;
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::loot::{Container, near};
+use enshwick::ecs::Entity;
+use enshwick::loot::{Container, near};
 
 /// How long a take holds a container: no one else takes from it, and its
 /// emptying starts nothing.
@@ -201,7 +201,7 @@ impl Tracker {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::loot::Offer;
+    use enshwick::loot::Offer;
 
     use super::*;
 

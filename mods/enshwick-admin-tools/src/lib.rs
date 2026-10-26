@@ -24,13 +24,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
-use enshwick_loader_api::commands::{CommandContext, Reply};
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::BuildingPlaced;
-use enshwick_loader_api::inventory::Inventories;
-use enshwick_loader_api::schedule::Scheduler;
-use enshwick_loader_api::world::World;
-use enshwick_loader_api::{Host, Load, Mod, Off};
+use enshwick::commands::{CommandContext, Reply};
+use enshwick::ecs::Entity;
+use enshwick::events::BuildingPlaced;
+use enshwick::inventory::Inventories;
+use enshwick::schedule::Scheduler;
+use enshwick::world::World;
+use enshwick::{Host, Load, Mod, Off};
 
 use crate::command::{Admin, Online, Placed, Seen};
 use crate::file::Tail;
@@ -46,7 +46,7 @@ const ID: &str = "admin-tools";
 
 /// Admin tools: commands and a command file for test servers. Keep them off
 /// on a server people play on.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Turn on the /admin commands for administrators and the command file
@@ -65,7 +65,7 @@ static PLACED: Mutex<VecDeque<Placed>> = Mutex::new(VecDeque::new());
 fn set_enabled(settings: &Settings) {
     let was = ENABLED.swap(settings.enabled, Ordering::AcqRel);
     if was != settings.enabled {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "admin tools {}",
             if settings.enabled { "on" } else { "off" }
         );
@@ -80,8 +80,8 @@ pub struct AdminTools {
 }
 
 impl Mod for AdminTools {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "admin-tools",
             side: SERVER,
             name: "Admin tools",
@@ -97,7 +97,7 @@ impl Mod for AdminTools {
             .ok_or_else(|| Off::new("the data folder is not under the game's folder"))?
             .to_path_buf();
         for line in migrate::migrate(&game, ID) {
-            enshwick_loader_api::info!("{line}");
+            enshwick::info!("{line}");
         }
         let settings: Settings = load.config()?;
         set_enabled(&settings);
@@ -107,7 +107,7 @@ impl Mod for AdminTools {
         load.on::<BuildingPlaced>(remember)?;
         // Entity ids belong to one game: a hosted game's next world starts
         // with nothing placed.
-        load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
+        load.on::<enshwick::events::ShutdownStarted>(|()| {
             PLACED
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
@@ -151,15 +151,15 @@ impl Mod for AdminTools {
             .name("enshwick-admin-tools".into())
             .spawn(move || watch(&self.file, self.scheduler));
         if let Err(e) = started {
-            enshwick_loader_api::warn!("the command file is not watched: {e}");
+            enshwick::warn!("the command file is not watched: {e}");
         }
     }
 }
 
-enshwick_loader_api::declare_mod!(AdminTools);
+enshwick::declare_mod!(AdminTools);
 
 /// Remembers a placed piece for `/admin placed`.
-fn remember(data: &enshwick_loader_api::abi::BuildingData) {
+fn remember(data: &enshwick::abi::BuildingData) {
     let mut placed = PLACED.lock().unwrap_or_else(PoisonError::into_inner);
     if placed.len() == REMEMBERED {
         placed.pop_front();
@@ -204,7 +204,7 @@ fn admin(tools: &Tools, ctx: &CommandContext, args: &[&str]) -> Reply {
             let newest: Vec<Placed> = placed.iter().rev().take(count).copied().collect();
             command::placed(&newest)
         }
-        Admin::Mods => command::mods(&enshwick_loader_api::mods()),
+        Admin::Mods => command::mods(&enshwick::mods()),
         Admin::Reload(id) => command::reload(&tools.game, &id, world.key().as_deref()),
         Admin::Give { item, count, to } => give(tools, ctx, item, count, to.as_deref()),
         Admin::Say(text) => {
@@ -251,7 +251,7 @@ fn give(tools: &Tools, ctx: &CommandContext, item: u32, count: u32, to: Option<&
                 receiver.name, outcome.done
             )
         };
-        enshwick_loader_api::info!("{line}");
+        enshwick::info!("{line}");
         world.tell(&receiver, &line);
     });
     format!("giving {count} of item {item} to {}", player.name)
@@ -295,7 +295,7 @@ fn stamp(path: &Path) -> Stamp {
 fn watch(path: &Path, scheduler: Scheduler) {
     let mut seen = stamp(path);
     let mut tail = Tail::at(&std::fs::read(path).unwrap_or_default());
-    enshwick_loader_api::info!("watching {}", path.display());
+    enshwick::info!("watching {}", path.display());
     loop {
         std::thread::sleep(POLL);
         let now = stamp(path);
@@ -308,7 +308,7 @@ fn watch(path: &Path, scheduler: Scheduler) {
             continue;
         }
         if !ENABLED.load(Ordering::Acquire) {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "{} command file lines skipped: admin tools are off",
                 lines.len()
             );
@@ -325,16 +325,16 @@ fn watch(path: &Path, scheduler: Scheduler) {
 /// Runs a command file line as the console and logs its reply.
 fn run(line: &str) {
     RUN.fetch_add(1, Ordering::Relaxed);
-    match enshwick_loader_api::commands::run(line) {
-        Ok(reply) if reply.text().is_empty() => enshwick_loader_api::info!("{line}: no reply"),
-        Ok(reply) => enshwick_loader_api::info!("{line}:\n{}", reply.text()),
-        Err(why) => enshwick_loader_api::warn!("{line}: {why}"),
+    match enshwick::commands::run(line) {
+        Ok(reply) if reply.text().is_empty() => enshwick::info!("{line}: no reply"),
+        Ok(reply) => enshwick::info!("{line}:\n{}", reply.text()),
+        Err(why) => enshwick::warn!("{line}: {why}"),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::{Header, PlayerInfo, Status};
+    use enshwick::abi::{Header, PlayerInfo, Status};
 
     use super::*;
 
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn dev_answers_administrators_while_on_and_runs_file_lines_as_the_console() {
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .type_hash("keen::ecs::CurrentTransform", 1)
             .type_hash("keen::ecs::UsedItem", 2)
             .foreign_command("enshwick", "Enshwick 0.0.0-test: admin-tools 0.1.0")
@@ -378,10 +378,7 @@ mod tests {
         );
 
         loader.set_settings("enabled = true\n");
-        assert_eq!(
-            loader.raise::<enshwick_loader_api::events::SettingsChanged>(&()),
-            1
-        );
+        assert_eq!(loader.raise::<enshwick::events::SettingsChanged>(&()), 1);
         assert_eq!(
             loader.command("admin", &admin, "world").as_deref(),
             Some("no players online")
@@ -407,10 +404,10 @@ mod tests {
 
     #[test]
     fn a_hosted_game_s_next_world_starts_with_nothing_placed() {
-        use enshwick_loader_api::abi::BuildingData;
-        use enshwick_loader_api::events::ShutdownStarted;
+        use enshwick::abi::BuildingData;
+        use enshwick::events::ShutdownStarted;
 
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .type_hash("keen::ecs::CurrentTransform", 1)
             .type_hash("keen::ecs::UsedItem", 2)
             .settings(

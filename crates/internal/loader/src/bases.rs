@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::abi::{AltarLimitFn, HookFlags, Status};
+use enshwick::abi::{AltarLimitFn, HookFlags, Status};
 
 use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::Next;
@@ -550,7 +550,7 @@ unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, it
     };
     // SAFETY: the cursor's transform: the position first, three i64.
     let fixed = unsafe { transform.cast::<[i64; 3]>().read_unaligned() };
-    let candidate = limit::candidate(enshwick_loader_api::ecs::metres(fixed), size);
+    let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
     if zones.refuses(&candidate) {
         // SAFETY: as above.
         let refused = unsafe { flags.read() } | MAX_ALTARS_REACHED;

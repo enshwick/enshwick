@@ -7,13 +7,16 @@
 //! packages are already fresh, and nextest runs the tests of the changed
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
-//! checks. `cargo xtask check --all` runs the full suite.
+//! checks. `cargo xtask check --windows` also runs the tests of the crates
+//! that build only for Windows, under Wine off Windows. `cargo xtask check
+//! --all` runs the full suite, the Windows tests included when Docker runs.
 //!
 //! `cargo xtask bundle` writes the dev bundle testers unpack into the game
 //! folder ([`bundle`]).
 
 mod affected;
 mod bundle;
+mod wine;
 
 use std::collections::BTreeSet;
 use std::io::Write as _;
@@ -23,8 +26,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str =
-    "usage: cargo xtask check [--all] [--base <git ref>] | bundle [--out <dir>] [--local]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] | bundle [--out <dir>] [--local]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 fn main() -> ExitCode {
@@ -44,14 +46,17 @@ fn run(args: &[String]) -> Result<bool, String> {
     match task.as_str() {
         "check" => {}
         "bundle" => return bundle::run(rest),
+        "wine-run" => return wine::run_one(rest),
         _ => return Err(USAGE.to_owned()),
     }
     let mut all = false;
+    let mut windows = false;
     let mut base = "origin/main".to_owned();
     let mut rest = rest.iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--all" => all = true,
+            "--windows" => windows = true,
             "--base" => base.clone_from(rest.next().ok_or(USAGE)?),
             _ => return Err(USAGE.to_owned()),
         }
@@ -65,7 +70,16 @@ fn run(args: &[String]) -> Result<bool, String> {
         say(&format!("no merge base with {base}; checking everything"));
         Scope::All
     };
-    Ok(check(&scope, &packages, all))
+    let checked = check(&scope, &packages, all);
+    if !(checked && (all || windows)) {
+        return Ok(checked);
+    }
+    let windows_only: Vec<&str> = packages
+        .iter()
+        .filter(|p| p.windows_only)
+        .map(|p| p.name.as_str())
+        .collect();
+    Ok(wine::run(&windows_only, windows))
 }
 
 /// The workspace packages, from `cargo metadata`.
@@ -148,7 +162,7 @@ fn cargo() -> String {
 #[derive(Debug)]
 struct Step {
     args: Vec<String>,
-    env: Vec<(&'static str, &'static str)>,
+    env: Vec<(&'static str, String)>,
 }
 
 impl Step {
@@ -169,8 +183,8 @@ impl Step {
         self
     }
 
-    fn env(mut self, name: &'static str, value: &'static str) -> Self {
-        self.env.push((name, value));
+    fn env(mut self, name: &'static str, value: impl Into<String>) -> Self {
+        self.env.push((name, value.into()));
         self
     }
 
@@ -183,7 +197,9 @@ impl Step {
     fn run(&self, quiet: bool) -> bool {
         let started = Instant::now();
         let mut command = Command::new(cargo());
-        command.args(&self.args).envs(self.env.iter().copied());
+        command
+            .args(&self.args)
+            .envs(self.env.iter().map(|(name, value)| (name, value)));
         let (ok, output) = if quiet {
             match command.output() {
                 Ok(output) => (

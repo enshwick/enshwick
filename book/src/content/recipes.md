@@ -2,12 +2,12 @@
 
 Two calls add recipes, and one changes them:
 
-- [`Load::add_recipe`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+- [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
-- [`Load::derive_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+- [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
   you pick;
-- [`Load::modify_recipes`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+- [`Load::modify_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   changes the output and ingredient counts of the recipes you pick, in place.
 
 All three patch the game's recipe registry, which every mod shares; patches
@@ -18,14 +18,14 @@ their changes add up. To take recipes out of the game, see
 ## A single recipe
 
 ```rust
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::content::recipes::NewRecipe;
+use enshwick::content::{Guid, Id};
+use enshwick::content::recipes::NewRecipe;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 const SAFE: Id = Id::new("safes:safe");
 const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_recipe(NewRecipe {
         id: SAFE_RECIPE,
         like: CHEST,
@@ -67,9 +67,9 @@ the registry. Return `Some(Derived { .. })` to add a copy of that recipe
 beside it, `None` to leave it alone:
 
 ```rust
-use enshwick_loader_api::content::recipes::{Derived, RecipeView};
+use enshwick::content::recipes::{Derived, RecipeView};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.derive_recipes("my-mod", |recipe: &RecipeView<'_>| {
         recipe
             .debug_name()
@@ -84,7 +84,7 @@ it; its output count is the original's times `output`, and its ingredient
 counts are the original's times `cost`. The original stays as it is. The
 copy makes the original's first output only.
 
-[`RecipeView`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+[`RecipeView`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
 shows what a recipe is:
 
 - `guid()`, the recipe's GUID;
@@ -110,9 +110,9 @@ and never change it: saves hold the copies' ids like any other.
 lets it change the recipe's counts in place, with no recipe added:
 
 ```rust
-use enshwick_loader_api::content::recipes::RecipeEdit;
+use enshwick::content::recipes::RecipeEdit;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
         if recipe.view().debug_name().starts_with("Block_") {
             recipe.scale_output(2);
@@ -121,7 +121,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 }
 ```
 
-[`RecipeEdit`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+[`RecipeEdit`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
 has:
 
 - `view()`, the recipe as a `RecipeView` reads it now;
@@ -145,7 +145,7 @@ The client's crafting menu does not list what the registry holds. It lists
 the recipe ids of a tree baked into the game's UI bundle: per workshop,
 groups of sets of recipes. So `add_recipe`, `add_recipe_with` and
 `derive_recipes` also patch the UI bundle on the client, and the
-[`content::menu`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/menu.rs)
+[`content::menu`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs)
 module does the edit:
 
 - a new recipe goes right after the vanilla recipe that makes `like`, in the
@@ -160,7 +160,7 @@ the mods before it left it. Each new recipe goes right after the one it
 copies, so of the Safe of one mod and the Vault of a mod loaded later, both
 copied from the wooden chest, the Vault shows first: chest, Vault, Safe. One group of
 the menu shows at most 512 recipes, all its sets together
-([`GROUP_ENTRIES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/menu.rs));
+([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs));
 the mod's log says when a recipe is left out because its group is full or
 because nothing in the menu says where it goes. The dedicated server has no
 crafting menu and serves no UI bundle.
@@ -168,19 +168,19 @@ crafting menu and serves no UI bundle.
 ## The workshop limit
 
 The game takes at most 512 recipes at one workshop
-([`WORKSHOP_RECIPES`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs));
+([`WORKSHOP_RECIPES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs));
 more ends the game. When any mod serves the recipe registry, the loader
 patches the game to lift that limit, on the server and the client alike. If
 it cannot, because the game code does not read as the loader expects, the
 loader logs `workshop recipe limit kept: <reason>` and the limit holds.
 
-[`workshop_limit()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+[`workshop_limit()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
 tells which: `usize::MAX` once the limit is lifted, else 512. The answer is
 final before the game first reads the registry, which is when the recipe
 patches run, so both calls follow it:
 
 - while the limit holds, derived copies stop
-  [`RESERVED_FOR_SINGLE`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/content/recipes.rs)
+  [`RESERVED_FOR_SINGLE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   (16) short of 512 at each workshop, which leaves room for single recipes
   from `add_recipe`, and a single recipe is skipped at a workshop that
   already holds 512;
@@ -208,7 +208,7 @@ limit holds.
 
 ## A worked example
 
-[`enshwick-building-materials`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-building-materials/src/lib.rs)
+[`enshwick-building-materials`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-building-materials/src/lib.rs)
 doubles the output of the vanilla recipes for building blocks, overgrowth
 and decor with one `modify_recipes` call. It picks categories by debug name,
 and reads the multiplier and the categories from join values, which a client

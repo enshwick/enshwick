@@ -14,7 +14,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick_loader_api::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 
 use crate::host::Loader;
 
@@ -248,7 +248,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
                 // SAFETY: as above.
                 hardness: unsafe { read(config, layout.config_hardness) },
                 reserved: 0,
-                item: enshwick_loader_reflect::fnv1a32(&item),
+                item: enshwick_reflect::fnv1a32(&item),
                 // SAFETY: as above.
                 health: unsafe { read(config, layout.config_health) },
             }

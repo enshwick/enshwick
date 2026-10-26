@@ -21,7 +21,7 @@
 
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
+use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
 
 use crate::chains::Next;
 use crate::host::Loader;

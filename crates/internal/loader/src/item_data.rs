@@ -22,7 +22,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Event, HookFlags, Status};
+use enshwick::abi::{Event, HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::Next;
@@ -167,7 +167,7 @@ fn open_kind(
         let kind = &mut pending[index];
         if kind.scope != scope {
             crate::log::write(
-                enshwick_loader_api::abi::Level::ERROR,
+                enshwick::abi::Level::ERROR,
                 &record.id,
                 &format!("data kind {full} is opened for items and for entities"),
             );
@@ -208,13 +208,13 @@ pub(crate) fn get_platform_kind(id: &str, pide: u32, item: u32) -> Option<Box<[u
 /// Sets the item stats of the item `pide` holding `item`, as a mod's set
 /// would.
 pub(crate) fn set_platform(pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
-    let kind = kind_of(enshwick_loader_api::stats::ITEM_KIND).ok_or(Status::MISSING)?;
+    let kind = kind_of(enshwick::stats::ITEM_KIND).ok_or(Status::MISSING)?;
     set(kind, pide, item, value)
 }
 
 /// The item stats of the item `pide` holding `item`.
 pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
-    get_platform_kind(enshwick_loader_api::stats::ITEM_KIND, pide, item)
+    get_platform_kind(enshwick::stats::ITEM_KIND, pide, item)
 }
 
 /// Seals the kinds; the store runs only when a mod opened one.
@@ -369,7 +369,7 @@ fn kind_of(id: &str) -> Option<u32> {
 fn template_id(entity: u32) -> Option<u32> {
     let loader = crate::host::loader()?;
     let template = crate::world::template(loader, entity).ok()?;
-    Some(enshwick_loader_api::content::Guid(template).id())
+    Some(enshwick::content::Guid(template).id())
 }
 
 /// Whether this process runs the world the values belong to: the dedicated
@@ -453,7 +453,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         }
         server.changed = true;
     }
-    if id == enshwick_loader_api::stats::ITEM_KIND {
+    if id == enshwick::stats::ITEM_KIND {
         crate::stats::items_changed();
     }
     if !spec.sent {

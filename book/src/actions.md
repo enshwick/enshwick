@@ -18,9 +18,9 @@ the recommended way for anything a player does. Keep plain
 [commands](commands.md) for administrators' and developers' tools.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
+use enshwick::actions::{Action, Arg, Outcome, Value};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts("[en]\n\"set\" = \"Change the weather\"\n")?;
     let actions = load.actions("weather", texts)?;
     let kinds = [("clear", "Clear"), ("rain", "Rain"), ("storm", "Storm")];
@@ -47,7 +47,7 @@ use.
 
 ## Declaring
 
-[`load.actions(command, texts)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/actions.rs)
+[`load.actions(command, texts)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/actions.rs)
 registers the chat command and returns the mod's `Actions`; call it once,
 during `init`, on both sides of a join mod alike. Texts are keys of
 `texts`, the mod's [translations](settings.md), shown in each player's
@@ -104,7 +104,7 @@ game's window has the focus and the HUD shows.
 
 ## Worked example
 
-[`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
 declares who may open a Safe as a list action with a hint: `.at` finds the
 Safe at hand, the player's own first, through the mod's own rules and its
 extension point; `on` names the players allowed there; `.verbs("allow",

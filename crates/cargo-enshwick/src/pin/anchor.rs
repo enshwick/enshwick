@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use enshwick_loader_builds::{Locate, Table};
+use enshwick_gamedata::{Locate, Table};
 
 use super::exe::Exe;
 use super::patterns::{self, Carrier};

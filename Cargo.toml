@@ -2,7 +2,10 @@
 resolver = "3"
 members = [
     "crates/cargo-enshwick",
-    "crates/enshwick-loader-api",
+    "crates/enshwick",
+    "crates/enshwick-gamedata",
+    "crates/enshwick-macros",
+    "crates/enshwick-reflect",
     "crates/internal/*",
     "mods/*",
     # Listed one by one: release-please reads every glob match as a crate,
@@ -12,6 +15,7 @@ members = [
     "examples/safe-viewers",
     "examples/trading-post",
     "examples/trading-post-api",
+    "tools/compat",
     "tools/xtask",
 ]
 
@@ -20,7 +24,7 @@ authors = ["themaiby"]
 edition = "2024"
 rust-version = "1.99"
 license = "MIT"
-repository = "https://github.com/themaiby/enshwick"
+repository = "https://github.com/enshwick/enshwick"
 publish = false
 
 [workspace.dependencies]
@@ -29,9 +33,9 @@ const-sha1 = { version = "0.3.0", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
-enshwick-loader-api = { path = "crates/enshwick-loader-api", version = "0.0.0-dev" } # x-release-please-version
-enshwick-loader-builds = { path = "crates/internal/builds", version = "0.0.0-dev" } # x-release-please-version
-enshwick-loader-reflect = { path = "crates/internal/reflect", version = "0.0.0-dev" } # x-release-please-version
+enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.1" } # x-release-please-version
+enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.1" } # x-release-please-version
+enshwick-reflect = { path = "crates/enshwick-reflect", version = "1.0.0-alpha.1" } # x-release-please-version
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }

@@ -78,7 +78,7 @@ pub(crate) fn slots<'a>(
 /// the archive holds no single container that reads.
 pub fn read(
     archive: &crate::archive::Archive,
-    reflection: &enshwick_loader_reflect::Reflection<'_>,
+    reflection: &enshwick_reflect::Reflection<'_>,
 ) -> Result<FxHashMap<String, usize>, &'static str> {
     let field = |ty: &str, name: &str| {
         let offset = reflection.field_offset(ty, name).ok()?;
@@ -94,7 +94,7 @@ pub fn read(
         })
     })()
     .ok_or("the game does not reflect its attribute container")?;
-    let keys = archive.keys_of(enshwick_loader_reflect::fnv1a32(CONTAINER.as_bytes()));
+    let keys = archive.keys_of(enshwick_reflect::fnv1a32(CONTAINER.as_bytes()));
     let resource = match keys.as_slice() {
         [key] => archive.resource(key),
         _ => None,
@@ -117,9 +117,9 @@ pub fn read(
 #[cfg(windows)]
 pub(crate) fn supply(
     build: &mut crate::builds::KnownBuild,
-    reflection: &enshwick_loader_reflect::Reflection<'_>,
+    reflection: &enshwick_reflect::Reflection<'_>,
     dir: &std::path::Path,
-    side: enshwick_loader_api::abi::Side,
+    side: enshwick::abi::Side,
 ) {
     let wanted = build.attributes().to_vec();
     if wanted.is_empty() {
@@ -233,13 +233,13 @@ mod tests {
         };
         let archive =
             crate::archive::Archive::open(std::path::Path::new(&dir), "enshrouded").unwrap();
-        let keys = archive.keys_of(enshwick_loader_reflect::fnv1a32(
+        let keys = archive.keys_of(enshwick_reflect::fnv1a32(
             b"keen::AttributeContainerResource",
         ));
         assert_eq!(keys.len(), 1);
         let resource = archive.resource(&keys[0]).unwrap();
         let found = slots(&LAYOUT, &resource).unwrap();
-        let table = crate::builds::embedded(enshwick_loader_api::abi::Side::CLIENT);
+        let table = crate::builds::embedded(enshwick::abi::Side::CLIENT);
         let named = table.attributes();
         assert_eq!(named.len(), 9);
         for (id, name) in named {

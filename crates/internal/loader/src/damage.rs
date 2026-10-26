@@ -19,7 +19,7 @@
 use core::ffi::c_void;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
+use enshwick::abi::{DamageCheck, DamageFilterFn, Header, HookFlags, Registers, Status};
 
 use crate::chains::LOADER;
 use crate::host::{Loader, Registered, take};

@@ -12,9 +12,7 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{
-    Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str,
-};
+use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
 use crate::host::Loader;

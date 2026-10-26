@@ -7,7 +7,7 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
+use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
 
 use arc_swap::ArcSwapOption;
 
@@ -177,7 +177,7 @@ pub(crate) fn link(loader: &'static Loader) {
         .reflection
         .system("inventory_actions")
         .ok()
-        .map(enshwick_loader_reflect::System::entry);
+        .map(enshwick_reflect::System::entry);
     let stock_flags = if layout.stock_ui_return == 0 {
         HookFlags::NONE
     } else {
@@ -292,7 +292,7 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
             call.item = unsafe { read(item, 0) };
             // SAFETY: a transform starts with its 32.32 position.
             let fixed: [i64; 3] = unsafe { read(transform, 0) };
-            call.position = enshwick_loader_api::ecs::metres(fixed);
+            call.position = enshwick::ecs::metres(fixed);
             call.known = 1;
         }
     }

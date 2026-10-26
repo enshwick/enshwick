@@ -14,7 +14,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 
 use crate::chains::Next;
 use crate::host::Loader;
-use enshwick_loader_api::abi::{Event, Header, HookFlags, PlayerDeathData};
+use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &["player.death_sink"];

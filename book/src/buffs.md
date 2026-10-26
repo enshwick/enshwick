@@ -1,17 +1,17 @@
 # Buffs
 
-[`load.buffs()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/buffs.rs)
+[`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 returns the
-[`Buffs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/buffs.rs)
+[`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 of the server's world: the buff and debuff types the game knows, the buffs an
 entity has, giving one and removing one. It is `Copy`; get it during `init`
 and move it into handlers, tasks and commands.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::buffs::{Apply, BuffId};
+use enshwick::buffs::{Apply, BuffId};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let buffs = load.buffs();
     load.add_command("buffs", "lists your buffs", move |ctx, _args| {
         let Some(me) = ctx.character() else {

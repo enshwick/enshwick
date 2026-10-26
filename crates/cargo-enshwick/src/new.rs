@@ -177,9 +177,7 @@ fn part(pattern: &[u8], text: &[u8]) -> bool {
 /// Refuses an id no mod and no crate can take.
 fn check_id(id: &str) -> Result<(), String> {
     // The id names the crate too, and a crate's name starts with a letter.
-    if !enshwick_loader_api::abi::is_valid_id(id)
-        || !id.starts_with(|c: char| c.is_ascii_lowercase())
-    {
+    if !enshwick::abi::is_valid_id(id) || !id.starts_with(|c: char| c.is_ascii_lowercase()) {
         return Err(format!(
             "the id {id:?} is not 1 to 64 characters of [a-z0-9-] starting with a letter"
         ));
@@ -201,7 +199,7 @@ fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, 
             .replace("{type}", &type_name(id))
             .replace("{name}", &display_name(id))
             .replace("{side}", side)
-            .replace("{api}", &api_source())
+            .replace("{api}", enshwick::VERSION)
     };
     let cargo = match place {
         Place::Alone => fill(CARGO_TOML) + PROFILE,
@@ -214,17 +212,6 @@ fn files(id: &str, side: Side, place: &Place) -> Result<Vec<(PathBuf, String)>, 
         ("README.md".into(), fill(README)),
         (".gitignore".into(), "/target\n".into()),
     ])
-}
-
-/// Where a new mod takes the API from: the tag of this API's release, or
-/// `main` for a development build, which has no release.
-fn api_source() -> String {
-    let version = enshwick_loader_api::VERSION;
-    if version.contains('-') {
-        "branch = \"main\"".to_owned()
-    } else {
-        format!("tag = \"enshwick-loader-api-v{version}\"")
-    }
 }
 
 /// `flame-altar-zones` as `Flame altar zones`, the name players read until
@@ -271,7 +258,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", {api} }
+enshwick = "{api}"
 serde = { version = "1", features = ["derive"] }
 "#;
 
@@ -288,13 +275,13 @@ const LIB_RS: &str = r#"//! The {id} mod for Enshrouded.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::{Load, Mod, Off};
 
 /// Whether the mod does its work now; a settings change updates it.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// {type} settings, in `mod-configs/{id}.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Whether the mod does its work.
@@ -317,8 +304,8 @@ impl Default for Settings {
 pub struct {type};
 
 impl Mod for {type} {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "{id}",
             side: {side},
             // What players read; description, authors, license and homepage
@@ -339,17 +326,17 @@ impl Mod for {type} {
         load.on_config_change(|settings: Settings| {
             ENABLED.store(settings.enabled, Ordering::Relaxed);
         })?;
-        enshwick_loader_api::info!("enabled: {}", settings.enabled);
+        enshwick::info!("enabled: {}", settings.enabled);
         Ok(Self)
     }
 }
 
-enshwick_loader_api::declare_mod!({type});
+enshwick::declare_mod!({type});
 "#;
 
 const README: &str = "# {id}
 
-An Enshrouded mod for the [Enshwick](https://github.com/themaiby/enshwick) loader.
+An Enshrouded mod for the [Enshwick](https://github.com/enshwick/enshwick) loader.
 
 `cargo enshwick install --game <game folder>` builds it and copies it into the
 game's `mods/` folder. Its settings are `mod-configs/{id}.toml`, written on first
@@ -385,7 +372,7 @@ mod tests {
                 .1
         };
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
-        assert!(text("Cargo.toml").contains(&api_source()));
+        assert!(text("Cargo.toml").contains(&format!("enshwick = \"{}\"", enshwick::VERSION)));
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
         assert!(text("src/lib.rs").contains("// replaces: [\"old-id\"]"));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));

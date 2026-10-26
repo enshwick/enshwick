@@ -7,10 +7,10 @@
 mod take;
 mod tracker;
 
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::{Load, Mod, Off};
 
 /// Area loot settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Metres across the ground from the emptied container.
@@ -36,13 +36,13 @@ impl Default for Settings {
 
 fn describe(settings: &Settings) {
     if settings.enabled {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "area loot within {} m, {} m up or down",
             settings.radius,
             settings.height
         );
     } else {
-        enshwick_loader_api::info!("area loot disabled");
+        enshwick::info!("area loot disabled");
     }
 }
 
@@ -51,8 +51,8 @@ fn describe(settings: &Settings) {
 pub struct AreaLoot;
 
 impl Mod for AreaLoot {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "area-loot",
             side: SERVER,
             name: "Area loot",
@@ -72,11 +72,11 @@ impl Mod for AreaLoot {
     }
 }
 
-enshwick_loader_api::declare_mod!(AreaLoot);
+enshwick::declare_mod!(AreaLoot);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::config::Config;
+    use enshwick::config::Config;
 
     use super::*;
 

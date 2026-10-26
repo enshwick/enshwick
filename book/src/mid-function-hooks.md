@@ -6,13 +6,13 @@ and no function boundary is near it. `load.hook_at(address, handler)` runs
 has there:
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // An instruction inside a function, pinned per build in the mod's rows.
     let site = load.symbol("my-mod.range_clamp")?;
     // SAFETY: the site starts an instruction that reads a range in `rax`, and
     // a smaller range is one the game takes.
     unsafe {
-        load.hook_at(site, |registers: &mut enshwick_loader_api::abi::Registers| {
+        load.hook_at(site, |registers: &mut enshwick::abi::Registers| {
             registers.rax = registers.rax.min(64);
         })
     }
@@ -27,7 +27,7 @@ is a value the game code goes on with, which the loader cannot check.
 
 ## Registers
 
-[`Registers`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
+[`Registers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 holds the 16 general-purpose registers and `rflags`.
 
 - Writes to any field but `rsp` take effect when the game code goes on.

@@ -7,14 +7,14 @@ through.
 
 ## Crafting
 
-[`load.on_craft(|craft| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/vetoes.rs)
+[`load.on_craft(|craft| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
 runs on each player's craft request in the server's world, with a
 `CraftRequest`: the crafting `player`, the `station` (`None` for crafting by
 hand), the `recipe` id and the `amount`. Returning `false` refuses it:
 nothing is made and nothing is taken.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     // Only administrators craft by hand.
     load.on_craft(move |craft| {
@@ -30,14 +30,14 @@ request reaches the crafting system empty, with no crafter and no amount.
 
 ## Building
 
-[`load.on_build(|placement| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/vetoes.rs)
+[`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
 runs after the game's cursor check allows a placement, with a `Placement`:
 the building `player`, the `item` placed and its `position` in metres.
 Returning `false` refuses it the way the game refuses a placement without
 building permission: the building systems do not place it.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Nothing is built in a ring around the world's centre.
     load.on_build(|placement| {
         let [x, _, z] = placement.position;

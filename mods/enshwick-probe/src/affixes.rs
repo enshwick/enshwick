@@ -3,13 +3,13 @@
 //! and its old stats put back; and the `/probe stat`, `/probe stats` and
 //! `/probe affix` commands an administrator tries them with in game.
 
-use enshwick_loader_api::affixes::{AffixDef, Affixes, Categories, Range, Rarity, RollRules};
-use enshwick_loader_api::inventory::{Category, Inventories};
-use enshwick_loader_api::item_data::ItemInstance;
-use enshwick_loader_api::stats::{Lasting, Modifier, Op, Stat, StatDef, Stats, builtin};
-use enshwick_loader_api::world::Player;
-use enshwick_loader_api::world::{ComponentType, World};
-use enshwick_loader_api::{Load, Off};
+use enshwick::affixes::{AffixDef, Affixes, Categories, Range, Rarity, RollRules};
+use enshwick::inventory::{Category, Inventories};
+use enshwick::item_data::ItemInstance;
+use enshwick::stats::{Lasting, Modifier, Op, Stat, StatDef, Stats, builtin};
+use enshwick::world::Player;
+use enshwick::world::{ComponentType, World};
+use enshwick::{Load, Off};
 
 /// The probe's key for the modifiers its commands set.
 const KEY: &str = "probe-command";
@@ -80,7 +80,7 @@ impl AffixChecks {
                 Some(checks)
             }
             Err(off) => {
-                enshwick_loader_api::warn!("FAIL affixes: {off}");
+                enshwick::warn!("FAIL affixes: {off}");
                 None
             }
         }
@@ -100,7 +100,7 @@ impl AffixChecks {
                 })
             });
         let Some(item) = found else {
-            enshwick_loader_api::info!("SKIP affixes: no weapon or armour in any container");
+            enshwick::info!("SKIP affixes: no weapon or armour in any container");
             return;
         };
         let before = self.stats.item(item);
@@ -108,9 +108,9 @@ impl AffixChecks {
             .affixes
             .roll(item, RollRules::new(2, 2), Some(SEED), false)
         {
-            Ok(2) => enshwick_loader_api::info!("PASS affixes: {item:?} rolled 2"),
+            Ok(2) => enshwick::info!("PASS affixes: {item:?} rolled 2"),
             other => {
-                enshwick_loader_api::warn!("FAIL affixes: roll of {item:?}: {other:?}");
+                enshwick::warn!("FAIL affixes: roll of {item:?}: {other:?}");
                 return;
             }
         }
@@ -119,9 +119,9 @@ impl AffixChecks {
             .affixes
             .roll(item, RollRules::new(2, 2), Some(SEED), false);
         if self.stats.item(item) == first {
-            enshwick_loader_api::info!("PASS affixes: the same seed rolls {:?}", first.affixes);
+            enshwick::info!("PASS affixes: the same seed rolls {:?}", first.affixes);
         } else {
-            enshwick_loader_api::warn!("FAIL affixes: the same seed rolled otherwise");
+            enshwick::warn!("FAIL affixes: the same seed rolled otherwise");
         }
         let lines = self.affixes.lines(item);
         let named: Vec<String> = lines
@@ -133,13 +133,13 @@ impl AffixChecks {
             })
             .collect();
         if named.len() == 2 {
-            enshwick_loader_api::info!("PASS affixes: lines {named:?}");
+            enshwick::info!("PASS affixes: lines {named:?}");
         } else {
-            enshwick_loader_api::warn!("FAIL affixes: lines {lines:?}");
+            enshwick::warn!("FAIL affixes: lines {lines:?}");
         }
         match self.stats.set_item(item, &before) {
-            Ok(()) => enshwick_loader_api::info!("PASS affixes: {item:?} put back"),
-            Err(why) => enshwick_loader_api::warn!("FAIL affixes: putting back {item:?}: {why}"),
+            Ok(()) => enshwick::info!("PASS affixes: {item:?} put back"),
+            Err(why) => enshwick::warn!("FAIL affixes: putting back {item:?}: {why}"),
         }
     }
 

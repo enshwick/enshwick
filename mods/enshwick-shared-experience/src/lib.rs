@@ -15,15 +15,15 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use enshwick_loader_api::events::{ShutdownStarted, Ticked, WorldLoaded};
-use enshwick_loader_api::progress::Experience;
-use enshwick_loader_api::state::{Store, WorldStore};
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::events::{ShutdownStarted, Ticked, WorldLoaded};
+use enshwick::progress::Experience;
+use enshwick::state::{Store, WorldStore};
+use enshwick::{Load, Mod, Off};
 
 pub use share::{Character, Levels, high_water};
 
 /// Shared experience settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Every character catches up with the one furthest ahead in experience.
@@ -64,13 +64,13 @@ const fn character(row: &Experience) -> Character {
 }
 
 /// Moves the high-water mark and raises every character below it.
-fn share_experience(rows: &mut [Experience], table: &enshwick_loader_api::progress::Levels) {
+fn share_experience(rows: &mut [Experience], table: &enshwick::progress::Levels) {
     if !ENABLED.load(Ordering::Relaxed) || rows.is_empty() {
         return;
     }
     let levels = LEVELS.get_or_init(|| {
         let levels = Levels::new(table.cap(), |level| table.need(level));
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "level cap {}, {} experience to reach it",
             table.cap(),
             levels.total(Character {
@@ -129,18 +129,18 @@ fn open_world(store: &WorldStore<Saved>, dir: &Path) {
                         .map_err(|e| e.to_string())
                 });
                 match moved {
-                    Ok(()) => enshwick_loader_api::info!(
+                    Ok(()) => enshwick::info!(
                         "experience mark {mark} moved from experience.toml into this world"
                     ),
-                    Err(why) => enshwick_loader_api::warn!("experience.toml stays: {why}"),
+                    Err(why) => enshwick::warn!("experience.toml stays: {why}"),
                 }
             }
-            Err(error) => enshwick_loader_api::warn!("experience.toml not read: {error}"),
+            Err(error) => enshwick::warn!("experience.toml not read: {error}"),
         }
     }
     STORED.store(mark, Ordering::Relaxed);
     let mark = HIGH_WATER.fetch_max(mark, Ordering::Relaxed).max(mark);
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "experience mark {mark} in world {}",
         store.key().unwrap_or_default()
     );
@@ -151,8 +151,8 @@ fn open_world(store: &WorldStore<Saved>, dir: &Path) {
 pub struct SharedExperience;
 
 impl Mod for SharedExperience {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "shared-experience",
             side: SERVER,
             name: "Shared experience",
@@ -189,9 +189,9 @@ impl Mod for SharedExperience {
         })?;
         load.on_config_change(|settings: Settings| {
             ENABLED.store(settings.enabled, Ordering::Relaxed);
-            enshwick_loader_api::info!("shared experience {}", on_off(settings.enabled));
+            enshwick::info!("shared experience {}", on_off(settings.enabled));
         })?;
-        enshwick_loader_api::info!("shared experience {}", on_off(settings.enabled));
+        enshwick::info!("shared experience {}", on_off(settings.enabled));
         Ok(Self)
     }
 }
@@ -200,11 +200,11 @@ fn on_off(enabled: bool) -> &'static str {
     if enabled { "on" } else { "off" }
 }
 
-enshwick_loader_api::declare_mod!(SharedExperience);
+enshwick::declare_mod!(SharedExperience);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::config::Config as _;
+    use enshwick::config::Config as _;
 
     use super::*;
 
@@ -214,8 +214,8 @@ mod tests {
         assert!(settings.enabled);
     }
 
-    fn tick(loader: &enshwick_loader_api::test::Installed, step: u64) {
-        use enshwick_loader_api::abi::{Header, TickData};
+    fn tick(loader: &enshwick::test::Installed, step: u64) {
+        use enshwick::abi::{Header, TickData};
 
         let _ran = loader.raise::<Ticked>(&TickData {
             header: Header::of::<TickData>(),
@@ -224,8 +224,8 @@ mod tests {
     }
 
     /// A game of the world `key` with the mod's data in `dir`.
-    fn game(dir: &Path, key: &str) -> enshwick_loader_api::test::Installed {
-        let loader = enshwick_loader_api::test::FakeHost::new()
+    fn game(dir: &Path, key: &str) -> enshwick::test::Installed {
+        let loader = enshwick::test::FakeHost::new()
             .settings(
                 "enabled = true
 ",
@@ -235,7 +235,7 @@ mod tests {
             .install();
         // SAFETY: the exports of `declare_mod!`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert_eq!(status, enshwick::abi::Status::OK);
         HIGH_WATER.store(0, Ordering::Relaxed);
         STORED.store(0, Ordering::Relaxed);
         assert_eq!(loader.raise::<WorldLoaded>(&()), 2, "{:?}", loader.logs());
@@ -271,14 +271,14 @@ mod tests {
         assert!(dir.join("experience.toml.moved").exists());
         let mut rows = [
             Experience {
-                entity: enshwick_loader_api::ecs::Entity(1),
+                entity: enshwick::ecs::Entity(1),
                 level: 1,
                 progress: 0,
                 need: 100,
                 gained: 40,
             },
             Experience {
-                entity: enshwick_loader_api::ecs::Entity(2),
+                entity: enshwick::ecs::Entity(2),
                 level: 1,
                 progress: 0,
                 need: 100,
@@ -353,11 +353,11 @@ mod tests {
 
     #[test]
     fn one_kill_shared_across_batches_counts_once() {
-        use enshwick_loader_api::abi::{Header, TickData};
+        use enshwick::abi::{Header, TickData};
 
         let dir =
             std::env::temp_dir().join(format!("shared-experience-moment-{}", std::process::id()));
-        let loader = enshwick_loader_api::test::FakeHost::new()
+        let loader = enshwick::test::FakeHost::new()
             .settings(
                 "enabled = true
 ",
@@ -366,11 +366,11 @@ mod tests {
             .install();
         // SAFETY: the exports of `declare_mod!`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_eq!(status, enshwick_loader_api::abi::Status::OK);
+        assert_eq!(status, enshwick::abi::Status::OK);
         HIGH_WATER.store(0, Ordering::Relaxed);
         STORED.store(0, Ordering::Relaxed);
         let row = |entity, progress, gained| Experience {
-            entity: enshwick_loader_api::ecs::Entity(entity),
+            entity: enshwick::ecs::Entity(entity),
             level: 1,
             progress,
             need: 1000,

@@ -5,8 +5,8 @@
 
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{ModEventFn, Status};
-use enshwick_loader_api::services::{LayoutError, compare};
+use enshwick::abi::{ModEventFn, Status};
+use enshwick::services::{LayoutError, compare};
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;
@@ -329,7 +329,7 @@ pub(crate) fn seal(names: &impl Names) {
     let (slots, idle) = registry().seal(names);
     for (owner, reason) in idle {
         let (id, _) = names.name(owner);
-        crate::log::write(enshwick_loader_api::abi::Level::WARN, id, &reason);
+        crate::log::write(enshwick::abi::Level::WARN, id, &reason);
     }
     let count = slots.len();
     if SEALED.set(slots).is_ok() && count > 0 {
@@ -408,7 +408,7 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::Status;
+    use enshwick::abi::Status;
 
     use super::{Names, Registry};
 

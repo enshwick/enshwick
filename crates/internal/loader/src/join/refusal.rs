@@ -19,8 +19,8 @@ const MAX_LINES: usize = 12;
 /// # Examples
 ///
 /// ```
-/// use enshwick::admission::Need;
-/// use enshwick::join::{Names, refusal};
+/// use enshwick_loader::admission::Need;
+/// use enshwick_loader::join::{Names, refusal};
 ///
 /// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: None };
 /// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &Default::default());
@@ -68,8 +68,8 @@ enum Get {
 /// ```
 /// use std::collections::BTreeMap;
 ///
-/// use enshwick::admission::Need;
-/// use enshwick::join::{Names, refusal};
+/// use enshwick_loader::admission::Need;
+/// use enshwick_loader::join::{Names, refusal};
 ///
 /// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
 /// let pages = BTreeMap::from([("safes".to_owned(), "https://github.com/someone/safes".to_owned())]);
@@ -243,7 +243,7 @@ mod tests {
         let id = "survivors-per-altar";
         let pages = BTreeMap::from([(
             id.to_owned(),
-            "https://github.com/themaiby/enshwick".to_owned(),
+            "https://github.com/enshwick/enshwick".to_owned(),
         )]);
         let off = Off {
             by_player: vec!["safes".to_owned()],

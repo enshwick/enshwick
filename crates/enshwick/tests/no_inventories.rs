@@ -1,0 +1,30 @@
+//! A mod that needs inventories on a build without them turns off at init.
+
+#[cfg(test)]
+mod tests {
+    use enshwick::abi::Status;
+    use enshwick::test::FakeHost;
+
+    struct Looter;
+
+    impl enshwick::Mod for Looter {
+        fn manifest() -> &'static enshwick::abi::Manifest {
+            enshwick::manifest!(id: "looter", side: SERVER)
+        }
+
+        fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            load.inventories()?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::declare_mod!(Looter);
+
+    #[test]
+    fn a_build_without_inventories_turns_the_mod_off() {
+        let loader = FakeHost::new().without_inventories().install();
+        // SAFETY: the export of `declare_mod!` above.
+        assert_ne!(unsafe { loader.init(enshwick_mod_init) }, Status::OK);
+        assert!(loader.inventory_requests().is_empty());
+    }
+}

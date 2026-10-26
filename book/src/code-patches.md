@@ -6,7 +6,7 @@ the bytes stay changed for every caller, and for the rest of the process.
 Reach for a [hook](hooks.md) first; patch only what a hook cannot reach.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // `cmp eax, 8; jb` becomes `cmp eax, 16; jb`.
     let site = load.find_code("83 F8 08 72 ??")?;
     // SAFETY: an 8-bit immediate becomes another; the code stays valid.
@@ -48,7 +48,7 @@ patches is written, since a change made of several patches may be unsafe in
 part. A mod that returns `Off` from `init` after asking for patches gets none
 of them.
 
-[the loader's base limit](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/bases.rs)
+[the loader's base limit](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/bases.rs)
 widens the game's base grouping from 16 to 32 zones with six patches
 and three hooks, all found by patterns before any is registered. A
 miss there logs a warning and leaves the game at 16 altar zones.
@@ -68,12 +68,12 @@ displacements and offsets, and keep enough fixed bytes around the site to make
 it unique. Check the bytes you patch in the pattern too: `expected` must match
 them at arming anyway.
 
-[`code::Pattern`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/code.rs)
+[`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
 parses and searches patterns on any slice, which helps test them against a
 copy of the bytes in a unit test:
 
 ```rust
-use enshwick_loader_api::code::Pattern;
+use enshwick::code::Pattern;
 
 let pattern = Pattern::parse("83 F8 08 72 ??").unwrap();
 let code = [0x90, 0x83, 0xf8, 0x08, 0x72, 0x05, 0xc3];

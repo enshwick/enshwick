@@ -1,21 +1,21 @@
 # The world
 
-[`load.world()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns a
-[`World`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs):
+[`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs):
 reads of the server's world, component writes, character stats, entity
 queries, labels, chat lines, destroy requests and saves. It is `Copy`; get
 it during `init` and move it into handlers and tasks.
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::PlayerJoined;
+use enshwick::ecs::Entity;
+use enshwick::events::PlayerJoined;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
         if let Some(player) = world.player(Entity(joined.entity)) {
-            enshwick_loader_api::info!("{} joined, admin: {}", player.name, player.is_admin());
+            enshwick::info!("{} joined, admin: {}", player.name, player.is_admin());
         }
     })
 }
@@ -49,19 +49,19 @@ through the system's context instead; see [ECS inside systems](ecs.md).
 The pointer from `component` stays valid until the game thread returns to the
 game; read what you need at once. `component_type` turns the mod off when the
 type is not reflected on the running build. Its `hash()` is the hash
-[`ecs::Components`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs)
+[`ecs::Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 takes inside systems.
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::BuildingPlaced;
+use enshwick::ecs::Entity;
+use enshwick::events::BuildingPlaced;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
         let entity = Entity(placed.entity);
         if let (Some(at), Some(item)) = (world.position(entity), world.used_item(entity)) {
-            enshwick_loader_api::debug!("item {item} placed at {at:?}");
+            enshwick::debug!("item {item} placed at {at:?}");
         }
     })
 }
@@ -76,14 +76,14 @@ character's `level`, `experience` toward the next level and
 vitals; stamina and mana only for those that have them, such as characters.
 
 ```rust
-use enshwick_loader_api::events::PlayerJoined;
+use enshwick::events::PlayerJoined;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        let entity = enshwick_loader_api::ecs::Entity(joined.entity);
+        let entity = enshwick::ecs::Entity(joined.entity);
         if let (Some(vitals), Some(progress)) = (world.vitals(entity), world.progress(entity)) {
-            enshwick_loader_api::info!("level {} with {} health", progress.level, vitals.health.current);
+            enshwick::info!("level {} with {} health", progress.level, vitals.health.current);
         }
     })
 }
@@ -106,15 +106,15 @@ the game derives from gear and buffs and the writes leave alone:
 | Mana | 0 | the entity has no mana (`WorldError::Lacks`) |
 
 ```rust
-use enshwick_loader_api::game_events::LevelGained;
+use enshwick::game_events::LevelGained;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     // A level up restores the character's health.
     load.on_game::<LevelGained>(move |gained| {
         let max = world.vitals(gained.player).map_or(0, |v| v.health.max);
         if let Err(why) = world.set_health(gained.player, max) {
-            enshwick_loader_api::debug!("no heal: {why}");
+            enshwick::debug!("no heal: {why}");
         }
     })
 }
@@ -158,7 +158,7 @@ them from the server's own every step, so `writable_type` refuses them.
 | `set(entity, field, value)` | writes the field, marked changed |
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
     let immune = flags.field::<bool>(load, "immune")?;
@@ -198,7 +198,7 @@ engine walks every archetype with the component, so call them now and then,
 from a command or a timer, not on every step.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     let beds = world.component_type(load, "keen::ecs::NpcBed")?;
     load.add_command("beds", "counts the beds", move |_ctx, _args| {
@@ -229,7 +229,7 @@ thread.
 
 `player(entity)` returns the connected player whose character is `entity`;
 `players()` returns every connected player with a character in the world. A
-[`Player`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`Player`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 has:
 
 - `entity`, the character's entity;
@@ -237,7 +237,7 @@ has:
 - `key`, the same number for the same account in every session. Use it to
   remember a player between sessions;
 - `permissions`, the server's permission bits, `PlayerInfo::CAN_*` in
-  [`abi`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs);
+  [`abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs);
   `is_admin()` tells whether the player may kick and ban, the server's
   administrators;
 - `name`, the name the client sent. It is untrusted: a client picks it, and two
@@ -259,10 +259,10 @@ when the entity is gone.
 name, or `None` when the world cannot tell.
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::BuildingPlaced;
+use enshwick::ecs::Entity;
+use enshwick::events::BuildingPlaced;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
         if let Some(player) = world.player(Entity(placed.player)) {
@@ -274,21 +274,21 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 ```
 
 The game checks no permission when a player renames something.
-[`load.on_rename(|rename| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs)
+[`load.on_rename(|rename| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs)
 runs before every rename on the server, on its game thread, with a
-[`Rename`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/commands.rs):
+[`Rename`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/commands.rs):
 the `entity`, the `player` (`None` when the server cannot tell) and the new
 `text`. Returning `false` refuses the rename, and the entity keeps its name.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // Only administrators rename anything.
     load.on_rename(|rename| rename.player.as_ref().is_some_and(|p| p.is_admin()))
 }
 ```
 
 A panic in the filter turns the mod off and lets that rename through.
-[`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
 uses labels and a rename filter for its Safes.
 
 ## Chat lines

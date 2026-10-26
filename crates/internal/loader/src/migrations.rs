@@ -11,8 +11,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use enshwick_loader_api::abi::MigrationStep;
-use enshwick_loader_api::content::Guid;
+use enshwick::abi::MigrationStep;
+use enshwick::content::Guid;
 use toml_edit::DocumentMut;
 
 /// The record file, under the `mod-data` folder.
@@ -461,7 +461,7 @@ pub(crate) use live::{register, renamed, world_loaded};
 mod live {
     use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
-    use enshwick_loader_api::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
+    use enshwick::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
 
     use super::{Migration, Record, Step, Target, dry_run, follow_renames, run};
@@ -767,7 +767,7 @@ fn follow_renames(
 mod tests {
     use std::path::PathBuf;
 
-    use enshwick_loader_api::abi::MigrationStep;
+    use enshwick::abi::MigrationStep;
 
     use super::*;
 

@@ -68,7 +68,7 @@ pub(crate) fn start() {
         .name("research-fibers".into())
         .spawn(run);
     if let Err(why) = started {
-        enshwick_loader_api::warn!("R18 off: {why}");
+        enshwick::warn!("R18 off: {why}");
     }
 }
 
@@ -94,11 +94,11 @@ fn run() {
         })
         .collect();
     if odd.is_empty() {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R18 no fibers: {threads} threads at most, each on its own stack in {ROUNDS} rounds"
         );
     } else {
-        enshwick_loader_api::info!("R18 threads off their stacks or on fibers: {odd:?}");
+        enshwick::info!("R18 threads off their stacks or on fibers: {odd:?}");
     }
 }
 

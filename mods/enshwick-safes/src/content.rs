@@ -1,10 +1,10 @@
 //! The Safe as game content: an item cloned from the wooden chest that places
 //! the same vanilla chest, and a recipe beside the chest's.
 
-use enshwick_loader_api::content::items::NewItem;
-use enshwick_loader_api::content::recipes::NewRecipe;
-use enshwick_loader_api::content::{Guid, Id};
-use enshwick_loader_api::migrations::Migrations;
+use enshwick::content::items::NewItem;
+use enshwick::content::recipes::NewRecipe;
+use enshwick::content::{Guid, Id};
+use enshwick::migrations::Migrations;
 
 /// The vanilla wooden chest item.
 pub const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
@@ -28,7 +28,7 @@ pub fn migrations() -> Migrations {
 /// Whether `item` is a Safe, under its id or one it had before.
 #[must_use]
 pub fn is_safe(item: u32) -> bool {
-    enshwick_loader_api::migrations::current_id(item) == SAFE.id()
+    enshwick::migrations::current_id(item) == SAFE.id()
 }
 
 /// The mod's texts, per language.
@@ -59,7 +59,7 @@ pub const fn recipe(cost: u32) -> NewRecipe {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::i18n::{Language, Texts};
+    use enshwick::i18n::{Language, Texts};
 
     use super::*;
 

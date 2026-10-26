@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use enshwick_loader_api::content::Guid;
+use enshwick::content::Guid;
 
 /// What `/admin` was asked to do.
 ///
@@ -84,9 +84,7 @@ pub fn parse(args: &[&str]) -> Result<Admin, String> {
         ["placed"] => Ok(Admin::Placed(PLACED)),
         ["placed", count] => number(count, "the count").map(|n| Admin::Placed(n as usize)),
         ["mods"] => Ok(Admin::Mods),
-        ["reload", id] if enshwick_loader_api::abi::is_valid_id(id) => {
-            Ok(Admin::Reload((*id).to_owned()))
-        }
+        ["reload", id] if enshwick::abi::is_valid_id(id) => Ok(Admin::Reload((*id).to_owned())),
         ["reload", id] => Err(format!("{id} is no mod id")),
         ["say", words @ ..] if !words.is_empty() => Ok(Admin::Say(words.join(" "))),
         ["give", item, rest @ ..] => {
@@ -282,7 +280,7 @@ pub fn placed(placed: &[Placed]) -> String {
 /// assert_eq!(mods(&[]), "no mods listed");
 /// ```
 #[must_use]
-pub fn mods(entries: &[enshwick_loader_api::mods::ModEntry]) -> String {
+pub fn mods(entries: &[enshwick::mods::ModEntry]) -> String {
     if entries.is_empty() {
         return "no mods listed".to_owned();
     }
@@ -290,8 +288,8 @@ pub fn mods(entries: &[enshwick_loader_api::mods::ModEntry]) -> String {
         .iter()
         .map(|m| {
             let side = match m.side {
-                enshwick_loader_api::abi::Side::SERVER => "server",
-                enshwick_loader_api::abi::Side::CLIENT => "client",
+                enshwick::abi::Side::SERVER => "server",
+                enshwick::abi::Side::CLIENT => "client",
                 _ => "both",
             };
             let join = if m.join { ", join" } else { "" };

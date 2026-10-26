@@ -1,16 +1,16 @@
 # Effects
 
-[`load.effects()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs)
+[`load.effects()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs)
 returns the mod's
-[`Effects`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs):
+[`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`; get it during `init` and move it into
 handlers, tasks and commands.
 
 ```rust
-use enshwick_loader_api::effects::Teleport;
+use enshwick::effects::Teleport;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     load.add_command("home", "takes you to the world's centre", move |ctx, _args| {
         let Some(me) = ctx.character() else {
@@ -51,9 +51,9 @@ thread, `Refused` for a type the loader does not allow or when the step has
 no room for more events, `Missing` on a build without the event.
 
 ```rust
-use enshwick_loader_api::effects::NpcOrder;
+use enshwick::effects::NpcOrder;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
     load.add_command("come", "calls a survivor to you: /come <survivor id>", move |ctx, args| {
@@ -93,16 +93,16 @@ and `.facing_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::effects::Spawn;
+use enshwick::effects::Spawn;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
     load.add_command("decoy", "spawns a copy of an entity beside you for a minute: /decoy <entity>", move |ctx, args| {
         let Some(me) = ctx.character() else {
             return "the console has no character".into();
         };
-        let source = args.first().and_then(|a| a.parse().ok()).map(enshwick_loader_api::ecs::Entity);
+        let source = args.first().and_then(|a| a.parse().ok()).map(enshwick::ecs::Entity);
         let (Some(template), Some([x, y, z])) = (source.and_then(|e| world.template(e)), world.position(me)) else {
             return "/decoy <entity>".into();
         };

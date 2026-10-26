@@ -17,7 +17,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwapOption;
-use enshwick_loader_api::abi::Level;
+use enshwick::abi::Level;
 
 use crate::settings::{LOADER_ID, Settings};
 
@@ -293,7 +293,7 @@ fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String
 #[macro_export]
 macro_rules! log {
     ($level:ident, $($arg:tt)+) => {{
-        let level = ::enshwick_loader_api::abi::Level::$level;
+        let level = ::enshwick::abi::Level::$level;
         if $crate::log::enabled(level, $crate::settings::LOADER_ID) {
             $crate::log::write(level, $crate::settings::LOADER_ID, &::std::format!($($arg)+));
         }

@@ -180,8 +180,8 @@ impl Texts {
 
 /// The game's text collection resource.
 #[cfg(windows)]
-const COLLECTION: enshwick_loader_api::abi::ResourceKey = enshwick_loader_api::abi::ResourceKey {
-    guid: enshwick_loader_api::content::Guid::parse("163bb0a2-dc73-428b-b01a-a11e2eff947c").0,
+const COLLECTION: enshwick::abi::ResourceKey = enshwick::abi::ResourceKey {
+    guid: enshwick::content::Guid::parse("163bb0a2-dc73-428b-b01a-a11e2eff947c").0,
     type_hash: 0x3f13_ff35,
     part: 0,
 };
@@ -319,9 +319,8 @@ mod tests {
         };
         let archive =
             crate::archive::Archive::open(std::path::Path::new(&dir), "enshrouded").unwrap();
-        let collection = enshwick_loader_api::abi::ResourceKey {
-            guid: enshwick_loader_api::content::Guid::parse("163bb0a2-dc73-428b-b01a-a11e2eff947c")
-                .0,
+        let collection = enshwick::abi::ResourceKey {
+            guid: enshwick::content::Guid::parse("163bb0a2-dc73-428b-b01a-a11e2eff947c").0,
             type_hash: 0x3f13_ff35,
             part: 0,
         };

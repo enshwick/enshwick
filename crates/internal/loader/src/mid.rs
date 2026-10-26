@@ -15,7 +15,7 @@
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
-use enshwick_loader_api::abi::{HookFlags, MidHookFn, Registers, Status};
+use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
 use rustc_hash::FxHashMap;
 use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::Memory::{

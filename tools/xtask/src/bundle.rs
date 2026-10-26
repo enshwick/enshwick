@@ -18,11 +18,11 @@ const BUNDLE: &str = "enshwick.zip";
 const LOADER_ONLY: &str = "enshwick-loader.zip";
 /// The list of mods, relative to the workspace.
 const MODS: &str = "tools/mods.toml";
-/// The stub's package and library; the game loads it as `powrprof.dll`.
-const STUB: (&str, &str) = ("enshwick-loader-stub", "powrprof");
-/// The loader's package and library, which the stub loads from
-/// `mods/enshwick/`.
-const LOADER: (&str, &str) = ("enshwick-loader", "enshwick");
+/// The stub's package and where it goes: the game loads it as a system DLL.
+const STUB: (&str, &str) = ("enshwick-loader-stub", "powrprof.dll");
+/// The loader's package and where it goes: the stub loads it from there,
+/// whatever its library is called.
+const LOADER: (&str, &str) = ("enshwick-loader", "mods/enshwick/enshwick.dll");
 
 /// One mod of `tools/mods.toml`.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -70,7 +70,13 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
         }
     }
     let listed = read_list(&std::fs::read_to_string(MODS).map_err(|e| format!("{MODS}: {e}"))?)?;
-    let workspace = workspace_mods()?;
+    let (libraries, workspace) = workspace_libraries()?;
+    let built_as = |package: &str| {
+        libraries
+            .get(package)
+            .map(|lib| release_dir_of().join(format!("{lib}.dll")))
+            .ok_or_else(|| format!("{package} builds no library"))
+    };
     let sources = plan(&listed, &workspace, |repository| {
         !local && has_dev_release(repository)
     })?;
@@ -102,8 +108,8 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
     }
     let _gone = std::fs::remove_dir_all(&staging);
     let parts = Parts {
-        stub: read(&release_dir.join(format!("{}.dll", STUB.1)))?,
-        loader: read(&release_dir.join(format!("{}.dll", LOADER.1)))?,
+        stub: read(&built_as(STUB.0)?)?,
+        loader: read(&built_as(LOADER.0)?)?,
         license: read(Path::new("LICENSE"))?,
         mods,
     };
@@ -150,11 +156,8 @@ struct Parts {
 fn archives(parts: &Parts) -> BTreeMap<String, BTreeMap<String, Vec<u8>>> {
     let license = ("LICENSE".to_owned(), parts.license.clone());
     let loader: BTreeMap<String, Vec<u8>> = [
-        (format!("{}.dll", STUB.1), parts.stub.clone()),
-        (
-            format!("mods/enshwick/{}.dll", LOADER.1),
-            parts.loader.clone(),
-        ),
+        (STUB.1.to_owned(), parts.stub.clone()),
+        (LOADER.1.to_owned(), parts.loader.clone()),
         license.clone(),
     ]
     .into_iter()
@@ -181,10 +184,12 @@ fn read_list(text: &str) -> Result<Vec<Listed>, String> {
     Ok(file.mods)
 }
 
-/// The mods of this workspace that release, as `package -> library`: the
-/// packages under `mods/` with a cdylib, without
+/// The packages of this workspace with a cdylib, as `package -> library`,
+/// and of them the mods that release: those under `mods/`, without
 /// `[package.metadata.enshwick] release = false`.
-fn workspace_mods() -> Result<BTreeMap<String, String>, String> {
+type Libraries = BTreeMap<String, String>;
+
+fn workspace_libraries() -> Result<(Libraries, Libraries), String> {
     let output = Command::new(cargo())
         .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
         .output()
@@ -198,30 +203,34 @@ fn workspace_mods() -> Result<BTreeMap<String, String>, String> {
         .as_str()
         .unwrap_or_default()
         .replace('\\', "/");
-    Ok(metadata["packages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|p| {
-            p["manifest_path"]
-                .as_str()
-                .unwrap_or_default()
-                .replace('\\', "/")
-                .starts_with(&format!("{root}/mods/"))
-        })
-        .filter(|p| p["metadata"]["enshwick"]["release"].as_bool() != Some(false))
-        .filter_map(|p| {
-            let lib = p["targets"].as_array()?.iter().find(|t| {
-                t["kind"]
-                    .as_array()
-                    .is_some_and(|kinds| kinds.iter().any(|k| k == "cdylib"))
-            })?;
-            Some((
-                p["name"].as_str()?.to_owned(),
-                lib["name"].as_str()?.to_owned(),
-            ))
-        })
-        .collect())
+    let (mut libraries, mut mods) = (Libraries::new(), Libraries::new());
+    for p in metadata["packages"].as_array().into_iter().flatten() {
+        let Some(lib) = p["targets"].as_array().into_iter().flatten().find(|t| {
+            t["kind"]
+                .as_array()
+                .is_some_and(|kinds| kinds.iter().any(|k| k == "cdylib"))
+        }) else {
+            continue;
+        };
+        let (Some(name), Some(lib)) = (p["name"].as_str(), lib["name"].as_str()) else {
+            continue;
+        };
+        libraries.insert(name.to_owned(), lib.to_owned());
+        let is_mod = p["manifest_path"]
+            .as_str()
+            .unwrap_or_default()
+            .replace('\\', "/")
+            .starts_with(&format!("{root}/mods/"));
+        if is_mod && p["metadata"]["enshwick"]["release"].as_bool() != Some(false) {
+            mods.insert(name.to_owned(), lib.to_owned());
+        }
+    }
+    Ok((libraries, mods))
+}
+
+/// Where the release build for Windows puts its DLLs.
+fn release_dir_of() -> PathBuf {
+    Path::new("target").join(WINDOWS_TARGET).join("release")
 }
 
 /// Where each listed mod comes from: its repository's `dev` prerelease
@@ -292,7 +301,7 @@ fn build(sources: &[Source]) -> Result<PathBuf, String> {
     if !status.success() {
         return Err("the build failed".to_owned());
     }
-    Ok(Path::new("target").join(WINDOWS_TARGET).join("release"))
+    Ok(release_dir_of())
 }
 
 fn has_dev_release(repository: &str) -> bool {

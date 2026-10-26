@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
+use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
 
 use super::{definition, layout, read, store};
 use crate::host::Loader;

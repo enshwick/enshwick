@@ -15,7 +15,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use enshwick_loader_api::abi::{Status, UiAnswerFn, UiDialog};
+use enshwick::abi::{Status, UiAnswerFn, UiDialog};
 
 use super::engine::{self, Buf, DialogLayout, Engine, PopupFn};
 use crate::host::Registered;
@@ -142,7 +142,7 @@ const TAGS: [[u8; 16]; 2 * KEPT] = {
 };
 
 fn tag_id(index: usize) -> u32 {
-    enshwick_loader_reflect::fnv1a32(&TAGS[index])
+    enshwick_reflect::fnv1a32(&TAGS[index])
 }
 
 /// The text of a dialog text tag, by its id, while its dialog is kept.

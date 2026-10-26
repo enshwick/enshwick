@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick::{Load, Next, Off};
 
 use crate::memory;
 
@@ -33,7 +33,7 @@ type Writer = unsafe extern "system" fn(
     program: *const u8,
 ) -> *mut u8;
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static WRITER: unsafe extern "system" fn(
         out: *mut u8,
         attribute: u32,
@@ -80,7 +80,7 @@ fn writer(
 fn log(number: u32, entity: u32, value: usize, program: usize) {
     let mut pin = [0u8; 16];
     if memory::read(value, &mut pin) < pin.len() {
-        enshwick_loader_api::info!("R17 health write {number}: entity {entity}, unreadable pin");
+        enshwick::info!("R17 health write {number}: entity {entity}, unreadable pin");
         return;
     }
     let ty = u32::from_le_bytes([pin[8], pin[9], pin[10], pin[11]]);
@@ -96,12 +96,12 @@ fn log(number: u32, entity: u32, value: usize, program: usize) {
             (memory::read(base + offset, &mut word) == 4).then(|| u32::from_le_bytes(word))
         });
     match raw {
-        Some(raw) => enshwick_loader_api::info!(
+        Some(raw) => enshwick::info!(
             "R17 health write {number}: entity {entity}, {name} pin {ty:#010x}, value {} (f32 {})",
             raw.cast_signed(),
             f32::from_bits(raw)
         ),
-        None => enshwick_loader_api::info!(
+        None => enshwick::info!(
             "R17 health write {number}: entity {entity}, {name} pin {ty:#010x}, value unreadable"
         ),
     }

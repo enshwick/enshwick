@@ -9,14 +9,14 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::inventory::{Batch, Inventories, Op, Outcome};
-use enshwick_loader_api::loot::{Container, LootPass, near};
-use enshwick_loader_api::points::OwnedPoint;
-use enshwick_loader_api::points::area_loot::Eligible;
-use enshwick_loader_api::time::StepClock;
-use enshwick_loader_api::world::World;
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::inventory::{Batch, Inventories, Op, Outcome};
+use enshwick::loot::{Container, LootPass, near};
+use enshwick::points::OwnedPoint;
+use enshwick::points::area_loot::Eligible;
+use enshwick::time::StepClock;
+use enshwick::world::World;
+use enshwick::{Load, Off};
 
 use crate::Settings;
 use crate::tracker::Tracker;
@@ -93,15 +93,15 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
         Ok(world) => {
             let _first = WORLD.set(world);
         }
-        Err(off) => enshwick_loader_api::warn!(
-            "a player who walks up to a queued container may lose it: {off}"
-        ),
+        Err(off) => {
+            enshwick::warn!("a player who walks up to a queued container may lose it: {off}");
+        }
     }
     *tracker() = Some(Tracker::default());
     let _first = CLOCK.set(load.step_clock()?);
     load.on_loot_pass(check)?;
     // Entity ids belong to one game.
-    load.on::<enshwick_loader_api::events::ShutdownStarted>(|()| {
+    load.on::<enshwick::events::ShutdownStarted>(|()| {
         GAME.fetch_add(1, Ordering::AcqRel);
         if let Some(t) = tracker().as_mut() {
             t.clear();
@@ -116,7 +116,7 @@ fn check(loot: &LootPass<'_>) {
     if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pass(loot))).is_err()
         && !OFF.swap(true, Ordering::AcqRel)
     {
-        enshwick_loader_api::warn!("area loot off, vanilla from now on: the pass panicked");
+        enshwick::warn!("area loot off, vanilla from now on: the pass panicked");
     }
 }
 
@@ -144,7 +144,7 @@ fn pass(loot: &LootPass<'_>) {
         if container.is_enemy_loot() && loot.is_player(player) {
             let queue = gather(loot, &container, player, now);
             if !queue.is_empty() {
-                enshwick_loader_api::debug!(
+                enshwick::debug!(
                     "{} emptied {}: taking {} more",
                     player.0,
                     container.entity.0,
@@ -249,7 +249,7 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
             break next;
         }
         t.release(next);
-        enshwick_loader_api::debug!(
+        enshwick::debug!(
             "area loot for {} skips {}: opened since or another player at it",
             player.0,
             next.0
@@ -275,7 +275,7 @@ fn take_next(player: Entity, mut queue: VecDeque<Entity>, game: u64) {
             return;
         }
         // Inventory full or the container changed: the rest stays for later.
-        enshwick_loader_api::debug!(
+        enshwick::debug!(
             "area loot for {} stopped at {}: {:?}",
             player.0,
             container.0,
@@ -298,7 +298,7 @@ fn emptied(outcome: &Outcome) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::inventory::{Done, OpResult};
+    use enshwick::inventory::{Done, OpResult};
 
     use super::*;
 
@@ -321,14 +321,14 @@ mod tests {
 
     #[test]
     fn other_mods_leave_containers_out() {
-        use enshwick_loader_api::abi::Status;
-        use enshwick_loader_api::points::Verdict;
+        use enshwick::abi::Status;
+        use enshwick::points::Verdict;
 
         assert!(
             eligible(Entity(1), Entity(2), Entity(3), 4.0),
             "before init"
         );
-        let loader = enshwick_loader_api::test::FakeHost::new().install();
+        let loader = enshwick::test::FakeHost::new().install();
         // The fake lacks the inventories, which the mod links after its
         // point: it turns off, and the point stays defined.
         // SAFETY: the exports of the mod's `declare_mod!`.

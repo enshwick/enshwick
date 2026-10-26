@@ -1,6 +1,6 @@
 # Asks Steam once a week for the public build of the dedicated server (app
 # 2278520). When the loader has no server build table for it, a Windows job
-# downloads that server (never committed), runs `cargo enshwick compat` on it
+# downloads that server (never committed), runs `enshwick-compat` on it
 # with the latest released mods and opens an issue with the report, so a
 # maintainer writes the table with `cargo enshwick pin` (crates/cargo-enshwick).
 # It runs on its schedule or by hand, never on pull requests. Off until the
@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ steps.steam.outputs.build }}
         run: |
-          if grep -qx "steam_build = $BUILD" crates/internal/builds/tables/server-*.toml; then
+          if grep -qx "steam_build = $BUILD" crates/enshwick-gamedata/tables/server-*.toml; then
             echo "build $BUILD has a table"
             exit 0
           fi
@@ -103,9 +103,9 @@ jobs:
 
       - name: Report
         run: |
-          cargo build --release --locked -p cargo-enshwick
+          cargo build --release --locked -p enshwick-compat
           # 2 means something does not work, which is what the report is for.
-          target/release/cargo-enshwick enshwick compat "$RUNNER_TEMP/server/enshrouded_server.exe" \
+          target/release/enshwick-compat "$RUNNER_TEMP/server/enshrouded_server.exe" \
             --mods "$RUNNER_TEMP/released/mods" --report "$RUNNER_TEMP/report.md" || [ $? -eq 2 ]
 
       - name: Open an issue
@@ -117,7 +117,7 @@ jobs:
             echo "Steam's public branch of the dedicated server (app 2278520) is at build"
             echo "$BUILD, and the loader has no build table for it. Until it has, the loader"
             echo "runs that build on the code patterns of the newest table, and what the"
-            echo "patterns miss stays off. The report below is \`cargo enshwick compat\` on"
+            echo "patterns miss stays off. The report below is \`enshwick-compat\` on"
             echo "the new server with the mods of $RELEASED."
             echo
             echo "Write the table with \`cargo enshwick pin\`, following"

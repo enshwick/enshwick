@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::altars::VANILLA_ALTAR_ZONES;
-use enshwick_loader_api::events::{AltarsChanged, ShutdownStarted, WorldLoaded};
-use enshwick_loader_api::state::Hold;
-use enshwick_loader_api::{Load, Off};
+use enshwick::altars::VANILLA_ALTAR_ZONES;
+use enshwick::events::{AltarsChanged, ShutdownStarted, WorldLoaded};
+use enshwick::state::Hold;
+use enshwick::{Load, Off};
 
 const EVERY: Duration = Duration::from_secs(5);
 /// How long the loaded world stays at 16 zones or fewer before the hold goes.
@@ -99,7 +99,7 @@ fn run(hold: &Hold, loaded: &AtomicBool) {
     let mut watch = Watch::new(hold.reason().is_some());
     loop {
         std::thread::park_timeout(EVERY);
-        let Some(grouping) = enshwick_loader_api::altars::grouping() else {
+        let Some(grouping) = enshwick::altars::grouping() else {
             continue;
         };
         let zones = grouping.zones;
@@ -114,13 +114,13 @@ fn run(hold: &Hold, loaded: &AtomicBool) {
         match done {
             Ok(()) => {
                 watch.done(past);
-                enshwick_loader_api::info!(
+                enshwick::info!(
                     "hold {}: {zones} altar zones",
                     if past { "set" } else { "released" }
                 );
             }
             Err(error) => {
-                enshwick_loader_api::warn_every!(Duration::from_secs(600), "hold: {error}");
+                enshwick::warn_every!(Duration::from_secs(600), "hold: {error}");
             }
         }
     }

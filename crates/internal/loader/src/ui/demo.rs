@@ -8,7 +8,7 @@ use core::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::abi::{UiDialog, UiWidget};
+use enshwick::abi::{UiDialog, UiWidget};
 
 use super::Painter;
 use super::engine::{Engine, Window};
@@ -253,11 +253,11 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
         false,
     ) {
         demo.marker = on;
-        let marker = enshwick_loader_api::abi::UiMarker {
-            header: enshwick_loader_api::abi::Header::of::<enshwick_loader_api::abi::UiMarker>(),
+        let marker = enshwick::abi::UiMarker {
+            header: enshwick::abi::Header::of::<enshwick::abi::UiMarker>(),
             position,
-            label: enshwick_loader_api::abi::Str::new("Enshwick demo marker"),
-            color: enshwick_loader_api::abi::UiMarker::GREEN,
+            label: enshwick::abi::Str::new("Enshwick demo marker"),
+            color: enshwick::abi::UiMarker::GREEN,
             reserved: 0,
         };
         let markers: &[_] = if on { &[marker] } else { &[] };

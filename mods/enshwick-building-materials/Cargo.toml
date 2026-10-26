@@ -6,7 +6,7 @@ keywords = ["enshrouded", "mod", "building", "recipes"]
 categories = ["game-development"]
 readme = "README.md"
 authors.workspace = true
-homepage = "https://github.com/themaiby/enshwick/tree/main/mods/enshwick-building-materials"
+homepage = "https://github.com/enshwick/enshwick/tree/main/mods/enshwick-building-materials"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -17,12 +17,12 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-enshwick-loader-api.workspace = true
+enshwick.workspace = true
 serde.workspace = true
 toml.workspace = true
 
 [dev-dependencies]
-enshwick-loader-api = { workspace = true, features = ["test"] }
+enshwick = { workspace = true, features = ["test"] }
 
 [lints]
 workspace = true

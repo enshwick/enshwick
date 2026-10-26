@@ -1,15 +1,15 @@
 # Damage
 
-[`load.on_damage(filter)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/damage.rs)
+[`load.on_damage(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/damage.rs)
 runs a filter on damage about to reach an entity's health in the server's
 world, before the game applies it. The filter gets a
-[`Damage`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/damage.rs)
+[`Damage`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/damage.rs)
 to read and change; what it leaves is what the game applies.
 
 ```rust
-use enshwick_loader_api::damage::{DamageCause, DamageType};
+use enshwick::damage::{DamageCause, DamageType};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_damage(|damage| match damage.cause() {
         DamageCause::Fall => damage.cancel(),
         DamageCause::Hit => damage.scale_type(DamageType::Poison, 0.5),

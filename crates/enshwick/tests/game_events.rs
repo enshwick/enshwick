@@ -1,0 +1,61 @@
+//! Game events reach a mod's handlers by type, with fields read by name.
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use enshwick::abi::Status;
+    use enshwick::ecs::Entity;
+    use enshwick::{Load, Mod, Off};
+
+    const DIED: u32 = 0xd8ec_982a;
+    const HIT: u32 = 0xcc0d_57e0;
+
+    static DEAD: Mutex<Vec<Entity>> = Mutex::new(Vec::new());
+    static EVERY: Mutex<Vec<u32>> = Mutex::new(Vec::new());
+
+    struct Watcher;
+
+    impl Mod for Watcher {
+        fn manifest() -> &'static enshwick::abi::Manifest {
+            enshwick::manifest!(id: "watcher", side: SERVER)
+        }
+
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            let died = load.event_type("keen::ecs::EntityDiedEvent")?;
+            let dead = died.field::<Entity>(load, "deadEntityId")?;
+            assert!(died.field::<u32>(load, "nope").is_err());
+            assert!(died.field::<u64>(load, "late").is_err());
+            load.on_raw_game_event(died, move |event| {
+                if let Some(entity) = event.get(dead) {
+                    DEAD.lock().unwrap().push(entity);
+                }
+            })?;
+            load.on_every_raw_game_event(|event| EVERY.lock().unwrap().push(event.type_hash()))?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::declare_mod!(Watcher);
+
+    #[test]
+    fn handlers_get_their_type_and_every_handler_gets_all() {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("keen::ecs::EntityDiedEvent", DIED)
+            .type_size("keen::ecs::EntityDiedEvent", 16)
+            .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
+            .field_offset("keen::ecs::EntityDiedEvent", "late", 12)
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(loader.game_event_types(), [DIED, 0]);
+
+        let mut died = [0u8; 16];
+        died[8..12].copy_from_slice(&4096u32.to_le_bytes());
+        assert_eq!(loader.raise_game_event(DIED, &died), 2);
+        assert_eq!(loader.raise_game_event(HIT, &[0; 248]), 1);
+        assert_eq!(*DEAD.lock().unwrap(), [Entity(4096)]);
+        assert_eq!(*EVERY.lock().unwrap(), [DIED, HIT]);
+    }
+}

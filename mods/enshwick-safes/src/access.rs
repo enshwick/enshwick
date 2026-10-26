@@ -14,10 +14,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, OnceLock};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::interactions::{Interaction, Kind};
-use enshwick_loader_api::points::OwnedPoint;
-use enshwick_loader_api::points::safes::{Access as AccessPoint, SafeAction};
+use enshwick::ecs::Entity;
+use enshwick::interactions::{Interaction, Kind};
+use enshwick::points::OwnedPoint;
+use enshwick::points::safes::{Access as AccessPoint, SafeAction};
 
 /// A position in half-metre cells.
 pub type Cell = (i64, i64, i64);
@@ -365,7 +365,7 @@ impl Access {
         }
         let found = self.seen(chest.0, cell(position?));
         if found.is_none() {
-            enshwick_loader_api::warn_every!(
+            enshwick::warn_every!(
                 std::time::Duration::from_secs(60),
                 "a Safe has no recorded owner and stays open to all"
             );

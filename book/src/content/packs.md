@@ -210,11 +210,11 @@ version differ, and the player's game stays out of the server.
 ## Packs in a mod
 
 A mod adds a pack it embeds with
-[`Load::add_pack`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/packs.rs);
+[`Load::add_pack`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/packs.rs);
 the names live in the mod's namespace:
 
 ```rust
-use enshwick_loader_api::packs::{Pack, PackFiles};
+use enshwick::packs::{Pack, PackFiles};
 
 // In a mod: include_str!("pack/items.toml"), and so on.
 const ITEMS: &str = r#"
@@ -225,7 +225,7 @@ name = "lantern.name"
 "#;
 const TEXTS: &str = "[en]\n\"lantern.name\" = \"Lantern\"\n";
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let files = PackFiles::new().with("items.toml", ITEMS).with("texts.toml", TEXTS);
     load.add_pack(&Pack::parse("my-mod", &files)?)
 }
