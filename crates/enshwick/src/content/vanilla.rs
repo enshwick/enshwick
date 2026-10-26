@@ -147,7 +147,7 @@ impl Vanilla {
     /// See [`Vanilla`].
     #[must_use]
     pub fn game() -> Option<&'static Self> {
-        static GAME: OnceLock<Option<Vanilla>> = OnceLock::new();
+        static GAME: crate::fresh::Fresh<Option<Vanilla>> = crate::fresh::Fresh::new();
         GAME.get_or_init(|| {
             let host = crate::host()?;
             let load = crate::Load::new(host);

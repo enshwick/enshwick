@@ -1,5 +1,7 @@
 //! Settings and migrations: the settings text, synced values and migration steps.
 
+use std::collections::HashMap;
+
 use super::FakeHost;
 use super::Installed;
 use super::table;
@@ -8,6 +10,26 @@ use crate::abi::Str;
 use crate::migrations::MigrationError;
 
 impl FakeHost {
+    /// The settings file another mod `id` keeps, which
+    /// [`take_setting`](crate::migrations::Migration::take_setting) steps
+    /// read in [`migrate_settings`](Installed::migrate_settings).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::migrations::Migrations;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .other_settings("me.comfort", "multiplier = 2.0\n")
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn other_settings(mut self, id: &str, text: &str) -> Self {
+        self.other_settings.insert(id.to_owned(), text.to_owned());
+        self
+    }
+
     /// The text of the mod's settings file; without it the mod reads its own
     /// defaults, as on first start.
     ///
@@ -196,11 +218,13 @@ impl Installed {
     pub fn migrate_settings(&self, old: &str) -> Result<String, MigrationError> {
         use crate::abi::MigrationStep as S;
         let migrations = table::with(None, |s| s.migrations.clone());
+        let others = table::with(HashMap::new(), |s| s.host.other_settings.clone());
         let mut table: toml::Table = toml::from_str(old)?;
         let list = migrations.as_ref().map_or(&[][..], |m| &m.list[..]);
         for (index, (_, steps)) in list.iter().enumerate() {
             for (step, (kind, from, to)) in steps.iter().enumerate() {
                 match *kind {
+                    S::TAKE_SETTING => take(&mut table, from, to, &others)?,
                     S::RENAME_SETTING if !table.contains_key(to) => {
                         if let Some(value) = table.remove(from) {
                             table.insert(to.clone(), value);
@@ -317,4 +341,40 @@ impl FakeMigrations {
             Err(MigrationError::new(text))
         }
     }
+}
+
+/// Sets the dotted key `to` of `table` from `from`, `<mod id>:<key>`, in the
+/// settings of `others`, as the loader's take step does.
+fn take(
+    table: &mut toml::Table,
+    from: &str,
+    to: &str,
+    others: &HashMap<String, String>,
+) -> Result<(), MigrationError> {
+    let (id, key) = from
+        .split_once(':')
+        .ok_or_else(|| MigrationError::new(format!("setting {from}: not <mod id>:<key>")))?;
+    let Some(text) = others.get(id) else {
+        return Ok(());
+    };
+    let other: toml::Table = toml::from_str(text)?;
+    let mut parts = key.split('.');
+    let mut value = parts.next().and_then(|first| other.get(first));
+    for part in parts {
+        value = value.and_then(|v| v.get(part));
+    }
+    let Some(value) = value.cloned() else {
+        return Ok(());
+    };
+    let (path, leaf) = to.rsplit_once('.').map_or(("", to), |(p, l)| (p, l));
+    let mut at = table;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        at = at
+            .entry(part)
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| MigrationError::new(format!("setting {to}: {part} is not a table")))?;
+    }
+    at.insert(leaf.to_owned(), value);
+    Ok(())
 }
