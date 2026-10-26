@@ -202,6 +202,33 @@ pub struct ModStatus {
     pub features: Vec<crate::features::Feature>,
 }
 
+impl ModStatus {
+    /// The mod's lines of the summary.
+    fn render(&self, out: &mut String) {
+        let off = if self.running { "" } else { " (off)" };
+        let _w = if self.name.is_empty() || self.name == self.id {
+            writeln!(out, "  {} {}{off}", self.id, self.version)
+        } else {
+            writeln!(out, "  {} ({}) {}{off}", self.name, self.id, self.version)
+        };
+        if !self.credits.is_empty() {
+            let _w = writeln!(out, "    {}", self.credits);
+        }
+        for note in &self.notes {
+            let _w = writeln!(out, "    note: {note}");
+        }
+        for feature in &self.features {
+            let _w = match &feature.off {
+                Some(why) => writeln!(out, "    feature {} off: {why}", feature.name),
+                None => writeln!(out, "    feature {} on", feature.name),
+            };
+        }
+        for line in &self.lines {
+            let _w = writeln!(out, "    {line}");
+        }
+    }
+}
+
 /// What mods serve to the game.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Served {
@@ -308,27 +335,7 @@ impl Summary {
         let running = self.mods.iter().filter(|m| m.running).count();
         let _w = writeln!(out, "\nmods: {running} of {} running", self.mods.len());
         for m in &self.mods {
-            let off = if m.running { "" } else { " (off)" };
-            let _w = if m.name.is_empty() || m.name == m.id {
-                writeln!(out, "  {} {}{off}", m.id, m.version)
-            } else {
-                writeln!(out, "  {} ({}) {}{off}", m.name, m.id, m.version)
-            };
-            if !m.credits.is_empty() {
-                let _w = writeln!(out, "    {}", m.credits);
-            }
-            for note in &m.notes {
-                let _w = writeln!(out, "    note: {note}");
-            }
-            for feature in &m.features {
-                let _w = match &feature.off {
-                    Some(why) => writeln!(out, "    feature {} off: {why}", feature.name),
-                    None => writeln!(out, "    feature {} on", feature.name),
-                };
-            }
-            for line in &m.lines {
-                let _w = writeln!(out, "    {line}");
-            }
+            m.render(&mut out);
         }
         if !self.disabled.is_empty() {
             let _w = writeln!(
@@ -539,6 +546,40 @@ fn nanos(ns: f64) -> String {
 mod tests {
     use super::*;
 
+    fn mods() -> Vec<ModStatus> {
+        vec![
+            ModStatus {
+                id: "you.lockers".into(),
+                name: "Flame Altar Zones".into(),
+                version: "0.1.4".into(),
+                credits: "by themaiby; MIT".into(),
+                notes: vec!["recommends you.lanterns, which is not loaded".into()],
+                running: true,
+                lines: vec!["3 zones merged".into()],
+                features: vec![
+                    crate::features::Feature {
+                        name: "glow".into(),
+                        off: Some("symbol lantern.glow: missing on this game build".into()),
+                    },
+                    crate::features::Feature {
+                        name: "light".into(),
+                        off: None,
+                    },
+                ],
+            },
+            ModStatus {
+                id: "you.trading-post".into(),
+                name: String::new(),
+                version: "0.1.1".into(),
+                credits: String::new(),
+                notes: Vec::new(),
+                running: false,
+                lines: Vec::new(),
+                features: Vec::new(),
+            },
+        ]
+    }
+
     fn summary() -> Summary {
         Summary {
             version: "0.1.5".into(),
@@ -547,37 +588,7 @@ mod tests {
             uptime: Duration::from_mins(123),
             last_crash: Some("fault 0xc0000005, blamed on you.trading-post: in its code".into()),
             at: 45_000,
-            mods: vec![
-                ModStatus {
-                    id: "you.lockers".into(),
-                    name: "Flame Altar Zones".into(),
-                    version: "0.1.4".into(),
-                    credits: "by themaiby; MIT".into(),
-                    notes: vec!["recommends you.lanterns, which is not loaded".into()],
-                    running: true,
-                    lines: vec!["3 zones merged".into()],
-                    features: vec![
-                        crate::features::Feature {
-                            name: "glow".into(),
-                            off: Some("symbol lantern.glow: missing on this game build".into()),
-                        },
-                        crate::features::Feature {
-                            name: "light".into(),
-                            off: None,
-                        },
-                    ],
-                },
-                ModStatus {
-                    id: "you.trading-post".into(),
-                    name: String::new(),
-                    version: "0.1.1".into(),
-                    credits: String::new(),
-                    notes: Vec::new(),
-                    running: false,
-                    lines: Vec::new(),
-                    features: Vec::new(),
-                },
-            ],
+            mods: mods(),
             disabled: vec!["you.my-mod".into()],
             replaced: vec![
                 "you.stalls is replaced by you.market-stalls; delete mods/stalls.dll".into(),
