@@ -15,7 +15,7 @@ instead (see [Extending other mods](extending.md)).
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
 folder holds the two mods this chapter follows: `trading-post` publishes item
-prices and sends `trading-post:sold`, and `market-stalls` uses the prices and
+prices and sends `you.trading-post:sold`, and `market-stalls` uses the prices and
 counts the coins from each sale.
 
 ## One declaration
@@ -25,7 +25,7 @@ here `trading-post-api`:
 
 ```rust
 /// Item prices, published by `trading-post`.
-#[enshwick::service(name = "trading-post:prices", version = 1)]
+#[enshwick::service(name = "you.trading-post:prices", version = 1)]
 pub struct Prices {
     /// The price of `item` in coins, 0 for an item with no price.
     pub price: extern "system" fn(item: u32) -> u32,
@@ -34,7 +34,7 @@ pub struct Prices {
 }
 
 /// An item sold at the trading post.
-#[enshwick::event(name = "trading-post:sold")]
+#[enshwick::event(name = "you.trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -106,7 +106,7 @@ two mods that read the same bytes differently never link.
 publishes a `'static` table during `init`:
 
 ```rust
-#[enshwick::service(name = "trading-post:prices")]
+#[enshwick::service(name = "you.trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -132,7 +132,7 @@ returns the table once the loader has checked that the published table
 starts with every field of `T`:
 
 ```rust
-#[enshwick::service(name = "trading-post:prices")]
+#[enshwick::service(name = "you.trading-post:prices")]
 pub struct Prices {
     pub price: extern "system" fn(item: u32) -> u32,
 }
@@ -159,7 +159,7 @@ it gets back; sending calls every subscriber's handler on the sending
 thread, with no queue and no allocation:
 
 ```rust
-#[enshwick::event(name = "trading-post:sold")]
+#[enshwick::event(name = "you.trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -184,7 +184,7 @@ fn sell(item: u32, price: u32) {
 Other mods subscribe during `init`:
 
 ```rust
-#[enshwick::event(name = "trading-post:sold")]
+#[enshwick::event(name = "you.trading-post:sold")]
 #[derive(Clone, Copy, Debug)]
 pub struct Sold {
     pub item: u32,
@@ -216,7 +216,7 @@ A user built against a longer declaration than the publisher's is refused,
 with the first field the publisher lacks:
 
 ```text
-service trading-post:prices v1: trading-post 0.3.0: the publisher has 2 of
+service you.trading-post:prices v1: trading-post 0.3.0: the publisher has 2 of
 the 3 fields this mod needs: `refund` and later are newer than the publisher;
 update trading-post
 ```

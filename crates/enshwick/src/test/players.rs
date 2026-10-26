@@ -236,7 +236,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// #[enshwick::service(name = "trading-post:prices")]
+    /// #[enshwick::service(name = "you.trading-post:prices")]
     /// pub struct Prices {
     ///     pub price: extern "system" fn(item: u32) -> u32,
     /// }

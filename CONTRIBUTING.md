@@ -32,9 +32,10 @@ rules the hooks enforce, and the ones they cannot, are in this file:
   `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` to its executables and are skipped
   without them;
 
-- branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
-  open a pull request into `main`; its title is a conventional commit,
-  `<type>(<scope>): <subject>`, and becomes the squashed commit;
+- branch from `main` as `<type>/<slug>`, `<type>` a conventional commit
+  type such as `feat`, `fix` or `chore`, and open a pull request into
+  `main`; its title is a conventional commit, `<type>(<scope>): <subject>`,
+  and becomes the squashed commit; the merge queue merges it once CI passes;
 - code follows the style of the code around it, unsafe code included;
 - what mod authors need to know goes into [the modding book](book/src/SUMMARY.md)
   with the change; `bun run check:book` checks its structure, and its Rust
