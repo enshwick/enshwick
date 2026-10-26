@@ -4,8 +4,8 @@ Players never type commands: the game client keeps every chat line that
 starts with `/` to itself, and single player has no chat. Anything a player
 or an administrator does is a [player action](actions.md), shown in the
 game's interface. This chapter covers what a mod sends players, and the
-server's console, which runs lines from tools such as a dedicated server's
-command file.
+server's console, which runs lines typed into a dedicated server's console
+window or appended to its command file.
 
 Chat lines, labels and rename filters work on the dedicated server and on a
 client while it hosts a game.
@@ -89,6 +89,14 @@ lines already in the file when the server starts. Each line and its answer
 go to `logs/enshwick/loader.log`. Administrators and their scripts reach the
 console this way without anyone joining. A server that kept its command file
 in `mod-data/enshwick.admin-tools/` reads that one too.
+
+### The server's console window
+
+A line typed into a dedicated server's own console window, or its terminal,
+runs the same way, and its answer shows there and in the log. In Docker the
+container needs input: `docker run -it`, or `stdin_open: true` and
+`tty: true` in Compose, then `docker attach` to type. A server started without
+input, such as a Windows service, reads only its command file.
 
 ### The loader's tools
 

@@ -20,3 +20,8 @@ node_modules/
 
 # The built modding book.
 /book/book/
+
+# What fuzz runs write
+/fuzz/artifacts/
+/fuzz/coverage/
+/fuzz/target/
