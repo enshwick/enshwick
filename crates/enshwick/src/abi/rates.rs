@@ -26,4 +26,10 @@ impl RateId {
     pub const WORKSHOP_SPEED: Self = Self(4);
     /// How many resources a drop stacks.
     pub const RESOURCE_DROPS: Self = Self(5);
+    /// The comfort furniture gives a base.
+    pub const COMFORT: Self = Self(6);
+    /// The skill points a character gains per level.
+    pub const SKILL_POINTS: Self = Self(7);
+    /// How many items each stack of random loot holds.
+    pub const LOOT: Self = Self(8);
 }

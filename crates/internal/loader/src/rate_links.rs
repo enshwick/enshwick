@@ -4,12 +4,30 @@
 //! its settings alone, so the server never saves a scaled value to its
 //! configuration.
 
+use std::sync::OnceLock;
+
 use enshwick::abi::{HookFlags, RateId};
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
-use crate::rates::{LINKS, RATES, experience_rate, scale_count};
+use crate::rates::{LINKS, RATES, experience_rate, scale_points, scale_stack, scale_whole};
+
+/// The build table ids this part of the loader names; the comfort rate
+/// shares the comfort link of [`crate::progress`].
+pub(crate) const TABLE_IDS: &[&str] = &[
+    "experience.kill",
+    "experience.source_factor",
+    "settings.factory_speed",
+    "settings.resource_drops",
+    "skill.points_per_level",
+    "loot.stack_roll",
+];
+
+/// Where a rolled loot slot (`LootSlotInfo`, 16 bytes) keeps its item id
+/// (`u32`) and its stack's count (`u16`), on server 399 and client 426.
+const SLOT_ITEM: usize = 0;
+const SLOT_COUNT: usize = 4;
 
 /// `f32 (data)`: a factor getter of the game's data object, in `xmm0`.
 type FactorFn = unsafe extern "system" fn(data: *const u8) -> f32;
@@ -24,6 +42,14 @@ type KillFn = unsafe extern "system" fn(
     group: i32,
     data: *const u8,
 ) -> i64;
+
+/// `void (out slot, item id, context, rarity)`: rolls one stack of random
+/// loot into `out`; every loot roll of the game goes through it.
+type StackRollFn =
+    unsafe extern "system" fn(out: *mut u8, item: *const u32, context: *mut u8, rarity: *const u8);
+
+/// `u32 (data)`: the skill points a character gains per level, in `eax`.
+type PointsFn = unsafe extern "system" fn(data: *const u8) -> u32;
 
 // SAFETY: `FactorFn` is the signature of the table's
 // `settings.resource_drops` on every build that has it, and this slot is
@@ -43,25 +69,41 @@ static SOURCE_NEXT: Next<SourceFactorFn> = unsafe { Next::new() };
 // `kill` calls `get`.
 static KILL_NEXT: Next<KillFn> = unsafe { Next::new() };
 
+// SAFETY: `PointsFn` is the signature of the table's
+// `skill.points_per_level`, and this slot is the `next` of the one link
+// `link` makes on it, whose detour `skill_points` calls `get`.
+static POINTS_NEXT: Next<PointsFn> = unsafe { Next::new() };
+
+// SAFETY: `StackRollFn` is the signature of the table's `loot.stack_roll`,
+// and this slot is the `next` of the one link `link` makes on it, whose
+// detour `stack_roll` calls `get`.
+static STACK_NEXT: Next<StackRollFn> = unsafe { Next::new() };
+
+/// The loader, for the item lookups of the loot rate.
+static LOADED: OnceLock<&'static Loader> = OnceLock::new();
+
 /// The rates' switch.
 static FUSE: Fuse = Fuse::new("game rates");
 
 /// The factor in force for `rate`, 1 once the rates' fuse is off.
-fn factor(rate: RateId) -> f32 {
+pub(crate) fn factor(rate: RateId) -> f32 {
     FUSE.run("a game rate", || RATES.factor(rate, crate::host::is_off))
         .unwrap_or(1.0)
 }
 
 /// Whether a rate some mod declared links `symbol`.
-fn wanted(symbol: &str) -> bool {
+pub(crate) fn wanted(symbol: &str) -> bool {
     LINKS
         .iter()
         .any(|&(rate, symbols)| symbols.contains(&symbol) && RATES.declared(rate))
 }
 
-/// Seals the rates mods declared and links the functions they need.
+/// Seals the rates mods declared and links the functions they need; the
+/// comfort rate rides on the comfort link of [`crate::progress`], which
+/// links after this.
 pub(crate) fn link(loader: &'static Loader) {
     RATES.seal();
+    let _first = LOADED.set(loader);
     let address = |name| loader.address(name);
     let mut linked = 0;
     if wanted("settings.resource_drops") {
@@ -97,6 +139,24 @@ pub(crate) fn link(loader: &'static Loader) {
             address("experience.kill"),
             &KILL_NEXT,
             kill,
+            HookFlags::NONE,
+        ));
+    }
+    if wanted("skill.points_per_level") {
+        linked += usize::from(loader.link_feature(
+            "the skill point rate",
+            address("skill.points_per_level"),
+            &POINTS_NEXT,
+            skill_points,
+            HookFlags::NONE,
+        ));
+    }
+    if wanted("loot.stack_roll") {
+        linked += usize::from(loader.link_feature(
+            "the loot rate",
+            address("loot.stack_roll"),
+            &STACK_NEXT,
+            stack_roll,
             HookFlags::NONE,
         ));
     }
@@ -145,5 +205,76 @@ unsafe extern "system" fn kill(
     // to the rest of the chain, which the slot holds since the chain is
     // wired before the target jumps here.
     let vanilla = unsafe { KILL_NEXT.get()(level, other, xp_mod, group, data) };
-    scale_count(vanilla, factor(RateId::EXPERIENCE_COMBAT))
+    scale_whole(vanilla, factor(RateId::EXPERIENCE_COMBAT))
+}
+
+unsafe extern "system" fn skill_points(data: *const u8) -> u32 {
+    // SAFETY: the game's argument to `skill.points_per_level`, passed on
+    // unchanged to the rest of the chain, which the slot holds since the
+    // chain is wired before the target jumps here.
+    let vanilla = unsafe { POINTS_NEXT.get()(data) };
+    scale_points(vanilla, factor(RateId::SKILL_POINTS))
+}
+
+unsafe extern "system" fn stack_roll(
+    out: *mut u8,
+    item: *const u32,
+    context: *mut u8,
+    rarity: *const u8,
+) {
+    // SAFETY: the game's arguments to `loot.stack_roll`, passed on unchanged
+    // to the rest of the chain, which the slot holds since the chain is
+    // wired before the target jumps here.
+    unsafe { STACK_NEXT.get()(out, item, context, rarity) };
+    let rate = factor(RateId::LOOT);
+    if out.is_null() || rate.to_bits() == 1.0_f32.to_bits() {
+        return;
+    }
+    // SAFETY: `out` is the game's non-null slot (checked above), which the
+    // roll just wrote and its caller reads only after this returns.
+    let _done = FUSE.run("the loot rate", || unsafe { scale_slot(out, rate) });
+}
+
+/// Scales the count of the stack the game rolled into `slot`, held to the
+/// item's stack size; leaves it as rolled when the item is not found.
+///
+/// # Safety
+///
+/// - `slot` points at a `LootSlotInfo` the game rolled, writable for 16
+///   bytes, which no other thread touches during the call.
+#[cold]
+unsafe fn scale_slot(slot: *mut u8, rate: f32) {
+    let slot = slot.addr();
+    // SAFETY: the caller's slot holds the item id at `SLOT_ITEM`.
+    let item: u32 = unsafe { crate::memory::read(slot, SLOT_ITEM) };
+    // SAFETY: the caller's slot holds the stack's count at `SLOT_COUNT`.
+    let count: u16 = unsafe { crate::memory::read(slot, SLOT_COUNT) };
+    let Some(max) = LOADED
+        .get()
+        .and_then(|loader| crate::inventory::item_info(loader, item).ok())
+        .map(|info| info.max_stack)
+    else {
+        return;
+    };
+    // SAFETY: the caller's slot is writable at `SLOT_COUNT`, a `u16`.
+    unsafe { crate::memory::write(slot, SLOT_COUNT, scale_stack(count, rate, max)) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_linked_symbol_has_its_table_id() {
+        for (rate, symbols) in LINKS {
+            for symbol in *symbols {
+                assert!(
+                    crate::table_ids::TABLE_IDS
+                        .iter()
+                        .any(|(_, ids)| ids.contains(symbol)),
+                    "{rate:?}: {symbol}"
+                );
+            }
+        }
+    }
 }

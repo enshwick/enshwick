@@ -39,8 +39,13 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | `Experience(Exploration)` | experience from exploration, lore, quests and item sets |
 | `WorkshopSpeed` | how fast timed workshops such as the smelter and the kiln produce; 2 halves the time |
 | `ResourceDrops` | how many resources a drop stacks, as the game's own setting does: mined, chopped and harvested nodes, and the random loot of chests, corpses and animals |
+| `Comfort` | the comfort each piece of furniture gives a base, after every mod's comfort filter, rounded |
+| `SkillPoints` | the skill points a character gains per level, rounded; points from knowledge stay |
+| `Loot` | how many items each stack of random loot holds: chests, corpses, animals and random pickups; rounded, at least 1 and at most the item's stack size |
 
-Each rate multiplies the server's own setting of the same name. A rate
+The experience, workshop and resource drop rates multiply the server's own
+setting of the same name. Where `ResourceDrops` and `Loot` reach the same
+roll, both apply. A rate
 applies where the world runs: on a dedicated server and on a client while it
 hosts a game. The loader scales what the game reads and never writes the
 settings, so the server's configuration and the host's world keep their own
@@ -51,13 +56,16 @@ values.
 The game uses the product of the factors of every mod that declared the
 rate and is still on, held to 0 to 100. The rule is
 [`combine`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs),
-the same in the loader and the fake host. A product is the same in any
+the same in the loader and the fake host; `scale_whole` rounds a whole
+number the game keeps. A product is the same in any
 order, so load order never changes a rate. A mod that turns off drops out
 of the product at once.
 
 ## Rates clients count
 
-Clients count `WorkshopSpeed` too, for the time their screens show. Only a
+Clients count `WorkshopSpeed` and `SkillPoints` too, for the time and the
+points their screens show, and the server checks every skill unlock against
+its own count. Only a
 mod with `join: true` may declare it, and `Rate::seen_by_clients` says which
 rates need it. Set such a rate from a `sync` setting: every player who joins
 then runs the mod with the server's factor, and a player without the mod

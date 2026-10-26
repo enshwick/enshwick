@@ -7,17 +7,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{RateId, Status};
+pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
-
-/// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &[
-    "experience.kill",
-    "experience.source_factor",
-    "settings.factory_speed",
-    "settings.resource_drops",
-];
 
 /// For each rate, the build table symbols of the game functions whose
 /// answer the loader scales; the rate works where every one resolves.
@@ -33,6 +26,9 @@ pub(crate) const LINKS: &[(RateId, &[&str])] = &[
     ),
     (RateId::WORKSHOP_SPEED, &["settings.factory_speed"]),
     (RateId::RESOURCE_DROPS, &["settings.resource_drops"]),
+    (RateId::COMFORT, &["comfort.base_register"]),
+    (RateId::SKILL_POINTS, &["skill.points_per_level"]),
+    (RateId::LOOT, &["loot.stack_roll", "item.info"]),
 ];
 
 /// The build table symbols `rate` links; empty for a rate the loader does
@@ -57,15 +53,25 @@ pub(crate) fn experience_rate(source: u8) -> Option<RateId> {
     }
 }
 
-/// `count` times `factor`, rounded half away from zero and saturated.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    reason = "an experience count is far below 2^53, and the result is clamped first"
-)]
-pub(crate) fn scale_count(count: i64, factor: f32) -> i64 {
-    let scaled = (count as f64 * f64::from(factor)).round();
-    scaled.clamp(i64::MIN as f64, i64::MAX as f64) as i64
+/// The skill points per level `points` times `factor`, by [`scale_whole`].
+pub(crate) fn scale_points(points: u32, factor: f32) -> u32 {
+    u32::try_from(scale_whole(i64::from(points), factor).max(0)).unwrap_or(u32::MAX)
+}
+
+/// A rolled stack of `count` items times `factor`, by [`scale_whole`],
+/// held to 1 up to `max`: a roll that made something still makes one.
+pub(crate) fn scale_stack(count: u16, factor: f32, max: u16) -> u16 {
+    if count == 0 {
+        return 0;
+    }
+    let scaled = scale_whole(i64::from(count), factor).clamp(1, i64::from(max.max(1)));
+    u16::try_from(scaled).unwrap_or(max)
+}
+
+/// The comfort `value` times `factor`, by [`scale_whole`], saturated.
+pub(crate) fn scale_comfort(value: i32, factor: f32) -> i32 {
+    let scaled = scale_whole(i64::from(value), factor);
+    i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
 }
 
 const ONE: u32 = 0x3f80_0000;
@@ -206,15 +212,6 @@ mod tests {
     }
 
     #[test]
-    fn every_linked_symbol_has_its_table_id() {
-        for (rate, symbols) in LINKS {
-            for symbol in *symbols {
-                assert!(TABLE_IDS.contains(symbol), "{rate:?}: {symbol}");
-            }
-        }
-    }
-
-    #[test]
     fn several_mods_factors_multiply_in_any_order() {
         let rates = Rates::new();
         for owner in [0, 1, 2] {
@@ -300,9 +297,24 @@ mod tests {
 
     #[test]
     fn kill_experience_scales_rounds_and_saturates() {
-        assert_eq!(scale_count(50, 2.0), 100);
-        assert_eq!(scale_count(3, 1.5), 5);
-        assert_eq!(scale_count(7, 0.0), 0);
-        assert_eq!(scale_count(i64::MAX, 100.0), i64::MAX);
+        assert_eq!(scale_whole(50, 2.0), 100);
+        assert_eq!(scale_whole(3, 1.5), 5);
+        assert_eq!(scale_whole(7, 0.0), 0);
+        assert_eq!(scale_whole(i64::MAX, 100.0), i64::MAX);
+    }
+
+    #[test]
+    fn whole_numbers_scale_round_and_saturate() {
+        assert_eq!(scale_points(2, 1.5), 3);
+        assert_eq!(scale_points(2, 0.0), 0);
+        assert_eq!(scale_points(u32::MAX, 100.0), u32::MAX);
+        assert_eq!(scale_comfort(3, 1.5), 5);
+        assert_eq!(scale_comfort(-3, 1.5), -5);
+        assert_eq!(scale_comfort(i32::MAX, 2.0), i32::MAX);
+        assert_eq!(scale_stack(3, 2.0, 20), 6);
+        assert_eq!(scale_stack(15, 2.0, 20), 20);
+        assert_eq!(scale_stack(1, 0.0, 20), 1);
+        assert_eq!(scale_stack(0, 5.0, 20), 0);
+        assert_eq!(scale_stack(4, 2.0, 0), 1);
     }
 }

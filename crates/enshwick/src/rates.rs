@@ -64,6 +64,20 @@ pub enum Rate {
     WorkshopSpeed,
     /// How many resources a drop stacks.
     ResourceDrops,
+    /// The comfort each piece of furniture gives a base, rounded to a
+    /// whole number; the server decides comfort.
+    Comfort,
+    /// The skill points a character gains per level, rounded to a whole
+    /// number; points from knowledge stay as they are. Clients count it
+    /// too, for the points their skill tree shows, and the server checks
+    /// every unlock against its own count, so only a mod with
+    /// `join: true` declares it, set from a synced setting.
+    SkillPoints,
+    /// How many items each stack of random loot holds, rounded and held
+    /// to the item's stack size: the loot of chests, corpses and animals and
+    /// random pickups. Where the game's resource drop setting also scales a
+    /// roll, both apply.
+    Loot,
 }
 
 impl Rate {
@@ -74,6 +88,9 @@ impl Rate {
         Self::Experience(ExperienceSource::Exploration),
         Self::WorkshopSpeed,
         Self::ResourceDrops,
+        Self::Comfort,
+        Self::SkillPoints,
+        Self::Loot,
     ];
 
     /// The loader's number for this rate.
@@ -94,6 +111,9 @@ impl Rate {
             Self::Experience(ExperienceSource::Exploration) => RateId::EXPERIENCE_EXPLORATION,
             Self::WorkshopSpeed => RateId::WORKSHOP_SPEED,
             Self::ResourceDrops => RateId::RESOURCE_DROPS,
+            Self::Comfort => RateId::COMFORT,
+            Self::SkillPoints => RateId::SKILL_POINTS,
+            Self::Loot => RateId::LOOT,
         }
     }
 
@@ -122,12 +142,12 @@ impl Rate {
     /// ```
     /// use enshwick::rates::{ExperienceSource, Rate};
     ///
-    /// assert!(Rate::WorkshopSpeed.seen_by_clients());
+    /// assert!(Rate::WorkshopSpeed.seen_by_clients() && Rate::SkillPoints.seen_by_clients());
     /// assert!(!Rate::Experience(ExperienceSource::Combat).seen_by_clients());
     /// ```
     #[must_use]
     pub const fn seen_by_clients(self) -> bool {
-        matches!(self, Self::WorkshopSpeed)
+        matches!(self, Self::WorkshopSpeed | Self::SkillPoints)
     }
 }
 
@@ -171,6 +191,30 @@ pub fn combine(factors: impl IntoIterator<Item = f32>) -> f32 {
         .into_iter()
         .fold(1.0_f64, |product, factor| product * f64::from(factor));
     product.clamp(0.0, f64::from(MAX_FACTOR)) as f32
+}
+
+/// `value` times `factor`, rounded half away from zero and saturated: how
+/// the loader scales a whole number the game keeps, such as a comfort value,
+/// skill points or a kill's experience.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::rates::scale_whole;
+///
+/// assert_eq!(scale_whole(3, 1.5), 5);
+/// assert_eq!(scale_whole(-3, 1.5), -5);
+/// assert_eq!(scale_whole(i64::MAX, 2.0), i64::MAX);
+/// ```
+#[must_use]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    reason = "the game's whole numbers are far below 2^53, and the result is clamped first"
+)]
+pub fn scale_whole(value: i64, factor: f32) -> i64 {
+    let scaled = (value as f64 * f64::from(factor)).round();
+    scaled.clamp(i64::MIN as f64, i64::MAX as f64) as i64
 }
 
 /// Why a factor did not take.
