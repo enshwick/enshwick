@@ -629,13 +629,9 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             format!("{} {}", record.label(), record.version)
         };
         paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
-        if !record.meta.description.is_empty() {
-            paint.label(
-                record.meta.description.as_bytes(),
-                UiWidget::STYLE_BODY,
-                true,
-                false,
-            );
+        let description = record.description();
+        if !description.is_empty() {
+            paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
         }
         let credits = record.meta.credits();
         if !credits.is_empty() {
