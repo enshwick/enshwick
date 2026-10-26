@@ -10,6 +10,7 @@
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
+use crate::pinned;
 use enshwick::ecs::Entity;
 use std::sync::{Mutex, OnceLock};
 
@@ -20,7 +21,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["player.death_sink"];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];
 
 /// The most deaths kept between two steps.
 const MOST: usize = 64;
@@ -161,7 +162,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     loader.link_feature(
         "player deaths",
-        loader.address("player.death_sink"),
+        loader.address(pinned::player::DEATH_SINK),
         &SINK_NEXT,
         sink,
         HookFlags::NONE,

@@ -9,6 +9,8 @@
 //! filters first when the call comes from the rename message.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use enshwick::ecs::Entity;
 use std::sync::atomic::Ordering;
@@ -22,14 +24,14 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "label.add",
-    "label.find",
-    "label.max_text",
-    "label.rename_entity",
-    "label.rename_return",
-    "label.replace",
-    "server.custom_strings",
-    "server.world",
+    pinned::label::ADD.id(),
+    pinned::label::FIND.id(),
+    pinned::label::MAX_TEXT.id(),
+    pinned::label::RENAME_ENTITY.id(),
+    pinned::label::RENAME_RETURN.id(),
+    pinned::label::REPLACE.id(),
+    pinned::server::CUSTOM_STRINGS.id(),
+    pinned::server::WORLD.id(),
 ];
 
 /// The game's error for a string it could not take; the rename path then
@@ -91,22 +93,22 @@ static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let symbol = |name: &str| {
+            let symbol = |name: Symbol| {
                 loader
                     .build
-                    .symbol(name)
+                    .symbol(name.id())
                     .and_then(|rva| usize::try_from(loader.base + rva).ok())
             };
-            let constant = |name: &str| {
+            let constant = |name: Constant| {
                 loader
                     .build
-                    .constant(name)
+                    .constant(name.id())
                     .and_then(|v| usize::try_from(v).ok())
             };
             let (find, replace, add) = (
-                symbol("label.find")?,
-                symbol("label.replace")?,
-                symbol("label.add")?,
+                symbol(pinned::label::FIND)?,
+                symbol(pinned::label::REPLACE)?,
+                symbol(pinned::label::ADD)?,
             );
             let descriptor = loader.reflection.type_info(LABEL_TYPE).ok()?.va();
             Some(Layout {
@@ -121,11 +123,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // game function with the `AddFn` signature on this build.
                 add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
                 label_type: crate::world::type_hash(descriptor)?,
-                world: constant("server.world")?,
-                strings: constant("server.custom_strings")?,
-                max_text: constant("label.max_text")?,
-                rename_return: loader.base + loader.build.symbol("label.rename_return")?,
-                rename_entity: constant("label.rename_entity")?,
+                world: constant(pinned::server::WORLD)?,
+                strings: constant(pinned::server::CUSTOM_STRINGS)?,
+                max_text: constant(pinned::label::MAX_TEXT)?,
+                rename_return: loader.base
+                    + loader.build.symbol(pinned::label::RENAME_RETURN.id())?,
+                rename_entity: constant(pinned::label::RENAME_ENTITY)?,
             })
         })
         .as_ref()

@@ -21,6 +21,8 @@
 //! change nothing, so the version moves only when the speed does.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Symbol;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -32,21 +34,21 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "daytime.anchor",
-    "daytime.clock",
-    "daytime.day_end",
-    "daytime.day_length",
-    "daytime.day_start",
-    "daytime.game_time",
-    "daytime.is_day",
-    "daytime.night_length",
-    "daytime.object",
-    "daytime.set_speed",
-    "daytime.set_time",
-    "daytime.speed",
-    "server.player_infos",
-    "server.world",
-    "world.time",
+    pinned::daytime::ANCHOR.id(),
+    pinned::daytime::CLOCK.id(),
+    pinned::daytime::DAY_END.id(),
+    pinned::daytime::DAY_LENGTH.id(),
+    pinned::daytime::DAY_START.id(),
+    pinned::daytime::GAME_TIME.id(),
+    pinned::daytime::IS_DAY.id(),
+    pinned::daytime::NIGHT_LENGTH.id(),
+    pinned::daytime::OBJECT.id(),
+    pinned::daytime::SET_SPEED.id(),
+    pinned::daytime::SET_TIME.id(),
+    pinned::daytime::SPEED.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::server::WORLD.id(),
+    pinned::world::TIME.id(),
 ];
 
 /// Game nanoseconds in a day.
@@ -97,12 +99,15 @@ static SPEED_NEXT: Next<SetSpeedFn> = unsafe { Next::new() };
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
             };
-            let (set_time, now) = (function("daytime.set_time")?, function("world.time")?);
+            let (set_time, now) = (
+                function(pinned::daytime::SET_TIME)?,
+                function(pinned::world::TIME)?,
+            );
             Some(Layout {
                 // SAFETY: the table's `daytime.set_time` is the address of the
                 // game function with the `SetTimeFn` signature on this build,
@@ -112,18 +117,18 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // function with the `NowFn` signature on this build, in the
                 // image, which stays mapped.
                 now: unsafe { core::mem::transmute::<usize, NowFn>(now) },
-                world: loader.offset("server.world")?,
-                game: loader.offset("server.player_infos")?,
-                daytime: loader.offset("daytime.object")?,
-                anchor: loader.offset("daytime.anchor")?,
-                game_time: loader.offset("daytime.game_time")?,
-                speed: loader.offset("daytime.speed")?,
-                day_start: loader.offset("daytime.day_start")?,
-                day_end: loader.offset("daytime.day_end")?,
-                day_length: loader.offset("daytime.day_length")?,
-                night_length: loader.offset("daytime.night_length")?,
-                clock: loader.offset("daytime.clock")?,
-                is_day: loader.offset("daytime.is_day")?,
+                world: loader.offset(pinned::server::WORLD)?,
+                game: loader.offset(pinned::server::PLAYER_INFOS)?,
+                daytime: loader.offset(pinned::daytime::OBJECT)?,
+                anchor: loader.offset(pinned::daytime::ANCHOR)?,
+                game_time: loader.offset(pinned::daytime::GAME_TIME)?,
+                speed: loader.offset(pinned::daytime::SPEED)?,
+                day_start: loader.offset(pinned::daytime::DAY_START)?,
+                day_end: loader.offset(pinned::daytime::DAY_END)?,
+                day_length: loader.offset(pinned::daytime::DAY_LENGTH)?,
+                night_length: loader.offset(pinned::daytime::NIGHT_LENGTH)?,
+                clock: loader.offset(pinned::daytime::CLOCK)?,
+                is_day: loader.offset(pinned::daytime::IS_DAY)?,
             })
         })
         .as_ref()
@@ -273,7 +278,7 @@ pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Status {
     if FACTORS.get().is_some() {
         return Status::TOO_LATE;
     }
-    if layout(loader).is_none() || loader.address("daytime.set_speed").is_none() {
+    if layout(loader).is_none() || loader.address(pinned::daytime::SET_SPEED).is_none() {
         return Status::MISSING;
     }
     let mut mods = SPEED_MODS.relock();
@@ -342,7 +347,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wanted {
         loader.link_feature(
             "time speed",
-            loader.address("daytime.set_speed"),
+            loader.address(pinned::daytime::SET_SPEED),
             &SPEED_NEXT,
             speed as SetSpeedFn,
             HookFlags::NONE,

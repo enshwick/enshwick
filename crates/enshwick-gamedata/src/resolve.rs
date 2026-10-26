@@ -160,10 +160,11 @@ pub fn exact(tables: &[Table], side: Side, fingerprint: Fingerprint) -> Option<&
         .max_by_key(|t| t.revision)
 }
 
-/// The table of the newest build of `side` among `tables`, by Steam build
-/// id, then the game's version, then revision: the base for a build without
-/// a table. A table without a Steam build id ranks below every table with
-/// one.
+/// The table of the newest build of `side` among `tables`: the base for a
+/// build without a table.
+///
+/// Tables rank by Steam build id, then the game's version, then revision. A
+/// table without a Steam build id ranks below every table with one.
 #[must_use]
 pub fn newest(tables: &[Table], side: Side) -> Option<&Table> {
     tables

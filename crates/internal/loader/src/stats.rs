@@ -15,6 +15,7 @@
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use enshwick::ecs::Entity;
 
 mod equipment;
@@ -40,18 +41,18 @@ use crate::settings::LOADER_ID;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "attribute.health",
-    "attribute.health_adder_slot",
-    "attribute.health_max_slot",
-    "attribute.mana",
-    "attribute.mana_adder_slot",
-    "attribute.mana_max_slot",
-    "attribute.stamina",
-    "attribute.stamina_adder_slot",
-    "attribute.stamina_max_slot",
-    "ecs.attribute_count",
-    "ecs.level_data_offset",
-    "ecs.level_flags",
+    pinned::attribute::HEALTH.id(),
+    pinned::attribute::HEALTH_ADDER_SLOT.id(),
+    pinned::attribute::HEALTH_MAX_SLOT.id(),
+    pinned::attribute::MANA.id(),
+    pinned::attribute::MANA_ADDER_SLOT.id(),
+    pinned::attribute::MANA_MAX_SLOT.id(),
+    pinned::attribute::STAMINA.id(),
+    pinned::attribute::STAMINA_ADDER_SLOT.id(),
+    pinned::attribute::STAMINA_MAX_SLOT.id(),
+    pinned::ecs::ATTRIBUTE_COUNT.id(),
+    pinned::ecs::LEVEL_DATA_OFFSET.id(),
+    pinned::ecs::LEVEL_FLAGS.id(),
 ];
 
 /// Steps between two looks at what watched entities wear and have.

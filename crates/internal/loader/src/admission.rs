@@ -1,15 +1,18 @@
 //! The serving side of the join check, on a dedicated server and in a game a
-//! client hosts. A server that runs join mods waits for each player who
-//! enters the world to say hello with the join mods the player's game runs.
-//! A game that says nothing in time, such as one without Enshwick, or one
-//! that lacks a join mod or runs it in another version, gets a chat line
-//! naming what it needs and where to get it, then the game's own kick;
-//! administrators too. A game whose hello matches stays, also when the hello
-//! comes after the line. The check is about compatibility, not cheating: a
-//! game that lies about its mods passes. A hosted game never checks its
-//! host, and checks no one until the host's own hello names it and only
-//! while the host's key holds a player slot in the game.
+//! client hosts.
+//!
+//! A server that runs join mods waits for each player who enters the world to
+//! say hello with the join mods the player's game runs. A game that says
+//! nothing in time, such as one without Enshwick, or one that lacks a join mod
+//! or runs it in another version, gets a chat line naming what it needs and
+//! where to get it, then the game's own kick; administrators too. A game whose
+//! hello matches stays, also when the hello comes after the line. The check is
+//! about compatibility, not cheating: a game that lies about its mods passes. A
+//! hosted game never checks its host, and checks no one until the host's own
+//! hello names it and only while the host's key holds a player slot in the
+//! game.
 
+use crate::pinned;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
@@ -19,15 +22,12 @@ mod note;
 
 pub use note::{note, place};
 
-/// The table id of the server's session, an offset in the server object.
-pub const SESSION: &str = "server.session";
-/// The table id of the game's kick of one machine from its session.
-pub const KICK: &str = "session.kick";
-/// The table id of the session's own machine, an offset in the session: the
-/// machine the game itself never kicks, the host's in a hosted game.
-pub const HOST_MACHINE: &str = "session.host_machine";
 /// The build table ids this part of the loader names.
-pub const TABLE_IDS: &[&str] = &[SESSION, KICK, HOST_MACHINE];
+pub const TABLE_IDS: &[&str] = &[
+    pinned::server::SESSION.id(),
+    pinned::session::KICK.id(),
+    pinned::session::HOST_MACHINE.id(),
+];
 
 /// Players the gate follows at most; the game has 16 slots.
 const MAX_PLAYERS: usize = 64;
@@ -331,6 +331,7 @@ fn judge(
 
 /// The server's join mods, of `server`, that a game with the `client` hello
 /// lacks or runs in another version; every one for a game that said no hello.
+///
 /// A cut hello lacks only the mods its list could have named.
 #[must_use]
 pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {

@@ -1,6 +1,8 @@
-//! The rows of a mod's settings page, built from the schema the mod handed
-//! the loader and the settings file: which game widget shows each setting,
-//! its value, whether the player may change it, and the TOML a change writes.
+//! The rows of a mod's settings page, built from the schema the mod handed the
+//! loader and the settings file.
+//!
+//! Which game widget shows each setting, its value, whether the player may
+//! change it, and the TOML a change writes.
 
 use enshwick::config::{Field, Kind, Schema, Stage, value_at};
 use enshwick::i18n::{Language, Texts};
@@ -180,10 +182,12 @@ fn widget(field: &Field, value: &toml::Value, words: Option<Words<'_>>) -> Widge
     }
 }
 
-/// The rows of `schema` with the values of the settings file `file`, and
-/// a joined server's join values `server` over them, labelled with the
-/// mod's `words` where it has them: `<text>` for a row's label, `<text>.doc`
-/// for its description, `<text>.<choice>` for a choice.
+/// The rows of `schema` with the values of the settings file `file`, and a
+/// joined server's join values `server` over them, labelled with the mod's
+/// `words` where it has them.
+///
+/// `<text>` for a row's label, `<text>.doc` for its description,
+/// `<text>.<choice>` for a choice.
 #[must_use]
 pub fn rows(
     schema: &Schema,

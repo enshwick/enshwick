@@ -6,6 +6,7 @@
 //! records; their frames hold the components of the entity they work on.
 
 use crate::mod_index::ModIndex;
+use crate::pinned::{self, Symbol};
 use core::ffi::c_void;
 use enshwick::ecs::Entity;
 use std::cell::{Cell, RefCell};
@@ -27,62 +28,62 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.template_guid",
-    "npc.bed_check",
-    "npc.lookup",
-    "npc.lookup_cursor",
-    "npc.move",
-    "npc.update",
-    "survivors.assign_bed",
-    "survivors.assign_context",
-    "survivors.assign_return_a",
-    "survivors.assign_return_b",
-    "survivors.assign_targets",
-    "survivors.bed_init_return",
-    "survivors.bed_return",
-    "survivors.bed_transform",
-    "survivors.cursor_return",
-    "survivors.cursor_return_a",
-    "survivors.cursor_return_b",
-    "survivors.map_bits",
-    "survivors.map_capacity",
-    "survivors.map_count",
-    "survivors.map_find_slot",
-    "survivors.map_keys",
-    "survivors.map_values",
-    "survivors.move_survivor",
-    "survivors.npc_common",
-    "survivors.npc_common_bed",
-    "survivors.npc_saved_state",
-    "survivors.npc_state",
-    "survivors.npc_transform",
-    "survivors.registry_item_map",
-    "survivors.registry_load",
-    "survivors.registry_loaded",
-    "survivors.roaming_context",
-    "survivors.roaming_return",
-    "survivors.spawn",
-    "survivors.spawn_ammo_item",
-    "survivors.spawn_consume",
-    "survivors.spawn_return",
-    "survivors.spawn_target",
-    "survivors.spawn_template",
-    "survivors.spawn_used_item",
-    "survivors.spawn_used_pide",
-    "survivors.spawn_used_slot",
-    "survivors.state_status",
-    "survivors.ui_map_bits",
-    "survivors.ui_map_capacity",
-    "survivors.ui_map_count",
-    "survivors.ui_map_keys",
-    "survivors.ui_map_values",
-    "survivors.ui_record_size",
-    "survivors.ui_record_status",
-    "survivors.unique_context",
-    "survivors.unique_return_a",
-    "survivors.unique_return_b",
-    "survivors.unique_saved_state",
-    "survivors.unique_transform",
+    pinned::ecs::TEMPLATE_GUID.id(),
+    pinned::npc::BED_CHECK.id(),
+    pinned::npc::LOOKUP.id(),
+    pinned::npc::LOOKUP_CURSOR.id(),
+    pinned::npc::MOVE.id(),
+    pinned::npc::UPDATE.id(),
+    pinned::survivors::ASSIGN_BED.id(),
+    pinned::survivors::ASSIGN_CONTEXT.id(),
+    pinned::survivors::ASSIGN_RETURN_A.id(),
+    pinned::survivors::ASSIGN_RETURN_B.id(),
+    pinned::survivors::ASSIGN_TARGETS.id(),
+    pinned::survivors::BED_INIT_RETURN.id(),
+    pinned::survivors::BED_RETURN.id(),
+    pinned::survivors::BED_TRANSFORM.id(),
+    pinned::survivors::CURSOR_RETURN.id(),
+    pinned::survivors::CURSOR_RETURN_A.id(),
+    pinned::survivors::CURSOR_RETURN_B.id(),
+    pinned::survivors::MAP_BITS.id(),
+    pinned::survivors::MAP_CAPACITY.id(),
+    pinned::survivors::MAP_COUNT.id(),
+    pinned::survivors::MAP_FIND_SLOT.id(),
+    pinned::survivors::MAP_KEYS.id(),
+    pinned::survivors::MAP_VALUES.id(),
+    pinned::survivors::MOVE_SURVIVOR.id(),
+    pinned::survivors::NPC_COMMON.id(),
+    pinned::survivors::NPC_COMMON_BED.id(),
+    pinned::survivors::NPC_SAVED_STATE.id(),
+    pinned::survivors::NPC_STATE.id(),
+    pinned::survivors::NPC_TRANSFORM.id(),
+    pinned::survivors::REGISTRY_ITEM_MAP.id(),
+    pinned::survivors::REGISTRY_LOAD.id(),
+    pinned::survivors::REGISTRY_LOADED.id(),
+    pinned::survivors::ROAMING_CONTEXT.id(),
+    pinned::survivors::ROAMING_RETURN.id(),
+    pinned::survivors::SPAWN.id(),
+    pinned::survivors::SPAWN_AMMO_ITEM.id(),
+    pinned::survivors::SPAWN_CONSUME.id(),
+    pinned::survivors::SPAWN_RETURN.id(),
+    pinned::survivors::SPAWN_TARGET.id(),
+    pinned::survivors::SPAWN_TEMPLATE.id(),
+    pinned::survivors::SPAWN_USED_ITEM.id(),
+    pinned::survivors::SPAWN_USED_PIDE.id(),
+    pinned::survivors::SPAWN_USED_SLOT.id(),
+    pinned::survivors::STATE_STATUS.id(),
+    pinned::survivors::UI_MAP_BITS.id(),
+    pinned::survivors::UI_MAP_CAPACITY.id(),
+    pinned::survivors::UI_MAP_COUNT.id(),
+    pinned::survivors::UI_MAP_KEYS.id(),
+    pinned::survivors::UI_MAP_VALUES.id(),
+    pinned::survivors::UI_RECORD_SIZE.id(),
+    pinned::survivors::UI_RECORD_STATUS.id(),
+    pinned::survivors::UNIQUE_CONTEXT.id(),
+    pinned::survivors::UNIQUE_RETURN_A.id(),
+    pinned::survivors::UNIQUE_RETURN_B.id(),
+    pinned::survivors::UNIQUE_SAVED_STATE.id(),
+    pinned::survivors::UNIQUE_TRANSFORM.id(),
 ];
 
 /// How long a staff's move reaches only the entity it was answered.
@@ -255,12 +256,19 @@ type SystemFn = unsafe extern "system" fn(*mut u64);
 type FindSlotFn = unsafe extern "system" fn(map: *mut u8, key: *const u32) -> u64;
 type TemplateFn = unsafe extern "system" fn(ctx: *mut u64) -> *const [u8; 16];
 
-fn symbol(loader: &Loader, name: &str) -> Option<u64> {
+fn symbol(loader: &Loader, name: Symbol) -> Option<u64> {
     loader.address(name)
 }
 
-fn address(loader: &Loader, name: &str) -> Option<usize> {
-    symbol(loader, name).and_then(|v| usize::try_from(v).ok())
+fn address(loader: &Loader, id: Symbol) -> Option<usize> {
+    symbol(loader, id).and_then(|v| usize::try_from(v).ok())
+}
+
+/// The address of `name`, a `survivors.` id put together at run time.
+fn address_by_name(loader: &Loader, name: &str) -> Option<usize> {
+    loader
+        .address_by_name(name)
+        .and_then(|v| usize::try_from(v).ok())
 }
 
 fn size(loader: &Loader, name: &str) -> Option<usize> {
@@ -273,7 +281,7 @@ fn size(loader: &Loader, name: &str) -> Option<usize> {
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let s = |name: &str| address(loader, &format!("survivors.{name}"));
+            let s = |name: &str| address_by_name(loader, &format!("survivors.{name}"));
             let c = |name: &str| size(loader, &format!("survivors.{name}"));
             let client = loader.side == Side::CLIENT;
             Some(Layout {
@@ -319,7 +327,7 @@ fn item_map(loader: &Loader) -> Option<&'static ItemMap> {
     ITEM_MAP
         .get_or_init(|| {
             let z = |name: &str| size(loader, &format!("survivors.{name}"));
-            let find_slot = address(loader, "survivors.map_find_slot")?;
+            let find_slot = address(loader, pinned::survivors::MAP_FIND_SLOT)?;
             Some(ItemMap {
                 // SAFETY: the build table's `survivors.map_find_slot` is the
                 // address of the game function with the `FindSlotFn`
@@ -340,7 +348,7 @@ fn item_map(loader: &Loader) -> Option<&'static ItemMap> {
 fn menu(loader: &Loader) -> Option<&'static Menu> {
     MENU.get_or_init(|| {
         let z = |name: &str| size(loader, &format!("survivors.{name}"));
-        let template = address(loader, "ecs.template_guid")?;
+        let template = address(loader, pinned::ecs::TEMPLATE_GUID)?;
         Some(Menu {
             // SAFETY: the build table's `ecs.template_guid` is the address of
             // the game function with the `TemplateFn` signature on this
@@ -411,7 +419,7 @@ pub(crate) fn register_summon(
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if layout(loader).is_none() || symbol(loader, "survivors.spawn").is_none() {
+    if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
         return Status::MISSING;
     }
     SUMMONS
@@ -429,7 +437,7 @@ pub(crate) fn register_summoned(
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if layout(loader).is_none() || symbol(loader, "survivors.spawn").is_none() {
+    if layout(loader).is_none() || symbol(loader, pinned::survivors::SPAWN).is_none() {
         return Status::MISSING;
     }
     SUMMONED
@@ -442,7 +450,7 @@ pub(crate) fn register_item(loader: &Loader, item: u32, survivor: u32) -> Status
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if item_map(loader).is_none() || symbol(loader, "survivors.registry_load").is_none() {
+    if item_map(loader).is_none() || symbol(loader, pinned::survivors::REGISTRY_LOAD).is_none() {
         return Status::MISSING;
     }
     ITEMS.relock().push((item, survivor));
@@ -505,32 +513,32 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
-    let at = |name: &str| symbol(loader, name);
+    let at = |name: Symbol| symbol(loader, name);
     if lookup {
         loader.link_feature(
-            "npc.lookup",
-            at("npc.lookup"),
+            pinned::npc::LOOKUP.id(),
+            at(pinned::npc::LOOKUP),
             &LOOKUP_NEXT,
             lookup_link as LookupFn,
             HookFlags::CALLER_FRAME,
         );
         loader.link_feature(
-            "npc.lookup_cursor",
-            at("npc.lookup_cursor"),
+            pinned::npc::LOOKUP_CURSOR.id(),
+            at(pinned::npc::LOOKUP_CURSOR),
             &CURSOR_NEXT,
             cursor_link as LookupFn,
             HookFlags::CALLER_FRAME,
         );
         loader.link_feature(
-            "npc.move",
-            at("npc.move"),
+            pinned::npc::MOVE.id(),
+            at(pinned::npc::MOVE),
             &MOVE_NEXT,
             move_link,
             HookFlags::NONE,
         );
         loader.link_feature(
-            "npc.update",
-            at("npc.update"),
+            pinned::npc::UPDATE.id(),
+            at(pinned::npc::UPDATE),
             &UPDATE_NEXT,
             update_link,
             HookFlags::NONE,
@@ -538,8 +546,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if beds {
         loader.link_feature(
-            "npc.bed_check",
-            at("npc.bed_check"),
+            pinned::npc::BED_CHECK.id(),
+            at(pinned::npc::BED_CHECK),
             &BED_CHECK_NEXT,
             bed_check_link,
             HookFlags::NONE,
@@ -547,8 +555,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if summons {
         loader.link_feature(
-            "survivors.spawn",
-            at("survivors.spawn"),
+            pinned::survivors::SPAWN.id(),
+            at(pinned::survivors::SPAWN),
             &SPAWN_NEXT,
             spawn_link,
             HookFlags::NONE,
@@ -556,8 +564,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if items {
         loader.link_feature(
-            "survivors.registry_load",
-            at("survivors.registry_load"),
+            pinned::survivors::REGISTRY_LOAD.id(),
+            at(pinned::survivors::REGISTRY_LOAD),
             &REGISTRY_NEXT,
             registry_link,
             HookFlags::NONE,

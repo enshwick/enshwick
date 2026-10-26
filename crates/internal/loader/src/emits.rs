@@ -15,6 +15,8 @@
 //! only entities that count their teleports, actors and characters, so the
 //! loader refuses any other.
 
+use crate::pinned;
+use crate::pinned::Symbol;
 use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
@@ -25,16 +27,16 @@ use crate::host::Loader;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "ecs.command_append",
-    "ecs.command_buffers",
-    "ecs.command_records",
-    "ecs.command_set_data",
-    "ecs.command_set_hash",
-    "ecs.command_set_size",
-    "ecs.event_push",
-    "ecs.event_streams",
-    "world.entities",
-    "world.time",
+    pinned::ecs::COMMAND_APPEND.id(),
+    pinned::ecs::COMMAND_BUFFERS.id(),
+    pinned::ecs::COMMAND_RECORDS.id(),
+    pinned::ecs::COMMAND_SET_DATA.id(),
+    pinned::ecs::COMMAND_SET_HASH.id(),
+    pinned::ecs::COMMAND_SET_SIZE.id(),
+    pinned::ecs::EVENT_PUSH.id(),
+    pinned::ecs::EVENT_STREAMS.id(),
+    pinned::world::ENTITIES.id(),
+    pinned::world::TIME.id(),
 ];
 
 /// The event types mods may raise: types the server's own systems raise on
@@ -108,7 +110,7 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
@@ -145,9 +147,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 })
             })();
             let (push, time, append) = (
-                function("ecs.event_push")?,
-                function("world.time")?,
-                function("ecs.command_append")?,
+                function(pinned::ecs::EVENT_PUSH)?,
+                function(pinned::world::TIME)?,
+                function(pinned::ecs::COMMAND_APPEND)?,
             );
             Some(Layout {
                 // SAFETY: `push` is the build table's `ecs.event_push`, the
@@ -162,13 +164,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 append: unsafe { core::mem::transmute::<usize, AppendFn>(append) },
                 allowed,
                 time_offset: offset("keen::ecs::GameEvent", "timeStamp")?,
-                streams: loader.offset("ecs.event_streams")?,
-                command_buffers: loader.offset("ecs.command_buffers")?,
-                records: loader.offset("ecs.command_records")?,
-                record_hash: loader.offset("ecs.command_set_hash")?,
-                record_size: loader.offset("ecs.command_set_size")?,
-                record_data: loader.offset("ecs.command_set_data")?,
-                world_entities: loader.offset("world.entities")?,
+                streams: loader.offset(pinned::ecs::EVENT_STREAMS)?,
+                command_buffers: loader.offset(pinned::ecs::COMMAND_BUFFERS)?,
+                records: loader.offset(pinned::ecs::COMMAND_RECORDS)?,
+                record_hash: loader.offset(pinned::ecs::COMMAND_SET_HASH)?,
+                record_size: loader.offset(pinned::ecs::COMMAND_SET_SIZE)?,
+                record_data: loader.offset(pinned::ecs::COMMAND_SET_DATA)?,
+                world_entities: loader.offset(pinned::world::ENTITIES)?,
                 teleport,
                 transform: hash_of("keen::ecs::CurrentTransform")?,
                 teleport_count: hash_of("keen::ecs::TeleportCount")?,

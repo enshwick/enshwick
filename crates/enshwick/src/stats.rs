@@ -588,10 +588,11 @@ impl Stat {
     }
 }
 
-/// How a modifier acts on a stat. Modifiers apply in this order: every
-/// `Add` to the default, then every `Multiply`, then the greatest `Max` as
-/// a floor; an `Override` replaces the result, the last one in source
-/// order winning. The kind's range applies last.
+/// How a modifier acts on a stat.
+///
+/// Modifiers apply in this order: every `Add` to the default, then every
+/// `Multiply`, then the greatest `Max` as a floor; an `Override` replaces the
+/// result, the last one in source order winning. The kind's range applies last.
 ///
 /// # Examples
 ///
@@ -648,11 +649,12 @@ impl Op {
     }
 }
 
-/// The value of a stat with definition `def` under `modifiers`, given in
-/// source order: worn items by their entity, then buffs by their id, then
-/// the modifiers mods keep on the entity, by mod and key. Values that are
-/// not finite are skipped. See [`Op`] for the order the operations apply
-/// in.
+/// The value of a stat with definition `def` under `modifiers`, given in source
+/// order: worn items by their entity, then buffs by their id, then the
+/// modifiers mods keep on the entity, by mod and key.
+///
+/// Values that are not finite are skipped. See [`Op`] for the order the
+/// operations apply in.
 ///
 /// # Examples
 ///

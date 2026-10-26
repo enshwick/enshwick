@@ -1,7 +1,8 @@
 //! Where mods meet: game functions several mods hook, features several mods
-//! filter or one mod holds, resources several mods patch. The report names
-//! who, in which order, and whether they chain or one holds it; the status
-//! summary and `enshwick conflicts` show it.
+//! filter or one mod holds, resources several mods patch.
+//!
+//! The report names who, in which order, and whether they chain or one holds
+//! it; the status summary and `enshwick conflicts` show it.
 
 use crate::mod_index::ModIndex;
 use std::borrow::Cow;

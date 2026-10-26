@@ -6,7 +6,6 @@ use crate::abi::{InventoryRequest, InventoryResultFn, ItemData, ModHandle, Statu
 use crate::test::SubmittedRequest;
 use crate::test::table::{OpenRequest, found, with};
 
-/// The table every installed fake answers through; a mod keeps the first
 pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
         if s.host.no_inventories {

@@ -10,9 +10,11 @@ use crate::locks::Relock;
 use crate::texts;
 
 use super::file::{Watched, watch};
-use super::{Line, Tool, command_files, log_query, parse, submit, take};
+use super::input::{self, End};
+use super::{Line, Source, Tool, command_files, log_query, parse, submit, take};
 
-/// Starts reading the command files of a dedicated server.
+/// Starts reading the command files and the console input of a dedicated
+/// server.
 pub(crate) fn start(loader: &'static Loader) {
     let Some(game) = loader.data_dir.parent() else {
         return;
@@ -31,9 +33,26 @@ pub(crate) fn start(loader: &'static Loader) {
     let game = game.to_path_buf();
     let started = std::thread::Builder::new()
         .name("enshwick-command-file".into())
-        .spawn(move || watch(files, |path, line| submit(line, shown(&game, path))));
+        .spawn(move || {
+            watch(files, |path, line| {
+                submit(line, Source::File(shown(&game, path)));
+            })
+        });
     if let Err(e) = started {
         crate::log!(WARN, "the command file is not read: {e}");
+    }
+    let started = std::thread::Builder::new()
+        .name("enshwick-console-input".into())
+        .spawn(|| {
+            match input::read(std::io::stdin().lock(), |line| {
+                submit(line, Source::Input);
+            }) {
+                End::Closed => crate::log!(DEBUG, "the console has no more input"),
+                End::Failed(why) => crate::log!(WARN, "the console input stopped: {why}"),
+            }
+        });
+    if let Err(e) = started {
+        crate::log!(WARN, "the console input is not read: {e}");
     }
 }
 
@@ -51,12 +70,33 @@ pub(crate) fn after_step(loader: &Loader) {
     for pending in take() {
         let line = &pending.line;
         let from = &pending.source;
-        match run(loader, line) {
-            Ok(answer) if answer.is_empty() => crate::log!(INFO, "{from}: {line}: no answer"),
-            Ok(answer) => crate::log!(INFO, "{from}: {line}:\n{answer}"),
-            Err(status) => crate::log!(WARN, "{from}: {line}: {}", refusal(line, status)),
+        let answer = match run(loader, line) {
+            Ok(answer) if answer.is_empty() => {
+                crate::log!(INFO, "{from}: {line}: no answer");
+                texts::fill("console.no-answer", &[])
+            }
+            Ok(answer) => {
+                crate::log!(INFO, "{from}: {line}:\n{answer}");
+                answer
+            }
+            Err(status) => {
+                let why = refusal(line, status);
+                crate::log!(WARN, "{from}: {line}: {why}");
+                why
+            }
+        };
+        if *from == Source::Input {
+            show(&answer);
         }
     }
+}
+
+/// Writes `answer` to the server's console window or terminal, where the
+/// line was typed; the server's own output shares it.
+fn show(answer: &str) {
+    use std::io::Write as _;
+    let mut out = std::io::stdout().lock();
+    let _shown = writeln!(out, "{answer}").and_then(|()| out.flush());
 }
 
 /// Why the console did not answer `line`.

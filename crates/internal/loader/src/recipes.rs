@@ -513,10 +513,11 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
     }
 }
 
-/// The recipes disabled by mods' rules `mods`, then by each of `files` in
-/// turn: a file disables what its `[disable]` names and enables back what
-/// its `[enable]` names, over everything before it. The problems, one line
-/// each with where the rule comes from.
+/// The recipes disabled by mods' rules `mods`, then by each of `files` in turn:
+/// a file disables what its `[disable]` names and enables back what its
+/// `[enable]` names, over everything before it.
+///
+/// The problems, one line each with where the rule comes from.
 #[must_use]
 pub fn compose(
     index: &Index,
