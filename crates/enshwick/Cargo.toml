@@ -12,7 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.4" }
+enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.4" }
 bcdec_rs.workspace = true
 bytemuck.workspace = true
 const-sha1.workspace = true

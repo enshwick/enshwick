@@ -31,6 +31,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `enshwick` and `enshwick-gamedata` require the exact version of the
+  crates they are released with, so an older `enshwick` never resolves a
+  newer `enshwick-macros` (#484).
+
 - A mod id without an author part is refused whatever ABI minor the mod was
   built for. Rebuild a mod built for ABI minor 69 or older with an
   `<author>.<name>` id (#436).
