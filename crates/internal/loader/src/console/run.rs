@@ -18,9 +18,8 @@ pub(crate) fn start(loader: &'static Loader) {
     };
     let files: Vec<Watched> = command_files(&loader.data_dir, |id| {
         loader
-            .mods
-            .iter()
-            .any(|m| m.id == id && !m.off.load(Ordering::Acquire))
+            .find_mod(id)
+            .is_some_and(|(_, m)| !m.off.load(Ordering::Acquire))
     })
     .into_iter()
     .map(Watched::new)
@@ -92,10 +91,8 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
     match parse(line) {
         Line::Empty => Err(Status::BAD_ARGS),
         Line::Mod { id, rest } => {
-            let index = loader
-                .mods
-                .iter()
-                .position(|m| m.id.eq_ignore_ascii_case(id))
+            let (index, _) = loader
+                .find_mod(&id.to_ascii_lowercase())
                 .ok_or(Status::MISSING)?;
             crate::log!(DEBUG, "the console runs {id} {rest}");
             crate::actions::console(loader, index, rest).ok_or(Status::MISSING)
