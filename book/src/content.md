@@ -17,8 +17,9 @@ first and the served resources under them last:
 - [Served resources](content/resources.md): any resource, new or changed,
   built from bytes;
 - [Texts](content/texts.md): names and descriptions per language;
-- [Content packs](content/packs.md): all of the above from TOML files, in a
-  folder with no code or inside a mod.
+- [Data packs](content/packs.md): all of the above from TOML files, in a
+  folder with no code or inside a mod, and changes of vanilla values such as
+  stack sizes.
 
 [Inventories](inventories.md), which read and change what players and chests
 hold, have a chapter of their own.

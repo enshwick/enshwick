@@ -6,16 +6,17 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFn, AltarZoneSize,
     BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, CallerFrame, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec,
-    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
-    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, WeatherFront, ZoneCheckFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header,
+    HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1035,4 +1036,79 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Writes to `out` the kind of the recipes that make the item `item`,
+    /// from the item's static data; [`Status::MISSING`] while the game has
+    /// not loaded the item, which on a dedicated server comes after its
+    /// recipe registry is first built, and while the loader serves no
+    /// resource. Any thread. Since minor 73.
+    pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
+    /// Reports whether the mod's feature `name` runs on this game build:
+    /// off for the reason `off`, or on when `off` is empty. The loader
+    /// logs it and shows it in the status summary and on the Mods screen; a
+    /// later report of the same name replaces the earlier one.
+    /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
+    /// the call. Any thread. Since minor 74.
+    pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
+    /// Declares that the calling mod multiplies `rate`, so the loader arms
+    /// what the rate needs; its factor is 1 until
+    /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
+    /// what the rate needs, [`Status::BAD_ARGS`] for a rate this loader
+    /// does not know, [`Status::REFUSED`] for a rate clients count too in a
+    /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
+    /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
+    /// [`Status::FAULTED`] for a mod that is off. Allowed during
+    /// `enshwick_mod_init` only. Since minor 75.
+    pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
+    /// Puts `factor` in force as the calling mod's factor for `rate`: the
+    /// game uses the product of every declaring mod's factor, held to 0 to
+    /// 100, from the next time it reads the rate. [`Status::BAD_ARGS`] for
+    /// a factor that is not finite or lies outside 0 to 100, or a rate the
+    /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
+    /// thread; neither allocates nor locks once
+    /// every mod is initialised. Since minor 75.
+    pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
+    /// Declares a change of a vanilla value. The loader merges the changes
+    /// of every mod once their `init` ran: a set in load order, the last
+    /// winning and the overridden one reported in both mods' logs and the
+    /// conflict report; then every factor, multiplied. It builds the changed
+    /// resource the first time the game reads it, on each side from its own
+    /// mods. [`Status::BAD_ARGS`] for a null `change`, an unknown field or
+    /// operation and a value outside the field's range; [`Status::MISSING`]
+    /// when the build does not reflect the field. Init only. Since minor 76.
+    pub change_data: extern "system" fn(me: ModHandle, change: *const DataChange) -> Status,
+    /// Calls `callback` with `user` before every wait of the engine's event
+    /// loop on its handles, on the thread that waits, and writes to `found`
+    /// which waits it hooked ([`LoopWaitSites`]); a wait this build lacks,
+    /// whose code is not what its table expects, or that the mod hooked
+    /// already is left out. [`Status::BAD_ARGS`] for a null `found`, before
+    /// anything is hooked. Handlers run in load order. Allowed during
+    /// `enshwick_mod_init` only. Since minor 77.
+    pub loop_wait: extern "system" fn(
+        me: ModHandle,
+        callback: LoopWaitFn,
+        user: *mut c_void,
+        found: *mut LoopWaitSites,
+    ) -> Status,
+    /// Calls `callback` with `user` once a pass where the server's game loop
+    /// has picked its wait before the next pass, in nanoseconds, which the
+    /// handler may change; writes 1 to `found` when the loader hooked the
+    /// place, else 0. [`Status::BAD_ARGS`] for a null `found`, before
+    /// anything is hooked. Handlers run in load order, each on the last one's wait. On
+    /// the game thread of the server loop. Allowed during `enshwick_mod_init`
+    /// only. Since minor 77.
+    pub server_wait: extern "system" fn(
+        me: ModHandle,
+        callback: ServerWaitFn,
+        user: *mut c_void,
+        found: *mut u32,
+    ) -> Status,
+    /// Caps the worker threads of the task system's default and background
+    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
+    /// hooked and the task system starts after the hooks arm, which only the
+    /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
+    /// `found`, before anything is hooked. Allowed during
+    /// `enshwick_mod_init` only. Since minor 77.
+    pub task_workers:
+        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
 }

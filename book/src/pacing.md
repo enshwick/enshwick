@@ -3,8 +3,9 @@
 The engine paces its loops with waits on handles and sizes its thread pools
 from the CPUs it sees. [`pacing`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/pacing.rs)
 names the places a mod can change to make the game use less CPU. Each
-function hooks its site during `init`, finds it by its bytes on the running
-build and tells whether it was found.
+function asks the loader during `init`; the loader finds the place in the
+running build's table, hooks it and tells whether the build has it. Handlers
+of several mods run in load order, and with worker caps the lowest wins.
 
 | Function | Site | Where |
 | --- | --- | --- |

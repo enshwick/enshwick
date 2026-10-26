@@ -29,20 +29,22 @@ use entries::build::{
     type_hash, type_size,
 };
 use entries::content::{
-    add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_rule, resource_read,
-    serve_resource,
+    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
+    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
+    recipe_rule, resource_read, serve_resource,
 };
 use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_zones_control,
     altars, altars_open, apply_buff, base_zones, buff_types, buffs, build_filter, comfort_filter,
     craft_filter, damage_filter, experience_filter, grant_knowledge, interaction_filter,
-    item_lines, knowledge, knowledge_input_filter, quests, raise_base_limit, remove_buff,
-    revoke_knowledge, set_altar_zones, skill_override, stat_buff, stat_info, stat_modify,
+    item_lines, knowledge, knowledge_input_filter, quests, raise_base_limit, rate, remove_buff,
+    revoke_knowledge, set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify,
     stat_open, stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item,
     summoned, survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
-use entries::hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
+use entries::hooks::{
+    code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
+};
 use entries::inventory::{inventory_open, inventory_submit, item_info};
 use entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
@@ -55,7 +57,7 @@ use entries::services::{
 };
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template,
+    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
     forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
     players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
     set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
@@ -100,8 +102,10 @@ pub(crate) struct ModRecord {
     pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader, for its settings' labels.
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
-    /// Whether it is a content pack, a folder of data the loader runs.
+    /// Whether it is a data pack, a folder of data the loader runs.
     pub(crate) pack: bool,
+    /// The features it reported on or off, in the order it named them.
+    pub(crate) features: Mutex<Vec<crate::features::Feature>>,
 }
 
 impl ModRecord {
@@ -124,9 +128,29 @@ impl ModRecord {
         self.id == namespace || self.former.iter().any(|f| f == namespace)
     }
 
-    /// The name players read, or the id when the manifest names none.
+    /// The name players read, from the mod's texts in their language, else
+    /// from its manifest; empty when neither names it.
+    pub(crate) fn name(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.name_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
+    }
+
+    /// The name players read, or the id when nothing names the mod.
     pub(crate) fn label(&self) -> String {
-        self.meta.label(&self.id)
+        enshwick::mods::label(&self.name(), &self.id)
+    }
+
+    /// What the mod does, from its texts in the player's language, else
+    /// from its manifest.
+    pub(crate) fn description(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.description_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
     }
 
     /// Whether it takes part in the join check while it runs.
@@ -171,7 +195,7 @@ impl Kept {
 }
 
 /// The handle of the loader itself, which its own copy of the API uses to
-/// log and read while it runs content packs.
+/// log and read while it runs data packs.
 pub(crate) const LOADER_HANDLE: ModHandle = ModHandle(0);
 
 /// A mod's handler for one event.
@@ -205,6 +229,8 @@ pub(crate) struct Loader {
     pub(crate) reflection: Reflection<'static>,
     /// The `mods` folder.
     pub(crate) mods_dir: PathBuf,
+    /// The contract of the stub that started the loader; 0 in a dry run.
+    pub(crate) stub: u32,
     /// The `mod-configs` folder.
     pub(crate) configs_dir: PathBuf,
     /// The `mod-data` folder.
@@ -343,6 +369,53 @@ impl Loader {
         self.chains.relock().add(target, link)
     }
 
+    /// Whether the code at symbol `id` is what the table expects, checked
+    /// before a hook patches it or a detour relies on it, by
+    /// [`crate::builds::code_holds`]: on the build the table was made for,
+    /// the symbol's pattern matches where its code starts, when its pattern
+    /// finds it directly, and its first eight bytes are the table's
+    /// `<id>.bytes`, when the table pins them. A table carried over already
+    /// checked both while it found the symbol, so there only the presence of
+    /// a check counts. False for a symbol the build lacks.
+    pub(crate) fn code_holds(&self, id: Symbol) -> bool {
+        let Some(address) = self.address(id) else {
+            return false;
+        };
+        let exact = self.build.kind == crate::builds::Kind::Exact;
+        let head = self.build.head(id.id()).map(|(pattern, at)| {
+            !exact || {
+                let Some(start) = address
+                    .checked_sub(at)
+                    .and_then(|a| usize::try_from(a).ok())
+                else {
+                    return false;
+                };
+                let mut code = vec![0u8; pattern.len()];
+                // SAFETY: `start` is the table's `id` less the distance its
+                // pattern starts before it, code inside the game's image,
+                // which stays mapped and readable for the life of the
+                // process; a pattern spans code of the function it was made
+                // from, which the table checks against its build.
+                unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+                pattern.matches(&code)
+            }
+        });
+        let bytes = self.build.constant(&format!("{id}.bytes")).map(|expected| {
+            !exact || {
+                let Ok(code) = usize::try_from(address) else {
+                    return false;
+                };
+                // SAFETY: `code` is the table's `id`, eight bytes of code
+                // inside the game's image, which stays mapped and
+                // readable for the life of the process and is not
+                // patched before this check.
+                let found: u64 = unsafe { crate::memory::read(code, 0) };
+                found == expected
+            }
+        });
+        crate::builds::code_holds(head, bytes)
+    }
+
     /// [`Loader::link`] for a feature, logging why it stays off: a target
     /// this build lacks, or a refused link. True when linked.
     pub(crate) fn link_feature<F: Copy>(
@@ -428,7 +501,9 @@ impl Loader {
         let item_data = matches!(
             event,
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
-        ) && (crate::item_data::wanted() || crate::stats::wanted());
+        ) && (crate::item_data::wanted()
+            || crate::stats::wanted()
+            || crate::data_changes::wanted(self));
         item_data
             || self
                 .delivery
@@ -450,6 +525,7 @@ impl Loader {
             crate::knowledge::changes::world_event(self, event);
             crate::item_data::world_event(self, event);
             crate::stats::world_event(self, event);
+            crate::data_changes::world_event(self, event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;
@@ -675,6 +751,14 @@ pub(crate) static API: HostApi = HostApi {
     run_point,
     actions,
     event_types,
+    recipe_kind,
+    feature,
+    rate,
+    set_rate,
+    change_data,
+    loop_wait,
+    server_wait,
+    task_workers,
 };
 
 /// The loader and the calling mod, when the mod is on.

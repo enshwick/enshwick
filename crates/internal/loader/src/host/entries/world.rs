@@ -6,6 +6,7 @@ use enshwick::ecs::Entity;
 
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};
+use crate::locks::Relock;
 
 pub(crate) extern "system" fn component(
     me: ModHandle,
@@ -138,6 +139,35 @@ pub(crate) extern "system" fn rename_filter(
             crate::conflicts::Mode::Chained,
             crate::label::register(index, callback, user),
         )
+    })
+}
+
+pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Status {
+    entry("feature", || {
+        let (Some(name), Some(off)) = (text(name), text(off)) else {
+            return Status::BAD_ARGS;
+        };
+        if name.is_empty() {
+            return Status::BAD_ARGS;
+        }
+        let record = match calling(me) {
+            Ok((_, _, record)) => record,
+            Err(status) => return status,
+        };
+        let changed = crate::features::report(
+            &mut record.features.relock(),
+            name,
+            Some(off).filter(|off| !off.is_empty()),
+        );
+        if let Some(line) = changed {
+            let level = if off.is_empty() {
+                Level::INFO
+            } else {
+                Level::WARN
+            };
+            crate::log::write(level, &record.id, &line);
+        }
+        Status::OK
     })
 }
 

@@ -22,14 +22,14 @@ pub(super) type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) ->
 
 pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
 
-/// A mod DLL with its exports, or a content pack with the loader's.
+/// A mod DLL with its exports, or a data pack with the loader's.
 pub(super) struct Library {
     /// The DLL's file name, for messages.
     pub(super) file: String,
     /// The loaded DLL, freed again when the mod list turns its id off; null
     /// for a pack.
     pub(super) module: HMODULE,
-    /// Whether it is a content pack.
+    /// Whether it is a data pack.
     pub(super) pack: bool,
     /// Where the DLL is mapped, for crash attribution.
     pub(super) range: Option<(usize, usize)>,
@@ -118,6 +118,7 @@ pub(super) fn libraries(
     let (found, mut others) = discover(mods_dir, &list, run);
     if run == Run::Game {
         others.extend(chained(mods_dir));
+        others.extend(beside(mods_dir));
     }
     for library in found.into_iter().chain(packs) {
         // SAFETY: every manifest here is the copy `manifest::read` made for the process
@@ -176,17 +177,50 @@ fn chained(mods_dir: &Path) -> Vec<OtherDll> {
         .into_iter()
         .filter_map(|path| {
             let file = path.file_name()?.to_string_lossy().into_owned();
-            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-            // SAFETY: a NUL-terminated path; a module of that path is looked
-            // up, never loaded.
-            let loaded = !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null();
             Some(OtherDll {
                 file,
                 origin: Origin::Chain,
-                loaded,
+                loaded: is_loaded(&path),
             })
         })
         .collect()
+}
+
+/// Other mods' proxies in the game's folder under a name of
+/// [`crate::others::PROXY_NAMES`], and whether each is loaded.
+fn beside(mods_dir: &Path) -> Vec<OtherDll> {
+    let Some(game_dir) = mods_dir.parent() else {
+        return Vec::new();
+    };
+    crate::others::PROXY_NAMES
+        .iter()
+        .filter(|name| game_dir.join(name).is_file())
+        .map(|&name| {
+            let loaded = is_loaded(&game_dir.join(name));
+            crate::log!(
+                INFO,
+                "{name} beside the game is another mod's proxy{}",
+                if loaded {
+                    "; it runs"
+                } else {
+                    "; it was not loaded at start"
+                }
+            );
+            OtherDll {
+                file: name.to_owned(),
+                origin: Origin::Game,
+                loaded,
+            }
+        })
+        .collect()
+}
+
+/// Whether a module loaded from `path` is in the process now.
+fn is_loaded(path: &Path) -> bool {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: a NUL-terminated path; a module of that path is looked up,
+    // never loaded.
+    !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null()
 }
 
 /// The `*.dll` files directly in `dir`, sorted; none when it is missing.

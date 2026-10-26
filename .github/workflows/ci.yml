@@ -1,12 +1,16 @@
-# The merge gate: `cargo xtask check` on the organization runners through the
-# shared workflow, the changed packages on a pull request and the full suite
-# nightly. The nightly lane adds Miri, unused dependencies, coverage, external
-# links, benchmarks, the fuzz targets, loom models, Kani proofs and the
-# tests under AddressSanitizer.
+# The merge gate: `cargo xtask check` through the shared workflow, as parallel
+# parts: the changed packages on a pull request (GitHub-hosted) and in the
+# merge queue (the organization runners), the full suite on a push to main,
+# which also fills the build caches pull requests start from, and nightly.
+# The nightly lane adds Miri, unused dependencies, coverage, external links,
+# benchmarks, the fuzz targets, loom models, Kani proofs and the tests under
+# AddressSanitizer.
 name: ci
 
 on:
   pull_request:
+  push:
+    branches: [main]
   # The merge queue checks each group of pull requests on top of main.
   merge_group:
   schedule:
@@ -21,8 +25,10 @@ on:
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # Only a pull request's newer push cancels its older run: a run on main
+  # fills the caches pull requests start from and must finish.
+  group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust:
@@ -32,6 +38,13 @@ jobs:
       contents: read
     with:
       semver: enshwick
+      split: true
+      # The Windows lint runs on the owner's PC while it is online; the
+      # Windows tests stay under Wine until they pass natively.
+      clippy-features: enshwick/test,xtask/compat
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
 
   nightly:
     if: github.event_name == 'schedule' || inputs.nightly

@@ -12,6 +12,12 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `mods/<id>.log` | One mod's lines                                       |
 | `status.log`    | The latest status summary                             |
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
+| `report.md`     | One report to attach when you ask for help            |
+
+To ask for help, attach `report.md` to an issue. It holds the versions, your
+system, the status summary, the files in `mods/` and the latest warnings and
+errors, mods' messages included. Paths show the game's folder as `<game>` and
+leave out your user name. Read the report before you share it.
 
 `all.log`, `loader.log` and the mod logs start empty each session; the two
 sessions before stay as `all.1.log` and `all.2.log` (and so on for each
@@ -189,6 +195,9 @@ does not start.
 Put Enshwick's `powrprof.dll` back into the game's folder and move the other
 mod's file into `mods/chain/`. Enshwick starts every DLL there, in file name
 order, before its own mods.
+
+The status summary, `report.md` and the Mods screen list the DLLs in
+`mods/chain/` and other mods' proxy DLLs beside the game.
 
 Under Proton, add each moved file's name to the overrides as well, such as
 `WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` for a moved `dinput8.dll`.

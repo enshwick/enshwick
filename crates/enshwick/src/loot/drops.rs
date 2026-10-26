@@ -12,10 +12,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::ecs::{Components, Entity};
+use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
 use crate::locks::Relock;
-use crate::raw::{read_at, read_ptr_at, write_at};
+use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -430,6 +431,8 @@ struct Engine {
     boss: u32,
     lock: u32,
     lock_item: usize,
+    /// The single roll's output; `None` on a build without its layout.
+    slot: Option<Slot>,
 }
 
 static ENGINE: Fresh<Engine> = Fresh::new();
@@ -472,9 +475,9 @@ unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
 impl Engine {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let world = load.world()?;
-        let ty = |name: &str| {
+        let ty = |id: &str| {
             world
-                .component_type(load, name)
+                .component_type(load, id)
                 .map(crate::world::ComponentType::hash)
         };
         let size = |name: &str| {
@@ -491,12 +494,16 @@ impl Engine {
             txn_entity: size("loot.txn_entity")?,
             request_node: size("loot.request_node")?,
             request_labels: size("loot.request_labels")?,
-            destroy_on_loot: ty("keen::ecs::DestroyOnLoot")?,
-            boss: ty("keen::ecs::Boss")?,
-            lock: ty("keen::ecs::InteractionLock")?,
-            lock_item: load
-                .field_offset("keen::ecs::InteractionLock", "requiredItem")
-                .and_then(|v| usize::try_from(v).map_err(|_| Off::new("offset")))?,
+            destroy_on_loot: ty(ids::DESTROY_ON_LOOT)?,
+            boss: ty(ids::BOSS)?,
+            lock: ty(ids::INTERACTION_LOCK)?,
+            lock_item: load.constant(ids::INTERACTION_LOCK_ITEM).and_then(|v| {
+                usize::try_from(v)
+                    .map_err(|_| Off::new(format!("offset {}", ids::INTERACTION_LOCK_ITEM)))
+            })?,
+            slot: Slot::resolve(load)
+                .inspect_err(|off| crate::debug!("loot from destroyed things off: {off}"))
+                .ok(),
         })
     }
 
@@ -640,10 +647,55 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     }
 }
 
-/// Item id, count, rarity, level and value: the single roll's output.
-const ONE_ITEM: usize = 0;
-const ONE_COUNT: usize = 4;
-const ONE_SIZE: usize = 16;
+/// The most bytes a single roll's output slot may take.
+const SLOT_MAX: usize = 64;
+
+/// Where the single roll's output slot keeps the item id and the count, and
+/// its size, from the catalogue. The slot is the engine's `LootSlotInfo`
+/// (16 bytes: item id at 0, count at 4 on server 399 and client 426): the
+/// single roll's code names no type, and its output matches that layout
+/// exactly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Slot {
+    item: usize,
+    count: usize,
+    size: usize,
+}
+
+impl Slot {
+    /// The slot, when a u32 item id and a u16 count fit apart inside
+    /// `size` bytes and `size` fits [`SLOT_MAX`].
+    fn new(item: usize, count: usize, size: usize) -> Option<Self> {
+        let fits = |at: usize, len: usize| at.checked_add(len).is_some_and(|end| end <= size);
+        let apart = item.saturating_add(size_of::<u32>()) <= count
+            || count.saturating_add(size_of::<u16>()) <= item;
+        (size <= SLOT_MAX && fits(item, size_of::<u32>()) && fits(count, size_of::<u16>()) && apart)
+            .then_some(Self { item, count, size })
+    }
+
+    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let at = |id: &str| {
+            load.constant(id)
+                .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
+        };
+        let size = usize::try_from(load.type_size(ids::LOOT_SLOT)?).unwrap_or(usize::MAX);
+        Self::new(at(ids::LOOT_SLOT_ITEM)?, at(ids::LOOT_SLOT_COUNT)?, size).ok_or_else(|| {
+            Off::new(format!(
+                "{}: not the layout this API writes",
+                ids::LOOT_SLOT
+            ))
+        })
+    }
+
+    /// The slot's bytes for `count` of `item`, the rest zero, and how many
+    /// of them the slot takes.
+    fn fill(self, item: u32, count: u16) -> ([u8; SLOT_MAX], usize) {
+        let mut bytes = [0u8; SLOT_MAX];
+        bytes[self.item..self.item + size_of::<u32>()].copy_from_slice(&item.to_le_bytes());
+        bytes[self.count..self.count + size_of::<u16>()].copy_from_slice(&count.to_le_bytes());
+        (bytes, self.size)
+    }
+}
 
 fn after_roll_one(
     next: Next<RollFn>,
@@ -673,12 +725,15 @@ fn after_roll_one(
 /// # Safety
 ///
 /// - `res` is null or the single roll's status byte, writable.
-/// - `out` is null or the single roll's output, writable for `ONE_SIZE`
-///   bytes.
+/// - `out` is null or the single roll's output slot, a `LootSlotInfo`,
+///   writable for that type's reflected size.
 /// - Both are the arguments the game passed to the single roll that just
 ///   returned, used on its thread inside the hook.
 unsafe fn add_one(res: *mut u8, out: *mut u8) {
-    if ENGINE.get().is_none() || res.is_null() || out.is_null() {
+    let Some(slot) = ENGINE.get().and_then(|engine| engine.slot) else {
+        return;
+    };
+    if res.is_null() || out.is_null() {
         return;
     }
     let roll = Roll {
@@ -698,14 +753,15 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
     else {
         return;
     };
-    let mut stack = [0u8; ONE_SIZE];
-    stack[ONE_ITEM..ONE_ITEM + 4].copy_from_slice(&item.to_le_bytes());
-    stack[ONE_COUNT..ONE_COUNT + 2].copy_from_slice(&count.to_le_bytes());
+    let (stack, len) = slot.fill(item, count);
     // SAFETY: `out` is not null, as the early return ensures, and the caller
-    // guarantees the single roll's `ONE_SIZE` writable output bytes; the game's
+    // guarantees the single roll's output slot. On server 399 and client 426
+    // that slot is a 16-byte `LootSlotInfo` (item id at 0, count at 4),
+    // identified by its layout, since the roll's code names no type; `len` is
+    // that type's reflected size, which `Slot::new` bounded. The game's
     // callers drop the stack when the status is 0 and the item and count are
     // set.
-    unsafe { write_at(out, 0, stack) };
+    unsafe { write_bytes_at(out, 0, &stack[..len]) };
     // SAFETY: `res` is not null, as the early return ensures, and the caller
     // guarantees the single roll's writable status byte.
     unsafe { write_at(res, 0, 0u8) };
@@ -778,6 +834,12 @@ impl Load<'_> {
                 .get_or_init(Default::default)
                 .load(Ordering::Acquire)
         {
+            if ENGINE.get().and_then(|engine| engine.slot).is_none() {
+                return Err(Off::new(format!(
+                    "loot from destroyed things: {} is not on this build",
+                    ids::LOOT_SLOT
+                )));
+            }
             let roll_one = self.symbol("loot.roll_one")?;
             // SAFETY: the build table's `loot.roll_one` is the single roll
             // `ROLL_ONE` declares.
@@ -827,7 +889,7 @@ pub fn replace_drops(drops: Vec<Drop>) -> Result<(), Off> {
     replace_group(0, drops).map_err(Off::new)
 }
 
-/// Replaces every drop of group `group` with `drops`, as a content pack's
+/// Replaces every drop of group `group` with `drops`, as a data pack's
 /// reload does; no drops forgets the group.
 ///
 /// # Errors
@@ -857,149 +919,4 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn roll(kind: Kinds) -> Roll {
-        Roll {
-            kind,
-            entity: Some(Entity(5)),
-            node: 0,
-            labels: 0,
-            boss: false,
-            locked: false,
-        }
-    }
-
-    #[test]
-    fn filters_keep_their_kind_and_markers() {
-        let corpse = roll(Kinds::CORPSES);
-        let boss = Roll {
-            boss: true,
-            labels: 3,
-            ..corpse
-        };
-        let chest = Roll {
-            node: 9,
-            ..roll(Kinds::CHESTS)
-        };
-        let locked = Roll {
-            locked: true,
-            ..chest
-        };
-        assert!(Source::kinds(Kinds::CONTAINERS).matches(&corpse));
-        assert!(Source::kinds(Kinds::CONTAINERS).matches(&chest));
-        assert!(!Source::kinds(Kinds::CONTAINERS).matches(&roll(Kinds::DESTROYED)));
-        assert!(Source::bosses().matches(&boss) && !Source::bosses().matches(&corpse));
-        assert!(!Source::bosses().matches(&locked));
-        assert!(Source::locked_chests().matches(&locked));
-        assert!(!Source::locked_chests().matches(&chest));
-        assert!(Source::bosses().with_labels(&[3]).matches(&boss));
-        assert!(!Source::bosses().with_labels(&[4]).matches(&boss));
-        assert!(
-            Source::kinds(Kinds::CHESTS)
-                .with_nodes(&[9])
-                .matches(&chest)
-        );
-        assert!(
-            !Source::kinds(Kinds::CHESTS)
-                .with_nodes(&[8])
-                .matches(&chest)
-        );
-    }
-
-    #[test]
-    fn invalid_drops_are_refused() {
-        let from = Source::bosses();
-        assert!(Drop::new(7, 0.5, from.clone()).check().is_ok());
-        assert!(Drop::new(0, 0.5, from.clone()).check().is_err());
-        assert!(Drop::new(7, 1.5, from.clone()).check().is_err());
-        assert!(Drop::new(7, f64::NAN, from.clone()).check().is_err());
-        assert!(Drop::new(7, 0.5, from.clone()).count(0, 1).check().is_err());
-        assert!(Drop::new(7, 0.5, from.clone()).count(3, 2).check().is_err());
-        assert!(
-            Drop::new(7, 0.5, from.clone())
-                .meter(1, 5, 5)
-                .check()
-                .is_ok()
-        );
-        assert!(
-            Drop::new(7, 0.5, from.clone())
-                .meter(3, 2, 5)
-                .check()
-                .is_err()
-        );
-        assert!(
-            Drop::new(7, 0.5, from.clone())
-                .meter(1, 6, 5)
-                .check()
-                .is_err()
-        );
-        assert!(Drop::new(7, 0.5, from).meter(0, 0, 0).check().is_err());
-    }
-
-    #[test]
-    fn meters_roll_every_count_between_their_bounds() {
-        let dice = Dice(AtomicU64::new(3));
-        let drop = Drop::new(7, 1.0, Source::bosses()).meter(2, 4, 5);
-        let mut seen = [0usize; 6];
-        for _ in 0..30_000 {
-            let (_, _, fill) = drop.draw(&dice).unwrap();
-            let charges = (5.0 * fill.unwrap().fraction() + 0.5).floor();
-            #[expect(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "0 to 5"
-            )]
-            let charges = charges as usize;
-            seen[charges] += 1;
-        }
-        assert_eq!((seen[0], seen[1], seen[5]), (0, 0, 0));
-        assert!(
-            seen[2..5].iter().all(|&n| (9_000..11_000).contains(&n)),
-            "{seen:?}"
-        );
-    }
-
-    #[test]
-    fn the_chance_holds_over_many_rolls() {
-        let dice = Dice(AtomicU64::new(42));
-        let drop = Drop::new(7, 0.1, Source::bosses()).count(2, 4);
-        let mut hits = 0;
-        for _ in 0..100_000 {
-            if let Some((item, n, fill)) = drop.draw(&dice) {
-                assert_eq!((item, fill), (7, None));
-                assert!((2..=4).contains(&n));
-                hits += 1;
-            }
-        }
-        assert!((9_000..11_000).contains(&hits), "{hits}");
-        let never = Drop::new(7, 0.0, Source::bosses());
-        let always = Drop::new(7, 1.0, Source::bosses());
-        for _ in 0..1000 {
-            assert_eq!(never.draw(&dice), None);
-            assert_eq!(always.draw(&dice), Some((7, 1, None)));
-        }
-    }
-
-    #[test]
-    fn one_of_spreads_over_its_items() {
-        let dice = Dice(AtomicU64::new(7));
-        let drop = Drop::one_of(&[1, 2, 3], 1.0, Source::bosses());
-        let mut seen = [0usize; 3];
-        for _ in 0..30_000 {
-            let (item, _, _) = drop.draw(&dice).unwrap();
-            seen[item as usize - 1] += 1;
-        }
-        assert!(
-            seen.iter().all(|&n| (9_000..11_000).contains(&n)),
-            "{seen:?}"
-        );
-        assert!(Drop::one_of(&[], 0.5, Source::bosses()).check().is_err());
-        assert!(
-            Drop::one_of(&[1, 0], 0.5, Source::bosses())
-                .check()
-                .is_err()
-        );
-    }
-}
+mod tests;

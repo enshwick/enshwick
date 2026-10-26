@@ -38,6 +38,7 @@ mod content;
 mod crash;
 #[cfg(windows)]
 mod damage;
+pub mod data_changes;
 #[cfg(windows)]
 mod daytime;
 #[cfg(windows)]
@@ -54,6 +55,7 @@ mod entities;
 pub mod errors;
 #[cfg(windows)]
 mod events;
+pub mod features;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the game's features run behind fuses")
@@ -79,6 +81,7 @@ mod interactions;
 mod inventory;
 #[cfg(windows)]
 mod item_data;
+pub mod item_kinds;
 pub mod join;
 #[cfg(windows)]
 mod knowledge;
@@ -114,6 +117,8 @@ mod notices;
 )]
 mod others;
 #[cfg(windows)]
+mod pacing;
+#[cfg(windows)]
 mod packs;
 #[cfg(windows)]
 mod pages;
@@ -138,12 +143,29 @@ mod points;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+#[cfg(windows)]
+mod rate_links;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game applies rates")
+)]
+mod rates;
 pub mod recipes;
 pub mod registry;
 #[cfg(windows)]
 mod reload;
 pub mod remote;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "written from the start, which runs on Windows")
+)]
+mod report;
 pub mod resolve;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build hands the game memory")
+)]
+mod retire;
 #[cfg(windows)]
 mod saves;
 #[cfg(windows)]

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "1.0.0-alpha.3"
+version = "1.0.0-alpha.4"
 description = "Internal, not for mods: the Enshwick Loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
@@ -19,7 +19,6 @@ doc = false
 
 [dependencies]
 arc-swap.workspace = true
-arrayvec.workspace = true
 base64.workspace = true
 enshwick.workspace = true
 enshwick-gamedata.workspace = true
@@ -34,6 +33,7 @@ toml.workspace = true
 toml_edit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+arrayvec.workspace = true
 iced-x86.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -58,8 +58,8 @@ windows-sys = { workspace = true, features = [
 loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
-criterion.workspace = true
 bytemuck.workspace = true
+criterion.workspace = true
 insta.workspace = true
 proptest.workspace = true
 
@@ -73,4 +73,8 @@ workspace = true
 
 [[bench]]
 name = "registry_read"
+harness = false
+
+[[bench]]
+name = "item_kinds"
 harness = false

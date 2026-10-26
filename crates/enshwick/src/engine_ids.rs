@@ -3,8 +3,8 @@
 
 /// Declares each id as a constant and lists them all in [`ALL`].
 macro_rules! ids {
-    ($($name:ident = $id:literal;)*) => {
-        $(pub(crate) const $name: &str = $id;)*
+    ($($(#[$meta:meta])* $name:ident = $id:literal;)*) => {
+        $($(#[$meta])* pub(crate) const $name: &str = $id;)*
 
         /// Every id, for the loader's test that each one resolves.
         pub const ALL: &[&str] = &[$($id),*];
@@ -108,10 +108,16 @@ ids! {
     ITEM_INFO_NAME = "item_info.name";
     ITEM_INFO_DESCRIPTION = "item_info.description";
     ITEM_INFO_FLAGS = "item_info.flags";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_MAX_STACK = "item_info.max_stack";
     ITEM_INFO_PID_ENTITY = "item_info.pid_entity";
     ITEM_INFO_UI_VALUES = "item_info.ui_values";
     ITEM_INFO_ICON_IMAGE = "item_info.icon_image";
     ITEM_INFO_PLACED_ENTITY = "item_info.placed_entity";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_EQUIPMENT_SLOT = "item_info.equipment_slot";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    EQUIPMENT_SLOT = "equipment_slot";
     ITEM_STAT = "item_stat";
     ITEM_STAT_LABEL = "item_stat.label";
     ITEM_STAT_FORMAT = "item_stat.format";
@@ -174,4 +180,53 @@ ids! {
     CRAFTING_MENU_GROUP_SETS = "crafting_menu_group.sets";
     CRAFTING_MENU_SET = "crafting_menu_set";
     CRAFTING_MENU_SET_ENTRIES = "crafting_menu_set.entries";
+    CURRENT_TRANSFORM = "current_transform";
+    USED_ITEM = "used_item";
+    LABEL = "label";
+    INVENTORY_SETUP = "inventory_setup";
+    INVENTORY_SETUP_LINKS = "inventory_setup.links";
+    INVENTORY_SETUP_CATEGORIES = "inventory_setup.categories";
+    INVENTORY_SETUP_INITIALIZED = "inventory_setup.initialized";
+    INVENTORY = "inventory";
+    ITEM_STACK = "item_stack";
+    ITEM_STACK_COUNT = "item_stack.count";
+    ITEM_STACK_PIDE = "item_stack.pide";
+    DURABILITY = "durability";
+    DURABILITY_MAX = "durability.max";
+    FUEL = "fuel";
+    FUEL_MAX = "fuel.max";
+    OWNER = "owner";
+    INVENTORY_EMPTY_STATE = "inventory_empty_state";
+    INVENTORY_EMPTY_STATE_EMPTY = "inventory_empty_state.empty";
+    DESTROY_ON_LOOT = "destroy_on_loot";
+    LIFETIME = "lifetime";
+    AREA_LOOT = "area_loot";
+    AREA_LOOT_EXCLUDE = "area_loot.exclude";
+    INTERACTION_OFFER = "interaction_offer";
+    INTERACTION_OFFER_ACCEPT_TIME = "interaction_offer.accept_time";
+    INTERACTION_OFFER_ACCEPT_GUEST = "interaction_offer.accept_guest";
+    INTERACTION_OFFER_DISABLED = "interaction_offer.disabled";
+    PLAYER_INPUT = "player_input";
+    BOSS = "boss";
+    INTERACTION_LOCK = "interaction_lock";
+    INTERACTION_LOCK_ITEM = "interaction_lock.item";
+    LOOT_SLOT = "loot_slot";
+    LOOT_SLOT_ITEM = "loot_slot.item";
+    LOOT_SLOT_COUNT = "loot_slot.count";
+    ATTRIBUTE_SET_HEALTH = "attribute_set.health";
+    ATTRIBUTE_SET_STAMINA = "attribute_set.stamina";
+    ATTRIBUTE_SET_MANA = "attribute_set.mana";
+    ATTRIBUTE_SET_LEVEL = "attribute_set.level";
+    ATTRIBUTE_SET_EXPERIENCE = "attribute_set.experience";
+    ATTRIBUTE_SET_FUEL = "attribute_set.fuel";
+    ATTRIBUTE_SET_SHROUD = "attribute_set.shroud";
+    SKILL_NODES = "skill_nodes";
+    SKILL_NODES_IDS = "skill_nodes.ids";
+    SKILL_NODES_LEVELS = "skill_nodes.levels";
+    BASE_ACTOR = "base_actor";
+    BASE_ACTOR_STATE = "base_actor.state";
+    NPC = "npc";
+    ANIMAL = "animal";
+    LOOT_FILL = "loot_fill";
+    RESOURCE_NODE = "resource_node";
 }

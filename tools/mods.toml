@@ -4,10 +4,6 @@
 # from this workspace.
 
 [[mod]]
-package = "enshwick-admin-tools"
-repository = "enshwick/mod-admin-tools"
-
-[[mod]]
 package = "enshwick-area-loot"
 repository = "enshwick/mod-area-loot"
 

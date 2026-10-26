@@ -8,6 +8,7 @@
 use crate::reflect::{Reflection, TypeInfo};
 use enshwick::Off;
 use enshwick::content::EngineFacts;
+use enshwick::content::recipes::RecipeKind;
 
 /// How one engine fact is found.
 ///
@@ -392,6 +393,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     ),
     ("item_info.flags", offset("keen::ItemInfo", "flags")),
     (
+        "item_info.max_stack",
+        offset("keen::ItemInfo", "maxStackSize"),
+    ),
+    (
         "item_info.pid_entity",
         offset("keen::ItemInfo", "pidEntity"),
     ),
@@ -407,6 +412,14 @@ pub const FACTS: &[(&str, Fact)] = &[
             ("keen::EquipmentSetup", "placedEntity"),
         ]),
     ),
+    (
+        "item_info.equipment_slot",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "slot"),
+        ]),
+    ),
+    ("equipment_slot", Fact::Type("keen::EquipmentSlotType")),
     ("item_stat", Fact::Type("keen::ImpactUiValue")),
     ("item_stat.label", offset("keen::ImpactUiValue", "locaId")),
     (
@@ -593,7 +606,176 @@ pub const FACTS: &[(&str, Fact)] = &[
         "crafting_menu_set.entries",
         offset("keen::FbUiCraftingRecipeSet", "entries"),
     ),
+    (
+        "current_transform",
+        Fact::Type("keen::ecs::CurrentTransform"),
+    ),
+    ("used_item", Fact::Type("keen::ecs::UsedItem")),
+    ("label", Fact::Type("keen::ecs::CustomPlayerString")),
+    ("inventory_setup", Fact::Type("keen::ecs::InventorySetup")),
+    (
+        "inventory_setup.links",
+        offset("keen::ecs::InventorySetup", "linksEntities"),
+    ),
+    (
+        "inventory_setup.categories",
+        offset("keen::ecs::InventorySetup", "linksCategories"),
+    ),
+    (
+        "inventory_setup.initialized",
+        offset("keen::ecs::InventorySetup", "isInitialized"),
+    ),
+    ("inventory", Fact::Type("keen::ecs::Inventory")),
+    ("item_stack", Fact::Type("keen::ItemStack")),
+    ("item_stack.count", offset("keen::ItemStack", "data")),
+    (
+        "item_stack.pide",
+        // `data` holds the u32 count, then the id of the item's own entity.
+        Fact::Offset {
+            ty: "keen::ItemStack",
+            field: "data",
+            plus: 4,
+        },
+    ),
+    ("durability", Fact::Type("keen::ecs::NetworkDurability")),
+    (
+        "durability.max",
+        offset("keen::ecs::NetworkDurability", "durabilityMax"),
+    ),
+    ("fuel", Fact::Type("keen::ecs::NetworkFuel")),
+    ("fuel.max", offset("keen::ecs::NetworkFuel", "fuelMax")),
+    ("owner", Fact::Type("keen::ecs::OwnerRelationship")),
+    (
+        "inventory_empty_state",
+        Fact::Type("keen::ecs::InventoryEmptyState"),
+    ),
+    (
+        "inventory_empty_state.empty",
+        offset("keen::ecs::InventoryEmptyState", "isEmpty"),
+    ),
+    ("destroy_on_loot", Fact::Type("keen::ecs::DestroyOnLoot")),
+    ("lifetime", Fact::Type("keen::ecs::LifeTime")),
+    ("area_loot", Fact::Type("keen::ecs::AreaLootOverride")),
+    (
+        "area_loot.exclude",
+        offset("keen::ecs::AreaLootOverride", "exclude"),
+    ),
+    (
+        "interaction_offer",
+        Fact::Type("keen::ecs::InteractionOfferRuntime"),
+    ),
+    (
+        "interaction_offer.accept_time",
+        offset("keen::ecs::InteractionOfferRuntime", "lastAcceptTime"),
+    ),
+    (
+        "interaction_offer.accept_guest",
+        Fact::Path(&[
+            ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
+            ("keen::ecs::InteractionAcceptData", "guestId"),
+        ]),
+    ),
+    (
+        "interaction_offer.disabled",
+        offset("keen::ecs::InteractionOfferRuntime", "isDisabled"),
+    ),
+    ("player_input", Fact::Type("keen::ecs::PlayerInput")),
+    ("boss", Fact::Type("keen::ecs::Boss")),
+    ("interaction_lock", Fact::Type("keen::ecs::InteractionLock")),
+    (
+        "interaction_lock.item",
+        offset("keen::ecs::InteractionLock", "requiredItem"),
+    ),
+    ("loot_slot", Fact::Type("keen::LootSlotInfo")),
+    ("loot_slot.item", offset("keen::LootSlotInfo", "itemId")),
+    ("loot_slot.count", offset("keen::LootSlotInfo", "stackSize")),
+    ("attribute_set.health", Fact::Type("keen::ecs::Health")),
+    ("attribute_set.stamina", Fact::Type("keen::ecs::Stamina")),
+    ("attribute_set.mana", Fact::Type("keen::ecs::Mana")),
+    ("attribute_set.level", Fact::Type("keen::ecs::Level")),
+    (
+        "attribute_set.experience",
+        Fact::Type("keen::ecs::Experience"),
+    ),
+    ("attribute_set.fuel", Fact::Type("keen::ecs::Fuel")),
+    (
+        "attribute_set.shroud",
+        Fact::Type("keen::ecs::FogResistance"),
+    ),
+    ("skill_nodes", Fact::Type("keen::ecs::UnlockedSkillNodes")),
+    (
+        "skill_nodes.ids",
+        offset("keen::ecs::UnlockedSkillNodes", "knownSkillNodes"),
+    ),
+    (
+        "skill_nodes.levels",
+        offset("keen::ecs::UnlockedSkillNodes", "unlockLevel"),
+    ),
+    ("base_actor", Fact::Type("keen::ecs::BaseActor")),
+    (
+        "base_actor.state",
+        offset("keen::ecs::BaseActor", "currentState"),
+    ),
+    ("npc", Fact::Type("keen::ecs::ActiveNpcState")),
+    ("animal", Fact::Type("keen::ecs::Animal")),
+    ("loot_fill", Fact::Type("keen::ecs::DefaultInventory")),
+    ("resource_node", Fact::Type("keen::ecs::MiningNode")),
 ];
+
+/// The id of the enum an item's equipment slot holds, which
+/// [`RECIPE_KINDS`] names constants of.
+pub const SLOT_TYPE: &str = "equipment_slot";
+
+/// The id of the offset of the item id in an item's static data.
+pub const ITEM_ID: &str = "item_info.id";
+
+/// The id of the offset of the equipment slot in an item's static data.
+pub const ITEM_SLOT: &str = "item_info.equipment_slot";
+
+/// The id of the offset of how many of an item one slot holds, a `u16`,
+/// in an item's static data.
+pub const ITEM_MAX_STACK: &str = "item_info.max_stack";
+
+/// The kind of the recipes that make an item, by the name of the constant
+/// of [`SLOT_TYPE`] the item's equipment slot holds; every other slot is
+/// [`RecipeKind::Other`]. A new kind is a row here.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::recipes::RecipeKind;
+/// use enshwick_gamedata::catalogue::RECIPE_KINDS;
+///
+/// assert!(RECIPE_KINDS.iter().any(|&(_, kind)| kind == RecipeKind::Roof));
+/// ```
+pub const RECIPE_KINDS: &[(&str, RecipeKind)] = &[
+    ("BlueprintMaterial_Default", RecipeKind::BuildingBlock),
+    ("BlueprintMaterial_Roof", RecipeKind::Roof),
+    ("OvergrowthMaterial", RecipeKind::Overgrowth),
+    ("TerrainMaterial", RecipeKind::Terrain),
+];
+
+/// The slot value each row of [`RECIPE_KINDS`] has in `reflection`, with
+/// its kind; a constant the build does not reflect is left out.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::catalogue::recipe_kind_slots;
+/// use enshwick_gamedata::reflect::Reflection;
+///
+/// fn slots(reflection: &Reflection<'_>) -> usize {
+///     recipe_kind_slots(reflection).len()
+/// }
+/// ```
+#[must_use]
+pub fn recipe_kind_slots(reflection: &Reflection<'_>) -> Vec<(u64, RecipeKind)> {
+    let slot = type_name(SLOT_TYPE);
+    RECIPE_KINDS
+        .iter()
+        .filter_map(|&(name, kind)| Some((reflection.enum_value(slot, name).ok()?, kind)))
+        .collect()
+}
 
 const fn offset(ty: &'static str, field: &'static str) -> Fact {
     Fact::Offset { ty, field, plus: 0 }
@@ -845,6 +1027,40 @@ mod tests {
                     assert!(steps.iter().all(|(ty, _)| ty.starts_with("keen::")), "{id}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn each_slot_constant_names_one_kind() {
+        let mut names: Vec<&str> = RECIPE_KINDS.iter().map(|&(name, _)| name).collect();
+        names.sort_unstable();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(names.len(), before);
+        assert!(matches!(fact(SLOT_TYPE), Some(Fact::Type(_))));
+        assert!(matches!(fact(ITEM_ID), Some(Fact::Offset { .. })));
+        assert!(matches!(fact(ITEM_SLOT), Some(Fact::Path(_))));
+    }
+
+    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
+    /// (skipped without them), every slot constant of the kinds resolves,
+    /// each to a value of its own.
+    #[test]
+    fn every_recipe_kind_s_slot_is_reflected() {
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image =
+                crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let slots = recipe_kind_slots(&reflection);
+            assert_eq!(slots.len(), RECIPE_KINDS.len(), "{var}");
+            let mut values: Vec<u64> = slots.iter().map(|&(value, _)| value).collect();
+            values.sort_unstable();
+            values.dedup();
+            assert_eq!(values.len(), RECIPE_KINDS.len(), "{var}");
         }
     }
 

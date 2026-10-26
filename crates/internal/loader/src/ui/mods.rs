@@ -629,17 +629,22 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             format!("{} {}", record.label(), record.version)
         };
         paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
-        if !record.meta.description.is_empty() {
-            paint.label(
-                record.meta.description.as_bytes(),
-                UiWidget::STYLE_BODY,
-                true,
-                false,
-            );
+        let description = record.description();
+        if !description.is_empty() {
+            paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
         }
         let credits = record.meta.credits();
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+        }
+        for feature in record.features.relock().iter() {
+            if let Some(reason) = &feature.off {
+                let line = texts::fill(
+                    "mods.feature.off",
+                    &[("feature", &feature.name), ("reason", reason)],
+                );
+                paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+            }
         }
         let (defines, extends) = crate::points::screen(index, loader);
         for (key, points) in [("mods.points", defines), ("mods.extends", extends)] {
@@ -670,6 +675,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     for (origin, loaded, key) in [
         (Origin::Mods, true, "mods.others.native"),
         (Origin::Chain, true, "mods.others.chain"),
+        (Origin::Game, true, "mods.others.beside"),
         (Origin::Chain, false, "mods.others.chain-failed"),
     ] {
         let files = crate::others::files(&loader.others, origin, loaded);

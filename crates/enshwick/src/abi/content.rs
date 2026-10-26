@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Status;
+use crate::abi::{Header, Status, Str};
 
 /// A game resource's key: its GUID in memory order, its type hash and part.
 ///
@@ -63,6 +63,114 @@ impl RecipeRuleKind {
     /// the workshop belongs to, the workshop's content id or GUID.
     pub const WORKSHOP: Self = Self(2);
 }
+
+/// What the item a recipe makes is, from
+/// [`HostApi::recipe_kind`](super::HostApi::recipe_kind); a later minor may
+/// add kinds, which a mod reads as [`RecipeKind::OTHER`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::RecipeKind;
+///
+/// assert_ne!(RecipeKind::ROOF, RecipeKind::BUILDING_BLOCK);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RecipeKind(pub u32);
+
+impl RecipeKind {
+    /// None of the kinds below: equipment, props, materials and the rest.
+    pub const OTHER: Self = Self(0);
+    /// A building block.
+    pub const BUILDING_BLOCK: Self = Self(1);
+    /// A roof block.
+    pub const ROOF: Self = Self(2);
+    /// An overgrowth material.
+    pub const OVERGROWTH: Self = Self(3);
+    /// A terrain material.
+    pub const TERRAIN: Self = Self(4);
+}
+
+/// The vanilla value a [`DataChange`] changes; the field says what its
+/// `entry` is. A later minor may add fields, which an older loader refuses
+/// with [`Status::BAD_ARGS`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::DataField;
+///
+/// assert_ne!(DataField::MAX_STACK, DataField(0));
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct DataField(pub u32);
+
+impl DataField {
+    /// How many of an item one inventory slot holds, 1 to 65535; the entry
+    /// is an item.
+    pub const MAX_STACK: Self = Self(1);
+}
+
+/// How a [`DataChange`] changes its value.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::ChangeOp;
+///
+/// assert_ne!(ChangeOp::SET, ChangeOp::TIMES);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct ChangeOp(pub u32);
+
+impl ChangeOp {
+    /// The value becomes `value`.
+    pub const SET: Self = Self(0);
+    /// The value is multiplied by `value`, a finite factor from 0 to 100.
+    pub const TIMES: Self = Self(1);
+}
+
+/// One change of a vanilla value, as
+/// [`HostApi::change_data`](super::HostApi::change_data) takes it. The
+/// loader copies it; `source` is borrowed for the call.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ChangeOp, DataChange, DataField, Header, Str};
+///
+/// let change = DataChange {
+///     header: Header::of::<DataChange>(),
+///     entry: [0x3a; 16],
+///     field: DataField::MAX_STACK,
+///     op: ChangeOp::SET,
+///     value: 999.0,
+///     source: Str::new("items.toml:3"),
+/// };
+/// assert_eq!(change.value, 999.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct DataChange {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The GUID of the vanilla entry, in memory order.
+    pub entry: [u8; 16],
+    /// The value changed.
+    pub field: DataField,
+    /// Whether `value` replaces it or scales it.
+    pub op: ChangeOp,
+    /// The new value or the factor.
+    pub value: f64,
+    /// Where the change comes from, such as `items.toml:12`, for the reports
+    /// of conflicts; may be empty.
+    pub source: Str,
+}
+
+impl_headed!(DataChange);
 
 /// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).
 ///

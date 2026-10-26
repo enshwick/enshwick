@@ -44,6 +44,7 @@ The loader writes to `logs/enshwick/` beside the game:
 | `mods/<id>.log` | one mod's lines                                     |
 | `status.log`    | the latest [status summary](#status-summary)        |
 | `crash.log`     | each crash, blamed on a mod, the loader or the game |
+| `report.md`     | the report a player attaches to an issue            |
 
 A line reads `hh:mm:ss.mmmZ level [source] message`, in UTC. At start the
 files of the two sessions before are kept as `<name>.1.log` (the last) and
@@ -52,6 +53,16 @@ flushes every line, so a hook never waits on the disk and the last lines
 before a crash are kept. Up to 4096 lines wait for it; a line that finds the
 queue full is dropped rather than making the game wait, and the next line
 written says how many were dropped.
+
+`report.md` gathers what an issue needs in one file: the loader version and
+the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, and
+the status summary. It lists the DLLs in `mods/`, in `mods/chain/` and other
+mods' proxies beside the game, with their sizes, and the latest 200 warnings
+and errors of the loader and every mod. The loader writes it once its log
+opens, again when it cannot serve the game, and with every status summary,
+each time after the log has taken the lines before it. Paths show the game's
+folder as `<game>`, the user's profile folder as `%USERPROFILE%` and the name
+in a Linux home folder as `<user>`, in any case and with either slash.
 
 ### Reading the log from the console
 
@@ -137,6 +148,25 @@ static MERGED: AtomicU64 = AtomicU64::new(0);
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_status(|| format!("{} zones merged", MERGED.load(Ordering::Relaxed)))
+}
+```
+
+## Features that turn off alone
+
+A mod made of parts that can fail apart wraps each part's setup in
+[`load.feature(name, |load| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
+When the closure returns an `Off`, only that part is off: the mod keeps
+running, its log names the part and the reason, and the status summary and
+the Mods screen show it. The closure's value comes back as `Some` when the
+part runs. Look up everything the part needs before it links hooks or adds
+content, since what it registered before it failed stays:
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    if let Some(glow) = load.feature("glow", |load| load.symbol("lantern.glow")) {
+        let _ = glow;
+    }
+    Ok(())
 }
 ```
 

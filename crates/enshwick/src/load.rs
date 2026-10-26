@@ -86,6 +86,7 @@ off_from!(
     crate::net::SendError,
     crate::packs::PackError,
     crate::packs::ReadPackError,
+    crate::rates::RateError,
     crate::services::LayoutError,
     crate::stats::ModifyError,
     crate::ui::UiError,
@@ -143,15 +144,28 @@ pub trait Mod: Sized + Send + Sync + 'static {
 #[derive(Debug)]
 pub struct Load<'a> {
     host: Host,
+    /// Whether the mod takes part in the join check, as its manifest says.
+    joins: bool,
     _init: core::marker::PhantomData<&'a ()>,
 }
 
 impl Load<'_> {
     pub(crate) fn new(host: Host) -> Self {
+        Self::of(host, false)
+    }
+
+    /// A `Load` for a mod that takes part in the join check when `joins`.
+    pub(crate) fn of(host: Host, joins: bool) -> Self {
         Self {
             host,
+            joins,
             _init: core::marker::PhantomData,
         }
+    }
+
+    /// Whether the mod takes part in the join check, as its manifest says.
+    pub(crate) fn joins(&self) -> bool {
+        self.joins
     }
 
     /// The loader's services, also available later through

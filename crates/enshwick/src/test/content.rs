@@ -143,6 +143,32 @@ impl FakeHost {
         self.disabled_recipes.insert(recipe.id());
         self
     }
+
+    /// Plays a game that has loaded the item `item` as one of `kind`, as
+    /// [`RecipeView::kind`](crate::content::recipes::RecipeView::kind) asks;
+    /// every other item reads as not loaded yet.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// let plank = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .recipe_kind(plank, RecipeKind::BuildingBlock)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn recipe_kind(
+        mut self,
+        item: crate::content::Guid,
+        kind: crate::content::recipes::RecipeKind,
+    ) -> Self {
+        self.recipe_kinds.insert(item.id(), kind.into());
+        self
+    }
 }
 
 #[expect(
@@ -169,6 +195,20 @@ impl Installed {
             }
             keys
         })
+    }
+
+    /// The changes of vanilla values the mod declared, in order, each with
+    /// its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> Vec<(crate::content::changes::Change, String)> {
+        table::with(Vec::new(), |s| s.changes.clone())
     }
 
     /// The mod's recipe rules in force, from

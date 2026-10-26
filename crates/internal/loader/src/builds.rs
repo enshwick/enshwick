@@ -51,6 +51,13 @@ impl KnownBuild {
         self.table.symbol(name)
     }
 
+    /// The pattern of symbol `id` and how many bytes before the symbol it
+    /// starts; see [`Resolved::head`].
+    #[must_use]
+    pub fn head(&self, id: &str) -> Option<(&enshwick::code::Pattern, u64)> {
+        self.table.head(id)
+    }
+
     /// Systems whose reflected entry must equal the pinned address.
     #[must_use]
     pub fn checks(&self) -> &[(String, u64)] {
@@ -195,6 +202,17 @@ pub fn by_patterns(tables: &[Table], running: Side, code: (&[u8], u64)) -> Optio
     })
 }
 
+/// Whether the code a hook relies on holds, from the checks its table offers.
+///
+/// `head` is whether the symbol's pattern matches where its code starts, and
+/// `bytes` whether its first eight bytes are the table's `<id>.bytes`; `None`
+/// for a check the table does not offer. A symbol with neither is refused,
+/// and every check offered must hold.
+#[must_use]
+pub fn code_holds(head: Option<bool>, bytes: Option<bool>) -> bool {
+    (head.is_some() || bytes.is_some()) && head != Some(false) && bytes != Some(false)
+}
+
 /// The embedded table of `side`'s newest build, for tests.
 ///
 /// # Panics
@@ -217,6 +235,26 @@ pub fn embedded(running: Side) -> KnownBuild {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn code_with_no_check_to_offer_never_holds() {
+        assert!(!code_holds(None, None));
+    }
+
+    #[test]
+    fn every_check_offered_must_hold() {
+        assert!(code_holds(Some(true), Some(true)));
+        assert!(!code_holds(Some(false), Some(true)));
+        assert!(!code_holds(Some(true), Some(false)));
+    }
+
+    #[test]
+    fn a_single_check_decides_alone() {
+        assert!(code_holds(Some(true), None));
+        assert!(!code_holds(Some(false), None));
+        assert!(code_holds(None, Some(true)));
+        assert!(!code_holds(None, Some(false)));
+    }
 
     #[cfg(windows)]
     #[test]

@@ -42,8 +42,8 @@ mod tests {
     #[test]
     fn players_are_found_by_key_and_by_name_ignoring_case() {
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("keen::ecs::CurrentTransform", 1)
-            .type_hash("keen::ecs::UsedItem", 2)
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
             .player(player(10, 7, "Ann"))
             .player(player(11, 8, "ann"))
             .player(player(12, 9, "Bob"))

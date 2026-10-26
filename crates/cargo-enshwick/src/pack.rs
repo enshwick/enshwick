@@ -1,4 +1,4 @@
-//! `cargo enshwick pack`: checks a content pack folder as the loader reads
+//! `cargo enshwick pack`: checks a data pack folder as the loader reads
 //! it, writes the JSON Schemas of its files for editors, and zips it for a
 //! release.
 
@@ -82,7 +82,7 @@ fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
 
 /// Reads and checks the pack in `dir`, with the game's vanilla names when
 /// `vanilla` is given: a summary, its manifest and files.
-fn check(
+pub(crate) fn check(
     dir: &Path,
     vanilla: Option<&Vanilla>,
 ) -> anyhow::Result<(String, PackManifest, PackFiles)> {
@@ -94,12 +94,14 @@ fn check(
         .with_context(|| format!("{MANIFEST_FILE}: version {:?}", manifest.version))?;
     let files = PackFiles::read_dir(dir)?;
     let pack = Pack::parse_with(&manifest.id, &files, vanilla)?;
+    manifest.check(&text, &pack)?;
     let summary = format!(
-        "{} {}: {} content ids, {} loot drops; join hash {:08x}",
+        "{} {}: {} content ids, {} loot drops, {} changes; join hash {:08x}",
         manifest.id,
         manifest.version,
         pack.ids().len(),
         pack.drops().len(),
+        pack.changes().len(),
         files.hash()
     );
     Ok((summary, manifest, files))
@@ -192,6 +194,24 @@ mod tests {
                 "mods/you.lanterns/pack.toml"
             ]
         );
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_pack_that_changes_items_keeps_join_on() {
+        let dir = pack(
+            "join",
+            "[[change]]\nitems = [\"6943053a-32c1-4718-ae22-e61427ddf54d\"]\nmax_stack = 50\n",
+        );
+        let (summary, _, _) = check(&dir, None).unwrap();
+        assert!(summary.contains("1 changes"), "{summary}");
+        std::fs::write(
+            dir.join(MANIFEST_FILE),
+            "id = \"you.lanterns\"\nversion = \"1.0.0\"\njoin = false\n",
+        )
+        .unwrap();
+        let error = check(&dir, None).unwrap_err().to_string();
+        assert!(error.starts_with("pack.toml:3:1: join = false"), "{error}");
         let _gone = std::fs::remove_dir_all(&dir);
     }
 

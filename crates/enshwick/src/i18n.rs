@@ -214,6 +214,31 @@ languages! {
     UK_UA = 34, "uk", "Ukrainian.";
 }
 
+/// The key of the mod's own name in its texts: the Mods screen, the join
+/// dialog and the status show it in the player's language, and the
+/// manifest's `name` where the texts lack it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::i18n::{Language, MOD_NAME, Texts};
+///
+/// let texts = Texts::parse("[en]\n\"mod.name\" = \"Better Altars\"\n[uk]\n\"mod.name\" = \"Кращі олтарі\"\n")?;
+/// assert_eq!(texts.get(MOD_NAME, Language::UK_UA), Some("Кращі олтарі"));
+/// # Ok::<(), enshwick::Off>(())
+/// ```
+pub const MOD_NAME: &str = "mod.name";
+
+/// The key of the sentence on what the mod does in its texts, shown as
+/// [`MOD_NAME`] is, the manifest's `description` where the texts lack it.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(enshwick::i18n::MOD_DESCRIPTION, "mod.description");
+/// ```
+pub const MOD_DESCRIPTION: &str = "mod.description";
+
 /// A mod's texts by language and key.
 ///
 /// # Examples
@@ -434,7 +459,7 @@ impl Texts {
     }
 }
 
-/// The texts each mod, or each content pack in the loader's copy of the
+/// The texts each mod, or each data pack in the loader's copy of the
 /// API, handed the loader so far.
 static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
     crate::fresh::Fresh::new();

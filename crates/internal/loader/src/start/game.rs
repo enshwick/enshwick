@@ -88,8 +88,13 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
     started.elapsed()
 }
 
-/// Creates `mods/` and opens the log; `None` when the folder cannot be made.
-pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
+/// Creates `mods/`, opens the log and starts writing the first report; the
+/// `mods` folder and the report's thread, or `None` when the folder cannot
+/// be made.
+pub(super) fn begin(
+    stub_abi: u32,
+    missing_forwards: u32,
+) -> Option<(PathBuf, Option<std::thread::JoinHandle<()>>)> {
     let game_dir = game_dir()?;
     let mods_dir = game_dir.join("mods");
     for dir in GAME_DIRS {
@@ -134,7 +139,16 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<PathBuf> {
             "{missing_forwards} powrprof.dll exports are missing on this system"
         );
     }
-    Some(mods_dir)
+    // On a thread of its own: the report waits for the log, which the start,
+    // holding the server's entry, does not.
+    let report_dir = game_dir.clone();
+    let report = std::thread::Builder::new()
+        .name("enshwick-report".into())
+        .spawn(move || crate::report::write(&report_dir, stub_abi, None));
+    if let Err(e) = &report {
+        crate::log!(WARN, "no report at start: {e}");
+    }
+    Some((mods_dir, report.ok()))
 }
 
 /// Identifies the running game and its build table; `None`, logged, when the
@@ -231,11 +245,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             build.missing().join(", ")
         );
     }
-    for part in build.parts(crate::TABLE_IDS) {
-        if let Some(line) = crate::diag::part_line(&part) {
-            crate::log!(WARN, "loader feature {line}; the game runs it vanilla");
-        }
-    }
+    warn_lacking(build);
     Some(Game {
         side,
         base,
@@ -243,6 +253,19 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         build,
         reflection,
     })
+}
+
+/// Warns about each loader feature `build` serves only partly or not at all.
+fn warn_lacking(build: &builds::KnownBuild) {
+    for part in build.parts(crate::TABLE_IDS) {
+        if let Some(line) = crate::diag::part_line(&part) {
+            crate::log!(
+                WARN,
+                "loader feature {line}; the game runs it vanilla ({})",
+                errors::FEATURES_OFF
+            );
+        }
+    }
 }
 
 /// `bytes` as lowercase hex digits, for the log.

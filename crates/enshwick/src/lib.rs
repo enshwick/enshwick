@@ -105,6 +105,7 @@ pub mod pacing;
 pub mod packs;
 pub mod points;
 pub mod progress;
+pub mod rates;
 pub mod raw;
 #[cfg(doctest)]
 mod refused;
@@ -577,7 +578,8 @@ pub mod __private {
             core::ptr::null_mut(),
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            M::init(&mut Load::new(host))
+            let joins = M::manifest().flags.contains(ManifestFlags::JOIN);
+            M::init(&mut Load::of(host, joins))
         }));
         match outcome {
             Ok(Ok(state)) => match slot.0.set(state) {
@@ -606,7 +608,7 @@ pub mod __private {
         std::panic::catch_unwind(M::manifest).map_or(core::ptr::null(), core::ptr::from_ref)
     }
 
-    /// Runs `init` with a [`Load`] for the content pack `me`, as the loader
+    /// Runs `init` with a [`Load`] for the data pack `me`, as the loader
     /// does for a pack folder; the process's host stays as it is.
     ///
     /// # Safety
@@ -642,7 +644,7 @@ pub mod __private {
     }
 
     /// Makes the table `api` with the handle `me` this process's host, for
-    /// the loader's own copy of the API, which runs content packs.
+    /// the loader's own copy of the API, which runs data packs.
     ///
     /// # Safety
     ///

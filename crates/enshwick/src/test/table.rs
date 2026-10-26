@@ -6,10 +6,10 @@ use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, Event, EventFn,
     ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, InventoryResultFn,
-    KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, ModEventFn, NetMessageFn, RenameCallFn,
-    ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn, NetMessageFn,
+    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn, SpawnRequest, Status,
+    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
 };
 use crate::locks::Relock;
 
@@ -22,6 +22,7 @@ mod hooks;
 mod inventory;
 mod mods;
 mod net;
+mod pacing;
 mod services;
 mod ui;
 mod world;
@@ -31,17 +32,17 @@ use build::{
     type_size,
 };
 use content::{
-    add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_rule, resource_read,
-    serve_resource,
+    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
+    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
+    recipe_rule, resource_read, serve_resource,
 };
 use gameplay::{
     account_knowledge, altar_limit, altar_zones_control, altars, altars_open, apply_buff,
     base_zones, buff_types, buffs, build_filter, comfort_filter, craft_filter, damage_filter,
     experience_filter, grant_knowledge, interaction_filter, knowledge, knowledge_input_filter,
-    quests, raise_base_limit, remove_buff, revoke_knowledge, set_altar_zones, skill_override,
-    summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup, survivor_status,
-    zone_check_filter,
+    quests, raise_base_limit, rate, remove_buff, revoke_knowledge, set_altar_zones, set_rate,
+    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
+    survivor_status, zone_check_filter,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
@@ -57,11 +58,11 @@ use services::{
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
     actions, chat, component, component_write, destroy, emit, entities, entity_template,
-    event_types, forget_game_settings, game_event, game_settings, hosting, keep_game_settings,
-    notify, player, players, rename_filter, run_console, save_world, server_world,
-    set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
-    teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, weather_at,
-    weather_fronts, world_key,
+    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
+    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
+    weather_at, weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -89,6 +90,8 @@ pub(crate) struct State {
     /// Every rebuild of a served resource the mod asked for, at init and
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
+    /// The changes of vanilla values the mod declared, with their sources.
+    pub(crate) changes: Vec<(crate::content::changes::Change, String)>,
     /// The mod's recipe rules in force: kind and name.
     pub(crate) recipe_rules: Vec<(crate::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
@@ -113,6 +116,9 @@ pub(crate) struct State {
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
+    /// The mod's features as it last reported them: name and, when off,
+    /// the reason.
+    pub(crate) features: Vec<(String, Option<String>)>,
     /// The lines the mod ran on the console, in order.
     pub(crate) console: Vec<String>,
     /// The entities the mod asked to destroy, in order.
@@ -220,6 +226,10 @@ pub(crate) struct State {
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
+    /// The rates the mod declared, with the factor it set for each.
+    pub(crate) rates: Vec<(crate::abi::RateId, f32)>,
+    /// What the mod asked of the engine's pacing places.
+    pub(crate) pacing: Pacing,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
@@ -262,6 +272,17 @@ fn take_turn() -> MutexGuard<'static, ()> {
 }
 
 /// Waits for the table to be free, then answers from `host`.
+/// What the mod asked of the engine's pacing places.
+#[derive(Debug, Default)]
+pub(crate) struct Pacing {
+    /// The loop wait handlers and their pointers.
+    pub(crate) loop_waits: Vec<(LoopWaitFn, usize)>,
+    /// The server wait handlers and their pointers.
+    pub(crate) server_waits: Vec<(ServerWaitFn, usize)>,
+    /// The lowest worker caps asked for, default and background.
+    pub(crate) task_workers: Option<(u32, u32)>,
+}
+
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
     *state() = Some(State {
@@ -274,6 +295,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
+        changes: Vec::new(),
         recipe_rules: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),
@@ -292,6 +314,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         labels: Vec::new(),
         rename_filters: Vec::new(),
         status_sources: Vec::new(),
+        features: Vec::new(),
         console: Vec::new(),
         destroyed: Vec::new(),
         saves: 0,
@@ -351,6 +374,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         interaction_filters: Vec::new(),
         skills: Vec::new(),
         comfort_filters: Vec::new(),
+        rates: Vec::new(),
+        pacing: Pacing::default(),
         experience_filters: Vec::new(),
         altar_limit: None,
         base_limit_raised: false,
@@ -565,4 +590,12 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_point: super::points::run_point,
     actions,
     event_types,
+    recipe_kind,
+    feature,
+    rate,
+    set_rate,
+    change_data,
+    loop_wait: pacing::loop_wait,
+    server_wait: pacing::server_wait,
+    task_workers: pacing::task_workers,
 };

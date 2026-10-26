@@ -372,7 +372,20 @@ impl Table {
             missing: Vec::new(),
             uncarried: Vec::new(),
             attributes: self.attributes(),
+            heads: self.heads(),
         }
+    }
+
+    /// Each symbol whose pattern matches where its code starts, or a fixed
+    /// distance before it, with that pattern and distance.
+    fn heads(&self) -> Vec<(String, Pattern, u64)> {
+        self.symbols
+            .iter()
+            .filter_map(|s| match (&s.pattern, s.locate) {
+                (Some(pattern), Locate::At(at)) => Some((s.id.clone(), pattern.clone(), at)),
+                _ => None,
+            })
+            .collect()
     }
 
     fn attributes(&self) -> Vec<(String, String)> {
@@ -442,6 +455,7 @@ impl Table {
             missing,
             uncarried: uncarried.iter().map(|c| c.id.clone()).collect(),
             attributes: self.attributes(),
+            heads: self.heads(),
         }
     }
 
