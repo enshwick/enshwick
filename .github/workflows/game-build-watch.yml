@@ -1,6 +1,8 @@
 # Every hour, on the organization runners: the public Steam builds of the
 # dedicated server and the client, and an issue for each build that no table
-# in crates/enshwick-gamedata/tables names. Never on pull requests.
+# in crates/enshwick-gamedata/tables names. A new server build also gets its
+# table ported by `cargo enshwick pin` in a pull request. Never on pull
+# requests.
 name: game-build-watch
 
 on:
@@ -21,3 +23,8 @@ jobs:
       issues: write
     # main: the organization runners run only workflows from main.
     uses: enshwick/.github/.github/workflows/game-build-watch.yml@main # zizmor: ignore[unpinned-uses]
+    with:
+      pin: true
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
