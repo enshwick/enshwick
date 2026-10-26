@@ -6,13 +6,13 @@ workspace and are never released.
 | Folder                                | Shows                                                       |
 | ------------------------------------- | ----------------------------------------------------------- |
 | [trading-post-api](trading-post-api/) | a service table and a mod event, declared once for two mods |
-| [trading-post](trading-post/)         | publishing the service and sending the event                |
+| [trading-post](trading-post/)         | publishing the service, sending the event, defining a point |
 | [market-stalls](market-stalls/)       | using the service and subscribing to the event              |
-| [safe-viewers](safe-viewers/)         | extending another mod's rule at its extension point         |
+| [haggling](haggling/)                 | extending another mod's rule at its extension point         |
 | [hot-reload](hot-reload/)             | a mod a development server reloads while it runs            |
 
 The book's chapter [Services between mods](../book/src/services.md) walks
 through the trading post and the market stalls,
-[Extending other mods](../book/src/extending.md) through the Safe viewers, and
+[Extending other mods](../book/src/extending.md) through the haggling, and
 [Testing](../book/src/testing.md#reloading-a-mod-while-the-game-runs) the
 reload.
