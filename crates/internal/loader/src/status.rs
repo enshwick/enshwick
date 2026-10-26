@@ -106,7 +106,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             let running = !record.off.load(Ordering::Acquire);
             ModStatus {
                 id: record.id.clone(),
-                name: record.meta.name.clone(),
+                name: record.name(),
                 version: record.version.clone(),
                 credits: record.meta.credits(),
                 notes: record.notes.clone(),
@@ -187,9 +187,11 @@ fn write(loader: &Loader) {
         return;
     };
     let path = game_dir.join("logs").join(LOADER_ID).join("status.log");
-    if let Err(e) = std::fs::write(&path, summary(loader).render()) {
+    let text = summary(loader).render();
+    if let Err(e) = std::fs::write(&path, &text) {
         crate::log!(WARN, "status summary not written: {e}");
     }
+    crate::report::write(game_dir, loader.stub, Some(text));
 }
 
 /// Starts the writer on a thread of its own.

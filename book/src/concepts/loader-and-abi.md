@@ -128,7 +128,8 @@ let manifest = enshwick::manifest!(
   notes, where `homepage` is the place a player who lacks the mod is sent to.
   Each but `name` comes from the crate's `Cargo.toml` when left out
   (`homepage` falls back to `repository`); a mod without a name is shown by
-  its id.
+  its id. The mod's texts translate its name and description under
+  [`mod.name` and `mod.description`](../content/texts.md#the-mods-own-name).
 - `join: true`: see [The join check](join-check.md).
 - `reload: true`: a development server may reload the mod while it runs; see
   [Testing](../testing.md#reloading-a-mod-while-the-game-runs).

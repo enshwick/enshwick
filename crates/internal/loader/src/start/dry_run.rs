@@ -146,6 +146,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         configs_dir: game_dir.join("mod-configs"),
         data_dir,
         mods_dir,
+        stub: 0,
         mods: records(&libraries, &candidates, &plan),
         others,
         chains: Mutex::new(Chains::default()),

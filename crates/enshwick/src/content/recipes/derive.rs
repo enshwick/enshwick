@@ -3,6 +3,7 @@
 use super::super::menu::MenuEntry;
 use super::super::workshops::WorkshopId;
 use super::super::{Blob, Guid, types};
+use super::RecipeKind;
 use super::add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, retarget, workshop_counts,
 };
@@ -120,11 +121,11 @@ pub(super) fn scaled_inputs(
     Some(bytes)
 }
 
-/// A vanilla recipe as [`Load::derive_recipes`] shows it.
+/// A vanilla recipe as [`Load::derive_recipes`](crate::Load::derive_recipes) shows it.
 ///
 /// # Examples
 ///
-/// See [`Load::derive_recipes`].
+/// See [`Load::derive_recipes`](crate::Load::derive_recipes).
 #[derive(Clone, Copy, Debug)]
 pub struct RecipeView<'a> {
     pub(super) blob: &'a Blob,
@@ -137,7 +138,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`].
+    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
     #[must_use]
     pub fn guid(&self) -> Guid {
         let mut guid = [0u8; 16];
@@ -155,7 +156,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`].
+    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
     #[must_use]
     pub fn debug_name(&self) -> String {
         self.blob
@@ -169,7 +170,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`].
+    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
     #[must_use]
     pub fn output(&self) -> Option<(Guid, u32)> {
         let (outputs, count) = self.blob.array(self.at + self.layout.output)?;
@@ -181,13 +182,41 @@ impl RecipeView<'_> {
         let made = self.blob.read_u32(outputs + self.layout.stack_count)?;
         Some((Guid(guid), made))
     }
+
+    /// What the item the recipe makes is, as the game classes it; `None`
+    /// until the game has loaded that item, and outside the game.
+    ///
+    /// A dedicated server builds its recipe registry before it loads the
+    /// items, so the first build of a recipe patch sees no kinds there: a
+    /// mod that changes recipes by kind calls [`rebuild_recipes`](super::rebuild_recipes) on
+    /// [`WorldLoaded`](crate::events::WorldLoaded), and the rebuild applies
+    /// them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.modify_recipes(|recipe| {
+    ///         if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
+    ///             recipe.scale_output(2);
+    ///         }
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn kind(&self) -> Option<RecipeKind> {
+        let (item, _) = self.output()?;
+        RecipeKind::of(item)
+    }
 }
 
 /// How a derived recipe differs from the vanilla one it copies.
 ///
 /// # Examples
 ///
-/// See [`Load::derive_recipes`].
+/// See [`Load::derive_recipes`](crate::Load::derive_recipes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Derived {
     /// The vanilla output count times this.
@@ -195,7 +224,7 @@ pub struct Derived {
     /// The vanilla ingredient counts times this.
     pub cost: u32,
     /// The workshop the copy is made at, such as one from
-    /// [`Load::add_workshop`]; `None` keeps the vanilla recipe's.
+    /// [`Load::add_workshop`](crate::Load::add_workshop); `None` keeps the vanilla recipe's.
     pub workshop: Option<WorkshopId>,
 }
 
@@ -232,7 +261,7 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 /// recipe `choose` picks.
 ///
 /// With a workshop `limit` other than [`usize::MAX`], copies stop
-/// [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`] serves it;
+/// [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`](crate::Load::derive_recipes) serves it;
 /// `salt` marks the copies as in [`derived_guid`].
 ///
 /// # Examples
@@ -345,12 +374,12 @@ pub fn derive_recipes_in(
     Some(blob.into_bytes())
 }
 
-/// A recipe in the registry as [`Load::modify_recipes`] shows it, with its
+/// A recipe in the registry as [`Load::modify_recipes`](crate::Load::modify_recipes) shows it, with its
 /// counts open to change in place.
 ///
 /// # Examples
 ///
-/// See [`Load::modify_recipes`].
+/// See [`Load::modify_recipes`](crate::Load::modify_recipes).
 #[derive(Debug)]
 pub struct RecipeEdit<'a> {
     blob: &'a mut Blob,
@@ -364,7 +393,7 @@ impl RecipeEdit<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::modify_recipes`].
+    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
     #[must_use]
     pub fn view(&self) -> RecipeView<'_> {
         RecipeView {
@@ -378,7 +407,7 @@ impl RecipeEdit<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::modify_recipes`].
+    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
     pub fn scale_output(&mut self, by: u32) {
         self.scale(self.layout.output, self.layout.stack_size, by);
     }
@@ -387,7 +416,7 @@ impl RecipeEdit<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::modify_recipes`].
+    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
     pub fn scale_inputs(&mut self, by: u32) {
         self.scale(self.layout.input, self.layout.input_size, by);
     }
@@ -412,7 +441,7 @@ impl RecipeEdit<'_> {
 }
 
 /// The recipe registry with `modify` called on each recipe in turn; the
-/// second value is how many recipes it changed. [`Load::modify_recipes`]
+/// second value is how many recipes it changed. [`Load::modify_recipes`](crate::Load::modify_recipes)
 /// serves it.
 ///
 /// # Examples

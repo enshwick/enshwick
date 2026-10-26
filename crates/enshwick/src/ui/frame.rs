@@ -12,12 +12,12 @@ use crate::ui::{Button, Dropdown, Label, MAX_OPTIONS, Screen, Slider, Sound, Tog
 use super::widgets::read_only_flag;
 
 /// One frame of the interface, handed to a callback of
-/// [`Load::on_frame`]: draw widgets in order through it. Valid for the
+/// [`Load::on_frame`](crate::Load::on_frame): draw widgets in order through it. Valid for the
 /// callback only, on its thread.
 ///
 /// # Examples
 ///
-/// See the [module](self).
+/// See the [module](crate::ui).
 #[derive(Debug)]
 pub struct Frame<'f> {
     pub(super) host: Host,
@@ -51,7 +51,7 @@ impl Frame<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::ui).
     pub fn window(&mut self, id: &str, title: &str, body: impl FnOnce(&mut Self)) -> bool {
         let mut open = UiWidget {
             kind: UiWidget::WINDOW,

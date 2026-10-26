@@ -32,8 +32,8 @@ use build::{
 };
 use content::{
     add_text, content_read, content_serve, entity_data_open, game_text, icons_ready, item_data_get,
-    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_rule, resource_read,
-    serve_resource,
+    item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind, recipe_rule,
+    resource_read, serve_resource,
 };
 use gameplay::{
     account_knowledge, altar_limit, altar_zones_control, altars, altars_open, apply_buff,
@@ -565,4 +565,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_point: super::points::run_point,
     actions,
     event_types,
+    recipe_kind,
 };

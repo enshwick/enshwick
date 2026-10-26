@@ -148,8 +148,14 @@ pub(crate) fn run(loader: &Loader, line: &str) -> Result<String, Status> {
 /// What the loader's tool `tool` answers.
 fn answer(loader: &Loader, tool: Tool<'_>) -> String {
     match tool {
-        Tool::Mods => mods(loader),
+        Tool::Overview => mods(loader),
         Tool::Help => help(loader),
+        Tool::Mods => super::tools::mods(loader),
+        Tool::World => super::tools::world(loader),
+        Tool::Entity(args) => super::tools::entity(loader, args),
+        Tool::Placed(args) => super::tools::placed(args),
+        Tool::Reload(args) => super::tools::reload(loader, args),
+        Tool::Account(act, args) => super::tools::account(loader, act, args),
         Tool::About(id) => loader
             .mods
             .iter()
@@ -231,8 +237,9 @@ fn name(record: &crate::host::ModRecord) -> String {
 /// What `record` is, for `enshwick <mod id>`.
 fn about(record: &crate::host::ModRecord) -> String {
     let mut lines = vec![name(record)];
-    if !record.meta.description.is_empty() {
-        lines.push(record.meta.description.clone());
+    let description = record.description();
+    if !description.is_empty() {
+        lines.push(description);
     }
     let credits = record.meta.credits();
     if !credits.is_empty() {
