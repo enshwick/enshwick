@@ -31,7 +31,7 @@ they are never released.
 | Mod                                                                         | What it does                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)      | touching altar zones grow together and can be built across         |
-| [Flame altar count](mods/enshwick-flame-altar-count)                        | how many altars each Flame level allows, twice vanilla by default  |
+| [Flame altar count](https://github.com/enshwick/mod-flame-altar-count)      | how many altars each Flame level allows, twice vanilla by default  |
 | [Furniture comfort](https://github.com/enshwick/mod-furniture-comfort)      | more comfort from furniture, twice vanilla by default              |
 | [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](mods/enshwick-safes)                                                | a craftable chest only the player who placed it can use            |
