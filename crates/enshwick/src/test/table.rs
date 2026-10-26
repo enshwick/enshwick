@@ -67,6 +67,9 @@ pub(crate) struct State {
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
     pub(crate) status_sources: Vec<(StatusFn, usize)>,
+    /// The mod's features as it last reported them: name and, when off,
+    /// the reason.
+    pub(crate) features: Vec<(String, Option<String>)>,
     /// The lines the mod ran on the console, in order.
     pub(crate) console: Vec<String>,
     /// The entities the mod asked to destroy, in order.
@@ -225,6 +228,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         labels: Vec::new(),
         rename_filters: Vec::new(),
         status_sources: Vec::new(),
+        features: Vec::new(),
         console: Vec::new(),
         destroyed: Vec::new(),
         saves: 0,
@@ -933,6 +937,21 @@ extern "system" fn rename_filter(
 ) -> Status {
     with(Status::MISSING, |s| {
         s.rename_filters.push((callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
+    let name = text(name);
+    if name.is_empty() {
+        return Status::BAD_ARGS;
+    }
+    let off = Some(text(off)).filter(|off| !off.is_empty());
+    with(Status::MISSING, |s| {
+        match s.features.iter_mut().find(|(have, _)| *have == name) {
+            Some(kept) => kept.1 = off,
+            None => s.features.push((name, off)),
+        }
         Status::OK
     })
 }
@@ -2505,4 +2524,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     attach_point: super::points::attach_point,
     run_point: super::points::run_point,
     actions,
+    feature,
 };

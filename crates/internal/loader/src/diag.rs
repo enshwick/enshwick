@@ -196,6 +196,8 @@ pub struct ModStatus {
     pub running: bool,
     /// The lines its status sources gave.
     pub lines: Vec<String>,
+    /// The features it reported on or off.
+    pub features: Vec<crate::features::Feature>,
 }
 
 /// What mods serve to the game.
@@ -295,6 +297,12 @@ impl Summary {
             }
             for note in &m.notes {
                 let _w = writeln!(out, "    note: {note}");
+            }
+            for feature in &m.features {
+                let _w = match &feature.off {
+                    Some(why) => writeln!(out, "    feature {} off: {why}", feature.name),
+                    None => writeln!(out, "    feature {} on", feature.name),
+                };
             }
             for line in &m.lines {
                 let _w = writeln!(out, "    {line}");
@@ -506,6 +514,16 @@ mod tests {
                     notes: vec!["recommends you.lanterns, which is not loaded".into()],
                     running: true,
                     lines: vec!["3 zones merged".into()],
+                    features: vec![
+                        crate::features::Feature {
+                            name: "glow".into(),
+                            off: Some("symbol lantern.glow: missing on this game build".into()),
+                        },
+                        crate::features::Feature {
+                            name: "light".into(),
+                            off: None,
+                        },
+                    ],
                 },
                 ModStatus {
                     id: "you.trading-post".into(),
@@ -515,6 +533,7 @@ mod tests {
                     notes: Vec::new(),
                     running: false,
                     lines: Vec::new(),
+                    features: Vec::new(),
                 },
             ],
             disabled: vec!["you.my-mod".into()],
@@ -579,7 +598,9 @@ mod tests {
         assert!(text.contains("mods: 1 of 2 running"));
         assert!(text.contains(
             "  Flame Altar Zones (you.lockers) 0.1.4\n    by themaiby; MIT\n    \
-             note: recommends you.lanterns, which is not loaded\n    3 zones merged\n"
+             note: recommends you.lanterns, which is not loaded\n    \
+             feature glow off: symbol lantern.glow: missing on this game build\n    \
+             feature light on\n    3 zones merged\n"
         ));
         assert!(text.contains(
             "  you.trading-post 0.1.1 (off)\n  off in mods/enshwick/mods.toml: you.my-mod\n"

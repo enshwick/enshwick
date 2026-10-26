@@ -52,6 +52,7 @@ mod emits;
 mod entities;
 #[cfg(windows)]
 mod events;
+pub mod features;
 mod fuse;
 #[cfg(windows)]
 mod game_events;

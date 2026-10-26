@@ -140,6 +140,25 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+## Features that turn off alone
+
+A mod made of parts that can fail apart wraps each part's setup in
+[`load.feature(name, |load| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/status.rs).
+When the closure returns an `Off`, only that part is off: the mod keeps
+running, its log names the part and the reason, and the status summary and
+the Mods screen show it. The closure's value comes back as `Some` when the
+part runs. Look up everything the part needs before it links hooks or adds
+content, since what it registered before it failed stays:
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    if let Some(glow) = load.feature("glow", |load| load.symbol("lantern.glow")) {
+        let _ = glow;
+    }
+    Ok(())
+}
+```
+
 ## Hook diagnostics
 
 With `diagnostics = true` the loader counts the calls of every hooked

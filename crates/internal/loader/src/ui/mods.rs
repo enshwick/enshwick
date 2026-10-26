@@ -30,7 +30,7 @@ use enshwick::config::{Scope, Stage};
 use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
 use crate::configure::rows::{self, Lock, Row, Widget};
-use crate::host::Loader;
+use crate::host::{Loader, relock};
 use crate::texts;
 
 /// Mods a list page shows.
@@ -596,6 +596,15 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         let credits = record.meta.credits();
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+        }
+        for feature in relock(&record.features, "the mod's features").iter() {
+            if let Some(reason) = &feature.off {
+                let line = texts::fill(
+                    "mods.feature.off",
+                    &[("feature", &feature.name), ("reason", reason)],
+                );
+                paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+            }
         }
         let (defines, extends) = crate::points::screen(index, loader);
         for (key, points) in [("mods.points", defines), ("mods.extends", extends)] {

@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 71;
+pub const ABI_MINOR: u16 = 72;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -4992,6 +4992,13 @@ pub struct HostApi {
     /// mod. Allowed during
     /// `enshwick_mod_init` only. Since minor 66.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
+    /// Reports whether the mod's feature `name` runs on this game build:
+    /// off for the reason `off`, or on when `off` is empty. The loader
+    /// logs it and shows it in the status summary and on the Mods screen; a
+    /// later report of the same name replaces the earlier one.
+    /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
+    /// the call. Any thread. Since minor 72.
+    pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
 }
 
 /// What a recipe rule of [`HostApi::recipe_rule`] names.
@@ -5563,7 +5570,8 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 141 * 8);
+    assert!(size_of::<HostApi>() == 24 + 142 * 8);
+    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 141 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 135 * 8);
     assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 136 * 8);
     assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 134 * 8);

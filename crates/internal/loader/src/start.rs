@@ -306,6 +306,7 @@ fn records(
             check: OnceLock::new(),
             texts: Mutex::new(None),
             pack: libraries[i].pack,
+            features: Mutex::new(Vec::new()),
         })
         .collect()
 }

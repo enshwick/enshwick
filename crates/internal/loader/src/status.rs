@@ -114,6 +114,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 version: record.version.clone(),
                 credits: record.meta.credits(),
                 notes: record.notes.clone(),
+                features: crate::host::relock(&record.features, "the mod's features").clone(),
                 running,
                 lines: if running {
                     lines_of(&sources, index)

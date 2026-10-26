@@ -52,6 +52,8 @@ pub(crate) struct ModRecord {
     pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
     /// Whether it is a content pack, a folder of data the loader runs.
     pub(crate) pack: bool,
+    /// The features it reported on or off, in the order it named them.
+    pub(crate) features: Mutex<Vec<crate::features::Feature>>,
 }
 
 impl ModRecord {
@@ -819,6 +821,7 @@ pub(crate) static API: HostApi = HostApi {
     attach_point,
     run_point,
     actions,
+    feature,
 };
 
 /// A static slice from a pointer and a count, empty for a null pointer.
@@ -2275,6 +2278,35 @@ extern "system" fn rename_filter(
             crate::conflicts::Mode::Chained,
             crate::label::register(index, callback, user),
         )
+    })
+}
+
+extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Status {
+    entry("feature", || {
+        let (Some(name), Some(off)) = (text(name), text(off)) else {
+            return Status::BAD_ARGS;
+        };
+        if name.is_empty() {
+            return Status::BAD_ARGS;
+        }
+        let record = match calling(me) {
+            Ok((_, _, record)) => record,
+            Err(status) => return status,
+        };
+        let changed = crate::features::report(
+            &mut relock(&record.features, "the mod's features"),
+            name,
+            Some(off).filter(|off| !off.is_empty()),
+        );
+        if let Some(line) = changed {
+            let level = if off.is_empty() {
+                Level::INFO
+            } else {
+                Level::WARN
+            };
+            crate::log::write(level, &record.id, &line);
+        }
+        Status::OK
     })
 }
 
