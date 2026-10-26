@@ -13,6 +13,8 @@
 //! Building happens inside ECS systems on worker threads, so those links only
 //! queue what happened; the post-step link raises it on the game thread.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -27,25 +29,25 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "building.ctx_player",
-    "building.ctx_replay",
-    "building.pickup",
-    "building.pickup_entity",
-    "building.pickup_mode",
-    "building.spawn_prop",
-    "server.entry_state",
-    "server.player_remove",
-    "server.player_slot_count",
-    "server.player_slot_entity",
-    "server.player_slot_key",
-    "server.player_slot_size",
-    "server.player_slot_state",
-    "server.player_slots",
-    "server.post_step",
-    "server.save_step",
-    "server.set_state",
-    "server.world",
-    "world.entities",
+    pinned::building::CTX_PLAYER.id(),
+    pinned::building::CTX_REPLAY.id(),
+    pinned::building::PICKUP.id(),
+    pinned::building::PICKUP_ENTITY.id(),
+    pinned::building::PICKUP_MODE.id(),
+    pinned::building::SPAWN_PROP.id(),
+    pinned::server::ENTRY_STATE.id(),
+    pinned::server::PLAYER_REMOVE.id(),
+    pinned::server::PLAYER_SLOT_COUNT.id(),
+    pinned::server::PLAYER_SLOT_ENTITY.id(),
+    pinned::server::PLAYER_SLOT_KEY.id(),
+    pinned::server::PLAYER_SLOT_SIZE.id(),
+    pinned::server::PLAYER_SLOT_STATE.id(),
+    pinned::server::PLAYER_SLOTS.id(),
+    pinned::server::POST_STEP.id(),
+    pinned::server::SAVE_STEP.id(),
+    pinned::server::SET_STATE.id(),
+    pinned::server::WORLD.id(),
+    pinned::world::ENTITIES.id(),
 ];
 
 /// Server states, from the game's state machine. A hosted game enters
@@ -202,27 +204,27 @@ type PickupFn = unsafe extern "system" fn(context: *mut u8, target: *const u8, t
 /// silent and says so.
 pub(crate) fn link(loader: &'static Loader) {
     let wants = |events: &[Event]| events.iter().any(|&e| loader.subscribed(e));
-    let constant = |name: &str| {
+    let constant = |name: Constant| {
         loader
             .build
-            .constant(name)
+            .constant(name.id())
             .and_then(|v| usize::try_from(v).ok())
     };
     let offsets = (|| {
         Some(Offsets {
-            entry_state: constant("server.entry_state")?,
-            slots: constant("server.player_slots")?,
-            slot_size: constant("server.player_slot_size")?,
-            slot_count: constant("server.player_slot_count")?.min(MAX_SLOTS),
-            slot_state: constant("server.player_slot_state")?,
-            slot_entity: constant("server.player_slot_entity")?,
-            slot_key: constant("server.player_slot_key")?,
-            ctx_player: constant("building.ctx_player")?,
-            ctx_replay: constant("building.ctx_replay")?,
-            pickup_entity: constant("building.pickup_entity")?,
-            pickup_mode: constant("building.pickup_mode")?,
-            server_world: constant("server.world")?,
-            entities: constant("world.entities")?,
+            entry_state: constant(pinned::server::ENTRY_STATE)?,
+            slots: constant(pinned::server::PLAYER_SLOTS)?,
+            slot_size: constant(pinned::server::PLAYER_SLOT_SIZE)?,
+            slot_count: constant(pinned::server::PLAYER_SLOT_COUNT)?.min(MAX_SLOTS),
+            slot_state: constant(pinned::server::PLAYER_SLOT_STATE)?,
+            slot_entity: constant(pinned::server::PLAYER_SLOT_ENTITY)?,
+            slot_key: constant(pinned::server::PLAYER_SLOT_KEY)?,
+            ctx_player: constant(pinned::building::CTX_PLAYER)?,
+            ctx_replay: constant(pinned::building::CTX_REPLAY)?,
+            pickup_entity: constant(pinned::building::PICKUP_ENTITY)?,
+            pickup_mode: constant(pinned::building::PICKUP_MODE)?,
+            server_world: constant(pinned::server::WORLD)?,
+            entities: constant(pinned::world::ENTITIES)?,
         })
     })();
     let Some(offsets) = offsets else {
@@ -234,26 +236,26 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // A client follows every hosted game's start and stop.
     let client = loader.side == Side::CLIENT;
-    let link = |events: &[Event], symbol: &str| -> Option<u64> {
-        let session = client && symbol == "server.set_state";
+    let link = |events: &[Event], symbol: Symbol| -> Option<u64> {
+        let session = client && symbol == pinned::server::SET_STATE;
         (events.is_empty() || wants(events) || session).then(|| loader.address(symbol).unwrap_or(0))
     };
     let none = HookFlags::NONE;
     let feature = "server events";
-    let stepped = link(&[], "server.post_step")
+    let stepped = link(&[], pinned::server::POST_STEP)
         .is_some_and(|target| loader.link_feature(feature, Some(target), &STEP_NEXT, step, none));
     if let Some(target) = link(
         &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
-        "server.set_state",
+        pinned::server::SET_STATE,
     ) {
         loader.link_feature(feature, Some(target), &STATE_NEXT, set_state, none);
     }
-    if let Some(target) = link(&[Event::WORLD_SAVED], "server.save_step") {
+    if let Some(target) = link(&[Event::WORLD_SAVED], pinned::server::SAVE_STEP) {
         loader.link_feature(feature, Some(target), &SAVE_NEXT, save, none);
     }
     if let Some(target) = link(
         &[Event::PLAYER_LEFT, Event::PLAYER_JOINED],
-        "server.player_remove",
+        pinned::server::PLAYER_REMOVE,
     ) {
         loader.link_feature(feature, Some(target), &REMOVE_NEXT, remove, none);
     }
@@ -262,10 +264,10 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "building events off: they need the server's step");
         return;
     }
-    if let Some(target) = link(&[Event::BUILDING_PLACED], "building.spawn_prop") {
+    if let Some(target) = link(&[Event::BUILDING_PLACED], pinned::building::SPAWN_PROP) {
         loader.link_feature(feature, Some(target), &PLACE_NEXT, place, none);
     }
-    if let Some(target) = link(&[Event::BUILDING_REMOVED], "building.pickup") {
+    if let Some(target) = link(&[Event::BUILDING_REMOVED], pinned::building::PICKUP) {
         loader.link_feature(feature, Some(target), &PICKUP_NEXT, pickup, none);
     }
 }

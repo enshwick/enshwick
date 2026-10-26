@@ -8,14 +8,9 @@
 //! on a build without a pinned slot, in exactly one slot, and where its
 //! first bytes are the pinned ones; anything else leaves the check off.
 
+use crate::pinned;
 use core::ops::Range;
 
-/// The build table's id of the online provider's join.
-pub const JOIN_ID: &str = "net.join_game";
-/// The build table's id of the online provider's function table.
-pub const TABLE_ID: &str = "net.provider_vtable";
-/// The build table's id of the join's slot in that table.
-pub const SLOT_ID: &str = "net.provider_join_slot";
 /// The build table's id of the join's first eight bytes.
 pub const BYTES_ID: &str = "net.join_game.bytes";
 /// The most slots read from the provider's table.
@@ -154,9 +149,10 @@ impl Pins {
                 .ok_or(Error::Missing(id))
         };
         Ok(Self {
-            table: at(TABLE_ID)?,
-            join: at(JOIN_ID)?,
-            slot: constant(SLOT_ID).and_then(|slot| usize::try_from(slot).ok()),
+            table: at(pinned::net::PROVIDER_VTABLE.id())?,
+            join: at(pinned::net::JOIN_GAME.id())?,
+            slot: constant(pinned::net::PROVIDER_JOIN_SLOT.id())
+                .and_then(|slot| usize::try_from(slot).ok()),
             bytes: constant(BYTES_ID),
         })
     }
@@ -173,11 +169,13 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
         .collect()
 }
 
-/// Checks the pinned join against the game, reading eight bytes at an
-/// address with `read`, whose code section spans `code`: its first bytes
-/// must be the pinned ones and the provider's table must hold it in the
-/// pinned slot, or in exactly one slot when none is pinned. Returns the
-/// join to hook.
+/// Checks the pinned join against the game, reading eight bytes at an address
+/// with `read`, whose code section spans `code`.
+///
+/// Its first bytes must be the pinned ones and the provider's table must hold
+/// it in the pinned slot, or in exactly one slot when none is pinned.
+///
+/// Returns the join to hook.
 ///
 /// # Errors
 ///
@@ -440,7 +438,7 @@ mod tests {
         let read = |va| image.u64(va);
         let pinned =
             Pins::from_table(|id| table.symbol(id), |id| table.constant(id), base).unwrap();
-        let join = base + table.symbol(JOIN_ID).unwrap();
+        let join = base + table.symbol(pinned::net::JOIN_GAME.id()).unwrap();
         assert_eq!(verify(&pinned, read, text.clone()), Ok(join));
         let code = image.read(text.start, text.end - text.start).unwrap();
         for other in tables

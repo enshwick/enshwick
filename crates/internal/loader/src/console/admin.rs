@@ -6,15 +6,13 @@
 use enshwick::abi::Status;
 
 use crate::host::Loader;
+use crate::pinned;
 
 use super::STATE;
 use super::accounts::{Act, event};
 
-/// The table id of the game's account action handler.
-const HANDLER: &str = "server.account_action";
-
 /// The build table ids the console names.
-pub(crate) const TABLE_IDS: &[&str] = &[HANDLER];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::server::ACCOUNT_ACTION.id()];
 
 /// The reflected account action the handler takes.
 const EVENT: &str = "keen::ecs::AccountActionEvent";
@@ -67,9 +65,9 @@ fn find(loader: &Loader) -> Result<Handler, String> {
             .ok_or_else(|| format!("the reflected {EVENT}.{field}"))
     };
     let address = loader
-        .address(HANDLER)
+        .address(pinned::server::ACCOUNT_ACTION)
         .and_then(|address| usize::try_from(address).ok())
-        .ok_or_else(|| format!("the table entry {HANDLER}"))?;
+        .ok_or_else(|| format!("the table entry {}", pinned::server::ACCOUNT_ACTION.id()))?;
     let size = reflection
         .type_info(EVENT)
         .ok()

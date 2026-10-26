@@ -1,10 +1,11 @@
 //! The client's join check: before it joins a server, it compares the server's
-//! mod set with its own. Mods the server does not run are turned off on the
-//! client, with a note; when the server runs mods the client lacks, or in
-//! another version, the client says which and does not join. A client that
-//! joins runs its join mods with the server's join values over its own
-//! settings files, and with its files' values again on joining a server
-//! without them; the files stay as they are.
+//! mod set with its own.
+//!
+//! Mods the server does not run are turned off on the client, with a note; when
+//! the server runs mods the client lacks, or in another version, the client
+//! says which and does not join. A client that joins runs its join mods with
+//! the server's join values over its own settings files, and with its files'
+//! values again on joining a server without them; the files stay as they are.
 //!
 //! A client kept out shows one dialog naming each of the server's mods it
 //! lacks, the server's version and where to get it ([`refusal`]), and tells

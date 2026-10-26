@@ -115,10 +115,11 @@ impl Plan {
     }
 }
 
-/// The plan for joining a server that advertises `server` (fingerprint and
-/// mod list), or no Enshwick at all. A list that is not `complete` holds only
-/// the first of the server's mods, so a mod of ours it does not name may
-/// still run there and stays on.
+/// The plan for joining a server that advertises `server` (fingerprint and mod
+/// list), or no Enshwick at all.
+///
+/// A list that is not `complete` holds only the first of the server's mods, so
+/// a mod of ours it does not name may still run there and stays on.
 ///
 /// # Examples
 ///
