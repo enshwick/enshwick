@@ -4,11 +4,12 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::progress::{SkillGate, AIRBORNE_ARCHITECT};
+//! use enshwick::progress::{Skill, SkillGate};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     // Fly mode for everyone, the skill tree untouched.
-//!     load.on_skill(AIRBORNE_ARCHITECT, |check| (check.gate == SkillGate::FlyMode).then_some(true))
+//!     let node = load.skill_node(Skill::AirborneArchitect)?;
+//!     load.on_skill(node, |check| (check.gate == SkillGate::FlyMode).then_some(true))
 //! }
 //! ```
 
@@ -59,8 +60,27 @@ const _: () = {
     assert!(offset_of!(Experience, gained) == offset_of!(ExperienceRow, gained));
 };
 
-/// The Airborne Architect node, which opens the building fly mode.
-pub const AIRBORNE_ARCHITECT: u32 = 0x4475_e8dd;
+/// A skill node the API names, for [`Load::skill_node`]; the loader knows
+/// each one's node per game build.
+///
+/// # Examples
+///
+/// See the [module](self).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Skill {
+    /// Airborne Architect, which opens the building fly mode.
+    AirborneArchitect,
+}
+
+impl Skill {
+    /// The build table id of the skill's node.
+    const fn id(self) -> &'static str {
+        match self {
+            Self::AirborneArchitect => "skill.airborne_architect",
+        }
+    }
+}
 
 /// Which game check asks about a skill node.
 ///
@@ -226,6 +246,20 @@ where
 }
 
 impl Load<'_> {
+    /// The node of `skill` on the running build, for [`Load::on_skill`].
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a build whose table lacks the skill.
+    ///
+    /// # Examples
+    ///
+    /// See the [module](self).
+    pub fn skill_node(&self, skill: Skill) -> Result<u32, Off> {
+        let id = skill.id();
+        u32::try_from(self.constant(id)?).map_err(|_| Off::new(format!("{id}: not a node")))
+    }
+
     /// Answers the game's checks of skill node `node`: `Some(true)` unlocks
     /// it for that check, `Some(false)` locks it, `None` keeps the game's
     /// answer. It runs on both sides, on the checking thread, and only for

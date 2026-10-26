@@ -14,7 +14,7 @@ use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::pinned::{self, Symbol};
 use crate::rates::{
-    LINKS, RATES, experience_rate, scale_points, scale_stack, scale_whole, workshop_duration,
+    LINKS, RATES, experience_rates, scale_points, scale_stack, scale_whole, workshop_duration,
 };
 
 /// The build table ids this part of the loader names; the comfort rate
@@ -84,8 +84,15 @@ static POINTS_NEXT: Next<PointsFn> = unsafe { Next::new() };
 // detour `stack_roll` calls `get`.
 static STACK_NEXT: Next<StackRollFn> = unsafe { Next::new() };
 
-/// The loader, for the item lookups of the loot rate.
-static LOADED: OnceLock<&'static Loader> = OnceLock::new();
+/// What the detours read, set when they link.
+struct Linked {
+    /// The loader, for the item lookups of the loot rate.
+    loader: &'static Loader,
+    /// The experience rate of each of the game's experience source values.
+    experience: [Option<RateId>; 256],
+}
+
+static LOADED: OnceLock<Linked> = OnceLock::new();
 
 /// The rates' switch.
 static FUSE: Fuse = Fuse::new("game rates");
@@ -108,7 +115,10 @@ pub(crate) fn wanted(symbol: Symbol) -> bool {
 /// links after this.
 pub(crate) fn link(loader: &'static Loader) {
     RATES.seal();
-    let _first = LOADED.set(loader);
+    let _first = LOADED.set(Linked {
+        loader,
+        experience: experience_rates(|id| crate::catalogue::constant(id, &loader.reflection)),
+    });
     let linked = [
         link_one(
             loader,
@@ -209,7 +219,10 @@ unsafe extern "system" fn source_factor(data: *const u8, source: u8) -> f32 {
     // unchanged to the rest of the chain, which the slot holds since the
     // chain is wired before the target jumps here.
     let vanilla = unsafe { SOURCE_NEXT.get()(data, source) };
-    experience_rate(source).map_or(vanilla, |rate| vanilla * factor(rate))
+    LOADED
+        .get()
+        .and_then(|linked| linked.experience[usize::from(source)])
+        .map_or(vanilla, |rate| vanilla * factor(rate))
 }
 
 unsafe extern "system" fn kill(
@@ -269,7 +282,7 @@ unsafe fn scale_slot(slot: *mut u8, rate: f32) {
     let count: u16 = unsafe { crate::memory::read(slot, SLOT_COUNT) };
     let Some(max) = LOADED
         .get()
-        .and_then(|loader| crate::inventory::item_info(loader, item).ok())
+        .and_then(|linked| crate::inventory::item_info(linked.loader, item).ok())
         .map(|info| info.max_stack)
     else {
         return;

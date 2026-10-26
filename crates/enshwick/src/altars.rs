@@ -24,7 +24,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{AltarInfo, AltarZoneSize, Bounds, ZoneCheck as RawZoneCheck};
+use crate::abi::{AltarInfo, AltarZone as RawAltarZone, Bounds, ZoneCheck as RawZoneCheck};
 use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
@@ -394,130 +394,123 @@ impl Altars {
     }
 }
 
-/// The size a mod gives one altar's zone; see [`ZoneControl::set`].
+/// One altar's zone as the loader sizes it; see [`Load::on_altar_zone`].
+/// A filter sees the size the filters before it left, the vanilla one first,
+/// and may change `grow` and `height`.
 ///
 /// # Examples
 ///
-/// ```
-/// use enshwick::altars::ZoneSize;
-/// use enshwick::ecs::Entity;
-///
-/// let size = ZoneSize { altar: Entity(4096), level: 2, grow: 6, height: 120 };
-/// assert_eq!(size.grow, 6);
-/// ```
+/// See [`Load::on_altar_zone`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ZoneSize {
+#[non_exhaustive]
+pub struct AltarZone {
     /// The altar.
     pub altar: Entity,
-    /// The level the size is for: the loader applies it while the altar is
-    /// at this level, the vanilla size otherwise.
+    /// The altar's level.
     pub level: u8,
-    /// Cells added to the vanilla zone of that level on every horizontal
-    /// side, at least 0.
+    /// Cells added to the vanilla zone on every horizontal side, at least 0;
+    /// 0 keeps the vanilla width.
     pub grow: i64,
     /// The zone's height in cells.
     pub height: i64,
 }
 
-/// The right to size altar zones, from [`Load::control_altar_zones`].
+/// The mod's place among the altar zone filters, from
+/// [`Load::on_altar_zone`]: the altars, and a way to have the zones sized
+/// again.
 ///
 /// # Examples
 ///
-/// ```
-/// use enshwick::altars::ZoneSize;
-/// use enshwick::events::AltarsChanged;
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let control = load.control_altar_zones()?;
-///     load.on::<AltarsChanged>(move |()| {
-///         // Every altar two cells wider on each side.
-///         let sizes: Vec<ZoneSize> = control
-///             .altars()
-///             .list()
-///             .iter()
-///             .filter_map(|altar| {
-///                 let zone = altar.levels.last()?;
-///                 Some(ZoneSize {
-///                     altar: altar.entity,
-///                     level: altar.level,
-///                     grow: 2,
-///                     height: zone.max[1] - zone.min[1],
-///                 })
-///             })
-///             .collect();
-///         let _ = control.set(&sizes);
-///     })
-/// }
-/// ```
+/// See [`Load::on_altar_zone`].
 #[derive(Clone, Copy, Debug)]
-pub struct ZoneControl {
+pub struct ZoneSizes {
     host: Host,
 }
 
-impl ZoneControl {
+impl ZoneSizes {
     /// The altars.
     ///
     /// # Examples
     ///
-    /// See [`ZoneControl`].
+    /// See [`Load::on_altar_zone`].
     #[must_use]
     pub const fn altars(&self) -> Altars {
         Altars { host: self.host }
     }
 
-    /// Replaces the sizes given before: each altar in `sizes` gets its size
-    /// on the server's next zone pass, every other altar its vanilla size.
-    /// Any thread. A size for an altar the loader does not know, or for
-    /// another level than the altar's, is left out.
+    /// Has the loader size the altar zones again on the server's next step,
+    /// as when the mod's settings change what its filter answers. Any
+    /// thread.
     ///
     /// # Errors
     ///
-    /// [`SetSizesError`] when the loader refuses the call.
+    /// [`ResizeError`] when the loader refuses the call.
     ///
     /// # Examples
     ///
-    /// See [`ZoneControl`].
-    pub fn set(&self, sizes: &[ZoneSize]) -> Result<(), SetSizesError> {
-        let raw: Vec<AltarZoneSize> = sizes
-            .iter()
-            .map(|size| AltarZoneSize {
-                altar: size.altar.0,
-                level: size.level,
-                reserved: [0; 3],
-                grow: size.grow,
-                height: size.height,
-            })
-            .collect();
-        let status = (self.host.api().set_altar_zones)(self.host.handle(), raw.as_ptr(), raw.len());
-        match status {
+    /// See [`Load::on_altar_zone`].
+    pub fn changed(&self) -> Result<(), ResizeError> {
+        match (self.host.api().altar_zones_changed)(self.host.handle()) {
             crate::abi::Status::OK => Ok(()),
-            crate::abi::Status::FAULTED => Err(SetSizesError::TurnedOff),
-            other => Err(SetSizesError::Refused(other.0)),
+            crate::abi::Status::FAULTED => Err(ResizeError::TurnedOff),
+            other => Err(ResizeError::Refused(other.0)),
         }
     }
 }
 
-/// Why the loader did not take the sizes given to [`ZoneControl::set`].
+/// Why the loader did not size the altar zones again for
+/// [`ZoneSizes::changed`].
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::altars::SetSizesError;
+/// use enshwick::altars::ResizeError;
 ///
 /// assert_eq!(
-///     SetSizesError::Refused(3).to_string(),
-///     "altar zone sizes refused by the loader (status 3)"
+///     ResizeError::Refused(3).to_string(),
+///     "altar zones not sized again: refused by the loader (status 3)"
 /// );
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum SetSizesError {
-    /// The mod is turned off, so its sizes no longer apply.
-    #[error("altar zone sizes not taken: the mod is turned off")]
+pub enum ResizeError {
+    /// The mod is turned off, so its filter no longer runs.
+    #[error("altar zones not sized again: the mod is turned off")]
     TurnedOff,
     /// The loader refused for another reason, with its status.
-    #[error("altar zone sizes refused by the loader (status {0})")]
+    #[error("altar zones not sized again: refused by the loader (status {0})")]
     Refused(u32),
+}
+
+unsafe extern "system" fn run_zone<F>(zone: *mut RawAltarZone, user: *mut c_void)
+where
+    F: Fn(&mut AltarZone),
+{
+    // SAFETY: the loader passes the zone for the call, writable; `as_mut`
+    // turns away null.
+    let Some(raw) = (unsafe { zone.as_mut() }) else {
+        return;
+    };
+    let mut zone = AltarZone {
+        altar: Entity(raw.altar),
+        level: raw.level,
+        grow: raw.grow,
+        height: raw.height,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let filter = unsafe { &*user.cast::<F>() };
+    let returned = crate::host::guard(
+        "panic in an altar zone filter",
+        || false,
+        || {
+            filter(&mut zone);
+            true
+        },
+    );
+    if returned {
+        raw.grow = zone.grow;
+        raw.height = zone.height;
+    }
 }
 
 /// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.
@@ -651,22 +644,37 @@ impl Load<'_> {
         crate::load::ok(status, Altars { host }, || "altars".to_owned())
     }
 
-    /// Makes the mod the one that sizes altar zones; it follows the altars
-    /// too. One mod at a time.
+    /// Runs `filter` for every altar of the server's world when the loader
+    /// sizes the altar zones: after altars change, and after
+    /// [`ZoneSizes::changed`]. Filters of several mods run in load order, each
+    /// on the size the last one left; the mod follows the altars too. On the
+    /// server's game thread.
     ///
     /// # Errors
     ///
-    /// [`Off`] when another mod sizes them, and as for [`Load::altars`].
+    /// [`Off`] after init, and as for [`Load::altars`].
     ///
     /// # Examples
     ///
-    /// See [`ZoneControl`].
-    pub fn control_altar_zones(&mut self) -> Result<ZoneControl, Off> {
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     // Every altar two cells wider on each side.
+    ///     let sizes = load.on_altar_zone(|zone| zone.grow += 2)?;
+    ///     let _ = sizes.altars();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_altar_zone<F>(&mut self, filter: F) -> Result<ZoneSizes, Off>
+    where
+        F: Fn(&mut AltarZone) + Send + Sync + 'static,
+    {
         let host = self.host();
-        let status = (host.api().altar_zones_control)(host.handle());
-        crate::load::ok(status, ZoneControl { host }, || {
-            "altar zones, sized by one mod at a time".to_owned()
-        })
+        crate::load::hand_over(
+            filter,
+            |user| (host.api().altar_zone_filter)(host.handle(), run_zone::<F>, user),
+            "the altar zone filter",
+        )?;
+        Ok(ZoneSizes { host })
     }
 
     /// Runs `filter` when the game refuses a placement because the object's
