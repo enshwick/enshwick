@@ -160,9 +160,20 @@ pub(crate) fn start(
     write_lock(loader, lock_files);
     crate::watch::start(loader);
     crate::status::start(loader);
-    if side == Side::SERVER
-        && let Some(game_dir) = loader.mods_dir.parent()
-    {
+    if side == Side::SERVER {
+        serve(loader);
+    }
+    crate::admission::start(
+        loader,
+        names(loader).into_iter().collect(),
+        pages(loader).into_iter().collect(),
+    );
+}
+
+/// Starts what only a dedicated server runs: the advertised join mods and
+/// the console's command file.
+fn serve(loader: &'static Loader) {
+    if let Some(game_dir) = loader.mods_dir.parent() {
         crate::advertise::start(
             game_dir,
             host::join_mods,
@@ -173,11 +184,7 @@ pub(crate) fn start(
             host::join_values,
         );
     }
-    crate::admission::start(
-        loader,
-        names(loader).into_iter().collect(),
-        pages(loader).into_iter().collect(),
-    );
+    crate::console::start(loader);
 }
 
 /// Copies each loading mod's settings and data from the ids it had, once.
