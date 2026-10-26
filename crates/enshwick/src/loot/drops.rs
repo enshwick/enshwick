@@ -497,9 +497,10 @@ impl Engine {
             destroy_on_loot: ty(ids::DESTROY_ON_LOOT)?,
             boss: ty(ids::BOSS)?,
             lock: ty(ids::INTERACTION_LOCK)?,
-            lock_item: load
-                .constant(ids::INTERACTION_LOCK_ITEM)
-                .and_then(|v| usize::try_from(v).map_err(|_| Off::new("offset")))?,
+            lock_item: load.constant(ids::INTERACTION_LOCK_ITEM).and_then(|v| {
+                usize::try_from(v)
+                    .map_err(|_| Off::new(format!("offset {}", ids::INTERACTION_LOCK_ITEM)))
+            })?,
             slot: Slot::resolve(load)
                 .inspect_err(|off| crate::debug!("loot from destroyed things off: {off}"))
                 .ok(),
@@ -650,7 +651,10 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
 const SLOT_MAX: usize = 64;
 
 /// Where the single roll's output slot keeps the item id and the count, and
-/// its size, from the catalogue.
+/// its size, from the catalogue. The slot is the engine's `LootSlotInfo`
+/// (16 bytes: item id at 0, count at 4 on server 399 and client 426): the
+/// single roll's code names no type, and its output matches that layout
+/// exactly.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Slot {
     item: usize,
@@ -659,11 +663,13 @@ struct Slot {
 }
 
 impl Slot {
-    /// The slot, when a u32 item id and a u16 count fit inside `size`
-    /// bytes and `size` fits [`SLOT_MAX`].
+    /// The slot, when a u32 item id and a u16 count fit apart inside
+    /// `size` bytes and `size` fits [`SLOT_MAX`].
     fn new(item: usize, count: usize, size: usize) -> Option<Self> {
         let fits = |at: usize, len: usize| at.checked_add(len).is_some_and(|end| end <= size);
-        (size <= SLOT_MAX && fits(item, size_of::<u32>()) && fits(count, size_of::<u16>()))
+        let apart = item.saturating_add(size_of::<u32>()) <= count
+            || count.saturating_add(size_of::<u16>()) <= item;
+        (size <= SLOT_MAX && fits(item, size_of::<u32>()) && fits(count, size_of::<u16>()) && apart)
             .then_some(Self { item, count, size })
     }
 
@@ -719,8 +725,8 @@ fn after_roll_one(
 /// # Safety
 ///
 /// - `res` is null or the single roll's status byte, writable.
-/// - `out` is null or the single roll's output slot, writable for its
-///   reflected size.
+/// - `out` is null or the single roll's output slot, a `LootSlotInfo`,
+///   writable for that type's reflected size.
 /// - Both are the arguments the game passed to the single roll that just
 ///   returned, used on its thread inside the hook.
 unsafe fn add_one(res: *mut u8, out: *mut u8) {
@@ -749,9 +755,12 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
     };
     let (stack, len) = slot.fill(item, count);
     // SAFETY: `out` is not null, as the early return ensures, and the caller
-    // guarantees the single roll's output slot, writable for its reflected
-    // size, which `Slot::new` bounded `len` to; the game's callers drop the
-    // stack when the status is 0 and the item and count are set.
+    // guarantees the single roll's output slot. On server 399 and client 426
+    // that slot is a 16-byte `LootSlotInfo` (item id at 0, count at 4),
+    // identified by its layout, since the roll's code names no type; `len` is
+    // that type's reflected size, which `Slot::new` bounded. The game's
+    // callers drop the stack when the status is 0 and the item and count are
+    // set.
     unsafe { write_bytes_at(out, 0, &stack[..len]) };
     // SAFETY: `res` is not null, as the early return ensures, and the caller
     // guarantees the single roll's writable status byte.
@@ -982,6 +991,12 @@ mod tests {
             "larger than the buffer"
         );
         assert!(Slot::new(usize::MAX, 4, 16).is_none(), "overflow");
+        assert!(Slot::new(0, 2, 16).is_none(), "count inside the item id");
+        assert!(Slot::new(3, 2, 16).is_none(), "item id over the count");
+        assert!(
+            Slot::new(4, 2, 16).is_some(),
+            "count just before the item id"
+        );
     }
 
     #[test]

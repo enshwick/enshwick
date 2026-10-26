@@ -1146,11 +1146,11 @@ impl World {
     }
 
     /// The world's containers of a kind in `kinds`, with their places: by
-    /// default what players build, such as storage chests and safes; see
+    /// default what players build, such as storage chests; see
     /// [`ContainerKinds`] for the rest. Each kind is told apart by a
     /// component the game gives it. Call it now and then, as
     /// [`World::entities`]. On the game thread only; empty elsewhere and on
-    /// a build without containers.
+    /// a build that lacks any of those components.
     ///
     /// # Examples
     ///

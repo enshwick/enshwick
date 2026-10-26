@@ -13,6 +13,18 @@ mod tests {
     const DROP: u32 = 9;
     const ANIMAL: u32 = 10;
     const LOOT_FILL: u32 = 11;
+    const NPC: u32 = 12;
+    const RESOURCE: u32 = 13;
+
+    /// Every marker the classification reads, by id.
+    const MARKERS: [(&str, u32); 6] = [
+        ("player_input", PLAYER),
+        ("npc", NPC),
+        ("animal", ANIMAL),
+        ("destroy_on_loot", DROP),
+        ("loot_fill", LOOT_FILL),
+        ("resource_node", RESOURCE),
+    ];
 
     struct Holders {
         world: World,
@@ -38,29 +50,42 @@ mod tests {
             .type_hash("used_item", USED_ITEM)
     }
 
-    /// A chest a player built, with the loot fill world chests have too, a
-    /// player's character, a corpse, a container no marker names, a tamed
-    /// animal that keeps the item it came from, and a world chest.
+    /// One holder of each kind, with the markers several kinds share: a
+    /// built chest with the loot fill world chests have too, a player's
+    /// character, an enemy's drop with the loot fill, a holder no marker
+    /// names, a tamed animal and a summoned NPC that keep the item they came
+    /// from, a world chest and a plant. Every marker but `missing` is on the
+    /// build.
+    fn holding_without(missing: &str) -> FakeHost {
+        let host = MARKERS
+            .iter()
+            .filter(|(id, _)| *id != missing)
+            .fold(world(), |host, &(id, hash)| host.type_hash(id, hash));
+        [
+            (10, &[USED_ITEM, LOOT_FILL][..]),
+            (11, &[PLAYER]),
+            (12, &[DROP, LOOT_FILL]),
+            (13, &[]),
+            (14, &[ANIMAL, USED_ITEM]),
+            (15, &[LOOT_FILL]),
+            (16, &[NPC, USED_ITEM]),
+            (17, &[RESOURCE]),
+        ]
+        .into_iter()
+        .fold(
+            host.type_hash("inventory_setup", SETUP),
+            |host, (entity, markers)| {
+                markers
+                    .iter()
+                    .fold(host.placed(SETUP, entity, [0.0; 3]), |host, &marker| {
+                        host.component(entity, marker, &[0; 4])
+                    })
+            },
+        )
+    }
+
     fn holding() -> FakeHost {
-        world()
-            .type_hash("inventory_setup", SETUP)
-            .type_hash("player_input", PLAYER)
-            .type_hash("destroy_on_loot", DROP)
-            .type_hash("animal", ANIMAL)
-            .type_hash("loot_fill", LOOT_FILL)
-            .placed(SETUP, 10, [0.0; 3])
-            .component(10, USED_ITEM, &5u32.to_le_bytes())
-            .component(10, LOOT_FILL, &[0; 4])
-            .placed(SETUP, 11, [1.0; 3])
-            .component(11, PLAYER, &[0; 4])
-            .placed(SETUP, 12, [2.0; 3])
-            .component(12, DROP, &[0; 4])
-            .placed(SETUP, 13, [3.0; 3])
-            .placed(SETUP, 14, [4.0; 3])
-            .component(14, ANIMAL, &[0; 4])
-            .component(14, USED_ITEM, &6u32.to_le_bytes())
-            .placed(SETUP, 15, [5.0; 3])
-            .component(15, LOOT_FILL, &[0; 4])
+        holding_without("")
     }
 
     fn found(host: FakeHost, kinds: ContainerKinds) -> Vec<u32> {
@@ -89,13 +114,22 @@ mod tests {
         assert_eq!(found(holding(), ContainerKinds::OTHER), [13]);
         assert_eq!(found(holding(), ContainerKinds::ANIMALS), [14]);
         assert_eq!(found(holding(), ContainerKinds::LOOT), [15]);
-        assert_eq!(found(holding(), ContainerKinds::NPCS), Vec::<u32>::new());
+        assert_eq!(found(holding(), ContainerKinds::NPCS), [16]);
+        assert_eq!(found(holding(), ContainerKinds::PLANTS), [17]);
         let both = ContainerKinds::PLACED | ContainerKinds::CHARACTERS;
         assert_eq!(found(holding(), both), [10, 11]);
         assert_eq!(
             found(holding(), ContainerKinds::ALL),
-            [10, 11, 12, 13, 14, 15]
+            [10, 11, 12, 13, 14, 15, 16, 17]
         );
+    }
+
+    #[test]
+    fn a_build_missing_any_marker_finds_no_containers_rather_than_wrong_ones() {
+        for (id, _) in MARKERS {
+            let found = found(holding_without(id), ContainerKinds::ALL);
+            assert_eq!(found, Vec::<u32>::new(), "without {id}");
+        }
     }
 
     #[test]

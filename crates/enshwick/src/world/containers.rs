@@ -25,7 +25,7 @@ use crate::world::{ComponentType, Placed, World};
 pub struct ContainerKinds(u32);
 
 impl ContainerKinds {
-    /// What players build: storage chests, safes, showcases and crafting
+    /// What players build: storage chests, showcases and crafting
     /// stations.
     pub const PLACED: Self = Self(1);
     /// The world's own loot chests.
@@ -91,25 +91,25 @@ const MARKERS: [(ContainerKinds, &str); 7] = [
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Containers {
     setup: ComponentType,
-    /// `None` for a marker the running build lacks: its kind finds nothing.
-    markers: [(ContainerKinds, Option<ComponentType>); MARKERS.len()],
+    markers: [(ContainerKinds, ComponentType); MARKERS.len()],
 }
 
 impl Containers {
-    /// The holders' component and markers; `None` on a build without the
-    /// holders' component.
+    /// The holders' component and every marker; `None` on a build that
+    /// lacks any of them, since a holder whose marker is missing would fall
+    /// to a later kind, a summoned NPC to the built ones.
     pub(crate) fn resolve(load: &Load<'_>, world: &World) -> Option<Self> {
-        let setup = world
-            .component_type(load, ids::INVENTORY_SETUP)
-            .inspect_err(|off| crate::debug!("container queries off: {off}"))
-            .ok()?;
-        let markers = MARKERS.map(|(kind, id)| {
-            let ty = world
+        let resolve = |id| {
+            world
                 .component_type(load, id)
-                .inspect_err(|off| crate::debug!("containers of kind {kind:?} off: {off}"))
-                .ok();
-            (kind, ty)
-        });
+                .inspect_err(|off| crate::debug!("container queries off: {off}"))
+                .ok()
+        };
+        let setup = resolve(ids::INVENTORY_SETUP)?;
+        let mut markers = [(ContainerKinds::OTHER, ComponentType(0)); MARKERS.len()];
+        for (slot, (kind, id)) in markers.iter_mut().zip(MARKERS) {
+            *slot = (kind, resolve(id)?);
+        }
         Some(Self { setup, markers })
     }
 
@@ -117,7 +117,7 @@ impl Containers {
     fn kind(&self, world: &World, entity: Entity) -> ContainerKinds {
         self.markers
             .iter()
-            .find(|(_, ty)| ty.is_some_and(|ty| world.component(entity, ty).is_some()))
+            .find(|&&(_, ty)| world.component(entity, ty).is_some())
             .map_or(ContainerKinds::OTHER, |&(kind, _)| kind)
     }
 
