@@ -243,6 +243,32 @@ mod tests {
         assert!(logged(&loader, "outside true"), "{:?}", loader.logs());
     }
 
+    /// Bytes Luau would take for compiled bytecode: a version byte, a types
+    /// version byte, then anything.
+    const BYTECODE: &str = "\u{6}\u{3}\u{0}\u{0}\u{1}\u{0}";
+
+    #[test]
+    fn a_main_script_of_bytecode_is_refused() {
+        let (loader, status) = run_with(BYTECODE, Limits::default(), Scripts::new());
+        assert_ne!(status, Status::OK, "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_required_script_of_bytecode_is_refused() {
+        let (loader, status) = run_with(
+            r#"local ok = pcall(require, "./compiled")
+            enshwick.log.info(`compiled loaded {ok}`)"#,
+            Limits::default(),
+            Scripts::new().with("compiled.luau", BYTECODE),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "compiled loaded false"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
     #[test]
     fn a_script_requires_its_siblings() {
         let (loader, status) = run_with(

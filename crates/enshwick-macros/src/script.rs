@@ -66,12 +66,12 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
         let fields = shown.iter().map(|f| {
             let field = &f.ident;
             let label = field.as_ref().map(ToString::to_string).unwrap_or_default();
-            quote!(#field: #script::argument(&mut fields, #label)?)
+            quote!(#field: ::enshwick::__private::argument(&mut fields, #label)?)
         });
         quote! {
             impl #script::FromScript for #ident {
                 fn from_value(value: #script::Value) -> ::core::result::Result<Self, #script::Error> {
-                    let mut fields = #script::record_fields(value, #count)?;
+                    let mut fields = ::enshwick::__private::record_fields(value, #count)?;
                     ::core::result::Result::Ok(Self { #(#fields,)* })
                 }
             }
@@ -246,7 +246,7 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
             },
             read: quote! {
                 let #local = {
-                    let callback: #script::Callback = #script::argument(&mut args, #param)?;
+                    let callback: #script::Callback = ::enshwick::__private::argument(&mut args, #param)?;
                     move |#(#names: #inputs),*| -> #output {
                         <#output as #script::Answer>::from_answer(
                             callback.call(::std::vec![#(#script::IntoScript::into_value(#names)),*]),
@@ -266,7 +266,7 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
     };
     Ok(Parameter {
         describe: quote!(#script::Param::new(#param, <#owned as #script::Typed>::TY)),
-        read: quote!(let #local: #owned = #script::argument(&mut args, #param)?;),
+        read: quote!(let #local: #owned = ::enshwick::__private::argument(&mut args, #param)?;),
         pass,
     })
 }

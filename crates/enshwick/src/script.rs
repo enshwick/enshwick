@@ -1,12 +1,8 @@
-//! What the API offers a script language, described as data beside the Rust
-//! items themselves, so each language's bindings and editor definitions come
-//! from one source.
+//! What the API offers a script language, described beside the Rust items.
 //!
-//! [`#[derive(Script)]`](macro@crate::Script) describes a type,
-//! [`#[script]`](macro@crate::script) the methods of an `impl` block, and the
-//! tables of [`events`](crate::events) describe every loader event. A
-//! language runtime reads [`Ty`] to convert values, and a definitions writer
-//! reads the same descriptions to declare them.
+//! [`#[derive(Script)]`](macro@crate::Script) describes types,
+//! [`#[script]`](macro@crate::script) methods, and the tables of
+//! [`events`](crate::events) events; runtimes and definitions read them.
 //!
 //! # Examples
 //!
@@ -28,12 +24,9 @@
 use core::ffi::c_void;
 use std::sync::Arc;
 
-mod convert;
+pub(crate) mod convert;
 #[cfg(test)]
 mod tests;
-
-#[doc(hidden)]
-pub use convert::{argument, record_fields};
 
 /// A value's type as a script language sees it.
 ///
@@ -747,12 +740,14 @@ impl EventKind {
     /// # Safety
     ///
     /// - `raw` is null or the pointer the loader passed with
-    ///   [`EventKind::event`], as [`Kind::data`](crate::events::Kind::data)
-    ///   asks.
+    ///   [`EventKind::event`]: the event's data, readable for the size its
+    ///   header states; no alignment is needed.
+    /// - No other thread writes that data during the call.
     #[must_use]
     pub unsafe fn read(&self, raw: *const c_void) -> Option<Value> {
-        // SAFETY: the caller passes the loader's pointer for this event, as
-        // this function's `# Safety` asks and the reader needs.
+        // SAFETY: the caller passes the loader's pointer for this event with
+        // no other thread writing its data, by this function's `# Safety`,
+        // which is what the reader asks.
         unsafe { (self.read)(raw) }
     }
 }
@@ -792,6 +787,8 @@ pub struct Namespace {
 /// See [`Namespace::functions`].
 #[derive(Clone, Copy, Debug)]
 pub struct Declared {
+    /// Its place in its namespace's [`Bound::functions`].
+    index: usize,
     name: &'static str,
     doc: &'static str,
     signature: &'static Signature,
@@ -829,8 +826,8 @@ impl Declared {
     }
 }
 
-/// The function behind an [`Opened`] namespace: the function's index in
-/// [`Namespace::functions`] and its arguments.
+/// The function behind an [`Opened`] namespace: the function's place in its
+/// namespace, from [`Declared`], and its arguments.
 type OpenedFn = dyn Fn(usize, Vec<Value>) -> Result<Value, Error> + Send + Sync;
 
 /// A [`Namespace`] opened for one mod: calls its functions by index.
@@ -848,17 +845,18 @@ impl core::fmt::Debug for Opened {
 }
 
 impl Opened {
-    /// Calls the function at `index` of [`Namespace::functions`] with `args`.
+    /// Calls `function`, one of [`Namespace::functions`] of the namespace
+    /// this was opened from, with `args`.
     ///
     /// # Errors
     ///
-    /// As [`Function::call`], and for an index past the last function.
+    /// As [`Function::call`], and for a function of another namespace.
     ///
     /// # Examples
     ///
     /// See [`Namespace::open`].
-    pub fn call(&self, index: usize, args: Vec<Value>) -> Result<Value, Error> {
-        (self.0)(index, args)
+    pub fn call(&self, function: &Declared, args: Vec<Value>) -> Result<Value, Error> {
+        (self.0)(function.index, args)
     }
 }
 
@@ -918,7 +916,8 @@ impl Namespace {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let log = NAMESPACES.iter().find(|n| n.name() == "log").ok_or(enshwick::Off::new("no log"))?;
-    ///     let info = log.functions().iter().position(|f| f.name() == "info").unwrap_or(0);
+    ///     let functions = log.functions();
+    ///     let info = functions.iter().find(|f| f.name() == "info").ok_or(enshwick::Off::new("no info"))?;
     ///     log.open(load)?.call(info, vec![Value::String("hello".into())])?;
     ///     Ok(())
     /// }
@@ -930,7 +929,9 @@ impl Namespace {
 
 fn describe<T: Bound>() -> Vec<Declared> {
     T::functions()
-        .map(|f| Declared {
+        .enumerate()
+        .map(|(index, f)| Declared {
+            index,
             name: f.name,
             doc: f.doc,
             signature: &f.signature,
@@ -943,7 +944,7 @@ fn open<T: Bound>(load: &mut crate::Load<'_>) -> Result<Opened, crate::Off> {
     Ok(Opened(Arc::new(move |index, args| {
         T::functions()
             .nth(index)
-            .ok_or_else(|| Error::new(format!("{} has no function {index}", T::NAME)))?
+            .ok_or_else(|| Error::new(format!("{} has no such function", T::NAME)))?
             .call(&this, args)
     })))
 }

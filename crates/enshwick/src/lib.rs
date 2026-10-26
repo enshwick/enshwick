@@ -132,8 +132,9 @@ pub use enshwick_macros::Config;
 /// [`script::IntoScript`] and, when every field is shown,
 /// [`script::FromScript`].
 ///
-/// A struct with named fields is a record of its public fields; `header`
-/// and fields named with a leading `_` are left out. A newtype is its inner
+/// A struct with named fields is a record of its public fields; fields of
+/// type `Header` and fields named with a leading `_` or `reserved` are left
+/// out. A newtype is its inner
 /// type. An enum of unit variants is a choice of the variants' names. Doc
 /// comments become the script's documentation.
 ///
@@ -321,6 +322,9 @@ pub use shape::Shape;
 #[doc(hidden)]
 pub mod __private {
     pub use const_format::concatcp;
+
+    pub use crate::locks::Relock;
+    pub use crate::script::convert::{argument, record_fields};
 
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};

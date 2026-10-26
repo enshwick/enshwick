@@ -3,12 +3,15 @@
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
+use arc_swap::ArcSwapOption;
+use enshwick::__private::Relock as _;
 use enshwick::abi::{Event, Level};
-use enshwick::script::{self, EventKind, Signature, Value};
+use enshwick::script::{self, EventKind, Opened, Signature, Value};
 use enshwick::{Host, Load, Off};
+use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, LuaOptions, MultiValue, StdLib, Table, Value as LuaValue, VmState};
 
 use crate::bridge::{arguments, from_lua, to_lua};
@@ -103,32 +106,29 @@ thread_local! {
     static EXPIRED: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Takes a lock under the API's poison policy: a lock a panicking thread
-/// held is taken again with its state kept and its poison cleared.
-trait Relock<T> {
-    fn relock(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> Relock<T> for Mutex<T> {
-    fn relock(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|poisoned| {
-            self.clear_poison();
-            poisoned.into_inner()
-        })
-    }
-}
-
 /// How many of Luau's interrupts pass between two reads of the clock.
 const TICKS_PER_CHECK: u32 = 64;
 
-pub(crate) struct Inner {
-    id: String,
-    host: Host,
+/// One VM of a mod: the Luau state and the handlers its `main.luau`
+/// registered.
+struct Vm {
     lua: Lua,
-    limits: Limits,
-    off: AtomicBool,
+    /// Whether `main.luau` is still running its top level.
     starting: AtomicBool,
     handlers: Mutex<Vec<(Event, Function)>>,
+}
+
+pub(crate) struct Inner {
+    /// This mod's own pointer, for the functions and callbacks it hands out.
+    me: Weak<Inner>,
+    id: String,
+    host: Host,
+    limits: Limits,
+    /// Every namespace the game build offers, opened for this mod.
+    namespaces: Vec<(&'static script::Namespace, Opened)>,
+    /// The VM; gone once the mod is off, which frees its memory.
+    vm: ArcSwapOption<Vm>,
+    off: AtomicBool,
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
     peak: AtomicUsize,
@@ -167,13 +167,7 @@ impl Runtime {
     /// See [`Runtime`].
     #[must_use]
     pub fn usage(&self) -> Usage {
-        let memory = self.0.lua.used_memory();
-        Usage {
-            memory,
-            peak: self.0.peak.load(Ordering::Relaxed).max(memory),
-            calls: self.0.calls.load(Ordering::Relaxed),
-            overruns: self.0.overruns.load(Ordering::Relaxed),
-        }
+        self.0.usage()
     }
 
     /// Whether a fault turned the mod off.
@@ -212,55 +206,61 @@ pub fn start(
     scripts: Scripts,
     limits: Limits,
 ) -> Result<Runtime, Off> {
-    let main = scripts
-        .get(MAIN)
-        .cloned()
-        .ok_or_else(|| Off::new(format!("{MAIN} is missing")))?;
-    let lua = sandbox(limits).map_err(|e| Off::new(format!("the Luau sandbox: {e}")))?;
-    let overruns = Arc::new(AtomicU64::new(0));
-    lua.set_interrupt({
-        let overruns = Arc::clone(&overruns);
-        move |_| interrupt(&overruns)
-    });
-    let inner = Arc::new(Inner {
+    let host = load.host();
+    let mut namespaces = Vec::new();
+    for namespace in script::NAMESPACES {
+        match namespace.open(load) {
+            Ok(opened) => namespaces.push((namespace, opened)),
+            Err(off) => host.log(
+                Level::INFO,
+                &format!(
+                    "enshwick.{} is not on this game build: {off}",
+                    namespace.name()
+                ),
+            ),
+        }
+    }
+    let inner = Arc::new_cyclic(|me| Inner {
+        me: Weak::clone(me),
         id: id.to_owned(),
-        host: load.host(),
-        lua,
+        host,
         limits,
+        namespaces,
+        vm: ArcSwapOption::empty(),
         off: AtomicBool::new(false),
-        starting: AtomicBool::new(true),
-        handlers: Mutex::new(Vec::new()),
         calls: AtomicU64::new(0),
-        overruns,
+        overruns: Arc::new(AtomicU64::new(0)),
         peak: AtomicUsize::new(0),
     });
-    let api = globals(&inner, load, scripts).map_err(|e| Off::new(format!("the Luau API: {e}")))?;
-    inner
-        .lua
-        .sandbox(true)
-        .map_err(|e| Off::new(format!("the Luau sandbox: {e}")))?;
-    let started = inner.enter(limits.start, || {
-        inner
-            .lua
-            .load(&main[..])
-            .set_name(format!("@{MAIN}"))
-            .exec()
-    });
-    inner.starting.store(false, Ordering::Release);
-    match started {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => return Err(Off::new(describe(&error))),
-        Err(()) => return Err(Off::new(format!("{MAIN} panicked in a call it made"))),
+    let vm = inner.run_main(scripts).map_err(Off::new)?;
+    let events = vm.events();
+    inner.vm.store(Some(vm));
+    for event in events {
+        let kind = script::events()
+            .find(|k| k.event() == event)
+            .ok_or_else(|| Off::new(format!("event {} has no script entry", event.0)))?;
+        let inner = Arc::clone(&inner);
+        load.on_raw_event(event, move |raw| inner.dispatch(kind, raw))?;
     }
-    api.set_readonly(true);
-    subscribe(&inner, load)?;
+    let usage = Arc::downgrade(&inner);
+    load.add_status(move || {
+        usage.upgrade().map_or_else(String::new, |inner| {
+            let usage = inner.usage();
+            format!(
+                "Luau: {} KiB, peak {} KiB, {} calls, {} past their budget",
+                usage.memory >> 10,
+                usage.peak >> 10,
+                usage.calls,
+                usage.overruns
+            )
+        })
+    })?;
     Ok(Runtime(inner))
 }
 
-/// A VM with Luau's safe libraries, `print` and `require` of the mod's own,
-/// and the memory limit; the caller turns the sandbox on once the globals
-/// are in place.
-fn sandbox(limits: Limits) -> mlua::Result<Lua> {
+/// A VM with Luau's safe libraries and the memory limit; the caller turns
+/// the sandbox on once the globals are in place.
+fn sandbox(limits: Limits, overruns: &Arc<AtomicU64>) -> mlua::Result<Lua> {
     let libs = StdLib::COROUTINE
         | StdLib::TABLE
         | StdLib::OS
@@ -272,6 +272,8 @@ fn sandbox(limits: Limits) -> mlua::Result<Lua> {
         | StdLib::VECTOR;
     let lua = Lua::new_with(libs, LuaOptions::new().catch_rust_panics(false))?;
     lua.set_memory_limit(limits.memory)?;
+    let overruns = Arc::clone(overruns);
+    lua.set_interrupt(move |_| interrupt(&overruns));
     Ok(lua)
 }
 
@@ -307,144 +309,18 @@ fn describe(error: &mlua::Error) -> String {
     }
 }
 
-/// Puts `enshwick`, `print` and `require` among the globals.
-fn globals(inner: &Arc<Inner>, load: &mut Load<'_>, scripts: Scripts) -> mlua::Result<Table> {
-    let lua = &inner.lua;
-    let api = lua.create_table()?;
-    for namespace in script::NAMESPACES {
-        let opened = match namespace.open(load) {
-            Ok(opened) => opened,
-            Err(off) => {
-                inner.host.log(
-                    Level::INFO,
-                    &format!(
-                        "enshwick.{} is not on this game build: {off}",
-                        namespace.name()
-                    ),
-                );
-                continue;
-            }
-        };
-        let table = lua.create_table()?;
-        for (index, declared) in namespace.functions().into_iter().enumerate() {
-            let weak = Arc::downgrade(inner);
-            let opened = opened.clone();
-            let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
-            let signature = declared.signature();
-            table.raw_set(
-                declared.name(),
-                lua.create_function(move |lua, args: MultiValue| {
-                    let values = arguments(lua, &weak, args, signature, &what)?;
-                    let answer = opened
-                        .call(index, values)
-                        .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                    to_lua(lua, &weak, answer, signature.ret())
-                })?,
-            )?;
-        }
-        table.set_readonly(true);
-        api.raw_set(namespace.name(), table)?;
-    }
-    let weak = Arc::downgrade(inner);
-    api.raw_set(
-        "on",
-        lua.create_function(move |_, (name, handler): (String, Function)| {
-            let inner = weak
-                .upgrade()
-                .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-            inner.on(&name, handler)
-        })?,
-    )?;
-    let globals = lua.globals();
-    globals.raw_set("enshwick", api.clone())?;
-    let host = inner.host;
-    globals.raw_set(
-        "print",
-        lua.create_function(move |_, args: MultiValue| {
-            let line = args
-                .iter()
-                .map(|v| v.to_string().unwrap_or_else(|_| "?".to_owned()))
-                .collect::<Vec<_>>()
-                .join("\t");
-            host.log(Level::INFO, &line);
-            Ok(())
-        })?,
-    )?;
-    globals.raw_set(
-        "require",
-        lua.create_require_function(Requirer::new(scripts))?,
-    )?;
-    Ok(api)
-}
-
-/// Subscribes each event a handler was registered for, once.
-fn subscribe(inner: &Arc<Inner>, load: &mut Load<'_>) -> Result<(), Off> {
-    let mut events: Vec<Event> = inner
-        .handlers
-        .relock()
-        .iter()
-        .map(|(event, _)| *event)
-        .collect();
-    events.sort_unstable_by_key(|e| e.0);
-    events.dedup();
-    for event in events {
-        let kind = script::events()
-            .find(|k| k.event() == event)
-            .ok_or_else(|| Off::new(format!("event {} has no script entry", event.0)))?;
-        let inner = Arc::clone(inner);
-        load.on_raw_event(event, move |raw| inner.dispatch(kind, raw))?;
-    }
-    Ok(())
-}
-
-impl Inner {
-    /// Runs `body` as a call into the scripts, under `budget` unless an
-    /// outer call on this thread set an earlier end; `Err` when it panicked.
-    fn enter<R>(&self, budget: Duration, body: impl FnOnce() -> R) -> Result<R, ()> {
-        let outer = DEADLINE.get();
-        let deadline = Instant::now().checked_add(budget);
-        let mine = match (outer, deadline) {
-            (Some(outer), Some(deadline)) => Some(outer.min(deadline)),
-            (outer, deadline) => outer.or(deadline),
-        };
-        DEADLINE.set(mine);
-        self.calls.fetch_add(1, Ordering::Relaxed);
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
-        DEADLINE.set(outer);
-        if outer.is_none() {
-            EXPIRED.set(false);
-        }
-        self.peak
-            .fetch_max(self.lua.used_memory(), Ordering::Relaxed);
-        result.map_err(|_| ())
-    }
-
-    /// Runs `body` as a call into the scripts after start; on an error or a
-    /// panic, logs why and turns the mod off.
-    fn call<R>(&self, what: &str, body: impl FnOnce() -> mlua::Result<R>) -> Option<R> {
-        if self.off.load(Ordering::Acquire) {
-            return None;
-        }
-        match self.enter(self.limits.call, body) {
-            Ok(Ok(value)) => Some(value),
-            Ok(Err(error)) => {
-                self.fail(&format!("{what}: {}", describe(&error)));
-                None
-            }
-            Err(()) => {
-                self.fail(&format!("{what}: a call it made panicked"));
-                None
-            }
-        }
-    }
-
-    /// Turns the mod off for `reason`, once.
-    #[cold]
-    fn fail(&self, reason: &str) {
-        if !self.off.swap(true, Ordering::AcqRel) {
-            self.host.log(Level::ERROR, reason);
-            self.host.fault(reason);
-        }
+impl Vm {
+    /// Every event a handler was registered for, once each.
+    fn events(&self) -> Vec<Event> {
+        let mut events: Vec<Event> = self
+            .handlers
+            .relock()
+            .iter()
+            .map(|(event, _)| *event)
+            .collect();
+        events.sort_unstable_by_key(|e| e.0);
+        events.dedup();
+        events
     }
 
     fn on(&self, name: &str, handler: Function) -> mlua::Result<()> {
@@ -459,27 +335,187 @@ impl Inner {
         self.handlers.relock().push((kind.event(), handler));
         Ok(())
     }
+}
+
+impl Inner {
+    fn usage(&self) -> Usage {
+        let memory = self.vm.load().as_ref().map_or(0, |vm| vm.lua.used_memory());
+        Usage {
+            memory,
+            peak: self.peak.load(Ordering::Relaxed).max(memory),
+            calls: self.calls.load(Ordering::Relaxed),
+            overruns: self.overruns.load(Ordering::Relaxed),
+        }
+    }
+
+    /// A new VM with the API and `scripts`, after its `main.luau` ran;
+    /// the error names the file, the line and the message.
+    fn run_main(&self, scripts: Scripts) -> Result<Arc<Vm>, String> {
+        let main = scripts
+            .get(MAIN)
+            .cloned()
+            .ok_or_else(|| format!("{MAIN} is missing"))?;
+        let lua =
+            sandbox(self.limits, &self.overruns).map_err(|e| format!("the Luau sandbox: {e}"))?;
+        let vm = Arc::new(Vm {
+            lua,
+            starting: AtomicBool::new(true),
+            handlers: Mutex::new(Vec::new()),
+        });
+        let api = self
+            .globals(&vm, scripts)
+            .map_err(|e| format!("the Luau API: {e}"))?;
+        vm.lua
+            .sandbox(true)
+            .map_err(|e| format!("the Luau sandbox: {e}"))?;
+        let started = self.enter(&vm.lua, self.limits.start, || {
+            vm.lua
+                .load(&main[..])
+                .set_name(format!("@{MAIN}"))
+                .set_mode(ChunkMode::Text)
+                .exec()
+        });
+        vm.starting.store(false, Ordering::Release);
+        match started {
+            Ok(Ok(())) => {
+                api.set_readonly(true);
+                Ok(vm)
+            }
+            Ok(Err(error)) => Err(describe(&error)),
+            Err(()) => Err(format!("{MAIN} panicked in a call it made")),
+        }
+    }
+
+    /// Puts `enshwick`, `print` and `require` among the globals of `vm`.
+    fn globals(&self, vm: &Arc<Vm>, scripts: Scripts) -> mlua::Result<Table> {
+        let lua = &vm.lua;
+        let api = lua.create_table()?;
+        for (namespace, opened) in &self.namespaces {
+            let table = lua.create_table()?;
+            for declared in namespace.functions() {
+                let weak = Weak::clone(&self.me);
+                let opened = opened.clone();
+                let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
+                let signature = declared.signature();
+                table.raw_set(
+                    declared.name(),
+                    lua.create_function(move |lua, args: MultiValue| {
+                        let values = arguments(lua, &weak, args, signature, &what)?;
+                        let answer = opened
+                            .call(&declared, values)
+                            .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
+                        to_lua(lua, &weak, answer, signature.ret())
+                    })?,
+                )?;
+            }
+            table.set_readonly(true);
+            api.raw_set(namespace.name(), table)?;
+        }
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
+            "on",
+            lua.create_function(move |_, (name, handler): (String, Function)| {
+                let vm = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                vm.on(&name, handler)
+            })?,
+        )?;
+        let globals = lua.globals();
+        globals.raw_set("enshwick", api.clone())?;
+        let host = self.host;
+        globals.raw_set(
+            "print",
+            lua.create_function(move |_, args: MultiValue| {
+                let line = args
+                    .iter()
+                    .map(|v| v.to_string().unwrap_or_else(|_| "?".to_owned()))
+                    .collect::<Vec<_>>()
+                    .join("\t");
+                host.log(Level::INFO, &line);
+                Ok(())
+            })?,
+        )?;
+        globals.raw_set(
+            "require",
+            lua.create_require_function(Requirer::new(scripts))?,
+        )?;
+        Ok(api)
+    }
+
+    /// Runs `body` as a call into the scripts of `lua`, under `budget`
+    /// unless an outer call on this thread set an earlier end; `Err` when it
+    /// panicked.
+    fn enter<R>(&self, lua: &Lua, budget: Duration, body: impl FnOnce() -> R) -> Result<R, ()> {
+        let outer = DEADLINE.get();
+        let outer_expired = EXPIRED.get();
+        let deadline = Instant::now().checked_add(budget);
+        let mine = match (outer, deadline) {
+            (Some(outer), Some(deadline)) => Some(outer.min(deadline)),
+            (outer, deadline) => outer.or(deadline),
+        };
+        DEADLINE.set(mine);
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(body));
+        DEADLINE.set(outer);
+        EXPIRED.set(outer_expired);
+        self.peak.fetch_max(lua.used_memory(), Ordering::Relaxed);
+        result.map_err(|_| ())
+    }
+
+    /// Runs `body` on the mod's VM as a call into the scripts after start;
+    /// on an error or a panic, turns the mod off with why.
+    fn call<R>(&self, what: &str, body: impl FnOnce(&Vm) -> mlua::Result<R>) -> Option<R> {
+        if self.off.load(Ordering::Acquire) {
+            return None;
+        }
+        let vm = self.vm.load_full()?;
+        match self.enter(&vm.lua, self.limits.call, || body(&vm)) {
+            Ok(Ok(value)) => Some(value),
+            Ok(Err(error)) => {
+                self.fail(&format!("{what}: {}", describe(&error)));
+                None
+            }
+            Err(()) => {
+                self.fail(&format!("{what}: a call it made panicked"));
+                None
+            }
+        }
+    }
+
+    /// Turns the mod off for `reason`, once, and drops its VM; the loader's
+    /// fault logs the reason.
+    #[cold]
+    fn fail(&self, reason: &str) {
+        if !self.off.swap(true, Ordering::AcqRel) {
+            self.vm.store(None);
+            self.host.fault(reason);
+        }
+    }
 
     fn dispatch(&self, kind: &'static EventKind, raw: *const core::ffi::c_void) {
         if self.off.load(Ordering::Acquire) {
             return;
         }
-        // SAFETY: the loader passes `raw` with `kind`'s event, as the
-        // subscription in `subscribe` asked for that event alone.
+        // SAFETY: `start` subscribed this closure with `Load::on_raw_event`
+        // for `kind`'s event alone, and the loader delivers that event's data
+        // for the call with no other thread writing it, as `read` asks.
         let Some(data) = (unsafe { kind.read(raw) }) else {
             return;
         };
-        let handlers: Vec<Function> = self
+        let Some(vm) = self.vm.load_full() else {
+            return;
+        };
+        let handlers: Vec<Function> = vm
             .handlers
             .relock()
             .iter()
             .filter(|(event, _)| *event == kind.event())
             .map(|(_, handler)| handler.clone())
             .collect();
-        let weak = Weak::new();
         for handler in handlers {
-            let done = self.call(kind.name(), || {
-                let arg = to_lua(&self.lua, &weak, data.clone(), kind.data())?;
+            let done = self.call(kind.name(), |vm| {
+                let arg = to_lua(&vm.lua, &self.me, data.clone(), kind.data())?;
                 handler.call::<()>(arg)
             });
             if done.is_none() {
@@ -496,16 +532,15 @@ impl Inner {
         args: Vec<Value>,
         signature: &'static Signature,
     ) -> Result<Value, script::Error> {
-        let weak = Weak::new();
-        let answer = self.call("a function passed to the API", || {
+        let answer = self.call("a function passed to the API", |vm| {
             let lua_args = args
                 .into_iter()
                 .zip(signature.params())
-                .map(|(value, param)| to_lua(&self.lua, &weak, value, param.ty()))
+                .map(|(value, param)| to_lua(&vm.lua, &self.me, value, param.ty()))
                 .collect::<mlua::Result<MultiValue>>()?;
             function.call::<LuaValue>(lua_args)
         });
         let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
-        from_lua(&weak, answer, signature.ret())
+        from_lua(&self.me, answer, signature.ret())
     }
 }

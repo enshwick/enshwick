@@ -510,6 +510,7 @@ dependencies = [
 name = "enshwick-luau"
 version = "1.0.0-alpha.6"
 dependencies = [
+ "arc-swap",
  "enshwick",
  "mlua",
 ]
