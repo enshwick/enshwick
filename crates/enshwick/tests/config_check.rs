@@ -52,7 +52,9 @@ mod tests {
         assert_eq!(loader.check_settings("first = 2\nlast = 4\n"), Ok(()));
         assert_eq!(
             loader.check_settings("first = 5\nlast = 4\n"),
-            Err("first is more than last".to_owned())
+            Err(enshwick::test::SettingsRefused {
+                reason: "first is more than last".to_owned()
+            })
         );
         assert!(loader.check_settings("first = 50\nlast = 60\n").is_err());
         assert!(loader.check_settings("first = \"many\"").is_err());
