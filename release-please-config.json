@@ -103,10 +103,6 @@
       "package-name": "enshwick-flame-altar-count",
       "component": "enshwick-flame-altar-count"
     },
-    "mods/enshwick-flame-altar-zones": {
-      "package-name": "enshwick-flame-altar-zones",
-      "component": "enshwick-flame-altar-zones"
-    },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"
