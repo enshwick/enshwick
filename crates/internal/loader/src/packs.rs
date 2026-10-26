@@ -343,13 +343,13 @@ mod tests {
     #[test]
     fn a_pack_manifest_reads_as_a_mod_s() {
         let manifest = PackManifest::parse(
-            "id = \"lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\nsafes = \">=0.5\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.2.0\"\nname = \"Lanterns\"\nhomepage = \"https://example.com/lanterns\"\n[requires]\nsafes = \">=0.5\"\n",
         )
         .unwrap();
         let manifest = manifest_of(&manifest);
         // SAFETY: built above for the process.
         let candidate = unsafe { crate::manifest::parse(manifest) }.unwrap();
-        assert_eq!(candidate.id, "lanterns");
+        assert_eq!(candidate.id, "you.lanterns");
         assert_eq!(candidate.version.to_string(), "1.2.0");
         assert_eq!(candidate.side, Side::BOTH);
         assert_eq!(candidate.dependencies.len(), 1);

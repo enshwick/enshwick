@@ -450,7 +450,7 @@ mod tests {
 
     const MOD: &str = r#"
         enshwick::manifest!(
-            id: "safes",
+            id: "you.safes",
             side: BOTH,
             builds: [
                 {
@@ -504,7 +504,7 @@ mod tests {
     /// Rows written `builds: [{ .. }, { .. }]`, the last without a comma.
     const PACKED: &str = r#"
         manifest!(
-            id: "research",
+            id: "you.research",
             builds: [{
                 side: CLIENT,
                 guid: "69f0e9573b32c24a8838d3fff550824c",

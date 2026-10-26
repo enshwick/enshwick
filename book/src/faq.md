@@ -121,7 +121,7 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | `skipped: requires trading-post ^0.2, found 0.1.3`                                            | A required mod is too old or too new                                   |
 | `skipped: does not work beside old-market 0.4.0; remove one of them`                          | The mod declares `breaks` on a loaded mod, and gives way               |
 | `skipped: in a dependency cycle`                                                              | Mods require each other in a circle                                    |
-| `skipped: the id "My Mod" is not [a-z0-9-]+`                                                  | The manifest's id is invalid; other manifest errors read the same way  |
+| `skipped: the id "My Mod" is not <author>.<name>, each of [a-z0-9-]`                          | The manifest's id is invalid; other manifest errors read the same way  |
 
 The client loads server mods too, since it runs the server's code while it
 hosts a game; see [Sides and hosting](concepts/sides-and-hosting.md).

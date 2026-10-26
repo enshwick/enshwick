@@ -177,7 +177,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join(MANIFEST_FILE),
-            "id = \"lanterns\"\nversion = \"1.0.0\"\n",
+            "id = \"you.lanterns\"\nversion = \"1.0.0\"\n",
         )
         .unwrap();
         std::fs::write(dir.join("items.toml"), items).unwrap();
@@ -192,7 +192,7 @@ mod tests {
         );
         let (summary, _, _) = check(&dir, None).unwrap();
         assert!(
-            summary.starts_with("lanterns 1.0.0: 1 content ids"),
+            summary.starts_with("you.lanterns 1.0.0: 1 content ids"),
             "{summary}"
         );
         let out = dir.join("out.zip");
@@ -205,7 +205,10 @@ mod tests {
         names.sort_unstable();
         assert_eq!(
             names,
-            ["mods/lanterns/items.toml", "mods/lanterns/pack.toml"]
+            [
+                "mods/you.lanterns/items.toml",
+                "mods/you.lanterns/pack.toml"
+            ]
         );
         let _gone = std::fs::remove_dir_all(&dir);
     }

@@ -49,12 +49,12 @@ mod tests {
         }
     }
 
-    #[enshwick::service(name = "market:stalls", version = 2)]
+    #[enshwick::service(name = "you.market:stalls", version = 2)]
     pub(crate) struct Stalls {
         pub(crate) count: extern "system" fn() -> u32,
     }
 
-    #[enshwick::event(name = "market:opened")]
+    #[enshwick::event(name = "you.market:opened")]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Opened {
         pub(crate) stalls: u32,
@@ -89,7 +89,7 @@ mod tests {
 
     impl Mod for Market {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "market", side: SERVER)
+            enshwick::manifest!(id: "you.market", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -125,9 +125,9 @@ mod tests {
     fn a_mod_uses_publishes_defines_and_subscribes() {
         let loader = enshwick::test::FakeHost::new().service(&PRICES).install();
         assert_eq!(start(&loader), Status::OK);
-        assert_eq!(loader.published(), [("market:stalls".to_owned(), 2)]);
-        assert_eq!(loader.defined_events(), ["market:opened"]);
-        assert_eq!(loader.sent_events(), ["market:opened"]);
+        assert_eq!(loader.published(), [("you.market:stalls".to_owned(), 2)]);
+        assert_eq!(loader.defined_events(), ["you.market:opened"]);
+        assert_eq!(loader.sent_events(), ["you.market:opened"]);
         EARNED.store(0, Ordering::Relaxed);
         assert_eq!(loader.send_mod_event(&Sold { item: 1, price: 7 }), 1);
         assert_eq!(EARNED.load(Ordering::Relaxed), 7);
