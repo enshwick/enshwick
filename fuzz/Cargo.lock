@@ -304,6 +304,7 @@ dependencies = [
  "libfuzzer-sys",
  "syn",
  "toml",
+ "toml_edit",
 ]
 
 [[package]]

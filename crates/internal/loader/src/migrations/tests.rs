@@ -506,3 +506,17 @@ fn a_setting_renamed_into_or_out_of_a_table_moves_there() {
     assert!(enshwick::config::value_at(&table, "old.legacy").is_none());
     assert!(!new.contains("\"count.per_level\""), "{new}");
 }
+
+#[test]
+fn a_migration_never_leaves_a_settings_file_that_does_not_read_back() {
+    let deep = vec!["level"; 300].join(".");
+    let rename = migration(
+        "deep",
+        vec![step(MigrationStep::RENAME_SETTING, "radius", &deep)],
+    );
+    let migrated = apply_settings("radius = 8\n", 0, &rename, &double, &none);
+    assert!(
+        migrated.is_err_and(|e| matches!(e, MigrationError::Unreadable(_))),
+        "a file deeper than the reader takes is refused"
+    );
+}

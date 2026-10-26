@@ -1,0 +1,17 @@
+# Zones.
+radius = 8 # metres
+
+[comfort]
+multiplier = 2
+ÿcapacity = 4
+[deep]
+key = 1
+ÿ1 radius range
+2 comfort.multiplier
+3 old
+7 you.other:capacity size
+1 comfort.multiplier comfort.factor
+ÿ3ÿ[settings]
+"you.zones" = ["one"]
+[worlds.w1]
+"you.zones" = ["two"]
