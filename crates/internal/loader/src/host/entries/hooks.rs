@@ -4,7 +4,8 @@ use enshwick::abi::{HookSpec, MidHookSpec, ModHandle, Status};
 
 use crate::chains::Link;
 use crate::host::memory::{put, slice};
-use crate::host::{caller_index, calling, entry, loader, relock};
+use crate::host::{caller_index, calling, entry, loader};
+use crate::locks::Relock;
 use crate::mid::MidLink;
 
 pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Status {
@@ -36,7 +37,7 @@ pub(crate) extern "system" fn hook(me: ModHandle, spec: *const HookSpec) -> Stat
             flags: spec.flags,
             hop: None,
         };
-        let mut chains = relock(&loader.chains, "the hook chains");
+        let mut chains = loader.chains.relock();
         if crate::reload::reinitialising(index) {
             chains.relink(spec.target, link)
         } else {
@@ -62,7 +63,7 @@ pub(crate) extern "system" fn hook_at(me: ModHandle, spec: *const MidHookSpec) -
             priority: spec.priority,
             flags: spec.flags,
         };
-        relock(&loader.mids, "the mid-function hooks").add(spec.address, link)
+        loader.mids.relock().add(spec.address, link)
     })
 }
 

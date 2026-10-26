@@ -17,7 +17,7 @@
 //! and items keep their vanilla icons.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{HookFlags, Side, Status};
@@ -27,6 +27,7 @@ use rustc_hash::FxHashMap;
 use crate::catalogue::types::UI_IMAGE;
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -216,7 +217,7 @@ pub(crate) fn serve(data: &[u8]) -> Result<ContentHash, Status> {
         return Err(Status::BAD_ARGS);
     }
     let hash = hash_of(data);
-    let _serving = SERVING.lock().unwrap_or_else(PoisonError::into_inner);
+    let _serving = SERVING.relock();
     let current = CONTENT.load_full();
     if current.as_ref().is_some_and(|map| map.contains_key(&hash)) {
         return Ok(hash);

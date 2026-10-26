@@ -18,6 +18,7 @@ use enshwick::code::Pattern;
 
 pub mod archive;
 pub mod catalogue;
+mod locks;
 mod parts;
 pub mod reflect;
 

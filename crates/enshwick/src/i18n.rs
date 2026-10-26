@@ -18,6 +18,7 @@ use std::collections::BTreeMap;
 use rustc_hash::FxHashMap;
 
 use crate::content::Id;
+use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
 /// The language the player reads the game in, for a mod's own texts in its
@@ -484,10 +485,7 @@ impl Load<'_> {
         // The loader keeps the last texts it was given, so it gets all
         // of this mod's, a pack's added to the mod's own.
         let me = self.host().handle();
-        let mut handed = HANDED
-            .get_or_init(std::sync::Mutex::default)
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut handed = HANDED.get_or_init(std::sync::Mutex::default).relock();
         let all = if let Some((_, kept)) = handed.iter_mut().find(|(owner, _)| *owner == me) {
             kept.merge(texts.clone());
             kept.to_toml()

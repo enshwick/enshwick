@@ -1,6 +1,6 @@
 [package]
 name = "enshwick"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "The Enshwick Loader's modding API for Enshrouded: the one crate mods are written against"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -12,7 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.2" }
+enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.3" }
 bcdec_rs.workspace = true
 bytemuck.workspace = true
 const-sha1.workspace = true
@@ -46,6 +46,10 @@ schema = ["dep:schemars", "dep:serde_json"]
 [[test]]
 name = "pack_schemas"
 required-features = ["schema"]
+
+[[test]]
+name = "fake_second_install"
+required-features = ["test"]
 
 [[test]]
 name = "old_mods"

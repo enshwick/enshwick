@@ -14,7 +14,7 @@
 use core::cell::RefCell;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{GameEventData, GameEventFn, Header, HookFlags, Side, Status};
 use rustc_hash::FxHashSet;
@@ -22,6 +22,7 @@ use rustc_hash::FxHashSet;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -147,21 +148,18 @@ pub(crate) fn register(
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
     }
-    PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Subscriber {
-            owner,
-            type_hash,
-            callback,
-            user: user.expose_provenance(),
-        });
+    PENDING.relock().push(Subscriber {
+        owner,
+        type_hash,
+        callback,
+        user: user.expose_provenance(),
+    });
     Status::OK
 }
 
 /// Seals the subscriptions and links the event move when a mod subscribed.
 pub(crate) fn link(loader: &'static Loader) {
-    let subscribers = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let subscribers = std::mem::take(&mut *PENDING.relock());
     let equipment = crate::stats::wanted()
         .then(|| {
             let info = loader

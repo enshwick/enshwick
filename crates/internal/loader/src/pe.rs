@@ -8,32 +8,32 @@ const SERVER_EXE: &str = "enshrouded_server.exe";
 const CLIENT_EXE: &str = "enshrouded.exe";
 
 /// The offset of the word that locates the PE signature.
-pub(super) const PE_POINTER: usize = 0x3c;
+pub(crate) const PE_POINTER: usize = 0x3c;
 /// From the PE signature: the section count in the file header.
-pub(super) const SECTION_COUNT: usize = 6;
+pub(crate) const SECTION_COUNT: usize = 6;
 /// From the PE signature: the optional header's size in the file header.
-pub(super) const OPTIONAL_SIZE: usize = 20;
+pub(crate) const OPTIONAL_SIZE: usize = 20;
 /// From the PE signature: the optional header, past the signature and the
 /// file header.
-pub(super) const OPTIONAL: usize = 24;
+pub(crate) const OPTIONAL: usize = 24;
 /// From the optional header of a 64-bit image: the preferred base.
-pub(super) const IMAGE_BASE: usize = 24;
+pub(crate) const IMAGE_BASE: usize = 24;
 /// From the optional header: the mapped image's size.
-pub(super) const SIZE_OF_IMAGE: usize = 56;
+pub(crate) const SIZE_OF_IMAGE: usize = 56;
 /// From the optional header: the size of all headers.
-pub(super) const SIZE_OF_HEADERS: usize = 60;
+pub(crate) const SIZE_OF_HEADERS: usize = 60;
 /// The length of one section header.
-pub(super) const SECTION_HEADER: usize = 40;
+pub(crate) const SECTION_HEADER: usize = 40;
 /// From a section header: where the section is mapped.
-pub(super) const SECTION_ADDRESS: usize = 12;
+pub(crate) const SECTION_ADDRESS: usize = 12;
 /// From a section header: the section's size in the file.
-pub(super) const SECTION_RAW_SIZE: usize = 16;
+pub(crate) const SECTION_RAW_SIZE: usize = 16;
 /// From a section header: where the section starts in the file.
-pub(super) const SECTION_RAW_AT: usize = 20;
+pub(crate) const SECTION_RAW_AT: usize = 20;
 
 /// The side a game executable runs, from its file name; `None` for any
 /// other executable.
-pub(super) fn side_of(file_name: &str) -> Option<Side> {
+pub(crate) fn side_of(file_name: &str) -> Option<Side> {
     match file_name.to_ascii_lowercase().as_str() {
         SERVER_EXE => Some(Side::SERVER),
         CLIENT_EXE => Some(Side::CLIENT),
@@ -42,7 +42,7 @@ pub(super) fn side_of(file_name: &str) -> Option<Side> {
 }
 
 /// The little-endian `u32` at `at` in `bytes`.
-pub(super) fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
+pub(crate) fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
     bytes
         .get(at..at.checked_add(4)?)?
         .try_into()
@@ -52,11 +52,11 @@ pub(super) fn u32_at(bytes: &[u8], at: usize) -> Option<u32> {
 
 /// The fields of a 64-bit executable's headers that mapping it needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Headers {
+pub(crate) struct Headers {
     /// The preferred base.
-    pub(super) base: u64,
+    pub(crate) base: u64,
     /// The mapped image's size.
-    pub(super) size: usize,
+    pub(crate) size: usize,
     /// The size of all headers, copied to the image's start.
     header_size: usize,
     /// Each section's `(mapped at, file offset, file size)`.
@@ -69,7 +69,7 @@ impl Headers {
     /// # Errors
     ///
     /// The name of the first field the bytes lack.
-    pub(super) fn read(bytes: &[u8]) -> Result<Self, &'static str> {
+    pub(crate) fn read(bytes: &[u8]) -> Result<Self, &'static str> {
         let word = |at: usize, name| {
             u32_at(bytes, at)
                 .and_then(|word| usize::try_from(word).ok())
@@ -116,7 +116,7 @@ impl Headers {
     /// Copies the headers and sections of the executable `bytes` into
     /// `image` where Windows would map them; a part that does not fit is
     /// left out.
-    pub(super) fn copy(&self, bytes: &[u8], image: &mut [u8]) {
+    pub(crate) fn copy(&self, bytes: &[u8], image: &mut [u8]) {
         let mut copy = |to: usize, from: usize, len: usize| {
             if let (Some(dst), Some(src)) = (
                 image.get_mut(to..to.saturating_add(len)),

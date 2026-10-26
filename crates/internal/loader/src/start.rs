@@ -23,7 +23,6 @@ mod game;
 mod join_check;
 mod library;
 mod lock;
-mod pe;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;

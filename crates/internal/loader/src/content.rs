@@ -15,13 +15,14 @@
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
 use enshwick::raw::{read_at, write_at};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -102,10 +103,7 @@ pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
     if TEXTS.get().is_some() {
         return Status::TOO_LATE;
     }
-    PENDING_TEXTS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push((id, language, text.to_owned()));
+    PENDING_TEXTS.relock().push((id, language, text.to_owned()));
     Status::OK
 }
 
@@ -191,8 +189,7 @@ unsafe extern "system" fn lookup_english(
 
 /// Seals the mod texts and links the client's text lookups when there are any.
 fn seal_texts(loader: &'static Loader) {
-    let pending =
-        std::mem::take(&mut *PENDING_TEXTS.lock().unwrap_or_else(PoisonError::into_inner));
+    let pending = std::mem::take(&mut *PENDING_TEXTS.relock());
     let count = pending.len();
     let mut texts: std::collections::HashMap<u32, Vec<(u32, &'static str)>> =
         std::collections::HashMap::new();
@@ -273,7 +270,7 @@ pub(crate) fn register(
     if SERVED_LIST.get().is_some() {
         return Status::TOO_LATE;
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let patch = Patch {
         owner,
         apply: patch,
@@ -300,7 +297,7 @@ pub(crate) fn register(
 pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
     let serves = |s: &Served| s.key == key && s.patches.iter().any(|p| p.owner == owner);
     let Some(list) = SERVED_LIST.get() else {
-        let pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+        let pending = PENDING.relock();
         return match pending.iter().find(|s| serves(s)) {
             Some(entry) => {
                 entry.keeps_base.store(true, Ordering::Relaxed);
@@ -312,14 +309,11 @@ pub(crate) fn rebuild(owner: usize, key: ResourceKey) -> Status {
     let Some(entry) = list.iter().find(|s| serves(s)) else {
         return Status::BAD_ARGS;
     };
-    let _one_at_a_time = entry
-        .rebuilding
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
+    let _one_at_a_time = entry.rebuilding.relock();
     // The game resolves the resource meanwhile: the patches run outside the
     // state's lock, on a copy of the base.
     let (data, len, base, built_by) = {
-        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = entry.state.relock();
         let Some((data, len)) = state.built else {
             // The first build takes the values in force.
             return Status::OK;
@@ -387,12 +381,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     LOADED.get_or_init(|| loader);
     let renames = crate::migrations::renamed(loader);
     let stand_ins = {
-        let keys: Vec<ResourceKey> = PENDING
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .iter()
-            .map(|s| s.key)
-            .collect();
+        let keys: Vec<ResourceKey> = PENDING.relock().iter().map(|s| s.key).collect();
         let recorded = crate::clones::items(&loader.data_dir);
         let orphans = crate::standins::orphans(&recorded, &keys, |guid| renames.contains_key(guid));
         crate::standins::served(loader, &orphans)
@@ -408,7 +397,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     if !ids.is_empty() {
         crate::log!(DEBUG, "content ids: {ids}");
     }
-    let mut served = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let mut served = std::mem::take(&mut *PENDING.relock());
     let count = served.len();
     let aliases = crate::clones::update(&loader.data_dir, served.iter().map(|s| (s.key, s.base)));
     let standing = stand_ins.map_or(0, |(items, registry)| {
@@ -596,7 +585,7 @@ pub(crate) fn summary() -> crate::diag::Served {
     let served = SERVED_LIST.get().map_or(&[][..], |s| s);
     let (mut built, mut failed) = (0, 0);
     for entry in served {
-        let state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = entry.state.relock();
         built += usize::from(state.built.is_some());
         failed += usize::from(state.failed);
     }
@@ -658,15 +647,9 @@ pub(crate) fn served_recipes() -> bool {
 /// Whether `served` holds `key` with a patch of a mod `on` names and a build
 /// that has not failed.
 fn serves(served: &[Served], key: &ResourceKey, on: impl Fn(usize) -> bool) -> bool {
-    served.iter().any(|s| {
-        s.key == *key
-            && s.patches.iter().any(|p| on(p.owner))
-            && !s
-                .state
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .failed
-    })
+    served
+        .iter()
+        .any(|s| s.key == *key && s.patches.iter().any(|p| on(p.owner)) && !s.state.relock().failed)
 }
 
 fn served(handle: u32) -> Option<&'static Served> {
@@ -773,11 +756,7 @@ unsafe extern "system" fn open(
         // arguments pass unchanged.
         return unsafe { OPEN_NEXT.get()(out, database, key) };
     }
-    entry
-        .state
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .base_handle = base_handle;
+    entry.state.relock().base_handle = base_handle;
     let handle = u32::try_from(index + 1).unwrap_or(0) | SERVED;
     if !out.is_null() {
         // SAFETY: `out` is non-null by the check before it and is the open's
@@ -814,7 +793,7 @@ unsafe extern "system" fn resolve(
 
 /// The served resource, built from its base on first use.
 fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
-    let mut state = entry.state.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = entry.state.relock();
     if let Some(built) = state.built {
         return Some(built);
     }
@@ -1045,11 +1024,7 @@ mod tests {
         let served = [served_by(key, &[1, 2])];
         assert!(serves(&served, &key, |owner| owner == 2));
         assert!(!serves(&served, &key, |_| false));
-        served[0]
-            .state
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .failed = true;
+        served[0].state.relock().failed = true;
         assert!(!serves(&served, &key, |_| true));
         let other = ResourceKey { part: 1, ..key };
         assert!(!serves(&[served_by(other, &[1])], &key, |_| true));

@@ -11,10 +11,12 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use enshwick::abi::ResourceKey;
 use rustc_hash::FxHashMap;
+
+use crate::locks::Relock;
 
 /// A content hash as the game keeps it: the size, then three words.
 pub type ContentHash = [u32; 4];
@@ -218,8 +220,7 @@ impl Archive {
     fn chunk(&self, index: usize) -> Option<Arc<[u8]>> {
         if let Some((_, bytes)) = self
             .cache
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .relock()
             .iter()
             .find(|(cached, _)| *cached == index)
         {
@@ -243,7 +244,7 @@ impl Archive {
         } else {
             return None;
         };
-        let mut cache = self.cache.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut cache = self.cache.relock();
         if cache.len() >= CACHED {
             cache.remove(0);
         }
@@ -253,10 +254,7 @@ impl Archive {
 
     /// Lets go of the unpacked chunks kept for later reads.
     pub fn trim(&self) {
-        self.cache
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clear();
+        self.cache.relock().clear();
     }
 }
 

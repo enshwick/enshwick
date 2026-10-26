@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "Internal, not for mods: the Enshwick Loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
@@ -57,9 +57,9 @@ windows-sys = { workspace = true, features = [
 bytemuck.workspace = true
 
 [package.metadata.enshwick]
-# Builds only for Windows: off Windows, `cargo xtask check` lints it through
-# cargo xwin and skips its tests.
-windows-only = true
+# Most of it runs only on Windows: off Windows, `cargo xtask check` runs its
+# portable tests on the host and the rest under Wine with `--windows`.
+windows-tests = true
 
 [lints]
 workspace = true
