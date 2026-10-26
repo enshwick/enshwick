@@ -284,6 +284,11 @@ harness = false
 required-features = ["test"]
 
 [[bench]]
+name = "world"
+harness = false
+required-features = ["test"]
+
+[[bench]]
 name = "pattern_scan"
 harness = false
 

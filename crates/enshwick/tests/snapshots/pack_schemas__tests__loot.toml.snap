@@ -68,11 +68,99 @@ expression: shape
           "type": "array"
         }
       ]
+    },
+    "LootChangeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "spawn_probability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stack_size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "weight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    },
+    "ScaleEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "times": {
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "times"
+      ],
+      "type": "object"
+    },
+    "ValueEntry": {
+      "anyOf": [
+        {
+          "format": "double",
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/ScaleEntry"
+        }
+      ]
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "change": {
+      "items": {
+        "$ref": "#/$defs/LootChangeEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "drop": {
       "items": {
         "$ref": "#/$defs/DropEntry"

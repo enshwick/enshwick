@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- `World` is one pointer to what the mod resolved once, instead of 320
+  bytes: a copy is cheap, and passing it by value or moving it into a
+  closure no longer trips `clippy::large_types_passed_by_value`. Its
+  methods take `self`, so calls read the same (#536).
+
 ## [1.0.0-alpha.5] - 2026-10-26
 
 ### Added
@@ -22,6 +29,16 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Altar zone sizes are a chain any mod joins: `Load::on_altar_zone` adds a
+  filter that sees each altar's zone so far, the vanilla one first, in load
+  order, and `ZoneSizes::changed` asks for a new sizing from any thread
+  (#499).
+- The loader owns the event loop, server loop and task worker hooks:
+  `on_loop_wait`, `on_server_wait` and `cap_task_workers` keep their
+  signatures but run through the host, handlers of several mods run in load
+  order and the lowest worker cap wins; a fake host test runs them with
+  `Installed::loop_wait`, `server_wait` and `task_workers`, no longer
+  through `mid_hooks` or `run_at` (#486).
 - Game settings, hit damage types and attack categories, experience
   sources, altar actions, equipment slots and inventory error codes resolve
   through engine ids and the game's constant names; no engine number is
@@ -179,6 +196,8 @@ Each entry names the pull request that made the change.
 
 ### Removed
 
+- `control_altar_zones`, `ZoneControl`, `ZoneSize` and `SetSizesError`
+  (#499).
 - `progress::AIRBORNE_ARCHITECT`, `OpResult::TOO_LARGE`,
   `OpResult::NO_ROOM`, `ExperienceSource::from_raw` and
   `AltarAction::from_raw` (#494).

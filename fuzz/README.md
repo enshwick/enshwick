@@ -18,6 +18,7 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `reflection` | a game image's headers and reflection data |
 | `migrations` | a mod's settings migrations on an edited file, and the record of what ran |
 | `mod_manifests` | mod manifests, resolved into a load order |
+| `point_schemas` | another mod's point schemas, from its DLL or as text, written as definitions |
 | `settings_files` | the mod list, its lock, a settings schema, texts, a pack manifest |
 
 Targets that take several fields split their input at the byte `0xff`, which
@@ -36,4 +37,5 @@ holds the small seed corpus kept in the repository. A crash is written to
 `cargo +nightly fuzz run -O --target-dir target/fuzz <target> <file>`.
 A crash becomes a regression test beside the code it found, then a fix.
 
-The nightly CI lane runs every target for a few minutes.
+The nightly CI lane runs every target for a few minutes; a pull request that
+changes what the targets read runs each for a few seconds.

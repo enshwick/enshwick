@@ -346,8 +346,18 @@ fn blank_info() -> PlayerInfo {
 ///     })
 /// }
 /// ```
+///
+/// A `World` is a pointer to what the mod resolved once, so a copy is cheap:
+/// pass it by value and move it into closures.
 #[derive(Clone, Copy, Debug)]
-pub struct World {
+pub struct World(&'static Resolved);
+
+// A copy of the world is one pointer, whatever it resolves.
+const _: () = assert!(size_of::<World>() == size_of::<usize>());
+
+/// The world's component types and readers, resolved once per mod life.
+#[derive(Debug)]
+struct Resolved {
     host: Host,
     transform: ComponentType,
     used_item: ComponentType,
@@ -356,25 +366,34 @@ pub struct World {
     containers: Option<containers::Containers>,
 }
 
+static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
+
+/// The component type named `name` on the host's build.
+fn type_named(host: Host, name: &str) -> Result<ComponentType, Off> {
+    let mut hash = 0;
+    let status = (host.api().type_hash)(Str::new(name), &raw mut hash);
+    crate::load::ok(status, ComponentType(hash), || {
+        format!("component type {name}")
+    })
+}
+
 impl World {
     pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        if let Some(resolved) = RESOLVED.get() {
+            return Ok(Self(resolved));
+        }
         let host = load.host();
-        let mut world = Self {
+        let resolved = Resolved {
             host,
-            transform: ComponentType(0),
-            used_item: ComponentType(0),
-            label: None,
-            stats: None,
-            containers: None,
+            transform: type_named(host, ids::CURRENT_TRANSFORM)?,
+            used_item: type_named(host, ids::USED_ITEM)?,
+            label: type_named(host, ids::LABEL).ok(),
+            containers: containers::Containers::resolve(host),
+            stats: stats::Stats::resolve(load, host)
+                .inspect_err(|off| crate::debug!("stat reads off: {off}"))
+                .ok(),
         };
-        world.transform = world.component_type(load, ids::CURRENT_TRANSFORM)?;
-        world.used_item = world.component_type(load, ids::USED_ITEM)?;
-        world.label = world.component_type(load, ids::LABEL).ok();
-        world.containers = containers::Containers::resolve(load, &world);
-        world.stats = stats::Stats::resolve(load, &world)
-            .inspect_err(|off| crate::debug!("stat reads off: {off}"))
-            .ok();
-        Ok(world)
+        Ok(Self(RESOLVED.get_or_init(|| resolved)))
     }
 
     /// The component type named `name`, such as `keen::ecs::UsedItem`.
@@ -386,12 +405,8 @@ impl World {
     /// # Examples
     ///
     /// See [`ComponentType`].
-    pub fn component_type(&self, _load: &Load<'_>, name: &str) -> Result<ComponentType, Off> {
-        let mut hash = 0;
-        let status = (self.host.api().type_hash)(Str::new(name), &raw mut hash);
-        crate::load::ok(status, ComponentType(hash), || {
-            format!("component type {name}")
-        })
+    pub fn component_type(self, _load: &Load<'_>, name: &str) -> Result<ComponentType, Off> {
+        type_named(self.0.host, name)
     }
 
     /// A pointer to `entity`'s component of type `ty`, valid until the game
@@ -403,7 +418,8 @@ impl World {
     #[must_use]
     pub fn component(&self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
         let mut out: *const c_void = core::ptr::null();
-        let status = (self.host.api().component)(self.host.handle(), entity.0, ty.0, &raw mut out);
+        let status =
+            (self.0.host.api().component)(self.0.host.handle(), entity.0, ty.0, &raw mut out);
         (status == Status::OK && !out.is_null()).then_some(out)
     }
 
@@ -419,7 +435,7 @@ impl World {
     /// # Examples
     ///
     /// See [`WritableType`].
-    pub fn writable_type(&self, load: &Load<'_>, name: &'static str) -> Result<WritableType, Off> {
+    pub fn writable_type(self, load: &Load<'_>, name: &'static str) -> Result<WritableType, Off> {
         Ok(WritableType {
             ty: self.component_type(load, name)?,
             size: load.type_size(name)?,
@@ -581,7 +597,7 @@ impl World {
     ) -> Result<*mut c_void, WorldError> {
         let mut out: *mut c_void = core::ptr::null_mut();
         let status =
-            (self.host.api().component_write)(self.host.handle(), entity.0, ty.0, &raw mut out);
+            (self.0.host.api().component_write)(self.0.host.handle(), entity.0, ty.0, &raw mut out);
         match WorldError::check(status, WorldError::Gone) {
             Ok(()) if !out.is_null() => Ok(out),
             Ok(()) => Err(WorldError::Missing),
@@ -597,7 +613,7 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
-        let data = self.component(entity, self.transform)?;
+        let data = self.component(entity, self.0.transform)?;
         // SAFETY: `component` returned the entity's live CurrentTransform,
         // valid until the game thread moves on, and read at once.
         Some(unsafe { crate::ecs::transform_position(data.cast()) })
@@ -610,7 +626,7 @@ impl World {
     /// See [`World`].
     #[must_use]
     pub fn used_item(&self, entity: Entity) -> Option<u32> {
-        let data = self.component(entity, self.used_item)?;
+        let data = self.component(entity, self.0.used_item)?;
         // SAFETY: `component` returned the entity's live UsedItem, valid until
         // the game thread moves on; the component is the u32 item id alone.
         Some(unsafe { crate::raw::read_at::<u32>(data.cast(), 0) })
@@ -630,7 +646,7 @@ impl World {
     /// ```
     #[must_use]
     pub fn has_label(&self, entity: Entity) -> Option<bool> {
-        let label = self.label?;
+        let label = self.0.label?;
         let Some(data) = self.component(entity, label) else {
             return Some(false);
         };
@@ -648,7 +664,8 @@ impl World {
     #[must_use]
     pub fn template(&self, entity: Entity) -> Option<[u8; 16]> {
         let mut out = [0u8; 16];
-        let status = (self.host.api().entity_template)(self.host.handle(), entity.0, &raw mut out);
+        let status =
+            (self.0.host.api().entity_template)(self.0.host.handle(), entity.0, &raw mut out);
         status.is_ok().then_some(out)
     }
 
@@ -671,8 +688,8 @@ impl World {
     ///     }
     /// }
     /// ```
-    pub fn save(&self) -> Result<(), WorldError> {
-        WorldError::from_status((self.host.api().save_world)(self.host.handle()))
+    pub fn save(self) -> Result<(), WorldError> {
+        WorldError::from_status((self.0.host.api().save_world)(self.0.host.handle()))
     }
 
     /// The key of the world the server runs: its save file's name and a hash
@@ -688,8 +705,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn key(&self) -> Option<String> {
-        world_key(self.host)
+    pub fn key(self) -> Option<String> {
+        world_key(self.0.host)
     }
 }
 

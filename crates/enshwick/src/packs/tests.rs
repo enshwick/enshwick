@@ -483,3 +483,24 @@ fn item_stats_change_and_armor_only_scales() {
     let fields: Vec<Field> = pack.changes().iter().map(|(c, _)| c.field).collect();
     assert_eq!(fields, [Field::DamageMod, Field::Armor]);
 }
+
+#[test]
+fn a_loot_change_stays_on_the_server() {
+    let wood = "3f4093ae-75ed-4e5d-bd0b-784ba83b88f5";
+    let loot = format!(
+        "[[change]]\nitems = [\"{wood}\"]\nstack_size = {{ times = 2 }}\ncount = 4\nspawn_probability = 0.5\n"
+    );
+    let pack = Pack::parse("you.loot", &PackFiles::new().with(LOOT_FILE, loot)).unwrap();
+    let fields: Vec<Field> = pack.changes().iter().map(|(c, _)| c.field).collect();
+    assert_eq!(
+        fields,
+        [Field::StackSize, Field::Count, Field::SpawnProbability]
+    );
+    assert!(!pack.reaches_players());
+    let wrong = format!("[[change]]\nitems = [\"{wood}\"]\nspawn_probability = 2\n");
+    let errors = Pack::parse("you.loot", &PackFiles::new().with(LOOT_FILE, wrong)).unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "loot.toml:1:1: change 1: spawn_probability 2 is not from 0 to 1"
+    );
+}

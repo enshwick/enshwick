@@ -10,6 +10,9 @@ use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
 use enshwick::content::Guid;
 use enshwick::content::changes::{Change, Entry, Field};
 use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
+use enshwick::content::loot_tables::{
+    LootLayout, change_fill_table, change_random_loot, fill_items,
+};
 use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeChanges, RecipeLayout, change_recipes_in};
 use enshwick::state::Hold;
 use enshwick_gamedata::catalogue;
@@ -48,6 +51,8 @@ struct Sealed {
     patched: OnceLock<Vec<ResourceKey>>,
     /// The template each item with changed container slots places.
     templates: OnceLock<FxHashMap<Guid, ResourceKey>>,
+    /// The items whose loot changed at start.
+    loot_items: OnceLock<Vec<Guid>>,
 }
 
 impl Sealed {
@@ -255,6 +260,7 @@ pub(crate) fn serve(
         slots_order,
         patched: OnceLock::new(),
         templates: OnceLock::new(),
+        loot_items: OnceLock::new(),
     });
     let mut patches = Vec::new();
     if !items.is_empty() {
@@ -271,6 +277,7 @@ pub(crate) fn serve(
         patches.push(patch);
     }
     patches.extend(container_patches(loader));
+    patches.extend(loot_patches(loader));
     let _first = sealed
         .patched
         .set(patches.iter().map(|(key, _, _)| *key).collect());
@@ -332,6 +339,14 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
             ));
         }
     }
+    let looted = sealed.loot_items.get();
+    for item in merged.entries(Entry::Loot) {
+        if !looted.is_some_and(|items| items.contains(&item)) {
+            return Err(format!(
+                "the loot of {item} changes for the first time, which takes a restart"
+            ));
+        }
+    }
     report(loader, &conflicts);
     sealed.merged.store(Arc::new(merged));
     *declared = next;
@@ -352,6 +367,122 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
             failed.join(", ")
         ))
     }
+}
+
+/// The loader's patches of the loot tables the changes reach: the random
+/// loot table, and each container fill table that names a changed item.
+fn loot_patches(
+    loader: &'static Loader,
+) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+    let Some(sealed) = CHANGES.sealed.get() else {
+        return Vec::new();
+    };
+    let items: FxHashMap<u32, Guid> = sealed
+        .merged()
+        .entries(Entry::Loot)
+        .into_iter()
+        .map(|item| (item.id(), item))
+        .collect();
+    let _first = sealed.loot_items.set(items.values().copied().collect());
+    if items.is_empty() {
+        return Vec::new();
+    }
+    let facts = catalogue::Reflected(&loader.reflection);
+    let hashes = catalogue::type_hash(catalogue::LOOT_RANDOM_TABLE)
+        .zip(catalogue::type_hash(catalogue::LOOT_FILL_TABLE));
+    let (Ok(layout), Some(archive), Some((random, fill))) =
+        (LootLayout::resolve(&facts), crate::archive::game(), hashes)
+    else {
+        crate::log!(
+            WARN,
+            "loot changes are off: this build does not reflect the loot tables, or the game's archive does not read"
+        );
+        return Vec::new();
+    };
+    let items: &'static FxHashMap<u32, Guid> = Box::leak(Box::new(items));
+    let mut patches = Vec::new();
+    let mut add = |key: ResourceKey, fill: bool| {
+        let patch: &'static LootPatch = Box::leak(Box::new(LootPatch {
+            layout,
+            items,
+            fill,
+        }));
+        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+        patches.push((key, build_loot as enshwick::abi::ResourcePatchFn, user));
+    };
+    for key in archive.keys_of(random) {
+        add(key, false);
+    }
+    let mut tables = 0;
+    for key in archive.keys_of(fill) {
+        let names = archive.resource(&key).is_some_and(|table| {
+            fill_items(&layout, &table)
+                .iter()
+                .any(|id| items.contains_key(id))
+        });
+        if names {
+            add(key, true);
+            tables += 1;
+        }
+    }
+    crate::log!(
+        INFO,
+        "{} items get changed loot, in {tables} container fill tables",
+        items.len()
+    );
+    patches
+}
+
+/// What the loader's patch of a loot table needs: the layout, the changed
+/// items by game id, and whether the table is a fill table or the random
+/// loot table.
+struct LootPatch {
+    layout: LootLayout,
+    items: &'static FxHashMap<u32, Guid>,
+    fill: bool,
+}
+
+/// The loader's patch of a loot table: the base with the values the
+/// changes of the mods still on give its items.
+unsafe extern "system" fn build_loot(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the `LootPatch` `loot_patches` leaked, which lives
+    // for the process.
+    let patch = unsafe { &*user.cast::<LootPatch>() };
+    let mut bytes = vec![0; base_len];
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let sealed = CHANGES.sealed.get()?;
+        let merged = sealed.merged();
+        let value = |id: u32, field: Field, base: f64| {
+            let item = *patch.items.get(&id)?;
+            merged.value(Key::new(item, field), base, |m| on(sealed.loader, m))
+        };
+        if patch.fill {
+            change_fill_table(&patch.layout, &bytes, &value)
+        } else {
+            change_random_loot(&patch.layout, &bytes, &value)
+        }
+    }));
+    let Ok(Some((built, _))) = built else {
+        return Status::REFUSED;
+    };
+    // The game reads the resource for the life of the process.
+    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
+    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // writable for the call.
+    unsafe { out.write(built.as_ptr()) };
+    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // writable for the call.
+    unsafe { out_len.write(built.len()) };
+    Status::OK
 }
 
 /// The loader's patches of the templates the items with changed container
@@ -747,6 +878,9 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
         Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient => recipes(),
         Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
+        Field::StackSize | Field::Count | Field::SpawnProbability | Field::Weight => {
+            LootLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()
+        }
         Field::Armor => {
             constant(catalogue::ITEM_ARMOR)
                 && constant(catalogue::ITEM_ARMOR_SET)

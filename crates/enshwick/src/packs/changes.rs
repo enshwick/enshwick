@@ -5,14 +5,18 @@ use std::collections::HashMap;
 use crate::content::Guid;
 use crate::content::changes::{Change, Entry, Field, Value};
 
-use super::entries::{ItemsFile, RecipesFile, ValueEntry};
+use super::entries::{ItemsFile, LootFile, RecipesFile, ValueEntry};
 use super::files::PackError;
 use super::pack::Reader;
-use super::{ITEMS_FILE, RECIPES_FILE};
+use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
 type RecipeField = (Field, Option<(Guid, String)>, Value);
+
+/// One `[[change]]` table read: where it starts, the items it names and
+/// the value it gives each field.
+type ChangeEntry<'a> = (usize, &'a [String], Vec<(Field, Option<ValueEntry>)>);
 
 /// The source of a change: the file and line, then the name the pack wrote
 /// unless it is a GUID.
@@ -59,28 +63,71 @@ pub(super) fn item_changes(
     items_file: &ItemsFile,
     text: &str,
 ) -> Vec<(Change, String)> {
-    let file = ITEMS_FILE;
+    let entries: Vec<ChangeEntry<'_>> = items_file
+        .change
+        .iter()
+        .map(|entry| {
+            let e = entry.get_ref();
+            let fields = vec![
+                (Field::MaxStackSize, e.max_stack),
+                (Field::Slots, e.slots),
+                (Field::DamageMod, e.damage_mod),
+                (Field::SpeedMod, e.speed_mod),
+                (Field::Armor, e.armor),
+                (Field::BurnTime, e.burn_time),
+                (Field::EnergyOutput, e.energy_output),
+                (Field::ComfortAmount, e.comfort_amount),
+            ];
+            (entry.span().start, e.items.as_slice(), fields)
+        })
+        .collect();
+    changes_of(reader, ITEMS_FILE, Entry::Item, &entries, text)
+}
+
+/// The checked changes of `loot_file`, each with its source as
+/// [`item_changes`] gives it.
+pub(super) fn loot_changes(
+    reader: &mut Reader<'_>,
+    loot_file: &LootFile,
+    text: &str,
+) -> Vec<(Change, String)> {
+    let entries: Vec<ChangeEntry<'_>> = loot_file
+        .change
+        .iter()
+        .map(|entry| {
+            let e = entry.get_ref();
+            let fields = vec![
+                (Field::StackSize, e.stack_size),
+                (Field::Count, e.count),
+                (Field::SpawnProbability, e.spawn_probability),
+                (Field::Weight, e.weight),
+            ];
+            (entry.span().start, e.items.as_slice(), fields)
+        })
+        .collect();
+    changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text)
+}
+
+/// The checked changes of one file's `[[change]]` tables of `kind`: each
+/// with where it starts, the items it names and its fields.
+fn changes_of(
+    reader: &mut Reader<'_>,
+    file: &str,
+    kind: Entry,
+    entries: &[ChangeEntry<'_>],
+    text: &str,
+) -> Vec<(Change, String)> {
     let mut out = Vec::new();
     let mut seen: HashMap<(Guid, Field), usize> = HashMap::new();
-    for (index, entry) in items_file.change.iter().enumerate() {
-        let at = entry.span().start;
+    for (index, (at, items, given)) in entries.iter().enumerate() {
+        let at = *at;
         let line = PackError::at(file, text, at, "").line;
-        let e = entry.get_ref();
         let number = index + 1;
-        let fields: Vec<(Field, Value)> = [
-            (Field::MaxStackSize, e.max_stack),
-            (Field::Slots, e.slots),
-            (Field::DamageMod, e.damage_mod),
-            (Field::SpeedMod, e.speed_mod),
-            (Field::Armor, e.armor),
-            (Field::BurnTime, e.burn_time),
-            (Field::EnergyOutput, e.energy_output),
-            (Field::ComfortAmount, e.comfort_amount),
-        ]
-        .into_iter()
-        .filter_map(|(field, v)| v.map(|v| (field, value(v))))
-        .collect();
-        if e.items.is_empty() {
+        let fields: Vec<(Field, Value)> = given
+            .iter()
+            .filter_map(|(field, v)| v.map(|v| (*field, value(v))))
+            .collect();
+        if items.is_empty() {
             reader.error(
                 file,
                 text,
@@ -91,7 +138,7 @@ pub(super) fn item_changes(
         if fields.is_empty() {
             let names: Vec<&str> = Field::ALL
                 .iter()
-                .filter(|f| f.entry() == Entry::Item)
+                .filter(|f| f.entry() == kind)
                 .map(|f| f.name())
                 .collect();
             reader.error(
@@ -111,7 +158,7 @@ pub(super) fn item_changes(
                 Err(why) => reader.error(file, text, at, format!("change {number}: {why}")),
             }
         }
-        for name in &e.items {
+        for name in *items {
             let Some((item, _)) = reader.reference(file, text, at, name, "item", "") else {
                 continue;
             };
