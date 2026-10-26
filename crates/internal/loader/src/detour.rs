@@ -576,9 +576,9 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
     if let Some(stack) = Stack::at(context.Rsp) {
         // SAFETY: the caller keeps every other thread, the stack's owner
         // among them, suspended for the call and vouches for the moved
-        // addresses. A word equal to a moved
-        // address is a return address, or a stale copy of one: either way the
-        // trampoline holds the same instruction.
+        // addresses. A word equal to a moved address is a return address, or
+        // a stale copy of one: either way the trampoline holds the same
+        // instruction.
         unsafe { stack.rewrite(find) };
     }
 }
