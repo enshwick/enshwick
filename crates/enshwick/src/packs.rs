@@ -202,6 +202,8 @@ mod pack;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "schema")]
+pub use entries::schemas;
 pub use files::*;
 pub use manifest::*;
 pub use pack::*;

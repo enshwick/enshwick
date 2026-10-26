@@ -176,6 +176,9 @@ pub(super) struct LootFile {
 #[cfg(feature = "schema")]
 #[must_use]
 pub fn schemas() -> Vec<(&'static str, String)> {
+    use super::manifest::PackManifest;
+    use super::{ITEMS_FILE, LOOT_FILE, MANIFEST_FILE, RECIPES_FILE, WORKSHOPS_FILE};
+
     #[derive(schemars::JsonSchema)]
     #[schemars(deny_unknown_fields)]
     #[expect(dead_code, reason = "only its schema is read")]
