@@ -1,0 +1,30 @@
+# Changelog
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Each entry names the pull request that made the change.
+
+## [Unreleased]
+
+## [1.0.0-alpha.3] - 2026-10-26
+
+### Added
+
+- `manifest!` takes `was: [...]` for a renamed mod (#369) and
+  `points: [...]` for the extension points a mod defines (#394), and checks
+  that a mod id has an author part (#378).
+- `#[point]` writes `Point::SCHEMA`, and `#[derive(Shape)]` writes the
+  schema names and types with their doc comments; `#[point]` refuses a type
+  a schema cannot describe (#394).
+- `#[config(group)]` for a table of settings (#399) and `#[config(first = n)]`
+  for the number of a list's first element (#425).
+
+## [1.0.0-alpha.2] - 2026-10-26
+
+### Removed
+
+- Chat command generation for actions (#336).
+
+## [1.0.0-alpha.1] - 2026-10-26
+
+The first version on crates.io (#347).
