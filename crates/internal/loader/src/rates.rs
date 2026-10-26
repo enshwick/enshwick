@@ -12,6 +12,7 @@ pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// The kill experience formula: its rounded experience, combat factor in.
 pub(crate) const KILL: &str = "experience.kill";
@@ -95,7 +96,7 @@ const ONE: u32 = 0x3f80_0000;
 /// One mod's declared rate and its factor, as `f32` bits.
 #[derive(Debug)]
 struct Declared {
-    owner: usize,
+    owner: ModIndex,
     rate: RateId,
     factor: AtomicU32,
 }
@@ -127,7 +128,7 @@ impl Rates {
     /// `available` and which takes part in the join check when `joins`.
     pub(crate) fn declare(
         &self,
-        owner: usize,
+        owner: ModIndex,
         rate: RateId,
         available: bool,
         joins: bool,
@@ -156,7 +157,7 @@ impl Rates {
     }
 
     /// Puts `factor` in force for mod `owner`'s declared `rate`.
-    pub(crate) fn set(&self, owner: usize, rate: RateId, factor: f32) -> Status {
+    pub(crate) fn set(&self, owner: ModIndex, rate: RateId, factor: f32) -> Status {
         if !is_valid_factor(factor) {
             return Status::BAD_ARGS;
         }
@@ -196,7 +197,7 @@ impl Rates {
 
     /// The factor in force for `rate`: the factors of the mods that declared
     /// it and are not `off`, combined; 1 before the seal.
-    pub(crate) fn factor(&self, rate: RateId, off: impl Fn(usize) -> bool) -> f32 {
+    pub(crate) fn factor(&self, rate: RateId, off: impl Fn(ModIndex) -> bool) -> f32 {
         let Some(sealed) = self.sealed.get() else {
             return 1.0;
         };
@@ -216,7 +217,7 @@ mod tests {
     const COMBAT: RateId = RateId::EXPERIENCE_COMBAT;
     const MINING: RateId = RateId::EXPERIENCE_MINING;
 
-    fn on(_owner: usize) -> bool {
+    fn on(_owner: ModIndex) -> bool {
         false
     }
 
@@ -231,11 +232,14 @@ mod tests {
     fn several_mods_factors_multiply_in_any_order() {
         let rates = Rates::new();
         for owner in [0, 1, 2] {
-            assert_eq!(rates.declare(owner, COMBAT, true, true), Status::OK);
+            assert_eq!(
+                rates.declare(ModIndex::new(owner), COMBAT, true, true),
+                Status::OK
+            );
         }
-        assert_eq!(rates.set(0, COMBAT, 2.0), Status::OK);
+        assert_eq!(rates.set(ModIndex::new(0), COMBAT, 2.0), Status::OK);
         rates.seal();
-        assert_eq!(rates.set(2, COMBAT, 1.5), Status::OK);
+        assert_eq!(rates.set(ModIndex::new(2), COMBAT, 1.5), Status::OK);
         assert_eq!(rates.factor(COMBAT, on), 3.0);
         assert_eq!(rates.factor(MINING, on), 1.0);
         assert!(rates.declared(COMBAT) && !rates.declared(MINING));
@@ -244,21 +248,21 @@ mod tests {
     #[test]
     fn a_mod_that_is_off_drops_out_of_the_product() {
         let rates = Rates::new();
-        rates.declare(0, COMBAT, true, true);
-        rates.declare(1, COMBAT, true, true);
-        rates.set(0, COMBAT, 4.0);
-        rates.set(1, COMBAT, 0.5);
+        rates.declare(ModIndex::new(0), COMBAT, true, true);
+        rates.declare(ModIndex::new(1), COMBAT, true, true);
+        rates.set(ModIndex::new(0), COMBAT, 4.0);
+        rates.set(ModIndex::new(1), COMBAT, 0.5);
         rates.seal();
-        assert_eq!(rates.factor(COMBAT, |owner| owner == 1), 4.0);
+        assert_eq!(rates.factor(COMBAT, |owner| owner == ModIndex::new(1)), 4.0);
     }
 
     #[test]
     fn the_product_is_held_to_the_largest_factor() {
         let rates = Rates::new();
-        rates.declare(0, COMBAT, true, true);
-        rates.declare(1, COMBAT, true, true);
-        rates.set(0, COMBAT, 100.0);
-        rates.set(1, COMBAT, 100.0);
+        rates.declare(ModIndex::new(0), COMBAT, true, true);
+        rates.declare(ModIndex::new(1), COMBAT, true, true);
+        rates.set(ModIndex::new(0), COMBAT, 100.0);
+        rates.set(ModIndex::new(1), COMBAT, 100.0);
         rates.seal();
         assert_eq!(rates.factor(COMBAT, on), enshwick::rates::MAX_FACTOR);
     }
@@ -266,16 +270,39 @@ mod tests {
     #[test]
     fn declarations_are_refused_as_the_abi_says() {
         let rates = Rates::new();
-        assert_eq!(rates.declare(0, RateId(0), true, true), Status::BAD_ARGS);
-        assert_eq!(rates.declare(0, COMBAT, false, true), Status::MISSING);
-        assert_eq!(rates.set(0, COMBAT, 2.0), Status::BAD_ARGS, "undeclared");
-        assert_eq!(rates.declare(0, COMBAT, true, true), Status::OK);
-        assert_eq!(rates.declare(0, COMBAT, true, true), Status::OK, "twice");
+        assert_eq!(
+            rates.declare(ModIndex::new(0), RateId(0), true, true),
+            Status::BAD_ARGS
+        );
+        assert_eq!(
+            rates.declare(ModIndex::new(0), COMBAT, false, true),
+            Status::MISSING
+        );
+        assert_eq!(
+            rates.set(ModIndex::new(0), COMBAT, 2.0),
+            Status::BAD_ARGS,
+            "undeclared"
+        );
+        assert_eq!(
+            rates.declare(ModIndex::new(0), COMBAT, true, true),
+            Status::OK
+        );
+        assert_eq!(
+            rates.declare(ModIndex::new(0), COMBAT, true, true),
+            Status::OK,
+            "twice"
+        );
         for factor in [-1.0, 100.5, f32::NAN, f32::INFINITY] {
-            assert_eq!(rates.set(0, COMBAT, factor), Status::BAD_ARGS);
+            assert_eq!(
+                rates.set(ModIndex::new(0), COMBAT, factor),
+                Status::BAD_ARGS
+            );
         }
         rates.seal();
-        assert_eq!(rates.declare(1, COMBAT, true, true), Status::TOO_LATE);
+        assert_eq!(
+            rates.declare(ModIndex::new(1), COMBAT, true, true),
+            Status::TOO_LATE
+        );
         assert_eq!(rates.factor(COMBAT, on), 1.0);
     }
 
@@ -283,16 +310,25 @@ mod tests {
     fn only_a_mod_that_joins_declares_a_rate_clients_count() {
         let rates = Rates::new();
         let speed = RateId::WORKSHOP_SPEED;
-        assert_eq!(rates.declare(0, speed, true, false), Status::REFUSED);
-        assert_eq!(rates.declare(0, speed, true, true), Status::OK);
-        assert_eq!(rates.declare(1, COMBAT, true, false), Status::OK);
+        assert_eq!(
+            rates.declare(ModIndex::new(0), speed, true, false),
+            Status::REFUSED
+        );
+        assert_eq!(
+            rates.declare(ModIndex::new(0), speed, true, true),
+            Status::OK
+        );
+        assert_eq!(
+            rates.declare(ModIndex::new(1), COMBAT, true, false),
+            Status::OK
+        );
     }
 
     #[test]
     fn nothing_counts_before_the_seal() {
         let rates = Rates::new();
-        rates.declare(0, COMBAT, true, true);
-        rates.set(0, COMBAT, 2.0);
+        rates.declare(ModIndex::new(0), COMBAT, true, true);
+        rates.set(ModIndex::new(0), COMBAT, 2.0);
         assert_eq!(rates.factor(COMBAT, on), 1.0);
         assert!(!rates.declared(COMBAT));
     }
