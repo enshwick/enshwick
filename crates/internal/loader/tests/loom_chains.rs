@@ -2,7 +2,7 @@
 //! chain while the loader rewires it past a faulted mod, or trades a
 //! reloaded mod's link, only ever follows a slot to a link or the original.
 //!
-//! `RUSTFLAGS="--cfg loom" cargo test -p enshwick-loader --test loom_chains --release`
+//! Run with `RUSTFLAGS="--cfg loom" cargo test -p enshwick-loader --test loom_chains --release`.
 
 #![cfg(loom)]
 
