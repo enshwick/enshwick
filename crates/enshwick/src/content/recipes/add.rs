@@ -16,10 +16,12 @@ pub const WORKSHOP_RECIPES: usize = 512;
 /// which [`Load::add_recipe`] adds, while the game's limit holds.
 pub const RESERVED_FOR_SINGLE: usize = 16;
 
-/// The most recipes one workshop takes on the running game: [`usize::MAX`]
-/// once the loader has lifted the game's limit, else [`WORKSHOP_RECIPES`],
-/// also outside the game. The answer is final once
-/// the hooks are armed, before the game first reads the recipe registry.
+/// The most recipes one workshop takes on the running game: [`usize::MAX`] once
+/// the loader has lifted the game's limit, else [`WORKSHOP_RECIPES`], also
+/// outside the game.
+///
+/// The answer is final once the hooks are armed, before the game first reads
+/// the recipe registry.
 ///
 /// # Examples
 ///
@@ -184,9 +186,10 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 }
 
 /// The recipe registry with `recipe` after the others, unless its workshop
-/// already holds `limit` recipes. [`Load::add_recipe`] serves it with
-/// [`workshop_limit`]; call it from a [`Load::serve`] builder of your own to
-/// combine it with other edits.
+/// already holds `limit` recipes.
+///
+/// [`Load::add_recipe`] serves it with [`workshop_limit`]; call it from a
+/// [`Load::serve`] builder of your own to combine it with other edits.
 ///
 /// # Examples
 ///

@@ -420,14 +420,14 @@ const BLOB_STRING: usize = 8;
 /// A `BlobVariant`: type hash, offset from its second word, size.
 const VARIANT: usize = 12;
 
-/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed
-/// from, made from the vanilla one in `like`: its id, object GUID, the tags
-/// it names, its meter and tooltip lines written in, the rest
-/// kept. `None` when `like` is too short for the layout, or when the item
-/// has a meter and `like` already has an entity of its own (a weapon's
-/// durability), which the meter's would replace. [`Load::add_item`] serves
-/// it; call it from a [`Load::serve`] builder of your own for an edit
-/// `add_item` does not make.
+/// `item`'s `ItemInfo` under `guid`, the item's own or one it was renamed from,
+/// made from the vanilla one in `like`: its id, object GUID, the tags it names,
+/// its meter and tooltip lines written in, the rest kept.
+///
+/// `None` when `like` is too short for the layout, or when the item has a meter
+/// and `like` already has an entity of its own (a weapon's durability), which
+/// the meter's would replace. [`Load::add_item`] serves it; call it from a
+/// [`Load::serve`] builder of your own for an edit `add_item` does not make.
 ///
 /// # Examples
 ///
@@ -572,8 +572,10 @@ pub fn list_meter_template(
 }
 
 /// The item registry with `guid` listed after the others, and its debug name
-/// beside it; `None` when the registry does not have the layout's arrays or
-/// lists another item with `guid`'s game id, which would stand for both.
+/// beside it.
+///
+/// `None` when the registry does not have the layout's arrays or lists another
+/// item with `guid`'s game id, which would stand for both.
 ///
 /// # Examples
 ///

@@ -90,9 +90,12 @@ impl AltarInfo {
 }
 
 /// The size a mod that controls altar zones gives one altar, for
-/// [`HostApi::set_altar_zones`](super::HostApi::set_altar_zones): its vanilla zone at `level` grown by `grow`
-/// cells on every horizontal side and made `height` cells tall. The loader
-/// applies it while the altar is at `level`, the vanilla size otherwise.
+/// [`HostApi::set_altar_zones`](super::HostApi::set_altar_zones): its vanilla
+/// zone at `level` grown by `grow` cells on every horizontal side and made
+/// `height` cells tall.
+///
+/// The loader applies it while the altar is at `level`, the vanilla size
+/// otherwise.
 ///
 /// # Examples
 ///

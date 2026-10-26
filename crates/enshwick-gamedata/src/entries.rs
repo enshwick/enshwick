@@ -326,3 +326,6 @@ impl Constant {
         }
     }
 }
+
+#[cfg(test)]
+mod proofs;

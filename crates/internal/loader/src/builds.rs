@@ -153,9 +153,11 @@ pub fn load() -> Vec<Table> {
         .collect()
 }
 
-/// The table for the running build among `tables`: its own when there is
-/// one; else, unless the settings turned it off, the newest table of its side
-/// carried over by patterns in `code` (the code section and its RVA).
+/// The table for the running build among `tables`.
+///
+/// Its own when there is one; else, unless the settings turned it off, the
+/// newest table of its side carried over by patterns in `code` (the code
+/// section and its RVA).
 #[must_use]
 pub fn select(
     tables: &[Table],

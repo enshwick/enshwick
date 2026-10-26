@@ -472,7 +472,7 @@ impl Code {
         self.vex(1, 1, true, 0xeb, [a, sources[0], sources[1]]);
     }
 
-    /// `vpord zmm<a>, zmm<b>, zmm<c>`
+    /// `vpord zmm<a>, zmm<b>, zmm<c>`.
     fn or_zmm(&mut self, a: u8, b: u8, c: u8) {
         self.evex(1, 1, false, 2, 0xeb, [a, b, c]);
     }
@@ -483,13 +483,13 @@ impl Code {
         self.emit(&[0xfe]);
     }
 
-    /// `vextracti64x4 ymm<to>, zmm<from>, 1`
+    /// `vextracti64x4 ymm<to>, zmm<from>, 1`.
     fn upper_zmm(&mut self, to: u8, from: u8) {
         self.evex(3, 1, true, 2, 0x3b, [from, 0, to]);
         self.emit(&[1]);
     }
 
-    /// `vptest ymm0, ymm0`
+    /// `vptest ymm0, ymm0`.
     fn test_ymm0(&mut self) {
         self.vex(2, 1, true, 0x17, [0, 0, 0]);
     }
@@ -527,7 +527,7 @@ impl Code {
         }
     }
 
-    /// `vzeroupper`
+    /// `vzeroupper`.
     fn vzeroupper(&mut self) {
         self.emit(&[0xc5, 0xf8, 0x77]);
     }
@@ -538,12 +538,12 @@ impl Code {
         self.jump(&[0x0f, 0x85])
     }
 
-    /// `jnz`
+    /// `jnz`.
     fn jnz(&mut self) -> usize {
         self.jump(&[0x0f, 0x85])
     }
 
-    /// `jmp`
+    /// `jmp`.
     fn jmp(&mut self) -> usize {
         self.jump(&[0xe9])
     }
@@ -553,17 +553,17 @@ impl Code {
         self.emit(&[0x41, 0xbc, path, 0, 0, 0]);
     }
 
-    /// `xor r12d, r12d`
+    /// `xor r12d, r12d`.
     fn clear_path(&mut self) {
         self.emit(&[0x45, 0x31, 0xe4]);
     }
 
-    /// `setnz r12b`
+    /// `setnz r12b`.
     fn path_if_nonzero(&mut self) {
         self.emit(&[0x41, 0x0f, 0x95, 0xc4]);
     }
 
-    /// `and rsp, -64; sub rsp, room`
+    /// `and rsp, -64; sub rsp, room`.
     fn frame(&mut self, room: u32) {
         self.emit(&[0x48, 0x83, 0xe4, 0xc0, 0x48, 0x81, 0xec]);
         self.emit(&room.to_le_bytes());
@@ -875,7 +875,8 @@ mod tests {
         }])
         .into_iter()
         .next()
-        .unwrap()?;
+        .unwrap()
+        .map_err(|e| e.to_string())?;
         stubs.finish(0, pending.original);
         assert!(stubs.seal());
         assert!(detour::commit(&[&pending], &[]));

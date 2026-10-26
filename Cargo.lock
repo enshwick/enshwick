@@ -450,6 +450,7 @@ version = "1.0.0-alpha.3"
 dependencies = [
  "criterion",
  "enshwick",
+ "proptest",
  "rustc-hash",
  "ruzstd",
  "serde",
