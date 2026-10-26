@@ -6,9 +6,9 @@
 //! finds it again, and when the table is ported, the instruction is ported
 //! like any address and read on the new build.
 
-use anyhow::{Context as _, bail};
 use std::collections::HashMap;
 
+use anyhow::{Context as _, bail};
 use enshwick_gamedata::{Locate, Table};
 
 use super::exe::Exe;

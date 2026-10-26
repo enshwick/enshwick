@@ -16,7 +16,6 @@
 //! before any item names it. Until both have happened [`ready`] stays false
 //! and items keep their vanilla icons.
 
-use crate::pinned;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -29,6 +28,7 @@ use crate::catalogue::types::UI_IMAGE;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

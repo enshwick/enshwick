@@ -16,7 +16,6 @@
 //! hooked at start, and on a client a mod the server's join turned off.
 //! Those take a restart.
 
-use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -28,6 +27,7 @@ use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 
 use crate::host::{self, Loader, Subscription};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 /// The folder under `mods/enshwick/` that holds the copies mods run from.
 pub(crate) const COPIES_DIR: &str = "reload";

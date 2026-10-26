@@ -2,12 +2,13 @@
 
 use std::collections::HashMap;
 
-use super::FakeHost;
-use super::Installed;
-use super::table;
 use crate::abi::Level;
 use crate::abi::Str;
 use crate::migrations::MigrationError;
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
 
 impl FakeHost {
     /// The settings file another mod `id` keeps, which

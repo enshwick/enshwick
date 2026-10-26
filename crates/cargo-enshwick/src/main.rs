@@ -1,11 +1,11 @@
 //! `cargo enshwick`: start an Enshwick mod, build it and install it into the game,
 //! and port the build rows to a new game build.
 
-use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anyhow::Context as _;
 use clap::{Parser, Subcommand, ValueEnum};
 use enshwick::content::Guid;
 

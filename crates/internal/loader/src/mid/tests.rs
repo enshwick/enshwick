@@ -2,8 +2,9 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
 use windows_sys::Win32::System::Memory::PAGE_EXECUTE_READWRITE;
 
-use super::*;
 use crate::detour::{self, Request};
+
+use super::*;
 
 type Unary = extern "system" fn(u32) -> u32;
 

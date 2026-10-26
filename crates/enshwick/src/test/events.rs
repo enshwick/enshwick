@@ -1,10 +1,11 @@
 //! Events: the mod's subscriptions, raised loader and game events, mod events.
 
-use super::table;
-use super::{FakeHost, Installed};
 use crate::abi::Event;
 use crate::abi::Header;
 use crate::events::Kind;
+
+use super::table;
+use super::{FakeHost, Installed};
 
 impl FakeHost {
     /// A game event type of the fake build: listed by

@@ -19,7 +19,6 @@
 //! from unloading to unloaded once they are gone. The loader wraps it and
 //! reports the turns of the server's world after the step.
 
-use crate::pinned::{self, Symbol};
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
@@ -29,6 +28,7 @@ use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::memory::{read, write};
+use crate::pinned::{self, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

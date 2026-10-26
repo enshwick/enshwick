@@ -7,11 +7,12 @@
 //! [`Load::derive_recipes`] and [`Load::add_workshop`] list what they add
 //! here on the client; the dedicated server has no UI bundle.
 
-use super::workshops::WorkshopId;
-use super::{Blob, EngineFacts, Guid, types};
 use crate::abi::Side;
 use crate::engine_ids as ids;
 use crate::{Load, Off};
+
+use super::workshops::WorkshopId;
+use super::{Blob, EngineFacts, Guid, types};
 
 /// The client's UI bundle resource, which holds the crafting menu.
 pub const UI_BUNDLE: Guid = Guid::parse("46e14df6-fb8f-4f66-9463-e23b9e19e48e");

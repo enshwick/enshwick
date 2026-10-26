@@ -1,9 +1,10 @@
 //! The slots of the containers items place, read and changed in the
 //! template each item places.
 
-use super::{Blob, EngineFacts};
 use crate::Off;
 use crate::engine_ids as ids;
+
+use super::{Blob, EngineFacts};
 
 /// A `BlobVariant` in a template's component list: type hash, offset from
 /// its second word, size.

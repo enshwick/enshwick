@@ -8,7 +8,6 @@
 //! for clients, the `Network*` and `Client*` components, are refused: the
 //! server's systems overwrite them from their source every step.
 
-use crate::pinned;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
@@ -16,6 +15,7 @@ use enshwick::abi::Status;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
+use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

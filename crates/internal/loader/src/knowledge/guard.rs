@@ -19,9 +19,6 @@
 //! worker threads: clearing `al` there takes the path of a malformed action,
 //! which consumes the request without queueing it.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
-use crate::registry::Registry;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
@@ -33,6 +30,9 @@ use enshwick::abi::{
 use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 use crate::mid::MidLink;
+use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 use crate::settings::KnowledgeGuard;
 
 use super::{Layout, definition, layout, quest_set, read};

@@ -2,9 +2,9 @@
 //! [`DIR`], read into rows and written for a new build with the code
 //! patterns that find each entry on a build without a table.
 
-use anyhow::{Context as _, anyhow, bail};
 use std::collections::HashMap;
 
+use anyhow::{Context as _, anyhow, bail};
 use enshwick_gamedata::Locate;
 use toml_edit::{DocumentMut, Item, Table as TomlTable, Value};
 

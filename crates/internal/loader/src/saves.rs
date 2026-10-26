@@ -13,8 +13,6 @@
 //! (client 410 and 426). There the key is the last one built since the
 //! hosted game started to initialise, and none once that game ends.
 
-use crate::pinned;
-use crate::pinned::Constant;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
@@ -24,6 +22,8 @@ use enshwick_gamedata::reflect::fnv1a32;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::pinned;
+use crate::pinned::Constant;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[

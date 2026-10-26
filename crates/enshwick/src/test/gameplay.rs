@@ -1,8 +1,5 @@
 //! Gameplay answers: damage, knowledge, buffs, altars, survivors, stats and checks.
 
-use super::Installed;
-use super::stats;
-use super::table;
 use crate::abi::AltarInfo;
 use crate::abi::AltarZone;
 use crate::abi::BedCheck;
@@ -16,6 +13,10 @@ use crate::abi::SkillCheck;
 use crate::abi::Summon;
 use crate::abi::SurvivorLookup;
 use crate::abi::ZoneCheck;
+
+use super::Installed;
+use super::stats;
+use super::table;
 
 #[expect(
     clippy::unused_self,

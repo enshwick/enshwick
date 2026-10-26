@@ -19,7 +19,6 @@
 //! less the next one's. Without diagnostics the thunks are the plain ones
 //! and count nothing.
 
-use crate::mod_index::ModIndex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -28,6 +27,8 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
 };
 use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
 use windows_sys::Win32::System::Threading::{TlsAlloc, TlsGetValue};
+
+use crate::mod_index::ModIndex;
 
 pub(crate) use crate::chains::Counter;
 use crate::chains::{Chains, Hop};
