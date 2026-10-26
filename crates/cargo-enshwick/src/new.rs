@@ -315,8 +315,9 @@ impl Mod for {type} {
             // beside, each with a version range ("" for any):
             // recommends: ["other-mod" => ">=0.2, <1.0"],
             // breaks: ["old-mod" => "<0.3"],
-            // After a rename, the old ids, whose DLLs then never start:
-            // replaces: ["old-id"],
+            // After a rename, the old ids: their DLLs never start, and
+            // their settings and data carry over on the first start:
+            // was: ["old-id"],
         )
     }
 
@@ -374,7 +375,7 @@ mod tests {
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
         assert!(text("Cargo.toml").contains(&format!("enshwick = \"{}\"", enshwick::VERSION)));
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
-        assert!(text("src/lib.rs").contains("// replaces: [\"old-id\"]"));
+        assert!(text("src/lib.rs").contains("// was: [\"old-id\"]"));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
         assert!(!files.iter().any(|(_, text)| text.contains("{type}")
             || text.contains("{id}")

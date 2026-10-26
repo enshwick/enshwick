@@ -19,6 +19,7 @@ mod bases;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
+pub mod carry;
 pub mod chains;
 #[cfg(windows)]
 mod chat;

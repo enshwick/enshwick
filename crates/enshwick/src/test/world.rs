@@ -1,0 +1,347 @@
+//! The world: components, entities, daytime, game settings, weather and terrain.
+
+use super::FakeHost;
+use super::Installed;
+use super::table;
+use crate::abi::EntityPlace;
+
+impl FakeHost {
+    /// The component of type `type_hash` that `entity` has, holding a copy
+    /// of `bytes` that the fake keeps, 16-byte aligned, for the rest of the
+    /// process; the mod's writes land in that copy.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .component(4096, 0x027a_c564, &health)
+    ///     .template(4096, [0x3a; 16])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn component(mut self, entity: u32, type_hash: u32, bytes: &[u8]) -> Self {
+        let mut words = vec![0u128; bytes.len().div_ceil(16).max(1)].into_boxed_slice();
+        for (word, chunk) in words.iter_mut().zip(bytes.chunks(16)) {
+            let mut le = [0u8; 16];
+            le[..chunk.len()].copy_from_slice(chunk);
+            *word = u128::from_le_bytes(le);
+        }
+        let data = Box::leak(words).as_mut_ptr();
+        self.components
+            .insert((entity, type_hash), (data.expose_provenance(), bytes.len()));
+        self
+    }
+
+    /// Refuses component writes of type `type_hash`, as the loader refuses
+    /// the copies the game keeps for clients.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().refuse_write(0x216e_b5f9).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn refuse_write(mut self, type_hash: u32) -> Self {
+        self.refused_writes.insert(type_hash);
+        self
+    }
+
+    /// An entity in the world with a component of type `type_hash`, at
+    /// `position` in metres, for [`World::entities`](crate::world::World::entities)
+    /// and [`World::near`](crate::world::World::near).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .placed(0x027a_c564, 4096, [1.0, 2.0, 3.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn placed(mut self, type_hash: u32, entity: u32, position: [f64; 3]) -> Self {
+        self.placed.push((
+            type_hash,
+            EntityPlace {
+                entity,
+                reserved: 0,
+                position: crate::ecs::fixed(position),
+            },
+        ));
+        self
+    }
+
+    /// The template GUID of `entity`, in file order.
+    ///
+    /// # Examples
+    ///
+    /// See [`FakeHost::component`].
+    #[must_use]
+    pub fn template(mut self, entity: u32, guid: [u8; 16]) -> Self {
+        self.templates.insert(entity, guid);
+        self
+    }
+}
+
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+impl Installed {
+    /// Sets the clock the fake's `time_of_day` reports; until then the
+    /// clock is missing, as before a world runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{DaytimeInfo, Header};
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_daytime(DaytimeInfo {
+    ///     header: Header::of::<DaytimeInfo>(),
+    ///     time: 0,
+    ///     day_start: 6 * 3_600_000_000_000,
+    ///     day_end: 18 * 3_600_000_000_000,
+    ///     day_length: 1_800_000_000_000,
+    ///     night_length: 720_000_000_000,
+    ///     speed: 1.0,
+    ///     flags: 0,
+    /// });
+    /// assert_eq!(loader.daytime().map(|info| info.time), Some(0));
+    /// ```
+    pub fn set_daytime(&self, info: crate::abi::DaytimeInfo) {
+        table::with((), |s| s.daytime = Some(info));
+    }
+
+    /// The clock as the mod left it; a time it set moves the clock and its
+    /// day flag.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_daytime`].
+    #[must_use]
+    pub fn daytime(&self) -> Option<crate::abi::DaytimeInfo> {
+        table::with(None, |s| s.daytime)
+    }
+
+    /// The mod's factor on the clock's speed, once it asked to change it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.clock_speed(), None);
+    /// ```
+    #[must_use]
+    pub fn clock_speed(&self) -> Option<f32> {
+        table::with(None, |s| s.clock_speed)
+    }
+
+    /// Sets the game settings the fake reports, `keen::ecs::GameSettings`
+    /// as bytes of its reflected size, and their preset; until then no
+    /// world runs. A change the mod makes replaces them and makes the
+    /// preset custom (4).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_game_settings(vec![0; 144], 0);
+    /// assert_eq!(loader.game_settings().map(|(bytes, _)| bytes.len()), Some(144));
+    /// ```
+    pub fn set_game_settings(&self, bytes: Vec<u8>, preset: u32) {
+        table::with((), |s| s.game_settings = Some((bytes, preset)));
+    }
+
+    /// The game settings' bytes and preset as the mod left them.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_game_settings`].
+    #[must_use]
+    pub fn game_settings(&self) -> Option<(Vec<u8>, u32)> {
+        table::with(None, |s| s.game_settings.clone())
+    }
+
+    /// The game settings' bytes the mod kept with the world, by offset:
+    /// `None` for a byte no kept field covers; empty before any is kept or
+    /// after the mod forgot them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.kept_game_settings().is_empty());
+    /// ```
+    #[must_use]
+    pub fn kept_game_settings(&self) -> Vec<Option<u8>> {
+        table::with(Vec::new(), |s| s.kept_settings.clone())
+    }
+
+    /// Sets the weather the fake reports: the weights everywhere (clear,
+    /// rain, snow, blizzard) and the fronts; until then no world runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_weather([1.0, 0.0, 0.0, 0.0], &[]);
+    /// assert!(loader.forecasts().is_empty());
+    /// ```
+    pub fn set_weather(&self, weights: [f32; 4], fronts: &[crate::abi::WeatherFront]) {
+        table::with((), |s| s.weather = Some((weights, fronts.to_vec())));
+    }
+
+    /// The weather the mod started: effect (`u32::MAX` for the game's
+    /// choice) and duration in game nanoseconds.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_weather`].
+    #[must_use]
+    pub fn forecasts(&self) -> Vec<(u32, i64)> {
+        table::with(Vec::new(), |s| s.forecasts.clone())
+    }
+
+    /// Sets the terrain materials the fake lists; until then no world runs.
+    /// Every edit the mod asks for is recorded and moves one cubic metre.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.set_terrain(&[]);
+    /// assert!(loader.terrain_edits().is_empty());
+    /// ```
+    pub fn set_terrain(&self, materials: &[crate::abi::TerrainMaterialInfo]) {
+        table::with((), |s| s.terrain = Some(materials.to_vec()));
+    }
+
+    /// The terrain edits the mod asked for, in order.
+    ///
+    /// # Examples
+    ///
+    /// See [`Installed::set_terrain`].
+    #[must_use]
+    pub fn terrain_edits(&self) -> Vec<crate::abi::TerrainEdit> {
+        table::with(Vec::new(), |s| s.terrain_edits.clone())
+    }
+
+    /// The labels the mod set, as `(entity, text)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.labels().is_empty());
+    /// ```
+    #[must_use]
+    pub fn labels(&self) -> Vec<(u32, String)> {
+        table::with(Vec::new(), |s| s.labels.clone())
+    }
+
+    /// The entities the mod asked the world to destroy, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.destroyed().is_empty());
+    /// ```
+    #[must_use]
+    pub fn destroyed(&self) -> Vec<u32> {
+        table::with(Vec::new(), |s| s.destroyed.clone())
+    }
+
+    /// The components the mod asked to write, `(entity, type hash)`, in
+    /// order; the fake hands out the data [`FakeHost::component`] gave.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.writes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn writes(&self) -> Vec<(u32, u32)> {
+        table::with(Vec::new(), |s| s.writes.clone())
+    }
+
+    /// The bytes of the component [`FakeHost::component`] gave `entity`, as
+    /// the mod's writes left them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().component(7, 1, &[4, 2]).install();
+    /// assert_eq!(loader.component_bytes(7, 1), Some(vec![4, 2]));
+    /// assert_eq!(loader.component_bytes(7, 2), None);
+    /// ```
+    #[must_use]
+    pub fn component_bytes(&self, entity: u32, type_hash: u32) -> Option<Vec<u8>> {
+        let (address, len) = table::with(None, |s| {
+            s.host.components.get(&(entity, type_hash)).copied()
+        })?;
+        let data: *const u8 = core::ptr::with_exposed_provenance(address);
+        // SAFETY: `component` leaked `len` initialised bytes at `address`,
+        // and no write of the mod's runs while the test reads.
+        Some(unsafe { core::slice::from_raw_parts(data, len) }.to_vec())
+    }
+
+    /// The game events the mod raised, `(type hash, bytes)`, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.emits().is_empty());
+    /// ```
+    #[must_use]
+    pub fn emits(&self) -> Vec<(u32, Vec<u8>)> {
+        table::with(Vec::new(), |s| s.emits.clone())
+    }
+
+    /// The teleports the mod asked for, in order; an entity the fake does
+    /// not know is refused.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.teleports().is_empty());
+    /// ```
+    #[must_use]
+    pub fn teleports(&self) -> Vec<crate::abi::TeleportRequest> {
+        table::with(Vec::new(), |s| s.teleports.clone())
+    }
+
+    /// The spawns the mod asked for, with the entity ids the fake handed
+    /// out, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.spawns().is_empty());
+    /// ```
+    #[must_use]
+    pub fn spawns(&self) -> Vec<(u32, crate::abi::SpawnRequest)> {
+        table::with(Vec::new(), |s| s.spawns.clone())
+    }
+
+    /// How many saves the mod asked for.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.saves(), 0);
+    /// ```
+    #[must_use]
+    pub fn saves(&self) -> usize {
+        table::with(0, |s| s.saves)
+    }
+}

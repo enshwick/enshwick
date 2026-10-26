@@ -1,4 +1,4 @@
-//! The points of the Flame altar count mod (`flame-altar-count`).
+//! The points of the More Altars mod (`flame-altar-count`).
 
 /// How many Flame Altars a Flame level allows, `flame-altar-count:limit`:
 /// the answer is the altars.
