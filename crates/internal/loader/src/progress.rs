@@ -215,7 +215,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Ok(()) => loader
             .reflection
             .system("player_level")
-            .map_or(0, enshwick_reflect::System::entry),
+            .map_or(0, enshwick_gamedata::reflect::System::entry),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");

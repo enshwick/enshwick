@@ -27,7 +27,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use enshwick_reflect::Fingerprint;
+use enshwick_gamedata::reflect::Fingerprint;
 
 use self::exe::Exe;
 use self::rows::{Row, guid_hex};

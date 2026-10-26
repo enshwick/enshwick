@@ -48,6 +48,10 @@ name = "pack_schemas"
 required-features = ["schema"]
 
 [[test]]
+name = "fake_second_install"
+required-features = ["test"]
+
+[[test]]
 name = "old_mods"
 required-features = ["test"]
 

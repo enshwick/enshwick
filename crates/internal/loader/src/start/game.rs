@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use enshwick::abi::Side;
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
 use crate::{builds, errors, log};
@@ -30,7 +30,7 @@ pub(super) struct Game {
     /// Where the executable's image is mapped.
     pub(super) base: u64,
     /// The build's fingerprint from its debug directory.
-    pub(super) fingerprint: enshwick_reflect::Fingerprint,
+    pub(super) fingerprint: enshwick_gamedata::reflect::Fingerprint,
     /// The build table that serves it.
     pub(super) build: &'static builds::KnownBuild,
     /// Its reflected types and systems.
@@ -197,7 +197,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
     for (name, rva) in build.checks() {
         let entry = reflection
             .system(name)
-            .map_or(0, enshwick_reflect::System::entry);
+            .map_or(0, enshwick_gamedata::reflect::System::entry);
         if entry != base + rva {
             crate::log!(
                 ERROR,

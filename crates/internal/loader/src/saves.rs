@@ -17,7 +17,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick_reflect::fnv1a32;
+use enshwick_gamedata::reflect::fnv1a32;
 
 use crate::chains::Next;
 use crate::host::Loader;

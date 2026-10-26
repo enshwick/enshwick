@@ -9,7 +9,7 @@ use std::ops::Range;
 /// # Examples
 ///
 /// ```
-/// use enshwick_reflect::Layout;
+/// use enshwick_gamedata::reflect::Layout;
 ///
 /// assert_ne!(Layout::File, Layout::Mapped);
 /// ```
@@ -27,7 +27,7 @@ pub enum Layout {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout};
+/// use enshwick_gamedata::reflect::{Image, Layout};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -86,7 +86,7 @@ impl Section {
 /// # Examples
 ///
 /// ```
-/// use enshwick_reflect::Fingerprint;
+/// use enshwick_gamedata::reflect::Fingerprint;
 ///
 /// let build = Fingerprint::new([0x1c; 16], 387);
 /// assert_eq!(build.age(), 387);
@@ -113,7 +113,7 @@ impl Fingerprint {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_reflect::Fingerprint;
+    /// use enshwick_gamedata::reflect::Fingerprint;
     ///
     /// assert_eq!(Fingerprint::new([7; 16], 1).guid(), [7; 16]);
     /// ```
@@ -138,7 +138,7 @@ impl Fingerprint {
 /// # Examples
 ///
 /// ```
-/// use enshwick_reflect::{Image, ImageError, Layout};
+/// use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 ///
 /// let error = Image::parse(b"not a pe", Layout::File, None).unwrap_err();
 /// assert_eq!(error, ImageError::NotPe);
@@ -162,7 +162,7 @@ pub enum ImageError {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick_reflect::{Image, Layout};
+/// use enshwick_gamedata::reflect::{Image, Layout};
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -273,7 +273,7 @@ impl<'a> Image<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout};
+    /// use enshwick_gamedata::reflect::{Image, Layout};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -302,7 +302,7 @@ impl<'a> Image<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout};
+    /// use enshwick_gamedata::reflect::{Image, Layout};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;
@@ -354,7 +354,7 @@ impl<'a> Image<'a> {
     /// # Examples
     ///
     /// ```no_run
-    /// use enshwick_reflect::{Image, Layout};
+    /// use enshwick_gamedata::reflect::{Image, Layout};
     ///
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let bytes = std::fs::read("enshrouded_server.exe")?;

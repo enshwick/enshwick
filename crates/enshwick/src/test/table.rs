@@ -195,9 +195,30 @@ fn state() -> MutexGuard<'static, Option<State>> {
     STATE.relock()
 }
 
+thread_local! {
+    /// Whether this thread holds the installed fake.
+    static HOLDS_TURN: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Waits for the table to be free and takes it for this thread.
+///
+/// # Panics
+///
+/// When this thread holds an installed fake already, which waiting would
+/// never release.
+fn take_turn() -> MutexGuard<'static, ()> {
+    assert!(
+        !HOLDS_TURN.get(),
+        "a fake host is already installed in this thread; drop the first `Installed` before the next install"
+    );
+    let turn = TURN.relock();
+    HOLDS_TURN.set(true);
+    turn
+}
+
 /// Waits for the table to be free, then answers from `host`.
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
-    let turn = TURN.relock();
+    let turn = take_turn();
     *state() = Some(State {
         host,
         logs: Vec::new(),
@@ -297,6 +318,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
 
 pub(crate) fn uninstall() {
     *state() = None;
+    HOLDS_TURN.set(false);
 }
 
 /// `f` on the installed fake's state, or `default` when none is installed.

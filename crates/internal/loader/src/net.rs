@@ -137,7 +137,7 @@ fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 
 /// The id of mod `id`'s channel `name`.
 fn channel_id(id: &str, name: &str) -> u32 {
-    let id = enshwick_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
+    let id = enshwick_gamedata::reflect::fnv1a32(format!("{id}/{name}").as_bytes());
     // Zero is the protocol's own.
     id.max(1)
 }
