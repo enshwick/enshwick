@@ -17,6 +17,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release
   profile is left to the workspace root.
+- `new --data <id>` creates a data pack folder `<dir>/<id>` instead: every
+  pack file with its first change commented out, their JSON Schemas and a
+  README. It checks clean as it is.
 - `manifest <dll>` prints what a built mod says about itself: id, version,
   side, join check and dependencies. With `--expect-version <version>` it fails
   when the DLL reports another version, which release pipelines can check.
