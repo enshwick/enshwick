@@ -16,7 +16,7 @@
 //! }
 //! ```
 
-use crate::abi::{RateId, RecipeKind as AbiKind, Status};
+use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
 use crate::{Host, Load, Off};
 
@@ -74,7 +74,7 @@ impl ExperienceGroup {
 /// ```
 /// use enshwick::rates::Rate;
 ///
-/// assert!(Rate::ALL.contains(&Rate::WorkshopSpeed));
+/// assert_eq!(Rate::from_id(Rate::WorkshopSpeed.id()), Some(Rate::WorkshopSpeed));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -113,8 +113,8 @@ pub enum Rate {
 }
 
 impl Rate {
-    /// Every rate, in the order of their ids.
-    pub const ALL: &[Self] = &[
+    /// Every rate that takes no part: each one alone.
+    const SINGLE: &[Self] = &[
         Self::Experience(ExperienceGroup::Combat),
         Self::Experience(ExperienceGroup::Mining),
         Self::Experience(ExperienceGroup::Exploration),
@@ -123,12 +123,24 @@ impl Rate {
         Self::Comfort,
         Self::SkillPoints,
         Self::Loot,
-        Self::RecipeOutput(RecipeKind::Other),
-        Self::RecipeOutput(RecipeKind::BuildingBlock),
-        Self::RecipeOutput(RecipeKind::Roof),
-        Self::RecipeOutput(RecipeKind::Overgrowth),
-        Self::RecipeOutput(RecipeKind::Terrain),
     ];
+
+    /// Every rate: those that stand alone, then one recipe output rate per
+    /// [`RecipeKind::ALL`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::rates::Rate;
+    ///
+    /// assert!(Rate::all().any(|rate| rate == Rate::WorkshopSpeed));
+    /// ```
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::SINGLE
+            .iter()
+            .copied()
+            .chain(RecipeKind::ALL.iter().map(|&kind| Self::RecipeOutput(kind)))
+    }
 
     /// The loader's number for this rate.
     ///
@@ -151,13 +163,7 @@ impl Rate {
             Self::Comfort => RateId::COMFORT,
             Self::SkillPoints => RateId::SKILL_POINTS,
             Self::Loot => RateId::LOOT,
-            Self::RecipeOutput(kind) => RateId::recipe_output(match kind {
-                RecipeKind::BuildingBlock => AbiKind::BUILDING_BLOCK,
-                RecipeKind::Roof => AbiKind::ROOF,
-                RecipeKind::Overgrowth => AbiKind::OVERGROWTH,
-                RecipeKind::Terrain => AbiKind::TERRAIN,
-                RecipeKind::Other => AbiKind::OTHER,
-            }),
+            Self::RecipeOutput(kind) => RateId::recipe_output(kind.code()),
         }
     }
 
@@ -175,7 +181,7 @@ impl Rate {
     /// ```
     #[must_use]
     pub fn from_id(id: RateId) -> Option<Self> {
-        Self::ALL.iter().copied().find(|rate| rate.id() == id)
+        Self::all().find(|rate| rate.id() == id)
     }
 
     /// Whether clients count the rate too, so only a mod that joins
@@ -376,12 +382,13 @@ mod tests {
 
     #[test]
     fn every_recipe_kind_has_its_output_rate_and_ids_are_unique() {
+        let all: Vec<Rate> = Rate::all().collect();
         for &kind in RecipeKind::ALL {
-            assert!(Rate::ALL.contains(&Rate::RecipeOutput(kind)), "{kind:?}");
+            assert!(all.contains(&Rate::RecipeOutput(kind)), "{kind:?}");
         }
-        for (i, a) in Rate::ALL.iter().enumerate() {
+        for (i, a) in all.iter().enumerate() {
             assert_eq!(Rate::from_id(a.id()), Some(*a));
-            assert!(Rate::ALL[i + 1..].iter().all(|b| b.id() != a.id()), "{a:?}");
+            assert!(all[i + 1..].iter().all(|b| b.id() != a.id()), "{a:?}");
         }
     }
 

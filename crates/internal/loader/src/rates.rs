@@ -6,7 +6,8 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{RateId, RecipeKind, Status};
+use enshwick::abi::{RateId, Status};
+use enshwick::content::recipes::{RecipeKind, RecipeLayout, RecipeView, modify_recipes_in};
 use enshwick::game_events::ExperienceSource;
 pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
@@ -29,16 +30,33 @@ pub(crate) const LINKS: &[(RateId, &[Symbol])] = &[
     (RateId::COMFORT, &[comfort::BASE_REGISTER]),
     (RateId::SKILL_POINTS, &[skill::POINTS_PER_LEVEL]),
     (RateId::LOOT, &[loot::STACK_ROLL, item::INFO]),
-    (RateId::recipe_output(RecipeKind::OTHER), SERVED),
-    (RateId::recipe_output(RecipeKind::BUILDING_BLOCK), SERVED),
-    (RateId::recipe_output(RecipeKind::ROOF), SERVED),
-    (RateId::recipe_output(RecipeKind::OVERGROWTH), SERVED),
-    (RateId::recipe_output(RecipeKind::TERRAIN), SERVED),
 ];
 
 /// What a recipe output rate needs: the served resource links its patch of
 /// the recipe registry rides on.
 const SERVED: &[Symbol] = &[resource::OPEN, resource::RESOLVE, resource::KEY_OF];
+
+/// The recipe registry `registry` with each recipe's output scaled by
+/// `factor` of its kind, which `kind` tells, or a copy of it unchanged when
+/// the registry does not read: the patch chain needs bytes of the same
+/// length either way.
+pub(crate) fn scale_recipes_in(
+    layout: &RecipeLayout,
+    registry: &[u8],
+    kind: &dyn Fn(&RecipeView<'_>) -> Option<RecipeKind>,
+    factor: &dyn Fn(RecipeKind) -> f32,
+) -> Vec<u8> {
+    let scaled = modify_recipes_in(layout, registry, &|recipe| {
+        let Some(kind) = kind(&recipe.view()) else {
+            return;
+        };
+        let factor = factor(kind);
+        if factor.to_bits() != 1.0_f32.to_bits() {
+            recipe.scale_output_by(factor);
+        }
+    });
+    scaled.map_or_else(|| registry.to_vec(), |(built, _)| built)
+}
 
 /// Whether `rate` multiplies what recipes make.
 pub(crate) fn is_recipe_output(rate: RateId) -> bool {
@@ -48,6 +66,9 @@ pub(crate) fn is_recipe_output(rate: RateId) -> bool {
 /// The build table symbols `rate` links; empty for a rate the loader does
 /// not know.
 pub(crate) fn links(rate: RateId) -> &'static [Symbol] {
+    if is_recipe_output(rate) {
+        return SERVED;
+    }
     LINKS
         .iter()
         .find(|&&(id, _)| id == rate)
@@ -189,6 +210,11 @@ impl Rates {
             .set(std::mem::take(&mut *open).into_boxed_slice());
     }
 
+    /// Whether every mod is initialised and the declarations are sealed.
+    pub(crate) fn is_sealed(&self) -> bool {
+        self.sealed.get().is_some()
+    }
+
     /// Whether a mod declared a rate `which` accepts, before or after the
     /// seal.
     pub(crate) fn any(&self, which: impl Fn(RateId) -> bool) -> bool {
@@ -233,7 +259,7 @@ mod tests {
 
     #[test]
     fn every_rate_of_the_api_is_known_to_the_loader() {
-        for rate in Rate::ALL {
+        for rate in Rate::all() {
             assert!(!links(rate.id()).is_empty(), "{rate:?} has no way to apply");
         }
     }
@@ -392,16 +418,84 @@ mod tests {
         );
     }
 
+    fn layout() -> RecipeLayout {
+        RecipeLayout {
+            recipes: 8,
+            recipe: 0xa8,
+            guid: 0,
+            id: 0x10,
+            workshop_guid: 0x14,
+            workshop: 0x24,
+            input: 0x28,
+            output: 0x30,
+            completion: 0x5c,
+            relative: [0x28, 0x30, 0x40, 0x78],
+            input_size: 48,
+            stack_size: 24,
+            stack_item: 0x10,
+            stack_count: 0x14,
+        }
+    }
+
+    #[test]
+    fn each_recipe_takes_the_factor_of_its_kind() {
+        use enshwick::content::Blob;
+
+        let mut blob = Blob::new(&[0u8; 16]);
+        let first = blob.append(&[0; 0xa8 * 2], 8);
+        for (i, name) in [&b"Roof"[..], &b"Bench"[..]].iter().enumerate() {
+            let at = first + i * 0xa8;
+            let mut output = vec![0u8; 24];
+            output[0x14..0x18].copy_from_slice(&4u32.to_le_bytes());
+            let output_at = blob.append(&output, 8);
+            let name_at = blob.append(name, 1);
+            assert!(blob.set_array(at + 0x30, output_at, 1));
+            assert!(blob.set_array(at + 0x78, name_at, u32::try_from(name.len()).unwrap()));
+        }
+        assert!(blob.set_array(8, first, 2));
+        let kind =
+            |view: &RecipeView<'_>| (view.debug_name() == "Roof").then_some(RecipeKind::Roof);
+        let factor = |kind| if kind == RecipeKind::Roof { 1.5 } else { 3.0 };
+        let built = scale_recipes_in(&layout(), blob.bytes(), &kind, &factor);
+        assert_eq!(built.len(), blob.bytes().len(), "in place");
+        let built = Blob::new(&built);
+        let made = |i: usize| {
+            let (outputs, _) = built.array(first + i * 0xa8 + 0x30)?;
+            built.read_u32(outputs + 0x14)
+        };
+        assert_eq!(made(0), Some(6), "a roof times 1.5");
+        assert_eq!(made(1), Some(4), "no kind: unchanged");
+    }
+
+    #[test]
+    fn a_registry_that_does_not_read_passes_through_unchanged() {
+        let layout = layout();
+        let garbage = [0xffu8; 12];
+        let built = scale_recipes_in(&layout, &garbage, &|_| Some(RecipeKind::Roof), &|_| 2.0);
+        assert_eq!(built, garbage);
+    }
+
+    #[test]
+    fn every_recipe_kind_has_its_output_rate_linked() {
+        for &kind in RecipeKind::ALL {
+            let rate = Rate::RecipeOutput(kind).id();
+            assert!(is_recipe_output(rate), "{kind:?}");
+            assert_eq!(links(rate), SERVED, "{kind:?}");
+        }
+    }
+
     #[test]
     fn a_recipe_output_rate_is_seen_before_and_after_the_seal() {
-        let roof = RateId::recipe_output(RecipeKind::ROOF);
+        let roof = Rate::RecipeOutput(RecipeKind::Roof).id();
         assert!(is_recipe_output(roof));
         assert!(!is_recipe_output(COMBAT));
         let rates = Rates::new();
         assert!(!rates.any(is_recipe_output));
         rates.declare(ModIndex::new(0), roof, true, true);
         assert!(rates.any(is_recipe_output), "open");
+        assert!(!rates.is_sealed());
         rates.seal();
+        assert!(rates.is_sealed());
         assert!(rates.any(is_recipe_output), "sealed");
         assert!(!rates.any(|rate| rate == COMBAT));
     }
