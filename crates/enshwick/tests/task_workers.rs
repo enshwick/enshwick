@@ -1,5 +1,5 @@
-//! Capping the task workers: no cap is a no-op that says so, a cap links one
-//! mid-function hook per capped group.
+//! Capping the task workers: no cap is a no-op that says so, a cap reaches
+//! the loader, and only the dedicated server takes it.
 
 #[cfg(test)]
 mod tests {
@@ -9,13 +9,6 @@ mod tests {
     use enshwick::abi::{Side, Status};
     use enshwick::pacing::TaskWorkers;
     use enshwick::{Load, Mod, Off};
-
-    /// The worker sizing as the dedicated server's code has it.
-    static CODE: [u8; 44] = [
-        0x41, 0x0F, 0xB6, 0x47, 0x09, 0x8B, 0xCF, 0x40, 0x3A, 0xC7, 0x0F, 0x42, 0xC8, 0x84, 0xDB,
-        0x89, 0x8D, 0x00, 0x00, 0x00, 0x00, 0x8B, 0xCF, 0x0F, 0xB6, 0xC3, 0x0F, 0x45, 0xC8, 0x41,
-        0x0F, 0xB6, 0x47, 0x0A, 0x44, 0x0F, 0xB6, 0xE9, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-    ];
 
     static CAPS: Mutex<TaskWorkers> = Mutex::new(TaskWorkers::at_most(0));
     static CAPPED: AtomicBool = AtomicBool::new(false);
@@ -36,25 +29,26 @@ mod tests {
 
     enshwick::declare_mod!(Workers);
 
-    fn start(caps: TaskWorkers) -> (bool, usize) {
-        let loader = enshwick::test::FakeHost::new()
-            .side(Side::SERVER)
-            .code(&CODE)
-            .install();
+    fn start(side: Side, caps: TaskWorkers) -> (bool, Option<(u32, u32)>) {
+        let loader = enshwick::test::FakeHost::new().side(side).install();
         *CAPS.lock().unwrap() = caps;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Workers)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        (CAPPED.load(Ordering::Relaxed), loader.mid_hooks().len())
+        (CAPPED.load(Ordering::Relaxed), loader.task_workers())
     }
 
     #[test]
     fn no_cap_links_nothing_and_says_false() {
-        assert_eq!(start(TaskWorkers::at_most(0)), (false, 0));
+        assert_eq!(start(Side::SERVER, TaskWorkers::at_most(0)), (false, None));
     }
 
     #[test]
-    fn a_cap_links_a_hook_per_capped_group() {
-        assert_eq!(start(TaskWorkers::at_most(4)), (true, 2));
+    fn a_cap_reaches_the_loader_and_only_the_server_takes_it() {
+        assert_eq!(
+            start(Side::SERVER, TaskWorkers::at_most(4)),
+            (true, Some((4, 4)))
+        );
+        assert_eq!(start(Side::CLIENT, TaskWorkers::at_most(4)), (false, None));
     }
 }
