@@ -66,10 +66,19 @@ pub(super) fn item_changes(
         let line = PackError::at(file, text, at, "").line;
         let e = entry.get_ref();
         let number = index + 1;
-        let fields: Vec<(Field, Value)> = [(Field::MaxStack, e.max_stack), (Field::Slots, e.slots)]
-            .into_iter()
-            .filter_map(|(field, v)| v.map(|v| (field, value(v))))
-            .collect();
+        let fields: Vec<(Field, Value)> = [
+            (Field::MaxStack, e.max_stack),
+            (Field::Slots, e.slots),
+            (Field::DamageMod, e.damage_mod),
+            (Field::SpeedMod, e.speed_mod),
+            (Field::Armor, e.armor),
+            (Field::BurnTime, e.burn_time),
+            (Field::EnergyOutput, e.energy_output),
+            (Field::ComfortAmount, e.comfort_amount),
+        ]
+        .into_iter()
+        .filter_map(|(field, v)| v.map(|v| (field, value(v))))
+        .collect();
         if e.items.is_empty() {
             reader.error(
                 file,

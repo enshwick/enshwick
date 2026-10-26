@@ -128,10 +128,21 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
 | `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
+| `damage_mod` | a weapon's damage factor | 0 to 100 |
+| `speed_mod` | a weapon's attack speed factor | 0 to 10 |
+| `armor` | every armour value of the item, scaled only: `{ times = x }` | a factor |
+| `burn_time` | how long the item burns as fuel, in seconds | 0 to 86400 |
+| `energy_output` | the energy the item gives as fuel | 0 to 1000000 |
+| `comfort_amount` | the comfort the placed item gives | 0 to 1000 |
 
 A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
+
+The stats change only on items that have them: a `damage_mod` on an item
+that deals no damage is left, and the pack's log says so. A weapon deals the
+changed damage once the game sets it up again; the number its tooltip shows
+was written when the item was made and stays.
 
 `slots` changes the chests placed from then on, and chests upgraded to the
 item, since an upgrade places a new chest: a chest placed before keeps the
