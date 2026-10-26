@@ -14,6 +14,7 @@
 //! the player joins.
 
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 
 mod equipment;
 mod vitals;
@@ -32,7 +33,6 @@ use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_
 use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::chains::LOADER;
 use crate::host::{Loader, Registered};
 use crate::ids::Space;
 use crate::settings::LOADER_ID;
@@ -101,7 +101,7 @@ struct Pending {
 /// A modifier a mod keeps on an entity.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Held {
-    owner: usize,
+    owner: ModIndex,
     key: u32,
     stat: u32,
     op: u8,
@@ -192,7 +192,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
             let text = def.text.clone().into_boxed_str();
             fresh.kinds.push(Kind {
                 id: id.into(),
-                def: Some((def, text, LOADER)),
+                def: Some((def, text, (ModIndex::LOADER).get())),
             });
         }
         fresh
@@ -232,12 +232,12 @@ fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
 
 /// Records `full` in its space; a name whose key another has turns mod
 /// `owner` off with both named.
-fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<(), Status> {
+fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result<(), Status> {
     if SEALED.get().is_some() {
         return Err(Status::TOO_LATE);
     }
     let key = key_of(full).0;
-    let by = loader.mods.get(owner).map_or("?", |m| m.id.as_str());
+    let by = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
     let declared = crate::ids::with(|ids| {
         if space == Space::Stat {
             for (id, _) in builtin::ALL {
@@ -255,11 +255,11 @@ fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<()
 /// Defines or opens kind `id` for mod `owner`. During init only.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
@@ -270,7 +270,7 @@ pub(crate) fn open(
                 return Err(Status::REFUSED);
             }
             let text = def.text.clone().into_boxed_str();
-            kind.def = Some((def, text, owner));
+            kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
             index: u32::try_from(index).map_err(|_| Status::REFUSED)?,
@@ -290,11 +290,11 @@ pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), Stat
 /// Defines mod `owner`'s affix `id`. During init only.
 pub(crate) fn open_affix(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
@@ -384,7 +384,7 @@ pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), Status> {
 
 /// Registers mod `owner`'s handler of changes. During init only.
 pub(crate) fn on_changed(
-    owner: usize,
+    owner: ModIndex,
     callback: StatChangeFn,
     user: *mut core::ffi::c_void,
 ) -> Result<(), Status> {
@@ -509,7 +509,7 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 }
 
 /// Sets or removes mod `owner`'s modifier.
-pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Result<(), Status> {
+pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> Result<(), Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let stat = request.modifier.stat;
     if request.entity == 0 || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
@@ -559,7 +559,7 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
         if (saved || was_saved)
             && let Some(player) = player
         {
-            let record = loader.mods.get(owner);
+            let record = loader.mods.get(owner.get());
             let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
@@ -627,7 +627,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
                 restored.push(Held {
-                    owner,
+                    owner: ModIndex::new(owner),
                     key: saved.key,
                     stat,
                     op: saved.op,
@@ -696,7 +696,7 @@ fn gather(loader: &Loader, sealed: &Sealed, entity: u32, held: &[Held]) -> (Vec<
             h.stat,
             h.value,
             h.key,
-            u32::try_from(h.owner).unwrap_or(u32::MAX),
+            u32::try_from(h.owner.get()).unwrap_or(u32::MAX),
         ));
     }
     (out, core::hash::Hasher::finish(&hash))

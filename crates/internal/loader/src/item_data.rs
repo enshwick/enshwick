@@ -18,6 +18,7 @@
 //! and a client that says hello gets every value of those kinds; a client
 //! keeps what it got and answers reads from it.
 
+use crate::mod_index::ModIndex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -139,7 +140,7 @@ fn full_id(mod_id: &str, id: &str) -> Option<String> {
 
 /// Opens item kind `id` for mod `owner` and returns its index; the same id
 /// gives the same index to every mod. During init only.
-pub(crate) fn open(loader: &Loader, owner: usize, id: &str) -> Result<u32, Status> {
+pub(crate) fn open(loader: &Loader, owner: ModIndex, id: &str) -> Result<u32, Status> {
     open_kind(loader, owner, id, Scope::Item, true)
 }
 
@@ -147,7 +148,7 @@ pub(crate) fn open(loader: &Loader, owner: usize, id: &str) -> Result<u32, Statu
 /// (once any mod asks for it), and returns its index. During init only.
 pub(crate) fn open_entity(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     sent: bool,
 ) -> Result<u32, Status> {
@@ -156,7 +157,7 @@ pub(crate) fn open_entity(
 
 fn open_kind(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     scope: Scope,
     sent: bool,
@@ -164,7 +165,7 @@ fn open_kind(
     if KINDS.get().is_some() {
         return Err(Status::TOO_LATE);
     }
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
     let mut pending = PENDING.relock();
     let index = if let Some(index) = pending.iter().position(|k| k.id == full) {

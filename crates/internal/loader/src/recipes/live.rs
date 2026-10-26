@@ -1,6 +1,7 @@
 //! Disabled recipes in the running game: the rules in force, the lookup's
 //! filter, the screen's question, the messages to clients and the command.
 
+use crate::mod_index::ModIndex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex, OnceLock};
@@ -373,7 +374,7 @@ pub(crate) fn registry_built(data: usize, len: usize) {
 }
 
 /// Mod `owner`'s rule: added, or taken back.
-pub(crate) fn rule(owner: usize, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
+pub(crate) fn rule(owner: ModIndex, kind: RecipeRuleKind, name: &str, disable: bool) -> Status {
     let Some(kind) = Kind::from_abi(kind) else {
         return Status::BAD_ARGS;
     };
@@ -386,9 +387,9 @@ pub(crate) fn rule(owner: usize, kind: RecipeRuleKind, name: &str, disable: bool
     }
     live(|l| {
         l.mods
-            .retain(|(o, k, n)| !(*o == owner && *k == kind && n == name));
+            .retain(|(o, k, n)| !(*o == owner.get() && *k == kind && n == name));
         if disable {
-            l.mods.push((owner, kind, name.to_owned()));
+            l.mods.push((owner.get(), kind, name.to_owned()));
         }
     });
     DIRTY.store(true, Ordering::Release);

@@ -78,10 +78,17 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The answer goes back to the caller, not to any chat.
-[`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
-runs each line appended to `mod-data/admin-tools/commands.txt` this way: it
-is how a dedicated server's administrators and their scripts reach the
-console.
+
+### The command file
+
+A dedicated server runs each line appended to
+`mod-data/enshwick/commands.txt` on its console, once, about a second after
+the file is saved. Only complete lines run, so a line waits for its line
+break; blank lines and lines starting with `#` are skipped, and so are the
+lines already in the file when the server starts. Each line and its answer
+go to `logs/enshwick/loader.log`. Administrators and their scripts reach the
+console this way without anyone joining. A server that kept its command file
+in `mod-data/enshwick.admin-tools/` reads that one too.
 
 ### The loader's tools
 

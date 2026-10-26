@@ -1,0 +1,9 @@
+---
+source: crates/internal/loader/src/diag.rs
+expression: summary().short()
+---
+Enshwick 0.1.5, up 2h 03m, server running: 1 of 2 mods running.
+you.stalls is replaced by you.market-stalls; delete mods/stalls.dll.
+you.trading-post off: panic in an action
+2 hooked functions, busiest building.max_altars with 1.2M calls; 4 resources served; 1 code patches.
+Full summary: logs/enshwick/status.log

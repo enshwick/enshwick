@@ -12,6 +12,7 @@
 //! handler in running order, skipping mods that are off, so turning a mod off
 //! touches no code either.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 
@@ -151,7 +152,7 @@ impl Vectors {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct MidLink {
     /// The owning mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The handler, inside the mod's DLL.
     pub(crate) handler: MidHookFn,
     /// The mod's pointer for the handler, as an address.
@@ -170,7 +171,7 @@ pub(crate) struct Site {
     pub(crate) address: u64,
     links: Box<[MidLink]>,
     /// Whether a mod is off, by index.
-    off: fn(usize) -> bool,
+    off: fn(ModIndex) -> bool,
 }
 
 /// Every mid-function hook, keyed by address.
@@ -211,7 +212,7 @@ impl Mids {
     }
 
     /// Every address with its links in running order, for arming.
-    pub(crate) fn sites(&self, off: fn(usize) -> bool) -> Vec<&'static Site> {
+    pub(crate) fn sites(&self, off: fn(ModIndex) -> bool) -> Vec<&'static Site> {
         self.sites
             .iter()
             .map(|(&address, links)| {
@@ -227,7 +228,7 @@ impl Mids {
     }
 
     /// The mods with a handler at `address`.
-    pub(crate) fn owners(&self, address: u64) -> Vec<usize> {
+    pub(crate) fn owners(&self, address: u64) -> Vec<ModIndex> {
         self.sites
             .get(&address)
             .map(|links| links.iter().map(|l| l.owner).collect())
@@ -263,7 +264,7 @@ pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *
         return;
     };
     for link in &site.links {
-        if !(site.off)(link.owner) {
+        if !(site.off)(ModIndex::new(link.owner.get())) {
             let user = core::ptr::with_exposed_provenance_mut::<c_void>(link.user);
             // SAFETY: `site.off` says the mod is on, so its DLL and the
             // handler in it are loaded; the handler gets the pointer its mod
@@ -874,7 +875,8 @@ mod tests {
         }])
         .into_iter()
         .next()
-        .unwrap()?;
+        .unwrap()
+        .map_err(|e| e.to_string())?;
         stubs.finish(0, pending.original);
         assert!(stubs.seal());
         assert!(detour::commit(&[&pending], &[]));
@@ -1463,7 +1465,7 @@ mod tests {
         unsafe { (*registers).rax += 100 };
     }
 
-    fn link(owner: usize, handler: MidHookFn, priority: i32) -> MidLink {
+    fn link(owner: ModIndex, handler: MidHookFn, priority: i32) -> MidLink {
         MidLink {
             owner,
             handler,
@@ -1476,9 +1478,16 @@ mod tests {
     #[test]
     fn a_panicking_handler_changes_nothing_and_is_skipped_once_its_mod_is_off() {
         let mut mids = Mids::default();
-        assert_eq!(mids.add(0x10, link(1, add_hundred, 0)), Status::OK);
-        assert_eq!(mids.add(0x10, link(0, panicking, -1)), Status::OK);
-        let off: fn(usize) -> bool = |owner| owner == 0 && FAULTED.load(Ordering::Relaxed);
+        assert_eq!(
+            mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+            Status::OK
+        );
+        assert_eq!(
+            mids.add(0x10, link(ModIndex::new(0), panicking, -1)),
+            Status::OK
+        );
+        let off: fn(ModIndex) -> bool =
+            |owner| owner == ModIndex::new(0) && FAULTED.load(Ordering::Relaxed);
         let site = mids.sites(off)[0];
         let target = function(&SUM);
         install(
@@ -1508,17 +1517,35 @@ mod tests {
         let mut mids = Mids::default();
         let exclusive = MidLink {
             flags: HookFlags::EXCLUSIVE,
-            ..link(0, add_hundred, 0)
+            ..link(ModIndex::new(0), add_hundred, 0)
         };
         assert_eq!(mids.add(0x10, exclusive), Status::OK);
-        assert_eq!(mids.add(0x10, link(1, add_hundred, 0)), Status::REFUSED);
-        assert_eq!(mids.add(0x20, link(1, add_hundred, 0)), Status::OK);
-        assert_eq!(mids.add(0x20, link(1, add_hundred, 0)), Status::REFUSED);
-        assert_eq!(mids.add(0x20, link(2, add_hundred, 0)), Status::OK);
-        assert_eq!(mids.add(0, link(3, add_hundred, 0)), Status::BAD_ARGS);
-        assert_eq!(mids.owners(0x20), [1, 2]);
+        assert_eq!(
+            mids.add(0x10, link(ModIndex::new(1), add_hundred, 0)),
+            Status::REFUSED
+        );
+        assert_eq!(
+            mids.add(0x20, link(ModIndex::new(1), add_hundred, 0)),
+            Status::OK
+        );
+        assert_eq!(
+            mids.add(0x20, link(ModIndex::new(1), add_hundred, 0)),
+            Status::REFUSED
+        );
+        assert_eq!(
+            mids.add(0x20, link(ModIndex::new(2), add_hundred, 0)),
+            Status::OK
+        );
+        assert_eq!(
+            mids.add(0, link(ModIndex::new(3), add_hundred, 0)),
+            Status::BAD_ARGS
+        );
+        assert_eq!(mids.owners(0x20), [ModIndex::new(1), ModIndex::new(2)]);
         mids.seal();
-        assert_eq!(mids.add(0x30, link(3, add_hundred, 0)), Status::TOO_LATE);
+        assert_eq!(
+            mids.add(0x30, link(ModIndex::new(3), add_hundred, 0)),
+            Status::TOO_LATE
+        );
         assert_eq!(mids.len(), 2);
     }
 }

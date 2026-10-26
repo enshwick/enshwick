@@ -4,6 +4,7 @@
 //! then every `status_minutes`, and whenever an administrator asks with
 //! `enshwick status` on the console; each write replaces the last.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -24,7 +25,7 @@ const FIRST: Duration = Duration::from_secs(60);
 /// A mod's status source.
 #[derive(Clone, Copy, Debug)]
 struct Source {
-    owner: usize,
+    owner: ModIndex,
     callback: StatusFn,
     user: usize,
 }
@@ -40,7 +41,7 @@ pub(crate) fn mark_start() {
 }
 
 /// Adds mod `owner`'s status source.
-pub(crate) fn register(owner: usize, callback: StatusFn, user: *mut c_void) -> Status {
+pub(crate) fn register(owner: ModIndex, callback: StatusFn, user: *mut c_void) -> Status {
     SOURCES.relock().push(Source {
         owner,
         callback,
@@ -55,7 +56,7 @@ pub(crate) fn request() {
 }
 
 /// The lines mod `owner`'s sources give now.
-fn lines_of(sources: &[Source], owner: usize) -> Vec<String> {
+fn lines_of(sources: &[Source], owner: ModIndex) -> Vec<String> {
     sources
         .iter()
         .filter(|s| s.owner == owner)
@@ -111,20 +112,20 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 notes: record.notes.clone(),
                 running,
                 lines: if running {
-                    lines_of(&sources, index)
+                    lines_of(&sources, ModIndex::new(index))
                 } else {
                     Vec::new()
                 },
             }
         })
         .collect();
-    let owner_name = |owner: usize| {
-        if owner == crate::chains::LOADER {
+    let owner_name = |owner: ModIndex| {
+        if owner == ModIndex::LOADER {
             LOADER_ID.to_owned()
         } else {
             loader
                 .mods
-                .get(owner)
+                .get(owner.get())
                 .map_or_else(|| "?".to_owned(), |m| m.id.clone())
         }
     };
@@ -301,13 +302,13 @@ pub(crate) fn costs(loader: &Loader) -> Option<(Vec<crate::profile::Cost>, Durat
         let chains = loader.chains.relock();
         chain_readings(loader, &chains, &base)
     };
-    let name = |owner: usize| {
-        if owner == crate::chains::LOADER {
+    let name = |owner: ModIndex| {
+        if owner == ModIndex::LOADER {
             LOADER_ID.to_owned()
         } else {
             loader
                 .mods
-                .get(owner)
+                .get(owner.get())
                 .map_or_else(|| "?".to_owned(), |m| m.id.clone())
         }
     };
@@ -348,13 +349,13 @@ pub(crate) fn cost_lines(loader: &Loader, mods: usize, items: usize) -> Vec<Stri
 /// share, or one holds against another.
 pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
     use crate::conflicts::{HookLink, Hooked};
-    let name = |owner: usize| {
-        if owner == crate::chains::LOADER {
+    let name = |owner: ModIndex| {
+        if owner == ModIndex::LOADER {
             LOADER_ID.to_owned()
         } else {
             loader
                 .mods
-                .get(owner)
+                .get(owner.get())
                 .map_or_else(|| "?".to_owned(), |m| m.id.clone())
         }
     };
