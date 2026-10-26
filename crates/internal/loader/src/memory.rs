@@ -60,6 +60,39 @@ pub(crate) unsafe fn write<T: NoUninit>(base: usize, offset: usize, value: T) {
     unsafe { enshwick::raw::write_at(at(base, offset), 0, value) };
 }
 
+/// Reads the word at `address` on a suspended thread's stack.
+///
+/// The address sanitizer marks the gaps between another thread's locals as
+/// poisoned, so a walk over that stack is left unchecked under it; the
+/// word is still read whole and unaligned reads are fine.
+///
+/// # Safety
+///
+/// - `address` is readable for a word.
+/// - No other thread writes those bytes during the read.
+#[cfg_attr(enshwick_asan, sanitize(address = "off"))]
+pub(crate) unsafe fn read_stack_word(address: usize) -> usize {
+    // SAFETY: the caller guarantees a readable word at `address` with no
+    // concurrent writer; `read_unaligned` needs no alignment, and every bit
+    // pattern is a `usize`.
+    unsafe { at(address, 0).cast::<usize>().read_unaligned() }
+}
+
+/// Writes the word at `address` on a suspended thread's stack, unchecked by
+/// the address sanitizer, as [`read_stack_word`] reads.
+///
+/// # Safety
+///
+/// - `address` is writable for a word.
+/// - Nothing else reads or writes those bytes during the write.
+/// - The thread may find `value` there.
+#[cfg_attr(enshwick_asan, sanitize(address = "off"))]
+pub(crate) unsafe fn write_stack_word(address: usize, value: usize) {
+    // SAFETY: the caller guarantees a writable word at `address` that
+    // nothing else touches; `write_unaligned` needs no alignment.
+    unsafe { at(address, 0).cast::<usize>().write_unaligned(value) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,6 +114,17 @@ mod tests {
         // SAFETY: four readable bytes of `bytes` start at offset 2.
         unsafe { read_bytes(bytes.as_ptr().expose_provenance(), 2, &mut out) };
         assert_eq!(&out, b"name");
+    }
+
+    #[test]
+    fn a_stack_word_reads_and_writes_at_an_address() {
+        let mut words = [1usize, 2, 3];
+        let base = words.as_mut_ptr().expose_provenance();
+        // SAFETY: `words` holds a word at its second slot.
+        unsafe { write_stack_word(base + size_of::<usize>(), 7) };
+        // SAFETY: the same word.
+        assert_eq!(unsafe { read_stack_word(base + size_of::<usize>()) }, 7);
+        assert_eq!(words, [1, 7, 3]);
     }
 
     #[test]

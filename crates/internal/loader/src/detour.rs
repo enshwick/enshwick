@@ -558,7 +558,7 @@ impl Stack {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, which stays committed
             // and unwritten while every other thread stays suspended.
-            test(unsafe { crate::memory::read(self.address(word), 0) })
+            test(unsafe { crate::memory::read_stack_word(self.address(word)) })
         })
     }
 
@@ -576,12 +576,12 @@ impl Stack {
             // SAFETY: `word` is below `words`, so its eight bytes lie in the
             // committed read-write region `at` found, unwritten while every
             // other thread stays suspended.
-            let old: usize = unsafe { crate::memory::read(at, 0) };
+            let old = unsafe { crate::memory::read_stack_word(at) };
             if let Some(value) = new(old) {
                 // SAFETY: the same eight bytes, writable and touched by no
                 // other thread while every other thread stays suspended; the
                 // caller vouches for `value`.
-                unsafe { crate::memory::write(at, 0, value) };
+                unsafe { crate::memory::write_stack_word(at, value) };
             }
         }
     }
