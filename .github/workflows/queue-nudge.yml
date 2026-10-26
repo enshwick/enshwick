@@ -1,0 +1,23 @@
+# Every 15 minutes: pull requests with auto-merge on that are green but sit
+# outside the merge queue go into it. Never on pull requests.
+name: queue-nudge
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: queue-nudge
+  cancel-in-progress: false
+
+jobs:
+  nudge:
+    permissions: {}
+    # main: the shared workflows are used from main.
+    uses: enshwick/.github/.github/workflows/queue-nudge.yml@main # zizmor: ignore[unpinned-uses]
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
