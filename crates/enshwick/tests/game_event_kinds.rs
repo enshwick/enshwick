@@ -9,9 +9,10 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::ecs::Entity;
     use enshwick::game_events::{
-        AltarUsed, Built, CraftRequested, Crafted, DamageTypes, Died, EquipmentChanged,
-        ExperienceGained, Hit, Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived,
-        TornDown,
+        AcceptOfferedInteractionEvent, AttackCategoryMask, BuildingPickUpEvent, BuildingPlaceEvent,
+        BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, DamageTypeMask,
+        EntityDiedEvent, EquipmentSlot, FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent,
+        Kind, LevelUpEvent, LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
     };
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
@@ -20,9 +21,11 @@ mod tests {
     const DIED: u32 = 0x4001;
     const HISTORY: u32 = 0x4002;
     const CREDIT: u32 = 0x4003;
+    const EQUIPPED: u32 = 0x4004;
 
-    static HITS: Mutex<Vec<Hit>> = Mutex::new(Vec::new());
-    static DEATHS: Mutex<Vec<Died>> = Mutex::new(Vec::new());
+    static HITS: Mutex<Vec<HitEvent>> = Mutex::new(Vec::new());
+    static DEATHS: Mutex<Vec<EntityDiedEvent>> = Mutex::new(Vec::new());
+    static EQUIPPED_SLOTS: Mutex<Vec<EquipmentSlot>> = Mutex::new(Vec::new());
     static SUBSCRIBED: AtomicUsize = AtomicUsize::new(0);
 
     fn quietly<E: Kind>(load: &mut Load<'_>) -> Result<(), Off> {
@@ -39,21 +42,23 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.on_game::<Hit>(|hit| HITS.lock().unwrap().push(*hit))?;
-            load.on_game::<Died>(|died| DEATHS.lock().unwrap().push(*died))?;
-            SUBSCRIBED.fetch_add(2, Ordering::Relaxed);
-            quietly::<LevelGained>(load)?;
-            quietly::<ExperienceGained>(load)?;
-            quietly::<CraftRequested>(load)?;
-            quietly::<Crafted>(load)?;
-            quietly::<Interacted>(load)?;
-            quietly::<Built>(load)?;
-            quietly::<TornDown>(load)?;
-            quietly::<PickedUp>(load)?;
-            quietly::<AltarUsed>(load)?;
-            quietly::<LootOpened>(load)?;
-            quietly::<EquipmentChanged>(load)?;
-            quietly::<Revived>(load)?;
+            load.on_game::<HitEvent>(|hit| HITS.lock().unwrap().push(*hit))?;
+            load.on_game::<EntityDiedEvent>(|died| DEATHS.lock().unwrap().push(*died))?;
+            load.on_game::<HandleEquipmentSlotChangedEvent>(|changed| {
+                EQUIPPED_SLOTS.lock().unwrap().push(changed.equipment_slot);
+            })?;
+            SUBSCRIBED.fetch_add(3, Ordering::Relaxed);
+            quietly::<LevelUpEvent>(load)?;
+            quietly::<XpGainedEvent>(load)?;
+            quietly::<CraftRecipeEvent>(load)?;
+            quietly::<CraftRecipeSuccessEvent>(load)?;
+            quietly::<AcceptOfferedInteractionEvent>(load)?;
+            quietly::<BuildingPlaceEvent>(load)?;
+            quietly::<BuildingTearDownEvent>(load)?;
+            quietly::<BuildingPickUpEvent>(load)?;
+            quietly::<FlameAltarEvent>(load)?;
+            quietly::<LootInteractionEvent>(load)?;
+            quietly::<RevivedPlayerEvent>(load)?;
             Ok(Self)
         }
     }
@@ -61,8 +66,9 @@ mod tests {
     enshwick::declare_mod!(Watcher);
 
     /// A fake host answering every engine id of the API, each type id 64
-    /// bytes under a hash of its own and each offset id 8, then the hit,
-    /// death and kill credit laid out apart, and the world's types.
+    /// bytes under a hash of its own and each offset or enum constant id 8,
+    /// then the hit, death, kill credit and equipment change laid out
+    /// apart, engine bits and slots unlike the API's, and the world's types.
     fn host() -> FakeHost {
         let mut host = FakeHost::new();
         for (index, id) in (0x100u32..).zip(enshwick::__private::ENGINE_IDS) {
@@ -73,31 +79,37 @@ mod tests {
             };
         }
         let fields = [
-            ("hit_event.attacker", 8),
-            ("hit_event.target", 12),
-            ("hit_event.source", 16),
-            ("hit_event.root_target", 20),
-            ("hit_event.weapon", 24),
+            ("hit_event.root_source_id", 8),
+            ("hit_event.target_id", 12),
+            ("hit_event.source_id", 16),
+            ("hit_event.root_target_id", 20),
+            ("hit_event.weapon_pide_id", 24),
             ("hit_event.health_change", 28),
             ("hit_event.stamina_change", 32),
             ("hit_event.damage_types", 36),
-            ("hit_event.attack", 38),
+            ("hit_event.attack_category", 38),
             ("hit_event.target_faction", 39),
-            ("died_event.entity", 8),
+            ("entity_died_event.dead_entity_id", 8),
             ("hit_history.last_index", 0),
             ("hit_history.entries", 8),
             ("hit_history.end", 8 + 2 * 64),
             ("experience_credit.last_player", 4),
+            ("handle_equipment_slot_changed_event.equipment_slot", 12),
+            ("damage_type.magical_fire", 0),
+            ("damage_type.physical_cut", 5),
+            ("attack_category.melee", 2),
+            ("equipment_slot.shield", 40),
         ];
         for (id, offset) in fields {
             host = host.constant(id, offset);
         }
         host.type_hash("hit_event", HIT)
-            .type_hash("died_event", DIED)
-            .type_size("died_event", 16)
+            .type_hash("entity_died_event", DIED)
+            .type_size("entity_died_event", 16)
             .type_hash("hit_history", HISTORY)
             .type_size("hit_history", 152)
             .type_hash("experience_credit", CREDIT)
+            .type_hash("handle_equipment_slot_changed_event", EQUIPPED)
             .type_size("experience_credit", 8)
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
@@ -127,22 +139,27 @@ mod tests {
             hit[at..at + 4].copy_from_slice(&value.to_le_bytes());
         }
         hit[28..32].copy_from_slice(&(-40i32).to_le_bytes());
-        hit[36..38].copy_from_slice(&DamageTypes::FIRE.0.to_le_bytes());
-        hit[38] = 1;
+        hit[36..38].copy_from_slice(&(1u16 | 1 << 5 | 1 << 15).to_le_bytes());
+        hit[38] = 1 << 2;
         hit[39] = 2;
         assert_eq!(loader.raise_game_event(HIT, &hit), 1);
         let hits = HITS.lock().unwrap();
         let [hit] = hits.as_slice() else {
             panic!("{hits:?}")
         };
-        assert_eq!(hit.attacker, Some(Entity(5)));
-        assert_eq!(hit.target, Entity(77));
-        assert_eq!(hit.source, Some(Entity(9)));
-        assert_eq!(hit.root_target, None);
-        assert_eq!(hit.weapon, Some(Entity(3)));
+        assert_eq!(hit.root_source_id, Some(Entity(5)));
+        assert_eq!(hit.target_id, Entity(77));
+        assert_eq!(hit.source_id, Some(Entity(9)));
+        assert_eq!(hit.root_target_id, None);
+        assert_eq!(hit.weapon_pide_id, Some(Entity(3)));
         assert_eq!((hit.health_change, hit.stamina_change), (-40, 0));
-        assert_eq!(hit.damage_types, DamageTypes::FIRE);
-        assert_eq!((hit.attack.0, hit.target_faction), (1, 2));
+        assert_eq!(
+            hit.damage_types,
+            DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::PHYSICAL_CUT,
+            "engine bits the API does not name drop"
+        );
+        assert_eq!(hit.attack_category, AttackCategoryMask::MELEE);
+        assert_eq!(hit.target_faction, 2);
 
         let mut died = [0u8; 16];
         died[8..12].copy_from_slice(&77u32.to_le_bytes());
@@ -151,8 +168,18 @@ mod tests {
         let [died] = deaths.as_slice() else {
             panic!("{deaths:?}")
         };
-        assert_eq!(died.entity, Entity(77));
+        assert_eq!(died.dead_entity_id, Entity(77));
         assert_eq!(died.killer, Some(Entity(5)), "{:?}", loader.logs());
         assert_eq!(died.killer_player, Some(Entity(6)));
+
+        let mut equipped = [0u8; 64];
+        for slot in [40u8, 41] {
+            equipped[12] = slot;
+            assert_eq!(loader.raise_game_event(EQUIPPED, &equipped), 1);
+        }
+        assert_eq!(
+            *EQUIPPED_SLOTS.lock().unwrap(),
+            [EquipmentSlot::Shield, EquipmentSlot::Other(41)]
+        );
     }
 }

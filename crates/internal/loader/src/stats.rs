@@ -13,10 +13,12 @@
 //! account in `mod-data/enshwick/worlds/<key>/stats.bin` and come back when
 //! the player joins.
 
+use combat::{combat, expire, follow};
+use enshwick::ecs::Entity;
+
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
-use enshwick::ecs::Entity;
 
 mod equipment;
 mod vitals;
@@ -28,12 +30,12 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{
-    AffixDefData, AffixRoll, Event, Header, ItemLine, PlayerData, PlayerInfo, StatChange,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, Str,
+    AffixDefData, AffixRoll, Event, Header, ItemLine, PlayerData, StatChange, StatChangeFn,
+    StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
 use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_of, reroll};
 use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
 use crate::ids::Space;
@@ -749,98 +751,6 @@ pub(crate) fn sources(
     Ok(list)
 }
 
-/// The hit factors of an entity with `values`; `None` when it changes no
-/// hit.
-fn combat(sealed: &Sealed, values: &[f32]) -> Option<Combat> {
-    let at = |i: u32, default: f32| values.get(i as usize).copied().unwrap_or(default);
-    let mut row = Combat {
-        deals: [1.0; TYPES],
-        takes: [1.0; TYPES],
-    };
-    let all_deal = at(sealed.damage, 1.0);
-    let all_take = at(sealed.resistance, 0.0);
-    for (i, ids) in sealed.by_type.iter().enumerate() {
-        if i == HEALING {
-            continue;
-        }
-        let (deal, take) = ids.map_or((1.0, 0.0), |(d, t)| (at(d, 1.0), at(t, 0.0)));
-        row.deals[i] = all_deal * deal;
-        row.takes[i] = 1.0 - (all_take + take).clamp(-1.0, 1.0);
-    }
-    (row.deals
-        .iter()
-        .chain(&row.takes)
-        .any(|f| f.to_bits() != 1.0f32.to_bits()))
-    .then_some(row)
-}
-
-/// Applies the hit factors of `source` and `target` to a hit's damage by
-/// type. On the damage site's worker thread: no lock, no allocation.
-pub(crate) fn on_hit(amounts: &mut [f32; TYPES], target: u32, source: u32) {
-    let Some(values) = SNAPSHOT.get() else {
-        return;
-    };
-    let values = values.load();
-    if values.combat.is_empty() {
-        return;
-    }
-    let deals = values.combat.get(&source).map(|c| c.deals);
-    let takes = values.combat.get(&target).map(|c| c.takes);
-    if deals.is_none() && takes.is_none() {
-        return;
-    }
-    for (i, amount) in amounts.iter_mut().enumerate() {
-        if i == HEALING {
-            continue;
-        }
-        *amount *= deals.map_or(1.0, |d| d[i]) * takes.map_or(1.0, |t| t[i]);
-    }
-}
-
-/// Drops the modifiers that ran out, by `now`.
-fn expire(state: &mut State, now: Instant) {
-    if state.next_expiry.is_none_or(|at| at > now) {
-        return;
-    }
-    let mut next = None;
-    for watched in state.watched.values_mut() {
-        let before = watched.modifiers.len();
-        watched
-            .modifiers
-            .retain(|h| h.until.is_none_or(|at| at > now));
-        watched.dirty |= watched.modifiers.len() != before;
-        for at in watched.modifiers.iter().filter_map(|h| h.until) {
-            next = Some(next.map_or(at, |n: Instant| n.min(at)));
-        }
-    }
-    state.next_expiry = next;
-}
-
-/// Watches the players online and forgets the entities nothing keeps
-/// watched or that left the world; whether it forgot any.
-fn follow(loader: &Loader, state: &mut State, players: &[PlayerInfo]) -> bool {
-    let online: FxHashSet<u32> = players.iter().map(|p| p.entity).collect();
-    for p in players {
-        let watched = state.watched.entry(p.entity).or_default();
-        if watched.player.is_none() {
-            watched.player = Some(p.key);
-            watched.dirty = true;
-        }
-    }
-    let before = state.watched.len();
-    state.watched.retain(|entity, w| {
-        // An entry with values still to work out, or maxima points still
-        // added, stays until a step takes them back.
-        let keep = online.contains(entity)
-            || w.asked
-            || w.dirty
-            || w.applied.iter().any(|&points| points != 0)
-            || w.modifiers.iter().any(|h| !h.saved);
-        keep && crate::world::template(loader, Entity(*entity)).is_ok()
-    });
-    state.watched.len() != before
-}
-
 /// Takes the values worked out, as `(entity, what it wore, values)`, into
 /// `state`, and the changes into `changes`; whether any value moved.
 fn take_values(
@@ -1065,153 +975,7 @@ fn save(loader: &Loader) {
     }
 }
 
+mod combat;
+pub(crate) use combat::on_hit;
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_stopped_game_leaves_no_entities_or_values_behind() {
-        with_state(|state| {
-            state.watched.entry(7).or_default().asked = true;
-        });
-        let mut values = Snapshot::default();
-        values.values.insert(7, Box::new([2.0]));
-        snapshot().store(Arc::new(values));
-        forget();
-        assert!(STATE.relock().is_none());
-        assert!(snapshot().load().values.is_empty());
-    }
-
-    fn sealed(kinds: &[(&str, StatDef)]) -> Sealed {
-        let defs: Box<[StatDef]> = kinds.iter().map(|(_, d)| d.clone()).collect();
-        Sealed {
-            by_key: kinds
-                .iter()
-                .enumerate()
-                .map(|(i, (id, _))| (key_of(id).0, u32::try_from(i).unwrap()))
-                .collect(),
-            defaults: defs.iter().map(|d| d.default).collect(),
-            defs,
-            buffs: FxHashMap::default(),
-            handlers: Box::new([]),
-            damage: 0,
-            resistance: 1,
-            maxima: [u32::MAX; 3],
-            by_type: {
-                let mut t = [None; TYPES];
-                t[3] = Some((2, 3));
-                t
-            },
-            affixes: Box::new([]),
-            kinds: kinds
-                .iter()
-                .map(|(id, _)| Kind {
-                    id: (*id).into(),
-                    def: None,
-                })
-                .collect(),
-        }
-    }
-
-    fn combat_kinds() -> Sealed {
-        sealed(&[
-            (
-                "enshwick:damage",
-                StatDef::multiplicative("d").range(0.0, 100.0),
-            ),
-            (
-                "enshwick:resistance",
-                StatDef::additive("r").range(-1.0, 1.0),
-            ),
-            (
-                "enshwick:damage_fire",
-                StatDef::multiplicative("df").range(0.0, 100.0),
-            ),
-            (
-                "enshwick:resistance_fire",
-                StatDef::additive("rf").range(-1.0, 1.0),
-            ),
-        ])
-    }
-
-    #[test]
-    fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
-        assert_eq!(full_id(&["rpg"], "crit"), Some(("rpg:crit".into(), true)));
-        assert_eq!(
-            full_id(&["me.rpg", "rpg"], "crit"),
-            Some(("rpg:crit".into(), true)),
-            "a renamed mod's bare names stay where its data lives"
-        );
-        assert_eq!(
-            full_id(&["me.rpg", "rpg"], "me.rpg:luck"),
-            Some(("me.rpg:luck".into(), true))
-        );
-        assert_eq!(
-            full_id(&["rpg"], "rpg:crit"),
-            Some(("rpg:crit".into(), true))
-        );
-        assert_eq!(
-            full_id(&["rpg"], "enshwick:damage"),
-            Some(("enshwick:damage".into(), false))
-        );
-        assert_eq!(full_id(&["rpg"], "Crit"), None);
-        assert_eq!(full_id(&["rpg"], "a:b:c"), None);
-    }
-
-    #[test]
-    fn values_follow_the_sources_in_their_order() {
-        let sealed = combat_kinds();
-        let list = [
-            source(StatSource::ITEM, StatModifierData::MULTIPLY, 2, 1.5, 900, 7),
-            source(StatSource::BUFF, StatModifierData::ADD, 3, 0.25, 0x99, 0),
-            source(StatSource::ENTITY, StatModifierData::ADD, 3, 0.25, 1, 0),
-        ];
-        let values = work_out(&sealed, &list);
-        let want = [1.0f32, 0.0, 1.5, 0.5];
-        assert!(
-            values
-                .iter()
-                .zip(want)
-                .all(|(a, b)| a.to_bits() == b.to_bits())
-        );
-    }
-
-    #[test]
-    fn hit_factors_combine_every_type_with_each_type() {
-        let sealed = combat_kinds();
-        assert_eq!(combat(&sealed, &[1.0, 0.0, 1.0, 0.0]), None);
-        let close = |a: f32, b: f32| (a - b).abs() < 1e-6;
-        let row = combat(&sealed, &[2.0, 0.5, 1.5, 0.25]).unwrap();
-        assert!(close(row.deals[3], 3.0));
-        assert!(close(row.deals[0], 2.0));
-        assert!(close(row.deals[HEALING], 1.0));
-        assert!(close(row.takes[3], 0.25));
-        assert!(close(row.takes[0], 0.5));
-        let immune = combat(&sealed, &[1.0, 2.0, 1.0, 0.0]).unwrap();
-        assert!(
-            close(immune.takes[1], 0.0),
-            "resistance stops at taking nothing"
-        );
-    }
-
-    #[test]
-    fn hits_without_factors_stay_as_they_are() {
-        let mut amounts = [10.0; TYPES];
-        on_hit(&mut amounts, 1, 2);
-        assert!(amounts.iter().all(|a| a.to_bits() == 10.0f32.to_bits()));
-    }
-
-    #[test]
-    fn saved_modifiers_round_trip() {
-        let saved = vec![Saved {
-            player: 77,
-            owner: "rpg".into(),
-            key: 5,
-            stat: "rpg:crit".into(),
-            op: StatModifierData::ADD,
-            value: 0.1,
-        }];
-        let bytes = postcard::to_allocvec(&saved).unwrap();
-        assert_eq!(postcard::from_bytes::<Vec<Saved>>(&bytes).unwrap(), saved);
-    }
-}
+mod tests;

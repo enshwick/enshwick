@@ -144,6 +144,44 @@ pub(super) struct ItemChangeEntry {
     pub(super) items: Vec<String>,
     /// How many of the item one inventory slot holds, 1 to 65535.
     pub(super) max_stack: Option<ValueEntry>,
+    /// How many slots the container the item places holds, 8 to 128 in
+    /// steps of 8.
+    pub(super) slots: Option<ValueEntry>,
+    /// A weapon's damage factor, from 0 to 100.
+    pub(super) damage_mod: Option<ValueEntry>,
+    /// A weapon's attack speed factor, from 0 to 10.
+    pub(super) speed_mod: Option<ValueEntry>,
+    /// Every armour value, scaled: `{ times = x }` only.
+    pub(super) armor: Option<ValueEntry>,
+    /// How long the item burns as fuel, in seconds.
+    pub(super) burn_time: Option<ValueEntry>,
+    /// The energy the item gives as fuel.
+    pub(super) energy_output: Option<ValueEntry>,
+    /// The comfort the placed item gives.
+    pub(super) comfort_amount: Option<ValueEntry>,
+}
+
+/// A change of vanilla recipes' values.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub(super) struct RecipeChangeEntry {
+    /// The recipes changed: GUIDs, content ids or vanilla debug names.
+    #[serde(default)]
+    pub(super) recipes: Vec<String>,
+    /// Every vanilla recipe that makes one of these items.
+    #[serde(default)]
+    pub(super) output: Vec<String>,
+    /// How many of each item the recipe makes, 1 to 65535.
+    pub(super) output_count: Option<ValueEntry>,
+    /// How many of each ingredient it takes, 1 to 65535.
+    pub(super) cost: Option<ValueEntry>,
+    /// How long it takes, in seconds from 0 to 86400.
+    pub(super) time: Option<ValueEntry>,
+    /// How many of each named ingredient it takes, 0 to 65535: 0 takes the
+    /// ingredient out, and one the recipe lacks is added.
+    #[serde(default)]
+    pub(super) ingredients: std::collections::BTreeMap<String, ValueEntry>,
 }
 
 /// Where a drop comes from: one name or several.
@@ -186,6 +224,8 @@ pub(super) struct ItemsFile {
 pub(super) struct RecipesFile {
     #[serde(default)]
     pub(super) recipe: Vec<Spanned<RecipeEntry>>,
+    #[serde(default)]
+    pub(super) change: Vec<Spanned<RecipeChangeEntry>>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -221,6 +261,7 @@ pub fn schemas() -> Vec<(&'static str, String)> {
     #[expect(dead_code, reason = "only its schema is read")]
     struct Recipes {
         recipe: Option<Vec<RecipeEntry>>,
+        change: Option<Vec<RecipeChangeEntry>>,
     }
     #[derive(schemars::JsonSchema)]
     #[schemars(deny_unknown_fields)]

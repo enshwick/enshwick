@@ -14,6 +14,7 @@
 //! level.
 
 mod kinds;
+mod values;
 
 use core::marker::PhantomData;
 
@@ -22,9 +23,13 @@ use crate::ecs::Entity;
 use crate::{Load, Off};
 
 pub use kinds::{
-    AltarAction, AltarUsed, AttackCategories, Block, Built, CraftRequested, Crafted, DamageTypes,
-    Died, EquipmentChanged, ExperienceGained, ExperienceSource, Hit, Interacted, Kind, LevelGained,
-    LootOpened, PickedUp, Revived, TornDown,
+    AcceptOfferedInteractionEvent, Block, BuildingPickUpEvent, BuildingPlaceEvent,
+    BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, EntityDiedEvent,
+    FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, Kind, LevelUpEvent,
+    LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
+};
+pub use values::{
+    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
 };
 
 mod sealed {

@@ -12,33 +12,36 @@ any other.
 runs a handler on every event of kind `E`:
 
 ```rust
-use enshwick::game_events::{Died, LevelGained};
+use enshwick::game_events::{EntityDiedEvent, LevelUpEvent};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    load.on_game::<Died>(move |died| {
+    load.on_game::<EntityDiedEvent>(move |died| {
         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-            enshwick::info!("{} killed entity {}", player.name, died.entity.0);
+            enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
         }
     })?;
-    load.on_game::<LevelGained>(|up| enshwick::info!("entity {} reached level {}", up.player.0, up.level))
+    load.on_game::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
 }
 ```
 
 | Kind | Fields |
 | --- | --- |
-| `Hit` | `attacker`, `source`, `target`, `root_target`, `weapon`, `health_change` (below 0 for damage), `stamina_change`, `damage_types`, `attack`, `target_faction` |
-| `Died` | `entity`, `killer` (the last hit's attacker), `killer_player` (the player credited with the kill) |
-| `LevelGained` | `player`, `level` |
-| `ExperienceGained` | `player`, `amount`, `source` (`Combat`, `Quest`, `Mining` and others) |
-| `CraftRequested` | `player`, `station`, `recipe`, `amount` |
-| `Crafted` | `workshop`, `recipe` |
-| `Interacted` | `player`, `target`, `offer` |
-| `Built`, `TornDown`, `PickedUp` | `block` (`player`, `position`, volume, `material`); `item` for `Built`, `entity` for `PickedUp` |
-| `AltarUsed` | `player`, `altar`, `action` (`Abandon`, `Reclaim`, `RemoveWater`, `SetSpawn`) |
-| `LootOpened` | `player`, `container`, `take_all` |
-| `EquipmentChanged` | `player`, `slot` |
-| `Revived` | `player`, `by` |
+| `HitEvent` | `root_source_id` (who the hit is credited to), `source_id`, `target_id`, `root_target_id`, `weapon_pide_id`, `health_change` (below 0 for damage), `stamina_change`, `damage_types`, `attack_category`, `target_faction` |
+| `EntityDiedEvent` | `dead_entity_id`; enshwick's own `killer` (the last hit's attacker) and `killer_player` (the player credited with the kill) |
+| `LevelUpEvent` | `player_entity_id`, `level` |
+| `XpGainedEvent` | `player_entity_id`, `amount`, `source` (`Combat`, `Quest`, `Mining` and others) |
+| `CraftRecipeEvent` | `crafting_operator_id`, `crafting_station_id`, `recipe_id`, `recipe_amount` |
+| `CraftRecipeSuccessEvent` | `workshop_id`, `recipe_id` |
+| `AcceptOfferedInteractionEvent` | `guest_entity_id`, `host_entity_id`, `offer_id` |
+| `BuildingPlaceEvent`, `BuildingTearDownEvent`, `BuildingPickUpEvent` | `block` (`owner_id`, `position`, volume, `material`); `tracking_item_id` for `BuildingPlaceEvent`, `picked_entity_id` for `BuildingPickUpEvent` |
+| `FlameAltarEvent` | `player_entity_id`, `base_entity_id`, `r#type` (`Abandon`, `Reclaim`, `RemoveWater`, `SetAsPreferredSpawnAltar`) |
+| `LootInteractionEvent` | `guest_id`, `host_id`, `loot_all` |
+| `HandleEquipmentSlotChangedEvent` | `player_entity_id`, `equipment_slot` |
+| `RevivedPlayerEvent` | `target_entity_id`, `source_entity_id` |
+
+Each kind and field takes the game's own name in Rust casing; `Block`,
+`killer` and `killer_player` are enshwick's.
 
 The loader maps each kind and its fields to the running build, so a game
 update that renames or moves them changes the loader, not your mod.

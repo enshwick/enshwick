@@ -4,9 +4,12 @@
 //! tick, so no pass sees every altar: passes merge into what is known, and an
 //! altar no pass has seen for [`FORGET_AFTER`] and [`FORGET_STEPS`] server
 //! steps is forgotten, the last one too. Counting steps keeps a server that
-//! stalls from forgetting altars it could not step over. A mod that controls
-//! the zones gets `upgrade_building_range` replaced by vanilla's own loop on
-//! the same engine helpers, writing its sizes.
+//! stalls from forgetting altars it could not step over. With altar zone
+//! filters, `upgrade_building_range` is replaced by vanilla's own loop on the
+//! same engine helpers, writing the sizes the filters chained to, in load
+//! order, each on the size the last one left.
+
+use levels::{observe, read_levels, write_ranges};
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -15,6 +18,7 @@ use crate::pinned::Constant;
 use crate::registry::Registry;
 
 mod geometry;
+mod levels;
 
 use core::ffi::c_void;
 use std::cell::{Cell, RefCell};
@@ -27,15 +31,15 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick::abi::{
-    AltarInfo, AltarZoneSize, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
+    AltarInfo, AltarZone, AltarZoneFn, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
     ZoneCheckFn,
 };
 use enshwick::altars::MAX_ZONES;
-use enshwick::raw::{read_at, read_ptr_at, write_at};
+use enshwick::raw::{read_at, read_ptr_at};
 
 use self::geometry::Placed;
 use crate::chains::Next;
-use crate::ecs::{Engine, Query};
+use crate::ecs::Engine;
 use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
@@ -195,8 +199,22 @@ impl Fields {
     }
 }
 static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
-/// The index of the mod that controls the zones, plus one; 0 for none.
-static CONTROLLER: AtomicUsize = AtomicUsize::new(0);
+/// The mods' altar zone filters, in load order.
+static SIZERS: Registry<Sizer> = Registry::new();
+/// When the zones need sizing again.
+#[derive(Debug)]
+struct Sizing {
+    /// Set when a mod asked for the zones to be sized again.
+    asked: AtomicBool,
+    /// How many filters ran at the last sizing, so a filter whose mod goes
+    /// off takes its share back at the next step.
+    running: AtomicUsize,
+}
+
+static SIZING: Sizing = Sizing {
+    asked: AtomicBool::new(false),
+    running: AtomicUsize::new(0),
+};
 static TARGETS: ArcSwapOption<Targets> = ArcSwapOption::const_empty();
 static CHANGED: AtomicBool = AtomicBool::new(false);
 /// The server steps the post-step counted.
@@ -216,6 +234,7 @@ static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
 static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 type Filter = Registered<ZoneCheckFn>;
+type Sizer = Registered<AltarZoneFn>;
 
 #[derive(Debug, Clone, Copy)]
 struct SeamLayout {
@@ -272,55 +291,145 @@ pub(crate) fn open(loader: &Loader, owner: ModIndex) -> Status {
     Status::OK
 }
 
-/// Makes mod `owner` the one that sizes altar zones; during init only.
-pub(crate) fn control(loader: &Loader, owner: ModIndex) -> Status {
+/// Adds mod `owner`'s altar zone filter; it opens altars too. During init
+/// only.
+pub(crate) fn add_sizer(
+    loader: &Loader,
+    owner: ModIndex,
+    callback: AltarZoneFn,
+    user: *mut c_void,
+) -> Status {
     let status = open(loader, owner);
     if !status.is_ok() {
         return status;
     }
-    match CONTROLLER.compare_exchange(0, owner.handle().0, Ordering::AcqRel, Ordering::Acquire) {
-        Ok(_) => Status::OK,
-        Err(held) if held == owner.handle().0 => Status::OK,
-        Err(_) => Status::REFUSED,
+    SIZERS
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
+}
+
+/// Has the zones sized again on the server's next step, for mod `owner`,
+/// which must have a filter.
+pub(crate) fn resize(owner: ModIndex) -> Status {
+    let has_filter = |sizers: &[Sizer]| sizers.iter().any(|s| s.owner == owner);
+    let has_filter = match SIZERS.sealed() {
+        Some(sizers) => has_filter(sizers),
+        // Sealed meanwhile: the sealed list has it.
+        None => SIZERS
+            .edit(|sizers| has_filter(sizers))
+            .unwrap_or_else(|_| SIZERS.sealed().is_some_and(has_filter)),
+    };
+    if !has_filter {
+        return Status::REFUSED;
     }
+    SIZING.asked.store(true, Ordering::Release);
+    Status::OK
 }
 
 pub(crate) fn opened(owner: ModIndex) -> bool {
     OPENERS.relock().contains(&owner)
 }
 
-pub(crate) fn set_sizes(owner: ModIndex, sizes: &[AltarZoneSize]) -> Status {
-    if CONTROLLER.load(Ordering::Acquire) != owner.handle().0 {
-        return Status::REFUSED;
-    }
-    let state = STATE.relock();
-    let mut targets = Targets::new();
-    for size in sizes {
-        let (Some(placed), Some(levels)) =
-            (state.placed.get(size.altar), state.levels.get(size.altar))
-        else {
-            continue;
-        };
-        let level = usize::from(size.level);
-        let (Some(turn), Some(current)) = (geometry::turn(placed.orientation), levels.last())
-        else {
-            continue;
-        };
-        if levels.len() != level || size.grow < 0 || size.height <= 0 {
-            continue;
+/// The filters of mods that run.
+fn running_sizers() -> impl Iterator<Item = &'static Sizer> {
+    SIZERS
+        .sealed()
+        .unwrap_or_default()
+        .iter()
+        .filter(|s| !crate::host::is_off(s.owner))
+}
+
+/// One altar's vanilla zone, taken from the state before the filters run.
+struct Vanilla {
+    zone: AltarZone,
+    levels: usize,
+    range: [f32; 3],
+    turn: (f64, f64),
+}
+
+/// Runs `filters` in order on `zone`, each on what the last one left: a
+/// filter keeps the altar and level, cannot shrink the zone below vanilla
+/// width, and a height below one cell keeps the height before it. The
+/// result, or `None` when it is the vanilla zone.
+fn chain(
+    vanilla: AltarZone,
+    filters: impl Iterator<Item = (AltarZoneFn, *mut c_void)>,
+) -> Option<(i64, i64)> {
+    let mut zone = vanilla;
+    for (callback, user) in filters {
+        let before = zone;
+        // SAFETY: the mod's filter with its own pointer and a zone valid for
+        // the call; the safe layer catches its panics.
+        unsafe { callback(&raw mut zone, user) };
+        zone.header = before.header;
+        zone.altar = before.altar;
+        zone.level = before.level;
+        zone.reserved = before.reserved;
+        zone.grow = zone.grow.max(0);
+        if zone.height <= 0 {
+            zone.height = before.height;
         }
-        let range = current.map(|v| v * HALF);
-        targets.insert(
-            size.altar,
-            (
-                level,
-                geometry::grown_range(range, turn, size.grow, size.height),
-            ),
-        );
     }
-    drop(state);
+    ((zone.grow, zone.height) != (vanilla.grow, vanilla.height)).then_some((zone.grow, zone.height))
+}
+
+/// Asks the filters of the mods that run for every altar's zone; see
+/// [`size_zones_with`].
+fn size_zones() {
+    let running: Vec<&Sizer> = running_sizers().collect();
+    SIZING.running.store(running.len(), Ordering::Release);
+    size_zones_with(&running);
+}
+
+/// Asks `sizers` for every altar's zone and keeps what differs from vanilla
+/// for the next range pass. The filters run without the state's lock, so
+/// they may read the altars.
+fn size_zones_with(sizers: &[&Sizer]) {
+    if sizers.is_empty() {
+        TARGETS.store(None);
+        return;
+    }
+    let vanilla: Vec<Vanilla> = {
+        let state = STATE.relock();
+        state
+            .placed
+            .iter()
+            .filter_map(|(id, placed)| {
+                let levels = state.levels.get(id)?;
+                let turn = geometry::turn(placed.orientation)?;
+                let centre = geometry::centre(placed)?;
+                let range = levels.last()?.map(|v| v * HALF);
+                let cells = geometry::cells(centre, range, turn);
+                Some(Vanilla {
+                    zone: AltarZone {
+                        header: Header::of::<AltarZone>(),
+                        altar: id,
+                        level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
+                        reserved: [0; 3],
+                        grow: 0,
+                        height: cells.max[1] - cells.min[1],
+                    },
+                    levels: levels.len(),
+                    range,
+                    turn,
+                })
+            })
+            .collect()
+    };
+    let mut targets = Targets::new();
+    for altar in vanilla {
+        let filters = sizers.iter().map(|s| (s.callback, s.user()));
+        if let Some((grow, height)) = chain(altar.zone, filters) {
+            targets.insert(
+                altar.zone.altar,
+                (
+                    altar.levels,
+                    geometry::grown_range(altar.range, altar.turn, grow, height),
+                ),
+            );
+        }
+    }
     TARGETS.store(Some(Arc::new(targets)));
-    Status::OK
 }
 
 pub(crate) fn list() -> Vec<AltarInfo> {
@@ -377,7 +486,12 @@ pub(crate) fn after_step(loader: &Loader) {
             CHANGED.store(true, Ordering::Release);
         }
     }
-    if CHANGED.swap(false, Ordering::AcqRel) {
+    let changed = CHANGED.swap(false, Ordering::AcqRel);
+    let gone = SIZING.running.load(Ordering::Acquire) != running_sizers().count();
+    if changed | SIZING.asked.swap(false, Ordering::AcqRel) | gone {
+        size_zones();
+    }
+    if changed {
         loader.emit(Event::ALTARS_CHANGED, None, core::ptr::null());
     }
 }
@@ -403,6 +517,7 @@ pub(crate) fn register(owner: ModIndex, callback: ZoneCheckFn, user: *mut c_void
 }
 
 pub(crate) fn link(loader: &'static Loader) {
+    let controlled = !SIZERS.seal().is_empty();
     link_seam(loader);
     if !WANTED.load(Ordering::Acquire) {
         return;
@@ -431,7 +546,6 @@ pub(crate) fn link(loader: &'static Loader) {
             return;
         }
     }
-    let controlled = CONTROLLER.load(Ordering::Acquire) != 0;
     let upgrade_flags = if controlled {
         HookFlags::EXCLUSIVE
     } else {
@@ -567,8 +681,7 @@ unsafe extern "system" fn upgrade(ctx: *mut u64) {
         unsafe { UPGRADE_NEXT.get()(ctx) };
         return;
     };
-    let controller = CONTROLLER.load(Ordering::Acquire);
-    if controller != 0 && !crate::host::is_off(ModIndex::new(controller - 1)) {
+    if running_sizers().next().is_some() {
         // SAFETY: `ctx` is the live context of `upgrade_building_range`, on
         // its thread, and vanilla has not run this tick.
         if std::panic::catch_unwind(|| unsafe { write_ranges(engine, ctx) }).is_ok() {
@@ -631,267 +744,6 @@ fn merge(
     if changed {
         CHANGED.store(true, Ordering::Release);
     }
-}
-
-/// Learns positions, orientations and built zones, after vanilla built them.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `add_buildzones_server`, used on its
-///   thread while the system runs.
-unsafe fn observe(engine: &Engine, ctx: *mut u64) {
-    drop_stale_buffers();
-    PLACED.with_borrow_mut(|placed| {
-        BUILT.with_borrow_mut(|built| {
-            LEVELS.with_borrow_mut(|levels| {
-                // SAFETY: the caller guarantees the live context of
-                // `add_buildzones_server` on its thread.
-                unsafe { observe_into(engine, ctx, placed, built) };
-                merge(placed, built, levels);
-            });
-        });
-    });
-}
-
-/// Walks `add_buildzones_server`'s rows again into `placed` and `built`.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `add_buildzones_server`, used on its
-///   thread while the system runs.
-unsafe fn observe_into(
-    engine: &Engine,
-    ctx: *mut u64,
-    placed: &mut Vec<(u32, Placed)>,
-    built: &mut Vec<(u32, [f32; 3])>,
-) {
-    let Some(fields) = FIELDS.get() else {
-        return;
-    };
-    // Vanilla left the row counter at the end: walk again from the start and
-    // restore it.
-    // SAFETY: the caller guarantees the system's live context on its thread.
-    let saved = unsafe { engine.row(ctx) };
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, 0) };
-    // SAFETY: the caller guarantees the system's live context on its thread;
-    // its iterator is `ZONES_WORDS` words, checked against the system's
-    // reflected components at link; the query ends inside this call.
-    let mut query: Query<'_, ZONES_WORDS> = unsafe { engine.query(ctx) };
-    while let Some(words) = query.next() {
-        let transform = words[ZONES_TRANSFORM] as *const u8;
-        let shape = words[ZONES_SHAPE] as *const u8;
-        if transform.is_null() || shape.is_null() {
-            continue;
-        }
-        // SAFETY: the caller guarantees the system's live context on its
-        // thread.
-        let id = unsafe { engine.entity(ctx) };
-        // SAFETY: `shape` is the row's non-null `TriggerShape` by the check
-        // before it; its half extents sit at the reflected `rangeX` field.
-        let range: [f32; 3] = unsafe { read_at(shape, fields.range) };
-        // SAFETY: `transform` is the row's non-null `CurrentTransform` by
-        // the check before it; its position sits at the reflected
-        // `transform.position` field.
-        let position: [i64; 3] = unsafe { read_at(transform, fields.position) };
-        // SAFETY: `transform` is the row's non-null `CurrentTransform` by
-        // the check before it; its orientation sits at the reflected
-        // `transform.orientation` field.
-        let orientation: [f32; 4] = unsafe { read_at(transform, fields.orientation) };
-        built.push((id, range));
-        placed.push((
-            id,
-            Placed {
-                position,
-                orientation,
-            },
-        ));
-    }
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, saved) };
-}
-
-/// Learns levels after vanilla's `upgrade_building_range`.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `upgrade_building_range`, used on its
-///   thread while the system runs.
-unsafe fn read_levels(engine: &Engine, ctx: *mut u64) {
-    drop_stale_buffers();
-    LEVELS.with_borrow_mut(|levels| {
-        // SAFETY: the caller guarantees the live context of
-        // `upgrade_building_range` on its thread.
-        unsafe { read_levels_into(engine, ctx, levels) };
-        PLACED.with_borrow_mut(|placed| {
-            BUILT.with_borrow_mut(|built| merge(placed, built, levels));
-        });
-    });
-}
-
-/// Walks `upgrade_building_range`'s rows again into `levels`.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `upgrade_building_range`, used on its
-///   thread while the system runs.
-unsafe fn read_levels_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
-    // SAFETY: the caller guarantees the system's live context on its thread.
-    let saved = unsafe { engine.row(ctx) };
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, 0) };
-    // SAFETY: the caller guarantees the system's live context on its thread;
-    // its iterator is `UPGRADE_WORDS` words, checked against the system's
-    // reflected components at link; the query ends inside this call.
-    let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
-    while let Some(words) = query.next() {
-        let words = *words;
-        // SAFETY: `words` are the current row's iterator words of the live
-        // query, on the system's thread.
-        let Some(level) = (unsafe { altar_level(engine, &words) }) else {
-            continue;
-        };
-        // SAFETY: `words` are the current row's iterator words of the live
-        // query, on the system's thread.
-        let Some((_, sizes)) = (unsafe { level_sizes(engine, &words, level) }) else {
-            continue;
-        };
-        // SAFETY: the caller guarantees the system's live context on its
-        // thread.
-        levels.push((unsafe { engine.entity(ctx) }, sizes));
-    }
-    // SAFETY: the caller guarantees the system's live context on its
-    // thread, which alone writes it.
-    unsafe { engine.set_row(ctx, saved) };
-}
-
-/// Vanilla's `upgrade_building_range`, writing the controlling mod's ranges
-/// where it has one for the altar's level.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `upgrade_building_range`, used on its
-///   thread in place of the system's own run.
-unsafe fn write_ranges(engine: &Engine, ctx: *mut u64) {
-    drop_stale_buffers();
-    LEVELS.with_borrow_mut(|levels| {
-        // SAFETY: the caller guarantees the live context of
-        // `upgrade_building_range` on its thread, in place of its run.
-        unsafe { write_ranges_into(engine, ctx, levels) };
-        merge(&mut Vec::new(), &mut Vec::new(), levels);
-    });
-}
-
-/// Writes each row's range as [`write_ranges`] describes, into `levels` the
-/// sizes it saw.
-///
-/// # Safety
-///
-/// - `ctx` is the live context of `upgrade_building_range`, used on its
-///   thread in place of the system's own run.
-unsafe fn write_ranges_into(engine: &Engine, ctx: *mut u64, levels: &mut Vec<(u32, Sizes)>) {
-    let Some(range_at) = FIELDS.get().map(|fields| fields.range) else {
-        return;
-    };
-    let targets = TARGETS.load();
-    // SAFETY: the caller guarantees the system's live context on its thread;
-    // its iterator is `UPGRADE_WORDS` words, checked against the system's
-    // reflected components at link; the query ends inside this call.
-    let mut query: Query<'_, UPGRADE_WORDS> = unsafe { engine.query(ctx) };
-    while let Some(words) = query.next() {
-        let words = *words;
-        // SAFETY: `words` are the current row's iterator words of the live
-        // query, on the system's thread.
-        let Some(level) = (unsafe { altar_level(engine, &words) }) else {
-            continue;
-        };
-        // SAFETY: `words` are the current row's iterator words of the live
-        // query, on the system's thread.
-        let Some((current, sizes)) = (unsafe { level_sizes(engine, &words, level) }) else {
-            continue;
-        };
-        // SAFETY: the caller guarantees the system's live context on its
-        // thread.
-        let id = unsafe { engine.entity(ctx) };
-        let target = match targets.as_deref().and_then(|targets| targets.get(&id)) {
-            Some(&(solved_level, range)) if solved_level == level => range,
-            _ => current.map(|v| v * HALF),
-        };
-        levels.push((id, sizes));
-        let shape = words[UPGRADE_SHAPE] as *mut u8;
-        if shape.is_null() {
-            continue;
-        }
-        // SAFETY: `shape` is the row's non-null `TriggerShape` by the check
-        // before it; its half extents sit at the reflected `rangeX` field.
-        let written: [f32; 3] = unsafe { read_at(shape, range_at) };
-        if written.map(f32::to_bits) != target.map(f32::to_bits) {
-            // SAFETY: the tracker, stamps, entity and kind are the current
-            // row's words of the live query, whose system writes
-            // `TriggerShape`, on its thread.
-            unsafe {
-                engine.mark_changed(
-                    words[UPGRADE_TRACKER],
-                    words[UPGRADE_STAMP_A],
-                    words[UPGRADE_STAMP_B],
-                    words[UPGRADE_ENTITY],
-                    words[UPGRADE_KIND],
-                );
-            }
-            // SAFETY: `shape` is the row's non-null `TriggerShape`, which
-            // this system writes, on its thread in place of its run; the half
-            // extents sit at the reflected `rangeX` field.
-            unsafe { write_at(shape, range_at, target) };
-        }
-    }
-}
-
-/// The altar level of the current row, or `None` for a row that is no altar.
-///
-/// # Safety
-///
-/// - `words` are the current row's iterator words of a live
-///   `upgrade_building_range` query, used on its system's thread.
-unsafe fn altar_level(engine: &Engine, words: &[u64; UPGRADE_WORDS]) -> Option<usize> {
-    let level_component = words[UPGRADE_LEVEL] as *const u8;
-    // SAFETY: the caller guarantees the current row's words, so these are
-    // the row's null or live `Level` attribute set and its attribute
-    // registry, on the system's thread.
-    let value = unsafe { engine.level(words[UPGRADE_ATTRIBUTES], level_component) }?;
-    // The level is the attribute's low byte.
-    Some(usize::from(value.to_le_bytes()[0]))
-}
-
-/// The current level's size and the sizes of every level up to it; `None`
-/// when a size is missing.
-///
-/// # Safety
-///
-/// - `words` are the current row's iterator words of a live
-///   `upgrade_building_range` query, used on its system's thread.
-unsafe fn level_sizes(
-    engine: &Engine,
-    words: &[u64; UPGRADE_WORDS],
-    level: usize,
-) -> Option<([f32; 3], Sizes)> {
-    if level > MAX_LEVELS {
-        return None;
-    }
-    // SAFETY: the caller guarantees the current row's words, so this is the
-    // live row's balancing registry word, on the system's thread.
-    let size_of = |l: usize| unsafe { engine.zone_size(words[UPGRADE_BALANCING], l) };
-    let mut sizes = Sizes::new();
-    for l in 1..=level {
-        sizes.try_push(size_of(l)?).ok()?;
-    }
-    let current = match sizes.last() {
-        Some(&current) => current,
-        None => size_of(level)?,
-    };
-    Some((current, sizes))
 }
 
 unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f32) -> u8 {
@@ -988,108 +840,4 @@ unsafe fn check(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn entries_held_back_from_a_gone_world_never_reach_the_next() {
-        drop_stale_buffers();
-        BUILT.with_borrow_mut(|built| built.push((7, [1.0; 3])));
-        drop_stale_buffers();
-        assert_eq!(BUILT.with_borrow(Vec::len), 1);
-        forget();
-        drop_stale_buffers();
-        assert!(BUILT.with_borrow(Vec::is_empty));
-    }
-
-    #[test]
-    fn seen_merges_batches_and_reports_changes() {
-        let now = When {
-            at: Instant::now(),
-            step: 0,
-        };
-        let later = When {
-            at: now.at + FORGET_AFTER,
-            step: FORGET_STEPS,
-        };
-        let mut seen: Seen<u8> = Seen::new();
-        assert!(seen.merge([(1, 10), (2, 20)], now));
-        assert!(!seen.merge([(1, 10)], now));
-        assert!(seen.merge([(2, 21)], now));
-        assert_eq!(seen.get(2), Some(&21));
-        assert_eq!(seen.iter().count(), 2);
-        assert!(seen.merge([], later));
-        assert_eq!(seen.iter().count(), 0);
-    }
-
-    #[test]
-    fn a_stalled_server_keeps_its_altars_and_the_last_one_goes() {
-        let start = When {
-            at: Instant::now(),
-            step: 100,
-        };
-        let mut seen: Seen<u8> = Seen::new();
-        assert!(seen.merge([(1, 10), (2, 20)], start));
-        let stalled = When {
-            at: start.at + FORGET_AFTER * 30,
-            step: start.step + 1,
-        };
-        assert!(
-            !seen.merge([(1, 10)], stalled),
-            "a long step forgets nothing"
-        );
-        assert!(!seen.expire(stalled));
-        let fast = When {
-            at: start.at,
-            step: start.step + FORGET_STEPS * 10,
-        };
-        assert!(!seen.expire(fast), "fast steps alone forget nothing");
-        let gone = When {
-            at: stalled.at + FORGET_AFTER,
-            step: stalled.step + FORGET_STEPS,
-        };
-        assert!(seen.expire(gone), "no pass sees them any more");
-        assert_eq!(seen.iter().count(), 0);
-    }
-
-    #[test]
-    fn an_upright_altar_reports_its_zone_and_levels() {
-        let placed = Placed {
-            position: [
-                3636_i64 << 32 | 3 << 30,
-                860_i64 << 32 | 1 << 31,
-                1339_i64 << 32 | 3 << 30,
-            ],
-            orientation: [0.0, 0.0, 0.0, 1.0],
-        };
-        let altar = info(
-            7,
-            &placed,
-            Some(&[20.0; 3]),
-            Some(&[[40.0; 3]].into_iter().collect()),
-        );
-        assert_eq!(altar.entity, 7);
-        assert_eq!(altar.level, 1);
-        assert_eq!(altar.tilted, 0);
-        assert_eq!(
-            altar.zone,
-            Bounds {
-                min: [7234, 1681, 2640],
-                max: [7314, 1761, 2720]
-            }
-        );
-        assert_eq!(altar.level_count, 1);
-        assert_eq!(altar.levels[0], altar.zone);
-    }
-
-    #[test]
-    fn a_tilted_altar_has_no_zone() {
-        let placed = Placed {
-            position: [0; 3],
-            orientation: [0.3, 0.0, 0.0, 0.95],
-        };
-        let altar = info(7, &placed, Some(&[20.0; 3]), None);
-        assert_eq!(altar.tilted, 1);
-        assert_eq!(altar.zone, Bounds::default());
-    }
-}
+mod tests;

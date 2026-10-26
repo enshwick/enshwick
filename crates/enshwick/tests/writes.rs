@@ -15,7 +15,7 @@ mod tests {
         world: World,
         flags: WritableType,
         immune: Field<bool>,
-        refused: bool,
+        copy: WritableType,
     }
 
     static RESOLVED: OnceLock<Resolved> = OnceLock::new();
@@ -31,14 +31,12 @@ mod tests {
             let world = load.world()?;
             let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
             let immune = flags.field(load, "immune")?;
-            let refused = world
-                .writable_type(load, "keen::ecs::NetworkHealth")
-                .is_err();
+            let copy = world.writable_type(load, "keen::ecs::NetworkHealth")?;
             let _first = RESOLVED.set(Resolved {
                 world,
                 flags,
                 immune,
-                refused,
+                copy,
             });
             Ok(Self)
         }
@@ -92,13 +90,18 @@ mod tests {
             .component(8, 1, &dead)
             .template(7, [1; 16])
             .template(8, [2; 16])
+            .refuse_write(7)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Writes)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let resolved = RESOLVED.get().unwrap();
         let world = resolved.world;
-        assert!(resolved.refused, "a copy for clients is not writable");
+        assert_eq!(
+            world.update(Entity(7), resolved.copy, |_| ()),
+            Err(WorldError::Refused),
+            "the loader refuses the copies the game keeps for clients"
+        );
 
         assert_eq!(
             world.set_health(Entity(7), 500),

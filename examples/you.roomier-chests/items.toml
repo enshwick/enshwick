@@ -1,0 +1,19 @@
+[[change]]
+items = ["Prop_Storage_24_T1_Box"]
+slots = 32
+
+[[change]]
+items = ["Prop_Storage_32_T2_Box"]
+slots = 48
+
+[[change]]
+items = ["Prop_Storage_40_T3_Box"]
+slots = 64
+
+[[change]]
+items = ["Prop_Storage_56_T4_Box"]
+slots = 88
+
+[[change]]
+items = ["Prop_Storage_72_T6_Magic"]
+slots = 112

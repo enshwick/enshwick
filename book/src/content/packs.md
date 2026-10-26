@@ -29,6 +29,9 @@ game's files or saves.
 
 A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
 
+The repository's `examples/` folder holds three packs to start from:
+`you.bigger-stacks`, `you.faster-crafting` and `you.roomier-chests`.
+
 `cargo enshwick new --data you.bigger-stacks` starts a pack: the folder
 `you.bigger-stacks/` with every file above, each showing its first change
 commented out, the schema files that let an editor check them, and a README
@@ -81,7 +84,7 @@ the game lacks, or that several items carry, is a problem at its line, with
 the names that look like it:
 
 ```text
-error [you.lanterns] items.toml:7:1: no item "Torchh" in this pack, and no vanilla item "Torchh"; near: Torch
+error [you.lanterns] items.toml:7:1: no item "Tool_Torch1" in this pack, and no vanilla item "Tool_Torch1"; near: Tool_Torch01
 ```
 
 `cargo enshwick id you.lockers:locker` prints a name's GUID and game id.
@@ -113,11 +116,11 @@ another mod's, with a `[[change]]` table:
 
 ```toml
 [[change]]
-items = ["Wood_Log", "Stone_Raw", "6943053a-32c1-4718-ae22-e61427ddf54d"]
+items = ["Material_T1_Wood_Logs", "Build_TerrainMaterial_T1_Stone", "6943053a-32c1-4718-ae22-e61427ddf54d"]
 max_stack = 999
 
 [[change]]
-items = ["Resin"]
+items = ["Material_T1_Resin"]
 max_stack = { times = 4 }
 ```
 
@@ -127,10 +130,72 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
+| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
+| `damage_mod` | a weapon's damage factor | 0 to 100 |
+| `speed_mod` | a weapon's attack speed factor | 0 to 10 |
+| `armor` | every armour value of the item, scaled only: `{ times = x }` | a factor |
+| `burn_time` | how long the item burns as fuel, in seconds | 0 to 86400 |
+| `energy_output` | the energy the item gives as fuel | 0 to 1000000 |
+| `comfort_amount` | the comfort the placed item gives | 0 to 1000 |
 
 A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
+
+The stats change only on items that have them: a `damage_mod` on an item
+that deals no damage is left, and the pack's log says so. A weapon deals the
+changed damage once the game sets it up again; the number its tooltip shows
+was written when the item was made and stays.
+
+`slots` changes the chests placed from then on, and chests upgraded to the
+item, since an upgrade places a new chest: a chest placed before keeps the
+size it was placed with, which the save holds. Removing the pack leaves every
+chest as it is. A container only grows, as an upgraded chest moves every item
+it holds; an item that places no container is a problem at its line. The
+change reaches every item that places the same container, and the log names
+them; when such items ask for different sizes, the last in load order counts
+and the log says so. The largest vanilla chest holds 72 slots.
+
+### Recipes
+
+`recipes.toml` changes vanilla recipes the same way:
+
+```toml
+[[change]]
+recipes = ["Tool_Torch01_T0_PK"]
+output_count = 3
+
+[[change]]
+output = ["Material_T2_Wood_Planks"]
+cost = { times = 0.5 }
+time = { times = 0.5 }
+
+[[change]]
+output = ["Tool_Torch01"]
+ingredients = { Material_T1_Wood_Logs = 1, Material_T1_Resin = 0, Build_TerrainMaterial_T1_Stone = 2 }
+```
+
+`recipes` names vanilla recipes by GUID or by debug name. `output` names
+items and picks every vanilla recipe that makes one of them. A change gives
+at least one of the two. A recipe a mod or the pack adds gets its values
+where it is defined, so naming one here is a problem.
+
+| Field | Meaning | Values |
+| --- | --- | --- |
+| `output_count` | how many of each item the recipe makes | 1 to 65535 |
+| `cost` | how many of each ingredient it takes | 1 to 65535 |
+| `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
+| `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+
+`cost` applies first, then `ingredients`, so a named ingredient wins over the
+cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
+any item of a kind keeps its count. Most workbench recipes
+take no time; production stations such as the kiln do. A changed time
+reaches a production that runs already from its next step on.
+
+The server crafts by its own recipes and each player's crafting menu shows
+the player's own, so every side runs the same pack, which the join check
+proves. [Game rates](../rates.md) multiply what a pack sets.
 
 ### Several packs on one value
 
@@ -144,7 +209,7 @@ later pack [requires](#packtoml) the other, it overrides it on purpose and
 the line is information:
 
 ```text
-warn  [you.stacks] max_stack of 6943053a-32c1-4718-ae22-e61427ddf54d is 999 from you.stacks items.toml:2 (Wood_Log), which overrides 500 from ann.bags items.toml:7 (Wood_Log)
+warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from you.stacks items.toml:2 (Material_T1_Wood_Logs), which overrides 500 from ann.bags items.toml:7 (Material_T1_Wood_Logs)
 ```
 
 A Rust mod declares the same changes with
@@ -160,7 +225,7 @@ depends on that pack. The first time such a world loads, the pack sets a
 stops before the world loads and the log says which pack and items:
 
 ```text
-error you.stacks holds this game (it lets Wood_Log and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
 ```
 
 To remove such a pack safely, split every stack larger than the game's size
@@ -252,22 +317,42 @@ workbench is a problem that asks for the game's data. `cargo enshwick pack schem
 every file but `texts.toml`; name one at the top of a file, `#:schema ./items.schema.json`, and an
 editor with TOML support completes and checks fields as you type.
 
-## Changes while the server runs
+## Changes while the game runs
 
 The dedicated server watches a pack's files. When they change it reads them
 again and logs any problem with its line; with none, it applies the new
 `loot.toml` at once: chances, counts and items of drops change for the next
 roll. Items, recipes, workshops, texts and changes of values are built into
-the game's registries at start, on the server and on every player's client,
-so a change to them waits for the next start, and the log says so:
+the game's data at start, on the server and on every player's client, so a
+change to them waits for the next start, and the log says so:
 
 ```text
 info  [you.lanterns] data pack reloaded: 2 loot drops
-warn  [you.lanterns] data pack changed beyond its loot: items, recipes, workshops, texts and changes of values change at the next start
+warn  [you.lanterns] data pack changed beyond its loot: changes of values change at the next start, or at once with dev_reload = true
 ```
 
 Loot of a kind no pack or mod had at start, such as the first drop from
 destroyed objects, also waits for a restart.
+
+### While you make a pack
+
+With `dev_reload = true` in `mod-configs/enshwick.toml` (see [reloading a mod](../testing.md#reloading-a-mod-while-the-game-runs)),
+the server and the client both watch the packs' files, and a change that
+only moves values applies at once: stack sizes, recipe counts and times, and
+chest slots. The loader merges every pack's changes again, reports
+overridden values as at start, and builds each changed resource again in
+place:
+
+```text
+info  [you.stacks] data pack reloaded: 3 changes of values, 4 resources built again
+```
+
+Some changes still take a restart, and the log names them: the first change
+of an item or recipe that no change touched at start, and an ingredient taken
+out or added, which changes the recipe list's length. Chest slots apply to
+chests placed after the reload. On a server, players who joined before the
+change keep the old values until they join again, so reload on a test server
+of your own.
 
 ## Releases and the join check
 

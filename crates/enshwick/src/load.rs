@@ -75,7 +75,7 @@ macro_rules! off_from {
 
 off_from!(
     crate::affixes::RollError,
-    crate::altars::SetSizesError,
+    crate::altars::ResizeError,
     crate::code::FindError,
     crate::code::PatternError,
     crate::console::RunError,

@@ -2,7 +2,11 @@
 //! running build, for [`Load::on_game`](crate::Load::on_game).
 
 use crate::ecs::Entity;
+use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
+use crate::game_events::values::{
+    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
+};
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
@@ -18,14 +22,14 @@ mod sealed {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::{Died, Kind};
+/// use enshwick::game_events::{EntityDiedEvent, Kind};
 ///
 /// fn watch<E: Kind + core::fmt::Debug>(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.on_game::<E>(|event| enshwick::debug!("{event:?}"))
 /// }
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     watch::<Died>(load)
+///     watch::<EntityDiedEvent>(load)
 /// }
 /// ```
 pub trait Kind: sealed::Sealed + Sized + 'static {
@@ -54,172 +58,86 @@ where
     })
 }
 
-/// Bits of the damage types of a hit, the engine's `DamageTypeNew` mask.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::DamageTypes;
-///
-/// let types = DamageTypes(DamageTypes::FIRE.0 | DamageTypes::CUT.0);
-/// assert!(types.contains(DamageTypes::FIRE));
-/// assert!(!types.contains(DamageTypes::ICE));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct DamageTypes(pub u16);
-
-impl DamageTypes {
-    /// Physical cut.
-    pub const CUT: Self = Self(1);
-    /// Physical pierce.
-    pub const PIERCE: Self = Self(1 << 1);
-    /// Physical blunt.
-    pub const BLUNT: Self = Self(1 << 2);
-    /// Fire.
-    pub const FIRE: Self = Self(1 << 3);
-    /// Ice.
-    pub const ICE: Self = Self(1 << 4);
-    /// Shroud.
-    pub const SHROUD: Self = Self(1 << 5);
-    /// Lightning.
-    pub const LIGHTNING: Self = Self(1 << 6);
-    /// Healing.
-    pub const HEALING: Self = Self(1 << 7);
-    /// Poison.
-    pub const POISON: Self = Self(1 << 8);
-    /// Wood, against trees and wooden things.
-    pub const WOOD: Self = Self(1 << 9);
-    /// Stone, against rock.
-    pub const STONE: Self = Self(1 << 10);
-    /// Metal, against ore.
-    pub const METAL: Self = Self(1 << 11);
-    /// Explosion.
-    pub const EXPLOSION: Self = Self(1 << 12);
-
-    /// Whether every bit of `other` is set.
-    ///
-    /// # Examples
-    ///
-    /// See [`DamageTypes`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
-/// Bits of the attack categories of a hit, the engine's `AttackCategory`
-/// mask.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::AttackCategories;
-///
-/// assert!(AttackCategories(1).contains(AttackCategories::MELEE));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AttackCategories(pub u8);
-
-impl AttackCategories {
-    /// Melee.
-    pub const MELEE: Self = Self(1);
-    /// Ranged.
-    pub const RANGED: Self = Self(1 << 1);
-    /// Magic.
-    pub const MAGIC: Self = Self(1 << 2);
-    /// A tool, such as a pickaxe.
-    pub const TOOL: Self = Self(1 << 3);
-    /// Anything else.
-    pub const OTHER: Self = Self(1 << 4);
-    /// Area of effect.
-    pub const AREA: Self = Self(1 << 5);
-    /// A skill shot.
-    pub const SKILL_SHOT: Self = Self(1 << 6);
-
-    /// Whether every bit of `other` is set.
-    ///
-    /// # Examples
-    ///
-    /// See [`AttackCategories`].
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
 /// A hit the server resolved, damage or healing, written where health
 /// changes. Fall and shroud damage change health without a hit.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Hit;
+/// use enshwick::game_events::HitEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<Hit>(|hit| {
+///     load.on_game::<HitEvent>(|hit| {
 ///         if hit.health_change < 0 {
-///             enshwick::debug!("{:?} took {} from {:?}", hit.target, -hit.health_change, hit.attacker);
+///             enshwick::debug!("{:?} took {} from {:?}", hit.target_id, -hit.health_change, hit.root_source_id);
 ///         }
 ///     })
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Hit {
+pub struct HitEvent {
     /// Who the hit is credited to: a character or enemy, not its arrow.
-    pub attacker: Option<Entity>,
+    pub root_source_id: Option<Entity>,
     /// What dealt it: the attacker itself, a projectile or an effect.
-    pub source: Option<Entity>,
+    pub source_id: Option<Entity>,
     /// The entity hit.
-    pub target: Entity,
+    pub target_id: Entity,
     /// The root of what was hit: the actor a hit body part belongs to.
-    pub root_target: Option<Entity>,
+    pub root_target_id: Option<Entity>,
     /// The weapon's item entity.
-    pub weapon: Option<Entity>,
+    pub weapon_pide_id: Option<Entity>,
     /// The change of the target's health: below 0 for damage.
     pub health_change: i32,
     /// The change of the target's stamina.
     pub stamina_change: i32,
     /// The damage types.
-    pub damage_types: DamageTypes,
+    pub damage_types: DamageTypeMask,
     /// The attack categories.
-    pub attack: AttackCategories,
+    pub attack_category: AttackCategoryMask,
     /// The target's faction, the engine's `FactionType`.
     pub target_faction: u8,
 }
 
-impl sealed::Sealed for Hit {}
+impl sealed::Sealed for HitEvent {}
 
-impl Kind for Hit {
+impl Kind for HitEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
         let ty = load.event_type(ids::HIT_EVENT)?;
-        let attacker: Field<Entity> = ty.field_by_id(load, ids::HIT_ATTACKER)?;
-        let target: Field<Entity> = ty.field_by_id(load, ids::HIT_TARGET)?;
-        let source: Field<Entity> = ty.field_by_id(load, ids::HIT_SOURCE)?;
-        let root_target: Field<Entity> = ty.field_by_id(load, ids::HIT_ROOT_TARGET)?;
-        let weapon: Field<Entity> = ty.field_by_id(load, ids::HIT_WEAPON)?;
+        let attacker: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_ROOT_SOURCE_ID)?;
+        let target: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_TARGET_ID)?;
+        let source: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_SOURCE_ID)?;
+        let root_target: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_ROOT_TARGET_ID)?;
+        let weapon: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_WEAPON_PIDE_ID)?;
         let health: Field<i32> = ty.field_by_id(load, ids::HIT_HEALTH_CHANGE)?;
         let stamina: Field<i32> = ty.field_by_id(load, ids::HIT_STAMINA_CHANGE)?;
         let damage: Field<u16> = ty.field_by_id(load, ids::HIT_DAMAGE_TYPES)?;
-        let attack: Field<u8> = ty.field_by_id(load, ids::HIT_ATTACK)?;
+        let attack: Field<u8> = ty.field_by_id(load, ids::HIT_EVENT_ATTACK_CATEGORY)?;
         let faction: Field<u8> = ty.field_by_id(load, ids::HIT_TARGET_FACTION)?;
+        let damage_bits = Bits::resolve(load, DamageTypeMask::IDS.map(|(t, id)| (t.bits(), id)));
+        let attack_bits = Bits::resolve(
+            load,
+            AttackCategoryMask::IDS.map(|(c, id)| (u16::from(c.bits()), id)),
+        );
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    attacker: some(e.get(attacker)?),
-                    source: some(e.get(source)?),
-                    target: e.get(target)?,
-                    root_target: some(e.get(root_target)?),
-                    weapon: some(e.get(weapon)?),
+                    root_source_id: some(e.get(attacker)?),
+                    source_id: some(e.get(source)?),
+                    target_id: e.get(target)?,
+                    root_target_id: some(e.get(root_target)?),
+                    weapon_pide_id: some(e.get(weapon)?),
                     health_change: e.get(health)?,
                     stamina_change: e.get(stamina)?,
-                    damage_types: DamageTypes(e.get(damage)?),
-                    attack: AttackCategories(e.get(attack)?),
+                    damage_types: DamageTypeMask::from_bits(damage_bits.map(e.get(damage)?)),
+                    attack_category: AttackCategoryMask::from_bits(
+                        u8::try_from(attack_bits.map(u16::from(e.get(attack)?))).ok()?,
+                    ),
                     target_faction: e.get(faction)?,
                 })
             },
@@ -234,30 +152,32 @@ impl Kind for Hit {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Died;
+/// use enshwick::game_events::EntityDiedEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let world = load.world()?;
-///     load.on_game::<Died>(move |died| {
+///     load.on_game::<EntityDiedEvent>(move |died| {
 ///         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-///             enshwick::info!("{} killed entity {}", player.name, died.entity.0);
+///             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
 ///         }
 ///     })
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Died {
+pub struct EntityDiedEvent {
     /// The entity that died.
-    pub entity: Entity,
-    /// The attacker of the last hit it took, from the hits it keeps.
+    pub dead_entity_id: Entity,
+    /// The attacker of the last hit it took, from the hits it keeps; the
+    /// name is enshwick's, not the game's.
     pub killer: Option<Entity>,
     /// The last player character that hit it, from its kill credit:
-    /// the one the game credits with the experience.
+    /// the one the game credits with the experience; the name is
+    /// enshwick's, not the game's.
     pub killer_player: Option<Entity>,
 }
 
-impl sealed::Sealed for Died {}
+impl sealed::Sealed for EntityDiedEvent {}
 
 /// Where the kill credit lives on a dying entity.
 #[derive(Clone, Copy, Debug)]
@@ -294,7 +214,7 @@ impl Credit {
             entries,
             slots,
             entry_size,
-            entry_attacker: offset(ids::HIT_ATTACKER)?,
+            entry_attacker: offset(ids::HIT_EVENT_ROOT_SOURCE_ID)?,
             experience: world.component_type(load, ids::EXPERIENCE_CREDIT)?,
             last_player: offset(ids::EXPERIENCE_CREDIT_LAST_PLAYER)?,
             world,
@@ -328,20 +248,20 @@ impl Credit {
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
         let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: `component` returned the entity's live ExperienceSource,
+        // SAFETY: `component` returned the entity's live ExperienceSource component,
         // valid until the game thread moves on; `resolve` checked that the u32
         // at `lastHitPlayerId` lies inside its reflected size.
         some(Entity(unsafe { read_at(source, self.last_player) }))
     }
 }
 
-impl Kind for Died {
+impl Kind for EntityDiedEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::DIED_EVENT)?;
-        let dead: Field<Entity> = ty.field_by_id(load, ids::DIED_ENTITY)?;
+        let ty = load.event_type(ids::ENTITY_DIED_EVENT)?;
+        let dead: Field<Entity> = ty.field_by_id(load, ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID)?;
         let credit = Credit::resolve(load)
             .inspect_err(|off| crate::debug!("kill credit off: {off}"))
             .ok();
@@ -351,7 +271,7 @@ impl Kind for Died {
             move |e| {
                 let entity = e.get(dead)?;
                 Some(Self {
-                    entity,
+                    dead_entity_id: entity,
                     killer: credit.as_ref().and_then(|c| c.killer(entity)),
                     killer_player: credit.as_ref().and_then(|c| c.killer_player(entity)),
                 })
@@ -366,37 +286,37 @@ impl Kind for Died {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::LevelGained;
+/// use enshwick::game_events::LevelUpEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<LevelGained>(|up| enshwick::info!("entity {} reached level {}", up.player.0, up.level))
+///     load.on_game::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct LevelGained {
+pub struct LevelUpEvent {
     /// The player's character.
-    pub player: Entity,
+    pub player_entity_id: Entity,
     /// The level reached.
     pub level: u32,
 }
 
-impl sealed::Sealed for LevelGained {}
+impl sealed::Sealed for LevelUpEvent {}
 
-impl Kind for LevelGained {
+impl Kind for LevelUpEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::LEVEL_GAINED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::LEVEL_GAINED_PLAYER)?;
-        let level: Field<i32> = ty.field_by_id(load, ids::LEVEL_GAINED_LEVEL)?;
+        let ty = load.event_type(ids::LEVEL_UP_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::LEVEL_UP_EVENT_PLAYER_ENTITY_ID)?;
+        let level: Field<i32> = ty.field_by_id(load, ids::LEVEL_UP_EVENT_LEVEL)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
+                    player_entity_id: e.get(player)?,
                     level: u32::try_from(e.get(level)?).ok()?,
                 })
             },
@@ -405,68 +325,16 @@ impl Kind for LevelGained {
     }
 }
 
-/// Where experience came from, the engine's `ExperienceSourceType`.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::ExperienceSource;
-///
-/// assert_eq!(ExperienceSource::from_raw(4), ExperienceSource::Combat);
-/// assert_eq!(ExperienceSource::from_raw(40), ExperienceSource::Other(40));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum ExperienceSource {
-    /// No source given.
-    None,
-    /// Exploring.
-    Exploration,
-    /// Reading lore.
-    Lore,
-    /// A quest.
-    Quest,
-    /// A kill.
-    Combat,
-    /// Mining.
-    Mining,
-    /// A completed item set.
-    ItemSetCompleted,
-    /// A value this crate does not name.
-    Other(u8),
-}
-
-impl ExperienceSource {
-    /// The source the engine's value names.
-    ///
-    /// # Examples
-    ///
-    /// See [`ExperienceSource`].
-    #[must_use]
-    pub const fn from_raw(value: u8) -> Self {
-        match value {
-            0 => Self::None,
-            1 => Self::Exploration,
-            2 => Self::Lore,
-            3 => Self::Quest,
-            4 => Self::Combat,
-            5 => Self::Mining,
-            6 => Self::ItemSetCompleted,
-            other => Self::Other(other),
-        }
-    }
-}
-
 /// A character gained experience.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::{ExperienceGained, ExperienceSource};
+/// use enshwick::game_events::{XpGainedEvent, ExperienceSourceType};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<ExperienceGained>(|gained| {
-///         if gained.source == ExperienceSource::Combat {
+///     load.on_game::<XpGainedEvent>(|gained| {
+///         if gained.source == ExperienceSourceType::Combat {
 ///             enshwick::debug!("{} experience for a kill", gained.amount);
 ///         }
 ///     })
@@ -474,34 +342,40 @@ impl ExperienceSource {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct ExperienceGained {
+pub struct XpGainedEvent {
     /// The player's character.
-    pub player: Entity,
+    pub player_entity_id: Entity,
     /// How much.
     pub amount: u32,
     /// Where from.
-    pub source: ExperienceSource,
+    pub source: ExperienceSourceType,
 }
 
-impl sealed::Sealed for ExperienceGained {}
+impl sealed::Sealed for XpGainedEvent {}
 
-impl Kind for ExperienceGained {
+impl Kind for XpGainedEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::EXPERIENCE_GAINED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_PLAYER)?;
-        let amount: Field<u32> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_AMOUNT)?;
-        let source: Field<u8> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_SOURCE)?;
+        let ty = load.event_type(ids::XP_GAINED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::XP_GAINED_EVENT_PLAYER_ENTITY_ID)?;
+        let amount: Field<u32> = ty.field_by_id(load, ids::XP_GAINED_EVENT_AMOUNT)?;
+        let source: Field<u8> = ty.field_by_id(load, ids::XP_GAINED_EVENT_SOURCE)?;
+        let sources = Values::resolve(load, ExperienceSourceType::IDS);
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
+                    player_entity_id: e.get(player)?,
                     amount: e.get(amount)?,
-                    source: ExperienceSource::from_raw(e.get(source)?),
+                    source: {
+                        let raw = e.get(source)?;
+                        sources
+                            .variant(u64::from(raw))
+                            .unwrap_or(ExperienceSourceType::Other(raw))
+                    },
                 })
             },
             handler,
@@ -515,46 +389,48 @@ impl Kind for ExperienceGained {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::CraftRequested;
+/// use enshwick::game_events::CraftRecipeEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<CraftRequested>(|craft| enshwick::debug!("recipe {:#x} x{}", craft.recipe, craft.amount))
+///     load.on_game::<CraftRecipeEvent>(|craft| enshwick::debug!("recipe {:#x} x{}", craft.recipe_id, craft.recipe_amount))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct CraftRequested {
+pub struct CraftRecipeEvent {
     /// The crafting player's character.
-    pub player: Entity,
+    pub crafting_operator_id: Entity,
     /// The station, or none for crafting by hand.
-    pub station: Option<Entity>,
+    pub crafting_station_id: Option<Entity>,
     /// The recipe id.
-    pub recipe: u32,
+    pub recipe_id: u32,
     /// How many.
-    pub amount: u16,
+    pub recipe_amount: u16,
 }
 
-impl sealed::Sealed for CraftRequested {}
+impl sealed::Sealed for CraftRecipeEvent {}
 
-impl Kind for CraftRequested {
+impl Kind for CraftRecipeEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::CRAFT_REQUESTED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::CRAFT_REQUESTED_PLAYER)?;
-        let station: Field<Entity> = ty.field_by_id(load, ids::CRAFT_REQUESTED_STATION)?;
-        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_REQUESTED_RECIPE)?;
-        let amount: Field<u16> = ty.field_by_id(load, ids::CRAFT_REQUESTED_AMOUNT)?;
+        let ty = load.event_type(ids::CRAFT_RECIPE_EVENT)?;
+        let player: Field<Entity> =
+            ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_CRAFTING_OPERATOR_ID)?;
+        let station: Field<Entity> =
+            ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_CRAFTING_STATION_ID)?;
+        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_RECIPE_ID)?;
+        let amount: Field<u16> = ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_RECIPE_AMOUNT)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    station: some(e.get(station)?),
-                    recipe: e.get(recipe)?,
-                    amount: e.get(amount)?,
+                    crafting_operator_id: e.get(player)?,
+                    crafting_station_id: some(e.get(station)?),
+                    recipe_id: e.get(recipe)?,
+                    recipe_amount: e.get(amount)?,
                 })
             },
             handler,
@@ -567,38 +443,39 @@ impl Kind for CraftRequested {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Crafted;
+/// use enshwick::game_events::CraftRecipeSuccessEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<Crafted>(|done| enshwick::debug!("workshop {:#x} made {:#x}", done.workshop, done.recipe))
+///     load.on_game::<CraftRecipeSuccessEvent>(|done| enshwick::debug!("workshop {:#x} made {:#x}", done.workshop_id, done.recipe_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Crafted {
+pub struct CraftRecipeSuccessEvent {
     /// The workshop id.
-    pub workshop: u32,
+    pub workshop_id: u32,
     /// The recipe id.
-    pub recipe: u32,
+    pub recipe_id: u32,
 }
 
-impl sealed::Sealed for Crafted {}
+impl sealed::Sealed for CraftRecipeSuccessEvent {}
 
-impl Kind for Crafted {
+impl Kind for CraftRecipeSuccessEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::CRAFTED_EVENT)?;
-        let workshop: Field<u32> = ty.field_by_id(load, ids::CRAFTED_WORKSHOP)?;
-        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFTED_RECIPE)?;
+        let ty = load.event_type(ids::CRAFT_RECIPE_SUCCESS_EVENT)?;
+        let workshop: Field<u32> =
+            ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_WORKSHOP_ID)?;
+        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    workshop: e.get(workshop)?,
-                    recipe: e.get(recipe)?,
+                    workshop_id: e.get(workshop)?,
+                    recipe_id: e.get(recipe)?,
                 })
             },
             handler,
@@ -612,42 +489,49 @@ impl Kind for Crafted {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Interacted;
+/// use enshwick::game_events::AcceptOfferedInteractionEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<Interacted>(|used| enshwick::debug!("{:?} used {:?}", used.player, used.target))
+///     load.on_game::<AcceptOfferedInteractionEvent>(|used| enshwick::debug!("{:?} used {:?}", used.guest_entity_id, used.host_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Interacted {
+#[expect(
+    clippy::struct_field_names,
+    reason = "the fields take the game's names, which all end in Id"
+)]
+pub struct AcceptOfferedInteractionEvent {
     /// The player's character.
-    pub player: Entity,
+    pub guest_entity_id: Entity,
     /// The entity that offered the interaction.
-    pub target: Entity,
+    pub host_entity_id: Entity,
     /// Which of the target's offers.
-    pub offer: u32,
+    pub offer_id: u32,
 }
 
-impl sealed::Sealed for Interacted {}
+impl sealed::Sealed for AcceptOfferedInteractionEvent {}
 
-impl Kind for Interacted {
+impl Kind for AcceptOfferedInteractionEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::INTERACTED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::INTERACTED_PLAYER)?;
-        let target: Field<Entity> = ty.field_by_id(load, ids::INTERACTED_TARGET)?;
-        let offer: Field<u32> = ty.field_by_id(load, ids::INTERACTED_OFFER)?;
+        let ty = load.event_type(ids::ACCEPT_OFFERED_INTERACTION_EVENT)?;
+        let player: Field<Entity> =
+            ty.field_by_id(load, ids::ACCEPT_OFFERED_INTERACTION_EVENT_GUEST_ENTITY_ID)?;
+        let target: Field<Entity> =
+            ty.field_by_id(load, ids::ACCEPT_OFFERED_INTERACTION_EVENT_HOST_ENTITY_ID)?;
+        let offer: Field<u32> =
+            ty.field_by_id(load, ids::ACCEPT_OFFERED_INTERACTION_EVENT_OFFER_ID)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    target: e.get(target)?,
-                    offer: e.get(offer)?,
+                    guest_entity_id: e.get(player)?,
+                    host_entity_id: e.get(target)?,
+                    offer_id: e.get(offer)?,
                 })
             },
             handler,
@@ -655,17 +539,17 @@ impl Kind for Interacted {
     }
 }
 
-/// What a player did to a building block, from the engine's building
-/// events.
+/// What a player did to a building block, the fields the engine's building
+/// events share; the name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
-/// See [`Built`].
+/// See [`BuildingPlaceEvent`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct Block {
     /// The player's character.
-    pub player: Entity,
+    pub owner_id: Entity,
     /// Where, in metres, as the engine records it.
     pub position: [f32; 3],
     /// The block's volume, its lower corner, in metres.
@@ -679,7 +563,7 @@ pub struct Block {
 /// The ids of the fields every building event shares, one set per event.
 #[derive(Clone, Copy, Debug)]
 struct BlockIds {
-    player: &'static str,
+    owner_id: &'static str,
     position: &'static str,
     min: &'static str,
     max: &'static str,
@@ -689,7 +573,7 @@ struct BlockIds {
 /// The fields every building event shares.
 #[derive(Clone, Copy, Debug)]
 struct BlockFields {
-    player: Field<Entity>,
+    owner_id: Field<Entity>,
     position: [Field<f32>; 3],
     min: [Field<f32>; 3],
     max: [Field<f32>; 3],
@@ -708,7 +592,7 @@ impl BlockFields {
             Ok([at, next(4)?, next(8)?])
         };
         Ok(Self {
-            player: ty.field_by_id(load, ids.player)?,
+            owner_id: ty.field_by_id(load, ids.owner_id)?,
             position: vector(ids.position)?,
             min: vector(ids.min)?,
             max: vector(ids.max)?,
@@ -721,7 +605,7 @@ impl BlockFields {
             Some([e.get(fields[0])?, e.get(fields[1])?, e.get(fields[2])?])
         };
         Some(Block {
-            player: e.get(self.player)?,
+            owner_id: e.get(self.owner_id)?,
             position: vector(self.position)?,
             volume_min: vector(self.min)?,
             volume_max: vector(self.max)?,
@@ -736,48 +620,48 @@ impl BlockFields {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Built;
+/// use enshwick::game_events::BuildingPlaceEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<Built>(|built| enshwick::debug!("{:?} built at {:?}", built.block.player, built.block.position))
+///     load.on_game::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.owner_id, built.block.position))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
-pub struct Built {
+pub struct BuildingPlaceEvent {
     /// The block.
     pub block: Block,
     /// The item the block was built from.
-    pub item: u32,
+    pub tracking_item_id: u32,
 }
 
-impl sealed::Sealed for Built {}
+impl sealed::Sealed for BuildingPlaceEvent {}
 
-impl Kind for Built {
+impl Kind for BuildingPlaceEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::BUILT_EVENT)?;
+        let ty = load.event_type(ids::BUILDING_PLACE_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
             BlockIds {
-                player: ids::BUILT_PLAYER,
-                position: ids::BUILT_POSITION,
-                min: ids::BUILT_VOLUME_MIN,
-                max: ids::BUILT_VOLUME_MAX,
-                material: ids::BUILT_MATERIAL,
+                owner_id: ids::BUILDING_PLACE_EVENT_OWNER_ID,
+                position: ids::BUILDING_PLACE_EVENT_POSITION,
+                min: ids::BUILDING_PLACE_EVENT_VOLUME_MIN,
+                max: ids::BUILDING_PLACE_EVENT_VOLUME_MAX,
+                material: ids::BUILDING_PLACE_EVENT_MATERIAL,
             },
         )?;
-        let item: Field<u32> = ty.field_by_id(load, ids::BUILT_ITEM)?;
+        let item: Field<u32> = ty.field_by_id(load, ids::BUILDING_PLACE_EVENT_TRACKING_ITEM_ID)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
                     block: block.read(e)?,
-                    item: e.get(item)?,
+                    tracking_item_id: e.get(item)?,
                 })
             },
             handler,
@@ -790,36 +674,36 @@ impl Kind for Built {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::TornDown;
+/// use enshwick::game_events::BuildingTearDownEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<TornDown>(|torn| enshwick::debug!("torn down at {:?}", torn.block.position))
+///     load.on_game::<BuildingTearDownEvent>(|torn| enshwick::debug!("torn down at {:?}", torn.block.position))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
-pub struct TornDown {
+pub struct BuildingTearDownEvent {
     /// The block.
     pub block: Block,
 }
 
-impl sealed::Sealed for TornDown {}
+impl sealed::Sealed for BuildingTearDownEvent {}
 
-impl Kind for TornDown {
+impl Kind for BuildingTearDownEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::TORN_DOWN_EVENT)?;
+        let ty = load.event_type(ids::BUILDING_TEAR_DOWN_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
             BlockIds {
-                player: ids::TORN_DOWN_PLAYER,
-                position: ids::TORN_DOWN_POSITION,
-                min: ids::TORN_DOWN_VOLUME_MIN,
-                max: ids::TORN_DOWN_VOLUME_MAX,
-                material: ids::TORN_DOWN_MATERIAL,
+                owner_id: ids::BUILDING_TEAR_DOWN_EVENT_OWNER_ID,
+                position: ids::BUILDING_TEAR_DOWN_EVENT_POSITION,
+                min: ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MIN,
+                max: ids::BUILDING_TEAR_DOWN_EVENT_VOLUME_MAX,
+                material: ids::BUILDING_TEAR_DOWN_EVENT_MATERIAL,
             },
         )?;
         on(
@@ -840,94 +724,53 @@ impl Kind for TornDown {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::PickedUp;
+/// use enshwick::game_events::BuildingPickUpEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<PickedUp>(|picked| enshwick::debug!("picked up {:?}", picked.entity))
+///     load.on_game::<BuildingPickUpEvent>(|picked| enshwick::debug!("picked up {:?}", picked.picked_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
-pub struct PickedUp {
+pub struct BuildingPickUpEvent {
     /// The block.
     pub block: Block,
     /// The entity picked up.
-    pub entity: Option<Entity>,
+    pub picked_entity_id: Option<Entity>,
 }
 
-impl sealed::Sealed for PickedUp {}
+impl sealed::Sealed for BuildingPickUpEvent {}
 
-impl Kind for PickedUp {
+impl Kind for BuildingPickUpEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::PICKED_UP_EVENT)?;
+        let ty = load.event_type(ids::BUILDING_PICK_UP_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
             BlockIds {
-                player: ids::PICKED_UP_PLAYER,
-                position: ids::PICKED_UP_POSITION,
-                min: ids::PICKED_UP_VOLUME_MIN,
-                max: ids::PICKED_UP_VOLUME_MAX,
-                material: ids::PICKED_UP_MATERIAL,
+                owner_id: ids::BUILDING_PICK_UP_EVENT_OWNER_ID,
+                position: ids::BUILDING_PICK_UP_EVENT_POSITION,
+                min: ids::BUILDING_PICK_UP_EVENT_VOLUME_MIN,
+                max: ids::BUILDING_PICK_UP_EVENT_VOLUME_MAX,
+                material: ids::BUILDING_PICK_UP_EVENT_MATERIAL,
             },
         )?;
-        let picked: Field<Entity> = ty.field_by_id(load, ids::PICKED_UP_ENTITY)?;
+        let picked: Field<Entity> =
+            ty.field_by_id(load, ids::BUILDING_PICK_UP_EVENT_PICKED_ENTITY_ID)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
                     block: block.read(e)?,
-                    entity: some(e.get(picked)?),
+                    picked_entity_id: some(e.get(picked)?),
                 })
             },
             handler,
         )
-    }
-}
-
-/// What a player did at a Flame Altar, the engine's `FlameAltarActionType`.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::AltarAction;
-///
-/// assert_eq!(AltarAction::from_raw(1), AltarAction::Reclaim);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum AltarAction {
-    /// Abandoned the base.
-    Abandon,
-    /// Reclaimed an abandoned base.
-    Reclaim,
-    /// Removed the water.
-    RemoveWater,
-    /// Made it the preferred respawn altar.
-    SetSpawn,
-    /// A value this crate does not name.
-    Other(u8),
-}
-
-impl AltarAction {
-    /// The action the engine's value names.
-    ///
-    /// # Examples
-    ///
-    /// See [`AltarAction`].
-    #[must_use]
-    pub const fn from_raw(value: u8) -> Self {
-        match value {
-            0 => Self::Abandon,
-            1 => Self::Reclaim,
-            2 => Self::RemoveWater,
-            3 => Self::SetSpawn,
-            other => Self::Other(other),
-        }
     }
 }
 
@@ -936,42 +779,49 @@ impl AltarAction {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::AltarUsed;
+/// use enshwick::game_events::FlameAltarEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<AltarUsed>(|used| enshwick::info!("{:?} at altar {:?}", used.action, used.altar))
+///     load.on_game::<FlameAltarEvent>(|used| enshwick::info!("{:?} at altar {:?}", used.r#type, used.base_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct AltarUsed {
+pub struct FlameAltarEvent {
     /// The player's character.
-    pub player: Entity,
+    pub player_entity_id: Entity,
     /// The altar's base entity.
-    pub altar: Entity,
+    pub base_entity_id: Entity,
     /// What was done.
-    pub action: AltarAction,
+    pub r#type: FlameAltarActionType,
 }
 
-impl sealed::Sealed for AltarUsed {}
+impl sealed::Sealed for FlameAltarEvent {}
 
-impl Kind for AltarUsed {
+impl Kind for FlameAltarEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::ALTAR_USED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_PLAYER)?;
-        let altar: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_ALTAR)?;
-        let kind: Field<u8> = ty.field_by_id(load, ids::ALTAR_USED_ACTION)?;
+        let ty = load.event_type(ids::FLAME_ALTAR_EVENT)?;
+        let player: Field<Entity> =
+            ty.field_by_id(load, ids::FLAME_ALTAR_EVENT_PLAYER_ENTITY_ID)?;
+        let altar: Field<Entity> = ty.field_by_id(load, ids::FLAME_ALTAR_EVENT_BASE_ENTITY_ID)?;
+        let kind: Field<u8> = ty.field_by_id(load, ids::FLAME_ALTAR_EVENT_TYPE)?;
+        let actions = Values::resolve(load, FlameAltarActionType::IDS);
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    altar: e.get(altar)?,
-                    action: AltarAction::from_raw(e.get(kind)?),
+                    player_entity_id: e.get(player)?,
+                    base_entity_id: e.get(altar)?,
+                    r#type: {
+                        let raw = e.get(kind)?;
+                        actions
+                            .variant(u64::from(raw))
+                            .unwrap_or(FlameAltarActionType::Other(raw))
+                    },
                 })
             },
             handler,
@@ -984,42 +834,42 @@ impl Kind for AltarUsed {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::LootOpened;
+/// use enshwick::game_events::LootInteractionEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<LootOpened>(|loot| enshwick::debug!("{:?} looted {:?}", loot.player, loot.container))
+///     load.on_game::<LootInteractionEvent>(|loot| enshwick::debug!("{:?} looted {:?}", loot.guest_id, loot.host_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct LootOpened {
+pub struct LootInteractionEvent {
     /// The player's character.
-    pub player: Entity,
+    pub guest_id: Entity,
     /// The container.
-    pub container: Entity,
+    pub host_id: Entity,
     /// Whether the player took everything at once.
-    pub take_all: bool,
+    pub loot_all: bool,
 }
 
-impl sealed::Sealed for LootOpened {}
+impl sealed::Sealed for LootInteractionEvent {}
 
-impl Kind for LootOpened {
+impl Kind for LootInteractionEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::LOOT_OPENED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::LOOT_OPENED_PLAYER)?;
-        let container: Field<Entity> = ty.field_by_id(load, ids::LOOT_OPENED_CONTAINER)?;
-        let all: Field<bool> = ty.field_by_id(load, ids::LOOT_OPENED_TAKE_ALL)?;
+        let ty = load.event_type(ids::LOOT_INTERACTION_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_GUEST_ID)?;
+        let container: Field<Entity> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_HOST_ID)?;
+        let all: Field<bool> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_LOOT_ALL)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    container: e.get(container)?,
-                    take_all: e.get(all)?,
+                    guest_id: e.get(player)?,
+                    host_id: e.get(container)?,
+                    loot_all: e.get(all)?,
                 })
             },
             handler,
@@ -1032,39 +882,50 @@ impl Kind for LootOpened {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::EquipmentChanged;
+/// use enshwick::game_events::HandleEquipmentSlotChangedEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<EquipmentChanged>(|changed| enshwick::debug!("slot {} of {:?}", changed.slot, changed.player))
+///     load.on_game::<HandleEquipmentSlotChangedEvent>(|changed| enshwick::debug!("{:?} of {:?}", changed.equipment_slot, changed.player_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct EquipmentChanged {
+pub struct HandleEquipmentSlotChangedEvent {
     /// The player's character.
-    pub player: Entity,
-    /// The slot, the engine's `EquipmentSlot`: 5 to 9 armour from head to
-    /// feet, 10 and 11 rings, 12 the ranged weapon, 13 the shield.
-    pub slot: u8,
+    pub player_entity_id: Entity,
+    /// The slot.
+    pub equipment_slot: EquipmentSlot,
 }
 
-impl sealed::Sealed for EquipmentChanged {}
+impl sealed::Sealed for HandleEquipmentSlotChangedEvent {}
 
-impl Kind for EquipmentChanged {
+impl Kind for HandleEquipmentSlotChangedEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::EQUIPMENT_CHANGED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_PLAYER)?;
-        let slot: Field<u8> = ty.field_by_id(load, ids::EQUIPMENT_CHANGED_SLOT)?;
+        let ty = load.event_type(ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT)?;
+        let player: Field<Entity> = ty.field_by_id(
+            load,
+            ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_PLAYER_ENTITY_ID,
+        )?;
+        let slot: Field<u8> = ty.field_by_id(
+            load,
+            ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_EQUIPMENT_SLOT,
+        )?;
+        let slots = Values::resolve(load, EquipmentSlot::IDS);
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    slot: e.get(slot)?,
+                    player_entity_id: e.get(player)?,
+                    equipment_slot: {
+                        let raw = e.get(slot)?;
+                        slots
+                            .variant(u64::from(raw))
+                            .unwrap_or(EquipmentSlot::Other(raw))
+                    },
                 })
             },
             handler,
@@ -1077,38 +938,39 @@ impl Kind for EquipmentChanged {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::Revived;
+/// use enshwick::game_events::RevivedPlayerEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<Revived>(|revived| enshwick::info!("{:?} revived by {:?}", revived.player, revived.by))
+///     load.on_game::<RevivedPlayerEvent>(|revived| enshwick::info!("{:?} revived by {:?}", revived.target_entity_id, revived.source_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Revived {
+pub struct RevivedPlayerEvent {
     /// The revived player's character.
-    pub player: Entity,
+    pub target_entity_id: Entity,
     /// Who revived them.
-    pub by: Option<Entity>,
+    pub source_entity_id: Option<Entity>,
 }
 
-impl sealed::Sealed for Revived {}
+impl sealed::Sealed for RevivedPlayerEvent {}
 
-impl Kind for Revived {
+impl Kind for RevivedPlayerEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::REVIVED_EVENT)?;
-        let player: Field<Entity> = ty.field_by_id(load, ids::REVIVED_PLAYER)?;
-        let by: Field<Entity> = ty.field_by_id(load, ids::REVIVED_BY)?;
+        let ty = load.event_type(ids::REVIVED_PLAYER_EVENT)?;
+        let player: Field<Entity> =
+            ty.field_by_id(load, ids::REVIVED_PLAYER_EVENT_TARGET_ENTITY_ID)?;
+        let by: Field<Entity> = ty.field_by_id(load, ids::REVIVED_PLAYER_EVENT_SOURCE_ENTITY_ID)?;
         on(
             load,
             ty,
             move |e| {
                 Some(Self {
-                    player: e.get(player)?,
-                    by: some(e.get(by)?),
+                    target_entity_id: e.get(player)?,
+                    source_entity_id: some(e.get(by)?),
                 })
             },
             handler,
