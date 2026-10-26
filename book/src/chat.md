@@ -58,7 +58,7 @@ A line is one of:
 
 - `enshwick ...`, the loader's own tools, listed below;
 - a mod's id and the text form of one of its [actions](actions.md#from-the-console):
-  `safes help`, `admin-tools give-to 3073 10 Ann`.
+  `you.trading-post help`, `you.my-mod give-to 3073 10 Ann`.
 
 [`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/console.rs)
 runs a line and returns its answer. Call it on the server's game thread, from
@@ -105,6 +105,6 @@ No mod may take the id `enshwick`.
 - [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
   declares administrator actions, answers with `tell`, and runs each line of
   its command file with `console::run` from a scheduled task.
-- [`enshwick-safes`](https://github.com/enshwick/mod-safes)
+- [`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.

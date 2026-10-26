@@ -42,7 +42,7 @@ fn manifest() -> &'static enshwick::abi::Manifest {
 
 `join: true` puts the mod in the mod set the server advertises, so a player
 without it is warned before joining; see [The join check](concepts/join-check.md).
-[`enshwick-safes`](https://github.com/enshwick/mod-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
 and
 [`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
 are content mods of this kind.
@@ -56,17 +56,17 @@ first time it reads it.
 Every piece of content a mod adds has a **content id**, `<mod>:<name>`:
 the item, its recipe, the station template, the workshop, each text tag and
 icon. The mod side is the mod's own id; the name is 1 to 128 of
-`[a-z0-9_./-]`, so ids read like paths: `safes:safe`, `safes:safe.name`,
-`survivors-per-altar:copy-staff/blacksmith`. Declare them as constants with
+`[a-z0-9_./-]`, so ids read like paths: `you.lockers:locker`, `you.lockers:locker.name`,
+`you.market-stalls:stall/blacksmith`. Declare them as constants with
 [`Id::new`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs);
 a malformed id fails the build:
 
 ```rust
 use enshwick::content::{Guid, Id};
 
-const SAFE: Id = Id::new("safes:safe");
-assert_eq!(SAFE.guid(), Guid::named("safes:safe"));
-assert_eq!(SAFE.guid().to_string(), "f7eb124c-c132-5cf1-9c6c-e9e49ed3c896");
+const LOCKER: Id = Id::new("you.lockers:locker");
+assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
+assert_eq!(LOCKER.guid().to_string(), "67842cb8-d551-542b-8765-fe1af9c28aca");
 ```
 
 The game knows content by GUID, so the id turns into one: a version 5
@@ -74,8 +74,8 @@ The game knows content by GUID, so the id turns into one: a version 5
 [`NAMESPACE`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs),
 `e2185889-0e5e-4977-9edd-d6e7bcd1393f`. The same id gives the same GUID on
 every machine, in every release and in any tool: Python's
-`uuid.uuid5(uuid.UUID("e2185889-0e5e-4977-9edd-d6e7bcd1393f"), "safes:safe")`
-prints the GUID above, and `cargo enshwick id safes:safe` prints it with
+`uuid.uuid5(uuid.UUID("e2185889-0e5e-4977-9edd-d6e7bcd1393f"), "you.lockers:locker")`
+prints the GUID above, and `cargo enshwick id you.lockers:locker` prints it with
 its game id. Saves hold these GUIDs and the ids derived from them, so a
 content id is fixed for good once players have the content; to move content
 to another id, keep its old one through a
@@ -94,7 +94,7 @@ Content a mod serves itself with [`Load::serve`](content/resources.md) is
 declared with `load.declare(id)`. References to existing content, a vanilla
 item to clone or another mod's item for a recipe, stay plain
 [`Guid`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)s:
-`Guid::parse` for a vanilla GUID, `Guid::named("safes:safe")` for another
+`Guid::parse` for a vanilla GUID, `Guid::named("you.lockers:locker")` for another
 mod's content, without depending on that mod. Stat kinds and affixes have
 `<mod>:<name>` ids too, and their keys come from the same GUIDs.
 

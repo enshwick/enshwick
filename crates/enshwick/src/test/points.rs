@@ -275,7 +275,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Verdict;
     ///
-    /// #[enshwick::point(name = "probe:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,
@@ -362,7 +362,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Decision;
     ///
-    /// #[enshwick::point(name = "probe:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,

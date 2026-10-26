@@ -9,14 +9,14 @@ module reads it, and a server owner can add to it or change it.
 
 ```toml
 [en]
-"safe.name" = "Safe"
-"safe.description" = "A chest only its owner can open."
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
 
 [uk]
-"safe.name" = "Сейф"
+"locker.name" = "Шафка"
 
 [de]
-"safe.name" = "Tresor"
+"locker.name" = "Spind"
 ```
 
 - Each table is a language code:
@@ -34,24 +34,24 @@ with
 ```rust
 use enshwick::content::Id;
 
-const SAFE_NAME: Id = Id::new("safes:safe.name");
-const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
+const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
+const LOCKER_DESCRIPTION: Id = Id::new("you.lockers:locker.description");
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = r#"
 [en]
-"safe.name" = "Safe"
-"safe.description" = "A chest only its owner can open."
+"locker.name" = "Locker"
+"locker.description" = "A chest only its owner can open."
 
 [uk]
-"safe.name" = "Сейф"
+"locker.name" = "Шафка"
 "#;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
-        ("safe.name", SAFE_NAME),
-        ("safe.description", SAFE_DESCRIPTION),
+        ("locker.name", LOCKER_NAME),
+        ("locker.description", LOCKER_DESCRIPTION),
     ])
 }
 ```
@@ -128,7 +128,7 @@ windows:
 ```rust
 use enshwick::i18n::{Texts, language};
 
-let texts = Texts::parse("[en]\nfound = \"{count} safes\"\n[uk]\nfound = \"Сейфів: {count}\"\n").unwrap();
+let texts = Texts::parse("[en]\nfound = \"{count} lockers\"\n[uk]\nfound = \"Шафок: {count}\"\n").unwrap();
 let line = texts.fill("found", language(), &[("count", "3")]);
 assert!(line.contains('3'));
 ```
@@ -136,7 +136,7 @@ assert!(line.contains('3'));
 The server does not know a player's language, and `language()` there is
 `Language::FALLBACK`; an [action](../actions.md)'s request carries the
 language the player's client reads.
-[`enshwick-safes`](https://github.com/enshwick/mod-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
 

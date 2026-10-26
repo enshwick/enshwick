@@ -65,8 +65,8 @@ The writer keeps the latest 1024 lines in memory. The
   severe; every kept line when left out;
 - `n`: how many of the latest lines, 10 by default and at most 16.
 
-`enshwick log safes warn 5` shows the last five warnings and errors of
-`safes`. Only lines the [levels](#levels) keep are there to read.
+`enshwick log you.trading-post warn 5` shows the last five warnings and errors of
+`you.trading-post`. Only lines the [levels](#levels) keep are there to read.
 
 ## Levels
 
@@ -77,7 +77,7 @@ own settings:
 # error, warn, info or debug; info by default
 log_level = "info"
 # The same per mod id, over log_level; "enshwick" is the loader itself.
-log_levels = { flame-altar-zones = "debug" }
+log_levels = { "you.lockers" = "debug" }
 ```
 
 The loader watches this file like a mod's settings: a change applies about a
@@ -172,7 +172,7 @@ time and its four costliest items; the loader's own links count under
 ```text
 per-mod costs over 1m 00s (since start), work per second of time:
   enshwick 0.92 ms/s: hook comfort.base_register 0.39 ms/s in 366110 calls; hook server.post_step 0.18 ms/s in 1456 calls
-  game-rates 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
+  you.lanterns 52.9 µs/s: progress filters 51.8 µs/s in 366110 calls; events 1.1 µs/s in 1 calls
 ```
 
 The console asks for the five costliest with `enshwick profile`, and starts

@@ -7,7 +7,7 @@ the platform offers it in the game's own interface:
 - on the mod's page of the [Mods screen](interface.md#the-mods-screen), in
   the game's settings rows and buttons;
 - for an action with a hint, as a line on the HUD while what it acts on is
-  at hand, such as "[F7] Who may use it: your Safe at (2, 10, -4)", with a
+  at hand, such as "[F7] Who may use it: your locker at (2, 10, -4)", with a
   key that opens a window of the mod's actions right there;
 - on the server's [console](chat.md#the-console), as the mod's id, the
   action and its values, such as a line in a dedicated server's command file.
@@ -92,7 +92,7 @@ The platform's replies, such as "No player named Bob.", are under
 
 A console line names the mod by its id, then the action and its values as
 words: a player by name, a choice by its word, a number, `on` or `off`. A
-list takes a player and `on` or `off`: `safes access Ann on`. `<mod id> help`
+list takes a player and `on` or `off`: `you.trading-post access Ann on`. `<mod id> help`
 lists the actions with their words. The console is an administrator with no
 character, so `request.player.entity` is 0, `.admins()` lets it in, and an
 `.at` that looks for something near the player finds nothing. Answers are in
@@ -110,7 +110,7 @@ game's window has the focus and the HUD shows.
 
 ## Worked example
 
-[`enshwick-safes`](https://github.com/enshwick/mod-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-personal-safes)
 declares who may open a Safe as a list action with a hint: `.at` finds the
 Safe at hand, the player's own first, through the mod's own rules and its
 extension point; `on` names the players allowed there; a second action,
