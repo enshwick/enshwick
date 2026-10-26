@@ -156,12 +156,12 @@ mod tests {
 
     #[test]
     fn an_id_prints_its_guid_and_game_id() {
-        let line = ids(&["safes:safe".to_owned()]).unwrap();
-        let guid = Guid::named("safes:safe");
+        let line = ids(&["you.lockers:locker".to_owned()]).unwrap();
+        let guid = Guid::named("you.lockers:locker");
         assert_eq!(
             line,
             format!(
-                "safes:safe  f7eb124c-c132-5cf1-9c6c-e9e49ed3c896  {0} {0:#010x}",
+                "you.lockers:locker  67842cb8-d551-542b-8765-fe1af9c28aca  {0} {0:#010x}",
                 guid.id()
             )
         );

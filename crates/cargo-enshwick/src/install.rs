@@ -156,14 +156,14 @@ mod tests {
     fn the_dll_is_where_cargo_says_it_built_it() {
         let messages = [
             r#"{"reason":"compiler-artifact","target":{"name":"serde","crate_types":["lib"]},"filenames":["C:/t/libserde.rlib"]}"#,
-            r#"{"reason":"compiler-artifact","target":{"name":"area_loot","crate_types":["cdylib"]},"filenames":["C:/t/x86_64-pc-windows-msvc/release/area_loot.dll","C:/t/x86_64-pc-windows-msvc/release/area_loot.dll.lib"]}"#,
+            r#"{"reason":"compiler-artifact","target":{"name":"market_stalls","crate_types":["cdylib"]},"filenames":["C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll","C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll.lib"]}"#,
             r#"{"reason":"build-finished","success":true}"#,
         ]
         .join("\n");
         assert_eq!(
-            built_dll(&messages, "area_loot"),
+            built_dll(&messages, "market_stalls"),
             Some(PathBuf::from(
-                "C:/t/x86_64-pc-windows-msvc/release/area_loot.dll"
+                "C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll"
             ))
         );
         assert_eq!(built_dll(&messages, "other"), None);
@@ -183,16 +183,19 @@ mod tests {
     #[test]
     fn the_package_is_named_found_here_or_the_only_mod() {
         let packages = [
-            package("area-loot", "/w/area-loot", &["cdylib"]),
-            package("safes", "/w/safes", &["cdylib", "rlib"]),
+            package("market-stalls", "/w/market-stalls", &["cdylib"]),
+            package("trading-post", "/w/trading-post", &["cdylib", "rlib"]),
             package("geometry", "/w/geometry", &["lib"]),
         ];
-        let named = choose(&packages, Some("safes"), Path::new("/w")).unwrap();
-        assert_eq!((named.0.name.as_str(), named.1), ("safes", "safes"));
-        let here = choose(&packages, None, Path::new("/w/area-loot")).unwrap();
-        let below = choose(&packages, None, Path::new("/w/area-loot/src")).unwrap();
+        let named = choose(&packages, Some("trading-post"), Path::new("/w")).unwrap();
+        assert_eq!(
+            (named.0.name.as_str(), named.1),
+            ("trading-post", "trading_post")
+        );
+        let here = choose(&packages, None, Path::new("/w/market-stalls")).unwrap();
+        let below = choose(&packages, None, Path::new("/w/market-stalls/src")).unwrap();
         assert_eq!(below.0.name, here.0.name);
-        assert_eq!(here.1, "area_loot");
+        assert_eq!(here.1, "market_stalls");
         assert!(choose(&packages, None, Path::new("/w")).is_err());
         assert!(choose(&packages, Some("geometry"), Path::new("/w")).is_err());
         assert_eq!(
@@ -206,14 +209,14 @@ mod tests {
                 .unwrap()
                 .0
                 .name,
-            "safes"
+            "trading-post"
         );
     }
 
     #[test]
     fn metadata_parses() {
-        let json = r#"{"packages":[{"name":"safes","manifest_path":"/w/safes/Cargo.toml",
-            "targets":[{"name":"safes","crate_types":["cdylib"],"kind":["cdylib"]}],"version":"0.1.0"}],
+        let json = r#"{"packages":[{"name":"trading-post","manifest_path":"/w/trading-post/Cargo.toml",
+            "targets":[{"name":"trading_post","crate_types":["cdylib"],"kind":["cdylib"]}],"version":"0.1.0"}],
             "target_directory":"/w/target","workspace_root":"/w"}"#;
         let metadata: Metadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.packages[0].targets[0].crate_types, ["cdylib"]);

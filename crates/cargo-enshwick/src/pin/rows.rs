@@ -450,7 +450,7 @@ mod tests {
 
     const MOD: &str = r#"
         enshwick::manifest!(
-            id: "you.safes",
+            id: "you.trading-post",
             side: BOTH,
             builds: [
                 {
@@ -458,17 +458,17 @@ mod tests {
                     guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
                     age: 387,
                     symbols: [
-                        "safes.offer_test" => 0x9_e270,
-                        "safes.sort" => 0x19_8cf0,
+                        "trading-post.offer_test" => 0x9_e270,
+                        "trading-post.sort" => 0x19_8cf0,
                     ],
-                    constants: ["safes.state_input" => 0x10],
+                    constants: ["trading-post.state_input" => 0x10],
                 },
                 {
                     // The client's twin.
                     side: CLIENT,
                     guid: "69f0e9573b32c24a8838d3fff550824c",
                     age: 410,
-                    symbols: ["safes.offer_test" => 0x2d_8295],
+                    symbols: ["trading-post.offer_test" => 0x2d_8295],
                 },
             ],
         )
@@ -504,7 +504,7 @@ mod tests {
     /// Rows written `builds: [{ .. }, { .. }]`, the last without a comma.
     const PACKED: &str = r#"
         manifest!(
-            id: "you.research",
+            id: "you.my-mod",
             builds: [{
                 side: CLIENT,
                 guid: "69f0e9573b32c24a8838d3fff550824c",
