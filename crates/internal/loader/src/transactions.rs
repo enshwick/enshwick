@@ -11,10 +11,12 @@
 //! undo write, which replicates and saves like any edit, newest first, and
 //! only while every brick still holds what the transaction left there.
 
+mod block;
 pub(crate) mod cover;
 #[cfg(windows)]
 mod game;
 mod ledger;
+mod paste;
 mod record;
 
 use std::sync::Mutex;
@@ -26,21 +28,33 @@ use crate::fuse::Fuse;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
+#[cfg(windows)]
+pub(crate) use game::resolve;
+#[cfg(any(windows, test))]
+pub(crate) use ledger::Change;
 use ledger::{Ledger, Limits};
+#[cfg(windows)]
+pub(crate) use paste::{Erase, Paste};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::building::BLOCK_BOX.id(),
+    pinned::building::BLUEPRINT_LOOKUP.id(),
+    pinned::building::MATERIAL_FEEDBACK.id(),
+    pinned::server::BLUEPRINT_REGISTRY.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::voxel::WRITE_BLOCK.id(),
     pinned::terrain::ADD.id(),
+    pinned::terrain::REGISTRY.id(),
     pinned::terrain::DIG.id(),
     pinned::terrain::FLATTEN.id(),
     pinned::voxel::READ_BOX.id(),
     pinned::voxel::UNDO_APPLY.id(),
 ];
 
-/// Bricks written a step, before-images and after-reads included: a step
-/// holds at least one whole change, however large. A first guess, to be
-/// tuned by the step time and the bytes sent to clients a live server
-/// shows.
+/// The bricks a step aims to write, before-images and after-reads
+/// included: a target, not a cap, since a step holds at least one whole
+/// change, however large.
 const BRICKS_PER_STEP: usize = 64;
 
 /// What the loader keeps: 1,024 changes in a transaction, 64 MiB of undo
@@ -88,20 +102,21 @@ fn guarded(state: &Transactions, work: impl FnOnce()) {
     }
 }
 
-/// Queues `edits` as one transaction of `owner`. [`Status::MISSING`] while
+/// Queues `changes` as one transaction of `owner`. [`Status::MISSING`] while
 /// no world runs or on a build without the edits, the read or the undo
 /// write; otherwise as [`Ledger::commit`].
 #[cfg(windows)]
 pub(crate) fn commit(
     loader: &crate::host::Loader,
     owner: ModIndex,
-    edits: &[enshwick::abi::TerrainEdit],
+    actor: Option<u32>,
+    changes: Vec<Change>,
 ) -> Result<u64, Status> {
     if STATE.fuse.is_off() || !game::ready(loader) {
         return Err(Status::MISSING);
     }
     let mut ledger = STATE.ledger.relock();
-    let id = ledger.commit(owner, edits)?;
+    let id = ledger.commit(owner, actor, changes)?;
     STATE.busy.store(true, Ordering::Release);
     Ok(id)
 }
@@ -216,7 +231,11 @@ mod tests {
     #[test]
     fn a_pass_that_panics_turns_transactions_off_and_settles_them() {
         let state = Transactions::new();
-        let id = state.ledger.relock().commit(ME, &[dig()]).unwrap();
+        let id = state
+            .ledger
+            .relock()
+            .commit(ME, None, vec![Change::Terrain(dig())])
+            .unwrap();
         state.busy.store(true, Ordering::Release);
 
         guarded(&state, || panic!("in a pass"));

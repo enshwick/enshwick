@@ -24,8 +24,9 @@ mod mods;
 mod net;
 mod pacing;
 mod services;
+mod transactions;
 mod ui;
-mod world;
+pub(crate) mod world;
 
 use build::{
     build, caller_frame, constant, data_dir, field_offset, log_level, symbol, system, type_hash,
@@ -56,6 +57,9 @@ pub(crate) use services::view;
 use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
 };
+use transactions::{
+    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+};
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
     actions, build_rights, chat, component, component_write, destroy, emit, entities,
@@ -63,8 +67,7 @@ use world::{
     hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    transaction_commit, transaction_status, transaction_undo, voxel_read, weather_at,
-    weather_fronts, world_key,
+    voxel_read, weather_at, weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -661,4 +664,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_commit,
     transaction_undo,
     transaction_status,
+    transaction_commit_for,
 };

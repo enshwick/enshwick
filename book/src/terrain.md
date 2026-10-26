@@ -60,9 +60,10 @@ Each call fails with a [`WorldError`](world.md#writing-components):
 1,024 metres, `NotLoaded` while part of what it can reach is not loaded,
 `WrongThread` off the game thread, `Missing` while no world runs. The
 server holds only some parts of the world in memory; an edit elsewhere
-writes nothing, since the game would leave it floating there with no
-ground under it. Asking starts loading the area, so the same edit works
-again a second or so later.
+writes nothing, since the game would compute it against air (a mound
+counted whole, a dig that removes nothing) and merge the result onto the
+ground once it loads. Asking starts loading the area, so the same edit
+works again a second or so later.
 
 A player's shovel and pickaxe also check where the player may build, take
 the cost, give the loot and experience and keep an undo; these edits do
@@ -119,9 +120,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The loader writes the edits in order on the server's game thread between
-steps, about 64 bricks of 8³ voxels (4 metres a side) a step, so a large
-transaction spreads over several steps instead of weighing on one; an edit
-is never split, and one larger than the budget takes a step of its own.
+steps, aiming at 64 bricks of 8³ voxels (4 metres a side) a step, so a
+large transaction spreads over several steps instead of weighing on one.
+64 is a target, not a cap: an edit is never split, so one that touches
+more bricks runs whole in a step of its own, and a step may write 80 or
+100.
 On a dedicated server with no player, one transaction of eight digs of
 6 metres, 57,512 voxels, was written over 20 steps and undone over 19; a
 world step took 5.9 ms on average (18 ms for the slowest twentieth), and
@@ -136,6 +139,7 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 | `Undoing` | its undo is queued or written in part |
 | `Undone` | undone, or dropped before it wrote anything |
 | `Failed(why)` | stopped at an edit it could not write or read back; what it wrote stays and can be undone |
+| `NotAllowed(why)` | the server refused the player it acts for, before it wrote anything |
 | `Expired` | its undo data was dropped; it can no longer be undone |
 | `UndoRefused(why)` | the last undo stopped, keeping what it put back; ask again later |
 
@@ -154,9 +158,11 @@ again at 64 bricks a step. Clients see the undo, and the save keeps it, as
 any edit. Before it writes, the undo checks that every brick still holds
 what the transaction left there, and it checks each brick again right
 before writing it back. If a player, another mod or a later transaction
-has changed one, the undo stops there and the status turns `UndoRefused`
-with `Refused`: a check before the first write means nothing was written,
-a later one keeps what was put back so far. Part of the region not loaded
+has changed one, the undo stops and the status turns `UndoRefused` with
+`Refused`. Found before the first write, the conflict means nothing was
+written; found later, the undo stops at that brick and keeps the bricks it
+already put back. Either way it may be asked again once the conflict is
+gone. Part of the region not loaded
 refuses the undo before it writes; a column that unloads during the undo
 makes it wait, and after about 3,600 steps it stops with `NotLoaded`. An
 undo stopped this way may be asked again. Undo overlapping transactions
@@ -169,6 +175,67 @@ bricks than the cap; a commit, or an undo, while queued work holds the
 cap is refused. The loader remembers the newest 4,096 transactions; the status of
 an older one is `None`. When the world ends, queued work fails with
 `Missing` and written transactions turn `Expired`.
+
+### Blocks and voxels
+
+A transaction also writes voxels and building blocks, with the same undo:
+
+| Call | What it does |
+| --- | --- |
+| `write_voxels(&block)` | writes a `VoxelBox` over its box: air, ground and building voxels alike, each with its fill |
+| `erase_block(min, size)` | tears down the building voxels of a box; the ground stays |
+| `place_block(shape, material, at)` | places a building block as a player's building tool does |
+
+```rust
+use enshwick::ItemId;
+use enshwick::voxels::{VoxelPos, Voxels};
+use enshwick::world::{Player, World, WorldTransform};
+
+fn copy_up(world: World, voxels: Voxels, from: VoxelPos) -> bool {
+    let Ok(block) = voxels.read(from, [16, 16, 16]) else {
+        return false;
+    };
+    let [x, y, z] = from.to_array();
+    let copy = block.moved_to(VoxelPos::new(x, y + 32, z));
+    world.transaction().write_voxels(&copy).commit().is_ok()
+}
+
+fn wall_for(world: World, player: &Player, shape: ItemId, stone: ItemId, at: [f64; 3]) -> bool {
+    let [x, y, z] = at;
+    (0..4)
+        .fold(world.transaction_for(player), |wall, step| {
+            let at = WorldTransform::at([x + 2.0 * f64::from(step), y, z]);
+            wall.place_block(shape, stone, at)
+        })
+        .commit()
+        .is_ok()
+}
+```
+
+`VoxelBox::new` builds a box of voxels, `set` changes one, and `moved_to`
+gives the same voxels at another corner, so a box read in one place pastes
+somewhere else. A voxel's kind must be the one its material names.
+
+`place_block` takes the shape's item, which has a `VoxelBlueprintItem`,
+and the material's item, whose `ChangeVoxelData` places a building
+material; anything else is refused at commit. The block is centred on the
+transform's position, and its orientation is kept in quarter turns, as the
+game keeps it. As a player's building tool does, it writes over air and
+over ground and building voxels softer than `Unbreakable`, and leaves the
+rest. It takes no cost from anyone. `place_block` raises the game's `BuildingPlaceEvent` and
+`erase_block` its `BuildingTearDownEvent`, so the game's listeners and
+other mods see the change. `write_voxels` raises no event.
+
+### For a player
+
+`world.transaction_for(&player)` starts a transaction for a player. Before
+it writes anything, the loader checks that the server lets the player edit
+the box of every change, as `world.can_build` does. A refusal fails the
+transaction with `NotAllowed(why)`, and nothing is written. The check runs
+at the transaction's first step on the game thread, never at the commit,
+so `commit` succeeds and `transaction_status` tells. The building events
+name the player as the owner. A transaction from `world.transaction()` acts for the
+mod itself: it checks no rights, and its events name no owner.
 
 ## Reading voxels
 
@@ -239,8 +306,8 @@ in metres and its orientation, a quaternion x, y, z then w with y up.
 A prop is told apart by its template, the one its item places, so the
 notes and animals a world comes with are not props even where they carry
 an item. The call walks every entity with a `UsedItem`, so call it now and
-then, not every step. Before the game first ran its inventories, a box
-holding things to check fails with `Missing`.
+then, not every step. While no world runs, a box holding things to check
+fails with `Missing`.
 
 `world.capture(a, b)` takes the region between two voxels, both included,
 as plain data: a `Capture` with its voxels and its props, both counted from

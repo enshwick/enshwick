@@ -40,6 +40,8 @@ use crate::pinned::{Constant, Symbol};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::server::ITEM_REGISTRY.id(),
+    pinned::server::PLAYER_INFOS.id(),
     pinned::ecs::CONTEXT_ENTITY_WORLD.id(),
     pinned::ecs::ROW_ENTITY.id(),
     pinned::ecs::SLOT_ROOT.id(),
@@ -341,6 +343,48 @@ static ARMED: AtomicBool = AtomicBool::new(false);
 static SETTLED: AtomicBool = AtomicBool::new(false);
 /// The item registry the inventory system last saw.
 static REGISTRY: AtomicUsize = AtomicUsize::new(0);
+
+/// The registry to use and whether the two disagree, from the one the
+/// inventory system handed its row (`captured`) and the game-systems
+/// holder's (`held`), 0 for none: the captured one once seen, else the
+/// holder's.
+fn pick_registry(captured: usize, held: usize) -> (usize, bool) {
+    match (captured, held) {
+        (0, held) => (held, false),
+        (captured, 0) => (captured, false),
+        (captured, held) => (captured, captured != held),
+    }
+}
+
+/// The item registry the game's item lookup takes: the one the inventory
+/// system last saw, else the game-systems holder's, which the world sets at
+/// its start, before any player joins (server 399, client 426); 0 while
+/// neither is known.
+fn registry(loader: &Loader) -> usize {
+    pick_registry(REGISTRY.load(Ordering::Acquire), held(loader).unwrap_or(0)).0
+}
+
+/// The game-systems holder's item registry, once a server runs.
+fn held(loader: &Loader) -> Option<usize> {
+    let server = crate::world::SERVER.load(Ordering::Acquire);
+    let holder_at = loader.offset(pinned::server::PLAYER_INFOS)?;
+    let registry_at = loader.offset(pinned::server::ITEM_REGISTRY)?;
+    if server == 0 {
+        return None;
+    }
+    // SAFETY: `server` is the running server the post-step link captured,
+    // non-zero (checked above); its game-systems holder, set at world
+    // start and kept for the world's life, sits at the table's
+    // `server.player_infos`.
+    let holder: usize = unsafe { crate::memory::read(server, holder_at) };
+    if holder == 0 {
+        return None;
+    }
+    // SAFETY: `holder` is the non-zero game-systems holder (checked
+    // above), whose item registry sits at the table's
+    // `server.item_registry`.
+    Some(unsafe { crate::memory::read::<usize>(holder, registry_at) })
+}
 
 fn executor(loader: &Loader) -> Option<&'static Executor> {
     EXECUTOR.get_or_init(|| build(loader)).as_ref()
@@ -670,19 +714,31 @@ fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
     Some(option)
 }
 
-/// The static data of `item`, once the inventory system has run.
-pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
+/// The game's static data of `item`, its `ItemInfo`, which lives as long
+/// as the item registry; `None` for an item the game does not have.
+/// [`Status::MISSING`] while the loader knows no item registry yet, or on a
+/// build without the lookup.
+pub(crate) fn item_info_at(loader: &Loader, item: u32) -> Result<Option<*const u8>, Status> {
     let executor = executor(loader).ok_or(Status::MISSING)?;
-    let registry = REGISTRY.load(Ordering::Acquire);
-    if registry == 0 || item == 0 {
+    let registry = registry(loader);
+    if registry == 0 {
         return Err(Status::MISSING);
+    }
+    if item == 0 {
+        return Ok(None);
     }
     // SAFETY: the game's lookup at the table's `item.info`, a read of the
-    // non-zero item registry (checked earlier) the inventory system last saw.
+    // non-zero item registry (checked earlier): the one the inventory system
+    // last saw, or the game-systems holder's, which the world keeps from its
+    // start.
     let info = unsafe { (executor.item_lookup)(item, registry) };
-    if info.is_null() {
-        return Err(Status::MISSING);
-    }
+    Ok((!info.is_null()).then_some(info))
+}
+
+/// The static data of `item`, once a world runs.
+pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
+    let executor = executor(loader).ok_or(Status::MISSING)?;
+    let info = item_info_at(loader, item)?.ok_or(Status::MISSING)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
         id: item,
@@ -789,7 +845,14 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.
     let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
-    REGISTRY.store(registry, Ordering::Release);
+    if REGISTRY.swap(registry, Ordering::AcqRel) != registry
+        && pick_registry(registry, crate::host::loader().and_then(held).unwrap_or(0)).1
+    {
+        crate::log!(
+            WARN,
+            "inventories: the inventory system's item registry differs from the game-systems holder's; the inventory system's is used"
+        );
+    }
     if !QUEUE.pending.load(Ordering::Acquire) {
         return;
     }

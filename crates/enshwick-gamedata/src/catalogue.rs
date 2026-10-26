@@ -81,6 +81,40 @@ pub const ITEM_CATEGORY: &str = "item_info.category";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of the flag, a byte, that says an item places building voxels.
+pub const ITEM_BUILDING_VOXEL: &str = "item_info.building_voxel";
+/// The id of the voxel material an item places, a `u8`: 0x80 and up for a
+/// building material.
+pub const ITEM_PLACE_VOXEL_MATERIAL_ID: &str = "item_info.place_voxel_material_id";
+
+/// The id of the event the game raises when a building piece is placed.
+pub const BUILDING_PLACE_EVENT: &str = "building_place_event";
+/// The id of the event the game raises when building voxels are torn down.
+pub const BUILDING_TEAR_DOWN_EVENT: &str = "building_tear_down_event";
+/// The ids of a placed piece's fields, as the place event holds them:
+/// position, orientation, lowest and highest corner, material feedback,
+/// tracking item and owner.
+pub const BUILDING_PLACE_EVENT_FIELDS: [&str; 7] = [
+    "building_place_event.position",
+    "building_place_event.orientation",
+    "building_place_event.volume_min",
+    "building_place_event.volume_max",
+    "building_place_event.material",
+    "building_place_event.tracking_item_id",
+    "building_place_event.owner_id",
+];
+/// The ids of a torn-down piece's fields, as the tear-down event holds
+/// them: position, orientation, lowest and highest corner, material
+/// feedback and owner.
+pub const BUILDING_TEAR_DOWN_EVENT_FIELDS: [&str; 6] = [
+    "building_tear_down_event.position",
+    "building_tear_down_event.orientation",
+    "building_tear_down_event.volume_min",
+    "building_tear_down_event.volume_max",
+    "building_tear_down_event.material",
+    "building_tear_down_event.owner_id",
+];
+
 /// The id of a weapon's damage factor, an `f32`, in an item's static data.
 pub const ITEM_DAMAGE_MOD: &str = "item_info.damage_mod";
 /// The id of a weapon's attack speed factor, an `f32`.
@@ -109,6 +143,16 @@ pub const PERMISSION_CAN_EDIT_BASE: &str = "player_permissions.can_edit_base";
 /// The id of the bit of a player's permission mask that lets the player
 /// edit the world outside every base.
 pub const PERMISSION_CAN_EDIT_WORLD: &str = "player_permissions.can_edit_world";
+
+/// The id of the terraforming registry resource's building configs, an
+/// array of [`BUILDING_TERRAFORMING_CONFIG`].
+pub const TERRAFORMING_BUILDING_CONFIGS: &str = "terraforming_registry.building_configs";
+/// The id of a building material's terraforming config.
+pub const BUILDING_TERRAFORMING_CONFIG: &str = "building_terraforming_config";
+/// The id of a building config's material, a `u8` counted from 0x80.
+pub const BUILDING_CONFIG_MATERIAL: &str = "building_terraforming_config.building_material";
+/// The id of a building config's hardness, a `u8`.
+pub const BUILDING_CONFIG_HARDNESS: &str = "building_terraforming_config.hardness";
 
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";

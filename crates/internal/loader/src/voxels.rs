@@ -120,6 +120,16 @@ pub(crate) const fn decode(word: u16) -> Voxel {
     }
 }
 
+/// The game's voxel word for `voxel`, the inverse of [`decode`];
+/// [`Status::BAD_ARGS`] when its kind is not the one its material names,
+/// or its reserved byte is set.
+pub(crate) const fn encode(voxel: Voxel) -> Result<u16, Status> {
+    if decode(voxel.material as u16).kind != voxel.kind || voxel.reserved != 0 {
+        return Err(Status::BAD_ARGS);
+    }
+    Ok(u16::from_le_bytes([voxel.material, voxel.fill]))
+}
+
 /// The game's box read: `out` takes the buffer, `size` and `min` are in
 /// voxels at level of detail `detail`, and the low byte of the result is 0
 /// when a brick of the box is not resident. It reads only `out.data`,
@@ -294,9 +304,10 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
 
 /// `Ok` when the column of bricks holding the voxel at `at` is loaded;
 /// [`Status::NOT_LOADED`] when not. The game keeps a column loaded or not
-/// as one, and its box read answers false for a column without data; an
-/// editor write there would make the column loaded holding only the edit,
-/// with nothing under it (server 399, server copy).
+/// as one, and its box read answers false for a column without data and
+/// starts loading it. An editor write there computes the edit against air
+/// and merges it onto the real ground when that arrives (server 399,
+/// server copy).
 #[cfg(windows)]
 pub(crate) fn column_loaded(loader: &crate::host::Loader, at: [u32; 3]) -> Result<(), Status> {
     read(loader, &ReadBox::new(at, [1; 3], 1)?).map(drop)
@@ -349,6 +360,36 @@ mod tests {
                 "{word:#06x}"
             );
             assert_eq!(voxel.reserved, 0);
+        }
+    }
+
+    #[test]
+    fn every_decoded_word_encodes_back_to_itself() {
+        for word in 0..=u16::MAX {
+            assert_eq!(encode(decode(word)), Ok(word), "{word:#06x}");
+        }
+    }
+
+    #[test]
+    fn a_voxel_whose_kind_and_material_disagree_does_not_encode() {
+        let voxel = |kind, material| Voxel {
+            kind,
+            material,
+            fill: 0xff,
+            reserved: 0,
+        };
+        for bad in [
+            voxel(Voxel::AIR, 1),
+            voxel(Voxel::TERRAIN, 0),
+            voxel(Voxel::TERRAIN, 0x80),
+            voxel(Voxel::BUILDING, 0x7f),
+            voxel(3, 0),
+            Voxel {
+                reserved: 1,
+                ..voxel(Voxel::AIR, 0)
+            },
+        ] {
+            assert_eq!(encode(bad), Err(Status::BAD_ARGS), "{bad:?}");
         }
     }
 

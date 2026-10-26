@@ -218,9 +218,8 @@ pub(crate) fn editor_and_allocator(loader: &Loader) -> Result<(usize, usize), St
     Ok((editor, alloc))
 }
 
-/// The terrain materials of the running game.
-pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
+/// The running game's terraforming registry resource, on the game thread.
+fn resource(layout: &Layout) -> Result<usize, Status> {
     let (_, _, game) = editor(layout)?;
     // SAFETY: `game` is the non-zero game object `editor` read on the game
     // thread; the table's `terrain.registry` offset holds its terraforming
@@ -236,21 +235,82 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
     if resource == 0 {
         return Err(Status::MISSING);
     }
-    let header = resource + layout.configs;
-    // SAFETY: `resource` is non-zero (`resource == 0` returns first) and the
-    // reflected `terrainConfigs` field of
-    // `keen::TerraformingEfficiencyRegistryResource` is an array header at
-    // `header`: an `i32` offset from itself, then a `u32` count.
+    Ok(resource)
+}
+
+/// The array a reflected array header at `header` points at: its first
+/// entry and its count; `None` for an empty one.
+///
+/// # Safety
+///
+/// - `header` is a live reflected array header: an `i32` offset from itself,
+///   then a `u32` count, read on the game thread.
+unsafe fn array(header: usize) -> Option<(usize, u32)> {
+    // SAFETY: the caller guarantees a live array header at `header`, which
+    // starts with its `i32` offset.
     let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: `resource` is non-zero (`resource == 0` returns first) and the
-    // reflected `terrainConfigs` field of
-    // `keen::TerraformingEfficiencyRegistryResource` is an array header at
-    // `header`: an `i32` offset from itself, then a `u32` count.
+    // SAFETY: the caller guarantees a live array header at `header`, whose
+    // `u32` count follows its offset.
     let count: u32 = unsafe { read(header, 4) };
-    if offset == 0 {
+    (offset != 0).then(|| (header.wrapping_add_signed(offset as isize), count))
+}
+
+/// The building materials' terraforming configs of the running game: each
+/// one's material, counted from 0x80, and its hardness.
+pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status> {
+    use enshwick_gamedata::catalogue;
+
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let at = |id| {
+        catalogue::constant(id, &loader.reflection)
+            .and_then(|at| usize::try_from(at).ok())
+            .ok_or(Status::MISSING)
+    };
+    let configs = at(catalogue::TERRAFORMING_BUILDING_CONFIGS)?;
+    let material_at = at(catalogue::BUILDING_CONFIG_MATERIAL)?;
+    let hardness_at = at(catalogue::BUILDING_CONFIG_HARDNESS)?;
+    let size = loader
+        .reflection
+        .type_info(catalogue::type_name(
+            catalogue::BUILDING_TERRAFORMING_CONFIG,
+        ))
+        .ok()
+        .and_then(|info| usize::try_from(info.size()).ok())
+        .ok_or(Status::MISSING)?;
+    let resource = resource(layout)?;
+    // SAFETY: `resource` is the live terraforming registry resource
+    // `resource` returned, whose reflected `buildingConfigs` array header
+    // sits at the catalogue's offset.
+    let Some((start, count)) = (unsafe { array(resource + configs) }) else {
         return Ok(Vec::new());
-    }
-    let start = header.wrapping_add_signed(offset as isize);
+    };
+    Ok((0..count as usize)
+        .map(|i| {
+            let config = start + i * size;
+            (
+                // SAFETY: `config` is entry `i < count` of the array, `size`
+                // bytes each; the reflected `buildingMaterial` byte sits at
+                // the catalogue's offset.
+                unsafe { read(config, material_at) },
+                // SAFETY: `config` is entry `i < count` of the array, `size`
+                // bytes each; the reflected `hardness` byte sits at the
+                // catalogue's offset.
+                unsafe { read(config, hardness_at) },
+            )
+        })
+        .collect())
+}
+
+/// The terrain materials of the running game.
+pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let resource = resource(layout)?;
+    // SAFETY: `resource` is the live terraforming registry resource
+    // `resource` returned, whose reflected `terrainConfigs` array header
+    // sits at `layout.configs`.
+    let Some((start, count)) = (unsafe { array(resource + layout.configs) }) else {
+        return Ok(Vec::new());
+    };
     Ok((0..count as usize)
         .map(|i| {
             let config = start + i * layout.config_size;

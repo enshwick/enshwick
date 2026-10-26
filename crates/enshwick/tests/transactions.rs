@@ -78,16 +78,20 @@ mod tests {
         let held = loader.transactions();
         assert_eq!(held.len(), 1);
         assert_eq!(held[0].id, id.get());
-        let kinds: Vec<u32> = held[0].terrain.iter().map(|edit| edit.kind).collect();
+        let edits: Vec<TerrainEdit> = held[0]
+            .changes
+            .iter()
+            .filter_map(|change| match change {
+                enshwick::test::FakeChange::Terrain(edit) => Some(*edit),
+                _ => None,
+            })
+            .collect();
+        let kinds: Vec<u32> = edits.iter().map(|edit| edit.kind).collect();
         assert_eq!(
             kinds,
             [TerrainEdit::DIG, TerrainEdit::ADD, TerrainEdit::FLATTEN]
         );
-        assert_eq!(
-            held[0].terrain[0].protect[1],
-            1 << 1,
-            "material 9 is protected"
-        );
+        assert_eq!(edits[0].protect[1], 1 << 1, "material 9 is protected");
         assert!(
             loader.terrain_edits().is_empty(),
             "a transaction is no direct edit"

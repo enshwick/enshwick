@@ -1,11 +1,11 @@
-//! The fake world: players, entities, chat, time, settings, weather, terrain, voxels and transactions.
+//! The fake world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
 use core::ffi::c_void;
 
 use crate::abi::{
     DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle, PlayerInfo,
     RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TransactionInfo, TransactionOp, Voxel, WeatherFront,
+    TerrainMaterialInfo, Voxel, WeatherFront,
 };
 use crate::test::table::{found, put, put_list, text, with};
 
@@ -644,7 +644,7 @@ pub(crate) extern "system" fn voxel_read(
 /// Whether the loader takes `edit`: a known kind and shape, a radius above
 /// 0 and up to 16, a position at 0 or more, and for an add or a flatten a
 /// terrain material, for an add a height above 0 and up to 16.
-fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
+pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
     let reach = |metres: f32| metres > 0.0 && metres <= crate::terrain::MAX_RADIUS;
     let material = (1..=0x7f).contains(&edit.material);
     reach(edit.radius)
@@ -659,148 +659,6 @@ fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
             TerrainEdit::FLATTEN => material,
             _ => false,
         }
-}
-
-/// The most changes the fake takes in one transaction, as the loader.
-const TRANSACTION_OPS_MAX: u32 = 1024;
-/// The most bricks of undo data the fake keeps, as the loader.
-const TRANSACTION_BRICKS_MAX: u64 = 65_536;
-
-pub(crate) extern "system" fn transaction_commit(
-    me: ModHandle,
-    ops: *const TransactionOp,
-    count: u32,
-    id: *mut u64,
-) -> Status {
-    if ops.is_null() || id.is_null() || count == 0 || count > TRANSACTION_OPS_MAX {
-        return Status::BAD_ARGS;
-    }
-    let mut terrain = Vec::new();
-    for i in 0..count as usize {
-        // SAFETY: `ops` is non-null, checked above, and `i` is below
-        // `count`; the safe layer passes `count` ops at `ops`, so the offset
-        // stays inside that array.
-        let slot = unsafe { ops.add(i) };
-        // SAFETY: `slot` is inside the `count` ops the safe layer passes,
-        // borrowed for the call; an unaligned read needs no alignment.
-        let op = unsafe { slot.read_unaligned() };
-        if op.kind != TransactionOp::TERRAIN || op.reserved != 0 {
-            return Status::BAD_ARGS;
-        }
-        // SAFETY: the safe layer passes each terrain op's `data` null or
-        // pointing at a `TerrainEdit` with its header, borrowed for the call.
-        let edit = unsafe {
-            crate::abi::read_headed(op.data.cast::<TerrainEdit>(), size_of::<TerrainEdit>())
-        };
-        match edit {
-            Some(edit) if edit.flags & TerrainEdit::DRY_RUN == 0 && terrain_edit_valid(&edit) => {
-                terrain.push(edit);
-            }
-            _ => return Status::BAD_ARGS,
-        }
-    }
-    with(Status::MISSING, |s| {
-        if s.terrain.is_none() {
-            return Status::MISSING;
-        }
-        if terrain
-            .iter()
-            .any(|edit| crate::test::world::edit_outside(s.host.extent, edit))
-        {
-            return Status::OUTSIDE_WORLD;
-        }
-        let bound: u64 = terrain.iter().map(crate::test::world::edit_bricks).sum();
-        if bound > TRANSACTION_BRICKS_MAX {
-            return Status::BAD_ARGS;
-        }
-        if claimed(&s.edits.transactions) + bound > TRANSACTION_BRICKS_MAX {
-            return Status::REFUSED;
-        }
-        let next = s.edits.transactions.last().map_or(1, |last| last.id + 1);
-        let ops = u32::try_from(terrain.len()).unwrap_or(u32::MAX);
-        s.edits.transactions.push(crate::test::FakeTransaction {
-            id: next,
-            owner: me,
-            terrain,
-            info: TransactionInfo {
-                header: Header::of::<TransactionInfo>(),
-                state: TransactionInfo::PENDING,
-                reason: Status::OK,
-                ops,
-                applied: 0,
-                bricks: 0,
-            },
-        });
-        put(id, next)
-    })
-}
-
-/// The bricks of undo data the transactions in work may come to hold, as
-/// the loader counts them.
-fn claimed(transactions: &[crate::test::FakeTransaction]) -> u64 {
-    transactions
-        .iter()
-        .map(|t| match t.info.state {
-            TransactionInfo::PENDING => t.terrain.iter().map(crate::test::world::edit_bricks).sum(),
-            TransactionInfo::UNDOING => t.info.bricks,
-            _ => 0,
-        })
-        .sum()
-}
-
-pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status {
-    with(Status::REFUSED, |s| {
-        let claimed = claimed(&s.edits.transactions);
-        let Some(transaction) = s
-            .edits
-            .transactions
-            .iter_mut()
-            .find(|t| t.id == id && t.owner == me)
-        else {
-            return Status::REFUSED;
-        };
-        let info = &mut transaction.info;
-        match info.state {
-            TransactionInfo::PENDING if info.applied == 0 => info.state = TransactionInfo::UNDONE,
-            TransactionInfo::UNDOING => {}
-            TransactionInfo::PENDING => info.state = TransactionInfo::UNDOING,
-            TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
-                if info.bricks > 0 =>
-            {
-                if claimed + info.bricks > TRANSACTION_BRICKS_MAX {
-                    return Status::REFUSED;
-                }
-                info.state = TransactionInfo::UNDOING;
-            }
-            _ => return Status::REFUSED,
-        }
-        info.reason = Status::OK;
-        Status::OK
-    })
-}
-
-pub(crate) extern "system" fn transaction_status(
-    me: ModHandle,
-    id: u64,
-    out: *mut TransactionInfo,
-) -> Status {
-    let found = with(None, |s| {
-        s.edits
-            .transactions
-            .iter()
-            .find(|t| t.id == id && t.owner == me)
-            .map(|t| t.info)
-    });
-    let Some(info) = found else {
-        return Status::MISSING;
-    };
-    // SAFETY: the safe layer passes `out` null or pointing at a writable
-    // `TransactionInfo` whose header names its size.
-    if unsafe { crate::abi::write_headed(out, info) } {
-        Status::OK
-    } else {
-        Status::BAD_ARGS
-    }
 }
 
 pub(crate) extern "system" fn build_rights(

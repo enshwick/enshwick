@@ -17,7 +17,9 @@ use std::hash::{Hash, Hasher};
 use enshwick::abi::{Header, Status, TerrainEdit, TransactionInfo};
 use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 
+use super::block::Block;
 use super::cover::{self, BRICK_VOXELS, Brick, Bricks};
+use super::paste::{Erase, Paste};
 use crate::mod_index::ModIndex;
 use crate::voxels::WorldExtent;
 
@@ -26,6 +28,15 @@ pub(crate) type Image = Box<[u16; BRICK_VOXELS]>;
 
 /// What the ledger needs of the world.
 pub(crate) trait Voxels {
+    /// Whether the server lets `actor` edit the box from `min` to `max` in
+    /// metres: 0, or the game's reason it refuses.
+    fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status>;
+    /// Places `block` for `actor` (0 for none) and announces it; an error
+    /// means nothing was written.
+    fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status>;
+    /// Announces that `erase` tore down building voxels for `actor` (0 for
+    /// none); called only when it cleared some and wrote every brick.
+    fn erased(&mut self, erase: &Erase, actor: u32);
     /// The world's extent.
     fn extent(&mut self) -> Result<WorldExtent, Status>;
     /// `Ok` when the column of bricks `brick` stands in is loaded;
@@ -35,9 +46,9 @@ pub(crate) trait Voxels {
     fn read(&mut self, brick: Brick) -> Result<Image, Status>;
     /// Writes `edit`; an error means nothing was written.
     fn edit(&mut self, edit: &TerrainEdit) -> Result<(), Status>;
-    /// Writes `image` back into `brick`, as an edit that clients receive and
-    /// the save keeps.
-    fn restore(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status>;
+    /// Writes `image` into `brick`, as an edit that clients receive and the
+    /// save keeps.
+    fn write(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status>;
 }
 
 /// How much the ledger holds.
@@ -55,10 +66,46 @@ pub(crate) struct Limits {
     pub(crate) waits: u32,
 }
 
+/// A change of the world a transaction makes.
+#[derive(Clone, Debug)]
+pub(crate) enum Change {
+    /// A terrain add, dig or flatten.
+    Terrain(TerrainEdit),
+    /// Voxels written over a box.
+    Voxels(Paste),
+    /// The building voxels of a box cleared to air.
+    Erase(Erase),
+    /// A building block placed.
+    Block(Box<Block>),
+}
+
+impl Change {
+    /// The bricks it can write; [`Status::BAD_ARGS`] for a change the
+    /// loader refuses.
+    fn bricks(&self) -> Result<Bricks, Status> {
+        match self {
+            Self::Terrain(edit) => cover::check(edit),
+            Self::Voxels(paste) => Ok(paste.bricks()),
+            Self::Erase(erase) => Ok(erase.bricks()),
+            Self::Block(block) => Ok(block.region.bricks()),
+        }
+    }
+
+    /// The box it can write, in metres, lowest and highest corner.
+    fn reach(&self) -> ([f64; 3], [f64; 3]) {
+        match self {
+            Self::Terrain(edit) => cover::reach(edit),
+            Self::Voxels(paste) => paste.region().metres(),
+            Self::Erase(erase) => erase.region().metres(),
+            Self::Block(block) => block.region.metres(),
+        }
+    }
+}
+
 /// One change and the bricks it can touch.
 #[derive(Debug)]
 struct Op {
-    edit: TerrainEdit,
+    change: Change,
     bricks: Bricks,
 }
 
@@ -77,6 +124,11 @@ struct Work {
     undo_checked: bool,
     /// Steps in a row its undo has waited for a column.
     waits: u32,
+    /// The player it acts for, whose rights it checks; `None` for the mod's
+    /// own change.
+    actor: Option<u32>,
+    /// The game's reason the server refused its actor, 0 for none.
+    refusal: u32,
 }
 
 impl Work {
@@ -104,6 +156,8 @@ struct Record {
     kept: usize,
     /// An undo asked for while its work was in hand.
     undo_asked: bool,
+    /// The game's reason the server refused its actor, 0 for none.
+    refusal: u32,
 }
 
 impl Record {
@@ -240,18 +294,18 @@ impl Ledger {
     /// edit that leaves the world, once a step has found its extent;
     /// [`Status::REFUSED`] while the queued transactions and those
     /// remembered leave no room.
-    pub(crate) fn commit(&mut self, owner: ModIndex, edits: &[TerrainEdit]) -> Result<u64, Status> {
-        if edits.is_empty() || edits.len() > self.limits.ops {
+    pub(crate) fn commit(
+        &mut self,
+        owner: ModIndex,
+        actor: Option<u32>,
+        changes: Vec<Change>,
+    ) -> Result<u64, Status> {
+        if changes.is_empty() || changes.len() > self.limits.ops {
             return Err(Status::BAD_ARGS);
         }
-        let ops = edits
-            .iter()
-            .map(|edit| {
-                cover::check(edit).map(|bricks| Op {
-                    edit: *edit,
-                    bricks,
-                })
-            })
+        let ops = changes
+            .into_iter()
+            .map(|change| change.bricks().map(|bricks| Op { change, bricks }))
             .collect::<Result<Vec<_>, _>>()?;
         if let Some(extent) = self.extent
             && !ops.iter().all(|op| op.bricks.inside(extent))
@@ -284,11 +338,13 @@ impl Ledger {
             reason: Status::OK,
             work: Some(Work {
                 ops,
+                actor,
                 ..Work::default()
             }),
             applied: 0,
             kept: 0,
             undo_asked: false,
+            refusal: 0,
         });
         self.work.push_back(id);
         Ok(id)
@@ -349,6 +405,8 @@ impl Ledger {
             ops: u32::try_from(record.ops).unwrap_or(u32::MAX),
             applied: u32::try_from(record.applied).unwrap_or(u32::MAX),
             bricks: record.kept as u64,
+            refusal: record.refusal,
+            reserved: 0,
         })
     }
 
@@ -461,6 +519,7 @@ impl Ledger {
         let record = &mut self.records[index];
         record.applied = task.work.written.len();
         record.kept = task.work.kept();
+        record.refusal = task.work.refusal;
         record.work = Some(task.work);
         let asked = core::mem::take(&mut record.undo_asked);
         let go_on = match outcome {
@@ -511,6 +570,23 @@ impl Ledger {
     }
 }
 
+/// Writes each brick of `images` back with `change` laid over it; the first
+/// write that fails, after which the bricks before it stay written.
+fn write_over(
+    world: &mut impl Voxels,
+    images: &[(Brick, Image)],
+    mut change: impl FnMut(Brick, &mut [u16; BRICK_VOXELS]),
+) -> Option<Status> {
+    images
+        .iter()
+        .try_for_each(|(brick, before)| {
+            let mut image = **before;
+            change(*brick, &mut image);
+            world.write(*brick, &image)
+        })
+        .err()
+}
+
 impl Task {
     /// Runs the task against the world for what is left of the pass.
     pub(crate) fn run(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
@@ -530,6 +606,19 @@ impl Task {
                 .map(|extent| work.ops.iter().all(|op| op.bricks.inside(extent)));
             if inside != Some(true) {
                 return failed(inside.map_or(Status::MISSING, |_| Status::OUTSIDE_WORLD));
+            }
+            if let Some(actor) = work.actor {
+                for op in &work.ops {
+                    let (min, max) = op.change.reach();
+                    match world.rights(actor, min, max) {
+                        Ok(0) => {}
+                        Ok(refusal) => {
+                            work.refusal = refusal;
+                            return failed(Status::REFUSED);
+                        }
+                        Err(reason) => return failed(reason),
+                    }
+                }
             }
             let mut columns = FxHashSet::default();
             for brick in work.ops.iter().flat_map(|op| op.bricks.columns()) {
@@ -551,13 +640,35 @@ impl Task {
                 .bricks
                 .iter()
                 .map(|brick| world.read(brick).map(|image| (brick, image)))
-                .collect::<Result<Vec<_>, _>>()
-                .and_then(|images| world.edit(&op.edit).map(|()| images));
+                .collect::<Result<Vec<_>, _>>();
             let images = match images {
                 Ok(images) => images,
                 Err(reason) => return failed(reason),
             };
-            let mut lost = None;
+            let actor = work.actor.unwrap_or(0);
+            let mut lost = match &op.change {
+                Change::Terrain(edit) => match world.edit(edit) {
+                    Ok(()) => None,
+                    Err(reason) => return failed(reason),
+                },
+                Change::Block(block) => match world.place(block, actor) {
+                    Ok(()) => None,
+                    Err(reason) => return failed(reason),
+                },
+                Change::Voxels(paste) => write_over(world, &images, |brick, image| {
+                    paste.overlay(brick, image);
+                }),
+                Change::Erase(erase) => {
+                    let mut cleared = 0;
+                    let lost = write_over(world, &images, |brick, image| {
+                        cleared += erase.overlay(brick, image);
+                    });
+                    if lost.is_none() && cleared > 0 {
+                        world.erased(erase, actor);
+                    }
+                    lost
+                }
+            };
             for (brick, _) in &images {
                 match world.read(*brick) {
                     Ok(now) => {
@@ -609,7 +720,7 @@ impl Task {
             let expected = work.now.get(&brick).copied();
             let result = world.read(brick).and_then(|now| {
                 if Some(hash(&now)) == expected {
-                    world.restore(brick, image)
+                    world.write(brick, image)
                 } else {
                     Err(Status::REFUSED)
                 }

@@ -25,6 +25,7 @@ macro_rules! headed {
             AltarZone,
             BaseLimitInfo,
             BedCheck,
+            BlockPlace,
             BuffRequest,
             BuffTypeInfo,
             BuildCheck,
@@ -79,6 +80,8 @@ macro_rules! headed {
             UiFrame,
             UiMarker,
             UiWidget,
+            VoxelRegion,
+            VoxelWrite,
             WeatherFront,
             ZoneCheck
         )

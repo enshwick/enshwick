@@ -87,6 +87,7 @@ mod rates;
 mod settings;
 mod stats;
 mod table;
+mod transactions;
 mod ui;
 mod world;
 
@@ -94,8 +95,8 @@ pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
+pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
-pub use world::FakeTransaction;
 
 /// The modding book's chapter on tests, whose examples run as doctests here.
 #[cfg(doctest)]
@@ -229,6 +230,8 @@ pub struct FakeHost {
     voxels: Vec<world::VoxelGrid>,
     zones: world::FakeZones,
     extent: Option<[u32; 3]>,
+    blueprints: HashMap<u32, [u32; 3]>,
+    building_materials: HashMap<u32, u8>,
 }
 
 impl Default for FakeHost {
@@ -297,6 +300,8 @@ impl FakeHost {
             voxels: Vec::new(),
             zones: world::FakeZones::default(),
             extent: None,
+            blueprints: HashMap::new(),
+            building_materials: HashMap::new(),
         }
     }
 

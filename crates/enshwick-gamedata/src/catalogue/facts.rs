@@ -159,6 +159,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::BuildingPlaceEvent", "position"),
     ),
     (
+        "building_place_event.orientation",
+        offset("keen::ecs::BuildingPlaceEvent", "orientation"),
+    ),
+    (
         "building_place_event.volume_min",
         offset("keen::ecs::BuildingPlaceEvent", "volumeMin"),
     ),
@@ -185,6 +189,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "building_tear_down_event.position",
         offset("keen::ecs::BuildingTearDownEvent", "position"),
+    ),
+    (
+        "building_tear_down_event.orientation",
+        offset("keen::ecs::BuildingTearDownEvent", "orientation"),
     ),
     (
         "building_tear_down_event.volume_min",
@@ -385,6 +393,22 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Path(&[
             ("keen::ItemInfo", "equipment"),
             ("keen::EquipmentSetup", "placedEntity"),
+        ]),
+    ),
+    (
+        "item_info.building_voxel",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "voxelData"),
+            ("keen::ChangeVoxelData", "isBuildingVoxel"),
+        ]),
+    ),
+    (
+        "item_info.place_voxel_material_id",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "voxelData"),
+            ("keen::ChangeVoxelData", "placeVoxelMaterialId"),
         ]),
     ),
     (
@@ -1358,6 +1382,25 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "player_permissions.can_edit_world",
         enum_constant(PLAYER_PERMISSIONS, "CanEditWorld"),
+    ),
+    (
+        "terraforming_registry.building_configs",
+        offset(
+            "keen::TerraformingEfficiencyRegistryResource",
+            "buildingConfigs",
+        ),
+    ),
+    (
+        "building_terraforming_config",
+        Fact::Type("keen::BuildingTerraformingConfig"),
+    ),
+    (
+        "building_terraforming_config.building_material",
+        offset("keen::BuildingTerraformingConfig", "buildingMaterial"),
+    ),
+    (
+        "building_terraforming_config.hardness",
+        offset("keen::BuildingTerraformingConfig", "hardness"),
     ),
 ];
 

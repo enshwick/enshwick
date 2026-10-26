@@ -35,16 +35,28 @@ Each entry names the pull request that made the change.
   inside the world's coordinates (#550).
 - `ItemData::placed_entity`, the GUID of the template a player places from
   the item, from `HostApi::item_info`; ABI minor 88 (#550).
+- `Transaction::write_voxels`, `erase_block` and `place_block` write voxels,
+  tear down building voxels and place building blocks inside a
+  transaction, with the same undo; blocks and tear-downs raise the game's
+  `BuildingPlaceEvent` and `BuildingTearDownEvent`. `VoxelBox::new`,
+  `set` and `moved_to` build boxes to write (#551).
+- `World::transaction_for` acts for a player: the loader checks the
+  player's rights for every change before it writes, and a refusal shows
+  as `TransactionStatus::NotAllowed`; the op kinds, records and
+  `transaction_commit_for` are ABI minor 89 (#551).
 
 ### Changed
 
-- `World::entities` takes the world by value, as the other `World` calls
-  do (#550).
-
 - `Terrain::{add,dig,flatten}` write nothing and fail with
   `WorldError::NotLoaded` unless the whole area the edit can reach is
-  loaded; the game would leave such an edit floating with no ground under
-  it (#548).
+  loaded; the game would compute such an edit against air and merge it
+  onto the ground once the area loads (#548).
+- `World::entities` takes the world by value, as the other `World` calls
+  do (#550).
+- Item data (`Inventories::item_info`, `HostApi::item_info`) and the
+  item checks of `World::props_in` and `Transaction::place_block` work from
+  world start: the loader finds the item registry without waiting for a
+  player to join (#551).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 

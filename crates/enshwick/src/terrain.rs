@@ -10,9 +10,10 @@
 //! of that, so a mod decides what it needs. An edit here keeps no undo; a
 //! [`Transaction`](crate::world::Transaction) of the same edits does. An
 //! edit where the world is not loaded yet writes nothing and fails with
-//! [`WorldError::NotLoaded`], since the game would leave it floating there
-//! with no ground under it; the check starts loading the area, so the same
-//! edit works again a second or so later.
+//! [`WorldError::NotLoaded`]: the game would compute it against air (an
+//! add counting its whole mound, a dig removing nothing) and merge that
+//! onto the ground once it loads. The check starts loading the area, so
+//! the same edit works again a second or so later.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
