@@ -53,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ steps.steam.outputs.build }}
         run: |
-          if grep -qx "build = $BUILD" crates/internal/builds/tables/server-*.toml; then
+          if grep -qx "steam_build = $BUILD" crates/internal/builds/tables/server-*.toml; then
             echo "build $BUILD has a table"
             exit 0
           fi

@@ -5,7 +5,8 @@ name = "1.0 client (26082781)"
 side = "client"
 guid = "69f0e9573b32c24a8838d3fff550824c"
 age = 426
-build = 26082781
+steam_build = 26082781
+game_version = 1273043
 revision = 1
 
 # Systems whose reflected entry must equal the pinned address: the
@@ -56,6 +57,9 @@ revision = 1
 # slot `net.provider_join_slot` the loader checks holds the join.
 "net.provider_vtable" = { rva = 0x1db_2f28, pattern = "48 89 5C 24 10 57 48 81 EC B0 00 00 00 33 FF 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8B D9 8B C7 87 41 58", rel = 18 }
 "net.join_game" = { rva = 0x108_9230, pattern = "40 53 55 56 57 48 83 EC 78 80 7A 20 01 48 8B F1 74 09 48 8B 1D ?? ?? ?? ?? EB 0D 0F 10 02 0F 11 44 24 ?? 48 8B 5C 24 ??" }
+# The game's start of a user interaction, such as a dialog, which the
+# join check holds back for the join it refused.
+"user.start_interaction" = { rva = 0x101_e830, pattern = "40 55 41 56 48 81 EC 88 00 00 00 8B 81 ?? ?? ?? ?? 4C 8B F2 48 8B E9 90 85 C0 75 ??" }
 "resource.open" = { rva = 0x106_6150, pattern = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 20 48 8B F9 49 8B D8" }
 "resource.resolve" = { rva = 0x106_5c60, pattern = "48 89 5C 24 ?? 48 89 74 24 ?? 57 48 83 EC 40 48 8B F9 41 8B D8" }
 "resource.key_of" = { rva = 0x106_4460, pattern = "48 89 5C 24 ?? 57 48 83 EC 20 41 8B D8 48 8B F9 45 85 C0" }
@@ -228,6 +232,11 @@ revision = 1
 # this build holds (`carried = false`), and the join's first eight bytes.
 "net.provider_join_slot" = { value = 16, carried = false }
 "net.join_game.bytes" = "0xec83_4857_5655_5340"
+"user.start_interaction.bytes" = "0x88ec_8148_5641_5540"
+# An interaction request's kind byte, and the kind of the dialog that a
+# join failed, checked on this build only (`carried = false`).
+"user.interaction_kind" = { value = 0x8, carried = false }
+"user.join_failed_kind" = { value = 10, carried = false }
 "text.pool_language" = { value = 0xd8, pattern = "75 38 48 8D 6E ?? 39 BE ?? ?? ?? ?? 75 11 48 8B D5 48 8D 4C 24 ??", at = 8, size = 4 }
 # The first eight code bytes at each mod textures symbol, and
 # the layouts they rely on: a content request (0x48 bytes:

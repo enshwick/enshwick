@@ -12,7 +12,7 @@
 //! message box on a thread of its own instead, so the game never waits.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use enshwick_loader_api::abi::{Status, UiAnswerFn, UiDialog};
@@ -101,6 +101,8 @@ struct Shown {
     title: Box<str>,
     message: Box<str>,
     detail: Box<str>,
+    /// Whether the game asked for a text yet, logged once.
+    read: AtomicBool,
 }
 
 /// The dialog on screen: its answerer, popup state and texts.
@@ -148,6 +150,9 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
     let index = (0..TAGS.len()).find(|&i| tag_id(i) == id)?;
     let shown = SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
     let texts = shown.iter().find(|s| s.slot == index / 2)?;
+    if !texts.read.swap(true, Ordering::Relaxed) {
+        crate::log!(INFO, "interface: the game reads dialog \"{}\"", texts.title);
+    }
     let text: &str = if index % 2 == 0 {
         &texts.title
     } else {
@@ -267,7 +272,9 @@ fn take_next(layout: &DialogLayout, active: usize) -> Option<Current> {
         title: dialog.title.into_boxed_str(),
         message: dialog.message.into_boxed_str(),
         detail: dialog.detail.into_boxed_str(),
+        read: AtomicBool::new(false),
     });
+    crate::log!(INFO, "interface: dialog \"{}\" shows", texts.title);
     {
         let mut shown = SHOWN.lock().unwrap_or_else(PoisonError::into_inner);
         shown.retain(|s| s.slot != slot);
