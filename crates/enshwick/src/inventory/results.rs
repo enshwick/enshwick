@@ -2,6 +2,8 @@ use core::ffi::c_void;
 use std::sync::{Arc, Mutex};
 
 use crate::abi::{InventoryOpResult, InventoryResult};
+use crate::engine_enum::Values;
+use crate::engine_ids as ids;
 use crate::locks::Relock;
 
 use super::ops::BatchError;
@@ -27,6 +29,44 @@ pub enum Done {
     Refused(BatchError),
 }
 
+/// Why an operation failed; the loader reads the game's code for each
+/// variant by its constant's name.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::inventory::{OpError, Outcome};
+///
+/// fn split(outcome: &Outcome) -> bool {
+///     outcome.ops.iter().any(|op| op.error == Some(OpError::OutOfMemory))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum OpError {
+    /// An operation before it failed, so it did not run; the loader's
+    /// name, not the game's.
+    NotRun,
+    /// The item did not fit or does not exist.
+    InvalidState,
+    /// The op log is full or more than 16 inventories are touched; split the
+    /// batch.
+    OutOfMemory,
+    /// A code this crate does not name, as the game gave it.
+    Other(u32),
+}
+
+impl OpError {
+    /// Each error with the id of the game's constant for it.
+    pub(super) const IDS: [(Self, &'static str); 2] = [
+        (Self::InvalidState, ids::INVENTORY_ERROR_INVALID_STATE),
+        (Self::OutOfMemory, ids::INVENTORY_ERROR_OUT_OF_MEMORY),
+    ];
+}
+
+/// The game's code of each [`OpError`] it names, for the running build.
+pub(super) type OpErrors = Values<OpError, 2>;
+
 /// The result of one operation.
 ///
 /// # Examples
@@ -34,20 +74,13 @@ pub enum Done {
 /// See [`Outcome`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct OpResult {
-    /// The game's error code, 0 for none; [`InventoryOpResult::NOT_RUN`]
-    /// when an operation before it failed.
-    pub error: u32,
+    /// Why it failed; `None` when it ran without an error.
+    pub error: Option<OpError>,
     /// How much of the count the operation could not do.
     pub remaining: u32,
 }
 
 impl OpResult {
-    /// The game's code for a full op log or more than 16 touched
-    /// inventories; split the batch.
-    pub const TOO_LARGE: u32 = 0x27;
-    /// The game's code for an item that did not fit or does not exist.
-    pub const NO_ROOM: u32 = 0x15;
-
     /// Whether the operation ran without an error.
     ///
     /// # Examples
@@ -55,7 +88,23 @@ impl OpResult {
     /// See [`Outcome`].
     #[must_use]
     pub const fn ok(self) -> bool {
-        self.error == 0
+        self.error.is_none()
+    }
+
+    fn from_raw(raw: InventoryOpResult, errors: &OpErrors) -> Self {
+        let error = match raw.error {
+            0 => None,
+            InventoryOpResult::NOT_RUN => Some(OpError::NotRun),
+            code => Some(
+                errors
+                    .variant(u64::from(code))
+                    .unwrap_or(OpError::Other(code)),
+            ),
+        };
+        Self {
+            error,
+            remaining: raw.remaining,
+        }
     }
 }
 
@@ -103,13 +152,14 @@ impl Outcome {
         }
     }
 
-    /// The outcome the loader reported in `result`.
+    /// The outcome the loader reported in `result`, its error codes read
+    /// with `errors`.
     ///
     /// # Safety
     ///
     /// - `result.ops` is null or points at `op_count` initialised, aligned
     ///   op results, alive for the call.
-    pub(super) unsafe fn from_raw(result: &InventoryResult) -> Self {
+    pub(super) unsafe fn from_raw(result: &InventoryResult, errors: &OpErrors) -> Self {
         let done = match result.outcome {
             InventoryResult::COMMITTED => Done::Committed,
             InventoryResult::ROLLED_BACK => Done::RolledBack,
@@ -128,10 +178,7 @@ impl Outcome {
             done,
             ops: ops
                 .iter()
-                .map(|r: &InventoryOpResult| OpResult {
-                    error: r.error,
-                    remaining: r.remaining,
-                })
+                .map(|&raw| OpResult::from_raw(raw, errors))
                 .collect(),
         }
     }
@@ -180,6 +227,7 @@ pub(super) type Callback = Box<dyn FnOnce(&Outcome) + Send>;
 pub(super) struct Pending {
     pub(super) ticket: Ticket,
     pub(super) done: Callback,
+    pub(super) errors: OpErrors,
 }
 
 impl Pending {
@@ -215,7 +263,7 @@ pub(super) unsafe extern "system" fn deliver(result: *const InventoryResult, use
             || Outcome::not_run(Done::Unavailable),
             // SAFETY: the caller guarantees the result's `ops` is null or
             // `op_count` aligned op results alive for the call.
-            |r| unsafe { Outcome::from_raw(&r) },
+            |r| unsafe { Outcome::from_raw(&r, &pending.errors) },
         );
     crate::host::guard(
         "panic in an inventory callback",

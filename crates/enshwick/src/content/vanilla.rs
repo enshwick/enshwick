@@ -9,7 +9,9 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
+use super::containers::{ContainerLayout, container_slots};
 use super::items::{ITEM_REGISTRY, ItemLayout};
+use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use super::workshops::{
     Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
 };
@@ -33,8 +35,8 @@ const NEAR: usize = 5;
 /// ```
 /// use enshwick::content::vanilla::VanillaError;
 ///
-/// let unknown = VanillaError::Unknown { name: "Torchh".into(), near: vec!["Torch".into()] };
-/// assert_eq!(unknown.to_string(), "no vanilla item \"Torchh\"; near: Torch");
+/// let unknown = VanillaError::Unknown { name: "Tool_Torch1".into(), near: vec!["Tool_Torch01".into()] };
+/// assert_eq!(unknown.to_string(), "no vanilla item \"Tool_Torch1\"; near: Tool_Torch01");
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -57,6 +59,23 @@ pub enum VanillaError {
         name: String,
         /// The items that carry it.
         items: Vec<Guid>,
+    },
+    /// No vanilla recipe has the debug name; `near` lists names that look
+    /// like it.
+    #[error("no vanilla recipe {name:?}{}", near_list(near))]
+    UnknownRecipe {
+        /// The name asked for.
+        name: String,
+        /// Names that look like it, at most five.
+        near: Vec<String>,
+    },
+    /// Several vanilla recipes have the debug name.
+    #[error("{} vanilla recipes are named {name:?}: {}; name one by its GUID", recipes.len(), guid_list(recipes))]
+    AmbiguousRecipe {
+        /// The name asked for.
+        name: String,
+        /// The recipes that carry it.
+        recipes: Vec<Guid>,
     },
     /// The item is no crafting station a mod can clone: the game lists no
     /// workshop for it, its workshop is a survivor's, or its template lacks
@@ -101,6 +120,19 @@ pub struct Vanilla {
     hashes: Hashes,
     read: Reader,
     names: OnceLock<Option<Names>>,
+    /// The recipe layout and the recipe registry's type hash, when the
+    /// build reflects them.
+    recipes: Option<(RecipeLayout, u32)>,
+    recipe_list: OnceLock<Option<Recipes>>,
+    /// The container layout, when the build reflects it.
+    containers: Option<ContainerLayout>,
+}
+
+/// The vanilla recipes: by debug name, and each with the item it makes.
+#[derive(Debug, Default)]
+struct Recipes {
+    names: Names,
+    made: Vec<(Guid, Option<Guid>)>,
 }
 
 impl core::fmt::Debug for Vanilla {
@@ -159,7 +191,9 @@ impl Vanilla {
             WorkshopLayout::resolve(facts)?,
             Hashes::resolve(facts)?,
             read,
-        ))
+        )
+        .with_recipe_facts(facts)
+        .with_containers(ContainerLayout::resolve(facts).ok()))
     }
 
     fn with_parts(
@@ -174,7 +208,152 @@ impl Vanilla {
             hashes,
             read: Box::new(read),
             names: OnceLock::new(),
+            recipes: None,
+            recipe_list: OnceLock::new(),
+            containers: None,
         }
+    }
+
+    /// The same, reading recipes through `layout` from the registry of type
+    /// `hash`.
+    fn with_recipes(mut self, layout: RecipeLayout, hash: u32) -> Self {
+        self.recipes = Some((layout, hash));
+        self
+    }
+
+    /// The same, reading containers through `layout`.
+    fn with_containers(mut self, layout: Option<ContainerLayout>) -> Self {
+        self.containers = layout;
+        self
+    }
+
+    /// How many slots the container the vanilla item `item` places holds;
+    /// `None` when it places none.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::Unreadable`] when the item's data, the container
+    /// layout or the template does not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let chest = vanilla.item("Prop_Decoration_T0_Storage_16")?;
+    ///     assert_eq!(vanilla.container_slots(chest)?, Some(16));
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn container_slots(&self, item: Guid) -> Result<Option<u8>, VanillaError> {
+        let layout = self
+            .containers
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("container layout"))?;
+        let info = (self.read)(item.key_by_hash(self.hashes.item))
+            .ok_or(VanillaError::Unreadable("item data"))?;
+        let at = self.workshops.placed_entity;
+        let Some(template) = info
+            .get(at..at + 16)
+            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
+            .map(Guid)
+            .filter(|template| template.0 != [0; 16])
+        else {
+            return Ok(None);
+        };
+        let Some(data) = (self.read)(template.key_by_hash(self.hashes.template)) else {
+            return Ok(None);
+        };
+        Ok(container_slots(layout, &data))
+    }
+
+    /// The same, with the recipe layout `facts` give, when they give it.
+    fn with_recipe_facts(self, facts: &(impl EngineFacts + ?Sized)) -> Self {
+        match (
+            RecipeLayout::resolve(facts),
+            facts.hash(types::RECIPE_REGISTRY.id()),
+        ) {
+            (Ok(layout), Ok(hash)) => self.with_recipes(layout, hash),
+            _ => self,
+        }
+    }
+
+    fn recipe_list(&self) -> Result<&Recipes, VanillaError> {
+        self.recipe_list
+            .get_or_init(|| {
+                let (layout, hash) = self.recipes.as_ref()?;
+                let registry = (self.read)(RECIPE_REGISTRY.key_by_hash(*hash))?;
+                let mut recipes = Recipes::default();
+                for (guid, name, output) in super::recipes::list(layout, &registry)? {
+                    recipes.names.entry(name).or_default().push(guid);
+                    recipes.made.push((guid, output));
+                }
+                Some(recipes)
+            })
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("recipe registry"))
+    }
+
+    /// The vanilla recipe with the debug name `name`, as the recipe registry
+    /// lists it.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::UnknownRecipe`] with the names that look like it,
+    /// [`VanillaError::AmbiguousRecipe`] when several recipes carry it, and
+    /// [`VanillaError::Unreadable`] without the registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let _recipe = vanilla.recipe("Tool_Torch01");
+    /// }
+    /// ```
+    pub fn recipe(&self, name: &str) -> Result<Guid, VanillaError> {
+        let names = &self.recipe_list()?.names;
+        match names.get(name).map(Vec::as_slice) {
+            Some([one]) => Ok(*one),
+            Some(several) if !several.is_empty() => Err(VanillaError::AmbiguousRecipe {
+                name: name.to_owned(),
+                recipes: several.to_vec(),
+            }),
+            _ => Err(VanillaError::UnknownRecipe {
+                name: name.to_owned(),
+                near: near(names, name),
+            }),
+        }
+    }
+
+    /// The vanilla recipes that make `item`, in the registry's order; none
+    /// when no recipe does.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::Unreadable`] without the registry.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let torch = vanilla.item("Tool_Torch01")?;
+    ///     let _recipes = vanilla.recipes_making(torch)?;
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn recipes_making(&self, item: Guid) -> Result<Vec<Guid>, VanillaError> {
+        Ok(self
+            .recipe_list()?
+            .made
+            .iter()
+            .filter(|(_, output)| *output == Some(item))
+            .map(|(recipe, _)| *recipe)
+            .collect())
     }
 
     /// The running game's vanilla content, read from its archive through
@@ -412,22 +591,111 @@ pub(crate) mod tests {
         let torch = Guid([1; 16]);
         let (one, two) = (Guid([2; 16]), Guid([3; 16]));
         let data = registry(&[
-            (torch, "Torch"),
+            (torch, "Tool_Torch01"),
             (one, "Twin"),
             (two, "Twin"),
-            (Guid([4; 16]), "Torch_Wall"),
+            (Guid([4; 16]), "Material_T2_Wood_Planks"),
+            (Guid([5; 16]), "Material_T1_Wood_Logs"),
         ]);
         let names = registry_names(&ITEMS, &data).unwrap();
-        assert_eq!(names.get("Torch"), Some(&vec![torch]));
-        assert_eq!(near(&names, "torch"), ["Torch", "Torch_Wall"]);
-        assert_eq!(near(&names, "wall"), ["Torch_Wall"]);
+        assert_eq!(names.get("Tool_Torch01"), Some(&vec![torch]));
+        assert_eq!(near(&names, "tool_torch01"), ["Tool_Torch01"]);
+        assert_eq!(
+            near(&names, "wood"),
+            ["Material_T1_Wood_Logs", "Material_T2_Wood_Planks"]
+        );
         assert!(near(&names, "nothing").is_empty());
     }
 
     /// A game with the items `named`, a forge station of its own workshop,
     /// a survivor's workshop and an item that places a plain template.
     pub(crate) fn game(named: &[(Guid, &str)]) -> Vanilla {
-        use super::super::workshops::tests::{CLIENT, CRAFTING, INTERACTION, LAYOUT, station};
+        let data = game_data(named);
+        Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            move |key| data.get(&key).cloned(),
+        )
+    }
+
+    /// The recipe registry's type hash in these tests.
+    const RECIPE_REGISTRY_HASH: u32 = 5;
+
+    /// The recipe layout of build 1269579, as far as these tests read it.
+    const RECIPES: RecipeLayout = RecipeLayout {
+        recipes: 8,
+        recipe: 0xa8,
+        guid: 0,
+        id: 0x10,
+        workshop_guid: 0x14,
+        workshop: 0x24,
+        input: 0x28,
+        output: 0x30,
+        completion: 0x5c,
+        relative: [0x28, 0x30, 0x40, 0x78],
+        input_size: 48,
+        stack_size: 24,
+        stack_item: 0x10,
+        stack_count: 0x14,
+    };
+
+    /// [`game`] with a recipe registry: each recipe's GUID, debug name and
+    /// the item it makes.
+    pub(crate) fn game_with_recipes(
+        named: &[(Guid, &str)],
+        recipes: &[(Guid, &str, Guid)],
+    ) -> Vanilla {
+        let mut blob = Blob::new(&[0u8; 16]);
+        let at = blob.append(&vec![0u8; 0xa8 * recipes.len()], 8);
+        for (i, (guid, name, output)) in recipes.iter().enumerate() {
+            let recipe = at + i * 0xa8;
+            let mut stack = vec![0u8; 24];
+            stack[..16].copy_from_slice(&output.0);
+            let output_at = blob.append(&stack, 8);
+            let name_at = blob.append(name.as_bytes(), 1);
+            assert!(blob.write(recipe, &guid.0));
+            assert!(blob.set_array(recipe + 0x30, output_at, 1));
+            assert!(blob.set_array(recipe + 0x78, name_at, u32::try_from(name.len()).unwrap()));
+        }
+        assert!(blob.set_array(8, at, u32::try_from(recipes.len()).unwrap()));
+        let mut data = game_data(named);
+        data.insert(
+            RECIPE_REGISTRY.key_by_hash(RECIPE_REGISTRY_HASH),
+            blob.into_bytes(),
+        );
+        Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            move |key| data.get(&key).cloned(),
+        )
+        .with_recipes(RECIPES, RECIPE_REGISTRY_HASH)
+    }
+
+    /// [`game`] with the item `chest`, named `name`, which places a
+    /// container of `slots` slots.
+    pub(crate) fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
+        use super::super::containers::tests::{LAYOUT as CONTAINERS, chest as template};
+
+        let placed = Guid([0x77; 16]);
+        let mut data = game_data(&[(chest, name)]);
+        let mut info = vec![0u8; 0x400];
+        info[0x3c0..0x3d0].copy_from_slice(&placed.0);
+        data.insert(chest.key_by_hash(HASHES.item), info);
+        data.insert(placed.key_by_hash(HASHES.template), template(slots));
+        Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            move |key| data.get(&key).cloned(),
+        )
+        .with_containers(Some(CONTAINERS))
+    }
+
+    /// The archive of [`game`], by key.
+    fn game_data(named: &[(Guid, &str)]) -> std::collections::HashMap<ResourceKey, Vec<u8>> {
+        use super::super::workshops::tests::{CLIENT, CRAFTING, INTERACTION, station};
 
         let (forge, survivor, prop) = (Guid([5; 16]), Guid([6; 16]), Guid([7; 16]));
         let (template, plain, workshop) = (Guid([8; 16]), Guid([9; 16]), Guid([10; 16]));
@@ -463,22 +731,57 @@ pub(crate) mod tests {
         }
         data.insert(template.key_by_hash(HASHES.template), crafting.into_bytes());
         data.insert(plain.key_by_hash(HASHES.template), other.into_bytes());
-        Vanilla::with_parts(ITEMS, LAYOUT, HASHES, move |key| data.get(&key).cloned())
+        data
+    }
+
+    #[test]
+    fn a_chest_s_slots_are_read_from_the_template_it_places() {
+        let chest = Guid([1; 16]);
+        let vanilla = game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
+        assert_eq!(vanilla.container_slots(chest), Ok(Some(16)));
+        assert_eq!(vanilla.container_slots(Guid([7; 16])), Ok(None));
+        assert_eq!(
+            game(&[]).container_slots(chest),
+            Err(VanillaError::Unreadable("container layout"))
+        );
+    }
+
+    #[test]
+    fn a_recipe_is_found_by_its_name_and_by_what_it_makes() {
+        let (torch, recipe) = (Guid([1; 16]), Guid([3; 16]));
+        let vanilla = game_with_recipes(
+            &[(torch, "Tool_Torch01")],
+            &[(recipe, "Tool_Torch01_T0_PK", torch)],
+        );
+        assert_eq!(vanilla.recipe("Tool_Torch01_T0_PK"), Ok(recipe));
+        assert_eq!(
+            vanilla
+                .recipe("tool_torch01_t0_pk")
+                .unwrap_err()
+                .to_string(),
+            "no vanilla recipe \"tool_torch01_t0_pk\"; near: Tool_Torch01_T0_PK"
+        );
+        assert_eq!(vanilla.recipes_making(torch), Ok(vec![recipe]));
+        assert_eq!(vanilla.recipes_making(Guid([9; 16])), Ok(Vec::new()));
+        assert_eq!(
+            game(&[]).recipe("Tool_Torch01_T0_PK"),
+            Err(VanillaError::Unreadable("recipe registry"))
+        );
     }
 
     #[test]
     fn a_name_finds_its_item_or_explains_why_not() {
         let torch = Guid([1; 16]);
         let vanilla = game(&[
-            (torch, "Torch"),
+            (torch, "Tool_Torch01"),
             (Guid([2; 16]), "Twin"),
             (Guid([3; 16]), "Twin"),
         ]);
-        assert_eq!(vanilla.item("Torch"), Ok(torch));
+        assert_eq!(vanilla.item("Tool_Torch01"), Ok(torch));
         let unknown = vanilla.item("torch").unwrap_err();
         assert_eq!(
             unknown.to_string(),
-            "no vanilla item \"torch\"; near: Torch"
+            "no vanilla item \"torch\"; near: Tool_Torch01"
         );
         let ambiguous = vanilla.item("Twin").unwrap_err().to_string();
         assert!(
@@ -492,7 +795,7 @@ pub(crate) mod tests {
             |_| None,
         );
         assert_eq!(
-            empty.item("Torch"),
+            empty.item("Tool_Torch01"),
             Err(VanillaError::Unreadable("item registry"))
         );
     }

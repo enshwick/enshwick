@@ -14,6 +14,10 @@ mod tests {
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            let roofs = Rate::RecipeOutput(enshwick::content::recipes::RecipeKind::Roof);
+            if load.rate(roofs).is_ok() {
+                return Err(enshwick::Off::new("a recipe output rate took without join"));
+            }
             load.rate(Rate::WorkshopSpeed)?;
             Ok(Self)
         }

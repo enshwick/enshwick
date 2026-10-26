@@ -6,6 +6,36 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Rate::RecipeOutput(kind)` multiplies what the recipes of each
+  `RecipeKind` make, after every mod's own recipe patch;
+  `RecipeEdit::scale_output_by` scales by a fraction and
+  `RecipeKind::ALL` lists the kinds (#501).
+- `progress::Skill` and `Load::skill_node` give the node of a skill the
+  platform names on the running game build (#494).
+- `game_events::EquipmentSlot`, the slot `EquipmentChanged` carries, and
+  `inventory::OpError`, why an inventory operation failed, both named as
+  the game names them (#494).
+
+### Changed
+
+- Game settings, hit damage types and attack categories, experience
+  sources, altar actions, equipment slots and inventory error codes resolve
+  through engine ids and the game's constant names; no engine number is
+  compiled into a mod (#494).
+- `DamageTypes` and `AttackCategories` keep their bits private and combine
+  with `|`; `EquipmentChanged::slot` is an `EquipmentSlot` and
+  `OpResult::error` an `Option<OpError>` (#494).
+- `World::writable_type` accepts the copies the game keeps for clients; a
+  write to one is refused with `WorldError::Refused` (#494).
+
+### Removed
+
+- `progress::AIRBORNE_ARCHITECT`, `OpResult::TOO_LARGE`,
+  `OpResult::NO_ROOM`, `ExperienceSource::from_raw` and
+  `AltarAction::from_raw` (#494).
+
 ## [1.0.0-alpha.4] - 2026-10-26
 
 ### Added

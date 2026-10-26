@@ -56,7 +56,7 @@ jobs:
       # that unpack the archive or parse every table skip themselves there.
       miri: enshwick-gamedata
       fuzz: true
-      loom: -p enshwick-loader --test loom_chains
+      loom: -p enshwick-loader --lib chains::model
       kani: |
         -p enshwick --lib --tests --features test --harness proofs
         -p enshwick-gamedata --lib --tests --harness proofs

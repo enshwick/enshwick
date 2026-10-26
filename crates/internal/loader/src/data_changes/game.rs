@@ -7,11 +7,16 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Level, Relation, ResourceKey, Status};
 use enshwick::content::Guid;
-use enshwick::content::changes::{Change, Field};
+use enshwick::content::changes::{Change, Entry, Field};
+use enshwick::content::containers::{ContainerLayout, container_slots, resize_container};
+use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeChanges, RecipeLayout, change_recipes_in};
 use enshwick::state::Hold;
 use rustc_hash::FxHashMap;
 
-use super::{Declared, HoldStep, Merged, Raised, credited, hold_step, merge};
+use super::{
+    Declared, HoldStep, Key, Merged, Raised, credited, grown_slots, hold_step, merge,
+    template_slots,
+};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -30,6 +35,9 @@ struct Sealed {
     merged: Merged,
     /// The names packs gave the changed entries.
     labels: FxHashMap<Guid, String>,
+    /// For each item with changed container slots, the place of its last
+    /// such change in load order.
+    slots_order: FxHashMap<Guid, usize>,
 }
 
 static CHANGES: Changes = Changes {
@@ -121,7 +129,10 @@ pub(crate) fn serve(
         for owner in [conflict.winner.owner, conflict.overridden.owner] {
             crate::log::write(level, &id(loader, owner), &line);
         }
-        let feature = format!("{} of {}", conflict.field, conflict.entry);
+        let feature = match conflict.key.item {
+            Some(item) => format!("{} {item} of {}", conflict.key.field, conflict.key.entry),
+            None => format!("{} of {}", conflict.key.field, conflict.key.entry),
+        };
         crate::conflicts::note(
             feature.clone(),
             conflict.overridden.owner,
@@ -144,33 +155,319 @@ pub(crate) fn serve(
         &loader.reflection,
     )
     .and_then(|at| usize::try_from(at).ok());
-    let items: Vec<Guid> = merged.entries(Field::MaxStack).collect();
+    let items: Vec<Guid> = merged.entries(Entry::Item);
+    let slots_order: FxHashMap<Guid, usize> = declared
+        .iter()
+        .enumerate()
+        .filter(|(_, d)| d.change.field == Field::Slots)
+        .map(|(at, d)| (d.change.entry, at))
+        .collect();
     let _sealed = CHANGES.sealed.set(Sealed {
         loader,
         merged,
         labels,
+        slots_order,
     });
-    let Some(max_stack_at) = max_stack_at else {
-        if !items.is_empty() {
-            crate::log!(
-                WARN,
-                "stack size changes are off: this build does not reflect the items' stack size"
-            );
+    let mut patches = Vec::new();
+    match max_stack_at {
+        Some(max_stack_at) => {
+            if !items.is_empty() {
+                crate::log!(INFO, "{} items get a changed stack size", items.len());
+            }
+            for item in items {
+                let patch: &'static ItemPatch =
+                    Box::leak(Box::new(ItemPatch { item, max_stack_at }));
+                let key = item.key_by_hash(crate::catalogue::types::ITEM_INFO);
+                let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+                patches.push((key, build_item as enshwick::abi::ResourcePatchFn, user));
+            }
         }
+        None if !items.is_empty() => crate::log!(
+            WARN,
+            "stack size changes are off: this build does not reflect the items' stack size"
+        ),
+        None => {}
+    }
+    if let Some(patch) = recipe_patch(loader) {
+        patches.push(patch);
+    }
+    patches.extend(container_patches(loader));
+    patches
+}
+
+/// The loader's patches of the templates the items with changed container
+/// slots place: one per template, for every item that places it.
+fn container_patches(
+    loader: &'static Loader,
+) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+    let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
-    if !items.is_empty() {
-        crate::log!(INFO, "{} items get a changed stack size", items.len());
-    }
-    items
+    let items: Vec<Guid> = sealed
+        .merged
+        .entries(Entry::Item)
         .into_iter()
-        .map(|item| {
-            let patch: &'static ItemPatch = Box::leak(Box::new(ItemPatch { item, max_stack_at }));
-            let key = item.key_by_hash(crate::catalogue::types::ITEM_INFO);
-            let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
-            (key, build_item as enshwick::abi::ResourcePatchFn, user)
+        .filter(|item| {
+            sealed
+                .merged
+                .keys(*item)
+                .iter()
+                .any(|k| k.field == Field::Slots)
         })
-        .collect()
+        .collect();
+    if items.is_empty() {
+        return Vec::new();
+    }
+    let facts = enshwick_gamedata::catalogue::Reflected(&loader.reflection);
+    let placed = enshwick_gamedata::catalogue::constant(
+        enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY,
+        &loader.reflection,
+    )
+    .and_then(|at| usize::try_from(at).ok());
+    let (Ok(layout), Some(placed), Some(archive)) = (
+        ContainerLayout::resolve(&facts),
+        placed,
+        crate::archive::game(),
+    ) else {
+        crate::log!(
+            WARN,
+            "container slot changes are off: this build does not reflect containers, or the game's archive does not read"
+        );
+        return Vec::new();
+    };
+    let mut templates: Vec<(Guid, Vec<Guid>)> = Vec::new();
+    for item in items {
+        let template = archive
+            .resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO))
+            .and_then(|info| info.get(placed..placed + 16)?.try_into().ok())
+            .map(Guid)
+            .filter(|template| template.0 != [0; 16]);
+        let Some(template) = template else {
+            crate::log!(
+                WARN,
+                "container slots of {item} are not changed: it is no vanilla item that places a container"
+            );
+            continue;
+        };
+        match templates.iter_mut().find(|(t, _)| *t == template) {
+            Some((_, items)) => items.push(item),
+            None => templates.push((template, vec![item])),
+        }
+    }
+    let mut patches = Vec::new();
+    for (template, mut items) in templates {
+        items.sort_by_key(|item| sealed.slots_order.get(item).copied().unwrap_or(0));
+        crate::log!(
+            INFO,
+            "container slots change on template {template}, which {} places, and so for every item that places it",
+            items
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        let patch: &'static ContainerPatch = Box::leak(Box::new(ContainerPatch { items, layout }));
+        let key = template.key_by_hash(crate::catalogue::types::TEMPLATE);
+        let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+        patches.push((key, build_container as enshwick::abi::ResourcePatchFn, user));
+    }
+    patches
+}
+
+/// What the loader's patch of a container's template needs: the changed
+/// items that place it, in load order, and the layout.
+struct ContainerPatch {
+    items: Vec<Guid>,
+    layout: ContainerLayout,
+}
+
+/// The loader's patch of a container's template: the base with the slots
+/// the changes of the mods still on give it, never fewer than it has.
+unsafe extern "system" fn build_container(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the `ContainerPatch` `container_patches` leaked,
+    // which lives for the process.
+    let patch = unsafe { &*user.cast::<ContainerPatch>() };
+    let mut bytes = vec![0; base_len];
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| resized(patch, &bytes)));
+    let Ok(Some(built)) = built else {
+        return Status::REFUSED;
+    };
+    // The game reads the resource for the life of the process.
+    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
+    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // writable for the call.
+    unsafe { out.write(built.as_ptr()) };
+    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // writable for the call.
+    unsafe { out_len.write(built.len()) };
+    Status::OK
+}
+
+/// The template `bytes` with the slots its changed items give it.
+fn resized(patch: &ContainerPatch, bytes: &[u8]) -> Option<Vec<u8>> {
+    let sealed = CHANGES.sealed.get()?;
+    let Some(old) = container_slots(&patch.layout, bytes) else {
+        crate::log!(
+            WARN,
+            "container slots of {} are not changed: the template has no inventory of its own",
+            patch
+                .items
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        return Some(bytes.to_vec());
+    };
+    let values: Vec<(Guid, f64)> = patch
+        .items
+        .iter()
+        .filter_map(|&item| {
+            let key = Key::new(item, Field::Slots);
+            let value = sealed
+                .merged
+                .value(key, f64::from(old), |m| on(sealed.loader, m))?;
+            Some((item, value))
+        })
+        .collect();
+    let (Some(new), disagree) = template_slots(&values) else {
+        return Some(bytes.to_vec());
+    };
+    if disagree {
+        let all = values
+            .iter()
+            .map(|(item, value)| format!("{item} {value}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        crate::log!(
+            WARN,
+            "items that place one container ask for different slots ({all}): the last in load order counts"
+        );
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "Field::resolve keeps slots whole and from 8 to 128"
+    )]
+    let (new, lowered) = grown_slots(old, new as u8);
+    if lowered {
+        crate::log!(
+            WARN,
+            "container slots stay at {old}: a container never shrinks, as an upgraded chest moves every item it holds"
+        );
+    }
+    resize_container(&patch.layout, bytes, new)
+}
+
+/// The loader's patch of the recipe registry, when some mod changes a
+/// recipe and the build reflects recipes.
+fn recipe_patch(
+    loader: &'static Loader,
+) -> Option<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+    let sealed = CHANGES.sealed.get()?;
+    let recipes = sealed.merged.entries(Entry::Recipe);
+    if recipes.is_empty() {
+        return None;
+    }
+    let facts = enshwick_gamedata::catalogue::Reflected(&loader.reflection);
+    let Ok(layout) = RecipeLayout::resolve(&facts) else {
+        crate::log!(
+            WARN,
+            "recipe changes are off: this build does not reflect the recipes"
+        );
+        return None;
+    };
+    let duration = enshwick_gamedata::catalogue::constant(
+        enshwick_gamedata::catalogue::RECIPE_DURATION,
+        &loader.reflection,
+    )
+    .and_then(|at| usize::try_from(at).ok());
+    crate::log!(INFO, "{} recipes get changed values", recipes.len());
+    let patch: &'static RecipePatch = Box::leak(Box::new(RecipePatch { layout, duration }));
+    let key = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
+    let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+    Some((key, build_recipes as enshwick::abi::ResourcePatchFn, user))
+}
+
+/// What the loader's patch of the recipe registry needs.
+struct RecipePatch {
+    layout: RecipeLayout,
+    /// Where a recipe keeps its time, when the build reflects it.
+    duration: Option<usize>,
+}
+
+/// The merged changes as the recipe edit asks for them, with the mods still
+/// on.
+struct Live<'a> {
+    loader: &'a Loader,
+    merged: &'a Merged,
+}
+
+impl RecipeChanges for Live<'_> {
+    fn of(&self, recipe: Guid) -> Vec<(Field, Option<Guid>)> {
+        self.merged
+            .keys(recipe)
+            .into_iter()
+            .map(|key| (key.field, key.item))
+            .collect()
+    }
+
+    fn value(&self, recipe: Guid, field: Field, item: Option<Guid>, base: f64) -> Option<f64> {
+        let key = Key {
+            entry: recipe,
+            field,
+            item,
+        };
+        self.merged.value(key, base, |m| on(self.loader, m))
+    }
+}
+
+/// The loader's patch of the recipe registry: the base with every recipe
+/// change of the mods still on.
+unsafe extern "system" fn build_recipes(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the `RecipePatch` `recipe_patch` leaked, which lives
+    // for the process.
+    let patch = unsafe { &*user.cast::<RecipePatch>() };
+    let mut bytes = vec![0; base_len];
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let sealed = CHANGES.sealed.get()?;
+        let live = Live {
+            loader: sealed.loader,
+            merged: &sealed.merged,
+        };
+        change_recipes_in(&patch.layout, patch.duration, &bytes, &live)
+    }));
+    let Ok(Some((built, changed))) = built else {
+        return Status::REFUSED;
+    };
+    crate::log!(INFO, "{changed} recipes changed by data changes");
+    // The game reads the resource for the life of the process.
+    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
+    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // writable for the call.
+    unsafe { out.write(built.as_ptr()) };
+    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // writable for the call.
+    unsafe { out_len.write(built.len()) };
+    Status::OK
 }
 
 /// The pack's own name for an entry, from a source such as
@@ -218,6 +515,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         loader,
         merged,
         labels,
+        ..
     }) = CHANGES.sealed.get()
     else {
         return;
@@ -229,7 +527,8 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     };
     let old = u16::from_le_bytes([field[0], field[1]]);
     let live = |m: ModIndex| on(loader, m);
-    let Some(new) = merged.value(patch.item, Field::MaxStack, f64::from(old), live) else {
+    let Some(new) = merged.value(Key::new(patch.item, Field::MaxStack), f64::from(old), live)
+    else {
         return;
     };
     #[expect(
@@ -242,12 +541,12 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     if new > old {
         let without = |m: ModIndex| {
             merged
-                .value(patch.item, Field::MaxStack, f64::from(old), |o| {
+                .value(Key::new(patch.item, Field::MaxStack), f64::from(old), |o| {
                     live(o) && o != m
                 })
                 .unwrap_or(f64::from(old))
         };
-        let owners = merged.owners(patch.item, Field::MaxStack, live);
+        let owners = merged.owners(Key::new(patch.item, Field::MaxStack), live);
         let label = labels
             .get(&patch.item)
             .cloned()
@@ -256,7 +555,7 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         let raised = raised.get_or_insert_with(FxHashMap::default);
         let alone = |m: ModIndex| {
             merged
-                .value(patch.item, Field::MaxStack, f64::from(old), |o| {
+                .value(Key::new(patch.item, Field::MaxStack), f64::from(old), |o| {
                     live(o) && o == m
                 })
                 .unwrap_or(f64::from(old))
@@ -297,11 +596,22 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 
 /// Whether the running build reflects what `field` changes.
 pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
-    let id = match field {
-        Field::MaxStack => enshwick_gamedata::catalogue::ITEM_MAX_STACK,
-        _ => return false,
+    let constant =
+        |id: &str| enshwick_gamedata::catalogue::constant(id, &loader.reflection).is_some();
+    let recipes = || {
+        RecipeLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection)).is_ok()
     };
-    enshwick_gamedata::catalogue::constant(id, &loader.reflection).is_some()
+    match field {
+        Field::MaxStack => constant(enshwick_gamedata::catalogue::ITEM_MAX_STACK),
+        Field::Output | Field::Cost | Field::Ingredient => recipes(),
+        Field::Time => recipes() && constant(enshwick_gamedata::catalogue::RECIPE_DURATION),
+        Field::Slots => {
+            ContainerLayout::resolve(&enshwick_gamedata::catalogue::Reflected(&loader.reflection))
+                .is_ok()
+                && constant(enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY)
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]

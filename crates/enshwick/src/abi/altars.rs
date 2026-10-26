@@ -89,13 +89,8 @@ impl AltarInfo {
     };
 }
 
-/// The size a mod that controls altar zones gives one altar, for
-/// [`HostApi::set_altar_zones`](super::HostApi::set_altar_zones): its vanilla
-/// zone at `level` grown by `grow` cells on every horizontal side and made
-/// `height` cells tall.
-///
-/// The loader applies it while the altar is at `level`, the vanilla size
-/// otherwise.
+/// The size [`HostApi::set_altar_zones`](super::HostApi::set_altar_zones)
+/// took for one altar before minor 78; the retired entry refuses it.
 ///
 /// # Examples
 ///
@@ -114,11 +109,50 @@ pub struct AltarZoneSize {
     pub level: u8,
     /// Zero.
     pub reserved: [u8; 3],
-    /// Cells added on every horizontal side, at least 0.
+    /// Cells added on every horizontal side.
     pub grow: i64,
     /// The zone's height in cells.
     pub height: i64,
 }
+
+/// One altar's zone as the loader sizes it, handed to every altar zone
+/// filter in load order.
+///
+/// The zone is the altar's vanilla zone at `level` grown by `grow` cells on
+/// every horizontal side and made `height` cells tall, as the filters before
+/// have left it; see
+/// [`HostApi::altar_zone_filter`](super::HostApi::altar_zone_filter).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{AltarZone, Header};
+///
+/// let zone = AltarZone { header: Header::of::<AltarZone>(), altar: 4096, level: 2, reserved: [0; 3], grow: 0, height: 60 };
+/// assert_eq!(zone.grow, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct AltarZone {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The altar's entity.
+    pub altar: u32,
+    /// The altar's level.
+    pub level: u8,
+    /// Zero.
+    pub reserved: [u8; 3],
+    /// Cells added on every horizontal side, at least 0; 0 for vanilla.
+    pub grow: i64,
+    /// The zone's height in cells; the vanilla height for vanilla.
+    pub height: i64,
+}
+
+impl_headed!(AltarZone);
+
+/// An altar zone filter: the zone so far, writable, and the pointer given
+/// at registration. It must not unwind.
+pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
 
 /// A placement the game refused because the object's box does not lie in a
 /// single building zone, as [`HostApi::zone_check_filter`](super::HostApi::zone_check_filter) hands it on.

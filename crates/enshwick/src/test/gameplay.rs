@@ -4,7 +4,7 @@ use super::Installed;
 use super::stats;
 use super::table;
 use crate::abi::AltarInfo;
-use crate::abi::AltarZoneSize;
+use crate::abi::AltarZone;
 use crate::abi::BedCheck;
 use crate::abi::Bounds;
 use crate::abi::Comfort;
@@ -213,17 +213,51 @@ impl Installed {
         table::with((false, false), |s| (s.altars_opened, s.zone_control))
     }
 
-    /// The altar zone sizes the mod set last.
+    /// Runs the mod's altar zone filters on one altar's vanilla zone of
+    /// `height` cells, as the loader would, a `grow` below 0 counting as 0 and
+    /// a `height` below one cell keeping the one before; the `grow` and
+    /// `height` they leave.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.zone_sizes().is_empty());
+    /// assert_eq!(loader.altar_zone(4096, 2, 60), (0, 60));
     /// ```
     #[must_use]
-    pub fn zone_sizes(&self) -> Vec<AltarZoneSize> {
-        table::with(Vec::new(), |s| s.zone_sizes.clone())
+    pub fn altar_zone(&self, altar: u32, level: u8, height: i64) -> (i64, i64) {
+        let filters = table::with(Vec::new(), |s| s.zone_sizing.filters.clone());
+        let mut zone = AltarZone {
+            header: Header::of::<AltarZone>(),
+            altar,
+            level,
+            reserved: [0; 3],
+            grow: 0,
+            height,
+        };
+        for (callback, user) in filters {
+            let before = zone;
+            // SAFETY: a valid registration; `user` is the mod's pointer.
+            unsafe { callback(&raw mut zone, core::ptr::with_exposed_provenance_mut(user)) };
+            zone.grow = zone.grow.max(0);
+            if zone.height <= 0 {
+                zone.height = before.height;
+            }
+        }
+        (zone.grow, zone.height)
+    }
+
+    /// How often the mod asked for the altar zones to be sized again.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert_eq!(loader.zone_resizes(), 0);
+    /// ```
+    #[must_use]
+    pub fn zone_resizes(&self) -> usize {
+        table::with(0, |s| s.zone_sizing.resizes)
     }
 
     /// Asks the mod's zone check filters about a placement the game refused,
