@@ -36,7 +36,6 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
     LPTOP_LEVEL_EXCEPTION_FILTER, RtlLookupFunctionEntry, RtlVirtualUnwind,
     SetUnhandledExceptionFilter, UNW_FLAG_NHANDLER,
 };
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows_sys::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
 use windows_sys::Win32::System::SystemInformation::GetSystemTime;
 use windows_sys::Win32::System::Threading::{
@@ -495,17 +494,8 @@ unsafe extern "system" fn dump(
 /// Links the report on the game's crash dumps: `MiniDumpWriteDump` of
 /// `dbghelp.dll`, loaded now if the game has not yet.
 pub(crate) fn link(loader: &Loader) {
-    let name: Vec<u16> = "dbghelp.dll".encode_utf16().chain(Some(0)).collect();
-    // SAFETY: `name` is a NUL-terminated UTF-16 string alive for the call;
-    // the module stays loaded for the process.
-    let module = unsafe { LoadLibraryW(name.as_ptr()) };
-    let found = if module.is_null() {
-        None
-    } else {
-        // SAFETY: `module` is a non-null loaded module handle and the export
-        // name a NUL-terminated C string.
-        unsafe { GetProcAddress(module, c"MiniDumpWriteDump".as_ptr().cast()) }
-    };
+    let found =
+        crate::module::Module::load("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));
     let target = found.map(|f| f as *const () as u64);
     if let Some(address) = target {
         crate::diag::name(address, "dbghelp.MiniDumpWriteDump");

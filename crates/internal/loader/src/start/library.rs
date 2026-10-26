@@ -4,11 +4,10 @@ use std::path::{Path, PathBuf};
 
 use enshwick::abi::{ABI_MAJOR, ABI_MINOR, HostApi, Manifest, ModHandle, Status, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::{
-    GetProcAddress, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
-};
+use windows_sys::Win32::System::LibraryLoader::{LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW};
 
 use crate::modlist;
+use crate::module::Export;
 use crate::resolve::{self, Candidate};
 
 type AbiFn = extern "system" fn() -> u32;
@@ -18,8 +17,6 @@ type QueryFn = extern "system" fn() -> *const Manifest;
 pub(super) type InitFn = unsafe extern "system" fn(*const HostApi, ModHandle) -> Status;
 
 pub(super) type ReadyFn = unsafe extern "system" fn(*const HostApi, ModHandle);
-
-type Export = unsafe extern "system" fn() -> isize;
 
 /// A mod DLL with its exports, or a content pack with the loader's.
 pub(super) struct Library {
@@ -300,11 +297,10 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
 /// The mod in the loaded `module`, named `file` in messages; `None`, logged,
 /// when it exports no Enshwick interface of this ABI.
 fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
-    let find = |name: &str| {
-        let name = format!("{name}\0");
-        // SAFETY: `module` is loaded and `name` is NUL-terminated.
-        unsafe { GetProcAddress(module, name.as_ptr()) }
-    };
+    // SAFETY: `module` was loaded by `load_from` and stays loaded while the
+    // library is kept; it is freed only after its exports are dropped.
+    let found = unsafe { crate::module::Module::from_handle(module) };
+    let find = |name: &str| found.export(name);
     let (Some(abi), Some(query), Some(init), Some(ready)) = (
         find(exports::ABI),
         find(exports::QUERY),

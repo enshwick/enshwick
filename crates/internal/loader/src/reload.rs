@@ -24,7 +24,6 @@ use std::time::{Duration, SystemTime};
 use arc_swap::ArcSwap;
 use enshwick::abi::{Manifest, ManifestFlags, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
 
 use crate::host::{self, Loader, Subscription};
 
@@ -448,10 +447,9 @@ fn unlink(loader: &Loader, index: usize) {
 
 /// Runs the `shutdown` export of `module`, when it has one.
 fn shutdown(module: HMODULE) {
-    let name = format!("{}\0", exports::SHUTDOWN);
-    // SAFETY: `module` is the copy the watcher loaded and never frees, and
-    // `name` ends in the NUL pushed by the `format!` above.
-    let Some(found) = (unsafe { GetProcAddress(module, name.as_ptr()) }) else {
+    // SAFETY: `module` is the copy the watcher loaded and never frees.
+    let module = unsafe { crate::module::Module::from_handle(module) };
+    let Some(found) = module.export(exports::SHUTDOWN) else {
         return;
     };
     // SAFETY: `enshwick::abi::exports::SHUTDOWN` documents the export as an
