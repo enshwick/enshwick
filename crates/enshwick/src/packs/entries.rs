@@ -144,6 +144,9 @@ pub(super) struct ItemChangeEntry {
     pub(super) items: Vec<String>,
     /// How many of the item one inventory slot holds, 1 to 65535.
     pub(super) max_stack: Option<ValueEntry>,
+    /// How many slots the container the item places holds, 8 to 128 in
+    /// steps of 8.
+    pub(super) slots: Option<ValueEntry>,
 }
 
 /// A change of vanilla recipes' values.

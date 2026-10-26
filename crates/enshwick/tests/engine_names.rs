@@ -21,10 +21,10 @@ mod tests {
         ("test/hooks.rs", "field_offset", FAKE),
         ("world.rs", "ComponentType", COMPONENT),
         ("world.rs", "WritableType", COMPONENT),
-        ("world.rs", "entities", COMPONENT),
         ("world.rs", "set", COMPONENT),
         ("world.rs", "size", COMPONENT),
         ("world.rs", "update", COMPONENT),
+        ("world/entities.rs", "entities", COMPONENT),
     ];
 
     const EVENT: &str = "`Load::event_type` takes any reflected event type by name";

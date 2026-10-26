@@ -28,6 +28,14 @@ impl<T: Copy + PartialEq, const N: usize> Values<T, N> {
             .find(|&&(_, value)| value == Some(raw))
             .map(|&(variant, _)| variant)
     }
+
+    /// The engine value of `variant`; `None` when the build lacks it.
+    pub(crate) fn value(&self, variant: T) -> Option<u64> {
+        self.0
+            .iter()
+            .find(|&&(known, _)| known == variant)
+            .and_then(|&(_, value)| value)
+    }
 }
 
 /// The API's bits for each bit of an engine mask of up to 16 bits, from the
@@ -98,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn a_variant_decodes_from_its_engine_value() {
+    fn a_variant_decodes_from_its_engine_value_and_back() {
         let values = Values([
             (Side::Left, Some(7)),
             (Side::Right, Some(2)),
@@ -107,6 +115,8 @@ mod tests {
         assert_eq!(values.variant(2), Some(Side::Right));
         assert_eq!(values.variant(9), None);
         assert_eq!(values.variant(7), Some(Side::Left));
+        assert_eq!(values.value(Side::Right), Some(2));
+        assert_eq!(values.value(Side::Up), None, "the build lacks its constant");
     }
 
     #[test]
