@@ -13,13 +13,18 @@ pub(crate) extern "system" fn loop_wait(
     user: *mut c_void,
     found: *mut LoopWaitSites,
 ) -> Status {
-    let side = with(Side::SERVER, |s| {
-        s.pacing
-            .loop_waits
-            .push((callback, user.expose_provenance()));
-        s.host.side
+    let (side, first) = with((Side::SERVER, false), |s| {
+        let first = s.pacing.loop_waits.is_empty();
+        if first {
+            s.pacing
+                .loop_waits
+                .push((callback, user.expose_provenance()));
+        }
+        (s.host.side, first)
     });
-    let sites = if side == Side::CLIENT {
+    let sites = if !first {
+        LoopWaitSites::NONE
+    } else if side == Side::CLIENT {
         LoopWaitSites(LoopWaitSites::HANDLES.0 | LoopWaitSites::MESSAGES.0)
     } else {
         LoopWaitSites::HANDLES
@@ -33,12 +38,16 @@ pub(crate) extern "system" fn server_wait(
     user: *mut c_void,
     found: *mut u32,
 ) -> Status {
-    with((), |s| {
-        s.pacing
-            .server_waits
-            .push((callback, user.expose_provenance()));
+    let first = with(false, |s| {
+        let first = s.pacing.server_waits.is_empty();
+        if first {
+            s.pacing
+                .server_waits
+                .push((callback, user.expose_provenance()));
+        }
+        first
     });
-    put(found, 1)
+    put(found, u32::from(first))
 }
 
 pub(crate) extern "system" fn task_workers(
