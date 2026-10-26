@@ -291,12 +291,12 @@ impl Load<'_> {
     ///
     /// # Safety
     ///
-    /// `target` is the start of a game function whose type is `F`: its
-    /// arguments, return type and calling convention. The loader cannot
-    /// check either, and the game calls the hook's body with what it passes.
-    /// When `F` is a safe `fn` type, the function must be safe to call with
-    /// any arguments, since the body calls it through `next` without
-    /// `unsafe`.
+    /// - `target` is the first byte of a game function, not the middle of one.
+    /// - That function has the type `F`: the same arguments, return type and
+    ///   calling convention. The loader checks neither, and the game calls
+    ///   the hook's body with what it passes.
+    /// - When `F` is a safe `fn` type, the function is safe to call with any
+    ///   arguments, since the body calls it through `next` without `unsafe`.
     ///
     /// # Errors
     ///
@@ -402,9 +402,11 @@ impl Load<'_> {
     ///
     /// # Safety
     ///
-    /// `replacement` keeps the code at `address` valid machine code for every
-    /// path through it, with the meaning the mod intends: the loader checks
-    /// the bytes it replaces, never what the new ones do.
+    /// - `replacement` is valid machine code at `address` for every path the
+    ///   game takes through those bytes, including jumps into them.
+    /// - The patched code keeps every register, stack and memory state the
+    ///   game code after it relies on; the loader checks the bytes it
+    ///   replaces, never what the new ones do.
     ///
     /// # Errors
     ///
@@ -464,10 +466,12 @@ impl Load<'_> {
     ///
     /// # Safety
     ///
-    /// `address` starts an instruction whose 5 bytes are not jumped into, as
-    /// above, and every register `handler` writes holds a value the game
-    /// code there can take: a wrong pointer or count in a register is a
-    /// wrong pointer or count in the game.
+    /// - `address` is the first byte of an instruction in a game function.
+    /// - No code jumps into the 5 bytes from `address` other than to
+    ///   `address` itself.
+    /// - Every register `handler` writes holds a value the game code at
+    ///   `address` can take: a wrong pointer or count in a register is a
+    ///   wrong pointer or count in the game.
     ///
     /// # Errors
     ///

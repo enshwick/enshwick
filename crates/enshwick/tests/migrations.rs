@@ -3,7 +3,9 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick::abi::Status;
+    use core::ffi::c_void;
+
+    use enshwick::abi::{Header, MigrateFn, MigrationSet, Status, Str};
     use enshwick::content::items::NewItem;
     use enshwick::content::{Guid, Id, types};
     use enshwick::migrations::{Migrations, current_id};
@@ -81,6 +83,40 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         loader
+    }
+
+    unsafe extern "system" fn unchanged(
+        _user: *mut c_void,
+        _migration: u32,
+        _step: u32,
+        _input: Str,
+        _out: *mut Str,
+    ) -> Status {
+        Status::OK
+    }
+
+    /// Hands the host table an empty set with `map`, as a mod would.
+    fn migrate_raw(map: Option<MigrateFn>) -> Status {
+        let host = enshwick::host().expect("the mod's host");
+        let set = MigrationSet {
+            header: Header::of::<MigrationSet>(),
+            migrations: core::ptr::null(),
+            count: 0,
+            map,
+            user: core::ptr::null_mut(),
+        };
+        (host.api().migrate)(host.handle(), &raw const set)
+    }
+
+    #[test]
+    fn a_migration_set_without_a_map_is_refused_as_bad_arguments() {
+        let _loader = start();
+        assert_eq!(migrate_raw(None), Status::BAD_ARGS);
+        assert_eq!(
+            migrate_raw(Some(unchanged)),
+            Status::REFUSED,
+            "with a map the set gets past the check, to the one set a mod may give"
+        );
     }
 
     #[test]

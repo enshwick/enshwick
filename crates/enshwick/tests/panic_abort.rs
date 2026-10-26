@@ -48,6 +48,17 @@ mod tests {
     }
 
     #[test]
+    fn every_declared_mod_runs_the_unwind_check() {
+        let source = include_str!("../src/declare.rs");
+        let declare = source
+            .split("macro_rules! declare_mod {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap();
+        assert!(declare.contains("$crate::__require_unwind!();"));
+    }
+
+    #[test]
     fn a_mod_built_with_panic_unwind_compiles() {
         let output = compile_with("unwind");
         assert!(

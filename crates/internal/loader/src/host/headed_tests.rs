@@ -168,11 +168,10 @@ fn round_trip<T: Headed>(name: &str) {
 
     let mut out = guarded(full + 16);
     set_size(&mut out, 0, room);
-    assert_eq!(
-        put_headed(out.as_mut_ptr().cast::<T>(), value::<T>()),
-        Status::OK,
-        "{name}"
-    );
+    // SAFETY: `out` is a local buffer writable for `full + 16` bytes, and its
+    // header states `room`, fewer; nothing else touches it.
+    let status = unsafe { put_headed(out.as_mut_ptr().cast::<T>(), value::<T>()) };
+    assert_eq!(status, Status::OK, "{name}");
     let written = bytes_of(&out);
     assert_eq!(size_at(&out, 0), room, "{name}: the written size");
     assert!(
@@ -215,7 +214,11 @@ fn round_trip<T: Headed>(name: &str) {
     set_size(&mut list, 0, room);
     let items = [value::<T>(); 4];
     let mut count = 0;
-    let status = put_headed_list(&items, list.as_mut_ptr().cast::<T>(), 3, &raw mut count);
+    // SAFETY: `list` is a local buffer writable for `room * capacity + 16`
+    // bytes, `capacity` entries of the `room` bytes its first header states,
+    // and `count` a local `u32`; nothing else touches either.
+    let status =
+        unsafe { put_headed_list(&items, list.as_mut_ptr().cast::<T>(), 3, &raw mut count) };
     assert_eq!((status, count), (Status::OK, 4), "{name}");
     for entry in 0..capacity {
         assert_eq!(size_at(&list, entry * room), room, "{name}: entry {entry}");
@@ -264,12 +267,16 @@ fn a_list_whose_first_header_is_shorter_than_a_header_is_refused() {
     set_size(&mut list, 0, 4);
     let mut count = 0;
     let out = list.as_mut_ptr().cast::<api_frame::WeatherFront>();
-    let status = put_headed_list(
-        &[value::<api_frame::WeatherFront>()],
-        out,
-        1,
-        &raw mut count,
-    );
+    // SAFETY: `out` is a local buffer writable for 64 bytes and `count` a
+    // local `u32`; nothing else touches either.
+    let status = unsafe {
+        put_headed_list(
+            &[value::<api_frame::WeatherFront>()],
+            out,
+            1,
+            &raw mut count,
+        )
+    };
     assert_eq!(status, Status::BAD_ARGS);
     assert!(bytes_of(&list)[4..].iter().all(|&b| b == GUARD));
 }

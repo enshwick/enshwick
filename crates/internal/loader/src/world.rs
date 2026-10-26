@@ -530,12 +530,9 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
     let mut name_len = 0;
     if data != 0 && len <= MAX_NAME {
         let kept = len.min(name.len());
-        for (at, byte) in name[..kept].iter_mut().enumerate() {
-            // SAFETY: `data` is non-zero (the `data != 0` condition) and the
-            // name buffer holds `len` bytes, `at < kept <= len`; read on the
-            // game thread.
-            *byte = unsafe { read(data, at) };
-        }
+        // SAFETY: `data` is non-zero (the `data != 0` condition) and the name
+        // buffer holds `len` bytes, `kept <= len`; read on the game thread.
+        unsafe { crate::memory::read_bytes(data, 0, &mut name[..kept]) };
         name_len = kept;
     }
     let permissions = if infos == 0 {

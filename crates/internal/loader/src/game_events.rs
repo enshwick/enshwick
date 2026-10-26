@@ -328,16 +328,12 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
                     start: batch.bytes.len(),
                 });
                 let payload = record + layout.record_header;
-                batch.bytes.reserve(size);
-                for byte in 0..size {
-                    // SAFETY: `byte < size` and the payload's `size` bytes lie
-                    // inside the bytes used (the `> used` check breaks first);
-                    // no system writes them during the call (the caller's
-                    // contract).
-                    batch
-                        .bytes
-                        .push(unsafe { crate::memory::read(payload, byte) });
-                }
+                let start = batch.bytes.len();
+                batch.bytes.resize(start + size, 0);
+                // SAFETY: the payload's `size` bytes lie inside the bytes used
+                // (the `> used` check breaks first); no system writes them
+                // during the call (the caller's contract).
+                unsafe { crate::memory::read_bytes(payload, 0, &mut batch.bytes[start..]) };
             }
             at += layout.record_header + size.next_multiple_of(layout.record_align);
         }

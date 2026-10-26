@@ -2,7 +2,8 @@
 //! not wrap: a field at an offset from [`Load::field_offset`] or
 //! [`Load::constant`], inside a context or component a hook was given.
 //!
-//! Every read of game memory goes through [`read_at`] or [`read_ptr_at`]. A
+//! Every read of game memory goes through [`read_at`], [`read_ptr_at`] or
+//! [`read_bytes_at`]. A
 //! read copies the value unaligned and makes no reference into game memory.
 //! Its type must be valid for any bit pattern ([`AnyBitPattern`]), so a
 //! `bool` or an enum, where most bit patterns are undefined behaviour, cannot
@@ -147,6 +148,64 @@ pub unsafe fn write_ptr_at<T>(base: *mut u8, offset: usize, value: *mut T) {
     }
 }
 
+/// Copies `out.len()` bytes at `offset` bytes past `base` into `out`, for a
+/// span of game memory such as a string or a payload; no reference into game
+/// memory is made.
+///
+/// # Safety
+///
+/// - `base + offset` is readable for `out.len()` bytes.
+/// - No other thread writes those bytes during the copy.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::raw::read_bytes_at;
+///
+/// let record = *b"..name";
+/// let mut name = [0u8; 4];
+/// // SAFETY: the six-byte array holds four bytes at offset 2.
+/// unsafe { read_bytes_at(record.as_ptr(), 2, &mut name) };
+/// assert_eq!(&name, b"name");
+/// ```
+#[inline]
+pub unsafe fn read_bytes_at(base: *const u8, offset: usize, out: &mut [u8]) {
+    // SAFETY: the caller guarantees `out.len()` readable bytes at
+    // `base + offset` with no concurrent writer; `out` is a distinct, writable
+    // buffer of that length, and bytes need no alignment.
+    unsafe {
+        core::ptr::copy_nonoverlapping(base.wrapping_add(offset), out.as_mut_ptr(), out.len());
+    }
+}
+
+/// Copies `bytes` to `offset` bytes past `base`, for a span of game memory
+/// such as a string or a payload.
+///
+/// # Safety
+///
+/// - `base + offset` is writable for `bytes.len()` bytes.
+/// - Nothing else reads or writes those bytes during the copy.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::raw::write_bytes_at;
+///
+/// let mut record = [0u8; 6];
+/// // SAFETY: the six-byte array takes four bytes at offset 2.
+/// unsafe { write_bytes_at(record.as_mut_ptr(), 2, b"name") };
+/// assert_eq!(&record, b"\0\0name");
+/// ```
+#[inline]
+pub unsafe fn write_bytes_at(base: *mut u8, offset: usize, bytes: &[u8]) {
+    // SAFETY: the caller guarantees `bytes.len()` writable bytes at
+    // `base + offset` that nothing else touches; `bytes` is a distinct buffer
+    // of that length, and bytes need no alignment.
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.as_ptr(), base.wrapping_add(offset), bytes.len());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +233,17 @@ mod tests {
         unsafe { write_at(bytes.as_mut_ptr(), 1, -5i64) };
         // SAFETY: the same eight bytes, now holding an i64.
         assert_eq!(unsafe { read_at::<i64>(bytes.as_ptr(), 1) }, -5);
+    }
+
+    #[test]
+    fn a_byte_span_reads_and_writes_at_an_offset() {
+        let mut bytes = [0u8; 8];
+        // SAFETY: three writable bytes of `bytes` start at offset 5.
+        unsafe { write_bytes_at(bytes.as_mut_ptr(), 5, &[1, 2, 3]) };
+        let mut out = [0u8; 4];
+        // SAFETY: four readable bytes of `bytes` start at offset 4.
+        unsafe { read_bytes_at(bytes.as_ptr(), 4, &mut out) };
+        assert_eq!(out, [0, 1, 2, 3]);
     }
 
     #[test]

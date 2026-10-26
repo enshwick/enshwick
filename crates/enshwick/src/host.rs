@@ -64,16 +64,21 @@ impl Host {
     ///
     /// # Safety
     ///
-    /// `api` must point at a valid [`HostApi`] that outlives the process, as
-    /// the loader's does.
+    /// - `api` is null, or points at an aligned [`HostApi`] readable for the size its
+    ///   header states.
+    /// - That table stays valid and unchanged for the rest of the process,
+    ///   as the loader's does.
     pub(crate) unsafe fn new(api: *const HostApi, me: ModHandle) -> Option<Self> {
-        // SAFETY: the caller guarantees a table, which starts with its
-        // header, valid for the process.
+        // SAFETY: by this function's `# Safety`, `api` is null or an aligned
+        // table that starts with its header and lives for the process;
+        // `as_ref` maps null to `None`.
         let header = unsafe { api.cast::<Header>().as_ref() }?;
         if header.abi_major != crate::abi::ABI_MAJOR || !header.covers(size_of::<HostApi>()) {
             return None;
         }
-        // SAFETY: the header says the table is at least this build's long.
+        // SAFETY: the table is readable for its header's size by this
+        // function's `# Safety`, and the check above found that size at least
+        // `size_of::<HostApi>()`.
         let api = unsafe { api.as_ref() }?;
         Some(Self { api, me })
     }

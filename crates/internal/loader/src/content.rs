@@ -522,13 +522,11 @@ unsafe extern "system" fn build_stand_in(
     // SAFETY: `user` is the builder `serve_stand_ins` leaked for it, which
     // lives for the process.
     let builder = unsafe { &*user.cast::<crate::standins::Builder>() };
-    let base: Vec<u8> = (0..base_len)
-        .map(|at| {
-            // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at
-            // `base` for the call, and `at` is below `base_len`.
-            unsafe { read_at::<u8>(base, at) }
-        })
-        .collect();
+    let mut copy = vec![0; base_len];
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut copy) };
+    let base = copy;
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(&base)));
     let Ok(Some(bytes)) = built else {
         return Status::REFUSED;
@@ -839,15 +837,11 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         return None;
     };
     if entry.keeps_base.load(Ordering::Relaxed) {
-        let base: Box<[u8]> = (0..len)
-            .map(|at| {
-                // SAFETY: the game resolved its base to `len` resident bytes
-                // at `data`, non-zero by the check before it, and `at` is below
-                // `len`.
-                unsafe { crate::memory::read::<u8>(data, at) }
-            })
-            .collect();
-        state.base = Some(base);
+        let mut base = vec![0; len];
+        // SAFETY: the game resolved its base to `len` resident bytes at
+        // `data`, non-zero by the check before it, unchanged for the call.
+        unsafe { crate::memory::read_bytes(data, 0, &mut base) };
+        state.base = Some(base.into_boxed_slice());
     }
     let result = (current, current_len);
     state.built = Some(result);

@@ -35,7 +35,8 @@ const NO_SYSTEM_COPY: u32 = u32::MAX;
 ///
 /// # Safety
 ///
-/// Called by the Windows loader only.
+/// - Called only by the Windows loader, as this DLL's entry point.
+/// - `reason` and `reserved` are the values that loader passes for the call.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn DllMain(
     _module: *mut c_void,

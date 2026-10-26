@@ -425,21 +425,21 @@ unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool 
         return false;
     }
     // SAFETY: `text` is non-null, checked by the guard before it, and is the
-    // game's span of two words, readable for the call by this function's `#
-    // Safety`.
+    // game's span of two words, readable for the call by this function's
+    // `# Safety`.
     let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
     if ptr == 0 || len == 0 || len > layout.max_text {
         return false;
     }
-    // SAFETY: `ptr` is non-null, checked by the guard before it, and the span's
-    // `len` bytes are readable and unchanged for the call by this function's `#
-    // Safety`; the slice does not outlive the call.
-    let bytes =
-        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
-    if !crate::net::is_frame(bytes) {
+    let mut bytes = vec![0; len];
+    // SAFETY: `ptr` is non-null, checked by the guard before it, and the
+    // span's `len` bytes are readable and unchanged for the call by this
+    // function's `# Safety`.
+    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
+    if !crate::net::is_frame(&bytes) {
         return false;
     }
-    core::str::from_utf8(bytes).is_ok_and(crate::net::client_received)
+    core::str::from_utf8(&bytes).is_ok_and(crate::net::client_received)
 }
 
 /// The frame when the game posts a frame line from a player's client.
@@ -463,18 +463,18 @@ unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Optio
         return None;
     }
     // SAFETY: `text` is non-null, checked by the guard before it, and is the
-    // game's span of two words, readable for the call by this function's `#
-    // Safety`.
+    // game's span of two words, readable for the call by this function's
+    // `# Safety`.
     let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
     if ptr == 0 || len == 0 || len > layout.max_text {
         return None;
     }
-    // SAFETY: `ptr` is non-null, checked by the guard before it, and the span's
-    // `len` bytes are readable and unchanged for the call by this function's `#
-    // Safety`; the slice does not outlive the call.
-    let bytes =
-        unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
-    client_frame(bytes).map(str::to_owned)
+    let mut bytes = vec![0; len];
+    // SAFETY: `ptr` is non-null, checked by the guard before it, and the
+    // span's `len` bytes are readable and unchanged for the call by this
+    // function's `# Safety`.
+    unsafe { enshwick::raw::read_bytes_at(core::ptr::with_exposed_provenance(ptr), 0, &mut bytes) };
+    client_frame(&bytes).map(str::to_owned)
 }
 
 /// The frame a line from a player's client carries, which the server takes
