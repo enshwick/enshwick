@@ -29,3 +29,13 @@ jobs:
     uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
     with:
       publish: ${{ inputs.publish }}
+
+  # The site lists the mods of the dev bundle; start its build once the
+  # prerelease changed.
+  docs:
+    needs: bundle
+    if: inputs.publish
+    uses: enshwick/.github/.github/workflows/docs-rebuild.yml@main # zizmor: ignore[unpinned-uses]
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
