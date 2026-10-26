@@ -24,12 +24,12 @@ Each entry names the pull request that made the change.
   tear down building voxels and place building blocks inside a
   transaction, with the same undo; blocks and tear-downs raise the game's
   `BuildingPlaceEvent` and `BuildingTearDownEvent`. `VoxelBox::new`,
-  `set` and `moved_to` build boxes to write (#PR).
+  `set` and `moved_to` build boxes to write (#551).
 - `World::transaction_for` acts for a player: the loader checks the
   player's rights for every change before it writes, and a refusal shows
-  as `TransactionStatus::NotAllowed` (#PR).
+  as `TransactionStatus::NotAllowed` (#551).
 - `ItemId` names an item by the game's id, and `world::Transform` a
-  position and rotation (#PR).
+  position and rotation (#551).
 
 ### Changed
 
