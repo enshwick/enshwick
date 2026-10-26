@@ -1,0 +1,39 @@
+schema = 1
+mod = "you.stalls"
+version = "1.2.0"
+[[point]]
+name = "you.stalls:price"
+mode = "override"
+refusable = true
+input = "Price"
+doc = "A \"fair\" price, in coins."
+output = "u32"
+output_layout = "14918346923295848190"
+layout = ["13059086432849901944", "4757988806913211573", "3608188286181557718"]
+[[type]]
+name = "Price"
+doc = "A \"fair\" price, in coins."
+kind = "struct"
+[[type.field]]
+name = "character"
+doc = "The player's character."
+type = "enshwick.entity"
+[[type.field]]
+name = "deal"
+doc = "What the player does."
+type = "Deal"
+[[type.field]]
+name = "own"
+doc = "Whether the stall is the player's own."
+type = "bool"
+[[type]]
+name = "Deal"
+doc = "What a player does at a stall."
+kind = "values"
+repr = "u32"
+[[type.value]]
+name = "BUY"
+value = 0
+[[type.value]]
+name = "SELL"
+value = 1

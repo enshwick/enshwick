@@ -11,6 +11,16 @@ git_release_type = "auto"
 # Only our own crates move in a release pull request; Renovate moves the rest.
 dependencies_update = false
 pr_labels = ["release"]
+# The pull request body follows the repository's form: outcome bullets; each
+# package's CHANGELOG.md in the pull request holds the details.
+pr_body = """
+## Chores
+
+{% for release in releases -%}
+- Released `{{ release.package }}` {{ release.next_version }}{% if release.previous_version and release.previous_version != release.next_version %} (was {{ release.previous_version }}){% endif %}{% if release.semver_check == "incompatible" %}, with breaking API changes{% endif %}.
+{% endfor %}
+Each package's `CHANGELOG.md` in this pull request lists what changed.
+"""
 
 # The loader DLL and the proxy stub are not published to crates.io: their
 # versions live in git tags, and their release carries the dev bundle's files.
@@ -34,7 +44,7 @@ name = "enshwick-example-market-stalls"
 release = false
 
 [[package]]
-name = "enshwick-example-safe-viewers"
+name = "enshwick-example-haggling"
 release = false
 
 [[package]]

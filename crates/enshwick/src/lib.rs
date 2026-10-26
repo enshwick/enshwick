@@ -130,8 +130,8 @@ pub use enshwick_macros::Config;
 /// A struct is `#[repr(C)]` or `#[repr(transparent)]`; an enum has an
 /// integer `repr` and unit variants, each hashed with its discriminant.
 /// `#[shape(values(A, B))]` on a newtype over an integer hashes its named
-/// constants with their values, as
-/// [`SafeAction`](points::safes::SafeAction) does.
+/// constants with their values. `#[shape(api = "<name>")]` marks a type
+/// of this crate, which a point schema names `enshwick.<name>`.
 ///
 /// # Examples
 ///
@@ -152,7 +152,7 @@ pub use enshwick_macros::Config;
 ///     pub const SELL: Self = Self(1);
 /// }
 ///
-/// #[enshwick::event(name = "trading-post:sold")]
+/// #[enshwick::event(name = "you.trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub price: Coins,
@@ -171,7 +171,7 @@ pub use enshwick_macros::Shape;
 /// # Examples
 ///
 /// ```
-/// #[enshwick::event(name = "trading-post:sold")]
+/// #[enshwick::event(name = "you.trading-post:sold")]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Sold {
 ///     pub item: u32,
@@ -224,7 +224,7 @@ pub use enshwick_macros::hook;
 /// ```
 /// use enshwick::points::{Order, Verdict};
 ///
-/// #[enshwick::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
+/// #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
 /// #[derive(Clone, Copy, Debug)]
 /// pub struct Price {
 ///     pub item: u32,
@@ -251,7 +251,7 @@ pub use enshwick_macros::point;
 /// # Examples
 ///
 /// ```
-/// #[enshwick::service(name = "trading-post:prices", version = 1)]
+/// #[enshwick::service(name = "you.trading-post:prices", version = 1)]
 /// pub struct Prices {
 ///     pub price: extern "system" fn(item: u32) -> u32,
 /// }
@@ -275,6 +275,8 @@ pub use shape::Shape;
 
 #[doc(hidden)]
 pub mod __private {
+    pub use const_format::concatcp;
+
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
     use std::time::{Duration, Instant};
@@ -293,6 +295,39 @@ pub mod __private {
             _ => 0,
         };
         ManifestFlags(join | reload)
+    }
+
+    /// The schema text of `manifest!`: empty when it names no point, so a
+    /// mod without points carries nothing.
+    #[must_use]
+    pub const fn point_schemas(text: &'static str) -> &'static str {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'[' {
+                return text;
+            }
+            i += 1;
+        }
+        ""
+    }
+
+    /// The bytes of `text`, as a static in a section of its own holds them.
+    ///
+    /// # Panics
+    ///
+    /// When `N` is not the length of `text`, at compile time.
+    #[must_use]
+    pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
+        let source = text.as_bytes();
+        assert!(source.len() == N, "the section's size is the text's length");
+        let mut out = [0u8; N];
+        let mut i = 0;
+        while i < N {
+            out[i] = source[i];
+            i += 1;
+        }
+        out
     }
 
     /// The first non-empty text of `texts`, or empty.
