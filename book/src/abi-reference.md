@@ -10,11 +10,11 @@ chapter is for reading logs and the rare call to the raw table. The exact types 
 
 | Constant                                                                                            | Value | Meaning                                         |
 | --------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------- |
-| [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 1     | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 66    | A newer minor only appends.                     |
+| [`ABI_MAJOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 2     | A loader refuses a mod built for another major. |
+| [`ABI_MINOR`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs) | 67    | A newer minor only appends.                     |
 
 The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
-[Releasing and updates](releasing.md#versions)): a platform release raises
+[Releasing mods](releasing.md#versions)): a platform release raises
 `ABI_MINOR` only when it appends to the ABI.
 
 The policy:
@@ -23,7 +23,7 @@ The policy:
   loader of another major does not load it and logs
   `<file> is built for ABI 2, the loader speaks 1`.
 - **Minor.** A loader refuses a mod built for a newer minor and logs
-  `built for ABI 1.66, newer than the loader's 1.65: update Enshwick`, so a
+  `built for ABI 2.67, newer than the loader's 2.66: update Enshwick`, so a
   mod always meets a loader that has every entry of the host table it knows,
   and the safe layer calls them without checks. Structs the other side may
   know an older version of start with a
@@ -36,7 +36,7 @@ The policy:
 
 A mod built against an older `enshwick-loader-api` loads under a newer loader:
 the loader reads the manifest fields the mod's header covers and takes the
-rest as empty, with no update source and no build rows. A mod built against a
+rest as empty, with no build rows and no names. A mod built against a
 newer one waits for a loader update.
 
 ## The exports of a mod
@@ -70,8 +70,6 @@ builds:
 | `flags`        | `JOIN` (1): counts in the join check; `RELOAD` (2, minor 53): may be reloaded                     | 0           |
 | `dependencies` | `Dependency { id, range, relation }`; `REQUIRES` (0), `AFTER` (1), `BREAKS` (2), `RECOMMENDS` (3) | 0           |
 | `builds`       | `BuildRow { side, fingerprint, symbols, constants }`: symbols and constants pinned per game build | 0           |
-| `updates`      | `UpdateSource { kind, location, component }`, or null; kind `NONE`, `GITHUB` or `URL`             | 5           |
-| `signed_by`    | Two `Str`: the author's minisign public keys (`RW...`); empty strings for none                    | 14          |
 | `name`         | What players read; empty for the id                                                               | 36          |
 | `description`  | One sentence on what the mod does                                                                 | 36          |
 | `authors`      | `*const Str` and `author_count`: the authors' names                                               | 36          |
@@ -85,10 +83,7 @@ with an empty range. `HostApi::replaced` lists the mods replaced this way, with
 The loader skips a mod whose manifest has another major, an invalid id, the
 loader's own id `enshwick`, a version that is not SemVer, an unknown side, or a
 dependency range that does not parse; the reason goes to `loader.log` as
-`<file> skipped: <reason>`. A malformed update source is dropped with a
-warning and the mod loads, and so is a `signed_by` key that is not a minisign
-public key: `<file>: key ignored: the signed_by key "..." is not a minisign
-public key (RW..., 56 characters)`.
+`<file> skipped: <reason>`.
 
 ## Status codes
 
@@ -301,8 +296,6 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `language`               | The game language the client last asked a text in; 0 on a server; any thread                         | 56          |
 | `keep_game_settings`     | Changes the game settings and keeps the marked fields with the world; server game thread only        | 57          |
 | `forget_game_settings`   | Forgets the world's kept game settings and puts back its loaded values; server game thread only      | 57          |
-| `updates_set`            | Replaces the updates of installed mods the mod shows on the Mods screen; client only; any thread     | 58          |
-| `update_pick`            | The mod's answer to the player pressing Update under a mod; init only                                | 58          |
 | `revoke_knowledge`       | Takes knowledge back and has the clients sent it again; server game thread only                      | 59          |
 | `account_knowledge`      | Grants or takes back an account's knowledge now or once its character loads; server game thread only | 59          |
 | `resource_read`          | Copies a vanilla resource from the game's archive files; any thread                                  | 61          |

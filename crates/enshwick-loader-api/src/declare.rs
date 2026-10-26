@@ -22,14 +22,7 @@
 /// - `breaks: ["id" => "range", ...]`: mods this one does not work beside in
 ///   that range; the loader skips this mod when one of them loads;
 /// - `replaces: ["id", ...]`: old ids of this mod, from before a rename;
-///   while this mod is present the loader never starts theirs, and the
-///   updater deletes their DLLs when it installs this one;
-/// - `updates: github("owner/name", "component")` or
-///   `updates: url("https://...")`, where new releases come from (see
-///   [`UpdateSource`](crate::abi::UpdateSource));
-/// - `signed_by: ["RW...", ...]`, the minisign public keys (one, or two while
-///   rotating) the author signs releases with, which an updater requires of
-///   every new release;
+///   while this mod is present the loader never starts theirs;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -48,8 +41,6 @@
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
-///     updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
-///     signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -65,29 +56,10 @@
 /// assert_eq!(unsafe { manifest.name.as_str() }, Some("Survivors per Altar"));
 /// // SAFETY: as above; the license comes from this crate's Cargo.toml.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
-/// assert!(!manifest.updates.is_null());
-/// assert!(!manifest.signed_by[0].is_empty() && manifest.signed_by[1].is_empty());
 ///
 /// let pinned = enshwick_loader_api::manifest!(id: "safes", side: SERVER, version: "0.3.0");
 /// // SAFETY: a static string.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
-/// assert!(pinned.updates.is_null());
-/// assert!(pinned.signed_by.iter().all(enshwick_loader_api::abi::Str::is_empty));
-///
-/// let elsewhere = enshwick_loader_api::manifest!(
-///     id: "my-mod",
-///     side: SERVER,
-///     updates: url("https://example.com/my-mod/latest.json"),
-/// );
-/// // SAFETY: the macro points at a static source.
-/// let source = unsafe { &*elsewhere.updates };
-/// assert_eq!(source.kind, enshwick_loader_api::abi::UpdateKind::URL);
-/// ```
-///
-/// A `signed_by` key that is not a minisign public key fails the build:
-///
-/// ```compile_fail
-/// let manifest = enshwick_loader_api::manifest!(id: "my-mod", side: SERVER, signed_by: ["RWnot-a-key"]);
 /// ```
 #[macro_export]
 macro_rules! manifest {
@@ -107,8 +79,6 @@ macro_rules! manifest {
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
-        $(, updates: $source:ident($($source_arg:literal),* $(,)?))?
-        $(, signed_by: [$($key:literal),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -169,9 +139,6 @@ macro_rules! manifest {
                     as &[$crate::abi::Symbol]).len(),
             },)*)?
         ];
-        static UPDATES: &[$crate::abi::UpdateSource] = &[
-            $($crate::abi::UpdateSource::$source($($source_arg),*),)?
-        ];
         static MANIFEST: $crate::abi::Manifest = $crate::abi::Manifest {
             header: $crate::abi::Header::of::<$crate::abi::Manifest>(),
             id: $crate::abi::Str::new($id),
@@ -185,8 +152,6 @@ macro_rules! manifest {
             dependency_count: DEPENDENCIES.len(),
             builds: BUILDS.as_ptr(),
             build_count: BUILDS.len(),
-            updates: $crate::__private::first_or_null(UPDATES),
-            signed_by: $crate::__private::signed_by(&[$($($key),*)?]),
             name: $crate::abi::Str::new($crate::__private::first_text(&[$($name)?])),
             description: $crate::abi::Str::new($crate::__private::first_text(
                 &[$($description,)? ::core::env!("CARGO_PKG_DESCRIPTION")],

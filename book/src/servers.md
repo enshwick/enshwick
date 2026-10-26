@@ -17,30 +17,26 @@ volume mounted there, from files you keep:
   every new build replaces. Download the files once, keep them in your own
   storage (an artifact store, a bucket, the image's build context) and build
   from there, so that a rebuild of the image gets the same files;
-- every archive has a `.minisig` beside it. Check it with Enshwick's public
-  key, given in the [README](https://github.com/themaiby/enshwick#install),
-  before the files go in. The trusted comment of a development build's
-  signature is `dev <short sha> <file>`, naming the commit it was built
-  from.
+- pin each archive by its SHA-256, which GitHub shows beside every release
+  file, so the image is built from exactly the file you checked.
 
-A template to fill in, with the archive and its signature in the build
-context; every `<...>` is yours to set:
+A template to fill in, with the archive in the build context; every `<...>`
+is yours to set:
 
 ```dockerfile
 FROM alpine:<version> AS enshwick
-RUN apk add --no-cache minisign unzip
-ARG ENSHWICK_KEY=<public key from the README>
+RUN apk add --no-cache unzip
+ARG ENSHWICK_SHA256=<the archive's SHA-256>
 WORKDIR /enshwick
-COPY enshwick.zip enshwick.zip.minisig ./
-RUN minisign -Vm enshwick.zip -P "$ENSHWICK_KEY" \
+COPY enshwick.zip ./
+RUN echo "$ENSHWICK_SHA256  enshwick.zip" | sha256sum -c - \
  && unzip -q enshwick.zip -d files
 
 FROM <your Enshrouded server image>
 COPY --from=enshwick /enshwick/files/ <folder that holds enshrouded_server.exe>/
 ```
 
-Mods of other authors follow the same steps with their release URLs and the
-key their README publishes.
+Mods of other authors follow the same steps with their release URLs.
 
 ## Change versions by rolling out
 
@@ -48,9 +44,7 @@ A new version is a new image or a new volume, rolled out like any other
 change. Never update files inside a running container or pod: the next
 restart would start a set nobody built, and replicas would drift apart.
 
-The [updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-is a client mod: a dedicated server skips it, so it never changes files in a
-container. After a game update, a loader without the new build's table runs
+After a game update, a loader without the new build's table runs
 on the code patterns of the newest table it embeds, and only what they miss
 stays off; `build_patterns = false` in `mod-configs/enshwick.toml` keeps such
 a build vanilla instead. Rebuild the image with a loader that has the table

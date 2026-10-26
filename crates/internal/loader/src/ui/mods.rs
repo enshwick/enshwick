@@ -17,12 +17,6 @@
 //! that sets a mod's join values, those rows show the server's values and
 //! take no changes.
 //!
-//! Mods that publish updates (see [`crate::updates`]), such as the updater,
-//! add to the screen: an installed mod with an update on offer shows the new
-//! version and, when the publishing mod can install it, an Update button.
-//! The button only tells the publishing mod which update the player picked:
-//! the mod asks the player and downloads, never the loader.
-//!
 //! The world settings view shows the same rows under its last tab, inside
 //! its scroll area, from a hook after the tab's own rows: read-only where the
 //! view is, for a player who may not change the world.
@@ -373,7 +367,6 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
                         },
                     );
                 }
-                Listed::Picked(message) => screen.message = Some(message),
                 Listed::Actions(id) => {
                     go(screen, Page::Actions(super::actions::View::new(id, None)));
                 }
@@ -543,23 +536,11 @@ fn server_settings(
     message
 }
 
-/// The updates the mods that are on publish, with the publishing mod.
-fn updates(loader: &Loader) -> Vec<(usize, enshwick_loader_api::updates::Update)> {
-    crate::updates::all(|owner| {
-        loader
-            .mods
-            .get(owner)
-            .is_some_and(|m| !m.off.load(Ordering::Acquire))
-    })
-}
-
 /// What the player did on the mod list.
 enum Listed {
     Nothing,
     /// Opened mod `index`'s settings.
     Settings(usize),
-    /// Picked an update; what the screen says about it.
-    Picked((String, bool)),
     /// Opened the actions of the mod with this id, or of every mod.
     Actions(Option<String>),
 }
@@ -570,28 +551,9 @@ fn go(screen: &mut Screen, page: Page) {
     screen.message = None;
 }
 
-/// Hands the player's pick of `update` to `owner`, the mod that offered it;
-/// what the screen says about it.
-fn pick(
-    loader: &Loader,
-    owner: usize,
-    update: &enshwick_loader_api::updates::Update,
-) -> (String, bool) {
-    let by = loader
-        .mods
-        .get(owner)
-        .map_or_else(String::new, crate::host::ModRecord::label);
-    if crate::updates::pick(owner, &update.id) {
-        (texts::fill("mods.picked", &[("mod", &by)]), true)
-    } else {
-        (texts::fill("mods.picked.refused", &[("mod", &by)]), false)
-    }
-}
-
 /// Draws a page of the mod list; what the player did.
 fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
-    let updates = updates(loader);
     let mut done = Listed::Nothing;
     if super::actions::any_offered() && paint.button(texts::text("actions").as_bytes(), true) {
         done = Listed::Actions(None);
@@ -640,21 +602,6 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             if !points.is_empty() {
                 let line = texts::fill(key, &[("points", &points.join(", "))]);
                 paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-            }
-        }
-        if let Some((owner, update)) = updates.iter().find(|(_, u)| u.id == record.id) {
-            let line = texts::fill("mods.update.version", &[("version", &update.version)]);
-            paint.label(line.as_bytes(), UiWidget::STYLE_POSITIVE, false, false);
-            if !update.note.is_empty() {
-                paint.label(
-                    update.note.as_bytes(),
-                    UiWidget::STYLE_SECONDARY,
-                    true,
-                    false,
-                );
-            }
-            if update.ready && paint.button(texts::text("mods.update").as_bytes(), true) {
-                done = Listed::Picked(pick(loader, *owner, update));
             }
         }
         if super::actions::offers(&record.id)

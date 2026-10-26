@@ -49,7 +49,7 @@ pub struct Off {
 /// Where the player gets a mod, in the order the dialog lists them.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Get {
-    /// From the page the server's update source for it names.
+    /// From the homepage the server advertises for it.
     From(String),
     /// From the server's admin: the server names no source.
     Ask,
@@ -61,7 +61,7 @@ enum Get {
 
 /// The dialog for a client that lacks `needs`, the server's mods it does not
 /// run in the server's version; mods named by `names`, places from the
-/// update sources the server advertises, `sources` by id.
+/// homepages the server advertises, `pages` by id.
 ///
 /// # Examples
 ///
@@ -72,16 +72,16 @@ enum Get {
 /// use enshwick::join::{Names, refusal};
 ///
 /// let need = Need { id: "safes".into(), version: "0.3.0".into(), yours: Some("0.2.0".into()) };
-/// let sources = BTreeMap::from([("safes".to_owned(), "github:someone/safes:safes".to_owned())]);
-/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &sources);
-/// assert!(dialog.detail.contains("github.com/someone/safes/releases"));
+/// let pages = BTreeMap::from([("safes".to_owned(), "https://github.com/someone/safes".to_owned())]);
+/// let dialog = refusal::dialog(&[need], &refusal::Off::default(), &Names::new(), &pages);
+/// assert!(dialog.detail.contains("github.com/someone/safes"));
 /// ```
 #[must_use]
 pub fn dialog(
     needs: &[Need],
     off: &Off,
     names: &Names,
-    sources: &BTreeMap<String, String>,
+    pages: &BTreeMap<String, String>,
 ) -> Dialog {
     let mut groups: BTreeMap<Get, Vec<String>> = BTreeMap::new();
     for need in needs {
@@ -90,11 +90,14 @@ pub fn dialog(
         } else if off.this_game.contains(&need.id) {
             Get::Restart
         } else {
-            sources
+            pages
                 .get(&need.id)
-                .and_then(|line| crate::admission::place(line))
+                .and_then(|page| crate::admission::place(page))
                 .map_or(Get::Ask, |place| {
-                    Get::From(place.trim_start_matches("https://").to_owned())
+                    let shown = place
+                        .strip_prefix("https://")
+                        .or_else(|| place.strip_prefix("http://"));
+                    Get::From(shown.unwrap_or(&place).to_owned())
                 })
         };
         let name = super::label(names, &need.id);
@@ -163,12 +166,15 @@ mod tests {
     #[test]
     fn missing_mods_are_listed_under_where_to_get_them() {
         let names = Names::from([("build-camera".to_owned(), "Build camera".to_owned())]);
-        let sources = BTreeMap::from([
+        let pages = BTreeMap::from([
             (
                 "build-camera".to_owned(),
-                "github:someone/mods:build-camera".to_owned(),
+                "https://github.com/someone/mods".to_owned(),
             ),
-            ("safes".to_owned(), "github:someone/mods:safes".to_owned()),
+            (
+                "safes".to_owned(),
+                "https://github.com/someone/mods".to_owned(),
+            ),
         ]);
         let dialog = dialog(
             &[
@@ -178,12 +184,12 @@ mod tests {
             ],
             &Off::default(),
             &names,
-            &sources,
+            &pages,
         );
         assert_eq!(
             lines(&dialog),
             [
-                "From github.com/someone/mods/releases:",
+                "From github.com/someone/mods:",
                 "Build camera 0.3.0",
                 "safes 0.2.0, yours 0.1.0",
                 "Ask the server's admin for:",
@@ -211,13 +217,15 @@ mod tests {
             by_player: vec!["safes".to_owned()],
             this_game: vec!["count".to_owned()],
         };
-        let sources =
-            BTreeMap::from([("safes".to_owned(), "github:someone/mods:safes".to_owned())]);
+        let pages = BTreeMap::from([(
+            "safes".to_owned(),
+            "https://github.com/someone/mods".to_owned(),
+        )]);
         let dialog = dialog(
             &[need("count", "0.2.0", None), need("safes", "0.3.0", None)],
             &off,
             &Names::new(),
-            &sources,
+            &pages,
         );
         assert_eq!(
             lines(&dialog),
@@ -233,7 +241,10 @@ mod tests {
     #[test]
     fn every_line_is_short_enough_to_stay_on_one_line() {
         let id = "survivors-per-altar";
-        let sources = BTreeMap::from([(id.to_owned(), format!("github:themaiby/enshwick:{id}"))]);
+        let pages = BTreeMap::from([(
+            id.to_owned(),
+            "https://github.com/themaiby/enshwick".to_owned(),
+        )]);
         let off = Off {
             by_player: vec!["safes".to_owned()],
             this_game: vec!["count".to_owned()],
@@ -247,7 +258,7 @@ mod tests {
             ],
             &off,
             &Names::new(),
-            &sources,
+            &pages,
         );
         for line in lines(&dialog) {
             assert!(line.chars().count() <= 44, "{line}");

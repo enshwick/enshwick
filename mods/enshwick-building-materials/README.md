@@ -7,7 +7,7 @@ menu shows the new counts.
 
 This mod replaces Building yield and its Bulk Workbench. The loader never starts
 an old `mods/enshwick-building-yield.dll` beside it and logs that it can be
-deleted; the updater deletes it when it installs or updates this mod. A
+deleted. A
 `mod-configs/building-yield.toml` is carried over to
 `mod-configs/building-materials.toml` on the first start, without the
 `own_workbench` key, when the new file does not exist yet. Placed Bulk

@@ -278,8 +278,6 @@ impl Mod for Safes {
             side: BOTH,
             name: "Safes",
             join: true,
-            updates: github("themaiby/enshwick", "enshwick-safes"),
-            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

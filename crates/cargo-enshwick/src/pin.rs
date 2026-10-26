@@ -610,8 +610,9 @@ mod tests {
         }
     }
 
-    /// Ports every row of one executable's build to the same executable:
-    /// every symbol and check must map to itself.
+    /// Ports every row of one executable's build to the same executable, as
+    /// the tool does with `--old` and `--new`: every symbol and check must
+    /// map to itself, and no constant may be flagged or change.
     ///
     /// `ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release
     /// -p cargo-enshwick -- --ignored`
@@ -623,10 +624,27 @@ mod tests {
         let mut ported = 0;
         let mut wrong = Vec::new();
         for (src, row) in &rows {
-            let result = row::port_row(row, &exe, &exe);
+            let mut result = row::port_row(row, &exe, &exe);
+            if row.table == Table::Loader {
+                let source = enshwick_loader_builds::Table::parse(src).unwrap();
+                row::port_anchors(row, &mut result, &source, &exe, &exe);
+                row::confirm_by_patterns(&mut result, &source, &exe);
+            }
             for line in &result.lines {
                 if line.kind == row::Kind::Constant {
-                    assert_ne!(line.status, row::Status::Flagged, "{}", line.id);
+                    assert_ne!(
+                        line.status,
+                        row::Status::Flagged,
+                        "{}: {}",
+                        line.id,
+                        line.note
+                    );
+                    assert!(
+                        line.new.is_none_or(|new| new == line.old),
+                        "{}: {}",
+                        line.id,
+                        line.note
+                    );
                     continue;
                 }
                 ported += 1;

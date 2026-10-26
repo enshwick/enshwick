@@ -169,10 +169,6 @@ name = "recipe_rules"
 required-features = ["test"]
 
 [[test]]
-name = "updates"
-required-features = ["test"]
-
-[[test]]
 name = "stat_kinds"
 required-features = ["test"]
 

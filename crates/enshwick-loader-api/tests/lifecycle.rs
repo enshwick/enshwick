@@ -7,14 +7,9 @@ mod tests {
 
     use enshwick_loader_api::abi::{
         Event, Header, HookFlags, Level, ManifestFlags, ModHandle, ModInfo, Side, Status, Str,
-        UpdateSource,
     };
-    use enshwick_loader_api::mods::Updates;
     use enshwick_loader_api::test::{FakeHost, address};
     use enshwick_loader_api::{Next, events, hook};
-
-    /// Enshwick's release key, which the loader's entry names.
-    const KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
 
     static ORIGINAL_CALLS: AtomicU32 = AtomicU32::new(0);
     static LIVE_LIMIT: AtomicU32 = AtomicU32::new(0);
@@ -102,7 +97,10 @@ mod tests {
         // SAFETY: static strings.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("test-mod"));
         assert_eq!(manifest.dependency_count, 1);
-        assert_eq!(enshwick_mod_abi(), 1);
+        assert_eq!(
+            enshwick_mod_abi(),
+            u32::from(enshwick_loader_api::abi::ABI_MAJOR)
+        );
 
         let target = address(original as extern "system" fn(u32) -> u32);
         let loader = FakeHost::new()
@@ -122,8 +120,6 @@ mod tests {
                 flags: ManifestFlags::NONE,
                 off: 0,
                 file: Str::new("mods/enshwick/enshwick.dll"),
-                updates: UpdateSource::github("themaiby/enshwick", "enshwick-loader"),
-                signed_by: [Str::new(KEY), Str::new("RWnot-a-key")],
                 ..ModInfo::EMPTY
             })
             .install();
@@ -139,11 +135,6 @@ mod tests {
         let listed = enshwick_loader_api::mods();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].file, "mods/enshwick/enshwick.dll");
-        assert_eq!(
-            listed[0].updates.as_ref().map(Updates::to_line).as_deref(),
-            Some("github:themaiby/enshwick:enshwick-loader")
-        );
-        assert_eq!(listed[0].signed_by, [KEY]);
         let hooks = loader.hooks();
         assert_eq!(hooks[0].target, target);
         assert_eq!(hooks[0].priority, -5);

@@ -70,7 +70,6 @@ macro_rules! headed {
             UiFrame,
             UiMarker,
             UiWidget,
-            UpdateSource,
             WeatherFront,
             ZoneCheck
         )

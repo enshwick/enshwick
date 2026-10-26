@@ -6,8 +6,8 @@ The loader comes in two parts:
 
 - `powrprof.dll`, the stub, in the folder of `enshrouded.exe` or
   `enshrouded_server.exe`. Windows loads it with the game. It forwards every
-  export to the system's `powrprof.dll`, then, on a thread of its own, moves
-  staged updates from `mods/.staged/` into place and loads the loader. Without
+  export to the system's `powrprof.dll`, then, on a thread of its own, loads
+  the loader. Without
   the loader the game runs vanilla.
 - `mods/enshwick/enshwick.dll`, the loader. It identifies the game build,
   loads the mods, initialises them, arms their hooks and answers their calls.
@@ -101,8 +101,6 @@ let manifest = enshwick_loader_api::manifest!(
     recommends: ["caravans" => ">=0.3, <1.0"],
     breaks: ["old-market" => "<0.5"],
     replaces: ["trade-post"],       // ids this mod had before a rename
-    updates: github("themaiby/enshwick", "enshwick-trading-post"),
-    signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
     builds: [{
         side: SERVER,
         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -122,10 +120,11 @@ let manifest = enshwick_loader_api::manifest!(
 - `version` is SemVer. Leave it out so the DLL reports the version you
   release; the loader names it in every message about the mod.
 - `name`, `description`, `authors`, `license` and `homepage` are what players
-  read: in `/enshwick <mod id>`, the status summary, the join check's notes and
-  the updater's questions. Each but `name` comes from the crate's
-  `Cargo.toml` when left out (`homepage` falls back to `repository`); a mod
-  without a name is shown by its id.
+  read: on the Mods screen, in the status summary and in the join check's
+  notes, where `homepage` is the place a player who lacks the mod is sent to.
+  Each but `name` comes from the crate's `Cargo.toml` when left out
+  (`homepage` falls back to `repository`); a mod without a name is shown by
+  its id.
 - `join: true`: see [The join check](join-check.md).
 - `reload: true`: a development server may reload the mod while it runs; see
   [Testing](../testing.md#reloading-a-mod-while-the-game-runs).
@@ -145,18 +144,9 @@ let manifest = enshwick_loader_api::manifest!(
   loader never starts a replaced mod: it unloads that DLL right after reading
   its manifest and logs once
   `<old> is replaced by <new>; delete mods/<file>`, which `/enshwick` and the
-  status summary repeat and the lock lists under `[[replaced]]`. When the
-  updater installs or updates this mod, it deletes those DLLs, and only them:
-  each a `.dll` directly in `mods/` that the loader listed for the replaced
-  id and that no running mod uses; a fresh install, which no loader listed
-  replacements for yet, deletes them at the next start, once the new mod
-  runs. Settings and data stay where they are, so
-  carry them over in the new mod if it needs them.
-- `updates` says where new releases come from, `github(...)` or
-  `url("https://...")`; see [Releasing and updates](../releasing.md).
-- `signed_by` names the minisign public keys (one, or two while you change
-  keys) your releases are signed with; an updater installs only releases one
-  of them signed. See [Author keys](../releasing.md#author-keys).
+  status summary repeat and the lock lists under `[[replaced]]`. Settings and
+  data stay where they are, so carry them over in the new mod if it needs
+  them.
 - `builds` pins symbols and constants for game builds the loader's table does
   not cover, per side, by the build's GUID and age; see
   [Finding the game](../finding-the-game.md).

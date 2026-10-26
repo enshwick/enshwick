@@ -8,21 +8,14 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use enshwick_loader_api::abi as api_frame;
 use enshwick_loader_api::abi::{
     BuildInfo, Event, EventFn, Header, HookFlags, HookSpec, HostApi, Level, Manifest,
-    ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str, UpdateKind, UpdateSource,
+    ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str,
 };
-use enshwick_loader_api::mods::{LOADER_FILE, Updates};
+use enshwick_loader_api::mods::LOADER_FILE;
 use enshwick_loader_reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
 use crate::mid::{MidLink, Mids};
-
-/// Where the loader's own releases come from.
-const LOADER_UPDATES: UpdateSource = UpdateSource::github("themaiby/enshwick", "enshwick-loader");
-
-/// The key Enshwick's releases are signed with, the loader's among them;
-/// the public key of `mods/enshwick-updater/keys/enshwick.pub`.
-const LOADER_KEY: &str = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
 
 /// A loaded mod.
 #[derive(Debug)]
@@ -33,10 +26,6 @@ pub(crate) struct ModRecord {
     pub(crate) version: String,
     /// Its DLL relative to the game's folder, with `/` separators.
     pub(crate) file: String,
-    /// Where its new releases come from, checked.
-    pub(crate) updates: UpdateSource,
-    /// The keys its author signs releases with, checked; empty for none.
-    pub(crate) signed_by: [Str; 2],
     /// Its manifest, copied out of its DLL.
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
@@ -332,10 +321,7 @@ struct Missing {
     name: &'static str,
     version: &'static str,
     file: &'static str,
-    kind: UpdateKind,
-    location: &'static str,
-    component: &'static str,
-    keys: [&'static str; 2],
+    page: &'static str,
 }
 
 /// The server's join mods the last refused join found missing.
@@ -366,10 +352,8 @@ pub(crate) struct Wanted {
     pub(crate) name: String,
     /// The server's version.
     pub(crate) version: String,
-    /// Where the server's version comes from.
-    pub(crate) source: Option<Updates>,
-    /// The keys its author signs releases with.
-    pub(crate) keys: Vec<String>,
+    /// The mod's homepage; empty for none.
+    pub(crate) page: String,
 }
 
 /// On a client the join check kept out: records `missing`, the server's
@@ -386,34 +370,16 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
                 id,
                 name,
                 version,
-                source,
-                keys,
+                page,
             } = wanted;
             let ours = loader.mods.iter().find(|m| &m.id == id);
             let file = ours.map_or("", |m| m.file.as_str());
-            // SAFETY: the loader keeps every source's strings for the process.
-            let own = ours.and_then(|m| unsafe { Updates::from_abi(&m.updates) });
-            let (kind, location, component) = match source.clone().or(own) {
-                Some(Updates::GitHub {
-                    repository,
-                    component,
-                }) => (UpdateKind::GITHUB, keep(&repository), keep(&component)),
-                Some(Updates::Url(url)) => (UpdateKind::URL, keep(&url), ""),
-                None => (UpdateKind::NONE, "", ""),
-            };
-            let mut kept = [""; 2];
-            for (slot, key) in kept.iter_mut().zip(keys) {
-                *slot = keep(key);
-            }
             Missing {
                 id: keep(id),
                 name: keep(name),
                 version: keep(version),
                 file: keep(file),
-                kind,
-                location,
-                component,
-                keys: kept,
+                page: keep(page),
             }
         })
         .collect();
@@ -826,8 +792,6 @@ pub(crate) static API: HostApi = HostApi {
     language,
     keep_game_settings,
     forget_game_settings,
-    updates_set,
-    update_pick,
     revoke_knowledge,
     account_knowledge,
     resource_read,
@@ -2005,8 +1969,6 @@ fn loader_info() -> ModInfo {
         flags: ManifestFlags::NONE,
         off: 0,
         file: Str::new(LOADER_FILE),
-        updates: LOADER_UPDATES,
-        signed_by: [Str::new(LOADER_KEY), Str::EMPTY],
         name: Str::new("Enshwick"),
         description: Str::new("The mod loader and modding API for Enshrouded"),
         authors: LOADER_AUTHORS.as_ptr(),
@@ -2030,8 +1992,6 @@ fn mod_info(record: &'static ModRecord) -> ModInfo {
         flags: record.manifest.flags,
         off: u8::from(record.off.load(Ordering::Acquire)),
         file: Str::new(&record.file),
-        updates: record.updates,
-        signed_by: record.signed_by,
         name: record.manifest.name,
         description: record.manifest.description,
         authors: record.manifest.authors,
@@ -2092,14 +2052,8 @@ extern "system" fn join_missing(
                 flags: ManifestFlags::JOIN,
                 off: 1,
                 file: Str::new(missing.file),
-                updates: UpdateSource {
-                    kind: missing.kind,
-                    location: Str::new(missing.location),
-                    component: Str::new(missing.component),
-                    ..UpdateSource::NONE
-                },
-                signed_by: missing.keys.map(Str::new),
                 name: Str::new(missing.name),
+                homepage: Str::new(missing.page),
                 ..ModInfo::EMPTY
             })
             .collect();
@@ -3911,30 +3865,6 @@ extern "system" fn language(_me: ModHandle) -> u32 {
     loader()
         .filter(|loader| loader.side == Side::CLIENT)
         .map_or(0, |_| crate::content::language().0)
-}
-
-extern "system" fn updates_set(me: ModHandle, toml: Str) -> Status {
-    entry("updates_set", || {
-        let (loader, index, _) = match calling(me) {
-            Ok(found) => found,
-            Err(status) => return status,
-        };
-        if loader.side != Side::CLIENT {
-            return Status::MISSING;
-        }
-        text(toml).map_or(Status::BAD_ARGS, |toml| crate::updates::set(index, toml))
-    })
-}
-
-extern "system" fn update_pick(
-    me: ModHandle,
-    callback: api_frame::UpdatePickFn,
-    user: *mut core::ffi::c_void,
-) -> Status {
-    entry("update_pick", || match calling(me) {
-        Ok((_, index, _)) => crate::updates::on_pick(index, callback, user.expose_provenance()),
-        Err(status) => status,
-    })
 }
 
 /// Mod handles start at 1; 0 is no mod.
