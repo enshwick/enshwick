@@ -112,15 +112,35 @@ pub(crate) fn parse_pick(
 
 /// The anchors of the entries of `table` that keep one, found in `exe` by
 /// their patterns: constants read from an operand and symbols reached through a
-/// rel32. Entries whose pattern does not match once are left out.
-pub(crate) fn of_table(table: &Table, exe: &Exe<'_>) -> HashMap<String, Anchor> {
+/// rel32. A constant read via a symbol is searched in that symbol's code,
+/// which `symbol_at` places in `exe`. Entries whose pattern does not match
+/// once are left out.
+pub(crate) fn of_table(
+    table: &Table,
+    exe: &Exe<'_>,
+    symbol_at: impl Fn(&str) -> Option<u64>,
+) -> HashMap<String, Anchor> {
     let (code, code_rva) = exe.text();
     let mut out = HashMap::new();
     for constant in table.constants() {
         let (Some(pattern), Some(operand)) = (constant.pattern(), constant.operand()) else {
             continue;
         };
-        let Ok(start) = pattern.find_unique(code) else {
+        let found = match constant.via() {
+            Some(via) => symbol_at(via)
+                .and_then(|rva| usize::try_from(rva.checked_sub(code_rva)?).ok())
+                .and_then(|at| match constant.within() {
+                    Some(within) => {
+                        let end = at
+                            .checked_add(usize::try_from(within).ok()?)?
+                            .min(code.len());
+                        Some(at + pattern.find_unique(code.get(at..end)?).ok()?)
+                    }
+                    None => pattern.matches(code.get(at..)?).then_some(at),
+                }),
+            None => pattern.find_unique(code).ok(),
+        };
+        let Some(start) = found else {
             continue;
         };
         let start = code_rva + start as u64;

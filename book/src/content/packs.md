@@ -18,8 +18,7 @@ mods/
 
 Every file but `pack.toml` is optional. The loader runs a pack as it runs a
 mod: it is in [`mods.toml`](../concepts/loader-and-abi.md) and the lock, counts in
-[the join check](../concepts/join-check.md), is updated by the updater, has
-its log `logs/enshwick/mods/<id>.log`, and is turned off alone when it goes
+[the join check](../concepts/join-check.md), has its log `logs/enshwick/mods/<id>.log`, and is turned off alone when it goes
 wrong. What it adds goes through the same calls a mod makes (`add_item`,
 `add_recipe`, `add_workshop`, `add_loot`, `add_texts`), beside vanilla
 content: a pack never changes a vanilla item, recipe or table.
@@ -36,8 +35,6 @@ description = "Coloured lanterns, crafted at a bench of their own."
 authors = ["Ann"]
 license = "MIT"
 homepage = "https://example.com/lanterns"
-updates = "github:ann/lanterns:lanterns"
-signed_by = ["RWQ..."]
 
 [requires]
 safes = ">=0.5, <1.0"
@@ -50,8 +47,6 @@ safes = ">=0.5, <1.0"
 | `name`, `description`, `authors`, `license`, `homepage` | what players read, as a mod's [manifest](../releasing.md) says it |
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false` |
-| `updates` | where releases come from: `github:<owner/name>:<component>` or an `https://` document, as a mod's `updates:` |
-| `signed_by` | the minisign keys the author signs releases with, at most two |
 | `requires` | mods and packs it needs, with a version requirement each |
 
 ## Names and references
@@ -204,12 +199,9 @@ destroyed objects, also waits for a restart.
 ## Releases and the join check
 
 A pack is released like a mod: an archive `<component>.zip` holding the
-pack's files under `mods/<id>/`, signed with minisign by a key `signed_by`
-names. `cargo enshwick pack zip mods/lanterns --out lanterns.zip` checks the
-pack and writes the archive; sign it and attach both to the release, as
-[Releasing and updates](../releasing.md) describes. The updater installs a
-pack's files into its folder only, never into another pack's or the
-loader's.
+pack's files under `mods/<id>/`. `cargo enshwick pack zip mods/lanterns --out
+lanterns.zip` checks the pack and writes the archive; attach it to the
+release, as [Releasing mods](../releasing.md) describes.
 
 In the join check a pack's version carries the hash of its files,
 `lanterns@1.0.0+3f2a9c1e`: a server and a player with other files of one

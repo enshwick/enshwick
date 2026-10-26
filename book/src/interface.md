@@ -180,29 +180,6 @@ each mod that has actions. They show one action at a time, a list of players
 as toggle rows, five to a page, and an action with arguments as rows above
 its button.
 
-### Updates
-
-A mod that knows of updates of installed mods, such as the updater, shows
-them on the screen with
-[`updates::publish`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/updates.rs):
-a list of `Update` values, each the installed mod's id, the version on offer,
-a note and whether it is ready. The mod shows `Update: <version>` and the
-note under its name, and a ready update has an Update button. A press only
-calls the publishing mod back through
-[`Load::on_update_pick`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/updates.rs),
-on the interface thread, with the mod's id: the publishing mod asks the
-player and downloads on a thread of its own; the loader itself never goes
-online.
-
-```rust
-use enshwick_loader_api::updates::{self, Update};
-
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.on_update_pick(|id| enshwick_loader_api::info!("the player picked {id}"))?;
-    updates::publish(&[Update::new("safes", "1.2.0").ready(true)])
-}
-```
-
 ## Testing
 
 With the `test` feature, the [fake loader](testing.md) runs frame callbacks

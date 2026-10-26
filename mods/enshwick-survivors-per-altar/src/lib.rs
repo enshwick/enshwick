@@ -161,8 +161,6 @@ impl Mod for SurvivorsPerAltar {
             side: BOTH,
             name: "Survivors per altar",
             join: true,
-            updates: github("themaiby/enshwick", "enshwick-survivors-per-altar"),
-            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 

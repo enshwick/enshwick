@@ -68,7 +68,7 @@ This mod was `enshwick-dev-tools`, id `dev-tools`. On its first start it moves
 `mod-configs/admin-tools.toml` already exists or `mod-data/admin-tools` is not
 empty. `/dev` still answers as `/admin`, with a note. The loader never starts
 an old `mods/enshwick-dev-tools.dll` beside this mod and logs that it can be
-deleted; the updater deletes it when it installs or updates this mod.
+deleted.
 
 ## Install
 

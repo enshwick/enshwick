@@ -13,8 +13,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::mods::Updates;
-
 use crate::join::Names;
 use crate::texts;
 
@@ -387,27 +385,31 @@ fn machine_to_kick(
     Ok(machine)
 }
 
-/// Where players get a mod with the update source `line`, as a link.
+/// The longest page a server may advertise, in bytes.
+const MAX_PAGE: usize = 127;
+
+/// Where players get a mod whose homepage is `page`: the page itself when it
+/// is an `https://` or `http://` address of printable characters without
+/// spaces, as a peer may send anything.
 #[must_use]
-pub fn place(line: &str) -> Option<String> {
-    match Updates::parse(line)? {
-        Updates::GitHub { repository, .. } => {
-            Some(format!("https://github.com/{repository}/releases"))
-        }
-        Updates::Url(url) => Some(url),
-    }
+pub fn place(page: &str) -> Option<String> {
+    let rest = page
+        .strip_prefix("https://")
+        .or_else(|| page.strip_prefix("http://"))?;
+    let plain =
+        !rest.is_empty() && page.len() <= MAX_PAGE && page.chars().all(|c| c.is_ascii_graphic());
+    plain.then(|| page.to_owned())
 }
 
 /// The note for a player whose game lacks `needs`: `hello` when the game
-/// said which mods it runs, mods named by `names` with the update sources
-/// `sources` by id, and the time to the kick, `leaving`, when the server
-/// kicks.
+/// said which mods it runs, mods named by `names` with the homepages `pages`
+/// by id, and the time to the kick, `leaving`, when the server kicks.
 #[must_use]
 pub fn note(
     needs: &[Need],
     hello: bool,
     names: &Names,
-    sources: &BTreeMap<String, String>,
+    pages: &BTreeMap<String, String>,
     leaving: Option<Duration>,
 ) -> String {
     let mut lines = Vec::with_capacity(MAX_NAMED + 4);
@@ -426,7 +428,7 @@ pub fn note(
             names.get(&need.id).map_or("", String::as_str),
             &need.id,
         );
-        let place = sources
+        let place = pages
             .get(&need.id)
             .and_then(|line| place(line))
             .unwrap_or_else(|| nowhere.clone());
@@ -499,7 +501,7 @@ mod runtime {
     struct Serving {
         rules: Rules,
         names: Names,
-        sources: BTreeMap<String, String>,
+        pages: BTreeMap<String, String>,
         kick: Option<Kick>,
         side: Side,
     }
@@ -549,9 +551,9 @@ mod runtime {
         }
     }
 
-    /// Starts admitting players, naming mods by `names` with the update
-    /// sources `sources` by id.
-    pub(crate) fn start(loader: &Loader, names: Names, sources: BTreeMap<String, String>) {
+    /// Starts admitting players, naming mods by `names` with the homepages
+    /// `pages` by id.
+    pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, String>) {
         let Some(&rules) = STATE.rules.get() else {
             crate::log!(
                 INFO,
@@ -592,7 +594,7 @@ mod runtime {
         let _first = STATE.serving.set(Serving {
             rules,
             names,
-            sources,
+            pages,
             kick,
             side: loader.side,
         });
@@ -755,7 +757,7 @@ mod runtime {
         match step {
             Step::Note { key, hello, needs } => {
                 let leaving = serving.kick.as_ref().map(|_| serving.rules.grace);
-                let text = super::note(&needs, hello, &serving.names, &serving.sources, leaving);
+                let text = super::note(&needs, hello, &serving.names, &serving.pages, leaving);
                 let ids: Vec<&str> = needs.iter().map(|n| n.id.as_str()).collect();
                 let why = if hello {
                     "runs other join mods"
@@ -1261,32 +1263,35 @@ mod tests {
     #[test]
     fn places_are_links_players_can_open() {
         assert_eq!(
-            place("github:themaiby/enshwick:enshwick-safes").as_deref(),
-            Some("https://github.com/themaiby/enshwick/releases")
+            place("https://github.com/someone/safes").as_deref(),
+            Some("https://github.com/someone/safes")
         );
-        assert_eq!(
-            place("url:https://example.com/latest.json").as_deref(),
-            Some("https://example.com/latest.json")
-        );
-        assert_eq!(place("ftp:somewhere"), None);
+        assert!(place("http://example.com/safes").is_some());
+        for bad in [
+            "",
+            "https://",
+            "ftp://example.com",
+            "github.com/someone/safes",
+            "https://exa mple.com",
+            "https://example.com/\nInstall",
+        ] {
+            assert_eq!(place(bad), None, "{bad}");
+        }
+        assert_eq!(place(&format!("https://{}", "x".repeat(200))), None);
     }
 
     #[test]
     fn a_note_names_enshwick_each_mod_its_version_and_where_to_get_it() {
         let names = Names::from([("safes".to_owned(), "Safes".to_owned())]);
-        let sources =
-            BTreeMap::from([("safes".to_owned(), "github:someone/safes:safes".to_owned())]);
+        let pages = BTreeMap::from([(
+            "safes".to_owned(),
+            "https://github.com/someone/safes".to_owned(),
+        )]);
         let needs = [
             need("safes", "0.3.0", Some("0.2.0")),
             need("zones", "0.1.0", None),
         ];
-        let text = super::note(
-            &needs,
-            false,
-            &names,
-            &sources,
-            Some(Duration::from_secs(10)),
-        );
+        let text = super::note(&needs, false, &names, &pages, Some(Duration::from_secs(10)));
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 5, "{text}");
         assert!(lines[1].contains(LOADER_PLACE), "{text}");
@@ -1294,7 +1299,7 @@ mod tests {
             lines[2].contains("Safes 0.3.0")
                 && !lines[2].contains("(safes)")
                 && lines[2].contains("0.2.0")
-                && lines[2].contains("https://github.com/someone/safes/releases"),
+                && lines[2].contains("https://github.com/someone/safes"),
             "{text}"
         );
         assert!(
@@ -1302,7 +1307,7 @@ mod tests {
             "{text}"
         );
         assert!(lines[4].contains("10"), "{text}");
-        let told = super::note(&needs, true, &names, &sources, None);
+        let told = super::note(&needs, true, &names, &pages, None);
         assert!(!told.contains(LOADER_PLACE), "{told}");
         assert_eq!(told.lines().count(), 3, "no kick line: {told}");
     }

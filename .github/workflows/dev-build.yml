@@ -1,7 +1,6 @@
 # A development build of the commit it runs on, until the first public
-# release, 1.0.0. It packs the same archives as a release (tools/pack.sh),
-# signs each with minisign, trusted comment `dev <short sha> <file>`, and
-# puts them on the single prerelease `dev`, whose tag moves to the commit.
+# release, 1.0.0. It packs the same archives as a release (tools/pack.sh)
+# and puts them on the single prerelease `dev`, whose tag moves to the commit.
 name: dev-build
 
 on:
@@ -23,7 +22,7 @@ jobs:
         shell: bash
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -33,23 +32,6 @@ jobs:
       - name: Archives
         run: bash tools/pack.sh "$RUNNER_TEMP/mods.tsv"
 
-      - name: Signing tool
-        run: cargo install --locked rsign2@0.6.7
-
-      - name: Sign
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-        run: |
-          short=$(git rev-parse --short=7 HEAD)
-          key="$RUNNER_TEMP/minisign.key"
-          trap 'rm -f "$key"' EXIT
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
-          files="enshwick.zip enshwick-loader.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/' | tr '\n' ' ')"
-          for file in $files; do
-            rsign sign -W -s "$key" -x "$file.minisig" -t "dev $short $file" "$file" < /dev/null
-          done
-          echo "$files" > "$RUNNER_TEMP/files"
-
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -58,11 +40,8 @@ jobs:
           title="Enshwick dev $short"
           notes="Development build of $GITHUB_SHA: $(git log -1 --format=%s).
 
-          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Each archive has its minisign signature beside it, by the key in the README."
-          assets=()
-          for file in $(cat "$RUNNER_TEMP/files"); do
-            assets+=("$file" "$file.minisig")
-          done
+          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it."
+          read -r -a assets <<< "enshwick.zip enshwick-loader.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/' | tr '\n' ' ')"
           if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
             gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false

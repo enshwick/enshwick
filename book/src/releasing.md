@@ -1,8 +1,8 @@
-# Releasing and updates
+# Releasing mods
 
-A player installs a mod by copying its DLL into `mods/`. This chapter covers
-what a release carries: the version, where updates come from, who signs them,
-how an updater installs them, and how releases are signed.
+A player installs a mod by copying its DLL into `mods/`, by hand or through a
+mod manager. This chapter covers what a release carries: the version, the
+archives, and the page players are sent to when a server runs a mod they lack.
 
 ## Versions
 
@@ -49,9 +49,8 @@ Until the first public release, 1.0.0, this repository has no releases.
 Every crate carries the version `0.0.0-dev`, and the
 [dev-build workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/dev-build.yml),
 run by hand, builds the commit it runs on, packs the same archives as a
-release, signs each with the trusted comment `dev <short sha> <file>` and
-replaces the files of the one prerelease tagged `dev`, whose tag moves to that
-commit. Two development builds of one commit join each other; builds of
+release and replaces the files of the one prerelease tagged `dev`, whose tag
+moves to that commit. Two development builds of one commit join each other; builds of
 different commits carry the same versions, so the join check does not tell
 them apart. The release workflow below runs by hand as well and makes 1.0.0
 the first version of every crate.
@@ -71,9 +70,8 @@ The platform crates are linked (the `linked-versions` plugin, group
 `enshwick`): a change to any of them releases all of them at one version,
 each with its own tag, `enshwick-loader-v0.2.0`,
 `enshwick-loader-api-v0.2.0` and so on. The tags keep what relies on them
-working: `cargo enshwick new` pins `enshwick-loader-api-v<version>`, and the
-updater and the loader's own `updates:` source look for `enshwick-loader-v*`
-releases. The loader's release is the platform release, titled
+working: `cargo enshwick new` pins `enshwick-loader-api-v<version>`. The
+loader's release is the platform release, titled
 `Enshwick Loader <version>` and kept as the repository's latest release. A platform
 release also bumps the patch version of every mod, since they all depend on
 `enshwick-loader-api`.
@@ -86,120 +84,18 @@ The
 [release workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/release-please.yml)
 then builds the workspace and attaches to each mod's release:
 
-| File                  | What it holds                         |
-| --------------------- | ------------------------------------- |
-| `<crate>.zip`         | `mods/<crate>.dll` and `LICENSE`      |
-| `<crate>.zip.minisig` | The minisign signature of the archive |
+| File          | What it holds                    |
+| ------------- | -------------------------------- |
+| `<crate>.zip` | `mods/<crate>.dll` and `LICENSE` |
 
 The platform release carries `enshwick-loader.zip` (the stub and the loader)
-and `enshwick.zip` (everything that goes next to the game), each with its
-`.minisig`. Before it signs anything, the workflow checks with
-`cargo enshwick manifest --expect-version` that every released mod's DLL
-reports the version of its tag.
+and `enshwick.zip` (everything that goes next to the game). Before it uploads
+anything, the workflow checks with `cargo enshwick manifest --expect-version`
+that every released mod's DLL reports the version of its tag.
 
 The loader's build tables (see [Finding the game](finding-the-game.md)) are
 compiled into the loader, so a table for a new game build ships with the next
 loader build.
-
-## Where updates come from
-
-`updates:` in the manifest names the source of new releases:
-
-```rust
-let manifest = enshwick_loader_api::manifest!(
-    id: "safes",
-    side: BOTH,
-    join: true,
-    updates: github("themaiby/enshwick", "enshwick-safes"),
-    signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
-);
-assert!(!manifest.updates.is_null());
-```
-
-| Source                         | Meaning                                                             |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `github("owner/name", "comp")` | GitHub releases of that repository whose tags name `comp`'s version |
-| `url("https://...")`           | A JSON document at that URL that lists the mod's versions           |
-
-A mod without `updates:` is updated by hand.
-
-The loader checks the source and lists it; it fetches nothing itself. It
-accepts a repository of the form `owner/name`, a component of `[a-z0-9_-]`
-(up to 64 characters) and a URL that starts with `https://`. A malformed
-source is dropped with a warning such as
-`my_mod.dll: no update source: the update URL "http://..." is not https://`,
-and the mod loads without one.
-
-The updater in this repository reads both. The document a `url(...)` source
-serves is described below.
-
-## Author keys
-
-`signed_by:` names the [minisign](https://jedisct1.github.io/minisign/)
-public keys you sign your releases with, each the second line of a `.pub`
-file (`RW...`). Name one; name two while you move to a new key. The build
-fails on a string that is not a minisign public key.
-
-An updater trusts a mod the way a phone trusts an app: on first install. The
-keys the installed DLL names are the ones a new release must be signed with,
-so nobody else can publish an update of your mod, even from your repository
-or your URL. Without `signed_by:` the updater still updates your mod,
-unsigned: it downloads the release over `https://` from the source the
-installed DLL names, and its dialog marks the update unsigned.
-
-The loader checks each key and lists it in `ModEntry::signed_by`. A key that
-is not a minisign public key is dropped with a warning such as
-`my_mod.dll: key ignored: the signed_by key "RW..." is not a minisign public key (RW..., 56 characters)`,
-and the mod loads with the others.
-
-To move to a new key, release one version that names both keys, signed with
-the old one. Releases after it can be signed with the new key. A player who
-skipped that version is refused the newer release with a note that it is
-signed by another key, and updates by hand or adds the new key to
-`trusted_keys`.
-
-## The document of a URL source
-
-A `url("https://...")` source is a JSON document that lists the mod's
-versions:
-
-```json
-{
-  "versions": [
-    {
-      "version": "1.2.0",
-      "url": "https://example.com/my-mod/my-mod-1.2.0.zip",
-      "signature": "https://example.com/my-mod/my-mod-1.2.0.zip.minisig"
-    }
-  ]
-}
-```
-
-- `version` is SemVer. A version with a prerelease part, such as
-  `1.3.0-rc.1`, is offered only to players who turn `prereleases` on.
-- `url` is where the file downloads from. It is an `https://` address whose
-  path ends in a file name with `.zip` (an archive) or `.dll` (the mod's
-  DLL alone).
-- `signature` is where the file's minisign signature downloads from, also
-  `https://`. A mod that names no author key may leave it out; a mod that
-  names one gets only versions with a signature.
-- Versions may come in any order. Fields the format does not name are
-  ignored, so a document may carry more, such as release notes.
-- An entry that breaks a rule (a version that is not SemVer, an address that
-  is not `https://`, a file that is neither `.zip` nor `.dll`) is skipped;
-  the other entries still count.
-
-The archive is laid out as a GitHub release's (see
-[Releasing your own mod](#releasing-your-own-mod)). A signature's trusted
-comment names `<id>-v<version>`, `<id>` being the mod id from the manifest,
-and the file's name:
-
-```bash
-minisign -S -s my-mod.key -m my-mod-1.2.0.zip -t "my-mod-v1.2.0 my-mod-1.2.0.zip"
-```
-
-The updater asks for the document once per check, refuses any address that
-is not `https://` (redirects included), and reads at most 4 MiB of it.
 
 ## The list of loaded mods
 
@@ -216,46 +112,28 @@ has:
 | `join`                                          | Whether it counts in the join check                                             |
 | `running`                                       | Not refused at init and not faulted since                                       |
 | `file`                                          | The DLL's path relative to the game's folder, such as `mods/enshwick_safes.dll` |
-| `updates`                                       | `Some(Updates::GitHub { .. })`, `Some(Updates::Url(..))` or `None`              |
-| `signed_by`                                     | The author keys the manifest names, checked; empty for none                     |
 | `name`                                          | What players read; `entry.label()` gives the name, or the id without a name     |
 | `description`, `authors`, `license`, `homepage` | The manifest's credits; empty for none                                          |
 | `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
 ```rust
-use enshwick_loader_api::mods::Updates;
-
 for entry in enshwick_loader_api::mods() {
-    if let Some(Updates::GitHub { repository, component }) = &entry.updates {
-        enshwick_loader_api::info!("{} {}: {repository}, tags {component}-v*", entry.id, entry.version);
-    }
+    enshwick_loader_api::info!("{} {} at {}", entry.id, entry.version, entry.file);
 }
 ```
 
 The list is empty before the loader initialises the mod. The loader lists itself first, under
 `mods::LOADER_ID`; `mods::LOADER_FILES` names the files it is made of, the
-stub and the loader's DLL, which an update of a mod never writes.
+stub and the loader's DLL.
 
-## A server's sources and the join check
+## A server's pages and the join check
 
-A server advertises each running join mod's source in the Steam rule
-`enshwick.src.<id>`, as one line written by
-[`Updates::to_line`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs):
-`github:<owner/name>:<component>` or `url:<url>`. A line longer than a Steam
-rule holds (127 bytes) is left out. `Updates::parse` reads a line back. A
-running join mod that names author keys also gets the rule
-`enshwick.key.<id>`: its keys separated by a space, written by
-`mods::keys_line` and read back by `mods::parse_keys`.
-
-```rust
-use enshwick_loader_api::mods::Updates;
-
-let safes = Updates::GitHub {
-    repository: "themaiby/enshwick".into(),
-    component: "enshwick-safes".into(),
-};
-assert_eq!(safes.to_line(), "github:themaiby/enshwick:enshwick-safes");
-```
+A server advertises each running join mod's homepage in the Steam rule
+`enshwick.page.<id>`: the manifest's `homepage`, an `https://` or `http://`
+address. A page longer than a Steam rule holds (127 bytes) is left out. A
+client the join check keeps out names that page in its dialog as the place to
+get the mod, and the server's own chat note to such a player does the same;
+a mod without a page is "ask the server's admin".
 
 When the join check keeps a client out because the server runs join mods the
 client lacks or has in another version, the loader shows the player a dialog,
@@ -264,24 +142,19 @@ then raises
 on the client.
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
 then lists those mods: the server's version, `running` false, the client's
-DLL path when it has the mod (empty otherwise), the source the server
-advertises, else the client's own source for the mod, and in `signed_by` the
-author keys the server advertises (empty when it advertises none).
+DLL path when it has the mod (empty otherwise), and the name and homepage the
+server advertises.
 
-The handler runs on the game thread once the player closed the dialog. Hand
-downloads to a thread of your own:
+The handler runs on the game thread once the player closed the dialog:
 
 ```rust
 use enshwick_loader_api::events::JoinRefused;
 
 fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
     load.on::<JoinRefused>(|()| {
-        let missing = enshwick_loader_api::mods::join_missing();
-        std::thread::spawn(move || {
-            for entry in missing {
-                enshwick_loader_api::info!("the server runs {} {}", entry.id, entry.version);
-            }
-        });
+        for entry in enshwick_loader_api::mods::join_missing() {
+            enshwick_loader_api::info!("the server runs {} {}", entry.id, entry.version);
+        }
     })
 }
 ```
@@ -293,135 +166,14 @@ itself.
 a rename (`replaces:` in the [manifest](concepts/loader-and-abi.md#the-manifest)),
 which the loader never started, each with `replaced_by` and its `file`.
 
-## Staged updates
-
-An updater never replaces a loaded DLL. It writes each update as a unit, a
-folder `mods/.staged/<unit>/` named by 1 to 20 digits that sort as the
-updates came, such as the nanoseconds since 1970. The unit holds each new
-file at `<path>`, the file's path relative to the game's folder
-(`ModEntry::file` for a mod). Write the unit elsewhere on the same drive and
-rename it into `mods/.staged/` once it is complete: the stub takes only
-folders named by digits, so an update cut short is never installed. On the
-next start, before the loader runs, the `powrprof.dll` stub applies the units
-oldest first, moving each file to `<path>` and keeping the file it replaces
-as `<path>.previous`, for one rollback.
-
-A file that cannot be moved stays staged for the next start, and so do the
-units after its own, so an older file never lands over a newer one; the game
-starts anyway. The stub writes what it moved to `logs/enshwick/stub.log`.
-
-## The updater mod
-
-[The updater](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-is such a mod, for players; a dedicated server skips it:
-
-- a short while after start, on a thread of its own, it asks each loaded mod's
-  source (its GitHub repository or its URL source's document) for newer
-  releases, and asks the player before it downloads anything;
-- it downloads the release's file for the mod from the GitHub release, or the
-  file a URL source's document names, over `https://` only, at most 64 MiB,
-  checks the signature when the mod names keys, and stages the DLLs;
-- it takes only `powrprof.dll`, DLLs under `mods/` and a content pack's files
-  from a signed archive, the mod's own DLL alone from an unsigned one, never
-  another mod's or the loader's files, and refuses an archive with a path
-  that leaves the game's folder;
-- it updates only mods the game has, from the source the installed DLL
-  names, never from one a server names;
-- it never touches settings files.
-
-A signed update is installed only when the right key signed it and the
-signature's trusted comment names both the release's tag and the file's
-name, so a signed file cannot pass for another release. For a URL source the
-tag is `<id>-v<version>`. The right key is:
-
-| The mod is                                  | The download must be signed by                                              |
-| ------------------------------------------- | --------------------------------------------------------------------------- |
-| installed and names keys in `signed_by:`    | one of those keys, or a key in `trusted_keys` of `mod-configs/updater.toml` |
-| installed without `signed_by:`              | nothing: it comes unsigned, over `https://`, and the dialog says so         |
-
-A release signed by another key than the installed version names is refused
-with a note: it may have been tampered with, or the author changed keys, and
-the player updates it by hand. Mods of this repository released before author keys are
-checked against Enshwick's own key, which has signed all of them.
-
-## Releasing your own mod
-
-A mod outside this repository gets updates from the updater when its
-manifest says `updates: github("you/your-repo", "my-mod")` and its GitHub
-releases follow the common forms:
-
-| What         | Accepted                                                                                                                |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| Tag          | `my-mod-v1.2.0`, `my-mod-1.2.0`, `my-mod@1.2.0`; in a repository of this one mod also `v1.2.0` or `1.2.0`               |
-| Release file | `my-mod.zip`; else the release's only `.zip`; else the one `.zip` whose name holds `my-mod`; else the same for a `.dll` |
-| Archive      | the DLL at `mods/<file>.dll`, at the archive's root, or either inside one top-level folder                              |
-
-A repository counts as one mod's when none of its tags names another
-component. In names, `-` and `_` count as one and case does not matter, so
-`My_Mod-1.2.0-windows.zip` holds `my-mod`. A bare `.dll` release file
-replaces the installed DLL. Prereleases and versions with a prerelease part,
-such as `1.3.0-rc.1`, reach only players who turn `prereleases` on.
-
-That is all an unsigned mod needs. To sign, name your public key with
-`signed_by: ["RW..."]` and attach `<file>.minisig` beside the release file, a
-[minisign](https://jedisct1.github.io/minisign/) signature by that key whose
-trusted comment names the tag and the file. From then on only signed
-releases reach players.
-
-Releases hosted elsewhere work the same way with `updates: url("https://...")`
-and a [document](#the-document-of-a-url-source) that lists them, the tag in
-the trusted comment being `my-mod-v<semver>`.
-
-Make a key pair once and keep the secret key out of the repository:
-
-```bash
-minisign -G -p my-mod.pub -s my-mod.key
-```
-
-Sign each release file with the tag and file name in the trusted comment:
-
-```bash
-minisign -S -s my-mod.key -m my-mod.zip -t "my-mod-v1.2.0 my-mod.zip"
-```
-
-Declare the public key, the second line of `my-mod.pub` (`RW...`), in the
-manifest, and publish it where players can compare it, such as your README:
-
-```rust,ignore
-enshwick_loader_api::manifest!(
-    id: "my-mod",
-    side: BOTH,
-    updates: github("you/your-repo", "my-mod"),
-    signed_by: ["RWQ..."],
-)
-```
-
-Players need nothing else: the key comes with the DLL they install. Keep the
-secret key safe; a release signed with a lost key cannot reach players who
-have your mod, and one signed with a stolen key can.
-
 ## Where to publish
 
-Players get your updates only from a source the updater can read, so:
-
-- **Publish every release in a repository**: GitHub releases with
-  `updates: github(...)`, or any `https://` host with a
-  [document](#the-document-of-a-url-source) and `updates: url(...)`. Use the
-  tag and file forms of [Releasing your own mod](#releasing-your-own-mod),
-  such as tag `my-mod-v1.2.0` with `my-mod.zip`, so the updater finds them
-  without guessing.
-- **Sign with minisign and name the key in `signed_by:`**. Players then get
-  an update checked against the key that came with the DLL they installed,
-  and nobody else can publish one in your name. An unsigned update still
-  installs, but the dialog and the Mods screen mark it unsigned.
-- **Treat Nexus as a mirror, not the only source.** Nexus downloads need a
-  login, and through its API a Premium account, so neither the updater nor a
-  server's automation can fetch from it. Upload there too if you like, with
-  the same files as the release.
-- **Publish your public key** where players and server admins can compare
-  it, such as your README; admins who bake mods into a server image check the
-  signatures with it (see
-  [Running a server in Docker or Kubernetes](servers.md)).
+- **Publish every release on a page players can open**, such as GitHub
+  releases, and set it as the crate's `homepage` (or `repository`) in
+  `Cargo.toml`: the manifest takes it, and a refused join sends players there.
+- **Use the same files everywhere.** Upload the release archive to Nexus or
+  other mod sites as it is, so players who install through a mod manager get
+  what the release page has.
 
 ## Removed mods and holds
 

@@ -5,7 +5,6 @@
 # Each mod's release gets its archive with the mod's DLL; the loader's release,
 # the platform release, carries the stub and loader and the full bundle,
 # everything as it goes next to the game.
-# Each archive has a minisign signature beside it, `<archive>.minisig`.
 # Until the first public release, 1.0.0, it runs only by hand; dev-build.yml
 # publishes development builds meanwhile.
 name: release-please
@@ -33,7 +32,7 @@ jobs:
     steps:
       # v5.0.0
       - id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
@@ -49,7 +48,7 @@ jobs:
         shell: bash
     steps:
       # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -73,22 +72,11 @@ jobs:
             target/release/cargo-enshwick enshwick manifest "target/release/$lib.dll" --expect-version "${tag##*-v}"
           done
 
-      - name: Signing tool
-        run: cargo install --locked rsign2@0.6.7
-
       - name: Attach
         env:
           GH_TOKEN: ${{ github.token }}
           OUTPUTS: ${{ needs.release-please.outputs.all }}
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: |
-          # Every archive goes up with a minisign signature, which the updater
-          # checks against the key in mods/enshwick-updater/keys. The trusted
-          # comment names the tag and the file, so a signed archive cannot be
-          # passed off as another release.
-          key="$RUNNER_TEMP/minisign.key"
-          trap 'rm -f "$key"' EXIT
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
           # jq on Windows ends lines with CRLF; the tags must not keep the CR.
           echo "$OUTPUTS" | jq -r 'to_entries[] | select(.key | endswith("--tag_name")) | .value' | tr -d '\r' |
             while read -r tag; do
@@ -103,16 +91,13 @@ jobs:
                 gh release delete "$tag" --yes --repo "$GITHUB_REPOSITORY"
                 continue
               fi
-              for file in $files; do
-                rsign sign -W -s "$key" -x "$file.minisig" -t "$tag $file" "$file" < /dev/null
-                gh release upload "$tag" "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
-              done
+              # shellcheck disable=SC2086 # the archive names hold no spaces
+              gh release upload "$tag" $files --clobber --repo "$GITHUB_REPOSITORY"
             done
 
       - name: Platform release
         env:
           GH_TOKEN: ${{ github.token }}
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
         run: |
           # The other platform crates release with the loader under the same
           # version; the loader's release is the one players download. It is
@@ -124,10 +109,6 @@ jobs:
             --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // empty' | tr -d '\r')
           [ -n "$tag" ] || exit 0
           gh release edit "$tag" --title "Enshwick Loader ${tag##*-v}" --latest --repo "$GITHUB_REPOSITORY"
-          key="$RUNNER_TEMP/minisign.key"
-          trap 'rm -f "$key"' EXIT
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
           for file in enshwick.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/'); do
-            rsign sign -W -s "$key" -x "$file.minisig" -t "$tag $file" "$file" < /dev/null
-            gh release upload "$tag" "$file" "$file.minisig" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$tag" "$file" --clobber --repo "$GITHUB_REPOSITORY"
           done

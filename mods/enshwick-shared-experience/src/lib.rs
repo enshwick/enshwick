@@ -88,7 +88,7 @@ fn share_experience(rows: &mut [Experience], table: &enshwick_loader_api::progre
         .unwrap_or(0);
     let counted = MOMENT.fetch_max(most_gained, Ordering::Relaxed);
     let new_gain = most_gained.saturating_sub(counted);
-    let moved = HIGH_WATER.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
+    let moved = HIGH_WATER.try_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
         let mark = high_water(previous, new_gain, furthest);
         (mark != previous).then_some(mark)
     });
@@ -156,8 +156,6 @@ impl Mod for SharedExperience {
             id: "shared-experience",
             side: SERVER,
             name: "Shared experience",
-            updates: github("themaiby/enshwick", "enshwick-shared-experience"),
-            signed_by: ["RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"],
         )
     }
 
