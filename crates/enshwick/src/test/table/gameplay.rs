@@ -3,10 +3,11 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneFn, AltarZoneSize, BedCheckFn, BuffRequest,
-    BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header,
-    InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarLimitFn, AltarZoneFn, AltarZoneSize,
+    BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn,
+    DamageFilterFn, ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn,
+    ModHandle, RateId, Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    ZoneCheckFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -196,21 +197,54 @@ pub(crate) extern "system" fn experience_filter(
 
 pub(crate) extern "system" fn altar_limit(
     _me: ModHandle,
-    callback: AltarLimitFn,
+    _callback: AltarLimitFn,
+    _user: *mut c_void,
+) -> Status {
+    Status::REFUSED
+}
+
+pub(crate) extern "system" fn altar_limit_filter(
+    _me: ModHandle,
+    callback: AltarLimitFilterFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        if s.altar_limit.is_some() {
-            return Status::REFUSED;
-        }
-        s.altar_limit = Some((callback, user.expose_provenance()));
+        s.altar_limits.push((callback, user.expose_provenance()));
         Status::OK
     })
 }
 
+/// The zones and bases the fake's game groups, as the loader's: 16 and 16,
+/// 32 and 16 once the mod raised the limit and its hooks are armed.
+pub(crate) fn zones_and_bases() -> (u32, u32) {
+    if with(false, |s| s.base_limit.raised && s.base_limit.armed) {
+        (32, 16)
+    } else {
+        (16, 16)
+    }
+}
+
+pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo) -> Status {
+    let (zones, bases) = zones_and_bases();
+    let limit = BaseLimitInfo {
+        header: Header::of::<BaseLimitInfo>(),
+        zones,
+        bases,
+        vanilla_zones: 16,
+        reserved: 0,
+    };
+    // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
+    // its header set, writable for the call.
+    if unsafe { crate::abi::write_headed(out, limit) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
+
 pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
-        s.base_limit_raised = true;
+        s.base_limit.raised = true;
         Status::OK
     })
 }
