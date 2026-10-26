@@ -26,7 +26,7 @@ struct Bench;
 
 impl Mod for Bench {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "bench", side: SERVER)
+        enshwick::manifest!(id: "enshwick.bench", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
