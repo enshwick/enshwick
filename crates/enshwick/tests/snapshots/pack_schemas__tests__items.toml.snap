@@ -56,6 +56,56 @@ expression: shape
     "ItemChangeEntry": {
       "additionalProperties": false,
       "properties": {
+        "armor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "burn_time": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comfort_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "damage_mod": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "energy_output": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "items": {
           "items": {
             "type": "string"
@@ -73,6 +123,16 @@ expression: shape
           ]
         },
         "slots": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ValueEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "speed_mod": {
           "anyOf": [
             {
               "$ref": "#/$defs/ValueEntry"

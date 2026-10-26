@@ -147,6 +147,18 @@ pub(super) struct ItemChangeEntry {
     /// How many slots the container the item places holds, 8 to 128 in
     /// steps of 8.
     pub(super) slots: Option<ValueEntry>,
+    /// A weapon's damage factor, from 0 to 100.
+    pub(super) damage_mod: Option<ValueEntry>,
+    /// A weapon's attack speed factor, from 0 to 10.
+    pub(super) speed_mod: Option<ValueEntry>,
+    /// Every armour value, scaled: `{ times = x }` only.
+    pub(super) armor: Option<ValueEntry>,
+    /// How long the item burns as fuel, in seconds.
+    pub(super) burn_time: Option<ValueEntry>,
+    /// The energy the item gives as fuel.
+    pub(super) energy_output: Option<ValueEntry>,
+    /// The comfort the placed item gives.
+    pub(super) comfort_amount: Option<ValueEntry>,
 }
 
 /// A change of vanilla recipes' values.

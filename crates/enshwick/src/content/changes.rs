@@ -59,6 +59,25 @@ pub enum Field {
     /// change reaches every item that places the same container. Containers
     /// placed before keep their size, which the save holds.
     Slots,
+    /// A weapon's damage factor, `dmgMod`, from 0 to 100; the entry is an
+    /// item that deals damage. Weapons the game sets up after the change
+    /// deal it; the number a tooltip shows stays until the item is made.
+    DamageMod,
+    /// A weapon's attack speed factor, `speedMod`, from 0 to 10; the entry
+    /// is an item that deals damage.
+    SpeedMod,
+    /// Every armour value of an item, scaled only, by a factor; the entry is
+    /// an item that gives armour.
+    Armor,
+    /// How long an item burns as fuel, in seconds from 0 to 86400; the entry
+    /// is a fuel item.
+    BurnTime,
+    /// The energy an item gives as fuel, 0 to 1000000; the entry is a fuel
+    /// item.
+    EnergyOutput,
+    /// The comfort a placed item gives, 0 to 1000; the entry is an item
+    /// that gives comfort.
+    ComfortAmount,
 }
 
 impl Field {
@@ -70,6 +89,12 @@ impl Field {
         Self::Ingredient,
         Self::Time,
         Self::Slots,
+        Self::DamageMod,
+        Self::SpeedMod,
+        Self::Armor,
+        Self::BurnTime,
+        Self::EnergyOutput,
+        Self::ComfortAmount,
     ];
 
     /// The name a data pack writes, such as `max_stack`.
@@ -90,6 +115,12 @@ impl Field {
             Self::Ingredient => "ingredient",
             Self::Time => "time",
             Self::Slots => "slots",
+            Self::DamageMod => "damage_mod",
+            Self::SpeedMod => "speed_mod",
+            Self::Armor => "armor",
+            Self::BurnTime => "burn_time",
+            Self::EnergyOutput => "energy_output",
+            Self::ComfortAmount => "comfort_amount",
         }
     }
 
@@ -106,7 +137,14 @@ impl Field {
     #[must_use]
     pub const fn entry(self) -> Entry {
         match self {
-            Self::MaxStack | Self::Slots => Entry::Item,
+            Self::MaxStack
+            | Self::Slots
+            | Self::DamageMod
+            | Self::SpeedMod
+            | Self::Armor
+            | Self::BurnTime
+            | Self::EnergyOutput
+            | Self::ComfortAmount => Entry::Item,
             Self::Output | Self::Cost | Self::Ingredient | Self::Time => Entry::Recipe,
         }
     }
@@ -116,8 +154,12 @@ impl Field {
         match self {
             Self::MaxStack | Self::Output | Self::Cost => (1.0, 65535.0),
             Self::Ingredient => (0.0, 65535.0),
-            Self::Time => (0.0, 86400.0),
+            Self::Time | Self::BurnTime => (0.0, 86400.0),
             Self::Slots => (8.0, 128.0),
+            Self::DamageMod => (0.0, 100.0),
+            Self::SpeedMod => (0.0, 10.0),
+            Self::Armor | Self::EnergyOutput => (0.0, 1_000_000.0),
+            Self::ComfortAmount => (0.0, 1000.0),
         }
     }
 
@@ -133,8 +175,14 @@ impl Field {
     /// Whether the field holds whole numbers only.
     const fn whole(self) -> bool {
         match self {
-            Self::MaxStack | Self::Output | Self::Cost | Self::Ingredient | Self::Slots => true,
-            Self::Time => false,
+            Self::MaxStack
+            | Self::Output
+            | Self::Cost
+            | Self::Ingredient
+            | Self::Slots
+            | Self::EnergyOutput
+            | Self::ComfortAmount => true,
+            Self::Time | Self::DamageMod | Self::SpeedMod | Self::Armor | Self::BurnTime => false,
         }
     }
 
@@ -157,6 +205,9 @@ impl Field {
                 low,
                 high,
             }),
+            Value::Set(_) if matches!(self, Self::Armor) => {
+                Err(ValueError::FactorOnly { field: self })
+            }
             Value::Set(v) if self.step() > 1.0 && (v / self.step()).fract() != 0.0 => {
                 Err(ValueError::NotInSteps {
                     field: self,
@@ -227,6 +278,12 @@ impl Field {
             Self::Ingredient => DataField::RECIPE_INGREDIENT,
             Self::Time => DataField::RECIPE_TIME,
             Self::Slots => DataField::CONTAINER_SLOTS,
+            Self::DamageMod => DataField::DAMAGE_MOD,
+            Self::SpeedMod => DataField::SPEED_MOD,
+            Self::Armor => DataField::ARMOR,
+            Self::BurnTime => DataField::BURN_TIME,
+            Self::EnergyOutput => DataField::ENERGY_OUTPUT,
+            Self::ComfortAmount => DataField::COMFORT_AMOUNT,
         }
     }
 
@@ -338,6 +395,12 @@ pub enum ValueError {
     /// A factor below 1 for a field that only grows.
     #[error("{field} only grows: a chest a player upgrades moves every item it holds")]
     Shrinks {
+        /// The field.
+        field: Field,
+    },
+    /// A set for a field that takes only a factor.
+    #[error("{field} takes only a factor: {{ times = x }}")]
+    FactorOnly {
         /// The field.
         field: Field,
     },
@@ -630,6 +693,19 @@ mod tests {
         assert_eq!(Field::Slots.resolve(24.0, [Value::Times(1.5)]), 40.0);
         assert_eq!(Field::Slots.resolve(72.0, [Value::Times(2.0)]), 128.0);
         assert!(Field::Slots.check(Value::Times(0.5)).is_err());
+    }
+
+    #[test]
+    fn armor_takes_only_a_factor() {
+        assert_eq!(
+            Field::Armor
+                .check(Value::Set(10.0))
+                .unwrap_err()
+                .to_string(),
+            "armor takes only a factor: { times = x }"
+        );
+        assert!(Field::Armor.check(Value::Times(1.5)).is_ok());
+        assert_eq!(Field::DamageMod.resolve(1.25, [Value::Times(2.0)]), 2.5);
     }
 
     #[test]
