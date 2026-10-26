@@ -60,7 +60,7 @@ or swapped whole:
   such as settings applied by `on_config_change`: readers load it without a
   lock, the writer stores a new one.
 
-[`enshwick-flame-altar-count`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
+[`enshwick-flame-altar-count`](https://github.com/enshwick/mod-flame-altar-count/blob/main/src/lib.rs)
 keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
 
 ## Work that can wait
