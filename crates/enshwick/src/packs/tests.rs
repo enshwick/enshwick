@@ -63,7 +63,7 @@ fn vanilla_content_is_named_by_its_debug_name() {
     let vanilla = crate::content::vanilla::tests::game(&[
         (torch, "Tool_Torch01"),
         (Guid([5; 16]), "Prop_Production_T1_Forge"),
-        (Guid([7; 16]), "Prop_Decoration_T0_Storage_16"),
+        (Guid([7; 16]), "Prop_Storage_24_T1_Box"),
     ]);
     let items = "[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch01\"\nname = \"lantern.name\"\n";
     let workshops = "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Production_T1_Forge\"\n\n\
@@ -81,7 +81,7 @@ fn vanilla_content_is_named_by_its_debug_name() {
 
     let wrong = files("[[item]]\nid = \"lantern\"\nlike = \"Tool_Torch1\"\n").with(
         WORKSHOPS_FILE,
-        "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Decoration_T0_Storage_16\"\n",
+        "[[workshop]]\nid = \"forge\"\nlike = \"Prop_Storage_24_T1_Box\"\n",
     );
     let errors = Pack::parse_with("lights", &wrong, Some(&vanilla)).unwrap_err();
     let lines: Vec<String> = errors.list().iter().map(ToString::to_string).collect();
@@ -444,14 +444,14 @@ fn a_chest_s_slots_change_in_pages_of_eight() {
 fn slots_go_only_to_a_container_and_never_shrink_it() {
     let chest = Guid([1; 16]);
     let vanilla =
-        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Decoration_T0_Storage_16", 16);
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 8\n";
+        crate::content::vanilla::tests::game_with_chest(chest, "Prop_Storage_24_T1_Box", 24);
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 8\n";
     let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
     assert!(
         errors.to_string().ends_with("a container only grows"),
         "{errors}"
     );
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = { times = 0.5 }\n";
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = { times = 0.5 }\n";
     let errors = Pack::parse_with("you.chests", &files(text), Some(&vanilla)).unwrap_err();
     assert!(errors.to_string().contains("slots only grows"), "{errors}");
     let prop = Guid([7; 16]);
@@ -461,6 +461,6 @@ fn slots_go_only_to_a_container_and_never_shrink_it() {
         errors.to_string().contains("places no container"),
         "{errors}"
     );
-    let text = "[[change]]\nitems = [\"Prop_Decoration_T0_Storage_16\"]\nslots = 32\n";
+    let text = "[[change]]\nitems = [\"Prop_Storage_24_T1_Box\"]\nslots = 32\n";
     assert!(Pack::parse_with("you.chests", &files(text), Some(&vanilla)).is_ok());
 }
