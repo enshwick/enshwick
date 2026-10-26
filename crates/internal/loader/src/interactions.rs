@@ -4,9 +4,11 @@
 //! world only.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -14,32 +16,31 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
-use crate::host::{Loader, Registered, take};
-use crate::locks::Relock;
+use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "access.base_stock",
-    "access.base_stock_ui_return",
-    "access.consumed_deposit",
-    "access.consumed_upgrade",
-    "access.deposit_target",
-    "access.deposit_version",
-    "access.dismantle_method",
-    "access.object_id",
-    "access.object_kind",
-    "access.offer_test",
-    "access.sort",
-    "access.sort_target",
-    "access.state_input",
-    "access.state_owner_index",
-    "access.transfer",
-    "access.transfer_source",
-    "access.transfer_source_slot",
-    "access.transfer_target",
-    "access.transfer_target_slot",
-    "access.upgrade_target",
-    "access.upgrade_version",
+    pinned::access::BASE_STOCK.id(),
+    pinned::access::BASE_STOCK_UI_RETURN.id(),
+    pinned::access::CONSUMED_DEPOSIT.id(),
+    pinned::access::CONSUMED_UPGRADE.id(),
+    pinned::access::DEPOSIT_TARGET.id(),
+    pinned::access::DEPOSIT_VERSION.id(),
+    pinned::access::DISMANTLE_METHOD.id(),
+    pinned::access::OBJECT_ID.id(),
+    pinned::access::OBJECT_KIND.id(),
+    pinned::access::OFFER_TEST.id(),
+    pinned::access::SORT.id(),
+    pinned::access::SORT_TARGET.id(),
+    pinned::access::STATE_INPUT.id(),
+    pinned::access::STATE_OWNER_INDEX.id(),
+    pinned::access::TRANSFER.id(),
+    pinned::access::TRANSFER_SOURCE.id(),
+    pinned::access::TRANSFER_SOURCE_SLOT.id(),
+    pinned::access::TRANSFER_TARGET.id(),
+    pinned::access::TRANSFER_TARGET_SLOT.id(),
+    pinned::access::UPGRADE_TARGET.id(),
+    pinned::access::UPGRADE_VERSION.id(),
 ];
 
 /// The offer result the game writes when it does not offer an interaction.
@@ -75,8 +76,7 @@ struct Layout {
 
 type Filter = Registered<InteractionFn>;
 
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
@@ -140,7 +140,10 @@ fn layout(loader: &Loader) -> Option<Layout> {
         upgrade_version: size("upgrade_version")?,
         consumed_upgrade: size("consumed_upgrade")?,
         stock_ui_return: if loader.side == Side::CLIENT {
-            loader.base + loader.build.symbol("access.base_stock_ui_return")?
+            loader.base
+                + loader
+                    .build
+                    .symbol(pinned::access::BASE_STOCK_UI_RETURN.id())?
         } else {
             0
         },
@@ -157,7 +160,7 @@ pub(crate) fn register(
     callback: InteractionFn,
     user: *mut c_void,
 ) -> Status {
-    if loader.delivery.get().is_some() || SEALED.get().is_some() {
+    if loader.delivery.get().is_some() || FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     if layout(loader).is_none()
@@ -167,15 +170,13 @@ pub(crate) fn register(
         return Status::MISSING;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = take(&FILTERS);
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
@@ -183,7 +184,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout, components));
-    let at = |name: &str| loader.address(&format!("access.{name}"));
+    let at = |name: &str| loader.address_by_name(&format!("access.{name}"));
     let actions = loader
         .reflection
         .system("inventory_actions")
@@ -251,7 +252,7 @@ pub(crate) fn forget() {
 }
 
 fn allowed(call: &Interaction) -> bool {
-    let Some(filters) = SEALED.get() else {
+    let Some(filters) = FILTERS.sealed() else {
         return true;
     };
     filters.iter().filter(|f| f.live()).all(|f| {

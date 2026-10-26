@@ -2,6 +2,7 @@
 //! equipment category, read through its `InventorySetup` as the game links
 //! them.
 
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::raw::read_at;
@@ -62,16 +63,16 @@ fn layout(loader: &Loader) -> Option<Layout> {
 
 /// The `(entity, item)` of every item `entity` wears that has an entity of
 /// its own; empty for an entity without inventories. On the game thread.
-pub(super) fn worn(loader: &Loader, entity: u32) -> Vec<(u32, u32)> {
+pub(super) fn worn(loader: &Loader, entity: Entity) -> Vec<(u32, u32)> {
     let mut out = Vec::new();
     if let Some(layout) = layout(loader) {
-        walk(loader, &layout, entity, 0, &mut out);
+        walk(loader, &layout, entity.0, 0, &mut out);
     }
     out
 }
 
 fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(u32, u32)>) {
-    let Ok(setup) = crate::world::component(loader, root, layout.setup) else {
+    let Ok(setup) = crate::world::component(loader, Entity(root), layout.setup) else {
         return;
     };
     // SAFETY: `world::component` returned the entity's live `InventorySetup`,
@@ -99,7 +100,7 @@ fn walk(loader: &Loader, layout: &Layout, root: u32, depth: u32, out: &mut Vec<(
         if category != EQUIPMENT {
             continue;
         }
-        let Ok(slots) = crate::world::component(loader, link, layout.inventory) else {
+        let Ok(slots) = crate::world::component(loader, Entity(link), layout.inventory) else {
             continue;
         };
         for index in 0..SLOTS {

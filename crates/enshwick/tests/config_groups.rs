@@ -91,3 +91,38 @@ mod tests {
         assert!(rates.validate().is_err());
     }
 }
+
+#[cfg(test)]
+mod moved {
+    use enshwick::abi::Status;
+    use enshwick::migrations::Migrations;
+
+    struct Mover;
+
+    impl enshwick::Mod for Mover {
+        fn manifest() -> &'static enshwick::abi::Manifest {
+            enshwick::manifest!(id: "you.mover", side: SERVER)
+        }
+
+        fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
+            load.migrate(
+                Migrations::new().add("2", |m| m.rename_setting("per_level", "count.per_level")),
+            )?;
+            Ok(Self)
+        }
+    }
+
+    enshwick::declare_mod!(Mover);
+
+    #[test]
+    fn a_flat_setting_renames_into_a_group() {
+        let loader = enshwick::test::FakeHost::new().install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(
+            loader.migrate_settings("per_level = [2, 4]\n"),
+            Ok("[count]\nper_level = [2, 4]\n".to_owned())
+        );
+    }
+}

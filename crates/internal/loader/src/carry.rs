@@ -5,7 +5,8 @@
 //! everything under `mod-data/<old>/` (each world's settings and stores, a
 //! hold) to the new id, and the migrations that ran under the old id count
 //! as run under the new one. A file the new id has already stays. The old
-//! files stay too, for a player who goes back to the old version. The record
+//! files stay too, for a player who goes back to the old version, except a
+//! hold, which moves, so the mod's release of it holds. The record
 //! in `mod-data/enshwick/migrations.toml` keeps what was carried, so it is
 //! carried once.
 
@@ -72,6 +73,12 @@ pub fn carry(
             std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
         std::fs::copy(from, to).map_err(|e| format!("{}: {e}", from.display()))?;
+    }
+    // One hold stays: under the old id it would outlive the mod's release
+    // of the copy under its new id.
+    let old_hold = old_data.join(enshwick::state::HOLD_FILE);
+    if old_hold.is_file() && new_data.join(enshwick::state::HOLD_FILE).is_file() {
+        std::fs::remove_file(&old_hold).map_err(|e| format!("{}: {e}", old_hold.display()))?;
     }
     record.take_over(id, old);
     Ok(Some(copies.len()))
@@ -232,6 +239,7 @@ mod tests {
             "a world left behind"
         );
         assert!(configs.join("altars.toml").exists(), "the old files stay");
+        assert!(!data.join("altars/hold.txt").exists(), "the hold moves");
         assert_eq!(record.ran(None, "me.altars"), &["2"]);
         assert_eq!(record.ran(Some("w-1"), "me.altars"), &["2"]);
 

@@ -16,8 +16,10 @@
 //! cursor shows as not allowed.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 use core::ffi::c_void;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use enshwick::abi::{
     BuildCheck, BuildCheckFn, CraftCheck, CraftCheckFn, Header, HookFlags, Status,
@@ -25,20 +27,17 @@ use enshwick::abi::{
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
-use crate::host::{Loader, Registered, take};
-use crate::locks::Relock;
+use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "building.cursor_check",
-    "building.cursor_item_info",
-    "building.cursor_no_permission",
+    pinned::building::CURSOR_CHECK.id(),
+    pinned::building::CURSOR_ITEM_INFO.id(),
+    pinned::building::CURSOR_NO_PERMISSION.id(),
 ];
 
-static CRAFT_FILTERS: Mutex<Vec<Registered<CraftCheckFn>>> = Mutex::new(Vec::new());
-static BUILD_FILTERS: Mutex<Vec<Registered<BuildCheckFn>>> = Mutex::new(Vec::new());
-static CRAFT_SEALED: OnceLock<Box<[Registered<CraftCheckFn>]>> = OnceLock::new();
-static BUILD_SEALED: OnceLock<Box<[Registered<BuildCheckFn>]>> = OnceLock::new();
+static CRAFT_FILTERS: Registry<Registered<CraftCheckFn>> = Registry::new();
+static BUILD_FILTERS: Registry<Registered<BuildCheckFn>> = Registry::new();
 static CRAFT: OnceLock<CraftLayout> = OnceLock::new();
 static BUILD: OnceLock<BuildLayout> = OnceLock::new();
 // SAFETY: `CursorFn` is the signature of the table's
@@ -81,16 +80,15 @@ pub(crate) fn register_craft(
     callback: CraftCheckFn,
     user: *mut c_void,
 ) -> Status {
-    if CRAFT_SEALED.get().is_some() {
+    if CRAFT_FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     if craft_layout(loader).is_none() {
         return Status::MISSING;
     }
     CRAFT_FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Registers mod `owner`'s build filter.
@@ -100,19 +98,18 @@ pub(crate) fn register_build(
     callback: BuildCheckFn,
     user: *mut c_void,
 ) -> Status {
-    if BUILD_SEALED.get().is_some() {
+    if BUILD_FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     if build_layout(loader).is_none()
-        || loader.address("building.cursor_check").is_none()
+        || loader.address(pinned::building::CURSOR_CHECK).is_none()
         || crate::ecs::engine(loader).is_none()
     {
         return Status::MISSING;
     }
     BUILD_FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
@@ -137,9 +134,13 @@ fn craft_layout(loader: &Loader) -> Option<CraftLayout> {
 
 fn build_layout(loader: &Loader) -> Option<BuildLayout> {
     Some(BuildLayout {
-        item_info: loader.offset("building.cursor_item_info")?,
-        no_permission: u32::try_from(loader.build.constant("building.cursor_no_permission")?)
-            .ok()?,
+        item_info: loader.offset(pinned::building::CURSOR_ITEM_INFO)?,
+        no_permission: u32::try_from(
+            loader
+                .build
+                .constant(pinned::building::CURSOR_NO_PERMISSION.id())?,
+        )
+        .ok()?,
     })
 }
 
@@ -152,7 +153,7 @@ pub(crate) fn crafting() -> bool {
 /// Seals the filters and links what they need. Craft requests are screened
 /// whenever the build reads them, as any recipe may be disabled later.
 pub(crate) fn link(loader: &'static Loader) {
-    let crafts = take(&CRAFT_FILTERS);
+    let crafts = CRAFT_FILTERS.seal();
     if let Some(layout) = craft_layout(loader) {
         let _first = CRAFT.set(layout);
         if !crafts.is_empty() {
@@ -164,10 +165,8 @@ pub(crate) fn link(loader: &'static Loader) {
             "craft requests are not screened: this build's CraftRecipeEvent is not reflected"
         );
     }
-    let _first = CRAFT_SEALED.set(crafts.into_boxed_slice());
-    let builds = take(&BUILD_FILTERS);
+    let builds = BUILD_FILTERS.seal();
     let wanted = !builds.is_empty();
-    let _first = BUILD_SEALED.set(builds.into_boxed_slice());
     if !wanted {
         return;
     }
@@ -177,7 +176,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = BUILD.set(layout);
     loader.link_feature(
         "build filters",
-        loader.address("building.cursor_check"),
+        loader.address(pinned::building::CURSOR_CHECK),
         &CURSOR_NEXT,
         cursor as CursorFn,
         HookFlags::NONE,
@@ -194,7 +193,7 @@ pub(crate) fn link(loader: &'static Loader) {
 /// - Called on the game thread before the engine moves the streams, so
 ///   nothing else reads or writes the event during the call.
 pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
-    let (Some(layout), Some(filters)) = (CRAFT.get(), CRAFT_SEALED.get()) else {
+    let (Some(layout), Some(filters)) = (CRAFT.get(), CRAFT_FILTERS.sealed()) else {
         return;
     };
     if type_hash != layout.hash || size < layout.size {
@@ -297,7 +296,7 @@ unsafe extern "system" fn cursor(
 ///   nothing else writes them during the call.
 unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform: *const i64) {
     let (Some(layout), Some(filters), Some(engine)) =
-        (BUILD.get(), BUILD_SEALED.get(), crate::ecs::resolved())
+        (BUILD.get(), BUILD_FILTERS.sealed(), crate::ecs::resolved())
     else {
         return;
     };
@@ -378,7 +377,7 @@ mod tests {
     #[test]
     fn a_request_for_a_disabled_recipe_reaches_the_game_empty() {
         let _first = CRAFT.set(LAYOUT);
-        let _sealed = CRAFT_SEALED.set(Box::default());
+        let _sealed = CRAFT_FILTERS.seal();
         crate::recipes::disable_for_test(&[7]);
         let mut refused = request(5, 7, 3);
         let mut allowed = request(5, 8, 3);

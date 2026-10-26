@@ -23,16 +23,18 @@
 //! over it, counting the drops for the status summary.
 
 use crate::mod_index::ModIndex;
+use crate::registry::Registry;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::collections::VecDeque;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
 use rustc_hash::FxHashMap;
 
-use crate::host::{Loader, Registered, take};
+use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 
 mod frame;
@@ -108,8 +110,7 @@ struct State {
     greeting: FxHashMap<u64, Peer>,
 }
 
-static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
-static CHANNELS: OnceLock<Box<[Channel]>> = OnceLock::new();
+static CHANNELS: Registry<Channel> = Registry::new();
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 /// Set while the client's outbox holds anything, so an idle frame takes no
 /// lock.
@@ -151,7 +152,7 @@ pub(crate) fn open(
     callback: NetMessageFn,
     user: *mut c_void,
 ) -> Result<u32, Status> {
-    if CHANNELS.get().is_some() {
+    if CHANNELS.is_sealed() {
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
@@ -166,26 +167,26 @@ pub(crate) fn open(
         return Err(Status::BAD_ARGS);
     }
     let id = channel_id(&record.id, name);
-    let mut pending = PENDING.relock();
-    if pending.iter().any(|c| c.id == id) {
-        return Err(Status::REFUSED);
-    }
-    pending.push(Channel {
-        id,
-        name: format!("{}/{name}", record.id),
-        handler: Registered::new(owner, callback, user),
-    });
-    Ok(id)
+    CHANNELS.edit(|pending| {
+        if pending.iter().any(|c| c.id == id) {
+            return Err(Status::REFUSED);
+        }
+        pending.push(Channel {
+            id,
+            name: format!("{}/{name}", record.id),
+            handler: Registered::new(owner, callback, user),
+        });
+        Ok(id)
+    })?
 }
 
 /// Seals the channels.
 pub(crate) fn link() {
-    let channels = take(&PENDING);
+    let channels = CHANNELS.seal();
     if !channels.is_empty() {
         let names: Vec<&str> = channels.iter().map(|c| c.name.as_str()).collect();
         crate::log!(INFO, "mod messages: channels {}", names.join(", "));
     }
-    let _first = CHANNELS.set(channels.into_boxed_slice());
 }
 
 /// The frames of a control message, numbered when it takes more than one.
@@ -201,7 +202,7 @@ pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
 /// Hands a message to the mod that opened its channel.
 fn deliver(channel: u32, peer: u64, data: &[u8]) {
     let Some(target) = CHANNELS
-        .get()
+        .sealed()
         .and_then(|channels| channels.iter().find(|c| c.id == channel))
     else {
         dropped();
@@ -235,12 +236,12 @@ fn control(kind: u8) -> Vec<u8> {
 
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
-pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
+pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status> {
     if !ready(key) {
         return Err(Status::MISSING);
     }
     let mut data = control(NOTICE);
-    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(&entity.0.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
     for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
         crate::chat::send_frame(key, &line);
@@ -572,7 +573,7 @@ pub(crate) fn client_received(text: &str) -> bool {
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
-            crate::notices::queue(u32::from_le_bytes(*entity), text);
+            crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
         } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
             crate::ui::open_demo(demo_position(rest));
         } else {
@@ -672,7 +673,7 @@ pub(crate) fn send(
     data: &[u8],
 ) -> Result<(), Status> {
     let open = CHANNELS
-        .get()
+        .sealed()
         .and_then(|channels| channels.iter().find(|c| c.id == channel));
     if open.is_none_or(|c| c.handler.owner != owner) {
         return Err(Status::BAD_ARGS);

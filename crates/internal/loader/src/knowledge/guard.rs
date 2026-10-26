@@ -20,15 +20,17 @@
 //! which consumes the request without queueing it.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
 use core::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{
     Header, HookFlags, KnowledgeInfo, KnowledgeInput, KnowledgeInputFn, Registers, Status,
 };
 
-use crate::host::{Loader, Registered, take};
+use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 use crate::mid::MidLink;
 use crate::settings::KnowledgeGuard;
@@ -41,8 +43,7 @@ static MODE: AtomicU8 = AtomicU8::new(MODE_WATCH);
 const MODE_WATCH: u8 = 0;
 const MODE_ENFORCE: u8 = 1;
 const MODE_OFF: u8 = 2;
-static FILTERS: Mutex<Vec<Registered<KnowledgeInputFn>>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Registered<KnowledgeInputFn>]>> = OnceLock::new();
+static FILTERS: Registry<Registered<KnowledgeInputFn>> = Registry::new();
 static SITE: OnceLock<Site> = OnceLock::new();
 /// Requests the guard would refuse but let through, watching.
 static WOULD_REFUSE: AtomicU32 = AtomicU32::new(0);
@@ -98,16 +99,15 @@ pub(crate) fn register(
     callback: KnowledgeInputFn,
     user: *mut c_void,
 ) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    if site(loader).is_none() || loader.address("knowledge.input_check").is_none() {
+    if site(loader).is_none() || loader.address(pinned::knowledge::INPUT_CHECK).is_none() {
         return Status::MISSING;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 fn site(loader: &Loader) -> Option<Site> {
@@ -119,9 +119,9 @@ fn site(loader: &Loader) -> Option<Site> {
             .and_then(|v| usize::try_from(v).ok())
     };
     Some(Site {
-        action: loader.offset("knowledge.input_action")?,
-        kind: loader.offset("knowledge.request_kind")?,
-        value: loader.offset("knowledge.request_value")?,
+        action: loader.offset(pinned::knowledge::INPUT_ACTION)?,
+        kind: loader.offset(pinned::knowledge::REQUEST_KIND)?,
+        value: loader.offset(pinned::knowledge::REQUEST_VALUE)?,
         experience: field("experienceGainId")?,
         skill_points: field("unlockedSkillPoints")?,
     })
@@ -129,17 +129,16 @@ fn site(loader: &Loader) -> Option<Site> {
 
 /// Seals the filters and adds the site when the guard is on or a mod asked.
 pub(crate) fn link(loader: &Loader) {
-    let filters = take(&FILTERS);
+    let filters = FILTERS.seal();
     let mode = MODE.load(Ordering::Acquire);
     let wanted = mode != MODE_OFF || !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
     let (Some(site), Some(_), Some(address)) = (
         site(loader),
         layout(loader),
-        loader.address("knowledge.input_check"),
+        loader.address(pinned::knowledge::INPUT_CHECK),
     ) else {
         crate::log!(WARN, "knowledge guard off: not in this build");
         return;
@@ -246,7 +245,7 @@ fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
 
 /// The verdict on `call` after the guard and every live filter.
 fn decide(call: &mut KnowledgeInput) -> bool {
-    if let Some(filters) = SEALED.get() {
+    if let Some(filters) = FILTERS.sealed() {
         for f in filters.iter().filter(|f| f.live()) {
             // SAFETY: `f` is live, so the mod's DLL that holds the callback
             // stays loaded; the callback gets the user pointer its mod

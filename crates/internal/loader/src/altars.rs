@@ -10,6 +10,9 @@
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::Constant;
+use crate::registry::Registry;
 
 mod geometry;
 
@@ -37,13 +40,13 @@ use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "building.corner_size",
-    "building.seam_check",
-    "building.zone_entry_ignored",
-    "building.zone_entry_shape",
-    "building.zone_entry_size",
-    "building.zone_list_count",
-    "building.zone_list_entries",
+    pinned::building::CORNER_SIZE.id(),
+    pinned::building::SEAM_CHECK.id(),
+    pinned::building::ZONE_ENTRY_IGNORED.id(),
+    pinned::building::ZONE_ENTRY_SHAPE.id(),
+    pinned::building::ZONE_ENTRY_SIZE.id(),
+    pinned::building::ZONE_LIST_COUNT.id(),
+    pinned::building::ZONE_LIST_ENTRIES.id(),
 ];
 
 const FORGET_AFTER: Duration = Duration::from_secs(2);
@@ -224,8 +227,7 @@ struct SeamLayout {
     corner_size: usize,
 }
 
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
 // SAFETY: `SeamFn` is the signature of the build table's
 // `building.seam_check`, and `link_seam` uses this slot only as that
@@ -392,13 +394,12 @@ pub(crate) fn forget() {
 }
 
 pub(crate) fn register(owner: ModIndex, callback: ZoneCheckFn, user: *mut c_void) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
@@ -477,24 +478,24 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 fn link_seam(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.relock());
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
-    let size = |name: &str| loader.offset(name);
+    let size = |name: Constant| loader.offset(name);
     let layout = (|| {
         Some(SeamLayout {
-            entries: size("building.zone_list_entries")?,
-            count: size("building.zone_list_count")?,
-            entry_size: size("building.zone_entry_size")?,
-            entry_shape: size("building.zone_entry_shape")?,
-            entry_ignored: size("building.zone_entry_ignored")?,
-            corner_size: size("building.corner_size")?,
+            entries: size(pinned::building::ZONE_LIST_ENTRIES)?,
+            count: size(pinned::building::ZONE_LIST_COUNT)?,
+            entry_size: size(pinned::building::ZONE_ENTRY_SIZE)?,
+            entry_shape: size(pinned::building::ZONE_ENTRY_SHAPE)?,
+            entry_ignored: size(pinned::building::ZONE_ENTRY_IGNORED)?,
+            corner_size: size(pinned::building::CORNER_SIZE)?,
         })
     })();
-    let (Some(layout), Some(target)) = (layout, loader.address("building.seam_check")) else {
+    let (Some(layout), Some(target)) = (layout, loader.address(pinned::building::SEAM_CHECK))
+    else {
         crate::log!(WARN, "zone checks off: this build lacks the zone list");
         return;
     };
@@ -901,7 +902,7 @@ unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f3
     if vanilla != 0 || zones.is_null() || corners.is_null() {
         return vanilla;
     }
-    let (Some(layout), Some(filters)) = (SEAM.get(), SEALED.get()) else {
+    let (Some(layout), Some(filters)) = (SEAM.get(), FILTERS.sealed()) else {
         return vanilla;
     };
     // SAFETY: `zones` and `corners` are non-null by the check before it and are

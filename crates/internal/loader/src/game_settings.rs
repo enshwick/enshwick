@@ -18,6 +18,7 @@
 //! on the game thread, the loader takes the values it loaded with, then
 //! writes the kept fields over them; a forget puts the loaded values back.
 
+use crate::pinned;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,9 +31,9 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "server.game_settings",
-    "server.game_settings_preset",
-    "server.game_settings_resend",
+    pinned::server::GAME_SETTINGS.id(),
+    pinned::server::GAME_SETTINGS_PRESET.id(),
+    pinned::server::GAME_SETTINGS_RESEND.id(),
 ];
 
 /// The kept fields' file in a world's folder.
@@ -113,9 +114,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                         .filter_map(|f| Some((f.name(), usize::try_from(f.offset()).ok()?))),
                     total,
                 ),
-                settings: loader.offset("server.game_settings")?,
-                preset: loader.offset("server.game_settings_preset")?,
-                resend: loader.offset("server.game_settings_resend")?,
+                settings: loader.offset(pinned::server::GAME_SETTINGS)?,
+                preset: loader.offset(pinned::server::GAME_SETTINGS_PRESET)?,
+                resend: loader.offset(pinned::server::GAME_SETTINGS_RESEND)?,
                 size: size_of(settings)?,
                 day_length: offset(settings, "dayTimeDuration")?,
                 night_length: offset(settings, "nightTimeDuration")?,

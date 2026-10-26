@@ -9,26 +9,29 @@
 //! filters first when the call comes from the rename message.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
+use crate::registry::Registry;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
+use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
 use crate::host::Loader;
-use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "label.add",
-    "label.find",
-    "label.max_text",
-    "label.rename_entity",
-    "label.rename_return",
-    "label.replace",
-    "server.custom_strings",
-    "server.world",
+    pinned::label::ADD.id(),
+    pinned::label::FIND.id(),
+    pinned::label::MAX_TEXT.id(),
+    pinned::label::RENAME_ENTITY.id(),
+    pinned::label::RENAME_RETURN.id(),
+    pinned::label::REPLACE.id(),
+    pinned::server::CUSTOM_STRINGS.id(),
+    pinned::server::WORLD.id(),
 ];
 
 /// The game's error for a string it could not take; the rename path then
@@ -84,28 +87,27 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 // table's `label.replace`, and the slot is used only as the `next` of the
 // `replace` link on that function.
 static REPLACE_NEXT: Next<ReplaceFn> = unsafe { Next::new() };
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let symbol = |name: &str| {
+            let symbol = |name: Symbol| {
                 loader
                     .build
-                    .symbol(name)
+                    .symbol(name.id())
                     .and_then(|rva| usize::try_from(loader.base + rva).ok())
             };
-            let constant = |name: &str| {
+            let constant = |name: Constant| {
                 loader
                     .build
-                    .constant(name)
+                    .constant(name.id())
                     .and_then(|v| usize::try_from(v).ok())
             };
             let (find, replace, add) = (
-                symbol("label.find")?,
-                symbol("label.replace")?,
-                symbol("label.add")?,
+                symbol(pinned::label::FIND)?,
+                symbol(pinned::label::REPLACE)?,
+                symbol(pinned::label::ADD)?,
             );
             let descriptor = loader.reflection.type_info(LABEL_TYPE).ok()?.va();
             Some(Layout {
@@ -120,11 +122,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // game function with the `AddFn` signature on this build.
                 add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
                 label_type: crate::world::type_hash(descriptor)?,
-                world: constant("server.world")?,
-                strings: constant("server.custom_strings")?,
-                max_text: constant("label.max_text")?,
-                rename_return: loader.base + loader.build.symbol("label.rename_return")?,
-                rename_entity: constant("label.rename_entity")?,
+                world: constant(pinned::server::WORLD)?,
+                strings: constant(pinned::server::CUSTOM_STRINGS)?,
+                max_text: constant(pinned::label::MAX_TEXT)?,
+                rename_return: loader.base
+                    + loader.build.symbol(pinned::label::RENAME_RETURN.id())?,
+                rename_entity: constant(pinned::label::RENAME_ENTITY)?,
             })
         })
         .as_ref()
@@ -132,22 +135,22 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 
 /// Registers mod `owner`'s rename filter.
 pub(crate) fn register(owner: ModIndex, callback: RenameCallFn, user: *mut c_void) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    FILTERS.relock().push(Filter {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
+    FILTERS
+        .add(Filter {
+            owner,
+            callback,
+            user: user.expose_provenance(),
+        })
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Links the rename check when a mod filters renames.
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.relock());
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     let _first = LOADED.set(loader);
     if !wanted {
         return;
@@ -175,7 +178,7 @@ fn cut(text: &str, max: usize) -> &str {
 }
 
 /// Gives `entity` the label `text`; on the game thread only.
-pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
+pub(crate) fn set(loader: &Loader, entity: Entity, text: &str) -> Status {
     let Some(layout) = layout(loader) else {
         return Status::MISSING;
     };
@@ -203,7 +206,7 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
     // SAFETY: the game's component lookup at the table's `label.find`, with
     // the non-null world checked earlier and our own four-word out record, on
     // the game thread at a quiet moment, outside systems.
-    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity) };
+    let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity.0) };
     // SAFETY: the lookup returns its out record, whose first word is the
     // component pointer or null.
     let component = unsafe { enshwick::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
@@ -238,7 +241,7 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
         // the non-null world checked earlier and a span over `id`, which
         // outlives the call; called as the game's rename path calls it, on the
         // game thread at a quiet moment.
-        let _added = unsafe { (layout.add)(world, entity, layout.label_type, &raw const data) };
+        let _added = unsafe { (layout.add)(world, entity.0, layout.label_type, &raw const data) };
     }
     Status::OK
 }
@@ -278,7 +281,7 @@ unsafe extern "system" fn replace(
 /// - The call runs at the entry of the string swap chain, on the thread the
 ///   game called the swap on, so the loader's caller frame is the swap's.
 unsafe fn refused(text: *const [usize; 2]) -> bool {
-    let (Some(loader), Some(filters)) = (LOADED.get(), SEALED.get()) else {
+    let (Some(loader), Some(filters)) = (LOADED.get(), FILTERS.sealed()) else {
         return false;
     };
     let Some(layout) = layout(loader) else {

@@ -88,9 +88,9 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::{Guid, types};
+    /// use enshwick::content::Guid;
     ///
-    /// let key = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key(types::ITEM_INFO);
+    /// let key = Guid::parse("2f04a05f-697d-489b-a32f-76bb3439f5bc").key_by_hash(1);
     /// let loader = enshwick::test::FakeHost::new().resource(key, vec![1, 2, 3]).install();
     /// # let _ = loader;
     /// ```

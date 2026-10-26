@@ -19,6 +19,9 @@
 //! keeps what it got and answers reads from it.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
+use crate::registry::Registry;
+use enshwick::ecs::Entity;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -31,7 +34,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["ecs.destroy_request"];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::DESTROY_REQUEST.id()];
 
 /// The longest kind id: a mod id, a colon and a name of up to 64 each.
 const MAX_ID: usize = 129;
@@ -92,9 +95,8 @@ struct Server {
 }
 
 /// Kinds while mods initialise.
-static PENDING: Mutex<Vec<Kind>> = Mutex::new(Vec::new());
 /// Kinds once sealed; the index is the kind.
-static KINDS: OnceLock<Box<[Kind]>> = OnceLock::new();
+static KINDS: Registry<Kind> = Registry::new();
 static SERVER: Mutex<Option<Server>> = Mutex::new(None);
 /// What a client got from its server.
 static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
@@ -162,46 +164,45 @@ fn open_kind(
     scope: Scope,
     sent: bool,
 ) -> Result<u32, Status> {
-    if KINDS.get().is_some() {
-        return Err(Status::TOO_LATE);
-    }
     let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
-    let mut pending = PENDING.relock();
-    let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
-        let kind = &mut pending[index];
-        if kind.scope != scope {
-            crate::log::write(
-                enshwick::abi::Level::ERROR,
-                &record.id,
-                &format!("data kind {full} is opened for items and for entities"),
-            );
-            return Err(Status::REFUSED);
+    let index = KINDS.edit(|pending| {
+        if let Some(index) = pending.iter().position(|k| k.id == full) {
+            let kind = &mut pending[index];
+            if kind.scope != scope {
+                crate::log::write(
+                    enshwick::abi::Level::ERROR,
+                    &record.id,
+                    &format!("data kind {full} is opened for items and for entities"),
+                );
+                return Err(Status::REFUSED);
+            }
+            kind.sent |= sent;
+            Ok(index)
+        } else {
+            pending.push(Kind {
+                id: full,
+                scope,
+                sent,
+            });
+            Ok(pending.len() - 1)
         }
-        kind.sent |= sent;
-        index
-    } else {
-        pending.push(Kind {
-            id: full,
-            scope,
-            sent,
-        });
-        pending.len() - 1
-    };
+    })??;
     u32::try_from(index).map_err(|_| Status::REFUSED)
 }
 
 /// Opens the loader's own item kind `id` for a platform feature, before the
 /// kinds are sealed.
 pub(crate) fn open_platform(id: &str) {
-    let mut pending = PENDING.relock();
-    if !pending.iter().any(|k| k.id == id) {
-        pending.push(Kind {
-            id: id.to_owned(),
-            scope: Scope::Item,
-            sent: true,
-        });
-    }
+    let _open = KINDS.edit(|pending| {
+        if !pending.iter().any(|k| k.id == id) {
+            pending.push(Kind {
+                id: id.to_owned(),
+                scope: Scope::Item,
+                sent: true,
+            });
+        }
+    });
 }
 
 /// The value of the loader's own kind `id` on the item `pide` holding
@@ -224,7 +225,7 @@ pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
 
 /// Seals the kinds; the store runs only when a mod opened one.
 pub(crate) fn seal() {
-    let kinds = std::mem::take(&mut *PENDING.relock());
+    let kinds = KINDS.seal();
     if !kinds.is_empty() {
         let names: Vec<String> = kinds
             .iter()
@@ -236,7 +237,6 @@ pub(crate) fn seal() {
             .collect();
         crate::log!(INFO, "mod data: kinds {}", names.join(", "));
     }
-    let _first = KINDS.set(kinds.into_boxed_slice());
 }
 
 /// Follows the game's destroy requests, when a mod keeps item data.
@@ -246,7 +246,7 @@ pub(crate) fn link(loader: &Loader) {
     }
     loader.link_feature(
         "mod data of destroyed entities",
-        loader.address("ecs.destroy_request"),
+        loader.address(pinned::ecs::DESTROY_REQUEST),
         &DESTROY_NEXT,
         destroy,
         HookFlags::NONE,
@@ -258,13 +258,13 @@ unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) 
     // the chain, which has the destroy request's signature.
     let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
     if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
-        note_destroyed(entity);
+        note_destroyed(Entity(entity));
     }
     queued
 }
 
 /// Notes that the game asked to destroy `entity`.
-fn note_destroyed(entity: u32) {
+fn note_destroyed(entity: Entity) {
     fill_destroyed(reserve_destroyed(), entity);
 }
 
@@ -274,9 +274,9 @@ fn reserve_destroyed() -> (usize, u64) {
     ((count & 0xffff_ffff) as usize, count >> 32)
 }
 
-fn fill_destroyed((at, round): (usize, u64), entity: u32) {
+fn fill_destroyed((at, round): (usize, u64), entity: Entity) {
     if let Some(slot) = DESTROYED.get(at) {
-        slot.store(round << 32 | u64::from(entity), Ordering::Release);
+        slot.store(round << 32 | u64::from(entity.0), Ordering::Release);
     }
 }
 
@@ -354,11 +354,11 @@ pub(crate) fn after_step() {
 /// Whether any mod keeps item data, which needs the world events and the
 /// clients' hello.
 pub(crate) fn wanted() -> bool {
-    KINDS.get().is_some_and(|k| !k.is_empty())
+    KINDS.sealed().is_some_and(|k| !k.is_empty())
 }
 
 fn kind(kind: u32) -> Option<&'static Kind> {
-    KINDS.get()?.get(usize::try_from(kind).ok()?)
+    KINDS.sealed()?.get(usize::try_from(kind).ok()?)
 }
 
 fn kind_id(kind: u32) -> Option<&'static str> {
@@ -366,13 +366,13 @@ fn kind_id(kind: u32) -> Option<&'static str> {
 }
 
 fn kind_of(id: &str) -> Option<u32> {
-    let index = KINDS.get()?.iter().position(|k| k.id == id)?;
+    let index = KINDS.sealed()?.iter().position(|k| k.id == id)?;
     u32::try_from(index).ok()
 }
 
 /// The game id of `entity`'s template, on the server's game thread; `None`
 /// for an entity that is gone or off that thread.
-fn template_id(entity: u32) -> Option<u32> {
+fn template_id(entity: Entity) -> Option<u32> {
     let loader = crate::host::loader()?;
     let template = crate::world::template(loader, entity).ok()?;
     Some(enshwick::content::Guid(template).id())
@@ -397,7 +397,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
             Scope::Item => item,
             // An entity in an area that is not loaded is not in the world's
             // map either: its value stays, unchecked.
-            Scope::Entity => match template_id(pide) {
+            Scope::Entity => match template_id(Entity(pide)) {
                 Some(now) => now,
                 None => return Ok(record.value.clone()),
             },
@@ -437,7 +437,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         Scope::Item => item,
         Scope::Entity => {
             crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
-            match template_id(pide) {
+            match template_id(Entity(pide)) {
                 Some(template) => template,
                 None if value.is_empty() => 0,
                 None => return Err(Status::BAD_ARGS),
@@ -653,7 +653,7 @@ fn held(loader: &Loader, pide: u32) -> Option<u32> {
             .ok()?;
         Some((ty, usize::try_from(offset).ok()?))
     }))?;
-    let data = crate::world::component(loader, pide, ty).ok()?;
+    let data = crate::world::component(loader, Entity(pide), ty).ok()?;
     // SAFETY: `world::component` returned the entity's live `ItemState`, read
     // on the game thread that owns it; it holds its `u32` item id at the
     // reflected `itemId` offset.
@@ -707,7 +707,7 @@ fn save(loader: &Loader, prune: bool) {
             server.values.retain(|&(kind, pide), record| {
                 let now = match self::kind(kind).map(|k| k.scope) {
                     Some(Scope::Item) => held(loader, pide),
-                    Some(Scope::Entity) => template_id(pide),
+                    Some(Scope::Entity) => template_id(Entity(pide)),
                     None => return true,
                 };
                 // An entity the world does not hold may lie in an area that
@@ -769,8 +769,8 @@ mod tests {
         values.insert((0, 900), record(7));
         values.insert((1, 900), record(0));
         values.insert((0, 901), record(7));
-        note_destroyed(900);
-        note_destroyed(0);
+        note_destroyed(Entity(900));
+        note_destroyed(Entity(0));
         let destroyed = take_destroyed();
         assert!(take_destroyed().is_empty(), "each request is taken once");
         let mut gone = prune_destroyed(&mut values, &destroyed);
@@ -781,32 +781,30 @@ mod tests {
         assert!(values.contains_key(&(0, 901)));
         // Past the cap in one step, requests are left for the save.
         for entity in 1..=u32::try_from(DESTROYED_CAP).unwrap() + 10 {
-            note_destroyed(entity);
+            note_destroyed(Entity(entity));
         }
         let destroyed = take_destroyed();
         assert_eq!(destroyed.len(), DESTROYED_CAP);
         assert!(!destroyed.contains(&(u32::try_from(DESTROYED_CAP).unwrap() + 1)));
         // A request filled after its round was taken never reaches a later
         // one, where its slot is still being filled.
-        note_destroyed(1);
+        note_destroyed(Entity(1));
         let late = reserve_destroyed();
         assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [1]);
-        fill_destroyed(late, 5);
-        note_destroyed(2);
+        fill_destroyed(late, Entity(5));
+        note_destroyed(Entity(2));
         let _filling = reserve_destroyed();
         assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [2]);
     }
 
     #[test]
     fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
-        let _sealed = KINDS.set(
-            vec![Kind {
-                id: "a:charges".into(),
-                scope: Scope::Item,
-                sent: true,
-            }]
-            .into_boxed_slice(),
-        );
+        let _added = KINDS.add(Kind {
+            id: "a:charges".into(),
+            scope: Scope::Item,
+            sent: true,
+        });
+        let _sealed = KINDS.seal();
         let mut values = Values::default();
         let mut bytes = Vec::new();
         for pide in 1..=u32::try_from(MAX_CLIENT_RECORDS).unwrap() {
