@@ -268,7 +268,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         // SAFETY: `component` found the entity's live `CurrentTransform` on
         // the game thread between steps; it is a `WorldTransform`, whose
         // reflected `orientation` holds four floats.
-        unsafe { crate::memory::read(current.addr(), teleport.current_orientation) }
+        unsafe { crate::memory::read(current.expose_provenance(), teleport.current_orientation) }
     } else {
         request.orientation
     };

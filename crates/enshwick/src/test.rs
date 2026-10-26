@@ -62,7 +62,8 @@
 //!     .symbol("quest.reward", enshwick::test::address(vanilla as extern "system" fn(u32) -> u32))
 //!     .settings("bonus = 5\n")
 //!     .install();
-//! // SAFETY: the exports of `declare_mod!` above.
+//! // SAFETY: `enshwick_mod_init` and `enshwick_mod_ready` are the exports
+//! // `declare_mod!(Bonus)` generated in this example.
 //! let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
 //! assert_eq!(status, Status::OK);
 //!
@@ -379,15 +380,15 @@ impl Installed {
     ///
     /// # Safety
     ///
-    /// `init` is the `enshwick_mod_init` that
-    /// [`declare_mod!`](crate::declare_mod) exported.
+    /// - `init` is the `enshwick_mod_init` that
+    ///   [`declare_mod!`](crate::declare_mod) exported.
     ///
     /// # Examples
     ///
     /// See [`crate`].
     pub unsafe fn init(&self, init: InitFn) -> Status {
-        // SAFETY: the table is static, and `init` is a mod's export as the
-        // caller guarantees.
+        // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
+        // `declare_mod!`, which takes the static fake table and a handle.
         unsafe { init(self.api(), self.handle) }
     }
 
@@ -395,15 +396,16 @@ impl Installed {
     ///
     /// # Safety
     ///
-    /// `ready` is the `enshwick_mod_ready` that
-    /// [`declare_mod!`](crate::declare_mod) exported, and its
-    /// `enshwick_mod_init` returned [`Status::OK`].
+    /// - `ready` is the `enshwick_mod_ready` that
+    ///   [`declare_mod!`](crate::declare_mod) exported.
+    /// - Its `enshwick_mod_init` returned [`Status::OK`] on this fake.
     ///
     /// # Examples
     ///
     /// See [`crate`].
     pub unsafe fn ready(&self, ready: ReadyFn) {
-        // SAFETY: as the caller guarantees.
+        // SAFETY: the caller guarantees `ready` is the `enshwick_mod_ready` of
+        // a `declare_mod!` whose init succeeded on this fake.
         unsafe { ready(self.api(), self.handle) }
     }
 
@@ -412,17 +414,20 @@ impl Installed {
     ///
     /// # Safety
     ///
-    /// `init` and `ready` are the exports of one
-    /// [`declare_mod!`](crate::declare_mod).
+    /// - `init` and `ready` are the `enshwick_mod_init` and
+    ///   `enshwick_mod_ready` exports of one
+    ///   [`declare_mod!`](crate::declare_mod).
     ///
     /// # Examples
     ///
     /// See [`crate`].
     pub unsafe fn start(&self, init: InitFn, ready: ReadyFn) -> Status {
-        // SAFETY: as the caller guarantees.
+        // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
+        // `declare_mod!`.
         let status = unsafe { self.init(init) };
         if status.is_ok() {
-            // SAFETY: as the caller guarantees, after a successful init.
+            // SAFETY: the caller guarantees `ready` is the matching
+            // `enshwick_mod_ready`, and `status` says its init returned `OK`.
             unsafe { self.ready(ready) };
         }
         status

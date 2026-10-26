@@ -270,7 +270,8 @@ pub struct Str {
 // SAFETY: a `Str` is a borrowed view of immutable bytes; sharing it across
 // threads shares only the view.
 unsafe impl Send for Str {}
-// SAFETY: as for `Send`, the bytes are never written through a `Str`.
+// SAFETY: a `Str` has no method that writes through `ptr`, so threads
+// sharing a `&Str` only read the immutable bytes it views.
 unsafe impl Sync for Str {}
 
 impl Str {
@@ -323,8 +324,10 @@ impl Str {
     ///
     /// # Safety
     ///
-    /// Unless the pointer is null, the bytes must be alive and unchanged for
-    /// the lifetime `'a` the caller picks.
+    /// - Unless the pointer is null or the length is zero, `ptr` is readable
+    ///   for `len` bytes.
+    /// - Those bytes stay alive and unchanged for the lifetime `'a` the
+    ///   caller picks.
     ///
     /// # Examples
     ///
@@ -337,7 +340,9 @@ impl Str {
         if self.ptr.is_null() || isize::try_from(self.len).is_err() {
             return None;
         }
-        // SAFETY: the caller keeps `len` bytes at `ptr` alive for `'a`.
+        // SAFETY: `ptr` is non-null and `len` fits `isize`, both checked just
+        // before; the caller guarantees `len` readable bytes at `ptr`, alive
+        // and unchanged for `'a`.
         let bytes = unsafe { core::slice::from_raw_parts(self.ptr, self.len) };
         core::str::from_utf8(bytes).ok()
     }
@@ -1624,8 +1629,10 @@ impl CallerFrame {
     ///
     /// # Safety
     ///
-    /// The frame was taken in the running chain, so `rsp` points at a live
-    /// return address.
+    /// - `rsp` is readable for eight bytes; no alignment is needed. A frame
+    ///   the loader passed meets this until the hooked function returns:
+    ///   `rsp` points at its return address on the calling thread's stack.
+    /// - No other thread writes those eight bytes during the read.
     ///
     /// # Examples
     ///
@@ -1639,7 +1646,8 @@ impl CallerFrame {
     /// ```
     #[must_use]
     pub unsafe fn return_address(&self) -> u64 {
-        // SAFETY: the caller guarantees `rsp` points at the return address.
+        // SAFETY: the caller guarantees `rsp` readable for eight bytes with no
+        // concurrent writer; the read is unaligned.
         unsafe { (self.rsp as *const u64).read_unaligned() }
     }
 }
@@ -1744,7 +1752,9 @@ impl ModInfo {
 // SAFETY: a listing's strings and its author list stay valid and unchanged
 // for the life of the process, as `Str` itself is shared.
 unsafe impl Send for ModInfo {}
-// SAFETY: as above.
+// SAFETY: a listing's strings and its author list stay valid and unchanged
+// for the life of the process and nothing writes through them, so threads
+// sharing a `&ModInfo` only read immutable data.
 unsafe impl Sync for ModInfo {}
 
 /// An opaque handle the loader gives each mod; every call names its caller
@@ -5805,7 +5815,8 @@ mod tests {
             ptr: c"x".as_ptr().cast(),
             len: usize::MAX,
         };
-        // SAFETY: neither is read: both are refused before.
+        // SAFETY: `as_str` returns `None` for a null pointer and for a length
+        // over `isize::MAX` before it reads, so neither view is dereferenced.
         let (null, huge) = (unsafe { null.as_str() }, unsafe { huge.as_str() });
         assert_eq!((null, huge), (None, None));
     }

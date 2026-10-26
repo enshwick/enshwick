@@ -496,7 +496,8 @@ unsafe extern "system" fn detour(state: *mut u8) {
     // popup state the game passed to `ui.popup`; its active byte sits at the
     // table's `ui.popup_active`.
     let vanilla =
-        unsafe { crate::memory::read::<u8>(state.addr(), engine.layout.popup_active) } != 0;
+        unsafe { crate::memory::read::<u8>(state.expose_provenance(), engine.layout.popup_active) }
+            != 0;
     if vanilla {
         return;
     }

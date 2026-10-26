@@ -7,7 +7,10 @@ use enshwick::abi::{Manifest, ManifestFlags, Relation, Side, Str};
 /// Describes the mod in `dll`; an error when its version is not `expected`.
 pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String> {
     let manifest = query(dll)?;
-    let text = describe(&manifest);
+    // SAFETY: `query` copied the manifest out of a DLL it never unloads, whose
+    // `enshwick_mod_query` export returns a static manifest with static
+    // strings and lists that no thread writes.
+    let text = unsafe { describe(&manifest) };
     // SAFETY: `query` copied the manifest out of a DLL it never unloads,
     // whose `enshwick_mod_query` export returns static strings.
     let version = unsafe { manifest.version.as_str() }.unwrap_or_default();
@@ -21,9 +24,16 @@ pub(crate) fn show(dll: &Path, expected: Option<&str>) -> Result<String, String>
 }
 
 /// The manifest as lines of `key: value`.
-fn describe(manifest: &Manifest) -> String {
-    // SAFETY: every manifest `describe` gets comes from `manifest!` or a
-    // DLL never unloaded, so its strings are static.
+///
+/// # Safety
+///
+/// - Every string in `manifest` and its dependencies is readable for its
+///   length and unchanged for the call.
+/// - `authors` and `dependencies` are null or point at `author_count` and
+///   `dependency_count` aligned entries, readable and unchanged for the call.
+unsafe fn describe(manifest: &Manifest) -> String {
+    // SAFETY: the caller guarantees every string of the manifest, its authors
+    // and its dependencies readable and unchanged for the call.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or("<not UTF-8>").to_owned();
     let side = match manifest.side {
         Side::SERVER => "server",
@@ -40,8 +50,8 @@ fn describe(manifest: &Manifest) -> String {
         let authors = if manifest.authors.is_null() {
             &[][..]
         } else {
-            // SAFETY: null was refused; the manifest of `manifest!` or of a DLL
-            // never unloaded points at `author_count` static, aligned names.
+            // SAFETY: `authors` is non-null, checked just before; the caller
+            // guarantees `author_count` aligned names there for the call.
             unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
         };
         let authors: Vec<String> = authors.iter().map(text).collect();
@@ -71,8 +81,8 @@ fn describe(manifest: &Manifest) -> String {
     let dependencies = if manifest.dependencies.is_null() {
         &[][..]
     } else {
-        // SAFETY: null was refused; the manifest of `manifest!` or of a DLL
-        // never unloaded points at `dependency_count` static, aligned entries.
+        // SAFETY: `dependencies` is non-null, checked just before; the caller
+        // guarantees `dependency_count` aligned entries there for the call.
         unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
     };
     for dependency in dependencies {
@@ -140,10 +150,14 @@ fn query(dll: &Path) -> Result<Manifest, String> {
         .ok_or_else(|| format!("{} is not an Enshwick mod", dll.display()))?;
     // SAFETY: the ABI gives `exports::QUERY` the signature
     // `extern "system" fn() -> *const Manifest`.
-    let query: extern "system" fn() -> *const Manifest = unsafe { core::mem::transmute(query) };
+    let query: unsafe extern "system" fn() -> *const Manifest =
+        unsafe { core::mem::transmute(query) };
+    // SAFETY: `query` is the mod's `exports::QUERY`, which takes no arguments
+    // and only returns its static manifest; the DLL is never unloaded.
+    let raw = unsafe { query() };
     // SAFETY: the ABI says `exports::QUERY` returns null or a static manifest,
     // which no thread writes; the DLL is never unloaded, so its strings stay.
-    unsafe { copy(query()) }
+    unsafe { copy(raw) }
 }
 
 #[cfg(not(windows))]
@@ -164,7 +178,8 @@ mod tests {
         let copied = unsafe { copy(&raw const old) }.unwrap();
         assert!(copied.name.is_empty());
         assert_eq!(
-            describe(&copied),
+            // SAFETY: `copied` holds the `'static` strings of `manifest!`.
+            unsafe { describe(&copied) },
             "id: old-mod
 version: 1.0.0
 side: server
@@ -198,7 +213,9 @@ join check: no"
             was: ["survivor-copies"],
         );
         assert_eq!(
-            describe(manifest),
+            // SAFETY: `manifest!` builds a static manifest whose strings and
+            // lists are `'static` data, never written.
+            unsafe { describe(manifest) },
             "id: survivors-per-altar\nversion: 0.2.0\nname: Survivors per Altar\n\
              description: More survivors per altar\nauthors: themaiby, a friend\n\
              license: MIT\nhomepage: https://github.com/enshwick/enshwick\n\

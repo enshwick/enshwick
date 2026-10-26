@@ -376,9 +376,13 @@ pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status>
     // `ecs.entity_records` offset holds the pointer to its record table; read
     // on the game thread (checked by `reader`), which alone writes it.
     let records: usize = unsafe { read(world, layout.entity_records) };
-    // SAFETY: the record table holds `capacity` record pointers and `slot <
-    // capacity` (`slot >= capacity` returns first); read on the game thread
-    // (checked by `reader`), which alone writes it.
+    if records == 0 {
+        return Err(Status::MISSING);
+    }
+    // SAFETY: `records` is non-zero (`records == 0` returns first); the record
+    // table holds `capacity` record pointers and `slot < capacity`
+    // (`slot >= capacity` returns first); read on the game thread (checked by
+    // `reader`), which alone writes it.
     let record: usize = unsafe { read(records, slot as usize * size_of::<usize>()) };
     if record == 0 {
         return Err(Status::MISSING);

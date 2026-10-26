@@ -91,7 +91,7 @@ impl History {
         let Ok(history) = crate::world::component(loader, entity, self.hash) else {
             return 0;
         };
-        let history = history.addr();
+        let history = history.expose_provenance();
         // SAFETY: `world::component` returned the entity's live HitHistory,
         // read on the game thread after the step; `resolve` checked that the
         // `u32` at `lastIndex` lies inside the reflected size.

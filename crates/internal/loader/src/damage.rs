@@ -468,7 +468,7 @@ unsafe extern "system" fn admin_kill(registers: *mut Registers, _user: *mut c_vo
             return;
         }
         if !kill_allowed(low(registers.rbx).cast_unsigned()) {
-            registers.rax = (&raw const NO_HEALTH).addr() as u64;
+            registers.rax = (&raw const NO_HEALTH).expose_provenance() as u64;
         }
     });
 }

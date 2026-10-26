@@ -1254,10 +1254,14 @@ mod tests {
         // frees it at the end.
         let page = unsafe { VirtualAlloc(core::ptr::null(), 4096, MEM_RESERVE, PAGE_READWRITE) };
         assert!(!page.is_null());
-        assert_eq!(read_word(page.addr()), None, "reserved, not committed");
+        assert_eq!(
+            read_word(page.expose_provenance()),
+            None,
+            "reserved, not committed"
+        );
         // SAFETY: `page` is the test's own reservation, released once.
         unsafe { VirtualFree(page, 0, MEM_RELEASE) };
-        assert_eq!(read_word(page.addr()), None, "released");
+        assert_eq!(read_word(page.expose_provenance()), None, "released");
     }
 
     #[test]

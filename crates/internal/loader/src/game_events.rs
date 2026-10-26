@@ -235,7 +235,7 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         // world, which the game passed to `ecs.event_merge` on its game thread
         // before moving its streams.
         let _raised = NOTICES_FUSE.run("the event link", || unsafe {
-            crate::notices::raise(loader, entity_world.addr());
+            crate::notices::raise(loader, entity_world.expose_provenance());
         });
     }
     // SAFETY: `entity_world` is the game's argument to `ecs.event_merge`,
@@ -266,7 +266,7 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     let Some(sealed) = SEALED.get() else {
         return;
     };
-    let world = entity_world.addr();
+    let world = entity_world.expose_provenance();
     // SAFETY: `world` is the server's live entity world on its game thread
     // (the caller's contract); the table's `ecs.event_streams` offset holds
     // its stream array pointer.

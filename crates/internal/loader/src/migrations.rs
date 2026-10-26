@@ -646,8 +646,10 @@ mod live {
             return Err("too many steps".to_owned());
         };
         let mut out = Str::EMPTY;
-        // SAFETY: the map lives in the mod's DLL, which stays loaded; the
-        // input is valid for the call and the safe layer catches panics.
+        // SAFETY: `reg.map` is the mod's migration function in its DLL, which
+        // stays loaded for the process, called with the `user` pointer it was
+        // registered with; `input` and `out` are locals alive for the call, and
+        // the safe layer catches the map's panics.
         let status =
             crate::profile::call(reg.owner, crate::profile::Feature::Migrations, || unsafe {
                 (reg.map)(
@@ -658,7 +660,9 @@ mod live {
                     &raw mut out,
                 )
             });
-        // SAFETY: the text stays valid until the mod's next map call.
+        // SAFETY: `out` is `Str::EMPTY` or the text the map wrote, which the ABI
+        // keeps valid and unchanged until the mod's next map call; it is copied
+        // here.
         let Some(text) = (unsafe { out.as_str() }).map(str::to_owned) else {
             return Err("the result is not UTF-8".to_owned());
         };
@@ -675,27 +679,37 @@ mod live {
     ///
     /// # Safety
     ///
-    /// `set` is the mod's valid set, its strings and arrays valid for the
-    /// call.
+    /// - `set.migrations` is null or points at `set.count` aligned
+    ///   migrations, and each migration's `steps` at its `count` aligned
+    ///   steps, all readable and unchanged for the call.
+    /// - Every migration id and step text is readable for its length and
+    ///   unchanged for the call.
     unsafe fn copy(set: &MigrationSet) -> Option<Vec<Migration>> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `set.migrations` null or pointing at
+        // `set.count` aligned migrations, readable and unchanged for the call.
         let migrations = unsafe { slice(set.migrations, set.count) }?;
         migrations
             .iter()
             .map(|m| {
-                // SAFETY: as above.
+                // SAFETY: the caller guarantees each migration's `steps` null or
+                // pointing at its `count` aligned steps, readable and unchanged.
                 let steps = unsafe { slice(m.steps, m.count) }?;
                 Some(Migration {
-                    // SAFETY: as above.
+                    // SAFETY: the caller guarantees every migration id readable
+                    // and unchanged for the call; it is copied here.
                     id: unsafe { m.id.as_str() }?.to_owned(),
                     steps: steps
                         .iter()
                         .map(|s| {
                             Some(Step {
                                 kind: s.kind,
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 from: unsafe { s.from.as_str() }?.to_owned(),
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 to: unsafe { s.to.as_str() }?.to_owned(),
                                 from_guid: s.from_guid,
                                 to_guid: s.to_guid,
@@ -711,7 +725,10 @@ mod live {
     ///
     /// # Safety
     ///
-    /// A non-null `ptr` points at `count` valid items.
+    /// - A non-null `ptr` with a nonzero `count` points at `count`
+    ///   initialised, aligned items.
+    /// - Those items stay alive and unchanged for the lifetime `'a` the
+    ///   caller picks.
     unsafe fn slice<'a, T>(ptr: *const T, count: u32) -> Option<&'a [T]> {
         if count == 0 {
             return Some(&[]);
@@ -719,7 +736,9 @@ mod live {
         if ptr.is_null() {
             return None;
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `ptr` is non-null and `count` nonzero, checked just before;
+        // the caller guarantees `count` aligned items there, alive and
+        // unchanged for `'a`.
         Some(unsafe { core::slice::from_raw_parts(ptr, count as usize) })
     }
 
@@ -799,7 +818,9 @@ mod live {
         let Some(map) = set.map else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the safe layer passes its valid set for the call.
+        // SAFETY: the only caller, the `migrate` entry of the host table, passes
+        // the set a mod handed over in that call, whose arrays and texts the ABI
+        // has the mod keep readable and unchanged for the call.
         let Some(list) = (unsafe { copy(set) }) else {
             return Status::BAD_ARGS;
         };

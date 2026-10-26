@@ -925,7 +925,7 @@ fn run_patches(
             }
             continue;
         }
-        (current, current_len) = (built.addr(), built_len);
+        (current, current_len) = (built.expose_provenance(), built_len);
         applied.push(patch.owner);
     }
     (!applied.is_empty()).then_some((current, current_len, applied))

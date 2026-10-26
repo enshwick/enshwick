@@ -307,7 +307,7 @@ unsafe fn queue_frames(client: *mut u8) {
     // SAFETY: `client` is non-null, checked by the guard before it, and is the
     // game client by this function's `# Safety`; its chat store pointer sits at
     // the table's `chat.client_store`.
-    let store: usize = unsafe { crate::memory::read(client.addr(), layout.store) };
+    let store: usize = unsafe { crate::memory::read(client.expose_provenance(), layout.store) };
     if store == 0 {
         return;
     }

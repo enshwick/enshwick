@@ -279,7 +279,7 @@ fn find_type(layout: &Layout, registry: usize, id: u32) -> Option<usize> {
     // SAFETY: `type_by_id` is the table's `buffs.type_by_id`; callers pass
     // the non-zero live registry `registry` returned, on the game thread.
     let found = unsafe { (layout.type_by_id)(id, core::ptr::with_exposed_provenance(registry)) };
-    (!found.is_null()).then(|| found.addr())
+    (!found.is_null()).then(|| found.expose_provenance())
 }
 
 fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
@@ -368,7 +368,7 @@ fn slots(layout: &Layout, container: usize) -> impl Iterator<Item = (usize, u16)
 pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, _, now) = server(layout)?;
-    let container = crate::world::component(loader, entity, layout.container)?.addr();
+    let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
     let mut out = Vec::new();
     for (slot, kind) in slots(layout, container) {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
@@ -387,7 +387,7 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
         let Ok(network) = crate::world::component(loader, buff, layout.network) else {
             continue;
         };
-        let network = network.addr();
+        let network = network.expose_provenance();
         // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
         // which `crate::world::component` found on the game thread; the
         // reflected type places its `i64` `lifeTime` at `network_lifetime`.
@@ -426,7 +426,7 @@ pub(crate) fn type_ids(loader: &Loader, entity: u32) -> Vec<u32> {
     let Ok(container) = crate::world::component(loader, entity, layout.container) else {
         return Vec::new();
     };
-    let container = container.addr();
+    let container = container.expose_provenance();
     slots(layout, container)
         .filter_map(|(slot, _)| {
             // SAFETY: `slot` is a slot of the entity's live `BuffContainer`,
@@ -464,7 +464,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     } else {
         request.duration
     };
-    let container = crate::world::component(loader, request.entity, layout.container)?.addr();
+    let container =
+        crate::world::component(loader, request.entity, layout.container)?.expose_provenance();
     for (slot, _) in slots(layout, container) {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
         // `crate::world::component` found on the game thread; the reflected
@@ -491,7 +492,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
             return renew(loader, layout, buff, duration, now);
         }
     }
-    let container = crate::writes::component_mut(loader, request.entity, layout.container)?.addr();
+    let container =
+        crate::writes::component_mut(loader, request.entity, layout.container)?.expose_provenance();
     let mut record = [0u8; RECORD];
     let mut put = |at: usize, bytes: &[u8]| {
         if let Some(out) = record.get_mut(at..at + bytes.len()) {
@@ -538,7 +540,7 @@ fn renew(
     duration: i64,
     now: i64,
 ) -> Result<(), Status> {
-    let lifetime = crate::writes::component_mut(loader, buff, layout.lifetime)?.addr();
+    let lifetime = crate::writes::component_mut(loader, buff, layout.lifetime)?.expose_provenance();
     // SAFETY: `lifetime` is the buff entity's live `LifeTime`, which
     // `component_mut` handed out for writing at a quiet moment on the game
     // thread; the reflected type places its `i64` `lifeTime` at
@@ -556,7 +558,7 @@ fn renew(
 pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     server(layout)?;
-    let container = crate::world::component(loader, entity, layout.container)?.addr();
+    let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
     let had = slots(layout, container).any(|(slot, _)| {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
         // `crate::world::component` found on the game thread; the reflected
@@ -573,7 +575,8 @@ pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Stat
     if !had {
         return Ok(false);
     }
-    let container = crate::writes::component_mut(loader, entity, layout.container)?.addr();
+    let container =
+        crate::writes::component_mut(loader, entity, layout.container)?.expose_provenance();
     // SAFETY: `cleanse` is the table's `buffs.cleanse`, called on the
     // entity's live container, which `component_mut` marked changed, on the
     // game thread at a quiet moment (checked by `server`).

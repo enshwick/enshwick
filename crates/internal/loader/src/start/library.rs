@@ -102,7 +102,10 @@ pub(super) fn libraries(mods_dir: &Path) -> (Vec<Library>, Vec<Candidate>) {
             ready: crate::packs::ready,
         });
     for library in discover(mods_dir, &list).into_iter().chain(packs) {
-        // SAFETY: the manifest is static data inside its loaded DLL.
+        // SAFETY: every manifest here is the copy `manifest::read` made for the process
+        // or a pack's manifest built for the process, their strings and lists
+        // readable and never written; a string `read` left in the DLL is read
+        // while `discover` keeps it loaded.
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
                 changed |= list.note(&candidate.id, &library.file);
@@ -262,7 +265,9 @@ fn load_from(path: &Path, named: Option<&str>) -> Option<Library> {
     }
     let library = exports_of(module, &file);
     if library.is_none() {
-        // SAFETY: the module was loaded above and nothing of it is in use.
+        // SAFETY: `module` was loaded by `LoadLibraryExW` in this function, and
+        // `exports_of` returned `None` without calling into it, so nothing of
+        // it is in use.
         unsafe { FreeLibrary(module) };
     }
     library
@@ -305,7 +310,9 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         );
         return None;
     }
-    // SAFETY: the manifest is static data inside the DLL, which stays loaded.
+    // SAFETY: `query` returns the mod's static manifest, null or readable
+    // for the size its header says, its strings and lists in the DLL's
+    // statics, which stay loaded and unwritten for this call.
     let manifest = match unsafe { crate::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {

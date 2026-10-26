@@ -1186,21 +1186,24 @@ impl Stats {
     }
 }
 
-/// Calls the stats handler `F` with one change the loader reports.
+/// Calls the stats handler `F` with one change the loader reports; a change
+/// shorter than its first version reaches no handler.
 ///
 /// # Safety
 ///
-/// - `change` is null or points at an aligned, whole change the loader
-///   wrote, alive and unchanged for the call.
+/// - `change` is null or points at a change the loader wrote, readable for
+///   the size its header states; no alignment is needed.
+/// - No other thread writes that change during the call.
 /// - `user` is the `Box<F>` that [`Load::on_stats_changed`] handed over,
 ///   which the loader keeps for the process.
 unsafe extern "system" fn run_changed<F>(change: *const StatChangeData, user: *mut c_void)
 where
     F: Fn(&StatChange),
 {
-    // SAFETY: the caller guarantees `change` is null or an aligned, whole
-    // change alive and unchanged for the call.
-    let Some(change) = (unsafe { change.as_ref() }) else {
+    // SAFETY: the caller guarantees `change` is null or readable for the size
+    // its header states, with no concurrent writer.
+    let Some(change) = (unsafe { crate::abi::read_headed(change, size_of::<StatChangeData>()) })
+    else {
         return;
     };
     // SAFETY: the caller guarantees `user` is the boxed `F` that `hand_over`
@@ -1445,5 +1448,30 @@ mod tests {
         let bytes = postcard::to_allocvec(&stats).unwrap();
         assert!(bytes.len() < 32);
         assert_eq!(postcard::from_bytes::<ItemStats>(&bytes).unwrap(), stats);
+    }
+
+    fn deliver<F: Fn(&StatChange)>(change: &StatChangeData, handler: &F) {
+        // SAFETY: `change` is a whole `StatChange` borrowed for the call, and
+        // `user` points at `handler`, an `F` alive for the call and only read
+        // through shared references.
+        unsafe { run_changed::<F>(change, core::ptr::from_ref(handler).cast_mut().cast()) };
+    }
+
+    #[test]
+    fn a_change_shorter_than_its_first_version_reaches_no_handler() {
+        let seen = core::cell::RefCell::new(Vec::new());
+        let handler = |change: &StatChange| seen.borrow_mut().push((change.entity, change.new));
+        let mut change = StatChangeData {
+            header: Header::of::<StatChangeData>(),
+            entity: 2,
+            stat: StatRef { index: 0, key: 1 },
+            old: 0.0,
+            new: 50.0,
+            reserved: 0,
+        };
+        deliver(&change, &handler);
+        change.header.size = 12;
+        deliver(&change, &handler);
+        assert_eq!(*seen.borrow(), [(Entity(2), 50.0)]);
     }
 }

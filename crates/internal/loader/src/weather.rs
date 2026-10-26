@@ -665,7 +665,7 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
     // SAFETY: `entities` is the server's entity world by the check before it and
     // live by the caller's contract; its chunk manager pointer sits at the
     // build table's `chunks.manager` offset.
-    let manager: usize = unsafe { read(entities.addr(), layout.manager) };
+    let manager: usize = unsafe { read(entities.expose_provenance(), layout.manager) };
     if manager == 0 {
         return;
     }
@@ -679,7 +679,7 @@ unsafe fn record(event: Event, entities: *mut u8, chunk: *mut u8) {
     let height: u32 = unsafe { read(manager, layout.height) };
     // SAFETY: the caller guarantees a live, non-null chunk; its u32 grid
     // index sits at the build table's `chunks.index` offset.
-    let index: u32 = unsafe { read(chunk.addr(), layout.index) };
+    let index: u32 = unsafe { read(chunk.expose_provenance(), layout.index) };
     if width == 0 || index >= width.saturating_mul(height) {
         return;
     }

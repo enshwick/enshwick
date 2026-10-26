@@ -195,7 +195,7 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     if path.is_null() {
         return None;
     }
-    let path = path.addr();
+    let path = path.expose_provenance();
     // SAFETY: `path` is non-null, checked by the guard before it, and is an
     // engine path by this function's `# Safety`, holding its buffer pointer at
     // the table's `save.path_data`.

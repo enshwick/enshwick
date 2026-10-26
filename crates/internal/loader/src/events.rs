@@ -320,7 +320,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     let seen = SESSION
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .step(server.addr(), thread);
+        .step(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
         Step::New if loader.side == Side::CLIENT => {
@@ -333,7 +333,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         Step::New | Step::Same => {}
     }
     crate::world::capture(
-        server.addr(),
+        server.expose_provenance(),
         thread,
         offsets.server_world,
         offsets.entities,
