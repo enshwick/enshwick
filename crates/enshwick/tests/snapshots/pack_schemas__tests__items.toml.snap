@@ -1,0 +1,189 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Items",
+  "type": "object",
+  "properties": {
+    "item": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ItemEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "FormatEntry": {
+      "description": "The number format of a tooltip line.",
+      "type": "string",
+      "enum": [
+        "number",
+        "signed",
+        "percent"
+      ]
+    },
+    "IconEntry": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "description": "How far toward the colour, in percent; 50 when left out.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "like": {
+          "description": "The vanilla icon to recolour; the item's `like` when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "png": {
+          "description": "A PNG of the pack's own under `icons/`, such as `icons/lantern.png`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tint": {
+          "description": "Recolour the vanilla icon toward this colour, red, green, blue.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "ItemEntry": {
+      "type": "object",
+      "properties": {
+        "debug_name": {
+          "description": "Its name in the registry's debug list.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "description": "The text key of its description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IconEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "description": "The item's name in the pack.",
+          "type": "string"
+        },
+        "like": {
+          "description": "The item it is cloned from: a vanilla GUID or a content id.",
+          "type": "string"
+        },
+        "meter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MeterEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "The text key of its name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatEntry"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "like"
+      ]
+    },
+    "MeterEntry": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "description": "The most it holds, 1 or more.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "start": {
+          "description": "What a new item holds; `max` when left out.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "max"
+      ]
+    },
+    "StatEntry": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/FormatEntry"
+        },
+        "label": {
+          "description": "The text key of the line's label.",
+          "type": "string"
+        },
+        "value": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "value"
+      ]
+    }
+  }
+}

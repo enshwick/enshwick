@@ -34,6 +34,7 @@ enshwick = { path = "crates/enshwick", version = "1.0.0-alpha.2" }
 enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "1.0.0-alpha.2" }
 enshwick-reflect = { path = "crates/enshwick-reflect", version = "1.0.0-alpha.2" }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
+insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
 bcdec_rs = { version = "0.2.1", default-features = false }

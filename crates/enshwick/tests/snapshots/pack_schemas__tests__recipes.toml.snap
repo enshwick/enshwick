@@ -1,0 +1,67 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Recipes",
+  "type": "object",
+  "properties": {
+    "recipe": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/RecipeEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "RecipeEntry": {
+      "type": "object",
+      "properties": {
+        "cost": {
+          "description": "The copied ingredient counts times this; 1 when left out.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 1,
+          "minimum": 0
+        },
+        "count": {
+          "description": "How many it makes; 1 when left out.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 1,
+          "minimum": 0
+        },
+        "id": {
+          "description": "The recipe's name in the pack.",
+          "type": "string"
+        },
+        "like": {
+          "description": "The item whose recipe is copied.",
+          "type": "string"
+        },
+        "output": {
+          "description": "The item it makes.",
+          "type": "string"
+        },
+        "workshop": {
+          "description": "Where it is made: a workshop of the pack, or a workshop's GUID or\ncontent id; the copied recipe's when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "like",
+        "output"
+      ]
+    }
+  }
+}

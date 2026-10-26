@@ -1,0 +1,94 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: schema
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Loot",
+  "type": "object",
+  "properties": {
+    "drop": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/DropEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "DropEntry": {
+      "type": "object",
+      "properties": {
+        "chance": {
+          "description": "The chance per roll, from 0 to 1.",
+          "type": "number",
+          "format": "double"
+        },
+        "count": {
+          "description": "How many per drop, at least and at most; 1 when left out.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "from": {
+          "description": "`bosses`, `locked-chests`, `corpses`, `chests`, `containers`,\n`destroyed`, or a list of the last four.",
+          "$ref": "#/$defs/FromEntry"
+        },
+        "items": {
+          "description": "The items, one picked per drop.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "meter": {
+          "description": "How full each dropped item's meter starts, at least and at most.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "chance",
+        "from"
+      ]
+    },
+    "FromEntry": {
+      "description": "Where a drop comes from: one name or several.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    }
+  }
+}
