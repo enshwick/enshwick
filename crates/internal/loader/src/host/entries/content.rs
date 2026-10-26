@@ -85,7 +85,7 @@ pub(crate) extern "system" fn recipe_kind(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::item_kinds::kind(item) {
+        match crate::item_kinds::ITEMS.kind(item) {
             // SAFETY: `HostApi::recipe_kind` has the mod pass `out` null or
             // pointing at a writable, aligned `RecipeKind` for the call.
             Some(kind) => unsafe { put(out, kind) },

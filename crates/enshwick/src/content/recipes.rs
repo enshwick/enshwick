@@ -1262,17 +1262,35 @@ mod tests {
         u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
     }
 
+    /// The kind after `kind`, in an order with every kind in it: a new kind
+    /// fails to compile here until it joins the order.
+    fn after(kind: RecipeKind) -> Option<RecipeKind> {
+        match kind {
+            RecipeKind::BuildingBlock => Some(RecipeKind::Roof),
+            RecipeKind::Roof => Some(RecipeKind::Overgrowth),
+            RecipeKind::Overgrowth => Some(RecipeKind::Terrain),
+            RecipeKind::Terrain => Some(RecipeKind::Other),
+            RecipeKind::Other => None,
+        }
+    }
+
+    fn every_kind() -> Vec<RecipeKind> {
+        std::iter::successors(Some(RecipeKind::BuildingBlock), |&kind| after(kind)).collect()
+    }
+
     #[test]
     fn every_kind_crosses_the_abi_and_an_unknown_code_reads_as_other() {
-        for kind in [
-            RecipeKind::BuildingBlock,
-            RecipeKind::Roof,
-            RecipeKind::Overgrowth,
-            RecipeKind::Terrain,
-            RecipeKind::Other,
-        ] {
+        let kinds = every_kind();
+        for &kind in &kinds {
             assert_eq!(RecipeKind::from(crate::abi::RecipeKind::from(kind)), kind);
         }
+        let mut codes: Vec<u32> = kinds
+            .iter()
+            .map(|&kind| crate::abi::RecipeKind::from(kind).0)
+            .collect();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), kinds.len());
         assert_eq!(
             RecipeKind::from(crate::abi::RecipeKind(u32::MAX)),
             RecipeKind::Other

@@ -766,8 +766,9 @@ unsafe extern "system" fn open(
             && !out.is_null()
         {
             // SAFETY: `out` is non-null by the check before it and is the
-            // open's u32 out handle, which the game's open just wrote.
-            crate::item_kinds::opened(unsafe { read_at(out.cast_const().cast(), 0) });
+            // open's u32 out handle, which the game's open just wrote; zero
+            // when the open failed, which `opened` skips.
+            crate::item_kinds::ITEMS.opened(unsafe { read_at(out.cast_const().cast(), 0) });
         }
         return opened;
     };
@@ -808,12 +809,12 @@ unsafe extern "system" fn resolve(
         // the slot holds the next function of that signature; the game's
         // arguments pass unchanged.
         let resolved = unsafe { RESOLVE_NEXT.get()(out, database, handle) };
-        if !out.is_null() && crate::item_kinds::offsets().is_some() {
+        if crate::item_kinds::ITEMS.pending() && !out.is_null() {
             // SAFETY: `out` is non-null by the check before it and is the
             // resolve's out triple of three u64, which the game's resolve
             // just wrote.
             let [data, len, _] = unsafe { read_at::<[u64; 3]>(out.cast_const().cast(), 0) };
-            if data != 0 && crate::item_kinds::take_opened(handle) {
+            if data != 0 && crate::item_kinds::ITEMS.take_opened(handle) {
                 record_item(data, len);
             }
         }
@@ -905,7 +906,7 @@ fn record_item(data: u64, len: u64) {
     let (Ok(data), Ok(len)) = (usize::try_from(data), usize::try_from(len)) else {
         return;
     };
-    let Some((id_at, slot_at)) = crate::item_kinds::offsets() else {
+    let Some((id_at, slot_at)) = crate::item_kinds::ITEMS.offsets() else {
         return;
     };
     if data == 0 || id_at.saturating_add(4) > len || slot_at >= len {
@@ -919,7 +920,7 @@ fn record_item(data: u64, len: u64) {
     // SAFETY: as for the item id: the reflected `slot_at`, below `len` by the
     // check before it, holds the one-byte equipment slot `seal` checked.
     let slot: u8 = unsafe { read_at(info, slot_at) };
-    crate::item_kinds::record(item, slot);
+    crate::item_kinds::ITEMS.record(item, slot);
 }
 
 /// Runs the patches of the mods still on, or of the mods `only` names,

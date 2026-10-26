@@ -10,9 +10,9 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     const PLANK: Guid = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
-    const ROOF: Guid = Guid::parse("9340b525-b047-4d87-a228-52a56b3b9401");
+    const ROOF: Guid = Guid::parse("1d2c3b4a-5e6f-4a1b-8c2d-3e4f5a6b7c8d");
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const MOSS: Guid = Guid::parse("953f5b06-d529-4610-b37c-c0163b9fd6b0");
+    const MOSS: Guid = Guid::parse("2e3d4c5b-6f7a-4b2c-9d3e-4f5a6b7c8d9e");
     const RECIPES: u32 = 1;
     const RECIPE_SIZE: usize = 0xa8;
 

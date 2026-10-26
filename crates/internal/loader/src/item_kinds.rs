@@ -11,29 +11,32 @@ use std::sync::OnceLock;
 use enshwick::abi::RecipeKind;
 
 /// Slots of each table: more than the items of the game and its mods.
-const CAPACITY: usize = 1 << 14;
+pub const CAPACITY: usize = 1 << 14;
 const EMPTY: u64 = 0;
-/// A slot whose key was taken; probes pass over it.
-const TAKEN: u64 = u64::MAX;
 const UNKNOWN: usize = usize::MAX;
+/// An opened `ItemInfo` handle the game has not resolved yet.
+const PENDING: u32 = 1;
+/// An opened `ItemInfo` handle whose item is recorded.
+const DONE: u32 = 2;
 
 /// A map of non-zero `u32` keys to `u32` values over a fixed array of
 /// atomics, so the resource detours write and read it without a lock or
-/// an allocation.
-struct Table<const N: usize> {
+/// an allocation. Keys are never removed: the slots in use are bounded by
+/// the distinct keys, and a probe for a missing key ends at the first empty
+/// slot.
+#[derive(Debug)]
+pub struct Table<const N: usize> {
     slots: [AtomicU64; N],
 }
 
-/// What [`Table::set`] did.
+/// [`Table::insert`] found no free slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Set {
-    Added,
-    Replaced,
-    Full,
-}
+pub struct Full;
 
 impl<const N: usize> Table<N> {
-    const fn new() -> Self {
+    /// An empty table, for a `static`.
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             slots: [const { AtomicU64::new(EMPTY) }; N],
         }
@@ -51,84 +54,214 @@ impl<const N: usize> Table<N> {
         ((entry >> 32) as u32, entry as u32)
     }
 
-    fn key(entry: u64) -> u32 {
-        Self::split(entry).0
-    }
-
     /// The slots to probe for `key`, starting at its hash.
     fn probe(key: u32) -> impl Iterator<Item = usize> {
         let start = key.wrapping_mul(0x9e37_79b9) as usize % N;
         (0..N).map(move |i| (start + i) % N)
     }
 
-    fn set(&self, key: u32, value: u32) -> Set {
+    /// The slot holding `key`, or the empty slot that ends its probe.
+    fn slot(&self, key: u32) -> Option<&AtomicU64> {
+        Self::probe(key)
+            .map(|i| &self.slots[i])
+            .find(|slot| match slot.load(Ordering::Acquire) {
+                EMPTY => true,
+                entry => Self::split(entry).0 == key,
+            })
+    }
+
+    /// Sets `key` to `value` and answers the value it had.
+    ///
+    /// # Errors
+    ///
+    /// [`Full`] when `key` is new and no slot is free, or `key` is zero.
+    pub fn insert(&self, key: u32, value: u32) -> Result<Option<u32>, Full> {
         if key == 0 {
-            return Set::Full;
+            return Err(Full);
         }
         let entry = Self::pack(key, value);
-        for i in Self::probe(key) {
-            let slot = &self.slots[i];
-            let mut current = slot.load(Ordering::Acquire);
-            if current == EMPTY {
-                match slot.compare_exchange(EMPTY, entry, Ordering::AcqRel, Ordering::Acquire) {
-                    Ok(_) => return Set::Added,
-                    Err(now) => current = now,
+        loop {
+            let slot = self.slot(key).ok_or(Full)?;
+            match slot.compare_exchange(EMPTY, entry, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => return Ok(None),
+                Err(now) if Self::split(now).0 == key => {
+                    return Ok(Some(Self::split(slot.swap(entry, Ordering::AcqRel)).1));
                 }
-            }
-            if current != TAKEN && Self::key(current) == key {
-                slot.store(entry, Ordering::Release);
-                return Set::Replaced;
+                // Another key took the empty slot first: probe again.
+                Err(_) => {}
             }
         }
-        Set::Full
     }
 
-    fn find(&self, key: u32) -> Option<&AtomicU64> {
-        if key == 0 {
-            return None;
-        }
-        for i in Self::probe(key) {
-            let slot = &self.slots[i];
-            match slot.load(Ordering::Acquire) {
-                EMPTY => return None,
-                TAKEN => {}
-                entry if Self::key(entry) == key => return Some(slot),
-                _ => {}
-            }
-        }
-        None
+    /// The value of `key`.
+    #[must_use]
+    pub fn get(&self, key: u32) -> Option<u32> {
+        let entry = self.slot(key)?.load(Ordering::Acquire);
+        let (found, value) = Self::split(entry);
+        (key != 0 && found == key).then_some(value)
     }
 
-    fn get(&self, key: u32) -> Option<u32> {
-        let entry = self.find(key)?.load(Ordering::Acquire);
-        (entry != TAKEN && Self::key(entry) == key).then_some(Self::split(entry).1)
+    /// Sets `key` from `from` to `to`; `false` when it held another value
+    /// or was not there.
+    pub fn replace(&self, key: u32, from: u32, to: u32) -> bool {
+        key != 0
+            && self.slot(key).is_some_and(|slot| {
+                slot.compare_exchange(
+                    Self::pack(key, from),
+                    Self::pack(key, to),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            })
     }
 
-    /// Takes `key` out; `None` when it was not there or another thread
-    /// took it first.
-    fn take(&self, key: u32) -> Option<u32> {
-        let slot = self.find(key)?;
-        let entry = slot.load(Ordering::Acquire);
-        if entry == TAKEN || Self::key(entry) != key {
-            return None;
-        }
-        slot.compare_exchange(entry, TAKEN, Ordering::AcqRel, Ordering::Acquire)
-            .ok()
-            .map(|entry| Self::split(entry).1)
+    #[cfg(test)]
+    fn used(&self) -> usize {
+        self.slots
+            .iter()
+            .filter(|slot| slot.load(Ordering::Relaxed) != EMPTY)
+            .count()
     }
 }
 
-/// Handles of the `ItemInfo` resources the game opened and has not
-/// resolved yet.
-static OPENED: Table<CAPACITY> = Table::new();
-/// Each loaded item's equipment slot, by item id.
-static SLOTS: Table<CAPACITY> = Table::new();
-/// Where `ItemInfo` holds its item id and its equipment slot; [`UNKNOWN`]
-/// until sealed, and for good when reflection lacks either.
-static ID_AT: AtomicUsize = AtomicUsize::new(UNKNOWN);
-static SLOT_AT: AtomicUsize = AtomicUsize::new(UNKNOWN);
-/// The slot values that make a kind other than [`RecipeKind::OTHER`].
-static KINDS: OnceLock<Box<[(u64, RecipeKind)]>> = OnceLock::new();
+impl<const N: usize> Default for Table<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The items' kinds as the game loads them, with `N` slots per table.
+///
+/// The `ItemInfo` handles noted are taken to stay `ItemInfo` until the game
+/// resolves them. Should the database give a handle opened and never
+/// resolved to another resource later, that resource's resolve is read as an
+/// item: the length checks keep the read inside it, but the item recorded
+/// may take a wrong kind.
+#[derive(Debug)]
+pub struct ItemKinds<const N: usize> {
+    /// The `ItemInfo` handles the game opened: [`PENDING`] until resolved,
+    /// then [`DONE`].
+    opened: Table<N>,
+    /// How many handles in `opened` are [`PENDING`]: a resolve reads
+    /// nothing while none is.
+    pending: AtomicUsize,
+    /// Each loaded item's equipment slot, by item id.
+    slots: Table<N>,
+    /// Where `ItemInfo` holds its item id and its equipment slot;
+    /// [`UNKNOWN`] until sealed, and for good when reflection lacks either.
+    id_at: AtomicUsize,
+    slot_at: AtomicUsize,
+    /// The slot values that make a kind other than [`RecipeKind::OTHER`].
+    kinds: OnceLock<Box<[(u64, RecipeKind)]>>,
+    warned: AtomicBool,
+}
+
+impl<const N: usize> ItemKinds<N> {
+    /// Nothing known yet, for a `static`.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            opened: Table::new(),
+            pending: AtomicUsize::new(0),
+            slots: Table::new(),
+            id_at: AtomicUsize::new(UNKNOWN),
+            slot_at: AtomicUsize::new(UNKNOWN),
+            kinds: OnceLock::new(),
+            warned: AtomicBool::new(false),
+        }
+    }
+
+    /// Starts recording: `ItemInfo` holds its item id at `id_at` and its
+    /// one-byte slot at `slot_at`, and `kinds` names the slot values with a
+    /// kind of their own. Only the first call counts.
+    pub fn seal(&self, id_at: usize, slot_at: usize, kinds: Box<[(u64, RecipeKind)]>) {
+        if self.kinds.set(kinds).is_ok() {
+            self.id_at.store(id_at, Ordering::Relaxed);
+            self.slot_at.store(slot_at, Ordering::Release);
+        }
+    }
+
+    /// Where `ItemInfo` holds its item id and its equipment slot, once
+    /// sealed.
+    #[must_use]
+    pub fn offsets(&self) -> Option<(usize, usize)> {
+        let slot_at = self.slot_at.load(Ordering::Acquire);
+        (slot_at != UNKNOWN).then(|| (self.id_at.load(Ordering::Relaxed), slot_at))
+    }
+
+    /// Notes that the game opened an `ItemInfo` resource as `handle`; a
+    /// failed open, handle zero, is not noted.
+    pub fn opened(&self, handle: u32) {
+        if handle == 0 || self.offsets().is_none() {
+            return;
+        }
+        match self.opened.insert(handle, PENDING) {
+            Ok(Some(PENDING)) => {}
+            Ok(_) => {
+                self.pending.fetch_add(1, Ordering::AcqRel);
+            }
+            Err(Full) => self.full(),
+        }
+    }
+
+    /// Whether any noted handle waits for its resolve; the one check on a
+    /// resolve once the items are in.
+    #[must_use]
+    pub fn pending(&self) -> bool {
+        self.pending.load(Ordering::Relaxed) != 0
+    }
+
+    /// Whether `handle` is an `ItemInfo` the game opened and has not
+    /// resolved yet; marks it resolved, so each is read once.
+    pub fn take_opened(&self, handle: u32) -> bool {
+        let taken = self.opened.replace(handle, PENDING, DONE);
+        if taken {
+            self.pending.fetch_sub(1, Ordering::AcqRel);
+        }
+        taken
+    }
+
+    /// Records that the item `item` has the equipment slot `slot`.
+    pub fn record(&self, item: u32, slot: u8) {
+        if self.slots.insert(item, u32::from(slot)).is_err() {
+            self.full();
+        }
+    }
+
+    /// The kind of the recipes that make the item `item`; `None` until the
+    /// game has resolved the item.
+    #[must_use]
+    pub fn kind(&self, item: u32) -> Option<RecipeKind> {
+        let slot = u64::from(self.slots.get(item)?);
+        let kinds = self.kinds.get()?;
+        Some(
+            kinds
+                .iter()
+                .find(|&&(value, _)| value == slot)
+                .map_or(RecipeKind::OTHER, |&(_, kind)| kind),
+        )
+    }
+
+    #[cold]
+    fn full(&self) {
+        if !self.warned.swap(true, Ordering::Relaxed) {
+            crate::log!(
+                WARN,
+                "more items than recipe kinds can hold: the rest have no kind"
+            );
+        }
+    }
+}
+
+impl<const N: usize> Default for ItemKinds<N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// The game's items, as the resource detours record them.
+pub(crate) static ITEMS: ItemKinds<CAPACITY> = ItemKinds::new();
 
 /// Learns from `reflection` where `ItemInfo` holds its id and its slot and
 /// which slot values make which kind; without them no kind is recorded.
@@ -157,61 +290,7 @@ pub(crate) fn seal(reflection: &enshwick_gamedata::reflect::Reflection<'_>) {
         .into_iter()
         .map(|(value, kind)| (value, kind.into()))
         .collect();
-    if KINDS.set(kinds).is_err() {
-        return;
-    }
-    ID_AT.store(id_at, Ordering::Relaxed);
-    SLOT_AT.store(slot_at, Ordering::Release);
-}
-
-/// Where `ItemInfo` holds its item id and its equipment slot, once sealed.
-pub(crate) fn offsets() -> Option<(usize, usize)> {
-    let slot_at = SLOT_AT.load(Ordering::Acquire);
-    (slot_at != UNKNOWN).then(|| (ID_AT.load(Ordering::Relaxed), slot_at))
-}
-
-/// Notes that the game opened an `ItemInfo` resource as `handle`.
-pub(crate) fn opened(handle: u32) {
-    if offsets().is_some() && OPENED.set(handle, 0) == Set::Full {
-        full();
-    }
-}
-
-/// Whether `handle` is an `ItemInfo` the game opened and has not resolved
-/// yet; takes it, so each is read once.
-pub(crate) fn take_opened(handle: u32) -> bool {
-    offsets().is_some() && OPENED.take(handle).is_some()
-}
-
-/// Records that the item `item` has the equipment slot `slot`.
-pub(crate) fn record(item: u32, slot: u8) {
-    if SLOTS.set(item, u32::from(slot)) == Set::Full {
-        full();
-    }
-}
-
-#[cold]
-fn full() {
-    static WARNED: AtomicBool = AtomicBool::new(false);
-    if !WARNED.swap(true, Ordering::Relaxed) {
-        crate::log!(
-            WARN,
-            "more items than recipe kinds can hold: the rest have no kind"
-        );
-    }
-}
-
-/// The kind of the recipes that make the item `item`; `None` until the
-/// game has resolved the item.
-pub(crate) fn kind(item: u32) -> Option<RecipeKind> {
-    let slot = u64::from(SLOTS.get(item)?);
-    let kinds = KINDS.get()?;
-    Some(
-        kinds
-            .iter()
-            .find(|&&(value, _)| value == slot)
-            .map_or(RecipeKind::OTHER, |&(_, kind)| kind),
-    )
+    ITEMS.seal(id_at, slot_at, kinds);
 }
 
 #[cfg(test)]
@@ -223,31 +302,32 @@ mod tests {
     #[test]
     fn a_table_keeps_the_last_value_of_each_key() {
         let table = Table::<SMALL>::new();
-        assert_eq!(table.set(7, 1), Set::Added);
-        assert_eq!(table.set(7, 2), Set::Replaced);
+        assert_eq!(table.insert(7, 1), Ok(None));
+        assert_eq!(table.insert(7, 2), Ok(Some(1)));
         assert_eq!(table.get(7), Some(2));
         assert_eq!(table.get(8), None);
-        assert_eq!(table.set(0, 1), Set::Full);
+        assert_eq!(table.insert(0, 1), Err(Full));
         assert_eq!(table.get(0), None);
+        assert!(table.replace(7, 2, 3));
+        assert!(!table.replace(7, 2, 4));
+        assert!(!table.replace(8, 0, 1));
+        assert_eq!(table.get(7), Some(3));
     }
 
     #[test]
-    fn a_taken_key_is_gone_once_and_probes_pass_over_it() {
+    fn keys_that_share_a_start_slot_probe_past_each_other() {
         let table = Table::<SMALL>::new();
-        // Keys that share a start slot probe past each other.
         let start = |key| Table::<SMALL>::probe(key).next();
         let keys: Vec<u32> = (1..u32::MAX)
             .filter(|&k| start(k) == start(1))
             .take(3)
             .collect();
         for &key in &keys {
-            assert_eq!(table.set(key, key), Set::Added);
+            assert_eq!(table.insert(key, key), Ok(None));
         }
-        assert_eq!(table.take(keys[0]), Some(keys[0]));
-        assert_eq!(table.take(keys[0]), None);
-        assert_eq!(table.get(keys[2]), Some(keys[2]));
-        assert_eq!(table.set(keys[0], 5), Set::Added);
-        assert_eq!(table.get(keys[0]), Some(5));
+        for &key in &keys {
+            assert_eq!(table.get(key), Some(key));
+        }
     }
 
     #[test]
@@ -255,10 +335,56 @@ mod tests {
         let table = Table::<SMALL>::new();
         let capacity = u32::try_from(SMALL).unwrap();
         for key in 1..=capacity {
-            assert_eq!(table.set(key, key), Set::Added);
+            assert_eq!(table.insert(key, key), Ok(None));
         }
-        assert_eq!(table.set(capacity + 1, 1), Set::Full);
-        assert_eq!(table.get(capacity), Some(capacity));
-        assert_eq!(table.set(1, 9), Set::Replaced);
+        assert_eq!(table.insert(capacity + 1, 1), Err(Full));
+        assert_eq!(table.get(capacity + 1), None);
+        assert_eq!(table.insert(1, 9), Ok(Some(1)));
+    }
+
+    fn sealed() -> ItemKinds<SMALL> {
+        let items = ItemKinds::new();
+        items.seal(0, 8, Box::new([(10, RecipeKind::BUILDING_BLOCK)]));
+        items
+    }
+
+    #[test]
+    fn opens_and_resolves_of_the_same_handles_never_fill_the_table() {
+        let items = sealed();
+        for round in 0..1000 {
+            let handle = round % 4 + 1;
+            items.opened(handle);
+            items.opened(handle);
+            assert!(items.pending());
+            assert!(items.take_opened(handle));
+            assert!(!items.take_opened(handle));
+            assert!(!items.pending());
+        }
+        assert_eq!(items.opened.used(), 4);
+        assert!(!items.take_opened(99));
+    }
+
+    #[test]
+    fn a_failed_open_and_an_unsealed_build_note_nothing() {
+        let items = sealed();
+        items.opened(0);
+        assert!(!items.pending());
+        assert!(!items.warned.load(Ordering::Relaxed));
+
+        let unsealed = ItemKinds::<SMALL>::new();
+        unsealed.opened(5);
+        assert!(!unsealed.pending());
+        assert_eq!(unsealed.offsets(), None);
+    }
+
+    #[test]
+    fn an_item_has_the_kind_of_its_slot_and_other_slots_are_other() {
+        let items = sealed();
+        assert_eq!(items.offsets(), Some((0, 8)));
+        items.record(0x5e01, 10);
+        items.record(0x5e02, 3);
+        assert_eq!(items.kind(0x5e01), Some(RecipeKind::BUILDING_BLOCK));
+        assert_eq!(items.kind(0x5e02), Some(RecipeKind::OTHER));
+        assert_eq!(items.kind(0x5e03), None);
     }
 }

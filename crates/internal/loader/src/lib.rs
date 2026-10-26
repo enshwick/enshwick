@@ -70,11 +70,7 @@ mod interactions;
 mod inventory;
 #[cfg(windows)]
 mod item_data;
-#[cfg_attr(
-    not(windows),
-    expect(dead_code, reason = "only the Windows build sees the game's items")
-)]
-mod item_kinds;
+pub mod item_kinds;
 pub mod join;
 #[cfg(windows)]
 mod knowledge;

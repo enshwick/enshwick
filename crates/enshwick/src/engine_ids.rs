@@ -40,9 +40,9 @@ ids! {
     ITEM_INFO_UI_VALUES = "item_info.ui_values";
     ITEM_INFO_ICON_IMAGE = "item_info.icon_image";
     ITEM_INFO_PLACED_ENTITY = "item_info.placed_entity";
-    #[expect(dead_code, reason = "the loader reads it to answer recipe kinds")]
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_EQUIPMENT_SLOT = "item_info.equipment_slot";
-    #[expect(dead_code, reason = "the loader reads it to answer recipe kinds")]
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     EQUIPMENT_SLOT = "equipment_slot";
     ITEM_STAT = "item_stat";
     ITEM_STAT_LABEL = "item_stat.label";

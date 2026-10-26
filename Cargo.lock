@@ -460,6 +460,7 @@ dependencies = [
  "arrayvec",
  "base64",
  "bytemuck",
+ "criterion",
  "enshwick",
  "enshwick-gamedata",
  "iced-x86",
