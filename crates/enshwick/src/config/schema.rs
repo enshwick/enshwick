@@ -68,7 +68,7 @@ impl Kind {
     }
 }
 
-/// One setting, as [`Config::schema`] describes it.
+/// One setting, as [`Config::schema`](crate::config::Config::schema) describes it.
 ///
 /// # Examples
 ///
@@ -448,7 +448,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 }
 
 /// A mod's settings described for the loader, the console and a settings menu:
-/// what [`Config::schema`] returns, and what a mod hands the loader as text.
+/// what [`Config::schema`](crate::config::Config::schema) returns, and what a mod hands the loader as text.
 ///
 /// # Examples
 ///
@@ -480,7 +480,7 @@ pub struct Schema {
 ///
 /// # Examples
 ///
-/// See [`Config`].
+/// See [`Config`](crate::config::Config).
 #[non_exhaustive]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Group {
@@ -639,7 +639,7 @@ impl Schema {
     ///
     /// # Examples
     ///
-    /// See [`Config::schema`].
+    /// See [`Config::schema`](crate::config::Config::schema).
     #[must_use]
     pub fn field(&self, key: &str) -> Option<&Field> {
         self.fields.iter().find(|f| f.key == key)
