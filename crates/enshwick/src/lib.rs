@@ -275,6 +275,8 @@ pub use shape::Shape;
 
 #[doc(hidden)]
 pub mod __private {
+    pub use const_format::concatcp;
+
     use std::sync::OnceLock;
     use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
     use std::time::{Duration, Instant};
@@ -293,6 +295,39 @@ pub mod __private {
             _ => 0,
         };
         ManifestFlags(join | reload)
+    }
+
+    /// The schema text of `manifest!`: empty when it names no point, so a
+    /// mod without points carries nothing.
+    #[must_use]
+    pub const fn point_schemas(text: &'static str) -> &'static str {
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'[' {
+                return text;
+            }
+            i += 1;
+        }
+        ""
+    }
+
+    /// The bytes of `text`, as a static in a section of its own holds them.
+    ///
+    /// # Panics
+    ///
+    /// When `N` is not the length of `text`, at compile time.
+    #[must_use]
+    pub const fn bytes<const N: usize>(text: &str) -> [u8; N] {
+        let source = text.as_bytes();
+        assert!(source.len() == N, "the section's size is the text's length");
+        let mut out = [0u8; N];
+        let mut i = 0;
+        while i < N {
+            out[i] = source[i];
+            i += 1;
+        }
+        out
     }
 
     /// The first non-empty text of `texts`, or empty.

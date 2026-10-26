@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 70;
+pub const ABI_MINOR: u16 = 71;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -1473,6 +1473,11 @@ pub struct Manifest {
     /// Where players read about the mod, an `https://` address. Since minor
     /// 36.
     pub homepage: Str,
+    /// The schemas of the extension points the mod defines, as TOML that
+    /// `cargo enshwick point` reads; empty for none. The same text sits in
+    /// the DLL's `.enshpt` section, so a tool reads it without running the
+    /// mod. Since minor 71.
+    pub points: Str,
 }
 
 // SAFETY: a manifest is immutable static data; its pointers refer to statics.
@@ -5674,7 +5679,8 @@ const _: () = {
     assert!(size_of::<AltarZoneSize>() == 24);
     assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, name) == 80);
-    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16);
+    assert!(core::mem::offset_of!(Manifest, points) == 80 + 16 * 4 + 16);
+    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16);
     assert!(size_of::<ResourceKey>() == 24);
 };
 

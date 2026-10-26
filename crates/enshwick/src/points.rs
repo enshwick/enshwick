@@ -114,6 +114,10 @@ pub unsafe trait Point: Copy + 'static {
     const LAYOUT: &'static [LayoutField];
     /// The answer's type, as one field.
     const OUTPUT: &'static [LayoutField];
+    /// The point's schema as `cargo enshwick point` reads it from the
+    /// owner's manifest: its `[[point]]` table with the layout hashes, then
+    /// the `[[type]]` tables of its input and answer.
+    const SCHEMA: &'static str;
     /// The answer.
     type Output: Copy + 'static;
 }

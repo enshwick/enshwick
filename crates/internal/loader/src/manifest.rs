@@ -84,6 +84,7 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
     manifest.description = text(manifest.description);
     manifest.authors = list(manifest.authors, manifest.author_count, text);
     manifest.license = text(manifest.license);
+    manifest.points = text(manifest.points);
     manifest.homepage = text(manifest.homepage);
     manifest
 }
