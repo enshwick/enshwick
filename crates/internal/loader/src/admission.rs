@@ -22,8 +22,11 @@ use crate::texts;
 pub const SESSION: &str = "server.session";
 /// The table id of the game's kick of one machine from its session.
 pub const KICK: &str = "session.kick";
+/// The table id of the session's own machine, an offset in the session: the
+/// machine the game itself never kicks, the host's in a hosted game.
+pub const HOST_MACHINE: &str = "session.host_machine";
 /// The build table ids this part of the loader names.
-pub const TABLE_IDS: &[&str] = &[SESSION, KICK];
+pub const TABLE_IDS: &[&str] = &[SESSION, KICK, HOST_MACHINE];
 
 /// Players the gate follows at most; the game has 16 slots.
 const MAX_PLAYERS: usize = 64;
@@ -358,11 +361,12 @@ pub fn needs(server: &str, client: Option<&Hello>) -> Vec<Need> {
 
 /// The machine to kick for the player `key` among the live slots'
 /// `machines`, `(key, machine)`: never the host's, nor one the host's slot
-/// shares; or why not.
+/// shares, nor the session's own `host_machine`; or why not.
 fn machine_to_kick(
     machines: &[(u64, u32)],
     key: u64,
     host: Option<u64>,
+    host_machine: Option<u32>,
 ) -> Result<u32, &'static str> {
     if host == Some(key) {
         return Err("the player is the host");
@@ -376,6 +380,9 @@ fn machine_to_kick(
     let machine = machine_of(key).ok_or("the player holds no slot")?;
     if host.and_then(machine_of) == Some(machine) {
         return Err("the player's machine is the host's");
+    }
+    if host_machine == Some(machine) {
+        return Err("the player's machine is the session's own");
     }
     Ok(machine)
 }
@@ -464,7 +471,7 @@ mod runtime {
 
     use enshwick_loader_api::abi::Side;
 
-    use super::{Gate, Hello, KICK, Rules, SESSION, Step};
+    use super::{Gate, HOST_MACHINE, Hello, KICK, Rules, SESSION, Step};
     use crate::fuse::Fuse;
     use crate::host::Loader;
     use crate::join::Names;
@@ -483,6 +490,8 @@ mod runtime {
     struct Kick {
         call: KickFn,
         session: usize,
+        /// The session's own machine, an offset in the session.
+        host_machine: Option<usize>,
     }
 
     /// What a serving game knows from its start.
@@ -559,12 +568,20 @@ mod runtime {
                 // signature, on this build.
                 call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
                 session,
+                host_machine: loader.offset(HOST_MACHINE),
             });
-        if kick.is_none() {
-            crate::log!(
+        match &kick {
+            None => crate::log!(
                 WARN,
                 "join check kicks off: not in this build; players without the join mods get the note and stay"
-            );
+            ),
+            Some(Kick {
+                host_machine: None, ..
+            }) => crate::log!(
+                WARN,
+                "join check: the session's own machine is not in this build; the host is known by its hello alone"
+            ),
+            Some(_) => {}
         }
         crate::log!(
             INFO,
@@ -779,8 +796,8 @@ mod runtime {
     }
 
     /// Kicks the player `key` through the game, on the game thread, never
-    /// on the machine of `host`, a hosted game's host; the player's machine
-    /// handle, or why not.
+    /// on the machine of `host`, a hosted game's host, nor on the session's
+    /// own machine; the player's machine handle, or why not.
     fn disconnect(
         loader: &Loader,
         kick: &Kick,
@@ -790,7 +807,6 @@ mod runtime {
         let server = crate::world::reader().map_err(|_| "not on the game thread")?;
         let machines =
             crate::world::machines(loader).map_err(|_| "the player slots do not read")?;
-        let machine = super::machine_to_kick(&machines, key, host)?;
         // SAFETY: the offset lies inside the server object, as the pattern
         // that pins it reads it from the server in the game's own kick; the
         // server is read on its own thread.
@@ -798,6 +814,13 @@ mod runtime {
         if session == 0 {
             return Err("the server has no session");
         }
+        let host_machine = kick.host_machine.map(|offset| {
+            // SAFETY: a `u32` machine handle inside the live session, as the
+            // pattern that pins the offset finds the game's own kick compare
+            // it with the machine to kick; read on the game thread.
+            unsafe { crate::world::read::<u32>(session, offset) }
+        });
+        let machine = super::machine_to_kick(&machines, key, host, host_machine)?;
         // SAFETY: the game's kick with the server's session and the machine
         // of one of its player slots, on the game thread, as the server's
         // own account actions call it.
@@ -1133,14 +1156,22 @@ mod tests {
     #[test]
     fn the_host_s_machine_is_never_kicked() {
         let machines = [(1, 10), (2, 20), (3, 10)];
-        assert_eq!(machine_to_kick(&machines, 2, Some(1)), Ok(20));
-        assert_eq!(machine_to_kick(&machines, 2, None), Ok(20));
-        assert!(machine_to_kick(&machines, 1, Some(1)).is_err());
+        assert_eq!(machine_to_kick(&machines, 2, Some(1), None), Ok(20));
+        assert_eq!(machine_to_kick(&machines, 2, None, None), Ok(20));
+        assert!(machine_to_kick(&machines, 1, Some(1), None).is_err());
         assert!(
-            machine_to_kick(&machines, 3, Some(1)).is_err(),
+            machine_to_kick(&machines, 3, Some(1), None).is_err(),
             "a guest on the host's machine"
         );
-        assert!(machine_to_kick(&machines, 4, Some(1)).is_err());
+        assert!(machine_to_kick(&machines, 4, Some(1), None).is_err());
+    }
+
+    #[test]
+    fn the_session_s_host_machine_is_never_kicked_before_the_host_said_hello() {
+        let machines = [(1, 10), (2, 20)];
+        assert!(machine_to_kick(&machines, 1, None, Some(10)).is_err());
+        assert!(machine_to_kick(&machines, 2, Some(9), Some(20)).is_err());
+        assert_eq!(machine_to_kick(&machines, 2, None, Some(10)), Ok(20));
     }
 
     #[test]
