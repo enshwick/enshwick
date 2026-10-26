@@ -18,6 +18,7 @@ use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::memory::read;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -62,7 +63,10 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     let world = if server == 0 {
         0
     } else {
-        // SAFETY: the server holds its world pointer, read on its own thread.
+        // SAFETY: `server` is non-zero (`server == 0` gives 0 first) and is the
+        // server the post-step link was handed, on the game thread that runs
+        // this link; `world_offset` is the table's `server.world` offset of its
+        // world pointer, which only that thread writes.
         unsafe { read::<usize>(server, world_offset) }
     };
     let entity_world = if world == 0 { 0 } else { world + entities };
@@ -89,7 +93,9 @@ thread_local! {
 static STEP_LINKED: AtomicBool = AtomicBool::new(false);
 
 type WorldStepFn = unsafe extern "system" fn(world: *mut u8) -> usize;
-// SAFETY: the slot joins the chain of the world step.
+// SAFETY: `WorldStepFn` is the signature of the table's `world.step`, and
+// this slot is the `next` of the one link `link` makes on it, whose detour
+// `world_step` alone calls `get`.
 static WORLD_STEP_NEXT: Next<WorldStepFn> = unsafe { Next::new() };
 
 /// Links the world step, which runs every ECS system of a world, the
@@ -111,7 +117,9 @@ pub(crate) fn link(loader: &'static Loader) {
 
 unsafe extern "system" fn world_step(world: *mut u8) -> usize {
     STEPPING.set(STEPPING.get().wrapping_add(1));
-    // SAFETY: forwarded unchanged.
+    // SAFETY: `world` is the game's argument to `world.step`, passed on
+    // unchanged; the chain is wired before the target jumps here, so the slot
+    // holds the rest of that chain with the same signature.
     let result = unsafe { WORLD_STEP_NEXT.get()(world) };
     STEPPING.set(STEPPING.get().wrapping_sub(1));
     result
@@ -208,13 +216,18 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let type_index = function("ecs.type_index")?;
             let read_component = function("ecs.component_read_raw")?;
             let entity_slot = function("ecs.entity_slot")?;
-            // SAFETY: each symbol is the game function with this signature on
-            // this build.
+            // SAFETY: the table's `ecs.type_index` is the address of the game
+            // function with the `TypeIndex` signature on this build, in the
+            // image, which stays mapped.
             let type_index = unsafe { core::mem::transmute::<usize, TypeIndex>(type_index) };
-            // SAFETY: as above.
+            // SAFETY: the table's `ecs.component_read_raw` is the address of
+            // the game function with the `ReadComponent` signature on this
+            // build, in the image, which stays mapped.
             let read_component =
                 unsafe { core::mem::transmute::<usize, ReadComponent>(read_component) };
-            // SAFETY: as above.
+            // SAFETY: the table's `ecs.entity_slot` is the address of the game
+            // function with the `EntitySlot` signature on this build, in the
+            // image, which stays mapped.
             let entity_slot = unsafe { core::mem::transmute::<usize, EntitySlot>(entity_slot) };
             Some(Layout {
                 type_index,
@@ -247,23 +260,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-pub(crate) unsafe fn read<T: Copy>(base: usize, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { core::ptr::with_exposed_provenance::<T>(base.wrapping_add(offset)).read_unaligned() }
-}
-
 /// The server, when the caller is on the game thread.
 pub(crate) fn reader() -> Result<usize, Status> {
     let server = SERVER.load(Ordering::Acquire);
     if server == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
     let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     if me != GAME_THREAD.load(Ordering::Acquire) {
         return Err(Status::WRONG_THREAD);
@@ -283,7 +286,9 @@ pub(crate) fn server() -> Result<usize, Status> {
 
 /// The entity world: `*(server + world) + entities`.
 fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
-    // SAFETY: the server holds its world pointer.
+    // SAFETY: callers pass the server `reader` returned, so this runs on the
+    // game thread that alone writes it; the table's `server.world` offset
+    // holds its world pointer.
     let world: usize = unsafe { read(server, layout.server_world) };
     (world != 0).then(|| world + layout.entity_world)
 }
@@ -293,7 +298,10 @@ fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
 pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
-    // SAFETY: the entity world starts with its component registry.
+    // SAFETY: `world` is the entity world, non-zero (checked by
+    // `entity_world`), which starts with its component registry pointer at
+    // the table's `world.entities` offset; read on the game thread (checked
+    // by `reader`), which alone writes it.
     let registry: usize = unsafe { read(world, 0) };
     if registry == 0 {
         return Err(Status::MISSING);
@@ -302,7 +310,11 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
         .registry_maps
         .iter()
         .map(|&map| {
-            // SAFETY: the registry's type maps, on the game thread between steps.
+            // SAFETY: `type_index` is the table's `ecs.type_index`; `registry`
+            // is non-zero (`registry == 0` returns first) and `map` one of the
+            // table's `ecs.registry_type_map` offsets of its type maps; `hash`
+            // lives across the call, made on the game thread (checked by
+            // `reader`).
             unsafe {
                 (layout.type_index)(
                     core::ptr::with_exposed_provenance(registry + map),
@@ -320,7 +332,10 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (world, index) = type_index(loader, hash)?;
     let mut out = [0usize; 2];
-    // SAFETY: as above; `index` points into the registry.
+    // SAFETY: `read_component` is the table's `ecs.component_read_raw`;
+    // `out` is two writable words on this stack, `world` the non-zero entity
+    // world and `index` the non-null registry index `type_index` returned,
+    // on the game thread (checked by `reader` inside `type_index`).
     unsafe {
         (layout.read_component)(
             &raw mut out,
@@ -339,35 +354,51 @@ pub(crate) fn component(loader: &Loader, entity: u32, hash: u32) -> Result<*cons
 pub(crate) fn template(loader: &Loader, entity: u32) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
-    // SAFETY: the entity world's id-to-slot map, on the game thread.
+    // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is the
+    // non-zero entity world and the table's `ecs.entity_map` offset its
+    // id-to-slot map; `entity` lives across the call, made on the game
+    // thread (checked by `reader`).
     let slot = unsafe {
         (layout.entity_slot)(
             core::ptr::with_exposed_provenance(world + layout.entity_map),
             &raw const entity,
         )
     };
-    // SAFETY: the map's capacity, which a missing entity returns.
+    // SAFETY: `world` is the non-zero entity world; the table's
+    // `ecs.entity_map_capacity` offset holds the map's capacity, which the
+    // lookup returns for a missing entity; read on the game thread (checked
+    // by `reader`), which alone writes it.
     let capacity: u32 = unsafe { read(world, layout.entity_capacity) };
     if slot >= capacity {
         return Err(Status::MISSING);
     }
-    // SAFETY: the record table holds `capacity` pointers.
+    // SAFETY: `world` is the non-zero entity world; the table's
+    // `ecs.entity_records` offset holds the pointer to its record table; read
+    // on the game thread (checked by `reader`), which alone writes it.
     let records: usize = unsafe { read(world, layout.entity_records) };
-    // SAFETY: as above.
+    if records == 0 {
+        return Err(Status::MISSING);
+    }
+    // SAFETY: `records` is non-zero (`records == 0` returns first); the record
+    // table holds `capacity` record pointers and `slot < capacity`
+    // (`slot >= capacity` returns first); read on the game thread (checked by
+    // `reader`), which alone writes it.
     let record: usize = unsafe { read(records, slot as usize * size_of::<usize>()) };
     if record == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: a live record points at its template GUID.
+    // SAFETY: `record` is a non-zero (`record == 0` returns first) live record;
+    // the table's `ecs.record_template` offset holds its template GUID pointer;
+    // read on the game thread (checked by `reader`).
     let guid: usize = unsafe { read(record, layout.record_template) };
     if guid == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: a GUID is 16 bytes.
+    // SAFETY: `guid` is non-zero (`guid == 0` returns first) and points at the
+    // template's 16-byte GUID, which the template keeps while it is loaded.
     Ok(unsafe { read::<[u8; 16]>(guid, 0) })
 }
 
-/// Every player in game, in slot order.
 /// Where `entity` stands, in 32.32 fixed-point metres, from its
 /// `CurrentTransform`; on the server's game thread.
 pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
@@ -377,24 +408,38 @@ pub(crate) fn fixed_position(loader: &Loader, entity: u32) -> Option<[i64; 3]> {
         .ok()?;
     let hash = type_hash(info.va())?;
     let data = component(loader, entity, hash).ok()?;
-    // SAFETY: a live CurrentTransform starts with its position, three
-    // fixed-point `i64`, read at once on the game thread.
-    Some(unsafe { data.cast::<[i64; 3]>().read_unaligned() })
+    // SAFETY: `data` is the non-null data of the entity's live
+    // `CurrentTransform` (checked by `component`), which starts with its
+    // position, three fixed-point `i64`; read on the game thread (checked by
+    // `reader`), which alone writes it.
+    Some(unsafe { enshwick::raw::read_at::<[i64; 3]>(data.cast(), 0) })
 }
 
+/// Every player in game, in slot order.
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = reader()?;
-    // SAFETY: the server's player infos object, for permissions.
+    // SAFETY: `server` is the server `reader` returned on the game thread,
+    // which alone writes it; the table's `server.player_infos` offset holds
+    // its player infos pointer.
     let infos: usize = unsafe { read(server, layout.server_players) };
     Ok((0..layout.slot_count)
         .filter_map(|index| {
             let slot = server + layout.slots + index * layout.slot_size;
-            // SAFETY: the server holds `slot_count` player slots.
+            // SAFETY: the table's `server.player_slots`, `player_slot_size`
+            // and `player_slot_count` place `slot_count` slots in the server,
+            // `index < slot_count`, and each slot starts with its `u32`
+            // handle; read on the game thread (checked by `reader`).
             let handle: u32 = unsafe { read(slot, 0) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_state` offset holds its state byte; read on
+            // the game thread (checked by `reader`).
             let state: u8 = unsafe { read(slot, layout.slot_state) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_entity` offset holds its `u32` entity; read
+            // on the game thread (checked by `reader`).
             let entity: u32 = unsafe { read(slot, layout.slot_entity) };
             (handle != 0 && state == SLOT_IN_GAME && entity != 0)
                 .then(|| player_at(layout, slot, index, entity, infos))
@@ -413,11 +458,20 @@ pub(crate) fn player_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYE
     Ok((0..layout.slot_count.min(MAX_PLAYERS))
         .filter_map(|index| {
             let slot = server + layout.slots + index * layout.slot_size;
-            // SAFETY: the server holds `slot_count` player slots.
+            // SAFETY: the table's `server.player_slots`, `player_slot_size`
+            // and `player_slot_count` place `slot_count` slots in the server,
+            // `index < slot_count`, and each slot starts with its `u32`
+            // handle; read on the game thread (checked by `reader`).
             let handle: u32 = unsafe { read(slot, 0) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_state` offset holds its state byte; read on
+            // the game thread (checked by `reader`).
             let state: u8 = unsafe { read(slot, layout.slot_state) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_entity` offset holds its `u32` entity; read
+            // on the game thread (checked by `reader`).
             let entity: u32 = unsafe { read(slot, layout.slot_entity) };
             (handle != 0 && state == SLOT_IN_GAME && entity != 0).then_some(entity)
         })
@@ -432,11 +486,20 @@ pub(crate) fn machines(loader: &Loader) -> Result<Vec<(u64, u32)>, Status> {
     Ok((0..layout.slot_count)
         .filter_map(|index| {
             let slot = server + layout.slots + index * layout.slot_size;
-            // SAFETY: the server holds `slot_count` player slots.
+            // SAFETY: the table's `server.player_slots`, `player_slot_size`
+            // and `player_slot_count` place `slot_count` slots in the server,
+            // `index < slot_count`, and each slot starts with its `u32`
+            // handle; read on the game thread (checked by `reader`).
             let handle: u32 = unsafe { read(slot, 0) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_machine` offset holds its `u32` machine
+            // handle; read on the game thread (checked by `reader`).
             let machine: u32 = unsafe { read(slot, layout.slot_machine) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is a player slot of the server (`index <
+            // slot_count`, slots from the table); the table's
+            // `server.player_slot_key` offset holds its `u64` account key;
+            // read on the game thread (checked by `reader`).
             let key: u64 = unsafe { read(slot, layout.slot_key) };
             (handle != 0 && machine != 0).then_some((key, machine))
         })
@@ -450,21 +513,26 @@ pub(crate) fn live_keys() -> Option<Vec<u64>> {
     Some(machines.iter().map(|&(key, _)| key).collect())
 }
 
+/// Entries in the player infos' permission table, one per entity id from 1.
+const PERMISSION_ENTRIES: usize = 0x3ff;
+
 fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usize) -> PlayerInfo {
     let mut name = [0u8; 64];
-    // SAFETY: the slot's name is a pointer and a byte length.
+    // SAFETY: `slot` is a player slot `players` found in the server on the
+    // game thread; the table's `server.player_slot_name` offset holds the
+    // name's data pointer.
     let data: usize = unsafe { read(slot, layout.slot_name) };
-    // SAFETY: as above.
+    // SAFETY: `slot` is a player slot `players` found in the server on the
+    // game thread; the name's `u64` byte length follows its data pointer at
+    // the table's `server.player_slot_name` offset.
     let len: u64 = unsafe { read(slot, layout.slot_name + size_of::<usize>()) };
     let len = usize::try_from(len).unwrap_or(usize::MAX);
     let mut name_len = 0;
     if data != 0 && len <= MAX_NAME {
         let kept = len.min(name.len());
-        // SAFETY: the name buffer holds `len` bytes.
-        let bytes = unsafe {
-            core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(data), kept)
-        };
-        name[..kept].copy_from_slice(bytes);
+        // SAFETY: `data` is non-zero (the `data != 0` condition) and the name
+        // buffer holds `len` bytes, `kept <= len`; read on the game thread.
+        unsafe { crate::memory::read_bytes(data, 0, &mut name[..kept]) };
         name_len = kept;
     }
     let permissions = if infos == 0 {
@@ -472,12 +540,19 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
     } else {
         let table = infos + layout.permission_table;
         let index = (entity as usize).wrapping_sub(1);
-        if index < 0x3ff {
+        if index < PERMISSION_ENTRIES {
             let entry = table + index * layout.permission_entry;
-            // SAFETY: the table holds 0x3ff entries; each starts with its entity.
+            // SAFETY: `infos` is non-zero (`infos == 0` gives 0 first); the
+            // table's `server.permission_table` and `permission_entry_size`
+            // place `PERMISSION_ENTRIES` entries there, `index` is below that
+            // (the enclosing condition), and each starts with its `u32` entity;
+            // read on the game thread.
             let owner: u32 = unsafe { read(entry, 0) };
             if owner == entity {
-                // SAFETY: as above.
+                // SAFETY: `entry` is a permission entry inside the table
+                // (`index < PERMISSION_ENTRIES`, the enclosing condition); the
+                // table's `server.permission_mask` offset holds its mask byte;
+                // read on the game thread.
                 unsafe { read::<u8>(entry, layout.permission_mask) }
             } else {
                 0
@@ -490,7 +565,9 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
         header: Header::of::<PlayerInfo>(),
         slot: u32::try_from(index).unwrap_or(u32::MAX),
         entity,
-        // SAFETY: as for the other slot fields.
+        // SAFETY: `slot` is a player slot `players` found in the server on
+        // the game thread; the table's `server.player_slot_key` offset holds
+        // its `u64` account key.
         key: unsafe { read(slot, layout.slot_key) },
         permissions,
         name_len: u8::try_from(name_len).unwrap_or(0),
@@ -503,7 +580,9 @@ fn player_at(layout: &Layout, slot: usize, index: usize, entity: u32, infos: usi
 pub(crate) fn type_hash(descriptor: u64) -> Option<u32> {
     let address =
         usize::try_from(descriptor.checked_add(enshwick_reflect::DESCRIPTOR_HASH)?).ok()?;
-    // SAFETY: a type descriptor in the game's image, which stays mapped.
+    // SAFETY: callers pass the address of a reflected type descriptor in the
+    // game's image, which stays mapped and is not written after load;
+    // `DESCRIPTOR_HASH` is the offset of its eight-byte hash field.
     let value: u64 = unsafe { read(address, 0) };
     #[expect(clippy::cast_possible_truncation, reason = "the hash is the low half")]
     Some(value as u32)

@@ -720,7 +720,8 @@ impl Field {
         self.stage == Stage::Sync || self.synced
     }
 
-    /// Checks `value` against the field's type, range and choices.
+    /// Checks `value` against the field's type, range and choices; the range
+    /// applies to every element of a list.
     ///
     /// # Errors
     ///
@@ -736,6 +737,55 @@ impl Field {
         {
             return Err(self.refused(format!("takes {}", kind_name(kind))));
         }
+        if let toml::Value::Array(items) = value {
+            let element = self.element_kind();
+            for item in items {
+                if element.is_some_and(|kind| !kind.accepts(Kind::of(item))) {
+                    return Err(self.refused(format!(
+                        "takes a list of {}",
+                        element.map_or("values", kind_name)
+                    )));
+                }
+                self.check_bounds(item)?;
+            }
+        }
+        let number = self.check_bounds(value)?;
+        let chosen = |choice: &String| {
+            *choice == value.to_string()
+                || number.is_some_and(|n| {
+                    choice
+                        .parse::<f64>()
+                        .is_ok_and(|c| c.to_bits() == n.to_bits())
+                })
+        };
+        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
+            return Err(self.refused(format!("is {}", self.accepts())));
+        }
+        Ok(())
+    }
+
+    /// The kind of each element of a list setting, from its default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Kind, Stage};
+    ///
+    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4, 8]);
+    /// assert_eq!(per_level.element_kind(), Some(Kind::Integer));
+    /// ```
+    #[must_use]
+    pub fn element_kind(&self) -> Option<Kind> {
+        let table: toml::Table = toml::from_str(&format!("v = {}", self.default)).ok()?;
+        match table.get("v")? {
+            toml::Value::Array(items) => items.first().map(Kind::of),
+            _ => None,
+        }
+    }
+
+    /// Checks a number against the range; the number, `None` for a value
+    /// that is none.
+    fn check_bounds(&self, value: &toml::Value) -> Result<Option<f64>, ConfigError> {
         #[expect(
             clippy::cast_precision_loss,
             reason = "bounds are compared as f64; a setting near 2^53 is no setting"
@@ -750,18 +800,7 @@ impl Field {
         {
             return Err(self.refused(format!("is {}", self.accepts())));
         }
-        let chosen = |choice: &String| {
-            *choice == value.to_string()
-                || number.is_some_and(|n| {
-                    choice
-                        .parse::<f64>()
-                        .is_ok_and(|c| c.to_bits() == n.to_bits())
-                })
-        };
-        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
-            return Err(self.refused(format!("is {}", self.accepts())));
-        }
-        Ok(())
+        Ok(number)
     }
 
     fn refused(&self, need: String) -> ConfigError {

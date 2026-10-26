@@ -251,6 +251,8 @@ pub fn verify(
 /// # Safety
 ///
 /// - Every byte of `image` is mapped readable and stays so for the call.
+/// - `image.start` carries provenance the game or the caller exposed.
+/// - No other thread writes the words read during the call.
 pub unsafe fn verify_mapped(
     pins: &Pins,
     image: Range<u64>,
@@ -262,8 +264,9 @@ pub unsafe fn verify_mapped(
             return None;
         }
         let address = usize::try_from(va).ok()?;
-        // SAFETY: eight bytes inside `image`, which the caller keeps mapped.
-        Some(unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() })
+        // SAFETY: `va..end` lies inside `image`, checked just before, and the
+        // caller guarantees every byte of `image` mapped readable for the call.
+        Some(unsafe { crate::memory::read::<u64>(address, 0) })
     };
     verify(pins, read, code)
 }
@@ -391,10 +394,13 @@ mod tests {
             slot: Some(0),
             bytes: Some(BYTES),
         };
-        // SAFETY: `image` spans `memory`, alive until the end of the test.
+        // SAFETY: `image` spans the 32 bytes of `memory`, whose provenance
+        // `start` exposed, alive and unwritten until the end of the test.
         let inside = unsafe { verify_mapped(&pins, image.clone(), start..start + 8) };
         assert_eq!(inside, Ok(start));
-        // SAFETY: the range lies inside `memory`.
+        // SAFETY: `start + 8..start + 32` lies inside the 32 bytes of `memory`,
+        // whose provenance `start` exposed, alive and unwritten until the end
+        // of the test.
         let outside = unsafe { verify_mapped(&pins, start + 8..start + 32, start..start + 8) };
         assert_eq!(outside, Err(Error::JoinUnreadable { join: start }));
     }

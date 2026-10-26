@@ -722,6 +722,15 @@ impl Blob {
 /// A served resource's builder, kept for the life of the process.
 type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
+/// Builds a served resource from its base for the loader.
+///
+/// # Safety
+///
+/// - `base` is null or readable for `base_len` bytes that stay unchanged for
+///   the call.
+/// - `user` is null or the `Box<Builder>` that [`Load::serve`] handed over,
+///   which the loader keeps for the process.
+/// - `out` and `out_len` are null or writable for one value each.
 unsafe extern "system" fn build(
     base: *const u8,
     base_len: usize,
@@ -732,12 +741,15 @@ unsafe extern "system" fn build(
     if user.is_null() || out.is_null() || out_len.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: `user` is the leaked builder this function was registered with.
+    // SAFETY: `user` is not null, as the early return ensures, and the caller
+    // guarantees it is the boxed `Builder` that `serve` leaked for the process,
+    // so it is aligned, alive and only read through shared references.
     let builder = unsafe { &*user.cast::<Builder>() };
     let base = if base.is_null() || base_len == 0 {
         &[][..]
     } else {
-        // SAFETY: the loader passes the base's bytes for the call.
+        // SAFETY: `base` is not null in this branch, and the caller guarantees
+        // `base_len` readable bytes there, unchanged for the call.
         unsafe { core::slice::from_raw_parts(base, base_len) }
     };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
@@ -749,11 +761,13 @@ unsafe extern "system" fn build(
     // again.
     let len = bytes.len();
     let bytes: *mut [u8] = Box::into_raw(bytes.into_boxed_slice());
-    // SAFETY: the loader's out pointers.
+    // SAFETY: `out` is not null, as the early return ensures, and the caller
+    // guarantees it is writable for one pointer.
     unsafe {
         out.write(bytes.cast::<u8>().cast_const());
     }
-    // SAFETY: as above.
+    // SAFETY: `out_len` is not null, as the early return ensures, and the
+    // caller guarantees it is writable for one `usize`.
     unsafe {
         out_len.write(len);
     }
@@ -915,7 +929,8 @@ impl Load<'_> {
             user.cast(),
         );
         if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
+            // refused it, so it keeps no copy and this is the only owner.
             drop(unsafe { Box::from_raw(user) });
         }
         crate::load::ok(status, (), || "serve resource".to_owned())
@@ -960,12 +975,15 @@ mod tests {
         let builder: Builder = Box::new(|base: &[u8]| Some(vec![u8::from(base.is_empty())]));
         let user = core::ptr::from_ref(&builder).cast_mut().cast();
         let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
-        // SAFETY: a null base, the builder as user and writable out pointers.
+        // SAFETY: a null base, `user` points at the `Builder` alive in this
+        // frame, and both out pointers are writable locals.
         let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
         assert_eq!(status, Status::OK);
-        // SAFETY: the leaked bytes the builder made.
+        // SAFETY: `build` returned OK and set `out` to the `out_len` bytes it
+        // leaked, which are never freed.
         assert_eq!(unsafe { core::slice::from_raw_parts(out, out_len) }, [1]);
-        // SAFETY: null out pointers are refused before anything is written.
+        // SAFETY: `user` points at the `Builder` alive in this frame, and
+        // `build` refuses a null `out` before it writes anything.
         let refused = unsafe {
             build(
                 core::ptr::null(),

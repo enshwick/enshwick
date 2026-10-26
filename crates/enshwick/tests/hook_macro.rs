@@ -26,7 +26,7 @@ mod tests {
     #[hook(priority = 3)]
     fn r#move(next: Next<Upgrade>, level: u32) -> u32 {
         assert_ne!(level, 13, "unlucky");
-        // SAFETY: the original takes the level.
+        // SAFETY: the chain behind `MOVE` ends in `upgrade`, which takes any level.
         unsafe { next.get()(level) * 2 }
     }
 
@@ -113,20 +113,20 @@ mod tests {
             .symbol("plain", address(plain as Count))
             .symbol("tallied", address(tallied as Count))
             .install();
-        // SAFETY: the export of `declare_mod!` above.
+        // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Hooks)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
         assert_eq!(status, Status::OK);
         assert_eq!(MOVE.name(), "MOVE");
 
         let moved = loader.detour(&MOVE).expect("linked");
-        // SAFETY: the detour takes a level.
+        // SAFETY: the chain behind `MOVE` ends in `upgrade`, which takes any level.
         assert_eq!(unsafe { moved(4) }, 10);
         let counted = loader.detour(&COUNT).expect("linked");
         assert_eq!(counted(4), 5);
         let plained = loader.detour(&PLAIN).expect("linked");
         assert_eq!(plained(4), 5);
 
-        // SAFETY: as above.
+        // SAFETY: the chain behind `MOVE` ends in `upgrade`, which takes any level.
         assert_eq!(unsafe { moved(13) }, 14);
         assert_eq!(loader.faults(), ["panic in hook MOVE"]);
 

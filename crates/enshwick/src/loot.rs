@@ -154,7 +154,7 @@ struct Layout {
 ///     unsafe { next.get()(ctx) };
 ///     if let Some(containers) = CONTAINERS.get() {
 ///         let mut open = 0;
-///         // SAFETY: the system's live context, on its thread.
+///         // SAFETY: `ctx` is the live context of `SYSTEM`, inside its hook.
 ///         unsafe { containers.each(ctx, |c| open += usize::from(c.is_open())) };
 ///         let _ = open;
 ///     }
@@ -222,30 +222,37 @@ impl Containers {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live context of [`SYSTEM`], used on its thread during
-    /// its hook.
+    /// - `ctx` is the live query context [`SYSTEM`] was called with, used on
+    ///   its thread during its hook.
     ///
     /// # Examples
     ///
     /// See [`Containers`].
     pub unsafe fn each(&self, ctx: *mut u64, mut f: impl FnMut(&Container)) {
-        // SAFETY: the system's live context, as the caller vouches.
+        // SAFETY: the caller guarantees `ctx` is the live context of
+        // `SYSTEM`, used on its thread during its hook.
         let saved = unsafe { self.ecs.row(ctx) };
-        // SAFETY: as above.
+        // SAFETY: `ctx` is the live context of `SYSTEM` on its thread, as the
+        // caller guarantees, and 0 is the row before the first.
         unsafe { self.ecs.set_row(ctx, 0) };
-        // SAFETY: as above, with the system's iterator size.
+        // SAFETY: `ctx` is the live context of `SYSTEM` on its thread, as the
+        // caller guarantees; `ROW_WORDS` is its iterator's word count, and
+        // `query` is dropped before this function returns.
         let mut query = unsafe { self.ecs.query::<ROW_WORDS>(ctx) };
         while query.next().is_some() {
-            // SAFETY: as above, on the current row.
+            // SAFETY: `ctx` is the live context of `SYSTEM` on its thread, as
+            // the caller guarantees, now on the row `next` moved to.
             let Some(entity) = (unsafe { self.ecs.entity(ctx) }) else {
                 continue;
             };
-            // SAFETY: as above.
+            // SAFETY: `ctx` is the live context of `SYSTEM` on its thread, as
+            // the caller guarantees.
             if let Some(container) = unsafe { self.container(ctx, entity) } {
                 f(&container);
             }
         }
-        // SAFETY: as above.
+        // SAFETY: `ctx` is the live context of `SYSTEM` on its thread, as the
+        // caller guarantees, and `saved` is the row it held on entry.
         unsafe { self.ecs.set_row(ctx, saved) };
     }
 
@@ -254,7 +261,8 @@ impl Containers {
     ///
     /// # Safety
     ///
-    /// `ctx` is the live context of a hooked system, used on its thread.
+    /// - `ctx` is the live query context a hooked system was called with,
+    ///   used on that system's thread during the hook.
     ///
     /// # Examples
     ///
@@ -271,24 +279,33 @@ impl Containers {
     #[must_use]
     pub unsafe fn container(&self, ctx: *mut u64, entity: Entity) -> Option<Container> {
         let layout = &self.layout;
-        // SAFETY: forwarded from the caller, for each read below.
+        // SAFETY: the caller guarantees `ctx` is a hooked system's live
+        // context on its thread, which is the contract of `component`.
         let read = |hash| unsafe { self.components.component(ctx, entity, hash) };
         read(layout.destroy)?;
         let state = read(layout.empty_state)?;
-        // SAFETY: the row's live CurrentTransform.
+        // SAFETY: `component` returned the entity's live CurrentTransform,
+        // read on the system's thread during the hook.
         let position = unsafe { crate::ecs::transform_position(read(layout.transform)?) };
-        // SAFETY: a live InventoryEmptyState holds its flag here.
+        // SAFETY: `state` is the entity's live InventoryEmptyState, whose
+        // `isEmpty` byte sits at the reflected offset `is_empty`.
         let empty = unsafe { read_at::<u8>(state, layout.is_empty) } != 0;
         let area_loot = read(layout.area_loot).map(|data| {
-            // SAFETY: a live AreaLootOverride holds its flag here.
+            // SAFETY: `data` is the entity's live AreaLootOverride, whose
+            // `exclude` byte sits at the reflected offset `exclude`.
             unsafe { read_at::<u8>(data, layout.exclude) == 0 }
         });
         let offer = read(layout.offer).map(|data| Offer {
-            // SAFETY: a live InteractionOfferRuntime holds these fields.
+            // SAFETY: `data` is the entity's live InteractionOfferRuntime,
+            // whose `lastAcceptData.guestId` u32 sits at the reflected offset
+            // `accept_guest`.
             guest: Entity::from_raw(unsafe { read_at(data, layout.accept_guest) }),
-            // SAFETY: as above.
+            // SAFETY: `data` is the entity's live InteractionOfferRuntime,
+            // whose `lastAcceptTime` i64 sits at the reflected offset
+            // `accept_time`.
             accepted_at: unsafe { read_at(data, layout.accept_time) },
-            // SAFETY: as above.
+            // SAFETY: `data` is the entity's live InteractionOfferRuntime,
+            // whose `isDisabled` byte sits at the reflected offset `disabled`.
             disabled: unsafe { read_at::<u8>(data, layout.disabled) } != 0,
         });
         Some(Container {
@@ -305,7 +322,8 @@ impl Containers {
     ///
     /// # Safety
     ///
-    /// As for [`Containers::container`].
+    /// - `ctx` is the live query context a hooked system was called with,
+    ///   used on that system's thread during the hook.
     ///
     /// # Examples
     ///
@@ -317,12 +335,14 @@ impl Containers {
     /// ```
     #[must_use]
     pub unsafe fn position(&self, ctx: *mut u64, entity: Entity) -> Option<[f64; 3]> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `ctx` is a hooked system's live
+        // context on its thread, which is the contract of `component`.
         let data = unsafe {
             self.components
                 .component(ctx, entity, self.layout.transform)
         }?;
-        // SAFETY: the entity's live CurrentTransform.
+        // SAFETY: `component` returned the entity's live CurrentTransform,
+        // read on the system's thread during the hook.
         Some(unsafe { crate::ecs::transform_position(data) })
     }
 
@@ -330,7 +350,8 @@ impl Containers {
     ///
     /// # Safety
     ///
-    /// As for [`Containers::container`].
+    /// - `ctx` is the live query context a hooked system was called with,
+    ///   used on that system's thread during the hook.
     ///
     /// # Examples
     ///
@@ -342,7 +363,8 @@ impl Containers {
     /// ```
     #[must_use]
     pub unsafe fn is_player(&self, ctx: *mut u64, entity: Entity) -> bool {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `ctx` is a hooked system's live
+        // context on its thread, which is the contract of `component`.
         unsafe {
             self.components
                 .component(ctx, entity, self.layout.player_input)
@@ -370,7 +392,9 @@ impl LootPass<'_> {
     ///
     /// See [`Load::on_loot_pass`].
     pub fn each(&self, f: impl FnMut(&Container)) {
-        // SAFETY: the system's live context, during its hook.
+        // SAFETY: only `after_check` makes a `LootPass`, from the live context
+        // of `SYSTEM` on its thread, and lends it to the handler for that call
+        // alone; the pass is neither `Clone` nor `Copy`.
         unsafe { self.containers.each(self.ctx, f) };
     }
 
@@ -385,7 +409,9 @@ impl LootPass<'_> {
     /// ```
     #[must_use]
     pub fn container(&self, entity: Entity) -> Option<Container> {
-        // SAFETY: as for `each`.
+        // SAFETY: only `after_check` makes a `LootPass`, from the live context
+        // of `SYSTEM` on its thread, and lends it to the handler for that call
+        // alone; the pass is neither `Clone` nor `Copy`.
         unsafe { self.containers.container(self.ctx, entity) }
     }
 
@@ -400,7 +426,9 @@ impl LootPass<'_> {
     /// ```
     #[must_use]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
-        // SAFETY: as for `each`.
+        // SAFETY: only `after_check` makes a `LootPass`, from the live context
+        // of `SYSTEM` on its thread, and lends it to the handler for that call
+        // alone; the pass is neither `Clone` nor `Copy`.
         unsafe { self.containers.position(self.ctx, entity) }
     }
 
@@ -415,7 +443,9 @@ impl LootPass<'_> {
     /// ```
     #[must_use]
     pub fn is_player(&self, entity: Entity) -> bool {
-        // SAFETY: as for `each`.
+        // SAFETY: only `after_check` makes a `LootPass`, from the live context
+        // of `SYSTEM` on its thread, and lends it to the handler for that call
+        // alone; the pass is neither `Clone` nor `Copy`.
         unsafe { self.containers.is_player(self.ctx, entity) }
     }
 }
@@ -430,10 +460,13 @@ crate::detour! {
 }
 
 fn after_check(next: crate::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
-    // SAFETY: the original system takes its own context.
+    // SAFETY: `ctx` is the context the game called `SYSTEM` with on this
+    // thread, passed on unchanged, so the rest of the chain gets what the
+    // game's own call gave it.
     unsafe { next.get()(ctx) };
     if let Some((containers, worlds, handler)) = PASS.get()
-        // SAFETY: the system's live context.
+        // SAFETY: `ctx` is the live context the game passed to `SYSTEM`, on
+        // its thread, during the hook.
         && unsafe { worlds.is_server(ctx) }
     {
         // Guarded here: the detour's own guard would run the system again.
@@ -476,7 +509,8 @@ impl Load<'_> {
         if PASS.set((containers, worlds, Box::new(handler))).is_err() {
             return Err(Off::new("one loot pass handler per mod"));
         }
-        // SAFETY: the reflected system is the check `CHECK` declares.
+        // SAFETY: `system` is the reflected update function of `SYSTEM`,
+        // which takes one context pointer, the signature `CHECK` declares.
         unsafe { self.hook(&CHECK, system) }
     }
 }

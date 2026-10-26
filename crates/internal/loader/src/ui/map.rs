@@ -68,7 +68,9 @@ struct Owned {
 
 type SystemFn = unsafe extern "system" fn(context: *mut u8);
 
-// SAFETY: the slot joins the chain of the replicate system, typed `SystemFn`.
+// SAFETY: `SystemFn` is the exact signature of the reflected ECS system
+// `replicate_map_markers_for_ui`, and the slot is used only as the `next` of
+// the `detour` link on that system's entry.
 static NEXT: Next<SystemFn> = unsafe { Next::new() };
 /// Each mod's markers, by owner.
 static SETS: Mutex<Vec<(usize, Arc<[Owned]>)>> = Mutex::new(Vec::new());
@@ -106,7 +108,8 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
         .map(|m| Owned {
             owner,
             position: m.position,
-            // SAFETY: the label is borrowed for the call, and copied here.
+            // SAFETY: the mod's label is borrowed for this call and copied
+            // here before `set` returns, so it outlives every use.
             label: unsafe { m.label.as_str() }.unwrap_or("").as_bytes().into(),
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
         })
@@ -142,22 +145,29 @@ pub(super) fn note(context: usize) {
     if NEXT.wired().is_none() {
         return;
     }
-    // SAFETY: a live context holds its G38 state pointer.
-    let state = unsafe { crate::world::read::<usize>(context, CONTEXT_STATE) };
-    let play = if state == 0 {
-        0
+    // SAFETY: the one caller passes the live interface context of the frame
+    // it draws, on the interface thread; client build 1269579 keeps its G38
+    // state pointer at `CONTEXT_STATE`.
+    let state = unsafe { crate::memory::read_ptr::<u8>(context, CONTEXT_STATE) };
+    let play = if state.is_null() {
+        core::ptr::null_mut()
     } else {
-        // SAFETY: the state's first word points at the play state, or is 0.
-        unsafe { crate::world::read::<usize>(state, 0) }
+        // SAFETY: `state` is the context's non-null G38 state (checked
+        // earlier), whose first word is the play state pointer or null on
+        // client build 1269579.
+        unsafe { crate::memory::read_ptr::<u8>(state.expose_provenance(), 0) }
     };
-    let data = if play == 0 {
+    let data = if play.is_null() {
         0
     } else {
-        // SAFETY: the play state holds its play data pointer.
-        unsafe { crate::world::read::<usize>(play, STATE_PLAY_DATA) }
+        // SAFETY: `play` is the non-null play state (checked earlier), which
+        // holds its play data pointer at `STATE_PLAY_DATA` on client build
+        // 1269579.
+        unsafe { crate::memory::read_ptr::<u8>(play.expose_provenance(), STATE_PLAY_DATA) }
+            .expose_provenance()
     };
     PLAY_DATA.store(data, Ordering::Release);
-    // SAFETY: no preconditions.
+    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
     NOTED_AT.store(unsafe { GetTickCount64() }, Ordering::Release);
 }
 
@@ -191,7 +201,8 @@ pub(crate) fn link(loader: &Loader) {
 }
 
 unsafe extern "system" fn detour(context: *mut u8) {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own argument, passed on unchanged to the rest of the
+    // chain, which has the replicate system's signature.
     unsafe { NEXT.get()(context) };
     let appended = std::panic::catch_unwind(append);
     if appended.is_err() {
@@ -203,31 +214,37 @@ unsafe extern "system" fn detour(context: *mut u8) {
     }
 }
 
-/// Reads a value of the game's at `base + offset`.
-fn read<T: Copy>(base: usize, offset: usize) -> T {
-    // SAFETY: every caller reads a field of the play data, its marker list
-    // or its marker type registry, live while the replicate system runs.
-    unsafe { crate::world::read::<T>(base, offset) }
-}
-
 fn append() {
     let sets = snapshot().load();
     if sets.is_empty() {
         return;
     }
     let data = PLAY_DATA.load(Ordering::Acquire);
-    // SAFETY: no preconditions.
+    // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
     let age = unsafe { GetTickCount64() }.saturating_sub(NOTED_AT.load(Ordering::Acquire));
     if data == 0 || age > FRESH_MS {
         return;
     }
-    let Some(kind) = marker_type(data) else {
+    // SAFETY: `data` is the non-zero play data `note` found under 500 ms ago
+    // (checked earlier), and `append` runs inside the replicate system's
+    // detour, on its thread while it runs.
+    let Some(kind) = (unsafe { marker_type(data) }) else {
         return;
     };
-    let entries: usize = read(data, LIST_DATA);
-    let mut count: u64 = read(data, LIST_COUNT);
-    let capacity: u64 = read(data, LIST_CAPACITY);
-    if entries == 0 {
+    // SAFETY: `data` is the non-zero play data `note` found under 500 ms ago
+    // (checked earlier), read on the replicate system's thread, which owns it
+    // while the system runs; client build 1269579 keeps the marker list's
+    // entry pointer at `LIST_DATA`.
+    let entries = unsafe { crate::memory::read_ptr::<u8>(data, LIST_DATA) };
+    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
+    // replicate system's thread; client build 1269579 keeps the list's `u64`
+    // count at `LIST_COUNT`.
+    let mut count: u64 = unsafe { crate::memory::read(data, LIST_COUNT) };
+    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
+    // replicate system's thread; client build 1269579 keeps the list's `u64`
+    // capacity at `LIST_CAPACITY`.
+    let capacity: u64 = unsafe { crate::memory::read(data, LIST_CAPACITY) };
+    if entries.is_null() {
         return;
     }
     for marker in sets.iter().flat_map(|set| set.iter()) {
@@ -250,35 +267,56 @@ fn append() {
         // is replaced.
         entry.text(ENTRY_LABEL, &UiText::new(&marker.label));
         entry.u8(ENTRY_COLOR, marker.color);
-        let slot = core::ptr::with_exposed_provenance_mut::<u8>(entries + index * ENTRY_SIZE);
-        // SAFETY: a free slot of the list, below its capacity, on the
-        // system's thread, which owns the list while it runs.
+        let slot = entries.wrapping_add(index * ENTRY_SIZE);
+        // SAFETY: `index` is the list's count, below its capacity by the
+        // earlier check, so `slot` is a free entry of `ENTRY_SIZE` bytes in the
+        // list's non-null storage; the replicate system's thread owns the list
+        // while the system runs, and `entry` is the loader's own buffer.
         unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, ENTRY_SIZE) };
         count += 1;
     }
-    let slot = core::ptr::with_exposed_provenance_mut::<u64>(data + LIST_COUNT);
-    // SAFETY: the list's count, on the system's thread.
-    unsafe { slot.write_unaligned(count) };
+    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
+    // replicate system's thread, which owns it while the system runs; client
+    // build 1269579 keeps the list's `u64` count at `LIST_COUNT`.
+    unsafe { crate::memory::write(data, LIST_COUNT, count) };
 }
 
 /// The marker type for mod markers: the registry's first custom marker type
 /// with a label, else its first type with a label shown above the fog;
 /// `None` until the registry has loaded, and for good when it has none.
-fn marker_type(data: usize) -> Option<u32> {
+///
+/// # Safety
+///
+/// - `data` is the address of the interface's live play data of client build
+///   1269579.
+/// - The call runs on the replicate system's thread while the system runs,
+///   so nothing writes the play data or its registry during the call.
+unsafe fn marker_type(data: usize) -> Option<u32> {
     if let Some(found) = MARKER_TYPE.get() {
         return *found;
     }
-    let registry: usize = read(data, REGISTRY);
-    if registry == 0 {
+    // SAFETY: the caller's contract makes `data` the live play data, read on
+    // the replicate system's thread; client build 1269579 keeps the marker
+    // type registry pointer at `REGISTRY`.
+    let registry = unsafe { crate::memory::read_ptr::<u8>(data, REGISTRY) };
+    if registry.is_null() {
         return None;
     }
-    let blob: usize = read(registry, REGISTRY_BLOB);
-    if blob == 0 {
+    // SAFETY: `registry` is the non-null marker type registry (checked
+    // earlier), which holds its blob pointer at `REGISTRY_BLOB` on client build
+    // 1269579.
+    let blob =
+        unsafe { crate::memory::read_ptr::<u8>(registry.expose_provenance(), REGISTRY_BLOB) };
+    if blob.is_null() {
         return None;
     }
-    let array = blob + BLOB_TYPES;
-    let offset: i32 = read(array, 0);
-    let count: u32 = read(array, 4);
+    let array = blob.expose_provenance() + BLOB_TYPES;
+    // SAFETY: the non-null blob (checked earlier) holds its type array header
+    // at `BLOB_TYPES` on client build 1269579: an `i32` offset first.
+    let offset: i32 = unsafe { crate::memory::read(array, 0) };
+    // SAFETY: the same type array header in the non-null blob, whose `u32`
+    // count follows the `i32` offset on client build 1269579.
+    let count: u32 = unsafe { crate::memory::read(array, 4) };
     if offset == 0 || count == 0 || count > MAX_TYPES {
         return None;
     }
@@ -286,12 +324,24 @@ fn marker_type(data: usize) -> Option<u32> {
     let types: Vec<(u32, bool, bool, bool)> = (0..count as usize)
         .map(|i| {
             let at = first + i * TYPE_SIZE;
-            (
-                read::<u32>(at, TYPE_ID),
-                read::<u8>(at, TYPE_CUSTOM) != 0,
-                read::<u8>(at, TYPE_LABEL) != 0,
-                read::<u8>(at, TYPE_ABOVE_FOG) != 0,
-            )
+            // SAFETY: the blob's type array holds `count` `MapMarkerType`
+            // entries of `TYPE_SIZE` bytes from `first` (count bounded by
+            // `MAX_TYPES` earlier) and `i` is below `count`; each keeps a `u32`
+            // id at `TYPE_ID` on client build 1269579.
+            let id: u32 = unsafe { crate::memory::read(at, TYPE_ID) };
+            // SAFETY: entry `i` of the blob's type array, `i` below `count`;
+            // its custom flag is a byte at `TYPE_CUSTOM` on client build
+            // 1269579, read as a byte and compared.
+            let custom: u8 = unsafe { crate::memory::read(at, TYPE_CUSTOM) };
+            // SAFETY: entry `i` of the blob's type array, `i` below `count`;
+            // its label flag is a byte at `TYPE_LABEL` on client build
+            // 1269579, read as a byte and compared.
+            let label: u8 = unsafe { crate::memory::read(at, TYPE_LABEL) };
+            // SAFETY: entry `i` of the blob's type array, `i` below `count`;
+            // its above-fog flag is a byte at `TYPE_ABOVE_FOG` on client
+            // build 1269579, read as a byte and compared.
+            let above_fog: u8 = unsafe { crate::memory::read(at, TYPE_ABOVE_FOG) };
+            (id, custom != 0, label != 0, above_fog != 0)
         })
         .collect();
     let chosen = pick(&types);

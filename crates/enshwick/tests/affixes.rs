@@ -64,7 +64,7 @@ mod tests {
             .item(SWORD, 1, ItemData::HAS_PIDE)
             .item_category(SWORD, 2)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Loot)`.
         let started = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(started, Status::OK);
         let Kit {

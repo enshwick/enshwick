@@ -1,0 +1,81 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: shape
+---
+{
+  "$defs": {
+    "StationRecipeEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "cost": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "cost"
+      ],
+      "type": "object"
+    },
+    "WorkshopEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "debug_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "like": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recipe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StationRecipeEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "like"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "workshop": {
+      "items": {
+        "$ref": "#/$defs/WorkshopEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "Workshops",
+  "type": "object"
+}
