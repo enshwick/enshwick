@@ -1,13 +1,14 @@
 //! The engine's pacing places, where the loader runs mods' handlers: the
 //! event loop about to wait on its handles, the server loop picking its wait
 //! between passes, and the task system reading its worker caps. Each place is
-//! a build table entry; the loader checks the code around a wait before it
-//! hooks it.
+//! a build table entry; the loader checks the bytes at every place, and the
+//! code before a wait, before it hooks it, and leaves out a place that does
+//! not check out or that it cannot link.
 
 use core::ffi::c_void;
 
 use enshwick::abi::{
-    HookFlags, LoopWaitData, LoopWaitFn, LoopWaitSites, Registers, ServerWaitFn, Side, Status,
+    HookFlags, LoopWaitData, LoopWaitFn, LoopWaitSites, Registers, ServerWaitFn, Side,
 };
 
 use crate::host::Loader;
@@ -93,7 +94,8 @@ unsafe extern "system" fn on_handles(registers: *mut Registers, user: *mut c_voi
 ///
 /// # Safety
 ///
-/// As [`on_handles`].
+/// - `registers` is the hook's saved registers, valid for the call.
+/// - `user` is the leaked `Handler<LoopWaitFn>` the hook was added with.
 unsafe extern "system" fn on_messages(registers: *mut Registers, user: *mut c_void) {
     // SAFETY: the mid hook passes its saved registers, valid for the call.
     let registers = unsafe { &*registers };
@@ -150,10 +152,26 @@ unsafe extern "system" fn on_workers(registers: *mut Registers, user: *mut c_voi
     registers.rax = registers.rax.min(user.addr() as u64);
 }
 
-/// The address of `id` on this build, when the code before it divides `rbx`
-/// by a million, so the wait's hook reads the time left.
-fn checked_wait(loader: &Loader, id: Symbol) -> Option<u64> {
+/// The address of `id` on this build when its bytes are the table's;
+/// `None`, logged when the build has the place, otherwise.
+fn verified(loader: &Loader, id: Symbol) -> Option<u64> {
     let at = loader.address(id)?;
+    if crate::code::matches(loader, id) {
+        return Some(at);
+    }
+    crate::log!(
+        WARN,
+        "{id} on {}: the code is not what the build table expects; it is not hooked",
+        loader.build.name
+    );
+    None
+}
+
+/// The address of the wait `id` on this build, when its bytes are the
+/// table's and the code before it divides `rbx` by a million, so the hook
+/// reads the time left.
+fn checked_wait(loader: &Loader, id: Symbol) -> Option<u64> {
+    let at = verified(loader, id)?;
     let code = crate::code::text_bytes(loader.base)?;
     let end = usize::try_from(at.checked_sub(code.as_ptr().addr() as u64)?).ok()?;
     let checked = code
@@ -162,22 +180,24 @@ fn checked_wait(loader: &Loader, id: Symbol) -> Option<u64> {
     if !checked {
         crate::log!(
             WARN,
-            "{id}: the code before it does not read the time left; the wait is not hooked"
+            "{id} on {}: the code before it does not read the time left; it is not hooked",
+            loader.build.name
         );
     }
     checked.then_some(at)
 }
 
-/// Adds the hook at `address` that runs `handler` with `user` for mod
-/// `owner`.
-fn add(
+/// Links `handler` with `user` for mod `owner` at `address`; whether it is
+/// linked. A refused link is logged and leaves nothing behind.
+fn link(
     loader: &Loader,
     owner: ModIndex,
+    id: Symbol,
     address: u64,
     handler: enshwick::abi::MidHookFn,
     user: usize,
-) -> Status {
-    loader.mids.relock().add(
+) -> bool {
+    let status = loader.mids.relock().add(
         address,
         MidLink {
             owner,
@@ -186,23 +206,32 @@ fn add(
             priority: 0,
             flags: HookFlags::NONE,
         },
-    )
+    );
+    if !status.is_ok() {
+        crate::log!(WARN, "{id}: the hook was refused ({})", status.0);
+    }
+    status.is_ok()
+}
+
+/// A mod's handler with its pointer as a hook's user pointer, kept for the
+/// life of the process.
+fn keep<F>(callback: F, user: *mut c_void) -> usize {
+    let handler = Box::leak(Box::new(Handler {
+        callback,
+        user: user.expose_provenance(),
+    }));
+    core::ptr::from_mut(handler).expose_provenance()
 }
 
 /// Runs `callback` with `user` for mod `owner` at every wait of the event
-/// loop this build has; the waits it found.
+/// loop this build has and the loader could link; the waits linked.
 pub(crate) fn loop_wait(
     loader: &Loader,
     owner: ModIndex,
     callback: LoopWaitFn,
     user: *mut c_void,
-) -> (Status, LoopWaitSites) {
-    let handler = Box::leak(Box::new(Handler {
-        callback,
-        user: user.expose_provenance(),
-    }));
-    let handler = core::ptr::from_mut(handler).expose_provenance();
-    let mut found = LoopWaitSites::NONE;
+) -> LoopWaitSites {
+    let handler = keep(callback, user);
     let sites: [(Symbol, enshwick::abi::MidHookFn, LoopWaitSites); 2] = [
         (
             pinned::pacing::LOOP_WAIT,
@@ -215,52 +244,45 @@ pub(crate) fn loop_wait(
             LoopWaitSites::MESSAGES,
         ),
     ];
+    let mut found = LoopWaitSites::NONE;
     for (id, hook, site) in sites {
-        let Some(at) = checked_wait(loader, id) else {
-            continue;
-        };
-        let status = add(loader, owner, at, hook, handler);
-        if !status.is_ok() {
-            return (status, found);
+        if let Some(at) = checked_wait(loader, id)
+            && link(loader, owner, id, at, hook, handler)
+        {
+            found = LoopWaitSites(found.0 | site.0);
         }
-        found = LoopWaitSites(found.0 | site.0);
     }
-    (Status::OK, found)
+    found
 }
 
 /// Runs `callback` with `user` for mod `owner` where the server loop has
-/// picked its wait; whether this build has the place.
+/// picked its wait; whether it is linked.
 pub(crate) fn server_wait(
     loader: &Loader,
     owner: ModIndex,
     callback: ServerWaitFn,
     user: *mut c_void,
-) -> (Status, bool) {
-    let Some(at) = loader.address(pinned::pacing::SERVER_WAIT) else {
-        return (Status::OK, false);
+) -> bool {
+    let id = pinned::pacing::SERVER_WAIT;
+    let Some(at) = verified(loader, id) else {
+        return false;
     };
-    let handler = Box::leak(Box::new(Handler {
-        callback,
-        user: user.expose_provenance(),
-    }));
-    let handler = core::ptr::from_mut(handler).expose_provenance();
-    let status = add(loader, owner, at, on_server_wait, handler);
-    (status, status.is_ok())
+    link(loader, owner, id, at, on_server_wait, keep(callback, user))
 }
 
 /// Caps the task groups' workers for mod `owner`, 0 leaving a group alone;
-/// whether the caps take effect: only on the dedicated server, which starts
-/// its task system after the hooks arm, and where this build has the places.
+/// whether a cap is linked: only on the dedicated server, which starts its
+/// task system after the hooks arm, and where this build has the places.
 pub(crate) fn task_workers(
     loader: &Loader,
     owner: ModIndex,
     default: u32,
     background: u32,
-) -> (Status, bool) {
-    if loader.side != Side::SERVER || (default, background) == (0, 0) {
-        return (Status::OK, false);
+) -> bool {
+    if loader.side != Side::SERVER {
+        return false;
     }
-    let mut found = false;
+    let mut linked = false;
     for (id, cap) in [
         (pinned::pacing::DEFAULT_WORKERS, default),
         (pinned::pacing::BACKGROUND_WORKERS, background),
@@ -268,16 +290,11 @@ pub(crate) fn task_workers(
         if cap == 0 {
             continue;
         }
-        let Some(at) = loader.address(id) else {
-            continue;
-        };
-        let status = add(loader, owner, at, on_workers, cap as usize);
-        if !status.is_ok() {
-            return (status, found);
+        if let Some(at) = verified(loader, id) {
+            linked |= link(loader, owner, id, at, on_workers, cap as usize);
         }
-        found = true;
     }
-    (Status::OK, found)
+    linked
 }
 
 #[cfg(test)]

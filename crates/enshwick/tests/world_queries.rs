@@ -55,8 +55,8 @@ mod tests {
             name: [0; 64],
         };
         let loader = enshwick::test::FakeHost::new()
-            .type_hash("keen::ecs::CurrentTransform", TRANSFORM)
-            .type_hash("keen::ecs::UsedItem", 2)
+            .type_hash("current_transform", TRANSFORM)
+            .type_hash("used_item", 2)
             .type_hash("keen::ecs::NpcBed", BED)
             .placed(BED, 10, [0.0, 0.0, 30.0])
             .placed(BED, 11, [3.0, 0.0, 4.0])

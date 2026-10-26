@@ -1,11 +1,11 @@
-//! The fake's altars, survivors, buffs, knowledge and the game's checks.
+//! The fake's altars, survivors, buffs, knowledge, game rates and the game's checks.
 
 use core::ffi::c_void;
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo,
     BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header, InteractionFn,
-    KnowledgeInfo, KnowledgeInputFn, ModHandle, Side, SkillCheckFn, Status, SummonFn,
+    KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 use crate::test::table::mods::list;
@@ -445,4 +445,34 @@ pub(crate) extern "system" fn quests(
     // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(ids.len()).unwrap_or(u32::MAX)) };
     Status::OK
+}
+
+pub(crate) extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.missing_rates.contains(&rate) {
+            return Status::MISSING;
+        }
+        if crate::rates::Rate::from_id(rate).is_none() {
+            return Status::BAD_ARGS;
+        }
+        if !s.rates.iter().any(|&(declared, _)| declared == rate) {
+            s.rates.push((rate, 1.0));
+        }
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn set_rate(_me: ModHandle, rate: RateId, factor: f32) -> Status {
+    if !crate::rates::is_valid_factor(factor) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        match s.rates.iter_mut().find(|(declared, _)| *declared == rate) {
+            Some((_, set)) => {
+                *set = factor;
+                Status::OK
+            }
+            None => Status::BAD_ARGS,
+        }
+    })
 }

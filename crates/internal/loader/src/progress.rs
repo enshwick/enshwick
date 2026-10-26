@@ -205,7 +205,7 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     let wants = [
         !sealed.skills.is_empty(),
-        !sealed.comfort.is_empty(),
+        !sealed.comfort.is_empty() || crate::rate_links::wanted(pinned::comfort::BASE_REGISTER),
         !sealed.experience.is_empty(),
     ];
     let _first = SEALED.set(sealed);
@@ -386,6 +386,10 @@ unsafe extern "system" fn register(
         .get()
         .and_then(|sealed| COMFORT_FUSE.run("a comfort provider", || filtered(sealed)))
         .unwrap_or(comfort);
+    let comfort = crate::rates::scale_comfort(
+        comfort,
+        crate::rate_links::factor(enshwick::abi::RateId::COMFORT),
+    );
     // SAFETY: the game's arguments to `comfort.base_register`, with `comfort`
     // filtered, an `i32` like the game's own, passed on to the rest of the
     // chain, which the slot holds since the chain is wired before the target

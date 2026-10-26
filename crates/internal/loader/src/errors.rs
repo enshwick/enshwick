@@ -59,6 +59,8 @@ pub const DUPLICATE_MOD: Code = Code("E2005");
 pub const BAD_MOD_LIST: Code = Code("E2006");
 /// A mod's hold stops the game.
 pub const HELD: Code = Code("E2007");
+/// A DLL of `mods/chain/` is not loaded.
+pub const CHAIN_NOT_LOADED: Code = Code("E2008");
 /// The server runs join mods the client lacks.
 pub const JOIN_MISSING: Code = Code("E3001");
 
@@ -78,6 +80,7 @@ pub const ALL: &[Code] = &[
     DUPLICATE_MOD,
     BAD_MOD_LIST,
     HELD,
+    CHAIN_NOT_LOADED,
     JOIN_MISSING,
 ];
 

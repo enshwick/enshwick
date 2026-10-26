@@ -1,5 +1,6 @@
-//! The fake's pacing places: every place is on the build, the worker caps
-//! only on the server, the message wait only on the client.
+//! The fake's pacing places, as the loader answers: every place is on the
+//! build, the worker caps take only on the server, the message wait is only
+//! on the client, and a second handler of the mod at a place links nothing.
 
 use core::ffi::c_void;
 
@@ -13,7 +14,9 @@ pub(crate) extern "system" fn loop_wait(
     found: *mut LoopWaitSites,
 ) -> Status {
     let side = with(Side::SERVER, |s| {
-        s.loop_waits.push((callback, user.expose_provenance()));
+        s.pacing
+            .loop_waits
+            .push((callback, user.expose_provenance()));
         s.host.side
     });
     let sites = if side == Side::CLIENT {
@@ -31,7 +34,9 @@ pub(crate) extern "system" fn server_wait(
     found: *mut u32,
 ) -> Status {
     with((), |s| {
-        s.server_waits.push((callback, user.expose_provenance()));
+        s.pacing
+            .server_waits
+            .push((callback, user.expose_provenance()));
     });
     put(found, 1)
 }
@@ -43,14 +48,17 @@ pub(crate) extern "system" fn task_workers(
     found: *mut u32,
 ) -> Status {
     let server = with(false, |s| {
+        if s.host.side != Side::SERVER || (default, background) == (0, 0) {
+            return false;
+        }
         let lowest = |old: u32, new: u32| match (old, new) {
             (0, new) => new,
             (old, 0) => old,
             (old, new) => old.min(new),
         };
-        let (d, b) = s.task_workers.unwrap_or((0, 0));
-        s.task_workers = Some((lowest(d, default), lowest(b, background)));
-        s.host.side == Side::SERVER
+        let (d, b) = s.pacing.task_workers.unwrap_or((0, 0));
+        s.pacing.task_workers = Some((lowest(d, default), lowest(b, background)));
+        true
     });
     put(found, u32::from(server))
 }

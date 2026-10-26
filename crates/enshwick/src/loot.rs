@@ -21,6 +21,7 @@ pub use drops::{Drop, Kinds, MeterRoll, Roll, Source, replace_drops};
 pub(crate) use drops::{replace_group, watch_rolls};
 
 use crate::ecs::{Components, Ecs, Entity};
+use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::{Load, Off};
 
@@ -186,29 +187,28 @@ impl Containers {
     /// See [`Containers`].
     pub fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let world = load.world()?;
-        let ty = |name: &str| {
+        let ty = |id: &str| {
             world
-                .component_type(load, name)
+                .component_type(load, id)
                 .map(crate::world::ComponentType::hash)
         };
-        let offset = |ty: &str, field: &str| {
-            load.field_offset(ty, field)
-                .and_then(|v| usize::try_from(v).map_err(|_| Off::new("offset")))
+        let offset = |id: &str| {
+            load.constant(id)
+                .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
         };
         let layout = Layout {
-            transform: ty("keen::ecs::CurrentTransform")?,
-            empty_state: ty("keen::ecs::InventoryEmptyState")?,
-            destroy: ty("keen::ecs::DestroyOnLoot")?,
-            lifetime: ty("keen::ecs::LifeTime")?,
-            area_loot: ty("keen::ecs::AreaLootOverride")?,
-            offer: ty("keen::ecs::InteractionOfferRuntime")?,
-            player_input: ty("keen::ecs::PlayerInput")?,
-            is_empty: offset("keen::ecs::InventoryEmptyState", "isEmpty")?,
-            exclude: offset("keen::ecs::AreaLootOverride", "exclude")?,
-            accept_time: offset("keen::ecs::InteractionOfferRuntime", "lastAcceptTime")?,
-            accept_guest: offset("keen::ecs::InteractionOfferRuntime", "lastAcceptData")?
-                + offset("keen::ecs::InteractionAcceptData", "guestId")?,
-            disabled: offset("keen::ecs::InteractionOfferRuntime", "isDisabled")?,
+            transform: world.transform_type().hash(),
+            empty_state: ty(ids::INVENTORY_EMPTY_STATE)?,
+            destroy: ty(ids::DESTROY_ON_LOOT)?,
+            lifetime: ty(ids::LIFETIME)?,
+            area_loot: ty(ids::AREA_LOOT)?,
+            offer: ty(ids::INTERACTION_OFFER)?,
+            player_input: ty(ids::PLAYER_INPUT)?,
+            is_empty: offset(ids::INVENTORY_EMPTY_STATE_EMPTY)?,
+            exclude: offset(ids::AREA_LOOT_EXCLUDE)?,
+            accept_time: offset(ids::INTERACTION_OFFER_ACCEPT_TIME)?,
+            accept_guest: offset(ids::INTERACTION_OFFER_ACCEPT_GUEST)?,
+            disabled: offset(ids::INTERACTION_OFFER_DISABLED)?,
         };
         Ok(Self {
             ecs: Ecs::resolve(load)?,

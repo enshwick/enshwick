@@ -137,14 +137,14 @@ pub(crate) extern "system" fn loop_wait(
     found: *mut api_frame::LoopWaitSites,
 ) -> Status {
     entry("loop_wait", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
         let (loader, index, _) = match calling(me) {
             Ok(called) => called,
             Err(status) => return status,
         };
-        let (status, sites) = crate::pacing::loop_wait(loader, index, callback, user);
-        if !status.is_ok() {
-            return status;
-        }
+        let sites = crate::pacing::loop_wait(loader, index, callback, user);
         // SAFETY: `HostApi::loop_wait` has the mod pass `found` null or
         // pointing at a writable `LoopWaitSites` no other thread touches
         // during the call.
@@ -159,14 +159,14 @@ pub(crate) extern "system" fn server_wait(
     found: *mut u32,
 ) -> Status {
     entry("server_wait", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
         let (loader, index, _) = match calling(me) {
             Ok(called) => called,
             Err(status) => return status,
         };
-        let (status, hooked) = crate::pacing::server_wait(loader, index, callback, user);
-        if !status.is_ok() {
-            return status;
-        }
+        let hooked = crate::pacing::server_wait(loader, index, callback, user);
         // SAFETY: `HostApi::server_wait` has the mod pass `found` null or
         // pointing at a writable `u32` no other thread touches during the
         // call.
@@ -181,14 +181,14 @@ pub(crate) extern "system" fn task_workers(
     found: *mut u32,
 ) -> Status {
     entry("task_workers", || {
+        if found.is_null() {
+            return Status::BAD_ARGS;
+        }
         let (loader, index, _) = match calling(me) {
             Ok(called) => called,
             Err(status) => return status,
         };
-        let (status, capped) = crate::pacing::task_workers(loader, index, default, background);
-        if !status.is_ok() {
-            return status;
-        }
+        let capped = crate::pacing::task_workers(loader, index, default, background);
         // SAFETY: `HostApi::task_workers` has the mod pass `found` null or
         // pointing at a writable `u32` no other thread touches during the
         // call.

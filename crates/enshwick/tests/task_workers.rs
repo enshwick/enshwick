@@ -49,9 +49,6 @@ mod tests {
             start(Side::SERVER, TaskWorkers::at_most(4)),
             (true, Some((4, 4)))
         );
-        assert_eq!(
-            start(Side::CLIENT, TaskWorkers::at_most(4)),
-            (false, Some((4, 4)))
-        );
+        assert_eq!(start(Side::CLIENT, TaskWorkers::at_most(4)), (false, None));
     }
 }
