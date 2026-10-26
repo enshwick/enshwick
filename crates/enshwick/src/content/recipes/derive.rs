@@ -121,6 +121,31 @@ pub(super) fn scaled_inputs(
     Some(bytes)
 }
 
+/// Every recipe of `registry`: its GUID, debug name and the item it makes.
+pub(crate) fn list(
+    layout: &RecipeLayout,
+    registry: &[u8],
+) -> Option<Vec<(Guid, String, Option<Guid>)>> {
+    let blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    Some(
+        (0..usize::try_from(count).ok()?)
+            .map(|i| {
+                let view = RecipeView {
+                    blob: &blob,
+                    at: start + i * layout.recipe,
+                    layout,
+                };
+                (
+                    view.guid(),
+                    view.debug_name(),
+                    view.output().map(|(item, _)| item),
+                )
+            })
+            .collect(),
+    )
+}
+
 /// A vanilla recipe as [`Load::derive_recipes`](crate::Load::derive_recipes) shows it.
 ///
 /// # Examples
@@ -410,6 +435,37 @@ impl RecipeEdit<'_> {
     /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
     pub fn scale_output(&mut self, by: u32) {
         self.scale(self.layout.output, self.layout.stack_size, by);
+    }
+
+    /// Multiplies the count of each item the recipe makes by `factor`,
+    /// rounded half away from zero by [`scale_whole`](crate::rates::scale_whole):
+    /// a stack the recipe made still makes at least one.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.modify_recipes(|recipe| recipe.scale_output_by(1.5))
+    /// }
+    /// ```
+    pub fn scale_output_by(&mut self, factor: f32) {
+        let Some((start, count)) = self.blob.array(self.at + self.layout.output) else {
+            return;
+        };
+        for i in 0..count as usize {
+            let at = start + i * self.layout.stack_size + self.layout.stack_count;
+            let Some(made) = self.blob.read_u32(at) else {
+                return;
+            };
+            if made == 0 {
+                continue;
+            }
+            let scaled = crate::rates::scale_whole(i64::from(made), factor);
+            let scaled = u32::try_from(scaled.max(1)).unwrap_or(u32::MAX);
+            if scaled != made && self.blob.write(at, &scaled.to_le_bytes()) {
+                self.changed = true;
+            }
+        }
     }
 
     /// Multiplies the count of each ingredient by `by`.

@@ -119,7 +119,7 @@ impl Reader<'_> {
     }
 
     /// The full id of the pack's own `name`: `<namespace>:<name>`.
-    fn own(&self, name: &str) -> String {
+    pub(super) fn own(&self, name: &str) -> String {
         format!("{}:{name}", self.namespace)
     }
 
@@ -317,7 +317,7 @@ impl Pack {
     /// ```
     /// use enshwick::packs::{Pack, PackFiles};
     ///
-    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Torch\"\n");
+    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"Tool_Torch01\"\n");
     /// let errors = Pack::parse_with("lights", &files, None).err().ok_or("parsed")?;
     /// assert!(errors.to_string().contains("items.toml:1"));
     /// # Ok::<(), &str>(())
@@ -405,6 +405,11 @@ impl Pack {
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
         pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
+        pack.changes.extend(super::changes::recipe_changes(
+            &mut reader,
+            &recipes_file,
+            &recipes_text,
+        ));
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
@@ -451,7 +456,7 @@ impl Pack {
 
     /// The pack's changes of vanilla values, each with its source: the file
     /// and line, then the name the pack wrote unless it is a GUID, such as
-    /// `items.toml:12 (Wood_Log)`.
+    /// `items.toml:12 (Material_T1_Wood_Logs)`.
     ///
     /// # Examples
     ///
@@ -525,6 +530,33 @@ impl Pack {
             && self.recipes == other.recipes
             && self.workshops == other.workshops
             && self.changes == other.changes
+            && self.texts == other.texts
+    }
+
+    /// Whether `other` adds the same content as this pack, its loot and its
+    /// changes of values aside: what a development reload takes without a
+    /// restart.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let stacks = |size: u32| PackFiles::new().with("items.toml", format!(
+    ///     "[[change]]\nitems = [\"3f4093ae-75ed-4e5d-bd0b-784ba83b88f5\"]\nmax_stack = {size}\n"
+    /// ));
+    /// let before = Pack::parse("you.stacks", &stacks(100))?;
+    /// let after = Pack::parse("you.stacks", &stacks(500))?;
+    /// assert!(!before.same_content(&after));
+    /// assert!(before.same_beside_changes(&after));
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn same_beside_changes(&self, other: &Self) -> bool {
+        self.namespace == other.namespace
+            && self.items == other.items
+            && self.recipes == other.recipes
+            && self.workshops == other.workshops
             && self.texts == other.texts
     }
 

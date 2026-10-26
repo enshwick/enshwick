@@ -504,7 +504,8 @@ impl Loader {
             Event::WORLD_LOADED | Event::WORLD_SAVED | Event::SHUTDOWN_STARTED
         ) && (crate::item_data::wanted()
             || crate::stats::wanted()
-            || crate::data_changes::wanted(self));
+            || crate::data_changes::wanted(self)
+            || crate::rate_links::recipes_rated());
         item_data
             || self
                 .delivery
@@ -527,6 +528,7 @@ impl Loader {
             crate::item_data::world_event(self, event);
             crate::stats::world_event(self, event);
             crate::data_changes::world_event(self, event);
+            crate::rate_links::world_event(event);
         }
         let Some(delivery) = self.delivery.get() else {
             return;

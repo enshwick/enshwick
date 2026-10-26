@@ -5,7 +5,7 @@ use crate::ecs::Entity;
 use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
 use crate::game_events::values::{
-    AltarAction, AttackCategories, DamageTypes, EquipmentSlot, ExperienceSource,
+    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
 };
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
@@ -92,9 +92,9 @@ pub struct Hit {
     /// The change of the target's stamina.
     pub stamina_change: i32,
     /// The damage types.
-    pub damage_types: DamageTypes,
+    pub damage_types: DamageTypeMask,
     /// The attack categories.
-    pub attack: AttackCategories,
+    pub attack: AttackCategoryMask,
     /// The target's faction, the engine's `FactionType`.
     pub target_faction: u8,
 }
@@ -117,10 +117,10 @@ impl Kind for Hit {
         let damage: Field<u16> = ty.field_by_id(load, ids::HIT_DAMAGE_TYPES)?;
         let attack: Field<u8> = ty.field_by_id(load, ids::HIT_ATTACK)?;
         let faction: Field<u8> = ty.field_by_id(load, ids::HIT_TARGET_FACTION)?;
-        let damage_bits = Bits::resolve(load, DamageTypes::IDS.map(|(t, id)| (t.bits(), id)));
+        let damage_bits = Bits::resolve(load, DamageTypeMask::IDS.map(|(t, id)| (t.bits(), id)));
         let attack_bits = Bits::resolve(
             load,
-            AttackCategories::IDS.map(|(c, id)| (u16::from(c.bits()), id)),
+            AttackCategoryMask::IDS.map(|(c, id)| (u16::from(c.bits()), id)),
         );
         on(
             load,
@@ -134,8 +134,8 @@ impl Kind for Hit {
                     weapon: some(e.get(weapon)?),
                     health_change: e.get(health)?,
                     stamina_change: e.get(stamina)?,
-                    damage_types: DamageTypes::from_bits(damage_bits.map(e.get(damage)?)),
-                    attack: AttackCategories::from_bits(
+                    damage_types: DamageTypeMask::from_bits(damage_bits.map(e.get(damage)?)),
+                    attack: AttackCategoryMask::from_bits(
                         u8::try_from(attack_bits.map(u16::from(e.get(attack)?))).ok()?,
                     ),
                     target_faction: e.get(faction)?,
@@ -246,7 +246,7 @@ impl Credit {
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
         let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: `component` returned the entity's live ExperienceSource,
+        // SAFETY: `component` returned the entity's live ExperienceSourceType,
         // valid until the game thread moves on; `resolve` checked that the u32
         // at `lastHitPlayerId` lies inside its reflected size.
         some(Entity(unsafe { read_at(source, self.last_player) }))
@@ -328,11 +328,11 @@ impl Kind for LevelGained {
 /// # Examples
 ///
 /// ```
-/// use enshwick::game_events::{ExperienceGained, ExperienceSource};
+/// use enshwick::game_events::{ExperienceGained, ExperienceSourceType};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.on_game::<ExperienceGained>(|gained| {
-///         if gained.source == ExperienceSource::Combat {
+///         if gained.source == ExperienceSourceType::Combat {
 ///             enshwick::debug!("{} experience for a kill", gained.amount);
 ///         }
 ///     })
@@ -346,7 +346,7 @@ pub struct ExperienceGained {
     /// How much.
     pub amount: u32,
     /// Where from.
-    pub source: ExperienceSource,
+    pub source: ExperienceSourceType,
 }
 
 impl sealed::Sealed for ExperienceGained {}
@@ -360,7 +360,7 @@ impl Kind for ExperienceGained {
         let player: Field<Entity> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_PLAYER)?;
         let amount: Field<u32> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_AMOUNT)?;
         let source: Field<u8> = ty.field_by_id(load, ids::EXPERIENCE_GAINED_SOURCE)?;
-        let sources = Values::resolve(load, ExperienceSource::IDS);
+        let sources = Values::resolve(load, ExperienceSourceType::IDS);
         on(
             load,
             ty,
@@ -372,7 +372,7 @@ impl Kind for ExperienceGained {
                         let raw = e.get(source)?;
                         sources
                             .variant(u64::from(raw))
-                            .unwrap_or(ExperienceSource::Other(raw))
+                            .unwrap_or(ExperienceSourceType::Other(raw))
                     },
                 })
             },
@@ -780,7 +780,7 @@ pub struct AltarUsed {
     /// The altar's base entity.
     pub altar: Entity,
     /// What was done.
-    pub action: AltarAction,
+    pub action: FlameAltarActionType,
 }
 
 impl sealed::Sealed for AltarUsed {}
@@ -794,7 +794,7 @@ impl Kind for AltarUsed {
         let player: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_PLAYER)?;
         let altar: Field<Entity> = ty.field_by_id(load, ids::ALTAR_USED_ALTAR)?;
         let kind: Field<u8> = ty.field_by_id(load, ids::ALTAR_USED_ACTION)?;
-        let actions = Values::resolve(load, AltarAction::IDS);
+        let actions = Values::resolve(load, FlameAltarActionType::IDS);
         on(
             load,
             ty,
@@ -806,7 +806,7 @@ impl Kind for AltarUsed {
                         let raw = e.get(kind)?;
                         actions
                             .variant(u64::from(raw))
-                            .unwrap_or(AltarAction::Other(raw))
+                            .unwrap_or(FlameAltarActionType::Other(raw))
                     },
                 })
             },
