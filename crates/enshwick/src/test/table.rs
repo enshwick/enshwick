@@ -63,7 +63,7 @@ use world::{
     keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    weather_at, weather_fronts, world_key,
+    voxel_read, weather_at, weather_fronts, world_key,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -256,6 +256,12 @@ pub(crate) fn state() -> MutexGuard<'static, Option<State>> {
 thread_local! {
     /// Whether this thread holds the installed fake.
     static HOLDS_TURN: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Whether this thread installed the fake, the one that stands for the
+/// server's game thread.
+pub(crate) fn on_game_thread() -> bool {
+    HOLDS_TURN.get()
 }
 
 /// Waits for the table to be free and takes it for this thread.
@@ -632,4 +638,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     altar_zones_changed,
     altar_limit_filter,
     base_limit,
+    voxel_read,
 };

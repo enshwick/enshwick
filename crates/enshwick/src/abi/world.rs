@@ -1,4 +1,4 @@
-//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather and terrain.
+//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, terrain and voxels.
 
 use core::ffi::c_void;
 
@@ -583,4 +583,85 @@ impl TerrainEdit {
     pub const SQUARE: u32 = 1;
     /// Counts what the edit would change and changes nothing.
     pub const DRY_RUN: u32 = 1;
+}
+
+/// A voxel of the server's world, written by
+/// [`HostApi::voxel_read`](super::HostApi::voxel_read). The loader decodes
+/// the game's voxel into it, so a mod never reads the game's own encoding.
+///
+/// Its layout is frozen: [`HostApi::voxel_read`](super::HostApi::voxel_read)
+/// writes an array of it with no entry size.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::Voxel;
+///
+/// let rock = Voxel { kind: Voxel::TERRAIN, material: 9, fill: 0xff, reserved: 0 };
+/// assert_ne!(rock.kind, Voxel::AIR);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct Voxel {
+    /// [`Voxel::AIR`], [`Voxel::TERRAIN`] or [`Voxel::BUILDING`]; a reader
+    /// treats a kind it does not know as neither.
+    pub kind: u8,
+    /// The game's material id: 0 for air, a terrain material's id as
+    /// [`TerrainMaterialInfo::id`] has it, or a building material's id.
+    pub material: u8,
+    /// How full the voxel is, 0 to 255: enshwick's name for the high byte
+    /// of the game's voxel, which the game does not name.
+    pub fill: u8,
+    /// Zero.
+    pub reserved: u8,
+}
+
+impl Voxel {
+    /// Empty: no ground and no building.
+    pub const AIR: u8 = 0;
+    /// Ground of a terrain material.
+    pub const TERRAIN: u8 = 1;
+    /// A building block's material.
+    pub const BUILDING: u8 = 2;
+    /// The most voxels one [`HostApi::voxel_read`](super::HostApi::voxel_read)
+    /// reads: a box of 64 voxels, 32 metres, a side.
+    pub const READ_MAX: u64 = 64 * 64 * 64;
+    /// The end of the coordinates a box covers on any axis, in voxels:
+    /// every voxel of a box lies below it. 2³⁰, far past any world's edge.
+    pub const END: u32 = 1 << 30;
+
+    /// The voxels in the box of `size` from `min` when one
+    /// [`HostApi::voxel_read`](super::HostApi::voxel_read) takes it: `None`
+    /// for an empty box, one past [`Voxel::END`] or more than
+    /// [`Voxel::READ_MAX`] voxels.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Voxel;
+    ///
+    /// assert_eq!(Voxel::read_count([0; 3], [2, 3, 4]), Some(24));
+    /// assert_eq!(Voxel::read_count([0; 3], [0, 3, 4]), None);
+    /// assert_eq!(Voxel::read_count([Voxel::END, 0, 0], [1; 3]), None);
+    /// ```
+    #[must_use]
+    pub const fn read_count(min: [u32; 3], size: [u32; 3]) -> Option<u64> {
+        let mut count = 1u64;
+        let mut axis = 0;
+        while axis < 3 {
+            let within = match min[axis].checked_add(size[axis]) {
+                Some(end) => end <= Self::END,
+                None => false,
+            };
+            if size[axis] == 0 || !within {
+                return None;
+            }
+            count = match count.checked_mul(size[axis] as u64) {
+                Some(product) if product <= Self::READ_MAX => product,
+                _ => return None,
+            };
+            axis += 1;
+        }
+        Some(count)
+    }
 }

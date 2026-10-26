@@ -138,6 +138,7 @@ reason of the form `<what>: <why>`, such as
 | 5    | `TOO_LATE`     | Called in a phase where it is not allowed, such as a hook after arming | `asked for too late`               |
 | 6    | `FAULTED`      | The mod has faulted and is off                                         | `unavailable: the mod has faulted` |
 | 7    | `WRONG_THREAD` | Called from a thread the function does not serve                       | `called off the thread it serves`  |
+| 8    | `NOT_LOADED`   | The part of the world asked about is not loaded now; try again later   | `not loaded now`                   |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -354,3 +355,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_zones_changed`    | Has the altar zones sized again on the server's next step; any thread                                | 78          |
 | `altar_limit_filter`     | Adds a filter to the chain that decides how many altars a Flame level allows; init only              | 82          |
 | `base_limit`             | The most altar zones and bases the game groups now, and its own grouping's zones; any thread         | 82          |
+| `voxel_read`             | Reads a box of up to 64³ voxels at full detail, decoded; server game thread, quiet moment only       | 84          |
