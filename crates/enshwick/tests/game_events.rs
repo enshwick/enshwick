@@ -18,7 +18,7 @@ mod tests {
 
     impl Mod for Watcher {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "watcher", side: SERVER)
+            enshwick::manifest!(id: "you.watcher", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

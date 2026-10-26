@@ -195,7 +195,7 @@ fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: 
 
 impl Mod for MyMod {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "my-mod", side: BOTH, join: true)
+        enshwick::manifest!(id: "you.my-mod", side: BOTH, join: true)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {

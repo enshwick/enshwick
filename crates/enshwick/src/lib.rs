@@ -42,7 +42,7 @@
 //!
 //! impl enshwick::Mod for Hello {
 //!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "hello", side: SERVER)
+//!         enshwick::manifest!(id: "you.hello", side: SERVER)
 //!     }
 //!
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {

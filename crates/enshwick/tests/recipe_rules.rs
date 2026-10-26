@@ -16,7 +16,7 @@ mod tests {
 
     impl Mod for Rules {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "rules", side: BOTH)
+            enshwick::manifest!(id: "you.rules", side: BOTH)
         }
 
         fn init(_load: &mut Load<'_>) -> Result<Self, Off> {

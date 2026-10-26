@@ -5,13 +5,14 @@ the one tool of the repository.
 
 ```sh
 cargo install --git https://github.com/enshwick/enshwick cargo-enshwick
-cargo enshwick new my-mod --side server
+cargo enshwick new you.my-mod --side server
 cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
 ```
 
-- `new <id>` creates a mod crate in `<dir>/<id>` (`--dir`, default the current
-  folder) for `--side server`, `client` or `both`. It builds and loads as it is:
+- `new <id>` creates a mod crate for the id `<author>.<name>` in
+  `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
+  `client` or `both`. It builds and loads as it is:
   settings in `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`.
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release
