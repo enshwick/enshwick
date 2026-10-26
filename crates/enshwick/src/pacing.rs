@@ -10,8 +10,8 @@
 //! - [`Load::cap_task_workers`]: the most worker threads each task group starts
 //!   with, which the engine sizes from the logical CPUs it sees.
 //!
-//! Every site is found by its bytes, on the server and on the client, and a
-//! site this build lacks is reported, never guessed.
+//! The loader finds each place on the running build and owns its hook; a
+//! place this build lacks is reported, never guessed.
 //!
 //! # Examples
 //!
@@ -29,46 +29,10 @@
 //! }
 //! ```
 
-use crate::abi::Registers;
+use core::ffi::c_void;
+
+use crate::abi::{LoopWaitData, LoopWaitSites};
 use crate::{Load, Off};
-
-/// The wait helper after it clamped the milliseconds into `r9d`: `cmp rdx,
-/// max; mov r9d, max; cmovl r9d, edx`, then the arguments of
-/// `WaitForMultipleObjectsEx(count, handles, FALSE, ms, TRUE)`.
-const WAIT: &str = "48 3B ?? 44 8B ?? 44 0F 4C CA 48 8B 55 D8 45 33 C0 8B 4D E0 \
-                    C7 44 24 20 01 00 00 00 FF 15";
-/// The client's message wait, the milliseconds in `r8d`: the arguments of
-/// `MsgWaitForMultipleObjectsEx(count, handles, ms, QS_ALLINPUT, alertable
-/// | input available)`.
-const MESSAGE_WAIT: &str = "48 3B ?? 44 8B ?? 44 0F 4C C2 48 8B 55 D8 41 B9 FF 1C 00 00 8B 4D E0 \
-                            C7 44 24 20 06 00 00 00 FF D0";
-/// Where the hook goes in [`WAIT`] and [`MESSAGE_WAIT`]: after the clamp.
-const WAIT_AT: u64 = 10;
-/// `mov rax, 0x431bde82d7b634db`: the start of a division by 1 000 000.
-const DIVIDE: [u8; 10] = [0x48, 0xB8, 0xDB, 0x34, 0xB6, 0xD7, 0x82, 0xDE, 0x1B, 0x43];
-/// `imul rbx; sar rdx, 18`: the dividend is `rbx`, the nanoseconds left.
-const DIVIDE_RBX: [u8; 7] = [0x48, 0xF7, 0xEB, 0x48, 0xC1, 0xFA, 0x12];
-/// How far before the hook the division may start.
-const DIVIDE_SPAN: usize = 0x80;
-
-/// The server loop picking its wait: 40 ms with nobody online, else 1 ms, or
-/// 0.1 ms after a pass longer than 14 ms, into `r9`; then the call into the
-/// event loop.
-const SERVER_WAIT: &str = "44 39 BB 3C 05 00 00 75 08 41 B9 00 5A 62 02 EB 12 48 81 7D ?? 80 9F D5 00 \
-                           41 B9 40 42 0F 00 4C 0F 4F CF 4D 8B C4 48 8D 55 ?? 48 8D 4D ?? E8";
-/// Where the hook goes in [`SERVER_WAIT`]: `r9` holds the final wait.
-const SERVER_WAIT_AT: u64 = 35;
-
-/// The task system reading its per-group worker caps from its config
-/// (`r15`): `movzx eax, byte [r15+9]` for the default group, then
-/// `movzx eax, byte [r15+0xa]` for the background group, each followed by a
-/// `min` with the CPUs counted.
-const WORKERS: &str = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 \
-                       0F 45 C8 41 0F B6 47 0A 44 0F B6 E9";
-/// Where `eax` holds the default group's cap in [`WORKERS`].
-const DEFAULT_WORKERS_AT: u64 = 5;
-/// Where `eax` holds the background group's cap in [`WORKERS`].
-const BACKGROUND_WORKERS_AT: u64 = 34;
 
 /// The server loop's wait with nobody online.
 pub const SERVER_IDLE_WAIT_NS: u64 = 40_000_000;
@@ -98,38 +62,36 @@ pub struct LoopWaits {
     pub messages: bool,
 }
 
-/// Whether `before`, the code ahead of a hook site, divides `rbx` by a
-/// million, so `rbx` holds the nanoseconds left at the site.
-fn divides_rbx(before: &[u8]) -> bool {
-    before
-        .windows(DIVIDE.len())
-        .enumerate()
-        .any(|(at, window)| {
-            window == DIVIDE
-                && before[at + DIVIDE.len()..]
-                    .windows(DIVIDE_RBX.len())
-                    .take(9)
-                    .any(|next| next == DIVIDE_RBX)
-        })
-}
-
-/// Whether the code before `site` divides `rbx` by a million.
-fn checks(code: &[u8], site: u64) -> bool {
-    let start = code.as_ptr().addr() as u64;
-    let Some(end) = site
-        .checked_sub(start)
-        .and_then(|end| usize::try_from(end).ok())
-    else {
-        return false;
+unsafe extern "system" fn run_loop_wait<F>(wait: *const LoopWaitData, user: *mut c_void)
+where
+    F: Fn(LoopWait),
+{
+    // SAFETY: the loader passes a valid wait for the call; `as_ref` turns
+    // away null.
+    let Some(wait) = (unsafe { wait.as_ref() }) else {
+        return;
     };
-    code.get(end.saturating_sub(DIVIDE_SPAN)..end)
-        .is_some_and(divides_rbx)
+    let call = LoopWait {
+        ms: wait.ms,
+        left_ns: wait.left_ns,
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    crate::host::guard("panic in a loop wait handler", || (), || handler(call));
 }
 
-/// The one match of `pattern` plus `at`; `None` when the pattern has no
-/// match or several.
-fn site(load: &Load<'_>, pattern: &str, at: u64) -> Option<u64> {
-    load.find_code(pattern).ok().map(|found| found + at)
+unsafe extern "system" fn run_server_wait<F>(wait_ns: *mut u64, user: *mut c_void)
+where
+    F: Fn(&mut u64),
+{
+    // SAFETY: the loader passes the wait for the call, writable; `as_mut`
+    // turns away null.
+    let Some(wait_ns) = (unsafe { wait_ns.as_mut() }) else {
+        return;
+    };
+    // SAFETY: `user` is the leaked `F` this function was registered with.
+    let handler = unsafe { &*user.cast::<F>() };
+    crate::host::guard("panic in a server wait handler", || (), || handler(wait_ns));
 }
 
 /// The most worker threads the task groups start with; 0 leaves a group
@@ -187,42 +149,19 @@ impl Load<'_> {
     /// ```
     pub fn on_loop_wait<F>(&mut self, handler: F) -> Result<LoopWaits, Off>
     where
-        F: Fn(LoopWait) + Clone + Send + Sync + 'static,
+        F: Fn(LoopWait) + Send + Sync + 'static,
     {
-        let code = self.code()?;
-        let wait_site = site(self, WAIT, WAIT_AT).filter(|&at| checks(code, at));
-        let message_site = site(self, MESSAGE_WAIT, WAIT_AT).filter(|&at| checks(code, at));
-        let mut found = LoopWaits::default();
-        let wait = |ms: u64, left: u64| LoopWait {
-            ms: u32::try_from(ms & 0xffff_ffff).unwrap_or(u32::MAX),
-            left_ns: i64::from_ne_bytes(left.to_ne_bytes()),
-        };
-        if let Some(at) = wait_site {
-            let handler = handler.clone();
-            // SAFETY: `site` found the one match of `WAIT`, and `WAIT_AT` is
-            // the instruction after its clamp, where `r9` holds the
-            // milliseconds; `checks` found the division that leaves the
-            // nanoseconds in `rbx`. The handler writes no register.
-            unsafe {
-                self.hook_at(at, move |registers: &mut Registers| {
-                    handler(wait(registers.r9, registers.rbx));
-                })
-            }?;
-            found.handles = true;
-        }
-        if let Some(at) = message_site {
-            // SAFETY: `site` found the one match of `MESSAGE_WAIT`, and
-            // `WAIT_AT` is the instruction after its clamp, where `r8` holds
-            // the milliseconds; `checks` found the division that leaves the
-            // nanoseconds in `rbx`. The handler writes no register.
-            unsafe {
-                self.hook_at(at, move |registers: &mut Registers| {
-                    handler(wait(registers.r8, registers.rbx));
-                })
-            }?;
-            found.messages = true;
-        }
-        Ok(found)
+        let host = self.host();
+        let mut sites = LoopWaitSites::NONE;
+        crate::load::hand_over(
+            handler,
+            |user| (host.api().loop_wait)(host.handle(), run_loop_wait::<F>, user, &raw mut sites),
+            "the loop wait handler",
+        )?;
+        Ok(LoopWaits {
+            handles: sites.contains(LoopWaitSites::HANDLES),
+            messages: sites.contains(LoopWaitSites::MESSAGES),
+        })
     }
 
     /// Runs `handler` where the server's game loop has picked its wait between
@@ -256,19 +195,16 @@ impl Load<'_> {
     where
         F: Fn(&mut u64) + Send + Sync + 'static,
     {
-        let Some(at) = site(self, SERVER_WAIT, SERVER_WAIT_AT) else {
-            return Ok(false);
-        };
-        // SAFETY: `site` found the one match of `SERVER_WAIT`, and
-        // `SERVER_WAIT_AT` is the instruction after the `cmovg` that leaves
-        // the wait in nanoseconds in `r9`; the event loop takes any value there as
-        // its wait, and the handler writes no other register.
-        unsafe {
-            self.hook_at(at, move |registers: &mut Registers| {
-                handler(&mut registers.r9);
-            })
-        }?;
-        Ok(true)
+        let host = self.host();
+        let mut found = 0;
+        crate::load::hand_over(
+            handler,
+            |user| {
+                (host.api().server_wait)(host.handle(), run_server_wait::<F>, user, &raw mut found)
+            },
+            "the server wait handler",
+        )?;
+        Ok(found != 0)
     }
 
     /// Caps the worker threads of the task groups as the task system starts.
@@ -297,60 +233,17 @@ impl Load<'_> {
     /// }
     /// ```
     pub fn cap_task_workers(&mut self, caps: TaskWorkers) -> Result<bool, Off> {
-        if caps == TaskWorkers::default() || self.host().build().side != crate::abi::Side::SERVER {
+        if caps == TaskWorkers::default() {
             return Ok(false);
         }
-        let Some(at) = site(self, WORKERS, 0) else {
-            return Ok(false);
-        };
-        for (offset, cap) in [
-            (DEFAULT_WORKERS_AT, caps.default),
-            (BACKGROUND_WORKERS_AT, caps.background),
-        ] {
-            if cap > 0 {
-                // SAFETY: `site` found the one match of `WORKERS`, and
-                // `offset` is the instruction after the `movzx` that loads
-                // the group's cap into `eax`; the handler only lowers `rax`,
-                // and a lower cap is one the task system takes.
-                unsafe {
-                    self.hook_at(at + offset, move |registers: &mut Registers| {
-                        registers.rax = registers.rax.min(u64::from(cap));
-                    })
-                }?;
-            }
-        }
-        Ok(true)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_division_of_rbx_is_recognised() {
-        // Server: the division, `mov edi, -1`, then `imul rbx; sar rdx, 18`.
-        let mut server = DIVIDE.to_vec();
-        server.extend([0xBF, 0xFF, 0xFF, 0xFF, 0xFF]);
-        server.extend(DIVIDE_RBX);
-        assert!(divides_rbx(&server));
-        // Client: the multiply right after.
-        let mut client = vec![0x90; 4];
-        client.extend(DIVIDE);
-        client.extend(DIVIDE_RBX);
-        assert!(divides_rbx(&client));
-        // Another dividend.
-        let mut other = DIVIDE.to_vec();
-        other.extend([0x48, 0xF7, 0xE9, 0x48, 0xC1, 0xFA, 0x12]);
-        assert!(!divides_rbx(&other));
-        assert!(!divides_rbx(&DIVIDE));
-        assert!(!divides_rbx(&[]));
-    }
-
-    #[test]
-    fn the_patterns_parse() {
-        for pattern in [WAIT, MESSAGE_WAIT, SERVER_WAIT, WORKERS] {
-            assert!(crate::code::Pattern::parse(pattern).is_ok(), "{pattern}");
-        }
+        let host = self.host();
+        let mut found = 0;
+        let status = (host.api().task_workers)(
+            host.handle(),
+            u32::from(caps.default),
+            u32::from(caps.background),
+            &raw mut found,
+        );
+        crate::load::ok(status, found != 0, || "the task worker caps".to_owned())
     }
 }
