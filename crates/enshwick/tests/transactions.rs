@@ -249,4 +249,58 @@ mod tests {
         );
         assert_eq!(loader.transactions().len(), 1, "nothing half-queued");
     }
+
+    #[test]
+    fn the_fake_holds_the_loader_s_brick_cap_and_queue() {
+        let (loader, world) = started();
+        loader.set_terrain(&[rock()]);
+        let wide = |count: u32| {
+            (0..count).fold(world.transaction(), |transaction, i| {
+                let x = 40.0 + 40.0 * f64::from(i);
+                transaction.terrain_dig([x, 40.0, 40.0], 16.0, Shape::Round, &[])
+            })
+        };
+        assert_eq!(
+            wide(91).commit(),
+            Err(WorldError::Refused),
+            "more bricks than the cap"
+        );
+        wide(50).commit().unwrap();
+        assert_eq!(
+            wide(50).commit(),
+            Err(WorldError::Refused),
+            "the queue claims the cap"
+        );
+        loader.run_transactions();
+        wide(50).commit().unwrap();
+    }
+
+    #[test]
+    fn an_op_with_a_reserved_field_set_is_refused() {
+        let (loader, _world) = started();
+        loader.set_terrain(&[rock()]);
+        let edit = TerrainEdit {
+            header: Header::of::<TerrainEdit>(),
+            kind: TerrainEdit::DIG,
+            shape: TerrainEdit::ROUND,
+            flags: 0,
+            material: 0,
+            position: [10.0; 3],
+            radius: 1.0,
+            height: 0.0,
+            protect: [0; 16],
+        };
+        let op = enshwick::abi::TransactionOp {
+            kind: enshwick::abi::TransactionOp::TERRAIN,
+            reserved: 1,
+            data: (&raw const edit).cast(),
+        };
+        let mut id = 0u64;
+        // SAFETY: `api` points at the fake's table, which lives for the
+        // process.
+        let api = unsafe { &*loader.api() };
+        let status =
+            (api.transaction_commit)(enshwick::abi::ModHandle(1), &raw const op, 1, &raw mut id);
+        assert_eq!(status, Status::BAD_ARGS);
+    }
 }

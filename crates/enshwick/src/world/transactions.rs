@@ -58,18 +58,22 @@ pub enum TransactionStatus {
     Undoing,
     /// Undone, or dropped before it wrote anything.
     Undone,
-    /// It stopped before a change it could not write:
-    /// [`WorldError::NotLoaded`] when part of the world was not loaded,
-    /// [`WorldError::OutsideWorld`] when a change leaves the world,
+    /// It stopped before or right after a change it could not write or
+    /// read back: [`WorldError::NotLoaded`] when part of the world was not
+    /// loaded, [`WorldError::OutsideWorld`] when a change leaves the world,
     /// [`WorldError::Missing`] when the world ended. The changes written
-    /// before it stay, and [`World::undo`] can still take them back.
+    /// stay, and [`World::undo`] can take them back while the loader keeps
+    /// their undo data; a brick it could not read back after its change is
+    /// never written over, so such an undo is refused.
     Failed(WorldError),
-    /// Written whole, but the loader dropped what its undo needs to stay
-    /// within its memory cap; it can no longer be undone.
+    /// Written whole, or with its undo refused, but the loader dropped what
+    /// its undo needs, to stay within its memory cap or because the world
+    /// ended; it can no longer be undone.
     Expired,
-    /// Its last undo wrote nothing and was refused:
-    /// [`WorldError::Refused`] when a brick it touched has changed since,
-    /// [`WorldError::NotLoaded`] when part of it was not loaded. It stays
+    /// Its last undo stopped: [`WorldError::Refused`] when a brick it
+    /// touched has changed since, [`WorldError::NotLoaded`] when part of it
+    /// stayed unloaded for about 3,600 steps. It stopped before writing, or
+    /// at that brick with what it had put back kept; the rest stays
     /// written, and [`World::undo`] may be asked again.
     UndoRefused(WorldError),
 }
@@ -276,14 +280,16 @@ impl World {
     /// was. The undo runs at the server's next quiet moments; it first checks
     /// that every brick still holds what the transaction left there, and
     /// writes nothing when one has changed since (a player's or another
-    /// edit), so undo transactions that overlap newest first.
-    /// [`World::transaction_status`] tells how it went.
+    /// edit), so undo transactions that overlap newest first. It checks each
+    /// brick again right before writing it back and stops at one changed
+    /// meanwhile. [`World::transaction_status`] tells how it went.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an id this mod did not get, one undone
-    /// already, or one whose undo data the loader has dropped
-    /// ([`TransactionStatus::Expired`]).
+    /// already, one whose undo data the loader has dropped
+    /// ([`TransactionStatus::Expired`]), or while queued work holds the
+    /// loader's cap of undo data; ask again once it is written.
     ///
     /// # Examples
     ///

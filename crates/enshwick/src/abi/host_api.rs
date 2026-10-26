@@ -1241,11 +1241,15 @@ pub struct HostApi {
     /// back as it was, in reverse order, on the server's game thread at
     /// quiet moments. Before writing, the undo checks that every brick still
     /// holds what the transaction left there and that all of them are
-    /// loaded; otherwise it writes nothing and the state turns
-    /// [`TransactionInfo::UNDO_REFUSED`]. [`Status::OK`] when queued or
+    /// loaded, and it checks each brick again right before writing it back;
+    /// a brick changed meanwhile, or a column that stays unloaded for the
+    /// loader's wait limit, stops it, and the state turns
+    /// [`TransactionInfo::UNDO_REFUSED`] with what was put back kept. A
+    /// refused undo may be asked again. [`Status::OK`] when queued or
     /// already undoing; [`Status::REFUSED`] for an id this mod did not get,
-    /// one the loader forgot, one undone, or one whose undo data is gone.
-    /// Any thread. Since minor 87.
+    /// one the loader forgot, one undone, one whose undo data is gone, or
+    /// while the transactions in work already claim the loader's cap of
+    /// undo data. Any thread. Since minor 87.
     pub transaction_undo: extern "system" fn(me: ModHandle, id: u64) -> Status,
     /// Writes where transaction `id` of this mod stands to `out`, a
     /// [`TransactionInfo`] with its header. [`Status::BAD_ARGS`] for a null

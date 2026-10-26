@@ -696,7 +696,7 @@ pub(crate) extern "system" fn transaction_commit(
             // SAFETY: `slot` is inside the `count` ops the mod passes,
             // borrowed for the call; an unaligned read needs no alignment.
             let op = unsafe { slot.read_unaligned() };
-            if op.kind != TransactionOp::TERRAIN {
+            if op.kind != TransactionOp::TERRAIN || op.reserved != 0 {
                 return Status::BAD_ARGS;
             }
             // SAFETY: `HostApi::transaction_commit` has the mod pass each

@@ -659,6 +659,8 @@ fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
 
 /// The most changes the fake takes in one transaction, as the loader.
 const TRANSACTION_OPS_MAX: u32 = 1024;
+/// The most bricks of undo data the fake keeps, as the loader.
+const TRANSACTION_BRICKS_MAX: u64 = 65_536;
 
 pub(crate) extern "system" fn transaction_commit(
     me: ModHandle,
@@ -678,7 +680,7 @@ pub(crate) extern "system" fn transaction_commit(
         // SAFETY: `slot` is inside the `count` ops the safe layer passes,
         // borrowed for the call; an unaligned read needs no alignment.
         let op = unsafe { slot.read_unaligned() };
-        if op.kind != TransactionOp::TERRAIN {
+        if op.kind != TransactionOp::TERRAIN || op.reserved != 0 {
             return Status::BAD_ARGS;
         }
         // SAFETY: the safe layer passes each terrain op's `data` null or
@@ -702,6 +704,25 @@ pub(crate) extern "system" fn transaction_commit(
             .any(|edit| crate::test::world::edit_outside(s.host.extent, edit))
         {
             return Status::OUTSIDE_WORLD;
+        }
+        let bound: u64 = terrain.iter().map(crate::test::world::edit_bricks).sum();
+        if bound > TRANSACTION_BRICKS_MAX {
+            return Status::BAD_ARGS;
+        }
+        let claimed: u64 = s
+            .edits
+            .transactions
+            .iter()
+            .map(|t| match t.info.state {
+                TransactionInfo::PENDING => {
+                    t.terrain.iter().map(crate::test::world::edit_bricks).sum()
+                }
+                TransactionInfo::UNDOING => t.info.bricks,
+                _ => 0,
+            })
+            .sum();
+        if claimed + bound > TRANSACTION_BRICKS_MAX {
+            return Status::REFUSED;
         }
         let next = s.edits.transactions.last().map_or(1, |last| last.id + 1);
         let ops = u32::try_from(terrain.len()).unwrap_or(u32::MAX);

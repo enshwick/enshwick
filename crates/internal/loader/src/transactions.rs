@@ -43,11 +43,13 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const BRICKS_PER_STEP: usize = 64;
 
 /// What the loader keeps: 1,024 changes in a transaction, 64 MiB of undo
-/// data (65,536 bricks of 1 KiB), the newest 4,096 transactions.
+/// data (65,536 bricks of 1 KiB), the newest 4,096 transactions; an undo
+/// waits 3,600 steps in a row for a column to load before it is refused.
 pub(crate) const LIMITS: Limits = Limits {
     ops: 1024,
     bricks: 65_536,
     records: 4096,
+    waits: 3600,
 };
 
 /// The transactions of the running world.
@@ -94,17 +96,58 @@ pub(crate) fn info(owner: ModIndex, id: u64) -> Option<TransactionInfo> {
     STATE.ledger.relock().info(owner, id)
 }
 
+/// The ledger without waiting: `None` while another thread holds it.
+#[cfg(windows)]
+fn try_ledger() -> Option<std::sync::MutexGuard<'static, Ledger>> {
+    match STATE.ledger.try_lock() {
+        Ok(ledger) => Some(ledger),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => Some(poisoned.into_inner()),
+        Err(std::sync::TryLockError::WouldBlock) => None,
+    }
+}
+
 /// Writes the queued work of a step, on the game thread after the step.
+/// The game's edits and undo writes run with the ledger free, so other
+/// threads and the game's own callbacks may commit, undo and ask meanwhile;
+/// a step that finds the ledger taken skips its work until the next.
 #[cfg(windows)]
 pub(crate) fn after_step(loader: &crate::host::Loader) {
+    use ledger::Voxels;
+
     if !STATE.busy.load(Ordering::Acquire) {
         return;
     }
-    let mut ledger = STATE.ledger.relock();
-    if let Ok(mut world) = game::Game::new(loader) {
-        ledger.step(&mut world, BRICKS_PER_STEP);
+    let Ok(mut world) = game::Game::new(loader) else {
+        return;
+    };
+    let started = std::time::Instant::now();
+    let extent = world.extent().ok();
+    let Some(mut pass) = try_ledger().map(|mut ledger| ledger.begin(extent, BRICKS_PER_STEP))
+    else {
+        return;
+    };
+    while let Some(mut task) = try_ledger().and_then(|mut ledger| ledger.take(&mut pass)) {
+        let outcome = task.run(&mut world, &mut pass);
+        let mut ledger = STATE.ledger.relock();
+        let go_on = ledger.put(task, outcome);
+        STATE.busy.store(ledger.busy(), Ordering::Release);
+        drop(ledger);
+        if !go_on {
+            break;
+        }
     }
-    STATE.busy.store(ledger.busy(), Ordering::Release);
+    if let Some(ledger) = try_ledger() {
+        STATE.busy.store(ledger.busy(), Ordering::Release);
+    }
+    if pass.spent > 0 || pass.probes > 0 {
+        crate::log!(
+            DEBUG,
+            "world transactions: {} bricks and {} column probes in {} µs",
+            pass.spent,
+            pass.probes,
+            started.elapsed().as_micros()
+        );
+    }
 }
 
 /// Drops what the loader holds for a world that ended.

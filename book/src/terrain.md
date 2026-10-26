@@ -118,9 +118,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The loader writes the edits in order on the server's game thread between
-steps, 64 bricks of 8³ voxels (4 metres a side) a step, so a large
-transaction spreads over several steps and never stalls one; an edit is
-never split, and one larger than the budget takes a step of its own.
+steps, about 64 bricks of 8³ voxels (4 metres a side) a step, so a large
+transaction spreads over several steps instead of weighing on one; an edit
+is never split, and one larger than the budget takes a step of its own.
+What a step of a given size costs the server is still being measured, and
+the budget may change with it.
 Before an edit writes, the loader keeps every brick it can touch, 1 KiB a
 brick. `world.transaction_status(id)` tells where a transaction stands:
 
@@ -130,9 +132,9 @@ brick. `world.transaction_status(id)` tells where a transaction stands:
 | `Applied` | written whole; it can be undone |
 | `Undoing` | its undo is queued or written in part |
 | `Undone` | undone, or dropped before it wrote anything |
-| `Failed(why)` | stopped before an edit it could not write; what it wrote before stays and can be undone |
-| `Expired` | written whole, but its undo data was dropped |
-| `UndoRefused(why)` | the last undo wrote nothing; ask again later |
+| `Failed(why)` | stopped at an edit it could not write or read back; what it wrote stays and can be undone |
+| `Expired` | its undo data was dropped; it can no longer be undone |
+| `UndoRefused(why)` | the last undo stopped, keeping what it put back; ask again later |
 
 A transaction checks that its whole region lies inside the world and is
 loaded before it writes anything: if not, it fails with `OutsideWorld` or
@@ -145,16 +147,21 @@ it then stops before the next edit, and an undo takes back what it wrote.
 whole or in part, putting every brick back as it was, newest edit first,
 again at 64 bricks a step. Clients see the undo, and the save keeps it, as
 any edit. Before it writes, the undo checks that every brick still holds
-what the transaction left there. If a player, another mod or a later
-transaction has changed one since, or part of the region is not loaded,
-the undo writes nothing and the status turns `UndoRefused` with `Refused`
-or `NotLoaded`. Undo overlapping transactions newest first.
+what the transaction left there, and it checks each brick again right
+before writing it back. If a player, another mod or a later transaction
+has changed one, the undo stops there and the status turns `UndoRefused`
+with `Refused`: a check before the first write means nothing was written,
+a later one keeps what was put back so far. Part of the region not loaded
+refuses the undo before it writes; a column that unloads during the undo
+makes it wait, and after about 3,600 steps it stops with `NotLoaded`. An
+undo stopped this way may be asked again. Undo overlapping transactions
+newest first.
 
 The loader keeps up to 64 MiB of undo data, 65,536 bricks, over all
 transactions; past that, the oldest written transactions lose theirs and
 turn `Expired`. A transaction holds up to 1,024 edits and may touch no more
-bricks than the cap; a commit while queued transactions hold the cap is
-refused. The loader remembers the newest 4,096 transactions; the status of
+bricks than the cap; a commit, or an undo, while queued work holds the
+cap is refused. The loader remembers the newest 4,096 transactions; the status of
 an older one is `None`. When the world ends, queued work fails with
 `Missing` and written transactions turn `Expired`.
 

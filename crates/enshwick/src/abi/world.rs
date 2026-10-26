@@ -747,7 +747,7 @@ pub struct TransactionOp {
     /// [`TransactionOp::TERRAIN`]; the loader refuses a kind it does not
     /// know.
     pub kind: u32,
-    /// Zero.
+    /// Zero; the loader refuses another value.
     pub reserved: u32,
     /// The change, borrowed for the call: a [`TerrainEdit`] for
     /// [`TransactionOp::TERRAIN`], without [`TerrainEdit::DRY_RUN`].
@@ -813,14 +813,17 @@ impl TransactionInfo {
     pub const UNDOING: u32 = 2;
     /// Undone, or dropped before it wrote anything.
     pub const UNDONE: u32 = 3;
-    /// It stopped before a change it could not write, for `reason`; the
-    /// changes written before it stay and can be undone while `bricks` is
-    /// above 0.
+    /// It stopped before or right after a change it could not write or
+    /// read back, for `reason`; the changes written stay and can be undone
+    /// while `bricks` is above 0. An undo never fails: it is refused.
     pub const FAILED: u32 = 4;
-    /// Written whole, but the loader dropped what its undo needs to stay
-    /// within its memory cap; it can no longer be undone.
+    /// Written whole, or with its undo refused, but the loader dropped what
+    /// its undo needs, to stay within its memory cap or because the world
+    /// ended; it can no longer be undone.
     pub const EXPIRED: u32 = 5;
-    /// Its last undo was refused before writing anything, for `reason`; it
-    /// stays written and can be undone again.
+    /// Its last undo stopped for `reason`: before writing anything, or at a
+    /// brick changed since or not loaded for the loader's wait limit, with
+    /// what it put back kept. The rest stays written and can be undone
+    /// again.
     pub const UNDO_REFUSED: u32 = 6;
 }

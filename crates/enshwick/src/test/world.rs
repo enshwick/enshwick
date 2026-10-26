@@ -248,7 +248,8 @@ impl Installed {
 
     /// Runs the loader's next steps until every queued transaction and undo
     /// is written: pending ones turn applied, undoing ones undone. The fake
-    /// counts one brick of undo data per change.
+    /// keeps the bricks of each change's position ± radius as undo data,
+    /// where the loader keeps every brick the change can write.
     ///
     /// # Examples
     ///
@@ -267,7 +268,7 @@ impl Installed {
                     TransactionInfo::PENDING => {
                         info.state = TransactionInfo::APPLIED;
                         info.applied = info.ops;
-                        info.bricks = u64::from(info.ops);
+                        info.bricks = transaction.terrain.iter().map(edit_bricks).sum();
                     }
                     TransactionInfo::UNDOING => {
                         info.state = TransactionInfo::UNDONE;
@@ -510,6 +511,21 @@ pub(crate) fn outside(end: Option<[u32; 3]>, min: [u32; 3], size: [u32; 3]) -> b
                 .is_none_or(|stop| stop > end[axis])
         })
     })
+}
+
+/// The 8³-voxel bricks of the box of the edit's position ± radius: the
+/// fake's count, where the loader counts every brick the edit can write.
+pub(crate) fn edit_bricks(edit: &crate::abi::TerrainEdit) -> u64 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a checked edit is finite and at 0 or more; `as` saturates"
+    )]
+    let brick = |metres: f32| ((f64::from(metres).max(0.0) * 2.0) as u64) / 8;
+    edit.position
+        .iter()
+        .map(|&at| brick(at + edit.radius) - brick(at - edit.radius) + 1)
+        .product()
 }
 
 /// Whether the edit's position lies past a world ending at `end`.

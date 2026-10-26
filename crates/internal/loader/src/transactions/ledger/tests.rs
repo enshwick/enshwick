@@ -11,6 +11,7 @@ const LIMITS: Limits = Limits {
     ops: 8,
     bricks: 256,
     records: 16,
+    waits: 3,
 };
 
 /// A world of bricks, air where never written; an edit stamps every brick
@@ -23,6 +24,10 @@ struct World {
     restores: usize,
     /// Pages of 32 by 32 bricks along x and z.
     pages: u32,
+    /// A column the next edit unloads once it has written.
+    unload_on_edit: Option<Brick>,
+    /// What the next restore fails with.
+    restore_fails: Option<Status>,
 }
 
 impl World {
@@ -83,10 +88,16 @@ impl Voxels for World {
             self.bricks
                 .insert(brick, Box::new([self.edits; BRICK_VOXELS]));
         }
+        if let Some(brick) = self.unload_on_edit.take() {
+            self.unload(brick);
+        }
         Ok(())
     }
 
     fn restore(&mut self, brick: Brick, image: &[u16; BRICK_VOXELS]) -> Result<(), Status> {
+        if let Some(reason) = self.restore_fails.take() {
+            return Err(reason);
+        }
         self.restores += 1;
         self.bricks.insert(brick, Box::new(*image));
         Ok(())
@@ -436,4 +447,171 @@ fn once_the_extent_is_known_a_commit_leaving_the_world_is_refused() {
         ledger.commit(ME, &[past_the_edge()]).is_ok(),
         "a new world's extent is not known until its first step"
     );
+}
+
+#[test]
+fn a_brick_changed_between_undo_steps_stops_the_undo_before_it() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 8);
+    assert_eq!(world.restores, 8);
+
+    let player = Brick([3, 3, 3]);
+    world.bricks.insert(player, Box::new([99; BRICK_VOXELS]));
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
+    );
+    assert_eq!(
+        world.brick(player),
+        [99; BRICK_VOXELS],
+        "the player's change stays"
+    );
+    assert!(world.restores < 64);
+    assert_eq!(
+        ledger.info(ME, id).unwrap().bricks,
+        64 - world.restores as u64,
+        "what was put back is no longer held"
+    );
+
+    world.bricks.insert(player, Box::new([1; BRICK_VOXELS]));
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id).0,
+        TransactionInfo::UNDONE,
+        "once the brick holds what the transaction left, the undo finishes"
+    );
+    assert_eq!(world.snapshot(), Vec::new());
+}
+
+#[test]
+fn a_brick_that_cannot_be_read_after_its_edit_fails_the_transaction() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.unload_on_edit = Some(Brick([3, 0, 3]));
+    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::NOT_LOADED)
+    );
+    assert_eq!((world.edits, applied(&ledger, id)), (1, 1));
+
+    world.unloaded.clear();
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::UNDO_REFUSED, Status::REFUSED),
+        "a brick whose state after the edit is unknown is never written over"
+    );
+}
+
+#[test]
+fn an_undo_is_refused_while_queued_work_holds_the_cap() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let first = ledger
+        .commit(ME, &[dig(20.0), dig(40.0), dig(60.0), dig(80.0)])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    let second = ledger
+        .commit(ME, &[dig(100.0), dig(120.0), dig(140.0), dig(160.0)])
+        .unwrap();
+    assert_eq!(ledger.undo(ME, first), Err(Status::REFUSED));
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, second).0, TransactionInfo::APPLIED);
+    assert!(ledger.kept() <= LIMITS.bricks);
+    assert_eq!(state(&ledger, first).0, TransactionInfo::EXPIRED);
+}
+
+#[test]
+fn a_failed_restore_refuses_the_undo_and_a_new_one_finishes_it() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 8);
+    world.restore_fails = Some(Status::MISSING);
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+    );
+    assert_eq!(ledger.info(ME, id).unwrap().bricks, 56);
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+    assert_eq!(world.snapshot(), Vec::new());
+}
+
+#[test]
+fn an_undo_waits_a_limited_number_of_steps_for_a_column() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    ledger.step(&mut world, 1000);
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 8);
+    world.unload(Brick([3, 0, 3]));
+    for _ in 0..LIMITS.waits - 1 {
+        ledger.step(&mut world, 1000);
+        assert_eq!(state(&ledger, id).0, TransactionInfo::UNDOING);
+    }
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::UNDO_REFUSED, Status::NOT_LOADED)
+    );
+    assert!(!ledger.busy(), "it no longer holds the queue");
+
+    world.unloaded.clear();
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+}
+
+#[test]
+fn an_undo_asked_while_a_change_is_in_hand_runs_once_it_is_back() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0), dig(40.0)]).unwrap();
+    let mut pass = ledger.begin(world.extent().ok(), 64);
+    let mut task = ledger.take(&mut pass).unwrap();
+    assert_eq!(
+        ledger.undo(ME, id),
+        Ok(()),
+        "the ledger answers while the change is out"
+    );
+    let outcome = task.run(&mut world, &mut pass);
+    assert!(!ledger.put(task, outcome));
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDOING);
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+    assert_eq!(world.edits, 1);
+    assert_eq!(world.snapshot(), Vec::new());
+}
+
+#[test]
+fn a_change_in_hand_when_the_world_ends_is_dropped_on_return() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger.commit(ME, &[dig(20.0)]).unwrap();
+    let mut pass = ledger.begin(world.extent().ok(), 64);
+    let mut task = ledger.take(&mut pass).unwrap();
+    ledger.forget();
+    let outcome = task.run(&mut world, &mut pass);
+    assert!(!ledger.put(task, outcome));
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::MISSING)
+    );
+    assert_eq!(ledger.kept(), 0);
 }
