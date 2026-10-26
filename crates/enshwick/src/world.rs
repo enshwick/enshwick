@@ -6,6 +6,7 @@
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.
 
+mod containers;
 mod geometry;
 mod rename;
 mod stats;
@@ -14,9 +15,11 @@ use core::ffi::c_void;
 
 use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
 use crate::ecs::Entity;
+use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
+pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
@@ -129,6 +132,14 @@ impl WritableType {
                 self.name
             ))
         })
+    }
+
+    /// The `T` at the offset the loader resolves for the engine id `id`,
+    /// inside this type's size.
+    pub(crate) fn field_by_id<T: Scalar>(self, load: &Load<'_>, id: &str) -> Result<Field<T>, Off> {
+        let offset = load.constant(id)?;
+        Field::within(self.ty.0, self.size, offset)
+            .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))
     }
 }
 
@@ -342,6 +353,7 @@ pub struct World {
     used_item: ComponentType,
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
+    containers: Option<containers::Containers>,
 }
 
 impl World {
@@ -353,12 +365,12 @@ impl World {
             used_item: ComponentType(0),
             label: None,
             stats: None,
+            containers: None,
         };
-        world.transform = world.component_type(load, "keen::ecs::CurrentTransform")?;
-        world.used_item = world.component_type(load, "keen::ecs::UsedItem")?;
-        world.label = world
-            .component_type(load, "keen::ecs::CustomPlayerString")
-            .ok();
+        world.transform = world.component_type(load, ids::CURRENT_TRANSFORM)?;
+        world.used_item = world.component_type(load, ids::USED_ITEM)?;
+        world.label = world.component_type(load, ids::LABEL).ok();
+        world.containers = containers::Containers::resolve(load, &world);
         world.stats = stats::Stats::resolve(load, &world)
             .inspect_err(|off| crate::debug!("stat reads off: {off}"))
             .ok();
@@ -1130,6 +1142,35 @@ impl World {
     #[must_use]
     pub const fn transform_type(&self) -> ComponentType {
         self.transform
+    }
+
+    /// The world's containers of a kind in `kinds`, with their places: by
+    /// default what players build, such as storage chests and safes; see
+    /// [`ContainerKinds`] for the rest. Each kind is told apart by a
+    /// component the game gives it. Call it now and then, as
+    /// [`World::entities`]. On the game thread only; empty elsewhere and on
+    /// a build without containers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::actions::{Action, Outcome};
+    /// use enshwick::world::ContainerKinds;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let world = load.world()?;
+    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
+    ///     actions.add(Action::new("chests", "Count the built chests"), move |_request| {
+    ///         let built = world.containers(ContainerKinds::default()).len();
+    ///         Outcome::done(format!("{built} built containers"))
+    ///     })
+    /// }
+    /// ```
+    #[must_use]
+    pub fn containers(&self, kinds: ContainerKinds) -> Vec<Placed> {
+        self.containers
+            .map(|containers| containers.of(self, kinds))
+            .unwrap_or_default()
     }
 
     /// Asks the server to destroy `entity` after the systems of the next

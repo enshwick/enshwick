@@ -318,6 +318,120 @@ pub const FACTS: &[(&str, Fact)] = &[
         "crafting_menu_set.entries",
         offset("keen::FbUiCraftingRecipeSet", "entries"),
     ),
+    (
+        "current_transform",
+        Fact::Type("keen::ecs::CurrentTransform"),
+    ),
+    ("used_item", Fact::Type("keen::ecs::UsedItem")),
+    ("label", Fact::Type("keen::ecs::CustomPlayerString")),
+    ("inventory_setup", Fact::Type("keen::ecs::InventorySetup")),
+    (
+        "inventory_setup.links",
+        offset("keen::ecs::InventorySetup", "linksEntities"),
+    ),
+    (
+        "inventory_setup.categories",
+        offset("keen::ecs::InventorySetup", "linksCategories"),
+    ),
+    (
+        "inventory_setup.initialized",
+        offset("keen::ecs::InventorySetup", "isInitialized"),
+    ),
+    ("inventory", Fact::Type("keen::ecs::Inventory")),
+    ("item_stack", Fact::Type("keen::ItemStack")),
+    ("item_stack.count", offset("keen::ItemStack", "data")),
+    (
+        "item_stack.pide",
+        // `data` holds the u32 count, then the id of the item's own entity.
+        Fact::Offset {
+            ty: "keen::ItemStack",
+            field: "data",
+            plus: 4,
+        },
+    ),
+    ("durability", Fact::Type("keen::ecs::NetworkDurability")),
+    (
+        "durability.max",
+        offset("keen::ecs::NetworkDurability", "durabilityMax"),
+    ),
+    ("fuel", Fact::Type("keen::ecs::NetworkFuel")),
+    ("fuel.max", offset("keen::ecs::NetworkFuel", "fuelMax")),
+    ("owner", Fact::Type("keen::ecs::OwnerRelationship")),
+    (
+        "inventory_empty_state",
+        Fact::Type("keen::ecs::InventoryEmptyState"),
+    ),
+    (
+        "inventory_empty_state.empty",
+        offset("keen::ecs::InventoryEmptyState", "isEmpty"),
+    ),
+    ("destroy_on_loot", Fact::Type("keen::ecs::DestroyOnLoot")),
+    ("lifetime", Fact::Type("keen::ecs::LifeTime")),
+    ("area_loot", Fact::Type("keen::ecs::AreaLootOverride")),
+    (
+        "area_loot.exclude",
+        offset("keen::ecs::AreaLootOverride", "exclude"),
+    ),
+    (
+        "interaction_offer",
+        Fact::Type("keen::ecs::InteractionOfferRuntime"),
+    ),
+    (
+        "interaction_offer.accept_time",
+        offset("keen::ecs::InteractionOfferRuntime", "lastAcceptTime"),
+    ),
+    (
+        "interaction_offer.accept_guest",
+        Fact::Path(&[
+            ("keen::ecs::InteractionOfferRuntime", "lastAcceptData"),
+            ("keen::ecs::InteractionAcceptData", "guestId"),
+        ]),
+    ),
+    (
+        "interaction_offer.disabled",
+        offset("keen::ecs::InteractionOfferRuntime", "isDisabled"),
+    ),
+    ("player_input", Fact::Type("keen::ecs::PlayerInput")),
+    ("boss", Fact::Type("keen::ecs::Boss")),
+    ("interaction_lock", Fact::Type("keen::ecs::InteractionLock")),
+    (
+        "interaction_lock.item",
+        offset("keen::ecs::InteractionLock", "requiredItem"),
+    ),
+    ("loot_slot", Fact::Type("keen::LootSlotInfo")),
+    ("loot_slot.item", offset("keen::LootSlotInfo", "itemId")),
+    ("loot_slot.count", offset("keen::LootSlotInfo", "stackSize")),
+    ("attribute_set.health", Fact::Type("keen::ecs::Health")),
+    ("attribute_set.stamina", Fact::Type("keen::ecs::Stamina")),
+    ("attribute_set.mana", Fact::Type("keen::ecs::Mana")),
+    ("attribute_set.level", Fact::Type("keen::ecs::Level")),
+    (
+        "attribute_set.experience",
+        Fact::Type("keen::ecs::Experience"),
+    ),
+    ("attribute_set.fuel", Fact::Type("keen::ecs::Fuel")),
+    (
+        "attribute_set.shroud",
+        Fact::Type("keen::ecs::FogResistance"),
+    ),
+    ("skill_nodes", Fact::Type("keen::ecs::UnlockedSkillNodes")),
+    (
+        "skill_nodes.ids",
+        offset("keen::ecs::UnlockedSkillNodes", "knownSkillNodes"),
+    ),
+    (
+        "skill_nodes.levels",
+        offset("keen::ecs::UnlockedSkillNodes", "unlockLevel"),
+    ),
+    ("base_actor", Fact::Type("keen::ecs::BaseActor")),
+    (
+        "base_actor.state",
+        offset("keen::ecs::BaseActor", "currentState"),
+    ),
+    ("npc", Fact::Type("keen::ecs::ActiveNpcState")),
+    ("animal", Fact::Type("keen::ecs::Animal")),
+    ("loot_fill", Fact::Type("keen::ecs::DefaultInventory")),
+    ("resource_node", Fact::Type("keen::ecs::MiningNode")),
 ];
 
 const fn offset(ty: &'static str, field: &'static str) -> Fact {

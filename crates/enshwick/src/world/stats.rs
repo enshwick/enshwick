@@ -5,6 +5,7 @@
 //! values in the order of the game's attribute container.
 
 use crate::ecs::Entity;
+use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError};
 use crate::{Load, Off};
@@ -126,7 +127,9 @@ struct SetLayout {
     count: usize,
 }
 
-/// What the stat reads need on the running build.
+/// What the stat reads need on the running build. The attribute sets are
+/// the game's own fixed set, the sets its attribute container lists; each
+/// is a component type the catalogue names.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Stats {
     layout: SetLayout,
@@ -158,18 +161,17 @@ impl Stats {
         let slot = |name: &str| value(name).map(|v| v as usize);
         let set = |ty: &str| world.component_type(load, ty);
         let skills = (|| {
-            let ty = "keen::ecs::UnlockedSkillNodes";
-            let at = |field: &str| {
-                load.field_offset(ty, field).and_then(|v| {
-                    usize::try_from(v).map_err(|_| Off::new(format!("field {ty}.{field}")))
-                })
+            let ty = ids::SKILL_NODES;
+            let at = |id: &str| {
+                load.constant(id)
+                    .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("field {id}"))))
             };
             let size = usize::try_from(load.type_size(ty)?).unwrap_or(0);
-            let (ids, levels) = (at("knownSkillNodes")?, at("unlockLevel")?);
-            if ids + SKILL_SLOTS * 4 > size || levels + SKILL_SLOTS > size {
+            let (nodes, levels) = (at(ids::SKILL_NODES_IDS)?, at(ids::SKILL_NODES_LEVELS)?);
+            if nodes + SKILL_SLOTS * 4 > size || levels + SKILL_SLOTS > size {
                 return Err(Off::new(format!("{ty}: smaller than this API reads")));
             }
-            Ok::<_, Off>((set(ty)?, ids, levels))
+            Ok::<_, Off>((set(ty)?, nodes, levels))
         })();
         if let Ok(found) = skills {
             let _first = SKILLS.set(found);
@@ -181,33 +183,33 @@ impl Stats {
                 count: slot("ecs.attribute_count")?,
             },
             health: Set {
-                ty: set("keen::ecs::Health")?,
+                ty: set(ids::ATTRIBUTE_SET_HEALTH)?,
                 root: value("attribute.health")?,
                 slots: [0, slot("attribute.health_max_slot")?],
             },
             stamina: Set {
-                ty: set("keen::ecs::Stamina")?,
+                ty: set(ids::ATTRIBUTE_SET_STAMINA)?,
                 root: value("attribute.stamina")?,
                 slots: [0, slot("attribute.stamina_max_slot")?],
             },
             mana: Set {
-                ty: set("keen::ecs::Mana")?,
+                ty: set(ids::ATTRIBUTE_SET_MANA)?,
                 root: value("attribute.mana")?,
                 slots: [0, slot("attribute.mana_max_slot")?],
             },
             level: Set {
-                ty: set("keen::ecs::Level")?,
+                ty: set(ids::ATTRIBUTE_SET_LEVEL)?,
                 root: value("attribute.level")?,
                 slots: [0],
             },
             experience: Set {
-                ty: set("keen::ecs::Experience")?,
+                ty: set(ids::ATTRIBUTE_SET_EXPERIENCE)?,
                 root: value("attribute.experience")?,
                 slots: [0, slot("attribute.experience_needed_slot")?],
             },
             meter: (|| {
                 Ok::<_, Off>(Set {
-                    ty: set("keen::ecs::Fuel")?,
+                    ty: set(ids::ATTRIBUTE_SET_FUEL)?,
                     root: value("attribute.fuel")?,
                     slots: [0, slot("attribute.fuel_max_slot")?],
                 })
@@ -215,7 +217,7 @@ impl Stats {
             .ok(),
             shroud: (|| {
                 Ok::<_, Off>(Set {
-                    ty: set("keen::ecs::FogResistance")?,
+                    ty: set(ids::ATTRIBUTE_SET_SHROUD)?,
                     root: value("attribute.shroud")?,
                     slots: [0, slot("attribute.shroud_max_slot")?],
                 })
@@ -223,8 +225,8 @@ impl Stats {
             .ok(),
             in_shroud: (|| {
                 let field = world
-                    .writable_type(load, "keen::ecs::BaseActor")?
-                    .field::<u64>(load, "currentState")?;
+                    .writable_type(load, ids::BASE_ACTOR)?
+                    .field_by_id::<u64>(load, ids::BASE_ACTOR_STATE)?;
                 Ok::<_, Off>((field, load.constant("actor.state_in_shroud")?))
             })()
             .ok(),

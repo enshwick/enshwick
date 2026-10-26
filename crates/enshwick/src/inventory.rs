@@ -23,6 +23,7 @@ use crate::abi::{
     Header, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
 };
 use crate::ecs::{Components, Entity};
+use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
 use crate::world::{ComponentType, World};
@@ -1034,25 +1035,25 @@ impl Inventories {
         }
         let world = load.world()?;
         let components = Components::resolve(load)?;
-        let offset = |ty: &str, field: &str| {
-            load.field_offset(ty, field)
-                .and_then(|v| usize::try_from(v).map_err(|_| Off::new("offset")))
+        let offset = |id: &str| {
+            load.constant(id)
+                .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
         };
         let layout = Layout {
-            setup: world.component_type(load, "keen::ecs::InventorySetup")?,
-            inventory: world.component_type(load, "keen::ecs::Inventory")?,
-            durability: world.component_type(load, "keen::ecs::NetworkDurability")?,
-            fuel: world.component_type(load, "keen::ecs::NetworkFuel")?,
-            owner: world.component_type(load, "keen::ecs::OwnerRelationship")?,
-            links: offset("keen::ecs::InventorySetup", "linksEntities")?,
-            categories: offset("keen::ecs::InventorySetup", "linksCategories")?,
-            initialized: offset("keen::ecs::InventorySetup", "isInitialized")?,
-            stack: usize::try_from(load.type_size("keen::ItemStack")?)
-                .map_err(|_| Off::new("ItemStack"))?,
-            stack_count: offset("keen::ItemStack", "data")?,
-            stack_pide: offset("keen::ItemStack", "data")? + size_of::<u32>(),
-            durability_max: offset("keen::ecs::NetworkDurability", "durabilityMax")?,
-            fuel_max: offset("keen::ecs::NetworkFuel", "fuelMax")?,
+            setup: world.component_type(load, ids::INVENTORY_SETUP)?,
+            inventory: world.component_type(load, ids::INVENTORY)?,
+            durability: world.component_type(load, ids::DURABILITY)?,
+            fuel: world.component_type(load, ids::FUEL)?,
+            owner: world.component_type(load, ids::OWNER)?,
+            links: offset(ids::INVENTORY_SETUP_LINKS)?,
+            categories: offset(ids::INVENTORY_SETUP_CATEGORIES)?,
+            initialized: offset(ids::INVENTORY_SETUP_INITIALIZED)?,
+            stack: usize::try_from(load.type_size(ids::ITEM_STACK)?)
+                .map_err(|_| Off::new(ids::ITEM_STACK))?,
+            stack_count: offset(ids::ITEM_STACK_COUNT)?,
+            stack_pide: offset(ids::ITEM_STACK_PIDE)?,
+            durability_max: offset(ids::DURABILITY_MAX)?,
+            fuel_max: offset(ids::FUEL_MAX)?,
             skip: usize::try_from(load.symbol("inventory.skip_entity")?)
                 .map_err(|_| Off::new("inventory.skip_entity"))?,
         };

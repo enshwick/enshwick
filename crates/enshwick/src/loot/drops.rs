@@ -12,9 +12,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
-use crate::raw::{read_at, read_ptr_at, write_at};
+use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -429,6 +430,8 @@ struct Engine {
     boss: u32,
     lock: u32,
     lock_item: usize,
+    /// The single roll's output; `None` on a build without its layout.
+    slot: Option<Slot>,
 }
 
 static ENGINE: Fresh<Engine> = Fresh::new();
@@ -471,9 +474,9 @@ unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
 impl Engine {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let world = load.world()?;
-        let ty = |name: &str| {
+        let ty = |id: &str| {
             world
-                .component_type(load, name)
+                .component_type(load, id)
                 .map(crate::world::ComponentType::hash)
         };
         let size = |name: &str| {
@@ -490,12 +493,15 @@ impl Engine {
             txn_entity: size("loot.txn_entity")?,
             request_node: size("loot.request_node")?,
             request_labels: size("loot.request_labels")?,
-            destroy_on_loot: ty("keen::ecs::DestroyOnLoot")?,
-            boss: ty("keen::ecs::Boss")?,
-            lock: ty("keen::ecs::InteractionLock")?,
+            destroy_on_loot: ty(ids::DESTROY_ON_LOOT)?,
+            boss: ty(ids::BOSS)?,
+            lock: ty(ids::INTERACTION_LOCK)?,
             lock_item: load
-                .field_offset("keen::ecs::InteractionLock", "requiredItem")
+                .constant(ids::INTERACTION_LOCK_ITEM)
                 .and_then(|v| usize::try_from(v).map_err(|_| Off::new("offset")))?,
+            slot: Slot::resolve(load)
+                .inspect_err(|off| crate::debug!("loot from destroyed things off: {off}"))
+                .ok(),
         })
     }
 
@@ -650,10 +656,50 @@ unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     }
 }
 
-/// Item id, count, rarity, level and value: the single roll's output.
-const ONE_ITEM: usize = 0;
-const ONE_COUNT: usize = 4;
-const ONE_SIZE: usize = 16;
+/// The most bytes a single roll's output slot may take.
+const SLOT_MAX: usize = 64;
+
+/// Where the single roll's output slot keeps the item id and the count, and
+/// its size, from the catalogue.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Slot {
+    item: usize,
+    count: usize,
+    size: usize,
+}
+
+impl Slot {
+    /// The slot, when a u32 item id and a u16 count fit inside `size`
+    /// bytes and `size` fits [`SLOT_MAX`].
+    fn new(item: usize, count: usize, size: usize) -> Option<Self> {
+        let fits = |at: usize, len: usize| at.checked_add(len).is_some_and(|end| end <= size);
+        (size <= SLOT_MAX && fits(item, size_of::<u32>()) && fits(count, size_of::<u16>()))
+            .then_some(Self { item, count, size })
+    }
+
+    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
+        let at = |id: &str| {
+            load.constant(id)
+                .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
+        };
+        let size = usize::try_from(load.type_size(ids::LOOT_SLOT)?).unwrap_or(usize::MAX);
+        Self::new(at(ids::LOOT_SLOT_ITEM)?, at(ids::LOOT_SLOT_COUNT)?, size).ok_or_else(|| {
+            Off::new(format!(
+                "{}: not the layout this API writes",
+                ids::LOOT_SLOT
+            ))
+        })
+    }
+
+    /// The slot's bytes for `count` of `item`, the rest zero, and how many
+    /// of them the slot takes.
+    fn fill(self, item: u32, count: u16) -> ([u8; SLOT_MAX], usize) {
+        let mut bytes = [0u8; SLOT_MAX];
+        bytes[self.item..self.item + size_of::<u32>()].copy_from_slice(&item.to_le_bytes());
+        bytes[self.count..self.count + size_of::<u16>()].copy_from_slice(&count.to_le_bytes());
+        (bytes, self.size)
+    }
+}
 
 fn after_roll_one(
     next: Next<RollFn>,
@@ -683,12 +729,15 @@ fn after_roll_one(
 /// # Safety
 ///
 /// - `res` is null or the single roll's status byte, writable.
-/// - `out` is null or the single roll's output, writable for `ONE_SIZE`
-///   bytes.
+/// - `out` is null or the single roll's output slot, writable for its
+///   reflected size.
 /// - Both are the arguments the game passed to the single roll that just
 ///   returned, used on its thread inside the hook.
 unsafe fn add_one(res: *mut u8, out: *mut u8) {
-    if ENGINE.get().is_none() || res.is_null() || out.is_null() {
+    let Some(slot) = ENGINE.get().and_then(|engine| engine.slot) else {
+        return;
+    };
+    if res.is_null() || out.is_null() {
         return;
     }
     let roll = Roll {
@@ -711,14 +760,12 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
     else {
         return;
     };
-    let mut stack = [0u8; ONE_SIZE];
-    stack[ONE_ITEM..ONE_ITEM + 4].copy_from_slice(&item.to_le_bytes());
-    stack[ONE_COUNT..ONE_COUNT + 2].copy_from_slice(&count.to_le_bytes());
+    let (stack, len) = slot.fill(item, count);
     // SAFETY: `out` is not null, as the early return ensures, and the caller
-    // guarantees the single roll's `ONE_SIZE` writable output bytes; the game's
-    // callers drop the stack when the status is 0 and the item and count are
-    // set.
-    unsafe { write_at(out, 0, stack) };
+    // guarantees the single roll's output slot, writable for its reflected
+    // size, which `Slot::new` bounded `len` to; the game's callers drop the
+    // stack when the status is 0 and the item and count are set.
+    unsafe { write_bytes_at(out, 0, &stack[..len]) };
     // SAFETY: `res` is not null, as the early return ensures, and the caller
     // guarantees the single roll's writable status byte.
     unsafe { write_at(res, 0, 0u8) };
@@ -792,6 +839,12 @@ impl Load<'_> {
                 .get_or_init(Default::default)
                 .load(Ordering::Acquire)
         {
+            if ENGINE.get().and_then(|engine| engine.slot).is_none() {
+                return Err(Off::new(format!(
+                    "loot from destroyed things: {} is not on this build",
+                    ids::LOOT_SLOT
+                )));
+            }
             let roll_one = self.symbol("loot.roll_one")?;
             // SAFETY: the build table's `loot.roll_one` is the single roll
             // `ROLL_ONE` declares.
@@ -922,6 +975,29 @@ mod tests {
                 .with_nodes(&[8])
                 .matches(&chest)
         );
+    }
+
+    #[test]
+    fn a_single_roll_slot_holds_the_item_and_count_at_their_offsets() {
+        let slot = Slot::new(0, 4, 16).unwrap();
+        let (bytes, len) = slot.fill(0x0102_0304, 7);
+        assert_eq!(len, 16);
+        assert_eq!(bytes[..6], [4, 3, 2, 1, 7, 0]);
+        assert!(bytes[6..].iter().all(|&b| b == 0));
+        let moved = Slot::new(8, 2, 12).unwrap();
+        let (bytes, len) = moved.fill(9, 3);
+        assert_eq!((len, bytes[8], bytes[2]), (12, 9, 3));
+    }
+
+    #[test]
+    fn a_single_roll_slot_that_cannot_hold_its_fields_is_refused() {
+        assert!(Slot::new(0, 4, 5).is_none(), "count past the end");
+        assert!(Slot::new(14, 4, 16).is_none(), "item past the end");
+        assert!(
+            Slot::new(0, 4, SLOT_MAX + 1).is_none(),
+            "larger than the buffer"
+        );
+        assert!(Slot::new(usize::MAX, 4, 16).is_none(), "overflow");
     }
 
     #[test]

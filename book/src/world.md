@@ -193,7 +193,11 @@ do nothing, so check a new write on a test server first.
 in the world, as `Placed { entity, position }`, position in metres;
 `near(point, radius, ty)` those within `radius` metres of `point`, nearest
 first. `transform_type()` is the component every placed entity has, so
-`near(point, radius, world.transform_type())` finds everything there. The
+`near(point, radius, world.transform_type())` finds everything there.
+`containers(kinds)` lists the entities that hold items, by kind:
+`ContainerKinds::default()` is what players build, such as storage chests and
+safes; the other constants of `ContainerKinds` name the rest, combined with
+`|`, and `ContainerKinds::ALL` takes every kind. The
 engine walks every archetype with the component, so call them now and then,
 from an action or a timer, not on every step.
 
