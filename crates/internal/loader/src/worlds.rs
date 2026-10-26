@@ -470,32 +470,4 @@ workers = 6
         remove_at(doc.as_table_mut(), "comfort.multiplier");
         assert!(value_at(doc.as_table(), "comfort.multiplier").is_none());
     }
-
-    #[test]
-    fn grouped_settings_overlay_and_fill_in_by_their_dotted_keys() {
-        let template = "limit = 4\n\n# Comfort.\n[comfort]\nmultiplier = 1.0\nshown = true\n";
-        let world = "limit = 6\n\n[comfort]\nmultiplier = 2.0\n";
-        let filled = with_new_keys(world, template);
-        assert_eq!(
-            filled,
-            "limit = 6\n\n[comfort]\nmultiplier = 2.0\nshown = true\n"
-        );
-        let global = "[comfort]\nmultiplier = 9.0\nshown = false\n";
-        let composed = overlay(&filled, global, Some(&["comfort.shown"]));
-        assert_eq!(
-            composed,
-            "limit = 6\n\n[comfort]\nmultiplier = 2.0\nshown = false\n"
-        );
-        let mut doc: DocumentMut = "a = 1\n".parse().unwrap();
-        assert!(set_at(doc.as_table_mut(), "comfort.multiplier", 3.into()));
-        assert!(!set_at(doc.as_table_mut(), "a.b", 3.into()), "a is a value");
-        assert_eq!(
-            value_at(doc.as_table(), "comfort.multiplier")
-                .map(ToString::to_string)
-                .as_deref(),
-            Some("3")
-        );
-        remove_at(doc.as_table_mut(), "comfort.multiplier");
-        assert!(value_at(doc.as_table(), "comfort.multiplier").is_none());
-    }
 }
