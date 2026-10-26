@@ -60,10 +60,10 @@ processors):
 
 | Path                  | Upper halves clear | `ymm` in use | `zmm` in use |
 | --------------------- | ------------------ | ------------ | ------------ |
-| AMD, AVX-512 (chosen) | +7.0 ns            | +7.3 ns      | +9.7 ns      |
-| Intel, AVX-512        | +12.5 ns           | +12.4 ns     | +14.4 ns     |
-| AMD, AVX              | +5.9 ns            | +5.9 ns      | —            |
-| Intel, AVX            | +6.1 ns            | +5.9 ns      | —            |
+| AMD, AVX-512 (chosen) | +7.3 ns            | +8.2 ns      | +8.7 ns      |
+| Intel, AVX-512        | +21.2 ns           | +21.7 ns     | +22.1 ns     |
+| AMD, AVX              | +5.9 ns            | +6.1 ns      | —            |
+| Intel, AVX            | +6.3 ns            | +6.4 ns      | —            |
 | no AVX                | +5.2 ns            | —            | —            |
 
 ## Choosing an address
