@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.5] - 2026-10-26
+
 ### Added
 
 - `Rate::RecipeOutput(kind)` multiplies what the recipes of each

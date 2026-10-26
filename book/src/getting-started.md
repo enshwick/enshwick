@@ -124,7 +124,7 @@ impl Mod for AltarCount {
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
         let settings: Settings = load.config()?;
         apply(&settings);
-        load.on_altar_limit(|_flame_level| ALTARS.load(Ordering::Relaxed))?;
+        load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
         load.on_config_change(|settings: Settings| apply(&settings))?;
         enshwick::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
@@ -143,9 +143,9 @@ What each piece does:
   `join: true` because the client's interface asks the same limit, so
   players and their server must agree. See
   [The loader and the ABI](concepts/loader-and-abi.md).
-- `init` reads the settings and hands the limit to the game with
-  `on_altar_limit`, which the game asks with the Flame level each time it
-  needs the number. Any `?` that fails turns the mod off with the reason in
+- `init` reads the settings and adds its answer to the game's limit with
+  `on_altar_limit`, which the loader asks with the Flame level, the game's own
+  count and the count so far each time the game needs the number. Any `?` that fails turns the mod off with the reason in
   the log; the game then runs vanilla. See
   [The life of a mod](concepts/lifecycle.md).
 - `on_config_change` applies an edited file while the game runs. The limit
@@ -209,9 +209,9 @@ enshwick::declare_mod!(AltarCount);
   function's arguments. See [Hooks](hooks.md).
 - `load.symbol` finds the function by its symbolic id on the running build;
   [Finding the game](finding-the-game.md) shows how ids are found and pinned.
-- A hook chains with other mods' hooks on the same function, while
-  `on_altar_limit` belongs to one mod at a time; a hook is also the mod's to
-  keep working when the game changes. Prefer the API's call where there is
+- A hook chains with other mods' hooks on the same function, as
+  `on_altar_limit` filters chain; a hook is also the mod's to keep working
+  when the game changes. Prefer the API's call where there is
   one, and ask for one when other mods would need the same hook.
 
 ## Where the logs are

@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-stub"
-version = "1.0.0-alpha.4"
+version = "1.0.0-alpha.5"
 description = "Internal, not for mods: the POWRPROF.dll proxy that starts the Enshwick Loader inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "proxy"]
 categories = ["game-development"]

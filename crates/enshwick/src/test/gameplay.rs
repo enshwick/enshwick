@@ -1,6 +1,7 @@
 //! Gameplay answers: damage, knowledge, buffs, altars, survivors, stats and checks.
 
 use crate::abi::AltarInfo;
+use crate::abi::AltarLimit;
 use crate::abi::AltarZone;
 use crate::abi::BedCheck;
 use crate::abi::Bounds;
@@ -651,20 +652,34 @@ impl Installed {
         }
     }
 
-    /// Asks the mod's altar limit about `flame_level`; `None` without one.
+    /// Asks the mod's altar limit filters about `flame_level`, where the game
+    /// allows `vanilla`, as the loader would: each on the count the last one
+    /// left, the answer kept within the zones the game groups.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.altar_limit(3), None);
+    /// assert_eq!(loader.altar_limit(3, 6), 6);
     /// ```
     #[must_use]
-    pub fn altar_limit(&self, flame_level: u32) -> Option<u8> {
-        let (callback, user) = table::with(None, |s| s.altar_limit)?;
-        let user = core::ptr::with_exposed_provenance_mut(user);
-        // SAFETY: `user` is the mod's pointer.
-        Some(unsafe { callback(flame_level, user) })
+    pub fn altar_limit(&self, flame_level: u32, vanilla: u8) -> u8 {
+        let filters = table::with(Vec::new(), |s| s.altar_limits.clone());
+        let mut limit = AltarLimit {
+            header: Header::of::<AltarLimit>(),
+            flame_level,
+            vanilla,
+            allowed: vanilla,
+            reserved: [0; 2],
+        };
+        for (callback, user) in filters {
+            // SAFETY: a valid limit; `user` is the mod's pointer.
+            unsafe { callback(&raw mut limit, core::ptr::with_exposed_provenance_mut(user)) };
+            limit.flame_level = flame_level;
+            limit.vanilla = vanilla;
+        }
+        let (zones, _) = table::gameplay::zones_and_bases();
+        limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
     }
 
     /// Whether the mod raised the base limit.
@@ -677,7 +692,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn base_limit_raised(&self) -> bool {
-        table::with(false, |s| s.base_limit_raised)
+        table::with(false, |s| s.base_limit.raised)
     }
 
     /// Makes the last grouping find `zones` altar zones in `bases` bases.
