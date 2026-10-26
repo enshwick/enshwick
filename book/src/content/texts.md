@@ -119,7 +119,7 @@ assert!(line.contains('3'));
 The server does not know a player's language, and `language()` there is
 `Language::FALLBACK`; an [action](../actions.md)'s request carries the
 language the player's client reads.
-[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/mod-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
 

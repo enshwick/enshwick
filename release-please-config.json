@@ -111,10 +111,6 @@
       "package-name": "enshwick-gamedata",
       "component": "enshwick-gamedata"
     },
-    "mods/enshwick-safes": {
-      "package-name": "enshwick-safes",
-      "component": "enshwick-safes"
-    },
     "mods/enshwick-optimizer": {
       "package-name": "enshwick-optimizer",
       "component": "enshwick-optimizer"
