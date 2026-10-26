@@ -11,6 +11,11 @@ Each entry names the pull request that made the change.
 - `ContainerKinds`, `ItemCategoryMask` and the event masks have a
   `const fn union`, so a combined set can be a `const`; `|` gives the same
   (#539).
+- `Load::change_items` changes a stack size or container slots of every
+  vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
+  `Items::Containers`), read from the game's data by the loader;
+  `ItemCategoryMask` moved to `content::categories` and names every item
+  category.
 
 ### Changed
 

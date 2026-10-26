@@ -101,15 +101,24 @@ pub(crate) extern "system" fn change_data(
     }) else {
         return Status::BAD_ARGS;
     };
-    let Ok(Some(change)) = crate::content::changes::Change::from_abi(&raw) else {
-        return Status::BAD_ARGS;
-    };
     // SAFETY: the safe layer borrows the source for the call.
     let source = unsafe { raw.source.as_str() }
         .unwrap_or_default()
         .to_owned();
+    if raw.select != crate::abi::DataSelect::ENTRY {
+        let Ok(Some(change)) = crate::content::changes::ItemsChange::from_abi(&raw) else {
+            return Status::BAD_ARGS;
+        };
+        return with(Status::MISSING, |s| {
+            s.changes.items.push((change, source));
+            Status::OK
+        });
+    }
+    let Ok(Some(change)) = crate::content::changes::Change::from_abi(&raw) else {
+        return Status::BAD_ARGS;
+    };
     with(Status::MISSING, |s| {
-        s.changes.push((change, source));
+        s.changes.one.push((change, source));
         Status::OK
     })
 }

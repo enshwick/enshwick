@@ -366,6 +366,7 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ItemInfo", "description"),
     ),
     ("item_info.flags", offset("keen::ItemInfo", "flags")),
+    ("item_info.category", offset("keen::ItemInfo", "category")),
     (
         "item_info.max_stack",
         offset("keen::ItemInfo", "maxStackSize"),

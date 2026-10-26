@@ -129,6 +129,10 @@ name = "rates_join"
 required-features = ["test"]
 
 [[test]]
+name = "item_changes"
+required-features = ["test"]
+
+[[test]]
 name = "rates_comfort"
 required-features = ["test"]
 

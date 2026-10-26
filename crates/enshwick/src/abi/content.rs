@@ -180,7 +180,7 @@ impl ChangeOp {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{ChangeOp, DataChange, DataField, Header, Str};
+/// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 ///
 /// let change = DataChange {
 ///     header: Header::of::<DataChange>(),
@@ -190,6 +190,8 @@ impl ChangeOp {
 ///     value: 999.0,
 ///     source: Str::new("items.toml:3"),
 ///     item: [0; 16],
+///     select: DataSelect::ENTRY,
+///     categories: 0,
 /// };
 /// assert_eq!(change.value, 999.0);
 /// ```
@@ -212,9 +214,39 @@ pub struct DataChange {
     /// The item the field names inside its entry, such as a recipe's
     /// ingredient; all zero for none. Since minor 79.
     pub item: [u8; 16],
+    /// Which vanilla items the change reaches: `entry` alone, or every item
+    /// a selection picks, with `entry` all zero. Since minor 83.
+    pub select: DataSelect,
+    /// The item categories [`DataSelect::CATEGORY`] picks, a bit per the
+    /// game's `ItemCategory`; 0 for any other selection. Since minor 83.
+    pub categories: u32,
 }
 
 impl_headed!(DataChange);
+
+/// Which vanilla items a [`DataChange`] reaches.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::DataSelect;
+///
+/// assert_ne!(DataSelect::ENTRY, DataSelect::STACKABLE);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
+pub struct DataSelect(pub u32);
+
+impl DataSelect {
+    /// The entry the change names, as before minor 83.
+    pub const ENTRY: Self = Self(0);
+    /// Every item of the categories in [`DataChange::categories`].
+    pub const CATEGORY: Self = Self(1);
+    /// Every item one slot holds more than one of.
+    pub const STACKABLE: Self = Self(2);
+    /// Every item that places a container.
+    pub const CONTAINERS: Self = Self(3);
+}
 
 /// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).
 ///

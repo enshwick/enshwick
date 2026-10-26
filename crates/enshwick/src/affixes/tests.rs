@@ -1,4 +1,5 @@
 use crate::abi::StatRef as Ref;
+use crate::content::categories::ItemCategoryMask;
 use crate::stats::Stat;
 
 use super::*;
