@@ -1,10 +1,18 @@
 # A development build of the commit it runs on, until the first public
-# release, 1.0.0. It packs the same archives as a release (tools/pack.sh)
-# and puts them on the single prerelease `dev`, whose tag moves to the commit.
+# release, 1.0.0. `cargo xtask bundle` writes the archives: enshwick.zip with
+# everything that goes into the game folder, each mod from the dev
+# prerelease of its own repository where tools/mods.toml names one that has
+# it. They replace the files of the single prerelease `dev`, whose tag moves
+# to the commit.
 name: dev-build
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Replace the dev prerelease; off builds the archives only
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -15,40 +23,53 @@ concurrency:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash
+    runs-on: enshwick
+    timeout-minutes: 45
     steps:
       # v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Build
-        run: cargo build --release --workspace --locked
+      # cargo-xwin links for Windows with clang and lld; build scripts need a
+      # C compiler for the runner itself.
+      - name: Toolchain
+        run: |
+          missing=""
+          for tool in cc clang lld; do command -v "$tool" > /dev/null || missing=1; done
+          if [ -n "$missing" ]; then
+            sudo apt-get update -q
+            sudo apt-get install -yq --no-install-recommends build-essential clang lld llvm
+          fi
+          command -v rustup > /dev/null || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          "$HOME/.cargo/bin/rustup" show active-toolchain
+          "$HOME/.cargo/bin/cargo" install --locked cargo-xwin@0.23.1
 
       - name: Archives
-        run: bash tools/pack.sh "$RUNNER_TEMP/mods.tsv"
-
-      - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          short=$(git rev-parse --short=7 HEAD)
-          title="Enshwick dev $short"
-          notes="Development build of $GITHUB_SHA: $(git log -1 --format=%s).
+        run: cargo xtask bundle --out "$RUNNER_TEMP/dev"
 
-          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it."
-          read -r -a assets <<< "enshwick.zip enshwick-loader.zip $(cut -f1 "$RUNNER_TEMP/mods.tsv" | sed 's/$/.zip/' | tr '\n' ' ')"
+      - name: Publish
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ runner.temp }}/dev
+        run: |
+          short=$(git -C "$GITHUB_WORKSPACE" rev-parse --short=7 HEAD)
+          title="Enshwick dev $short"
+          notes="Development build of $GITHUB_SHA: $(git -C "$GITHUB_WORKSPACE" log -1 --format=%s).
+
+          Until the first public release, 1.0.0, this prerelease is the only build to download; every run replaces it. Extract enshwick.zip into the folder that holds enshrouded.exe or enshrouded_server.exe."
+          assets=(*.zip)
           if gh release view dev --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/dev" -f sha="$GITHUB_SHA" -F force=true > /dev/null
             gh release edit dev --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$title" --notes "$notes" --prerelease --latest=false
             gh release upload dev "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-            # Files of an earlier build that this one no longer has, such as a
-            # renamed mod's archive, go.
-            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | tr -d '\r' |
+            # Files of an earlier build that this one no longer has, such as
+            # the archive of a mod that now releases from its own repository, go.
+            gh release view dev --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
               while read -r name; do
                 case " ${assets[*]} " in
                   *" $name "*) ;;

@@ -8,8 +8,12 @@
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
 //! checks. `cargo xtask check --all` runs the full suite.
+//!
+//! `cargo xtask bundle` writes the dev bundle testers unpack into the game
+//! folder ([`bundle`]).
 
 mod affected;
+mod bundle;
 
 use std::collections::BTreeSet;
 use std::io::Write as _;
@@ -19,7 +23,8 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--base <git ref>]";
+const USAGE: &str =
+    "usage: cargo xtask check [--all] [--base <git ref>] | bundle [--out <dir>] [--local]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 
 fn main() -> ExitCode {
@@ -36,8 +41,10 @@ fn main() -> ExitCode {
 
 fn run(args: &[String]) -> Result<bool, String> {
     let (task, rest) = args.split_first().ok_or(USAGE)?;
-    if task != "check" {
-        return Err(USAGE.to_owned());
+    match task.as_str() {
+        "check" => {}
+        "bundle" => return bundle::run(rest),
+        _ => return Err(USAGE.to_owned()),
     }
     let mut all = false;
     let mut base = "origin/main".to_owned();

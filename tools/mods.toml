@@ -1,0 +1,48 @@
+# The mods the dev bundle (`cargo xtask bundle`) carries. Each comes from the
+# `dev` prerelease of its repository, out of the single-mod archive
+# `<package>.zip` there, once that repository has one; until then it is built
+# from this workspace.
+
+[[mod]]
+package = "enshwick-admin-tools"
+repository = "enshwick/mod-admin-tools"
+
+[[mod]]
+package = "enshwick-area-loot"
+repository = "enshwick/mod-area-loot"
+
+[[mod]]
+package = "enshwick-build-camera"
+repository = "enshwick/mod-build-camera"
+
+[[mod]]
+package = "enshwick-building-materials"
+repository = "enshwick/mod-building-materials"
+
+[[mod]]
+package = "enshwick-flame-altar-count"
+repository = "enshwick/mod-flame-altar-count"
+
+[[mod]]
+package = "enshwick-flame-altar-zones"
+repository = "enshwick/mod-flame-altar-zones"
+
+[[mod]]
+package = "enshwick-furniture-comfort"
+repository = "enshwick/mod-furniture-comfort"
+
+[[mod]]
+package = "enshwick-optimizer"
+repository = "enshwick/mod-optimizer"
+
+[[mod]]
+package = "enshwick-safes"
+repository = "enshwick/mod-safes"
+
+[[mod]]
+package = "enshwick-shared-experience"
+repository = "enshwick/mod-shared-experience"
+
+[[mod]]
+package = "enshwick-survivors-per-altar"
+repository = "enshwick/mod-survivors-per-altar"

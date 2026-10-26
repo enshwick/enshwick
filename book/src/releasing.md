@@ -48,9 +48,13 @@ cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
 Until the first public release, 1.0.0, this repository has no releases.
 Every crate carries the version `0.0.0-dev`, and the
 [dev-build workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/dev-build.yml),
-run by hand, builds the commit it runs on, packs the same archives as a
-release and replaces the files of the one prerelease tagged `dev`, whose tag
-moves to that commit. Two development builds of one commit join each other; builds of
+run by hand, builds the commit it runs on with `cargo xtask bundle` and
+replaces the files of the one prerelease tagged `dev`, whose tag moves to
+that commit. `enshwick.zip` there holds everything that goes into the game
+folder: each mod of `tools/mods.toml` comes from the `dev` prerelease of its
+own repository once that repository has one, and is built from this
+repository until then. `cargo xtask bundle` writes the same archives into
+`target/bundle` on any machine with `cargo-xwin`. Two development builds of one commit join each other; builds of
 different commits carry the same versions, so the join check does not tell
 them apart. The release workflow below runs by hand as well and makes 1.0.0
 the first version of every crate.
