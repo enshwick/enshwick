@@ -23,12 +23,10 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    FlushInstructionCache, IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
+    IMAGE_RUNTIME_FUNCTION_ENTRY, RtlAddFunctionTable,
 };
-use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
-};
-use windows_sys::Win32::System::Threading::{GetCurrentProcess, TlsAlloc, TlsGetValue};
+use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
+use windows_sys::Win32::System::Threading::{TlsAlloc, TlsGetValue};
 
 pub(crate) use crate::chains::Counter;
 use crate::chains::{Chains, Hop};
@@ -364,19 +362,11 @@ pub(crate) fn arm(
         let _first = ARMED_AT.set((rdtsc(), std::time::Instant::now()));
     }
 
-    let mut old = 0;
     // SAFETY: `block` and `code_len` are the code pages `reserve` gave this
-    // batch, and `old` is a live `u32` the call writes.
-    let sealed = unsafe { VirtualProtect(block.cast(), code_len, PAGE_EXECUTE_READ, &raw mut old) };
-    if sealed == 0 {
+    // batch, written in full; no thread runs them before `hook` links them.
+    if !unsafe { crate::pages::seal(block.expose_provenance(), code_len) } {
         return unarmed(chains, mids, patches, "thunk pages not executable");
     }
-    // SAFETY: `GetCurrentProcess` takes no arguments and returns a
-    // pseudo-handle that needs no closing.
-    let process = unsafe { GetCurrentProcess() };
-    // SAFETY: `process` is this process's pseudo-handle and the range is the
-    // batch's own code pages; the call only flushes the cache.
-    unsafe { FlushInstructionCache(process, block.cast(), code_len) };
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
     Armed { failures, code }

@@ -23,14 +23,13 @@ use iced_x86::{
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    CONTEXT, CONTEXT_CONTROL_AMD64, FlushInstructionCache, GetThreadContext, SetThreadContext,
+    CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext, SetThreadContext,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_READWRITE,
-    VirtualAlloc,
+    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetThreadId, OpenThread,
@@ -101,8 +100,8 @@ pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, String>> {
     for &block in &fresh {
         // SAFETY: `block` is a block `allocate_near` reserved for this batch,
         // fully written above and not yet run by any thread.
-        let sealed = unsafe { pages::protect(block, BLOCK, PAGE_EXECUTE_READ) };
-        if sealed.is_none() {
+        let sealed = unsafe { pages::seal(block, BLOCK) };
+        if !sealed {
             return requests
                 .iter()
                 .map(|_| Err("relay pages not executable".to_owned()))
@@ -157,8 +156,9 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
     if !hookable(request.target, READ) {
         return Err("its address is not mapped code".into());
     }
-    // SAFETY: an instruction start the build table, reflection or a mod
-    // vouches for, in mapped code followed by `READ` readable bytes.
+    // SAFETY: `hookable` checked that `READ` bytes from the target lie in
+    // committed, readable pages, the first of them code; the slice lives for
+    // this function only, while no patch writes the target.
     let code = unsafe { core::slice::from_raw_parts(request.target as *const u8, READ) };
     let mut decoder = Decoder::with_ip(64, code, request.target as u64, DecoderOptions::NONE);
     let mut instructions: Vec<Instruction> = Vec::new();
@@ -275,7 +275,9 @@ fn allocate_near(target: usize) -> Option<usize> {
             if !pages::query(address).is_some_and(|found| found.is_free()) {
                 return None;
             }
-            // SAFETY: a free region; null when it was taken meanwhile.
+            // SAFETY: `VirtualAlloc` at a region `query` found free reserves
+            // fresh pages or returns null when another thread took it
+            // meanwhile; it touches no existing memory.
             let block = unsafe {
                 VirtualAlloc(
                     address as *const _,
@@ -356,8 +358,6 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
             unsafe { relocate(thread, &moved) };
         }
     }
-    // SAFETY: no preconditions.
-    let process = unsafe { GetCurrentProcess() };
     // Backwards: two writes on one page saw the first one's protection, so
     // the first one's `old` is the page's own and must come last.
     for (address, len, old) in protections.into_iter().rev() {
@@ -365,8 +365,7 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
             // SAFETY: the target's code pages, every other thread still
             // suspended, back to the protection they had before the write.
             let _restored = unsafe { pages::protect(address, len, old) };
-            // SAFETY: our own process's code.
-            unsafe { FlushInstructionCache(process, address as *const _, len) };
+            pages::flush(address, len);
         }
     }
     threads.resume();
@@ -440,7 +439,9 @@ fn follows_call(start: usize, at: usize) -> bool {
 fn control(thread: HANDLE) -> Option<CONTEXT> {
     let mut context: CONTEXT = unsafe_zeroed_context();
     context.ContextFlags = CONTEXT_CONTROL_AMD64;
-    // SAFETY: a suspended thread opened with context rights.
+    // SAFETY: `GetThreadContext` writes at most one `CONTEXT` into
+    // `context`, a local with `ContextFlags` set; a handle without context
+    // rights fails the call.
     (unsafe { GetThreadContext(thread, &raw mut context) } != 0).then_some(context)
 }
 
@@ -559,13 +560,16 @@ unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
     };
     if let Some(new) = find(usize::try_from(context.Rip).unwrap_or(0)) {
         context.Rip = new as u64;
-        // SAFETY: as in `control`; the trampoline holds the same instruction.
+        // SAFETY: the caller keeps `thread` suspended, `context` is the one
+        // `control` read from it with only `Rip` changed, and the moved
+        // address holds the same instruction in the trampoline.
         unsafe { SetThreadContext(thread, &raw const context) };
     }
     if let Some(stack) = Stack::at(context.Rsp) {
-        // SAFETY: the caller keeps `thread`, the stack's owner, suspended and
-        // vouches for the moved addresses. A word equal to a moved address is a return address, or a stale
-        // copy of one: either way the trampoline holds the same instruction.
+        // SAFETY: the caller keeps `thread`, the stack's owner, suspended
+        // and vouches for the moved addresses. A word equal to a moved
+        // address is a return address, or a stale copy of one: either way the
+        // trampoline holds the same instruction.
         unsafe { stack.rewrite(find) };
     }
 }
@@ -604,9 +608,11 @@ impl Threads {
     /// Suspends every other thread, including those started meanwhile;
     /// false when there are more than [`MAX_THREADS`] or none can be listed.
     fn suspend(&mut self) -> bool {
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+        // the calling thread's id.
         let me = unsafe { GetCurrentThreadId() };
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+        // pseudo-handle that needs no closing.
         let process = unsafe { GetCurrentProcess() };
         let access = THREAD_SUSPEND_RESUME
             | THREAD_GET_CONTEXT
@@ -617,13 +623,15 @@ impl Threads {
             let mut cursor: HANDLE = core::ptr::null_mut();
             loop {
                 let mut next: HANDLE = core::ptr::null_mut();
-                // SAFETY: our own process; `cursor` is null or a handle from
-                // the previous call.
+                // SAFETY: `process` is this process's pseudo-handle, `cursor`
+                // is null or the handle the previous call returned and is still
+                // open, and `next` is a local the call writes.
                 let status =
                     unsafe { NtGetNextThread(process, cursor, access, 0, 0, &raw mut next) };
                 let kept = self.held.iter().any(|&(h, _)| h == cursor);
                 if !cursor.is_null() && !kept {
-                    // SAFETY: a handle from the previous call, not kept.
+                    // SAFETY: `cursor` is an open handle the previous call
+                    // returned, which `held` does not keep, closed once here.
                     unsafe { CloseHandle(cursor) };
                 }
                 if status < 0 {
@@ -634,17 +642,20 @@ impl Threads {
                     break;
                 }
                 cursor = next;
-                // SAFETY: a thread handle opened with query rights.
+                // SAFETY: `next` is an open thread handle `NtGetNextThread`
+                // returned with `THREAD_QUERY_LIMITED_INFORMATION`.
                 let id = unsafe { GetThreadId(next) };
                 if id == me || self.held.iter().any(|&(_, known)| known == id) {
                     continue;
                 }
                 if self.held.len() == self.held.capacity() {
-                    // SAFETY: as above; the cursor is not kept.
+                    // SAFETY: `next` is an open handle `NtGetNextThread`
+                    // returned, which `held` does not keep, closed once here.
                     unsafe { CloseHandle(next) };
                     return false;
                 }
-                // SAFETY: a thread of our own process, opened with suspend rights.
+                // SAFETY: `next` is an open handle to another thread of this
+                // process, opened with `THREAD_SUSPEND_RESUME`.
                 if unsafe { SuspendThread(next) } != u32::MAX {
                     // A suspension only takes hold once the thread's context
                     // is read.
@@ -662,9 +673,11 @@ impl Threads {
     /// Suspends the other threads a snapshot lists, once: a thread started
     /// meanwhile stays running.
     fn suspend_listed(&mut self, me: u32, access: u32) -> bool {
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentProcessId` takes no arguments and only reads the
+        // calling process's id.
         let process = unsafe { GetCurrentProcessId() };
-        // SAFETY: a thread snapshot of the system.
+        // SAFETY: `TH32CS_SNAPTHREAD` with process 0 asks for every thread of
+        // the system and reads no memory of the caller's.
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return false;
@@ -678,12 +691,15 @@ impl Threads {
             tpDeltaPri: 0,
             dwFlags: 0,
         };
-        // SAFETY: a valid snapshot and entry.
+        // SAFETY: `snapshot` is the open snapshot checked against
+        // `INVALID_HANDLE_VALUE`, and `entry` is a local whose `dwSize` holds
+        // its size, as `Thread32First` requires.
         let mut more = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
         while more && self.held.len() < self.held.capacity() {
             let id = entry.th32ThreadID;
             if entry.th32OwnerProcessID == process && id != me {
-                // SAFETY: opening a thread of our own process.
+                // SAFETY: `OpenThread` takes any thread id and returns null
+                // for one it cannot open; `id` belongs to this process.
                 let thread = unsafe { OpenThread(access, 0, id) };
                 // SAFETY: a thread of our own process, opened with suspend
                 // rights; a null handle fails the call.
@@ -691,14 +707,17 @@ impl Threads {
                     let _settled = control(thread);
                     self.held.push((thread, id));
                 } else if !thread.is_null() {
-                    // SAFETY: opened above, not kept.
+                    // SAFETY: `thread` is the non-null handle `OpenThread`
+                    // returned in this iteration, which `held` does not keep.
                     unsafe { CloseHandle(thread) };
                 }
             }
-            // SAFETY: as above.
+            // SAFETY: `snapshot` is still the open snapshot, and `entry` is
+            // the local whose `dwSize` holds its size.
             more = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
         }
-        // SAFETY: the snapshot is ours.
+        // SAFETY: `snapshot` is the open snapshot this function created, closed
+        // once here.
         unsafe { CloseHandle(snapshot) };
         !more
     }
@@ -711,9 +730,12 @@ impl Threads {
     /// Resumes and lets go of every thread.
     fn resume(&mut self) {
         for (thread, _) in self.held.drain(..) {
-            // SAFETY: suspended in `suspend`.
+            // SAFETY: every handle in `held` is open, with
+            // `THREAD_SUSPEND_RESUME`, and was suspended once by `suspend` or
+            // `suspend_listed`.
             unsafe { ResumeThread(thread) };
-            // SAFETY: opened in `suspend`.
+            // SAFETY: `drain` hands each open handle of `held` out once, and
+            // nothing keeps it after this.
             unsafe { CloseHandle(thread) };
         }
     }

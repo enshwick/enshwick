@@ -17,11 +17,7 @@ use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, MidHookFn, Registers, Status};
 use rustc_hash::FxHashMap;
-use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
-use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE, VirtualAlloc, VirtualProtect,
-};
-use windows_sys::Win32::System::Threading::GetCurrentProcess;
+use windows_sys::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE, VirtualAlloc};
 
 /// Bytes per stub: the code, `int3` padding, [`UPPER`] and the continuation.
 const STUB: usize = 2048;
@@ -352,18 +348,10 @@ impl Stubs {
     /// Makes the stubs executable and no longer writable; false when they
     /// could not be.
     pub(crate) fn seal(&self) -> bool {
-        let mut old = 0;
         // SAFETY: `self.base` and `self.len` are the pages `write` allocated
-        // for this batch, and `old` is a live `u32` the call writes.
-        let sealed =
-            unsafe { VirtualProtect(self.base.cast(), self.len, PAGE_EXECUTE_READ, &raw mut old) };
-        // SAFETY: `GetCurrentProcess` takes no arguments and returns a
-        // pseudo-handle that needs no closing.
-        let process = unsafe { GetCurrentProcess() };
-        // SAFETY: `process` is this process's pseudo-handle and the range is
-        // the batch's own allocation; the call only flushes the cache.
-        unsafe { FlushInstructionCache(process, self.base.cast(), self.len) };
-        sealed != 0
+        // for this batch and filled; no thread runs the stubs before the
+        // batch arms them.
+        unsafe { crate::pages::seal(self.base.expose_provenance(), self.len) }
     }
 }
 
