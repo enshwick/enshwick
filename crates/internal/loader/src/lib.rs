@@ -168,6 +168,7 @@ mod vetoes;
 mod watch;
 #[cfg(windows)]
 mod weather;
+pub mod wire;
 #[cfg(windows)]
 mod world;
 pub mod worlds;

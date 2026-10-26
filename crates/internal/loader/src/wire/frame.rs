@@ -11,16 +11,28 @@ const HEADER: usize = 1 + 4 + 2 + 1 + 1;
 
 /// Parts of a message on their way in.
 #[derive(Debug, Default)]
-pub(super) struct Partial {
+pub(crate) struct Partial {
     /// How many parts the message takes.
-    pub(super) total: u8,
+    pub(crate) total: u8,
     /// The parts that came, by index.
-    pub(super) parts: Vec<Option<Vec<u8>>>,
+    pub(crate) parts: Vec<Option<Vec<u8>>>,
 }
 
 /// The frames of one message: base64 lines with the prefix; `None` for a
 /// message longer than [`MAX_PARTS`] frames, which no peer takes.
-pub(super) fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{PREFIX, frames, parse};
+///
+/// let lines = frames(7, 1, b"data").ok_or("too long")?;
+/// let frame = parse(lines[0].strip_prefix(PREFIX).ok_or("no prefix")?).ok_or("unreadable")?;
+/// assert_eq!((frame.channel, frame.part.as_slice()), (7, &b"data"[..]));
+/// # Ok::<(), &str>(())
+/// ```
+#[must_use]
+pub fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<String>> {
     let parts: Vec<&[u8]> = if data.is_empty() {
         vec![&[]]
     } else {
@@ -48,22 +60,32 @@ pub(super) fn frames(channel: u32, message: u16, data: &[u8]) -> Option<Vec<Stri
 }
 
 /// A frame's header and part.
+///
+/// # Examples
+///
+/// See [`frames`].
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Frame {
+pub struct Frame {
     /// The channel, [`CONTROL`](super::CONTROL) for the protocol's own.
-    pub(super) channel: u32,
+    pub channel: u32,
     /// The message's id on its channel.
-    pub(super) message: u16,
-    /// This part's index.
-    pub(super) index: u8,
-    /// How many parts the message takes.
-    pub(super) total: u8,
-    /// This part's bytes.
-    pub(super) part: Vec<u8>,
+    pub message: u16,
+    /// This part's index, below `total`.
+    pub index: u8,
+    /// How many parts the message takes, from 1 to [`MAX_PARTS`].
+    pub total: u8,
+    /// This part's bytes, at most [`PART_BYTES`].
+    pub part: Vec<u8>,
 }
 
-/// The frame a line carries, after the prefix.
-pub(super) fn parse(text: &str) -> Option<Frame> {
+/// The frame a line carries, after the prefix; `None` for a line that is no
+/// frame of this protocol or whose header does not hold together.
+///
+/// # Examples
+///
+/// See [`frames`].
+#[must_use]
+pub fn parse(text: &str) -> Option<Frame> {
     let bytes = URL_SAFE_NO_PAD.decode(text.trim()).ok()?;
     if bytes.len() < HEADER || bytes[0] != PROTOCOL {
         return None;
@@ -83,7 +105,23 @@ pub(super) fn parse(text: &str) -> Option<Frame> {
 }
 
 /// Adds `frame` from `peer`; the whole message once its last part came.
-pub(super) fn assemble(peer: &mut Peer, frame: Frame) -> Option<(u32, Vec<u8>)> {
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{PREFIX, Peer, assemble, frames, parse};
+///
+/// let data = vec![7u8; 2000];
+/// let mut peer = Peer::new();
+/// let mut whole = None;
+/// for line in frames(3, 1, &data).ok_or("too long")? {
+///     let frame = parse(line.strip_prefix(PREFIX).ok_or("no prefix")?).ok_or("unreadable")?;
+///     whole = assemble(&mut peer, frame);
+/// }
+/// assert_eq!(whole, Some((3, data)));
+/// # Ok::<(), &str>(())
+/// ```
+pub fn assemble(peer: &mut Peer, frame: Frame) -> Option<(u32, Vec<u8>)> {
     let key = (frame.channel, frame.message);
     if frame.total == 1 {
         peer.partial.remove(&key);
@@ -112,10 +150,8 @@ pub(super) fn assemble(peer: &mut Peer, frame: Frame) -> Option<(u32, Vec<u8>)> 
 
 #[cfg(test)]
 mod tests {
-    use super::super::{MAX_CONTROL, MAX_MESSAGE, NOTICE, control, control_frames, is_frame};
+    use super::super::{CONTROL, MAX_CONTROL, MAX_MESSAGE, NOTICE, control, is_frame};
     use super::*;
-
-    /// The frames of `lines`, as the server parses them.
 
     #[test]
     fn a_message_goes_out_in_frames_and_comes_back_whole() {
@@ -147,7 +183,7 @@ mod tests {
         assert!(frames(1, 0, &[0; PART_BYTES * MAX_PARTS + 1]).is_none());
         let mut long = control(NOTICE);
         long.extend_from_slice(&[b'a'; MAX_CONTROL + 1]);
-        assert!(control_frames(&long).is_none());
+        assert!(frames(CONTROL, 1, &long).is_none());
         assert!(parse("not base64 !").is_none());
         assert!(parse(&URL_SAFE_NO_PAD.encode([9u8; HEADER])).is_none());
         let mut bad = vec![PROTOCOL, 1, 0, 0, 0, 0, 0, 3, 2];
