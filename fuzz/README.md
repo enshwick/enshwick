@@ -15,6 +15,7 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `pattern` | a code pattern, run over code |
 | `table` | a build table, its patterns run over code |
 | `reflection` | a game image's headers and reflection data |
+| `migrations` | a mod's settings migrations on an edited file, and the record of what ran |
 | `mod_manifests` | mod manifests, resolved into a load order |
 | `settings_files` | the mod list, its lock, a settings schema, texts, a pack manifest |
 
