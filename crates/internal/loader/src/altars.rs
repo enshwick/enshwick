@@ -9,6 +9,7 @@
 //! the same engine helpers, writing its sizes.
 
 use crate::locks::Relock;
+use crate::registry::Registry;
 
 mod geometry;
 
@@ -223,8 +224,7 @@ struct SeamLayout {
     corner_size: usize,
 }
 
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 static SEAM: OnceLock<SeamLayout> = OnceLock::new();
 // SAFETY: `SeamFn` is the signature of the build table's
 // `building.seam_check`, and `link_seam` uses this slot only as that
@@ -391,13 +391,12 @@ pub(crate) fn forget() {
 }
 
 pub(crate) fn register(owner: usize, callback: ZoneCheckFn, user: *mut c_void) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
     FILTERS
-        .relock()
-        .push(Registered::new(owner, callback, user));
-    Status::OK
+        .add(Registered::new(owner, callback, user))
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 pub(crate) fn link(loader: &'static Loader) {
@@ -476,9 +475,8 @@ pub(crate) fn link(loader: &'static Loader) {
 }
 
 fn link_seam(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.relock());
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     if !wanted {
         return;
     }
@@ -900,7 +898,7 @@ unsafe extern "system" fn seam(zones: *const u8, corners: *const i64, margin: f3
     if vanilla != 0 || zones.is_null() || corners.is_null() {
         return vanilla;
     }
-    let (Some(layout), Some(filters)) = (SEAM.get(), SEALED.get()) else {
+    let (Some(layout), Some(filters)) = (SEAM.get(), FILTERS.sealed()) else {
         return vanilla;
     };
     // SAFETY: `zones` and `corners` are non-null by the check before it and are

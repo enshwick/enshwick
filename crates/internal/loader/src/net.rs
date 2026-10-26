@@ -22,16 +22,17 @@
 //! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
 //! over it, counting the drops for the status summary.
 
+use crate::registry::Registry;
 use core::ffi::c_void;
 use std::collections::VecDeque;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
 use rustc_hash::FxHashMap;
 
-use crate::host::{Loader, Registered, take};
+use crate::host::{Loader, Registered};
 use crate::locks::Relock;
 
 mod frame;
@@ -107,8 +108,7 @@ struct State {
     greeting: FxHashMap<u64, Peer>,
 }
 
-static PENDING: Mutex<Vec<Channel>> = Mutex::new(Vec::new());
-static CHANNELS: OnceLock<Box<[Channel]>> = OnceLock::new();
+static CHANNELS: Registry<Channel> = Registry::new();
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 /// Set while the client's outbox holds anything, so an idle frame takes no
 /// lock.
@@ -150,7 +150,7 @@ pub(crate) fn open(
     callback: NetMessageFn,
     user: *mut c_void,
 ) -> Result<u32, Status> {
-    if CHANNELS.get().is_some() {
+    if CHANNELS.is_sealed() {
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
@@ -165,26 +165,26 @@ pub(crate) fn open(
         return Err(Status::BAD_ARGS);
     }
     let id = channel_id(&record.id, name);
-    let mut pending = PENDING.relock();
-    if pending.iter().any(|c| c.id == id) {
-        return Err(Status::REFUSED);
-    }
-    pending.push(Channel {
-        id,
-        name: format!("{}/{name}", record.id),
-        handler: Registered::new(owner, callback, user),
-    });
-    Ok(id)
+    CHANNELS.edit(|pending| {
+        if pending.iter().any(|c| c.id == id) {
+            return Err(Status::REFUSED);
+        }
+        pending.push(Channel {
+            id,
+            name: format!("{}/{name}", record.id),
+            handler: Registered::new(owner, callback, user),
+        });
+        Ok(id)
+    })?
 }
 
 /// Seals the channels.
 pub(crate) fn link() {
-    let channels = take(&PENDING);
+    let channels = CHANNELS.seal();
     if !channels.is_empty() {
         let names: Vec<&str> = channels.iter().map(|c| c.name.as_str()).collect();
         crate::log!(INFO, "mod messages: channels {}", names.join(", "));
     }
-    let _first = CHANNELS.set(channels.into_boxed_slice());
 }
 
 /// The frames of a control message, numbered when it takes more than one.
@@ -200,7 +200,7 @@ pub(crate) fn control_frames(data: &[u8]) -> Option<Vec<String>> {
 /// Hands a message to the mod that opened its channel.
 fn deliver(channel: u32, peer: u64, data: &[u8]) {
     let Some(target) = CHANNELS
-        .get()
+        .sealed()
         .and_then(|channels| channels.iter().find(|c| c.id == channel))
     else {
         dropped();
@@ -671,7 +671,7 @@ pub(crate) fn send(
     data: &[u8],
 ) -> Result<(), Status> {
     let open = CHANNELS
-        .get()
+        .sealed()
         .and_then(|channels| channels.iter().find(|c| c.id == channel));
     if open.is_none_or(|c| c.handler.owner != owner) {
         return Err(Status::BAD_ARGS);

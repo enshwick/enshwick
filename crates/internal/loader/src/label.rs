@@ -8,15 +8,15 @@
 //! rename, so the loader links the string swap and asks the mods' rename
 //! filters first when the call comes from the rename message.
 
+use crate::registry::Registry;
 use core::ffi::c_void;
+use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
 use crate::host::Loader;
-use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -83,8 +83,7 @@ static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 // table's `label.replace`, and the slot is used only as the `next` of the
 // `replace` link on that function.
 static REPLACE_NEXT: Next<ReplaceFn> = unsafe { Next::new() };
-static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
-static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
+static FILTERS: Registry<Filter> = Registry::new();
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
@@ -131,22 +130,22 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 
 /// Registers mod `owner`'s rename filter.
 pub(crate) fn register(owner: usize, callback: RenameCallFn, user: *mut c_void) -> Status {
-    if SEALED.get().is_some() {
+    if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
-    FILTERS.relock().push(Filter {
-        owner,
-        callback,
-        user: user.expose_provenance(),
-    });
-    Status::OK
+    FILTERS
+        .add(Filter {
+            owner,
+            callback,
+            user: user.expose_provenance(),
+        })
+        .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
 /// Links the rename check when a mod filters renames.
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.relock());
+    let filters = FILTERS.seal();
     let wanted = !filters.is_empty();
-    let _first = SEALED.set(filters.into_boxed_slice());
     let _first = LOADED.set(loader);
     if !wanted {
         return;
@@ -277,7 +276,7 @@ unsafe extern "system" fn replace(
 /// - The call runs at the entry of the string swap chain, on the thread the
 ///   game called the swap on, so the loader's caller frame is the swap's.
 unsafe fn refused(text: *const [usize; 2]) -> bool {
-    let (Some(loader), Some(filters)) = (LOADED.get(), SEALED.get()) else {
+    let (Some(loader), Some(filters)) = (LOADED.get(), FILTERS.sealed()) else {
         return false;
     };
     let Some(layout) = layout(loader) else {

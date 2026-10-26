@@ -54,6 +54,7 @@ windows-sys = { workspace = true, features = [
 ] }
 
 [dev-dependencies]
+criterion.workspace = true
 bytemuck.workspace = true
 
 [package.metadata.enshwick]
@@ -63,3 +64,7 @@ windows-tests = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "registry_read"
+harness = false
