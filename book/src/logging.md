@@ -55,15 +55,14 @@ queue full is dropped rather than making the game wait, and the next line
 written says how many were dropped.
 
 `report.md` gathers what an issue needs in one file: the loader version and
-the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, the
-status summary, the DLLs in `mods/` and `mods/chain/` and other mods' proxies
-beside the game with their sizes, and
-the latest 200 warnings and errors of the loader and every mod. The loader
-writes it once its log opens, again when it cannot serve the game, and with
-every status summary, each time after the log has taken the lines before it.
-Paths show the game's folder as `<game>`, the user's profile folder as
-`%USERPROFILE%` and the name in a Linux home folder as `<user>`, in any case
-and with either slash.
+the stub's contract, Windows or the Wine version with `WINEDLLOVERRIDES`, and
+the status summary. It lists the DLLs in `mods/`, in `mods/chain/` and other
+mods' proxies beside the game, with their sizes, and the latest 200 warnings
+and errors of the loader and every mod. The loader writes it once its log
+opens, again when it cannot serve the game, and with every status summary,
+each time after the log has taken the lines before it. Paths show the game's
+folder as `<game>`, the user's profile folder as `%USERPROFILE%` and the name
+in a Linux home folder as `<user>`, in any case and with either slash.
 
 ### Reading the log from the console
 

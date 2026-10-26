@@ -114,12 +114,10 @@ pub(crate) fn lines(others: &[OtherDll]) -> Vec<String> {
         let files: Vec<String> = others
             .iter()
             .filter(|dll| dll.origin == origin)
-            .map(|dll| {
-                if dll.loaded {
-                    dll.file.clone()
-                } else {
-                    format!("{} (did not load)", dll.file)
-                }
+            .map(|dll| match (dll.loaded, dll.origin) {
+                (true, _) => dll.file.clone(),
+                (false, Origin::Game) => format!("{} (not loaded at start)", dll.file),
+                (false, _) => format!("{} (did not load)", dll.file),
             })
             .collect();
         (!files.is_empty()).then(|| format!("{heading}: {}", files.join(", ")))
@@ -157,13 +155,14 @@ mod tests {
             dll("powrprof.dll", Origin::Chain, true),
             dll("dinput8.dll", Origin::Chain, false),
             dll("dbghelp.dll", Origin::Game, true),
+            dll("winmm.dll", Origin::Game, false),
         ];
         assert_eq!(
             lines(&others),
             [
                 "native mods in mods/, without Enshwick's API: fps-unlock.dll",
                 "loaded from mods/chain/ before the loader: powrprof.dll, dinput8.dll (did not load)",
-                "other mods' proxies in the game's folder: dbghelp.dll",
+                "other mods' proxies in the game's folder: dbghelp.dll, winmm.dll (not loaded at start)",
             ]
         );
         assert_eq!(files(&others, Origin::Chain, true), ["powrprof.dll"]);

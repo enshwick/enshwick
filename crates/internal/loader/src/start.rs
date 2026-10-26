@@ -60,7 +60,10 @@ fn no_game(
 
 /// Warns about each DLL of `mods/chain/` the stub did not load.
 fn warn_unloaded(others: &[crate::others::OtherDll]) {
-    for dll in others.iter().filter(|dll| !dll.loaded) {
+    let chained = others
+        .iter()
+        .filter(|dll| dll.origin == crate::others::Origin::Chain && !dll.loaded);
+    for dll in chained {
         crate::log!(
             WARN,
             "{}/{} did not load",

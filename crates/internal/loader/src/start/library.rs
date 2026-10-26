@@ -177,14 +177,10 @@ fn chained(mods_dir: &Path) -> Vec<OtherDll> {
         .into_iter()
         .filter_map(|path| {
             let file = path.file_name()?.to_string_lossy().into_owned();
-            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-            // SAFETY: a NUL-terminated path; a module of that path is looked
-            // up, never loaded.
-            let loaded = !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null();
             Some(OtherDll {
                 file,
                 origin: Origin::Chain,
-                loaded,
+                loaded: is_loaded(&path),
             })
         })
         .collect()
@@ -198,30 +194,33 @@ fn beside(mods_dir: &Path) -> Vec<OtherDll> {
     };
     crate::others::PROXY_NAMES
         .iter()
-        .map(|name| game_dir.join(name))
-        .filter(|path| path.is_file())
-        .filter_map(|path| {
-            let file = path.file_name()?.to_string_lossy().into_owned();
-            let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-            // SAFETY: a NUL-terminated path; a module of that path is looked
-            // up, never loaded.
-            let loaded = !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null();
+        .filter(|name| game_dir.join(name).is_file())
+        .map(|&name| {
+            let loaded = is_loaded(&game_dir.join(name));
             crate::log!(
                 INFO,
-                "{file} beside the game is another mod's proxy{}",
+                "{name} beside the game is another mod's proxy{}",
                 if loaded {
                     "; it runs"
                 } else {
-                    "; it is not loaded"
+                    "; it was not loaded at start"
                 }
             );
-            Some(OtherDll {
-                file,
+            OtherDll {
+                file: name.to_owned(),
                 origin: Origin::Game,
                 loaded,
-            })
+            }
         })
         .collect()
+}
+
+/// Whether a module loaded from `path` is in the process now.
+fn is_loaded(path: &Path) -> bool {
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    // SAFETY: a NUL-terminated path; a module of that path is looked up,
+    // never loaded.
+    !unsafe { GetModuleHandleW(wide.as_ptr()) }.is_null()
 }
 
 /// The `*.dll` files directly in `dir`, sorted; none when it is missing.
