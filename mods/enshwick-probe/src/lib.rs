@@ -331,7 +331,7 @@ impl Mod for Probe {
         // The probe is no join mod, so the loader refuses it a channel.
         match load.channel::<u32, _>("probe", 1, |_, _| ()) {
             Err(off) => {
-                enshwick::info!("PASS a channel is refused to a mod that is no join mod: {off}")
+                enshwick::info!("PASS a channel is refused to a mod that is no join mod: {off}");
             }
             Ok(_) => {
                 enshwick::warn!("FAIL a channel opened for a mod that is no join mod");

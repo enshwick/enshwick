@@ -9,6 +9,7 @@ use enshwick::i18n::Texts;
 use enshwick::services::Emitter;
 use enshwick::{Load, Mod, Off};
 use enshwick_example_trading_post_api::{Prices, Sold};
+use enshwick_example_trading_post_api::{Prices, Sold};
 
 /// Items with a price: ids 0 to 63.
 const ITEMS: usize = 64;

@@ -119,7 +119,7 @@ impl KnowledgeChecks {
                 .grant_account(NOBODY, WORLD_COUNTER, Grant::Add(1))
             {
                 Err(why) => {
-                    enshwick::info!("PASS an account grant of a world id is refused: {why}")
+                    enshwick::info!("PASS an account grant of a world id is refused: {why}");
                 }
                 Ok(()) => {
                     enshwick::warn!("FAIL an account grant of a world id was taken");
