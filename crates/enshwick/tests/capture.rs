@@ -8,7 +8,7 @@ mod tests {
     use enshwick::abi::Status;
     use enshwick::ecs::Entity;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
-    use enshwick::world::{CAPTURE_MAX, Capture, Prop, World, WorldError, WorldTransform};
+    use enshwick::world::{CAPTURE_TILES, Capture, Prop, World, WorldError, WorldTransform};
     use enshwick::{Load, Mod, Off};
 
     const TRANSFORM: u32 = 1;
@@ -88,6 +88,7 @@ mod tests {
             .type_hash("used_item", USED_ITEM)
             .constant("current_transform.transform", 0)
             .constant("world_transform.orientation", 24)
+            .constant("item_info.placed_entity", 0x3c0)
     }
 
     fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, World) {
@@ -122,7 +123,7 @@ mod tests {
             [
                 Prop {
                     entity: Entity(10),
-                    item: ItemId(1_042),
+                    item: ItemId::new(1_042),
                     transform: WorldTransform {
                         position: [11.0, 1.0, 12.0],
                         orientation: TURNED,
@@ -130,7 +131,7 @@ mod tests {
                 },
                 Prop {
                     entity: Entity(11),
-                    item: ItemId(77),
+                    item: ItemId::new(77),
                     transform: WorldTransform {
                         position: [10.0, 0.0, 10.0],
                         orientation: STILL,
@@ -165,6 +166,18 @@ mod tests {
     }
 
     #[test]
+    fn props_are_missing_on_a_build_without_the_placed_template() {
+        let fake = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", TRANSFORM)
+            .type_hash("used_item", USED_ITEM)
+            .constant("current_transform.transform", 0)
+            .constant("world_transform.orientation", 24);
+        let (_loader, world) = start(prop(fake, 10, 1, [1.0; 3], STILL));
+
+        assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));
+    }
+
+    #[test]
     fn props_are_missing_before_the_game_knows_its_items() {
         let fake = thing(fake(), 10, 1, [1.0; 3], STILL).template(10, template_of(1));
         let (_loader, world) = start(fake);
@@ -193,7 +206,7 @@ mod tests {
             capture.props(),
             [Prop {
                 entity: Entity(10),
-                item: ItemId(5),
+                item: ItemId::new(5),
                 transform: WorldTransform {
                     position: [0.25, 0.5, 1.0],
                     orientation: TURNED,
@@ -226,16 +239,52 @@ mod tests {
     }
 
     #[test]
-    fn a_capture_past_its_most_voxels_is_refused() {
-        let (_loader, world) = start(fake());
-        let side = u32::try_from(CAPTURE_MAX.isqrt()).unwrap();
+    fn a_capture_reads_every_tile_after_one_not_loaded() {
+        let (loader, world) =
+            start(fake().voxels(VoxelPos::new(64, 0, 0), [6, 1, 1], &[Voxel::default(); 6]));
 
         assert_eq!(
             world
-                .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(side, 0, side))
+                .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(69, 0, 0))
                 .err(),
-            Some(WorldError::Refused)
+            Some(WorldError::NotLoaded)
         );
+        assert_eq!(
+            loader.voxel_reads(),
+            [([0, 0, 0], [64, 1, 1]), ([64, 0, 0], [6, 1, 1])]
+        );
+    }
+
+    #[test]
+    fn a_capture_takes_at_most_its_tiles_however_thin() {
+        let (loader, world) = start(fake());
+        let tiles = 64 * CAPTURE_TILES;
+
+        assert_eq!(
+            world
+                .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(8191, 0, 8191))
+                .err(),
+            Some(WorldError::Refused),
+            "a thin region of many tiles"
+        );
+        assert_eq!(
+            world
+                .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(tiles, 0, 0))
+                .err(),
+            Some(WorldError::Refused),
+            "one tile past the most"
+        );
+        assert!(
+            loader.voxel_reads().is_empty(),
+            "a refused capture reads nothing"
+        );
+        assert_eq!(
+            world
+                .capture(VoxelPos::new(0, 0, 0), VoxelPos::new(tiles - 1, 0, 0))
+                .err(),
+            Some(WorldError::NotLoaded)
+        );
+        assert_eq!(loader.voxel_reads().len(), CAPTURE_TILES as usize);
     }
 
     #[test]

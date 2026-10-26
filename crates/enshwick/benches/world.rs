@@ -44,6 +44,7 @@ fn accessors(c: &mut Criterion) {
         .type_hash("used_item", 2)
         .constant("current_transform.transform", 0)
         .constant("world_transform.orientation", 24)
+        .constant("item_info.placed_entity", 0x3c0)
         .item(7, 1, 0)
         .item_places(7, [7; 16])
         .component(4096, 2, &7u32.to_le_bytes())

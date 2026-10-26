@@ -10,7 +10,7 @@
 ///
 /// let torch = ItemId::from(1_042);
 /// assert_eq!(torch.get(), 1_042);
-/// assert_eq!(torch, ItemId(1_042));
+/// assert_eq!(torch, ItemId::new(1_042));
 /// ```
 #[derive(
     Clone,
@@ -26,9 +26,19 @@
     serde::Deserialize,
 )]
 #[serde(transparent)]
-pub struct ItemId(pub u32);
+pub struct ItemId(u32);
 
 impl ItemId {
+    /// The item the game numbers `id`, in a `const` too.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemId`].
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
     /// The game's number for the item.
     ///
     /// # Examples

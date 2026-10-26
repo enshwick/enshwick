@@ -27,7 +27,7 @@ use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
 pub use build::{BuildRefusal, PlayerPermissions};
-pub use capture::{CAPTURE_MAX, Capture};
+pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use props::{Prop, WorldTransform};
@@ -390,7 +390,7 @@ struct Resolved {
     transform: ComponentType,
     used_item: ComponentType,
     /// Where a `CurrentTransform` holds its orientation, on builds that
-    /// reflect it.
+    /// reflect it and the template an item places, which tells props apart.
     orientation: Option<usize>,
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
@@ -400,8 +400,10 @@ struct Resolved {
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
 
 /// The offset of the orientation inside a `CurrentTransform`, when the
-/// loader resolves it.
+/// loader resolves it and the template an item places, which the loader
+/// reads into item data from the same reflection.
 fn orientation_offset(load: &Load<'_>) -> Option<usize> {
+    load.constant(ids::ITEM_INFO_PLACED_ENTITY).ok()?;
     let transform = load.constant(ids::CURRENT_TRANSFORM_TRANSFORM).ok()?;
     let orientation = load.constant(ids::WORLD_TRANSFORM_ORIENTATION).ok()?;
     usize::try_from(transform.checked_add(orientation)?).ok()

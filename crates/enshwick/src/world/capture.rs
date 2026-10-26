@@ -6,11 +6,17 @@ use crate::voxels::{READ_MAX, Voxel, VoxelBox, VoxelPos, Voxels};
 
 use super::{Prop, World, WorldError};
 
-/// The most voxels one [`World::capture`] takes: 256 reads of the largest
-/// box, a region of 128 metres a side and 64 high.
-pub const CAPTURE_MAX: u64 = 256 * READ_MAX;
+/// The most tiles one [`World::capture`] reads, each up to 64 voxels, 32
+/// metres, a side.
+///
+/// Tiles are counted from the region's corner: 16 make a region of 128 by
+/// 128 metres and 32 high, or a cube of 64 metres. A read
+/// of a whole tile took 2.4 to 3.1 milliseconds on a server copy under
+/// Rosetta and Wine, so a capture holds the game thread for at most about
+/// 50 milliseconds.
+pub const CAPTURE_TILES: u32 = 16;
 
-/// Voxels along each axis of one read of a capture: the largest box a read
+/// Voxels along each axis of one tile of a capture: the largest box a read
 /// takes is a cube of this side.
 const TILE: u32 = 64;
 
@@ -128,7 +134,8 @@ impl Capture {
     /// vertical, each taking the +x side to +z, as seen from above. The
     /// region keeps its corner: the turned region's lowest corner is still
     /// [`Capture::origin`]. Voxels move to their turned places, and props
-    /// turn their positions and orientations with them.
+    /// turn their positions and orientations with them; a turned
+    /// orientation has w at or above zero.
     ///
     /// # Examples
     ///
@@ -142,11 +149,38 @@ impl Capture {
     /// ```
     #[must_use]
     pub fn rotated(&self, quarter_turns: i32) -> Self {
-        let mut turned = self.clone();
-        for _ in 0..quarter_turns.rem_euclid(4) {
-            turned = turned.turned_once();
+        let turns = quarter_turns.rem_euclid(4);
+        let mut voxels = self.voxels.clone();
+        for _ in 0..turns {
+            voxels = voxels.turned();
         }
-        turned
+        let [width, _, depth] = self
+            .voxels
+            .size()
+            .map(|axis| f64::from(axis) * VOXEL_METRES);
+        let props = self
+            .props
+            .iter()
+            .map(|prop| {
+                let mut prop = *prop;
+                let [x, y, z] = prop.transform.position;
+                prop.transform.position = match turns {
+                    0 => [x, y, z],
+                    1 => [depth - z, y, x],
+                    2 => [width - x, y, depth - z],
+                    _ => [z, y, width - x],
+                };
+                if turns != 0 {
+                    prop.transform.orientation = turn(turns, prop.transform.orientation);
+                }
+                prop
+            })
+            .collect();
+        Self {
+            origin: self.origin,
+            voxels,
+            props,
+        }
     }
 
     /// The capture moved by `by` voxels; `None` when its corner would
@@ -176,70 +210,65 @@ impl Capture {
             ..self.clone()
         })
     }
-
-    /// The capture turned by one quarter turn: (x, z) to (depth − z, x).
-    fn turned_once(&self) -> Self {
-        let [width, height, depth] = self.voxels.size();
-        let size = [depth, height, width];
-        let mut voxels = Vec::with_capacity(self.voxels.as_slice().len());
-        for z in 0..width {
-            for y in 0..height {
-                for x in 0..depth {
-                    let from = VoxelPos::new(z, y, depth - 1 - x);
-                    voxels.push(self.voxels.get(from).unwrap_or_default());
-                }
-            }
-        }
-        let depth_metres = f64::from(depth) * VOXEL_METRES;
-        let props = self
-            .props
-            .iter()
-            .map(|prop| {
-                let mut prop = *prop;
-                let [x, y, z] = prop.transform.position;
-                prop.transform.position = [depth_metres - z, y, x];
-                prop.transform.orientation = turn(prop.transform.orientation);
-                prop
-            })
-            .collect();
-        Self {
-            origin: self.origin,
-            voxels: VoxelBox::from_parts(VoxelPos::default(), size, voxels)
-                .unwrap_or_else(|| self.voxels.clone()),
-            props,
-        }
-    }
 }
 
-/// `orientation` after a quarter turn about +y that takes +x to +z: the
-/// Hamilton product of the turn (0, −√½, 0, √½) and `orientation`, the
-/// world's turn applied after the prop's own.
-fn turn(orientation: [f32; 4]) -> [f32; 4] {
+/// `orientation` after `turns` quarter turns about +y, each taking +x to
+/// +z: the Hamilton product of the turn and `orientation`, the world's turn
+/// applied after the prop's own. The turns are exact quaternions, and the
+/// result has the sign with w ≥ 0, so equal orientations compare equal.
+fn turn(turns: i32, orientation: [f32; 4]) -> [f32; 4] {
     let half = core::f32::consts::FRAC_1_SQRT_2;
     let [x, y, z, w] = orientation;
-    [
-        half * (x - z),
-        half * (y - w),
-        half * (z + x),
-        half * (w + y),
-    ]
+    let turned = match turns.rem_euclid(4) {
+        0 => orientation,
+        1 => [
+            half * (x - z),
+            half * (y - w),
+            half * (z + x),
+            half * (w + y),
+        ],
+        2 => [-z, -w, x, y],
+        _ => [
+            half * (x + z),
+            half * (y + w),
+            half * (z - x),
+            half * (w - y),
+        ],
+    };
+    canonical(turned)
+}
+
+/// `orientation` or its negation, the same rotation, whichever has w
+/// above zero, or the first non-zero part above zero where w is zero.
+fn canonical(orientation: [f32; 4]) -> [f32; 4] {
+    let [x, y, z, w] = orientation;
+    let leading = [w, x, y, z].into_iter().find(|part| *part != 0.0);
+    if leading.is_some_and(|part| part < 0.0) {
+        orientation.map(|part| -part)
+    } else {
+        orientation
+    }
 }
 
 impl World {
     /// The voxels and props of the region between voxels `a` and `b`, both
     /// included, as plain data counted from the region's lowest corner.
-    /// It reads the voxels in boxes of up to [`READ_MAX`], and takes a prop
-    /// whose position lies in the region.
+    /// It reads the voxels in tiles of up to [`READ_MAX`], 32 metres a
+    /// side, at most [`CAPTURE_TILES`] of them, and takes a prop whose
+    /// position lies in the region.
     ///
-    /// Every voxel read can pull a part of the world into memory: a region
-    /// not loaded yet fails with [`WorldError::NotLoaded`] after every part
-    /// has started loading, so the next try a second or so later finds
-    /// more of it. Each read of the largest box costs about half a
-    /// millisecond on the game thread.
+    /// Each tile read took 2.4 to 3.1 milliseconds on a server copy under
+    /// Rosetta and Wine, so a capture holds the game thread for at most
+    /// about 50 milliseconds. A mod captures a bigger region in parts over
+    /// several steps itself. Every voxel read can pull a part of the world
+    /// into memory: a region not loaded yet fails with
+    /// [`WorldError::NotLoaded`] after every tile has started loading, so
+    /// the next try a second or so later finds more of it.
     ///
     /// # Errors
     ///
-    /// [`WorldError::Refused`] for more than [`CAPTURE_MAX`] voxels;
+    /// [`WorldError::Refused`] for a region of more than [`CAPTURE_TILES`]
+    /// tiles;
     /// [`WorldError::NotLoaded`] while part of the region is not loaded,
     /// [`WorldError::OutsideWorld`] for one past the world's edge, and the
     /// other errors of [`Voxels::read`] and [`World::props_in`].
@@ -252,15 +281,15 @@ impl World {
         let low = [0, 1, 2].map(|axis| a[axis].min(b[axis]));
         let high = [0, 1, 2].map(|axis| a[axis].max(b[axis]));
         let size = [0, 1, 2].map(|axis| (high[axis] - low[axis]).saturating_add(1));
-        let count = abi::Voxel::read_count(low, [1; 3])
-            .and(
-                size.iter()
-                    .try_fold(1u64, |count, &axis| count.checked_mul(u64::from(axis))),
-            )
-            .filter(|&count| count <= CAPTURE_MAX)
-            .ok_or(WorldError::Refused)?;
+        let tiles = size
+            .iter()
+            .try_fold(1u32, |count, &axis| count.checked_mul(axis.div_ceil(TILE)))
+            .filter(|&tiles| tiles <= CAPTURE_TILES);
+        if tiles.is_none() || abi::Voxel::read_count(low, [1; 3]).is_none() {
+            return Err(WorldError::Refused);
+        }
         let origin = VoxelPos::from(low);
-        let voxels = self.capture_voxels(origin, size, count)?;
+        let voxels = self.capture_voxels(origin, size)?;
         let start = origin.to_metres();
         let end = VoxelPos::from(high)
             .to_metres()
@@ -283,42 +312,27 @@ impl World {
         })
     }
 
-    /// The voxels of the region of `size` from `origin`, `count` of them,
-    /// read a tile at a time.
-    fn capture_voxels(
-        self,
-        origin: VoxelPos,
-        size: [u32; 3],
-        count: u64,
-    ) -> Result<VoxelBox, WorldError> {
+    /// The voxels of the region of `size` from `origin`, read a tile at a
+    /// time, every tile read even after one not loaded.
+    fn capture_voxels(self, origin: VoxelPos, size: [u32; 3]) -> Result<VoxelBox, WorldError> {
+        let count: usize = size.iter().map(|&axis| axis as usize).product();
+        let mut whole = VoxelBox::from_parts(origin, size, vec![Voxel::default(); count])
+            .ok_or(WorldError::Refused)?;
         let reader = Voxels::new(self.0.host);
-        let mut voxels =
-            vec![Voxel::default(); usize::try_from(count).map_err(|_| WorldError::Refused)?];
         let mut not_loaded = false;
-        let [width, height, _] = size.map(|axis| axis as usize);
         for tile in tiles(size) {
             let corner = [0, 1, 2].map(|axis| origin.to_array()[axis] + tile[axis]);
             let extent = [0, 1, 2].map(|axis| (size[axis] - tile[axis]).min(TILE));
-            let block = match reader.read(VoxelPos::from(corner), extent) {
-                Ok(block) => block,
-                Err(WorldError::NotLoaded) => {
-                    not_loaded = true;
-                    continue;
-                }
+            match reader.read(VoxelPos::from(corner), extent) {
+                Ok(block) => whole.fill_from(&block),
+                Err(WorldError::NotLoaded) => not_loaded = true,
                 Err(why) => return Err(why),
-            };
-            for (at, voxel) in &block {
-                let [x, y, z] =
-                    [0, 1, 2].map(|axis| (at.to_array()[axis] - origin.to_array()[axis]) as usize);
-                if let Some(slot) = voxels.get_mut(x + width * (y + height * z)) {
-                    *slot = voxel;
-                }
             }
         }
         if not_loaded {
             return Err(WorldError::NotLoaded);
         }
-        VoxelBox::from_parts(VoxelPos::default(), size, voxels).ok_or(WorldError::Refused)
+        Ok(whole.at_corner())
     }
 }
 
@@ -393,10 +407,30 @@ mod tests {
 
     #[test]
     fn a_quarter_turn_takes_plus_x_to_plus_z() {
-        let turned = turn(WorldTransform::UPRIGHT);
+        let turned = turn(1, WorldTransform::UPRIGHT);
         assert!(close(apply(turned, [1.0, 0.0, 0.0]), [0.0, 0.0, 1.0]));
         assert!(close(apply(turned, [0.0, 0.0, 1.0]), [-1.0, 0.0, 0.0]));
         assert!(close(apply(turned, [0.0, 1.0, 0.0]), [0.0, 1.0, 0.0]));
+    }
+
+    #[test]
+    fn whole_turns_of_the_upright_are_exact() {
+        let half = core::f32::consts::FRAC_1_SQRT_2;
+        assert_eq!(turn(0, WorldTransform::UPRIGHT), WorldTransform::UPRIGHT);
+        assert_eq!(turn(1, WorldTransform::UPRIGHT), [0.0, -half, 0.0, half]);
+        assert_eq!(turn(2, WorldTransform::UPRIGHT), [0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(turn(3, WorldTransform::UPRIGHT), [0.0, half, 0.0, half]);
+        assert_eq!(
+            turn(-1, WorldTransform::UPRIGHT),
+            turn(3, WorldTransform::UPRIGHT)
+        );
+    }
+
+    #[test]
+    fn the_canonical_sign_puts_w_or_the_first_part_above_zero() {
+        assert_eq!(canonical([0.1, 0.2, 0.3, -0.9]), [-0.1, -0.2, -0.3, 0.9]);
+        assert_eq!(canonical([0.0, -1.0, 0.0, 0.0]), [0.0, 1.0, 0.0, 0.0]);
+        assert_eq!(canonical([0.5, 0.5, 0.5, 0.5]), [0.5, 0.5, 0.5, 0.5]);
     }
 
     #[test]
@@ -430,6 +464,29 @@ mod tests {
         }
 
         #[test]
+        fn four_quarter_turns_bring_props_back(
+            width in 1u32..9, depth in 1u32..9, turns in -8i32..8,
+            position in prop::array::uniform3(0.0f64..4.0),
+            orientation in unit_quaternion(),
+        ) {
+            let prop = Prop {
+                entity: Entity(9),
+                item: ItemId::new(4),
+                transform: WorldTransform { position, orientation: canonical(orientation) },
+            };
+            let capture = numbered([width, 2, depth], vec![prop]);
+            let back = capture.rotated(turns).rotated(4 - turns.rem_euclid(4));
+            prop_assert_eq!(back.voxels(), capture.voxels());
+            let back = back.props()[0].transform;
+            prop_assert!(close(back.position, position));
+            let near = |a: [f32; 4], b: [f32; 4]| (0..4).all(|i| (a[i] - b[i]).abs() < 1e-5);
+            let start = canonical(orientation);
+            let negated = start.map(|part| -part);
+            prop_assert!(near(back.orientation, start) || near(back.orientation, negated));
+            prop_assert!(back.orientation[3] >= 0.0);
+        }
+
+        #[test]
         fn a_prop_turns_with_the_voxel_it_stands_in(
             width in 1u32..9, height in 1u32..5, depth in 1u32..9,
             x in 0u32..8, y in 0u32..4, z in 0u32..8, turns in 0i32..4,
@@ -439,7 +496,7 @@ mod tests {
             let centre = [x, y, z].map(|axis| (f64::from(axis) + 0.5) * VOXEL_METRES);
             let prop = Prop {
                 entity: Entity(9),
-                item: ItemId(4),
+                item: ItemId::new(4),
                 transform: WorldTransform { position: centre, orientation },
             };
             let capture = numbered([width, height, depth], vec![prop]);

@@ -110,7 +110,7 @@ impl World {
             .map(|place| (Entity(place.entity), crate::ecs::metres(place.position)))
             .filter(|(_, at)| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
             .filter_map(|(entity, position)| {
-                let item = ItemId(self.used_item(entity)?);
+                let item = ItemId::new(self.used_item(entity)?);
                 let placed = templates.placed_by(self, item)?;
                 if self.template(entity) != Some(placed) {
                     return None;
@@ -177,13 +177,15 @@ struct Templates {
 
 impl Templates {
     /// The GUID of the template a player places from `item`; `None` for an
-    /// item that places nothing or the loader does not know.
+    /// item that places nothing or the loader does not know. The world
+    /// resolves props only where the loader reads the template, so a zero
+    /// GUID means the item places nothing.
     fn placed_by(&mut self, world: World, item: ItemId) -> Option<[u8; 16]> {
         *self.known.entry(item).or_insert_with(|| {
             let mut out = ItemData::zeroed();
             out.header = Header::of::<ItemData>();
             let host = world.0.host;
-            if (host.api().item_info)(host.handle(), item.0, &raw mut out).is_ok() {
+            if (host.api().item_info)(host.handle(), item.get(), &raw mut out).is_ok() {
                 self.found += 1;
                 Some(out.placed_entity).filter(|guid| *guid != [0; 16])
             } else {

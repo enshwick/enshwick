@@ -244,12 +244,16 @@ holding things to check fails with `Missing`.
 
 `world.capture(a, b)` takes the region between two voxels, both included,
 as plain data: a `Capture` with its voxels and its props, both counted from
-the region's lowest corner, its `origin`. It reads the voxels in boxes of
-up to `READ_MAX`, about half a millisecond each, and takes up to
-`CAPTURE_MAX` voxels, a region 128 metres a side and 64 high. `NotLoaded`
-and `OutsideWorld` come from the reads: a region not wholly loaded fails
-after every part of it has started loading, so a second try a moment later
-finds it.
+the region's lowest corner, its `origin`. It reads the voxels in tiles of
+up to 64 voxels, 32 metres, a side, counted from that corner, and takes at
+most `CAPTURE_TILES`, 16 tiles: such as a region of 128 by 128 metres and
+32 high, or a cube of 64 metres. A larger region is `Refused` before any
+read. A tile read took 2.4 to 3.1 milliseconds on a server copy under
+Rosetta and Wine, so a capture holds the game thread for at most about 50
+milliseconds. A mod captures a bigger region in parts, one per step or
+scheduler task, and keeps them together itself. `NotLoaded` and
+`OutsideWorld` come from the reads: a region not wholly loaded fails after
+every tile has started loading, so a second try a moment later finds it.
 
 ```rust
 use std::ops::ControlFlow;
@@ -293,7 +297,9 @@ turn taking the +x side to +z as seen from above, with negative turns the
 other way. The region keeps its corner: a box 32 voxels wide and 20 deep
 turns into one 20 wide and 32 deep. Voxels move to their turned places and
 props turn their positions and orientations with them; a voxel holds no
-direction of its own, so nothing else changes. `translated(by)` moves the
+direction of its own, so nothing else changes. A turned orientation comes
+with w at or above zero, so four quarter turns give back the same numbers
+within rounding. `translated(by)` moves the
 origin by a number of voxels on each axis, and is `None` once the corner
 would leave the world's coordinates. Both are pure: they change only the
 capture, never the world. A `Capture` implements serde's `Serialize` and
