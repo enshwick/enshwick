@@ -352,6 +352,8 @@ impl FakeHost {
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
     /// cover wholly not loaded, as the loader does far from every player.
+    /// The fake has no world's edge: where the loader reads air past it,
+    /// the fake answers not loaded.
     ///
     /// # Panics
     ///

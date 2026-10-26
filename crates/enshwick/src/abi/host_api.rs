@@ -1153,9 +1153,11 @@ pub struct HostApi {
     /// [`Status::OK`]. Voxels past the world's edge read as air.
     /// [`Status::BAD_ARGS`] for a null pointer, an empty box, one past
     /// [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or a `capacity`
-    /// below them; [`Status::MISSING`] while part of the box is not loaded,
-    /// far from every player, or on a build without the read. On the
-    /// server's game thread only, also inside a step. Since minor 83.
+    /// below them; [`Status::NOT_LOADED`] while part of the box is not
+    /// loaded, far from every player; [`Status::MISSING`] before a world
+    /// runs or on a build without the read. On the server's game thread at
+    /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
+    /// inside a step. Since minor 84.
     pub voxel_read: extern "system" fn(
         me: ModHandle,
         min: *const [u32; 3],

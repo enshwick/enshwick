@@ -609,7 +609,8 @@ pub struct Voxel {
     /// The game's material id: 0 for air, a terrain material's id as
     /// [`TerrainMaterialInfo::id`] has it, or a building material's id.
     pub material: u8,
-    /// How full the voxel is, 0 to 255, the game's density.
+    /// How full the voxel is, 0 to 255: enshwick's name for the high byte
+    /// of the game's voxel, which the game does not name.
     pub fill: u8,
     /// Zero.
     pub reserved: u8,
@@ -655,11 +656,11 @@ impl Voxel {
             if size[axis] == 0 || !within {
                 return None;
             }
-            count *= size[axis] as u64;
+            count = match count.checked_mul(size[axis] as u64) {
+                Some(product) if product <= Self::READ_MAX => product,
+                _ => return None,
+            };
             axis += 1;
-        }
-        if count > Self::READ_MAX {
-            return None;
         }
         Some(count)
     }

@@ -613,7 +613,7 @@ pub(crate) extern "system" fn voxel_read(
         crate::test::world::VoxelGrid::read(&s.host.voxels, min, size)
     });
     let Some(voxels) = voxels else {
-        return Status::MISSING;
+        return Status::NOT_LOADED;
     };
     for (i, voxel) in voxels.into_iter().enumerate() {
         // SAFETY: `out` is non-null, checked above, and `i` is below the

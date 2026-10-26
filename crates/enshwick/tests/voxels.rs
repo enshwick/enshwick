@@ -69,17 +69,17 @@ mod tests {
     }
 
     #[test]
-    fn a_box_not_wholly_loaded_is_missing() {
+    fn a_box_not_wholly_loaded_is_not_loaded_yet() {
         let _loader = installed();
         let voxels = VOXELS.get().unwrap();
 
         assert_eq!(
             voxels.read(VoxelPos::new(11, 20, 30), [2, 1, 1]),
-            Err(WorldError::Missing)
+            Err(WorldError::NotLoaded)
         );
         assert_eq!(
             voxels.sample(VoxelPos::new(0, 0, 0)),
-            Err(WorldError::Missing)
+            Err(WorldError::NotLoaded)
         );
     }
 
@@ -93,12 +93,17 @@ mod tests {
         assert_eq!(voxels.read(corner, [65, 64, 64]), Err(WorldError::Refused));
         assert_eq!(
             voxels.read(corner, [64, 64, 64]),
-            Err(WorldError::Missing),
+            Err(WorldError::NotLoaded),
             "the largest box is taken, and found not loaded"
         );
         assert_eq!(
             voxels.read(VoxelPos::new(1 << 30, 0, 0), [1, 1, 1]),
             Err(WorldError::Refused)
+        );
+        assert_eq!(
+            voxels.read(VoxelPos::new(0, 0, 0), [1 << 30, 1 << 30, 16]),
+            Err(WorldError::Refused),
+            "a count that overflows is refused, not wrapped"
         );
     }
 

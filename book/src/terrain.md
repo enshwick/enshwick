@@ -99,17 +99,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `read(min, size)` returns a `VoxelBox` of up to `READ_MAX` voxels, a box
 of 64 a side; `sample(at)` reads one voxel. Each voxel has a material,
 `Air`, `Terrain(id)` with the id `materials()` lists or `Building(id)`,
-and a fill from 0 to 255, the game's density, which shapes the surface
-between voxels. A box is read in the order x, then y, then z;
-`VoxelBox::get` finds a voxel by its place and `iter` walks them all with
-their places.
+and a fill from 0 to 255, which shapes the surface between voxels; the
+game does not name it, so the name is enshwick's. A box is read in the
+order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
+`iter` walks them all with their places.
 
 The server keeps only the parts of the world near players. A read of a box
-that is not wholly loaded fails with `Missing`; the mod tries again when a
-player is near. Voxels past the world's edge read as air. An empty box, one
-larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
-Reads cost one lock and one copy per 4-metre brick they touch: a read
-inside a step is allowed, and a few small reads per step cost little.
+that is not wholly loaded fails with `NotLoaded`; the mod tries again when
+a player is near. Voxels past the world's edge read as air. An empty box,
+one larger than `READ_MAX` or one past 2³⁰ voxels on an axis is `Refused`.
+A read costs one lock and one copy for each 4-metre brick it touches.
+Reads, like edits, need a quiet moment: inside a step, from a filter or a
+hook, they fail with `WrongThread`.
 
 Every call works on the server's game thread, from a game event, a
 [scheduler](events.md#the-scheduler) task or an [action](actions.md); on a

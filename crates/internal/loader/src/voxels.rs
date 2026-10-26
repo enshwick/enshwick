@@ -5,8 +5,9 @@
 //! level of detail into a buffer of voxel words, brick by brick under the
 //! store's own lock, and answers false when a brick of the box is not
 //! resident (far from every player, or still streaming). The loader reads
-//! at full detail on the game thread and decodes each word for the mod, so
-//! the word's layout stays in the loader.
+//! at full detail on the game thread at a quiet moment, since the read
+//! takes the editor's lock for each column and a step may hold it, and
+//! decodes each word for the mod, so the word's layout stays in the loader.
 
 use enshwick::abi::{Status, Voxel};
 
@@ -99,13 +100,14 @@ struct Words {
 const FULL_DETAIL: u32 = 0;
 
 /// The voxel words of `request` at full detail, x fastest, then y, then z;
-/// on the game thread only. [`Status::MISSING`] while a brick of the box
-/// is not resident, before a world runs or on a build without the read.
+/// on the game thread at a quiet moment only. [`Status::NOT_LOADED`] while
+/// a brick of the box is not resident, [`Status::MISSING`] before a world
+/// runs or on a build without the read.
 #[cfg(windows)]
 pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Vec<u16>, Status> {
     use crate::memory::read;
 
-    let server = crate::world::reader()?;
+    let server = crate::world::server()?;
     let function = loader
         .address(pinned::voxel::READ_BOX)
         .and_then(|address| usize::try_from(address).ok())
@@ -114,7 +116,7 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
         .offset(pinned::terrain::EDITOR)
         .ok_or(Status::MISSING)?;
     let store_at = loader.offset(pinned::voxel::STORE).ok_or(Status::MISSING)?;
-    // SAFETY: `server` comes from `crate::world::reader`, on the game thread
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
     // that alone writes it; the table's `terrain.editor` offset holds its
     // voxel editor pointer.
     let editor: usize = unsafe { read(server, editor_at) };
@@ -133,18 +135,30 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
     // which stays mapped.
     let read_box = unsafe { core::mem::transmute::<usize, ReadBoxFn>(function) };
     let mut words = vec![0u16; request.count];
+    debug_assert_eq!(
+        words.len() as u128,
+        request
+            .size
+            .iter()
+            .map(|&axis| u128::from(axis))
+            .product::<u128>(),
+        "the buffer holds exactly the voxels of the box"
+    );
     let mut out = Words {
         data: words.as_mut_ptr(),
         count: words.len() as u64,
     };
     // SAFETY: `read_box` is the table's `voxel.read_box`, called on the game
-    // thread (checked by `crate::world::reader`) with the server's non-zero
-    // voxel editor whose store is non-zero (both checked above), which the
-    // read dereferences unconditionally; `out.data` holds `request.count`
-    // words, exactly the voxels of `request.size`, which the read trusts;
-    // `ReadBox::new` keeps every end within `Voxel::END` and
-    // `SIGNED_END`, where the read's signed loops neither wrap nor run past
-    // the box.
+    // thread at a quiet moment, where no step holds the editor's column lock
+    // (checked by `crate::world::server`), with the server's non-zero voxel
+    // editor whose store is non-zero (both checked above), which the read
+    // dereferences unconditionally. The read writes the product of
+    // `request.size` words at `out.data` without a bound: `ReadBox::new`
+    // takes `request.count` from `Voxel::read_count`, which multiplies with
+    // overflow checks, so `request.count` is that product and at most
+    // `Voxel::READ_MAX`, and `words` holds `request.count` words. Every end
+    // lies within `Voxel::END`, below `SIGNED_END`, where the read's signed
+    // loops neither wrap nor run past the box.
     let resident = unsafe {
         read_box(
             &raw mut out,
@@ -155,7 +169,7 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
         )
     };
     if resident == 0 {
-        return Err(Status::MISSING);
+        return Err(Status::NOT_LOADED);
     }
     Ok(words)
 }
@@ -207,6 +221,14 @@ mod tests {
         );
         assert_eq!(
             ReadBox::new([0; 3], [u32::MAX, u32::MAX, 2], u64::MAX),
+            Err(Status::BAD_ARGS)
+        );
+    }
+
+    #[test]
+    fn a_box_whose_voxel_count_overflows_is_refused() {
+        assert_eq!(
+            ReadBox::new([0; 3], [1 << 30, 1 << 30, 16], u64::MAX),
             Err(Status::BAD_ARGS)
         );
     }
