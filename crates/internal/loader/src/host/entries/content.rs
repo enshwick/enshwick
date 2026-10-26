@@ -132,6 +132,87 @@ pub(crate) extern "system" fn change_data(
     })
 }
 
+pub(crate) extern "system" fn declare_change(
+    me: ModHandle,
+    change: *const api_frame::DataChange,
+    out: *mut api_frame::ChangeId,
+) -> Status {
+    entry("declare_change", || {
+        let (loader, index, record) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: `HostApi::declare_change` has the mod pass null or a
+        // record with its header, valid for the call; a mod that knows this
+        // entry knows every field of the record.
+        let Some(mut raw) =
+            (unsafe { api_frame::read_headed(change, size_of::<api_frame::DataChange>()) })
+        else {
+            return Status::BAD_ARGS;
+        };
+        raw.op = api_frame::ChangeOp::TIMES;
+        raw.value = 1.0;
+        let source = text(raw.source).unwrap_or_default().to_owned();
+        let (target, field) = if raw.select == api_frame::DataSelect::ENTRY {
+            match enshwick::content::changes::Change::from_abi(&raw) {
+                Ok(Some(change)) => (
+                    crate::data_changes::LiveTarget::Entry(change.entry, source),
+                    change.field,
+                ),
+                _ => return Status::BAD_ARGS,
+            }
+        } else {
+            match enshwick::content::changes::ItemsChange::from_abi(&raw) {
+                Ok(Some(change)) => (
+                    crate::data_changes::LiveTarget::Items(change.items, source),
+                    change.field,
+                ),
+                _ => return Status::BAD_ARGS,
+            }
+        };
+        if field == enshwick::content::changes::Field::Ingredient {
+            return Status::BAD_ARGS;
+        }
+        if field.seen_by_clients() && !record.joins_when_on() {
+            return Status::REFUSED;
+        }
+        if !crate::data_changes::reachable(loader, field) {
+            return Status::MISSING;
+        }
+        match crate::data_changes::declare_change(index, target, field) {
+            // SAFETY: `out` is non-null by the check above and, by
+            // `HostApi::declare_change`, points at a writable `ChangeId` for
+            // the call.
+            Ok(id) => unsafe { put(out, id) },
+            Err(status) => status,
+        }
+    })
+}
+
+pub(crate) extern "system" fn set_change(
+    me: ModHandle,
+    id: api_frame::ChangeId,
+    op: api_frame::ChangeOp,
+    value: f64,
+) -> Status {
+    entry("set_change", || {
+        let (_, index) = match caller_index(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        let value = match op {
+            api_frame::ChangeOp::SET => Some(enshwick::content::changes::Value::Set(value)),
+            api_frame::ChangeOp::TIMES => Some(enshwick::content::changes::Value::Times(value)),
+            api_frame::ChangeOp::RESET => None,
+            _ => return Status::BAD_ARGS,
+        };
+        crate::data_changes::set_change(index, id, value)
+    })
+}
+
 pub(crate) extern "system" fn add_text(me: ModHandle, id: u32, language: u32, text: Str) -> Status {
     entry("add_text", || {
         let Some(text) = self::text(text) else {

@@ -63,6 +63,7 @@ chapters! {
     Texts => "content/texts.md",
     ModWithoutRust => "content/a-mod-without-rust.md",
     Packs => "content/packs.md",
+    Limits => "content/limits.md",
     Inventories => "inventories.md",
     ItemData => "item-data.md",
     EntityData => "entity-data.md",

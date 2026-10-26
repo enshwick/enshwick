@@ -155,6 +155,7 @@ revision = 1
 "terrain.add" = { rva = 0xa3_32a0, pattern = "48 8B C4 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 20 02 00 00" }
 "terrain.dig" = { rva = 0xa3_2c50, pattern = "48 8B C4 48 89 58 ?? 48 89 48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ??" }
 "terrain.flatten" = { rva = 0xa3_2950, pattern = "48 8B C4 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 48 89 48 ?? 55 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ??" }
+"voxel.read_box" = { rva = 0x82_cd90, pattern = "44 89 4C 24 ?? 4C 89 44 24 ?? 48 89 4C 24 ?? 55 53 56 57 41 54 41 55 41 56 48 8D AC 24 ?? ?? ?? ?? 48 81 EC C0 05 00 00" }
 
 # Engine offsets, sizes and values by symbolic id. A `pattern` holds
 # the code that uses the value, found once on a build without its own
@@ -480,6 +481,8 @@ revision = 1
 # which holds its resource once loaded.
 "terrain.voxel_world" = { value = 0x1770, pattern = "48 83 EC 70 48 8B F9 48 8B DA 48 8B 8A ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 0F 84 ?? ?? ?? ??", at = 13, size = 4 }
 "terrain.editor" = { value = 0x1778, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 48 8B 8F ?? ?? ?? ?? 0F 57 C0 48 89 4D ?? 48 8B C8", at = 13, size = 4 }
+# The voxel editor holds its voxel store here.
+"voxel.store" = { value = 0x1220, pattern = "48 8B 89 ?? ?? ?? ?? E9 ?? ?? ?? ?? CC CC CC CC 48 8D 41 30 C3 CC CC CC CC CC CC CC CC CC CC CC 4C 89 44 24 ?? 48 89 54", at = 3, size = 4 }
 "terrain.registry" = { value = 0x258, pattern = "0F 29 85 ?? ?? ?? ?? 49 8B 56 ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 49 8B CF 4D 8B 86 ?? ?? ?? ?? 49 8B 56 ?? 49 81 C0 40 01 00 00", at = 19, size = 4 }
 "terrain.registry_resource" = { value = 0x38, pattern = "F2 0F 10 05 ?? ?? ?? ?? F2 0F 11 44 24 ?? 48 89 46 ?? E8 ?? ?? ?? ?? 48 85 ED", at = 17, size = 1 }
 # Fields the loader reads in bases, weather pools, saved buffs, pickup

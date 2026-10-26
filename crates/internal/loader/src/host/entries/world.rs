@@ -1,4 +1,4 @@
-//! Host functions for the world: players, entities, chat, time, settings, weather, terrain and build rights.
+//! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Side, Status, Str};
@@ -625,6 +625,48 @@ pub(crate) extern "system" fn terrain_edit(
             Ok(changed) => unsafe { put(amount, changed) },
             Err(status) => status,
         }
+    })
+}
+
+pub(crate) extern "system" fn voxel_read(
+    me: ModHandle,
+    min: *const [u32; 3],
+    size: *const [u32; 3],
+    out: *mut enshwick::abi::Voxel,
+    capacity: u64,
+) -> Status {
+    entry("voxel_read", || {
+        if min.is_null() || size.is_null() || out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: `min` is non-null, checked above; `HostApi::voxel_read` has
+        // the mod pass it pointing at three `u32`s borrowed for the call, and
+        // an unaligned read needs no alignment.
+        let min = unsafe { min.read_unaligned() };
+        // SAFETY: `size` is non-null, checked above; `HostApi::voxel_read`
+        // has the mod pass it pointing at three `u32`s borrowed for the call,
+        // and an unaligned read needs no alignment.
+        let size = unsafe { size.read_unaligned() };
+        let request = match crate::voxels::ReadBox::new(min, size, capacity) {
+            Ok(request) => request,
+            Err(status) => return status,
+        };
+        let words = match caller(me).and_then(|loader| crate::voxels::read(loader, &request)) {
+            Ok(words) => words,
+            Err(status) => return status,
+        };
+        for (i, &word) in words.iter().enumerate() {
+            // SAFETY: `out` is non-null, checked above, and `i` is below
+            // `request.count`, which `ReadBox::new` keeps within `capacity`;
+            // `HostApi::voxel_read` has the mod pass `capacity` entries at
+            // `out`, so the offset stays inside that array.
+            let slot = unsafe { out.add(i) };
+            // SAFETY: `slot` is inside the `capacity` writable entries at
+            // `out` that `HostApi::voxel_read` has the mod pass, untouched by
+            // other threads during the call; `Voxel` has alignment 1.
+            unsafe { slot.write(crate::voxels::decode(word)) };
+        }
+        Status::OK
     })
 }
 

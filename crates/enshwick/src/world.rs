@@ -295,6 +295,10 @@ pub enum WorldError {
     /// asked for its stamina.
     #[error("the entity lacks the component")]
     Lacks,
+    /// The part of the world asked about is not loaded now, far from every
+    /// player; try again when a player is near.
+    #[error("that part of the world is not loaded")]
+    NotLoaded,
 }
 
 impl WorldError {
@@ -305,6 +309,7 @@ impl WorldError {
         match status {
             Status::OK => Ok(()),
             Status::WRONG_THREAD => Err(Self::WrongThread),
+            Status::NOT_LOADED => Err(Self::NotLoaded),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
             Status::MISSING => Err(missing),
             _ => Err(Self::Missing),

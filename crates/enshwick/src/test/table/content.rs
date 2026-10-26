@@ -123,6 +123,81 @@ pub(crate) extern "system" fn change_data(
     })
 }
 
+pub(crate) extern "system" fn declare_change(
+    _me: ModHandle,
+    change: *const crate::abi::DataChange,
+    out: *mut crate::abi::ChangeId,
+) -> Status {
+    use crate::content::changes::{Change, Field, ItemsChange, Target};
+    if out.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes null or a full record with its header,
+    // valid for the call.
+    let Some(raw) =
+        (unsafe { crate::abi::read_headed(change, size_of::<crate::abi::DataChange>()) })
+    else {
+        return Status::BAD_ARGS;
+    };
+    let target = if raw.select == crate::abi::DataSelect::ENTRY {
+        Change::from_abi(&raw)
+            .ok()
+            .flatten()
+            .map(|c| (Target::Entry(c.entry), c.field))
+    } else {
+        ItemsChange::from_abi(&raw)
+            .ok()
+            .flatten()
+            .map(|c| (Target::Items(c.items), c.field))
+    };
+    let Some((target, field)) = target.filter(|(_, field)| *field != Field::Ingredient) else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: the safe layer borrows the source for the call.
+    let source = unsafe { raw.source.as_str() }
+        .unwrap_or_default()
+        .to_owned();
+    with(Status::MISSING, |s| {
+        s.changes.live.push(crate::test::content::LiveChange {
+            target,
+            field,
+            source,
+            value: None,
+        });
+        let id = crate::abi::ChangeId(u32::try_from(s.changes.live.len()).unwrap_or(u32::MAX));
+        // SAFETY: `out` is non-null by the check above and the safe layer
+        // points it at a writable `ChangeId` for the call.
+        unsafe { out.write(id) };
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn set_change(
+    _me: ModHandle,
+    id: crate::abi::ChangeId,
+    op: crate::abi::ChangeOp,
+    value: f64,
+) -> Status {
+    use crate::content::changes::Value;
+    let value = match op {
+        crate::abi::ChangeOp::SET => Some(Value::Set(value)),
+        crate::abi::ChangeOp::TIMES => Some(Value::Times(value)),
+        crate::abi::ChangeOp::RESET => None,
+        _ => return Status::BAD_ARGS,
+    };
+    with(Status::MISSING, |s| {
+        let at = usize::try_from(id.0).ok().and_then(|n| n.checked_sub(1));
+        let Some(live) = at.and_then(|at| s.changes.live.get_mut(at)) else {
+            return Status::BAD_ARGS;
+        };
+        if value.is_some_and(|value| live.field.check(value).is_err()) {
+            return Status::BAD_ARGS;
+        }
+        live.value = value;
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn add_text(
     _me: ModHandle,
     id: u32,

@@ -29,9 +29,9 @@ use entries::build::{
     type_hash, type_size,
 };
 use entries::content::{
-    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
-    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
-    recipe_rule, resource_read, serve_resource,
+    add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
+    game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
+    recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
 };
 use entries::gameplay::{
     account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_limit_filter,
@@ -63,7 +63,7 @@ use entries::world::{
     keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    weather_at, weather_fronts, world_key,
+    voxel_read, weather_at, weather_fronts, world_key,
 };
 pub(crate) use join::{
     Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
@@ -767,6 +767,9 @@ pub(crate) static API: HostApi = HostApi {
     altar_zones_changed,
     altar_limit_filter,
     base_limit,
+    voxel_read,
+    declare_change,
+    set_change,
     build_rights,
 };
 

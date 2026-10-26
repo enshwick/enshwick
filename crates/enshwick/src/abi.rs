@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 84;
+pub const ABI_MINOR: u16 = 86;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -468,6 +468,10 @@ impl Status {
     /// Called from a thread the function does not serve, such as a game
     /// read off the server's game thread, or a world change inside a step.
     pub const WRONG_THREAD: Self = Self(7);
+    /// The part of the world asked about is not loaded now, far from every
+    /// player or still streaming in; the same call may work later. A mod
+    /// built before minor 84 reads it as an unknown failure. Since minor 84.
+    pub const NOT_LOADED: Self = Self(8);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -680,11 +684,16 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 155 * 8);
-    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 154 * 8);
+    assert!(size_of::<HostApi>() == 24 + 158 * 8);
+    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 157 * 8);
     assert!(size_of::<BuildRights>() == 8 + 8 + 48);
+    assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 154 * 8);
+    // Frozen: written as an array.
+    assert!(size_of::<Voxel>() == 4);
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);
     assert!(core::mem::offset_of!(HostApi, base_limit) == 24 + 153 * 8);
+    assert!(core::mem::offset_of!(HostApi, declare_change) == 24 + 155 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_change) == 24 + 156 * 8);
     assert!(size_of::<AltarLimit>() == 8 + 8);
     assert!(size_of::<BaseLimitInfo>() == 8 + 16);
     assert!(core::mem::offset_of!(HostApi, altar_zone_filter) == 24 + 150 * 8);
@@ -842,6 +851,16 @@ mod tests {
         // over `isize::MAX` before it reads, so neither view is dereferenced.
         let (null, huge) = (unsafe { null.as_str() }, unsafe { huge.as_str() });
         assert_eq!((null, huge), (None, None));
+    }
+
+    #[test]
+    fn a_box_whose_voxel_count_overflows_is_refused() {
+        assert_eq!(Voxel::read_count([0; 3], [1 << 30, 1 << 30, 16]), None);
+        assert_eq!(Voxel::read_count([0; 3], [65, 64, 64]), None);
+        assert_eq!(
+            Voxel::read_count([0; 3], [64, 64, 64]),
+            Some(Voxel::READ_MAX)
+        );
     }
 }
 

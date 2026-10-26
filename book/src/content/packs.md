@@ -249,8 +249,10 @@ error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more item
 
 To remove such a pack safely, split every stack larger than the game's size
 first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
-item, each of them holds. A pack that only lowers stack sizes sets no hold;
-while it runs, the game cuts larger stacks to its value.
+item, each of them holds. A pack that only lowers stack sizes sets no hold.
+Beside the holds, the loader keeps every raised size a world was saved
+with and never serves less, so a lower size never cuts a saved stack: see
+[kept stack sizes](limits.md#stack-sizes-and-saved-worlds).
 
 ## `workshops.toml`
 
