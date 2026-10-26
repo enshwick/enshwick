@@ -170,6 +170,11 @@ pub mod resolve;
     expect(dead_code, reason = "only the Windows build hands the game memory")
 )]
 mod retire;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build asks the game's zones")
+)]
+mod rights;
 #[cfg(windows)]
 mod saves;
 #[cfg(windows)]

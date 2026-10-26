@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `World::can_build` tells whether the server lets a player edit a box, by
+  the game's own rule: `CanEditWorld`, `CanEditBase` inside a building zone,
+  the world's building area and strict no-build zones; a refusal is a
+  `BuildRefusal` with the game's names.
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Added

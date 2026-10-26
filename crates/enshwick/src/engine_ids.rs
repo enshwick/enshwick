@@ -408,4 +408,8 @@ ids! {
     CURSE_MODIFIER_EASY = "curse_modifier.easy";
     CURSE_MODIFIER_NORMAL = "curse_modifier.normal";
     CURSE_MODIFIER_HARD = "curse_modifier.hard";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    PLAYER_PERMISSIONS_CAN_EDIT_BASE = "player_permissions.can_edit_base";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    PLAYER_PERMISSIONS_CAN_EDIT_WORLD = "player_permissions.can_edit_world";
 }

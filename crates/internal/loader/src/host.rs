@@ -58,11 +58,12 @@ use entries::services::{
 };
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
-    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
-    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
-    terrain_materials, time_of_day, time_speed_control, weather_at, weather_fronts, world_key,
+    actions, build_rights, chat, component, component_write, destroy, emit, entities,
+    entity_template, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
+    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
+    weather_at, weather_fronts, world_key,
 };
 pub(crate) use join::{
     Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
@@ -766,6 +767,7 @@ pub(crate) static API: HostApi = HostApi {
     altar_zones_changed,
     altar_limit_filter,
     base_limit,
+    build_rights,
 };
 
 /// The loader and the calling mod, when the mod is on.

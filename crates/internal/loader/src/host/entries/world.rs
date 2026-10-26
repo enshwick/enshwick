@@ -1,4 +1,4 @@
-//! Host functions for the world: players, entities, chat, time, settings, weather and terrain.
+//! Host functions for the world: players, entities, chat, time, settings, weather, terrain and build rights.
 
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Side, Status, Str};
@@ -624,6 +624,36 @@ pub(crate) extern "system" fn terrain_edit(
             // touches during the call.
             Ok(changed) => unsafe { put(amount, changed) },
             Err(status) => status,
+        }
+    })
+}
+
+pub(crate) extern "system" fn build_rights(
+    me: ModHandle,
+    check: *mut enshwick::abi::BuildRights,
+) -> Status {
+    use enshwick::abi::BuildRights;
+    entry("build_rights", || {
+        // SAFETY: `HostApi::build_rights` has the mod pass `check` null or
+        // pointing at a `BuildRights` readable for the size its header
+        // states, borrowed for the call.
+        let Some(mut request) =
+            (unsafe { enshwick::abi::read_headed(check, size_of::<BuildRights>()) })
+        else {
+            return Status::BAD_ARGS;
+        };
+        request.refusal = match caller(me).and_then(|loader| crate::rights::check(loader, &request))
+        {
+            Ok(refusal) => refusal,
+            Err(status) => return status,
+        };
+        // SAFETY: `check` is non-null (read above) and `HostApi::build_rights`
+        // has the mod pass it writable for the size its header states,
+        // untouched by other threads during the call.
+        if unsafe { enshwick::abi::write_headed(check, request) } {
+            Status::OK
+        } else {
+            Status::BAD_ARGS
         }
     })
 }

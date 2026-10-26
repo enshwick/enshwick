@@ -1347,6 +1347,14 @@ pub const FACTS: &[(&str, Fact)] = &[
         enum_constant(CURSE_MODIFIER, "Normal"),
     ),
     ("curse_modifier.hard", enum_constant(CURSE_MODIFIER, "Hard")),
+    (
+        "player_permissions.can_edit_base",
+        enum_constant(PLAYER_PERMISSIONS, "CanEditBase"),
+    ),
+    (
+        "player_permissions.can_edit_world",
+        enum_constant(PLAYER_PERMISSIONS, "CanEditWorld"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.
@@ -1393,3 +1401,6 @@ const TAMING_STARTLE_REPERCUSSION: &str = "keen::ecs::TamingStartleRepercussion"
 
 /// How hard the shroud's curse hits.
 const CURSE_MODIFIER: &str = "keen::ecs::CurseModifier";
+
+/// The bits of a player's permission mask.
+const PLAYER_PERMISSIONS: &str = "keen::PlayerPermissions";

@@ -584,3 +584,52 @@ impl TerrainEdit {
     /// Counts what the edit would change and changes nothing.
     pub const DRY_RUN: u32 = 1;
 }
+
+/// Whether a player may edit a box of the server's world, for
+/// [`HostApi::build_rights`](crate::abi::HostApi::build_rights): the mod
+/// fills `player`, `min` and `max`, and the loader writes `refusal`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{BuildRights, Header};
+///
+/// let check = BuildRights {
+///     header: Header::of::<BuildRights>(),
+///     player: 2,
+///     refusal: BuildRights::ALLOWED,
+///     min: [100.0, 40.0, 100.0],
+///     max: [104.0, 44.0, 104.0],
+/// };
+/// assert_eq!(check.refusal, BuildRights::ALLOWED);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct BuildRights {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's character entity.
+    pub player: u32,
+    /// [`BuildRights::ALLOWED`] or why the server refuses, written by the
+    /// loader.
+    pub refusal: u32,
+    /// The box's lowest corner, in metres.
+    pub min: [f64; 3],
+    /// The box's highest corner, in metres, at least `min` on every axis.
+    pub max: [f64; 3],
+}
+
+impl_headed!(BuildRights);
+
+impl BuildRights {
+    /// The server lets the player edit the box.
+    pub const ALLOWED: u32 = 0;
+    /// The player lacks `CanEditWorld`, which every edit needs.
+    pub const NO_CAN_EDIT_WORLD: u32 = 1;
+    /// The player lacks `CanEditBase`, and the box touches a building zone.
+    pub const NO_CAN_EDIT_BASE: u32 = 2;
+    /// A corner of the box lies outside the world's building area.
+    pub const OUTSIDE_BUILDING_ZONE: u32 = 3;
+    /// The box reaches into a strict no-build zone.
+    pub const INSIDE_STRICT_BUILD_INHIBITOR_ZONE: u32 = 4;
+}

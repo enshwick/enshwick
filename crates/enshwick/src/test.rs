@@ -225,6 +225,7 @@ pub struct FakeHost {
     disabled_recipes: HashSet<u32>,
     recipe_kinds: HashMap<u32, crate::abi::RecipeKind>,
     missing_rates: HashSet<crate::abi::RateId>,
+    zones: world::FakeZones,
 }
 
 impl Default for FakeHost {
@@ -290,6 +291,7 @@ impl FakeHost {
             disabled_recipes: HashSet::new(),
             recipe_kinds: HashMap::new(),
             missing_rates: HashSet::new(),
+            zones: world::FakeZones::default(),
         }
     }
 

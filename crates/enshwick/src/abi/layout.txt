@@ -1,4 +1,4 @@
-abi 2.83
+abi 2.84
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -110,6 +110,12 @@ BuildInfo size 48 align 8
     base at 16 size 8
     fingerprint at 24 size 20
     table at 44 size 1
+BuildRights size 64 align 8
+    header at 0 size 8
+    player at 8 size 4
+    refusal at 12 size 4
+    min at 16 size 24
+    max at 40 size 24
 BuildRow size 56 align 8
     side at 0 size 1
     fingerprint at 4 size 20
@@ -242,7 +248,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1256 align 8
+HostApi size 1264 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -399,6 +405,7 @@ HostApi size 1256 align 8
     altar_zones_changed at 1232 size 8
     altar_limit_filter at 1240 size 8
     base_limit at 1248 size 8
+    build_rights at 1256 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

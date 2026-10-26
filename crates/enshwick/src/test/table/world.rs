@@ -586,3 +586,44 @@ pub(crate) extern "system" fn terrain_edit(
         Status::OK
     })
 }
+
+pub(crate) extern "system" fn build_rights(
+    _me: ModHandle,
+    check: *mut crate::abi::BuildRights,
+) -> Status {
+    use crate::abi::BuildRights;
+    // SAFETY: the safe layer passes `check` null or pointing at a live
+    // `BuildRights` for the call, readable for the size its header states.
+    let Some(mut request) = (unsafe { crate::abi::read_headed(check, size_of::<BuildRights>()) })
+    else {
+        return Status::BAD_ARGS;
+    };
+    let finite = request
+        .min
+        .iter()
+        .chain(&request.max)
+        .all(|v| v.is_finite());
+    if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
+        return Status::BAD_ARGS;
+    }
+    let refusal = with(None, |s| {
+        let permissions = s
+            .host
+            .players
+            .iter()
+            .find(|p| p.entity == request.player)
+            .map_or(0, |p| p.permissions);
+        Some(s.host.zones.refusal(permissions, request.min, request.max))
+    });
+    let Some(refusal) = refusal else {
+        return Status::MISSING;
+    };
+    request.refusal = refusal;
+    // SAFETY: the safe layer passes `check` non-null (read above) and
+    // writable for the size its header states, untouched by other threads.
+    if unsafe { crate::abi::write_headed(check, request) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
+}
