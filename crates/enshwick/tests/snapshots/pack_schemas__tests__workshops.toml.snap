@@ -1,73 +1,51 @@
 ---
 source: crates/enshwick/tests/pack_schemas.rs
-expression: schema
+expression: shape
 ---
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Workshops",
-  "type": "object",
-  "properties": {
-    "workshop": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "$ref": "#/$defs/WorkshopEntry"
-      }
-    }
-  },
-  "additionalProperties": false,
   "$defs": {
     "StationRecipeEntry": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "cost": {
-          "description": "The vanilla station's ingredient counts times this.",
-          "type": "integer",
           "format": "uint32",
-          "minimum": 0
+          "minimum": 0,
+          "type": "integer"
         }
       },
-      "additionalProperties": false,
       "required": [
         "cost"
-      ]
+      ],
+      "type": "object"
     },
     "WorkshopEntry": {
-      "type": "object",
+      "additionalProperties": false,
       "properties": {
         "debug_name": {
-          "description": "The item's name in the registry's debug list.",
           "type": [
             "string",
             "null"
           ]
         },
         "description": {
-          "description": "The text key of the station item's description.",
           "type": [
             "string",
             "null"
           ]
         },
         "id": {
-          "description": "The station's name in the pack; it also names its item.",
           "type": "string"
         },
         "like": {
-          "description": "The vanilla station cloned: `workbench`.",
           "type": "string"
         },
         "name": {
-          "description": "The text key of the station's name, which also names the workshop.",
           "type": [
             "string",
             "null"
           ]
         },
         "recipe": {
-          "description": "How the station is crafted; not at all when left out.",
           "anyOf": [
             {
               "$ref": "#/$defs/StationRecipeEntry"
@@ -78,11 +56,26 @@ expression: schema
           ]
         }
       },
-      "additionalProperties": false,
       "required": [
         "id",
         "like"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "workshop": {
+      "items": {
+        "$ref": "#/$defs/WorkshopEntry"
+      },
+      "type": [
+        "array",
+        "null"
       ]
     }
-  }
+  },
+  "title": "Workshops",
+  "type": "object"
 }
