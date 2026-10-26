@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check:book": "bun tools/check-book.ts",
     "lint:md": "markdownlint-cli2 --no-globs $(git ls-files '*.md')",
     "prepare": "lefthook install"
   },
