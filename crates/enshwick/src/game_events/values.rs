@@ -138,7 +138,7 @@ mask! {
 ///
 /// # Examples
 ///
-/// See [`ExperienceGained`](crate::game_events::ExperienceGained).
+/// See [`XpGainedEvent`](crate::game_events::XpGainedEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ExperienceSourceType {
@@ -181,7 +181,7 @@ impl ExperienceSourceType {
 ///
 /// # Examples
 ///
-/// See [`AltarUsed`](crate::game_events::AltarUsed).
+/// See [`FlameAltarEvent`](crate::game_events::FlameAltarEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum FlameAltarActionType {
@@ -215,7 +215,7 @@ impl FlameAltarActionType {
 ///
 /// # Examples
 ///
-/// See [`EquipmentChanged`](crate::game_events::EquipmentChanged).
+/// See [`HandleEquipmentSlotChangedEvent`](crate::game_events::HandleEquipmentSlotChangedEvent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum EquipmentSlot {

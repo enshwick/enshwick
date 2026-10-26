@@ -113,7 +113,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Died`](crate::game_events::Died).
+    /// See [`EntityDiedEvent`](crate::game_events::EntityDiedEvent).
     pub fn on_game<E: crate::game_events::Kind>(
         &mut self,
         handler: impl Fn(&E) + Send + Sync + 'static,

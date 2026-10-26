@@ -67,12 +67,12 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::game_events::LevelGained;
+    /// use enshwick::game_events::LevelUpEvent;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     load.on_game::<LevelGained>(move |gained| {
-    ///         let _healed = world.heal(gained.player, 50);
+    ///     load.on_game::<LevelUpEvent>(move |gained| {
+    ///         let _healed = world.heal(gained.player_entity_id, 50);
     ///     })
     /// }
     /// ```

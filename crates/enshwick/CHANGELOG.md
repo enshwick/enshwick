@@ -31,7 +31,7 @@ Each entry names the pull request that made the change.
   write to one is refused with `WorldError::Refused` (#494).
 - Names of things the game names itself are the game's reflected names in
   Rust casing; the game settings enums read their values by the game's
-  constant names, and `from_value` and `value` are gone (#506):
+  constant names (#506):
 
 | Old | New |
 | --- | --- |
@@ -84,6 +84,55 @@ Each entry names the pull request that made the change.
 | `Settings::day_length` | `Settings::day_time_duration` |
 | `Settings::night_length` | `Settings::night_time_duration` |
 | `Settings::curse` | `Settings::curse_modifier` |
+- Typed game events and their fields take the game's reflected names; `Block`, `killer` and `killer_player` stay enshwick's (#518):
+
+| Old | New |
+| --- | --- |
+| `game_events::Hit` | `game_events::HitEvent` |
+| `Hit::attacker` | `HitEvent::root_source_id` |
+| `Hit::source` | `HitEvent::source_id` |
+| `Hit::target` | `HitEvent::target_id` |
+| `Hit::root_target` | `HitEvent::root_target_id` |
+| `Hit::weapon` | `HitEvent::weapon_pide_id` |
+| `Hit::attack` | `HitEvent::attack_category` |
+| `game_events::Died` | `game_events::EntityDiedEvent` |
+| `Died::entity` | `EntityDiedEvent::dead_entity_id` |
+| `game_events::LevelGained` | `game_events::LevelUpEvent` |
+| `LevelGained::player` | `LevelUpEvent::player_entity_id` |
+| `game_events::ExperienceGained` | `game_events::XpGainedEvent` |
+| `ExperienceGained::player` | `XpGainedEvent::player_entity_id` |
+| `game_events::CraftRequested` | `game_events::CraftRecipeEvent` |
+| `CraftRequested::player` | `CraftRecipeEvent::crafting_operator_id` |
+| `CraftRequested::station` | `CraftRecipeEvent::crafting_station_id` |
+| `CraftRequested::recipe` | `CraftRecipeEvent::recipe_id` |
+| `CraftRequested::amount` | `CraftRecipeEvent::recipe_amount` |
+| `game_events::Crafted` | `game_events::CraftRecipeSuccessEvent` |
+| `Crafted::workshop` | `CraftRecipeSuccessEvent::workshop_id` |
+| `Crafted::recipe` | `CraftRecipeSuccessEvent::recipe_id` |
+| `game_events::Interacted` | `game_events::AcceptOfferedInteractionEvent` |
+| `Interacted::player` | `AcceptOfferedInteractionEvent::guest_entity_id` |
+| `Interacted::target` | `AcceptOfferedInteractionEvent::host_entity_id` |
+| `Interacted::offer` | `AcceptOfferedInteractionEvent::offer_id` |
+| `game_events::Built` | `game_events::BuildingPlaceEvent` |
+| `Built::item` | `BuildingPlaceEvent::tracking_item_id` |
+| `game_events::TornDown` | `game_events::BuildingTearDownEvent` |
+| `game_events::PickedUp` | `game_events::BuildingPickUpEvent` |
+| `PickedUp::entity` | `BuildingPickUpEvent::picked_entity_id` |
+| `game_events::AltarUsed` | `game_events::FlameAltarEvent` |
+| `AltarUsed::player` | `FlameAltarEvent::player_entity_id` |
+| `AltarUsed::altar` | `FlameAltarEvent::base_entity_id` |
+| `AltarUsed::action` | `FlameAltarEvent::r#type` |
+| `game_events::LootOpened` | `game_events::LootInteractionEvent` |
+| `LootOpened::player` | `LootInteractionEvent::guest_id` |
+| `LootOpened::container` | `LootInteractionEvent::host_id` |
+| `LootOpened::take_all` | `LootInteractionEvent::loot_all` |
+| `game_events::EquipmentChanged` | `game_events::HandleEquipmentSlotChangedEvent` |
+| `EquipmentChanged::player` | `HandleEquipmentSlotChangedEvent::player_entity_id` |
+| `EquipmentChanged::slot` | `HandleEquipmentSlotChangedEvent::equipment_slot` |
+| `game_events::Revived` | `game_events::RevivedPlayerEvent` |
+| `Revived::player` | `RevivedPlayerEvent::target_entity_id` |
+| `Revived::by` | `RevivedPlayerEvent::source_entity_id` |
+| `Block::player` | `Block::owner_id` |
 
 
 ### Removed

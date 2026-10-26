@@ -40,7 +40,7 @@ use std::time::{Duration, Instant};
 
 use crate::abi::{AffixRoll, Header, ItemLine, StatRef, Status, Str};
 use crate::ecs::Entity;
-use crate::game_events::CraftRequested;
+use crate::game_events::CraftRecipeEvent;
 use crate::inventory::Slot;
 use crate::item_data::ItemInstance;
 use crate::locks::Relock;
@@ -444,12 +444,12 @@ impl Load<'_> {
         let scheduler = self.scheduler()?;
         let pending: Arc<Crafts> = Arc::default();
         let requests = Arc::clone(&pending);
-        self.on_game::<CraftRequested>(move |craft| {
+        self.on_game::<CraftRecipeEvent>(move |craft| {
             let held: HashSet<ItemInstance> =
-                instances(&inventories.read().slots(craft.player)).collect();
+                instances(&inventories.read().slots(craft.crafting_operator_id)).collect();
             requests
                 .relock()
-                .entry(craft.player)
+                .entry(craft.crafting_operator_id)
                 .or_insert((Instant::now(), held));
         })?;
         scheduler.every(SWEEP, move || {
