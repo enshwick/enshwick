@@ -60,8 +60,8 @@ or swapped whole:
   such as settings applied by `on_config_change`: readers load it without a
   lock, the writer stores a new one.
 
-[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars/blob/main/src/lib.rs)
-keeps its altar table in an `ArcSwap` and the cap in force in an `AtomicU8`.
+[`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars/blob/main/src/count.rs)
+keeps its altar table in an `ArcSwap`.
 
 ## Work that can wait
 

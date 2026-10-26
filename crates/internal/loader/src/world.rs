@@ -422,6 +422,25 @@ pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]
     Some(unsafe { enshwick::raw::read_at::<[i64; 3]>(data.cast(), 0) })
 }
 
+/// The reflected component that names the item an entity was placed from.
+const USED_ITEM: &str = "keen::ecs::UsedItem";
+
+/// The item `entity` was placed from, from its `UsedItem`; on the server's
+/// game thread.
+pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
+    let info = loader.reflection.type_info(USED_ITEM).ok()?;
+    if info.size() != 4 {
+        return None;
+    }
+    let hash = type_hash(info.va())?;
+    let data = component(loader, entity, hash).ok()?;
+    // SAFETY: `data` is the non-null data of the entity's live `UsedItem`
+    // (checked by `component`), which reflection sizes at 4 bytes, its u32
+    // item id alone (checked above); read on the game thread (checked by
+    // `reader`), which alone writes it.
+    Some(unsafe { enshwick::raw::read_at::<u32>(data.cast(), 0) })
+}
+
 /// Every player in game, in slot order.
 pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;

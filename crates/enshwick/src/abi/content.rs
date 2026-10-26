@@ -64,6 +64,34 @@ impl RecipeRuleKind {
     pub const WORKSHOP: Self = Self(2);
 }
 
+/// What the item a recipe makes is, from
+/// [`HostApi::recipe_kind`](super::HostApi::recipe_kind); a later minor may
+/// add kinds, which a mod reads as [`RecipeKind::OTHER`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::RecipeKind;
+///
+/// assert_ne!(RecipeKind::ROOF, RecipeKind::BUILDING_BLOCK);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct RecipeKind(pub u32);
+
+impl RecipeKind {
+    /// None of the kinds below: equipment, props, materials and the rest.
+    pub const OTHER: Self = Self(0);
+    /// A building block.
+    pub const BUILDING_BLOCK: Self = Self(1);
+    /// A roof block.
+    pub const ROOF: Self = Self(2);
+    /// An overgrowth material.
+    pub const OVERGROWTH: Self = Self(3);
+    /// A terrain material.
+    pub const TERRAIN: Self = Self(4);
+}
+
 /// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).
 ///
 /// # Examples

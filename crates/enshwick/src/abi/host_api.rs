@@ -11,11 +11,11 @@ use crate::abi::{
     InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
     KnowledgeInputFn, Level, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
     NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound, ServiceSpec,
-    SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef,
-    StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, WeatherFront, ZoneCheckFn,
+    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServiceFound,
+    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
+    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
+    UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1035,6 +1035,12 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Writes to `out` the kind of the recipes that make the item `item`,
+    /// from the item's static data; [`Status::MISSING`] while the game has
+    /// not loaded the item, which on a dedicated server comes after its
+    /// recipe registry is first built, and while the loader serves no
+    /// resource. Any thread. Since minor 73.
+    pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
     /// Declares that the calling mod multiplies `rate`, so the loader arms
     /// what the rate needs; its factor is 1 until
     /// [`HostApi::set_rate`]. [`Status::MISSING`] on a build that lacks
@@ -1043,7 +1049,7 @@ pub struct HostApi {
     /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
     /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
     /// [`Status::FAULTED`] for a mod that is off. Allowed during
-    /// `enshwick_mod_init` only. Since minor 73.
+    /// `enshwick_mod_init` only. Since minor 74.
     pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
     /// Puts `factor` in force as the calling mod's factor for `rate`: the
     /// game uses the product of every declaring mod's factor, held to 0 to
@@ -1051,6 +1057,6 @@ pub struct HostApi {
     /// a factor that is not finite or lies outside 0 to 100, or a rate the
     /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
     /// thread; neither allocates nor locks once
-    /// every mod is initialised. Since minor 73.
+    /// every mod is initialised. Since minor 74.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
 }

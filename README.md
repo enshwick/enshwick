@@ -29,8 +29,7 @@ they are never released.
 
 | Mod                                                                        | What it does                                                       |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)     | touching altar zones grow together and can be built across         |
-| [More Altars](https://github.com/enshwick/mod-more-altars)                 | how many altars each Flame level allows, twice vanilla by default  |
+| [Better Altars](https://github.com/enshwick/mod-better-altars)             | twice the altars per Flame level; touching zones grow together     |
 | [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
 | [Safes](https://github.com/enshwick/mod-personal-safes)                    | a craftable chest only the player who placed it can use            |
 | [Game Rates](https://github.com/enshwick/mod-game-rates)                   | building recipe output and furniture comfort, twice by default     |
@@ -62,10 +61,12 @@ they are never released.
    `mod-configs/enshwick.recipes.toml` takes recipes out of the game, vanilla
    or a mod's ([Disabling recipes](book/src/content/disabled-recipes.md)).
 
-More Altars was called Flame altar count. After you extract a newer
-`enshwick.zip` over an older install, delete
-`mods/enshwick-flame-altar-count.dll`, the same mod under its old name.
-Enshwick runs only the newer file and names the old one in `loader.log`.
+Better Altars joins the former mods More Altars, once called Flame altar
+count, and Flame altar zones. After you extract a newer `enshwick.zip` over an
+older install, delete `mods/enshwick-more-altars.dll`,
+`mods/enshwick-flame-altar-count.dll` and `mods/enshwick-flame-altar-zones.dll`.
+Enshwick runs only Better Altars, carries their settings over and names each
+old file in `loader.log`.
 
 Players and their server need the same versions of the mods that count in the
 join check, which each mod's page names; the server advertises them. A

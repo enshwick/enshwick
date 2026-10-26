@@ -92,14 +92,14 @@ impl Resolved {
 
     /// The constants of the source table only its own build holds, left
     /// out on a build it is carried to and not [`Self::missing`] there
-    /// ([`Constant::carried`]).
+    /// ([`Constant::carried`](crate::Constant::carried)).
     #[must_use]
     pub fn uncarried(&self) -> &[String] {
         &self.uncarried
     }
 
     /// The constants that are slots of attributes, by id, with the name of
-    /// their attribute ([`Constant::attribute`]).
+    /// their attribute ([`Constant::attribute`](crate::Constant::attribute)).
     #[must_use]
     pub fn attributes(&self) -> &[(String, String)] {
         &self.attributes

@@ -337,7 +337,7 @@ impl<'a> Slider<'a> {
     }
 }
 
-/// A settings row with a choice among options, at most [`MAX_OPTIONS`].
+/// A settings row with a choice among options, at most [`MAX_OPTIONS`](crate::ui::MAX_OPTIONS).
 ///
 /// # Examples
 ///
