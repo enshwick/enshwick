@@ -102,6 +102,21 @@ pub(crate) extern "system" fn rename_filter(
     })
 }
 
+pub(crate) extern "system" fn feature(_me: ModHandle, name: Str, off: Str) -> Status {
+    let name = text(name);
+    if name.is_empty() {
+        return Status::BAD_ARGS;
+    }
+    let off = Some(text(off)).filter(|off| !off.is_empty());
+    with(Status::MISSING, |s| {
+        match s.features.iter_mut().find(|(have, _)| *have == name) {
+            Some(kept) => kept.1 = off,
+            None => s.features.push((name, off)),
+        }
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn status(
     _me: ModHandle,
     callback: StatusFn,

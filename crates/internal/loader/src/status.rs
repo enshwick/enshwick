@@ -110,6 +110,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
                 version: record.version.clone(),
                 credits: record.meta.credits(),
                 notes: record.notes.clone(),
+                features: record.features.relock().clone(),
                 running,
                 lines: if running {
                     lines_of(&sources, ModIndex::new(index))

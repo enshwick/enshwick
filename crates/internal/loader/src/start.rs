@@ -60,7 +60,10 @@ fn no_game(
 
 /// Warns about each DLL of `mods/chain/` the stub did not load.
 fn warn_unloaded(others: &[crate::others::OtherDll]) {
-    for dll in others.iter().filter(|dll| !dll.loaded) {
+    let chained = others
+        .iter()
+        .filter(|dll| dll.origin == crate::others::Origin::Chain && !dll.loaded);
+    for dll in chained {
         crate::log!(
             WARN,
             "{}/{} did not load",
@@ -271,7 +274,7 @@ fn release_server(release: Option<extern "system" fn() -> u32>, began: std::time
 /// replace, so their code never runs and the files can be deleted.
 fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
     for (index, reason) in &plan.skipped {
-        if plan.replaced.iter().any(|&(old, _)| old == *index) {
+        if plan.replaced.iter().any(|&(old, _)| old == *index) || plan.retired.contains(index) {
             continue;
         }
         if reason == resolve::OTHER_SIDE {
@@ -288,14 +291,20 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
     let replaced = plan
         .replaced
         .iter()
-        .map(|&(old, by)| {
+        .map(|&(old, by)| (old, candidates[by].id.as_str()))
+        .chain(
+            plan.retired
+                .iter()
+                .map(|&old| (old, crate::settings::LOADER_ID)),
+        )
+        .map(|(old, by)| {
             let library = &libraries[old];
             unload(library);
             let replaced = modlist::Replaced {
                 id: candidates[old].id.clone(),
                 version: candidates[old].version.to_string(),
                 file: library.file.clone(),
-                by: candidates[by].id.clone(),
+                by: by.to_owned(),
             };
             crate::log!(WARN, "{}", replaced.line());
             replaced
@@ -358,6 +367,7 @@ fn records(
             check: OnceLock::new(),
             texts: Mutex::new(None),
             pack: libraries[i].pack,
+            features: Mutex::new(Vec::new()),
         })
         .collect()
 }

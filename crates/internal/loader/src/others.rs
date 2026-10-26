@@ -1,6 +1,7 @@
 //! DLLs that run beside Enshwick without its API: native mods in `mods/`,
-//! which the loader loads and leaves alone, and other mods' proxies in
-//! `mods/chain/`, which the `powrprof.dll` stub loads before the loader.
+//! which the loader loads and leaves alone, other mods' proxies in
+//! `mods/chain/`, which the `powrprof.dll` stub loads before the loader, and
+//! other mods' proxies the game loads from its own folder.
 
 use std::path::{Path, PathBuf};
 
@@ -10,6 +11,12 @@ use enshwick_gamedata::reflect::{Image, Layout};
 /// it.
 #[cfg(windows)]
 pub(crate) const CHAIN_DIR: &str = "mods/chain";
+
+/// The names other mods give the proxy DLLs they put in the game's folder,
+/// besides Enshwick's own `powrprof.dll`: Windows takes a copy beside the
+/// game before the system's.
+#[cfg(windows)]
+pub(crate) const PROXY_NAMES: &[&str] = &["dbghelp.dll", "dinput8.dll", "winmm.dll"];
 
 /// Where the PE header starts, read from the DOS header.
 const PE_POINTER: usize = 0x3c;
@@ -79,6 +86,8 @@ pub(crate) enum Origin {
     Mods,
     /// In `mods/chain/`, loaded by the stub.
     Chain,
+    /// In the game's folder under a name the game loads, loaded by Windows.
+    Game,
 }
 
 /// A DLL that runs beside Enshwick without its API.
@@ -98,18 +107,17 @@ pub(crate) fn lines(others: &[OtherDll]) -> Vec<String> {
     [
         (Origin::Mods, "native mods in mods/, without Enshwick's API"),
         (Origin::Chain, "loaded from mods/chain/ before the loader"),
+        (Origin::Game, "other mods' proxies in the game's folder"),
     ]
     .into_iter()
     .filter_map(|(origin, heading)| {
         let files: Vec<String> = others
             .iter()
             .filter(|dll| dll.origin == origin)
-            .map(|dll| {
-                if dll.loaded {
-                    dll.file.clone()
-                } else {
-                    format!("{} (did not load)", dll.file)
-                }
+            .map(|dll| match (dll.loaded, dll.origin) {
+                (true, _) => dll.file.clone(),
+                (false, Origin::Game) => format!("{} (not loaded at start)", dll.file),
+                (false, _) => format!("{} (did not load)", dll.file),
             })
             .collect();
         (!files.is_empty()).then(|| format!("{heading}: {}", files.join(", ")))
@@ -146,12 +154,15 @@ mod tests {
             dll("fps-unlock.dll", Origin::Mods, true),
             dll("powrprof.dll", Origin::Chain, true),
             dll("dinput8.dll", Origin::Chain, false),
+            dll("dbghelp.dll", Origin::Game, true),
+            dll("winmm.dll", Origin::Game, false),
         ];
         assert_eq!(
             lines(&others),
             [
                 "native mods in mods/, without Enshwick's API: fps-unlock.dll",
                 "loaded from mods/chain/ before the loader: powrprof.dll, dinput8.dll (did not load)",
+                "other mods' proxies in the game's folder: dbghelp.dll, winmm.dll (not loaded at start)",
             ]
         );
         assert_eq!(files(&others, Origin::Chain, true), ["powrprof.dll"]);

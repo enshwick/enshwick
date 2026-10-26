@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 74;
+pub const ABI_MINOR: u16 = 75;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -676,8 +676,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 144 * 8);
-    assert!(core::mem::offset_of!(HostApi, change_data) == 24 + 143 * 8);
+    assert!(size_of::<HostApi>() == 24 + 145 * 8);
+    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 143 * 8);
+    assert!(core::mem::offset_of!(HostApi, change_data) == 24 + 144 * 8);
     assert!(size_of::<DataChange>() == 8 + 16 + 4 + 4 + 8 + 16);
     assert!(core::mem::offset_of!(HostApi, recipe_kind) == 24 + 142 * 8);
     assert!(size_of::<RecipeKind>() == 4);
