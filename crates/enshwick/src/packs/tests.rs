@@ -556,18 +556,44 @@ fn a_changed_script_changes_the_pack_s_hash() {
 }
 
 #[test]
-fn scripts_too_deep_or_too_many_are_refused() {
+fn scripts_deeper_than_the_bound_are_not_read_and_too_many_are_refused() {
     let folder = Folder::new("deep");
-    folder.write("a/b/c/d/e/deep.luau", "return 1");
-    let error = PackFiles::read_dir(&folder.0).unwrap_err();
-    assert!(error.to_string().contains("a/b/c/d/e"), "{error}");
+    folder.write("main.luau", "return 1");
+    folder.write("a/b/c/d/four.luau", "return 1");
+    folder.write("a/b/c/d/e/five.luau", "return 1");
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
+    assert_eq!(scripts, ["a/b/c/d/four.luau", "main.luau"]);
     let folder = Folder::new("many");
-    for i in 0..=MAX_SCRIPTS {
+    for i in 0..MAX_SCRIPTS {
         folder.write(&format!("s{i}.luau"), "return 1");
     }
+    folder.write("main.luau", "return 1");
     let error = PackFiles::read_dir(&folder.0).unwrap_err();
     assert!(
         error.to_string().contains(&MAX_SCRIPTS.to_string()),
         "{error}"
     );
+}
+
+#[test]
+fn scripts_of_a_pack_without_main_are_not_read() {
+    let folder = Folder::new("no-main");
+    folder.write("helper.luau", "return 1");
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    assert_eq!(files.scripts().count(), 0);
+}
+
+#[cfg(unix)]
+#[test]
+fn linked_folders_are_not_followed() {
+    let outside = Folder::new("outside");
+    outside.write("stolen.luau", "return 1");
+    let folder = Folder::new("links");
+    folder.write("main.luau", "return 1");
+    std::os::unix::fs::symlink(&outside.0, folder.0.join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(&folder.0, folder.0.join("loop")).unwrap();
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
+    assert_eq!(scripts, ["main.luau"]);
 }

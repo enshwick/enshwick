@@ -15,7 +15,9 @@ use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, LuaOptions, MultiValue, StdLib, Table, Value as LuaValue, VmState};
 
 use crate::bridge::{arguments, from_lua, to_lua};
-use crate::files::{MAIN, Requirer, Scripts};
+use enshwick::packs::SCRIPT_MAIN as MAIN;
+
+use crate::files::{Requirer, Scripts};
 
 /// How much a mod's scripts may take.
 ///
@@ -220,8 +222,9 @@ impl Runtime {
     ///
     /// # Errors
     ///
-    /// The file, line and message when the new `main.luau` fails at its
-    /// start, or when the mod is off; the old scripts keep running.
+    /// [`ReloadError`] when the mod is off, or with the file, line and
+    /// message when the new `main.luau` fails at its start; the old scripts
+    /// keep running.
     ///
     /// # Examples
     ///
@@ -231,17 +234,17 @@ impl Runtime {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), Limits::default())?;
     ///     let newer = Scripts::new().with("main.luau", "print('again')");
-    ///     runtime.reload(newer.clone()).map_err(enshwick::Off::new)?;
+    ///     runtime.reload(newer.clone()).map_err(|e| enshwick::Off::new(e.to_string()))?;
     ///     assert!(runtime.runs(&newer));
     ///     Ok(())
     /// }
     /// ```
-    pub fn reload(&self, scripts: Scripts) -> Result<(), String> {
+    pub fn reload(&self, scripts: Scripts) -> Result<(), ReloadError> {
         let inner = &self.0;
         if self.is_off() {
-            return Err("the mod is off".to_owned());
+            return Err(ReloadError::Off);
         }
-        let vm = inner.run_main(scripts)?;
+        let vm = inner.run_main(scripts).map_err(ReloadError::Start)?;
         let waiting: Vec<&str> = {
             let subscribed = inner.subscribed.relock();
             vm.events()
@@ -258,8 +261,31 @@ impl Runtime {
             );
         }
         inner.vm.store(Some(vm));
+        if self.is_off() {
+            inner.vm.store(None);
+            return Err(ReloadError::Off);
+        }
         Ok(())
     }
+}
+
+/// Why [`Runtime::reload`] left the old scripts running.
+///
+/// # Examples
+///
+/// ```
+/// let error = enshwick_luau::ReloadError::Start("main.luau:1: boom".to_owned());
+/// assert_eq!(error.to_string(), "main.luau:1: boom");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ReloadError {
+    /// A fault turned the mod off.
+    #[error("the mod is off")]
+    Off,
+    /// The new `main.luau` failed at its start: the file, line and message.
+    #[error("{0}")]
+    Start(String),
 }
 
 /// The mod and the VM a function or a callback belongs to.

@@ -3,7 +3,10 @@ use std::path::Path;
 
 use crate::Off;
 
-use super::{DEFINITIONS_SUFFIX, FILES, MAX_FILE, MAX_SCRIPT_DEPTH, MAX_SCRIPTS, SCRIPT_EXTENSION};
+use super::{
+    DEFINITIONS_SUFFIX, FILES, MAX_FILE, MAX_SCRIPT_DEPTH, MAX_SCRIPTS, SCRIPT_EXTENSION,
+    SCRIPT_MAIN,
+};
 
 /// One problem in a pack: where it is and what is wrong.
 ///
@@ -92,12 +95,6 @@ pub enum ReadPackError {
         /// The file, as the pack names it.
         file: String,
     },
-    /// A script sits more than [`MAX_SCRIPT_DEPTH`] folders deep.
-    #[error("{file}: more than {MAX_SCRIPT_DEPTH} folders deep")]
-    TooDeep {
-        /// The script, as the pack names it.
-        file: String,
-    },
     /// The pack holds more than [`MAX_SCRIPTS`] scripts.
     #[error("more than {MAX_SCRIPTS} scripts")]
     TooManyScripts,
@@ -143,13 +140,15 @@ impl PackFiles {
     }
 
     /// The pack files in the folder `dir`: the files of [`FILES`] it holds,
-    /// every PNG under `dir/icons` and every script in it and its folders
-    /// but definitions files, each at most [`MAX_FILE`] bytes.
+    /// every PNG under `dir/icons`, and when it has a [`SCRIPT_MAIN`] every
+    /// script up to [`MAX_SCRIPT_DEPTH`] folders deep but definitions files;
+    /// linked folders are not followed. Each file is at most [`MAX_FILE`]
+    /// bytes.
     ///
     /// # Errors
     ///
-    /// [`ReadPackError`] naming the file that could not be read, is larger
-    /// than [`MAX_FILE`] or a script too deep, or for too many scripts.
+    /// [`ReadPackError`] naming the file or folder that could not be read,
+    /// a file larger than [`MAX_FILE`], or for too many scripts.
     ///
     /// # Examples
     ///
@@ -195,9 +194,8 @@ impl PackFiles {
             }
         }
         let mut scripts = Vec::new();
-        find_scripts(dir, "", 0, &mut scripts)?;
-        if scripts.len() > MAX_SCRIPTS {
-            return Err(ReadPackError::TooManyScripts);
+        if dir.join(SCRIPT_MAIN).is_file() {
+            find_scripts(dir, "", 0, &mut scripts)?;
         }
         for (path, name) in scripts {
             read(&path, &name, &mut files)?;
@@ -310,17 +308,24 @@ fn is_script(name: &str) -> bool {
 }
 
 /// Adds every script under `dir`, named from `prefix`, `depth` folders below
-/// the pack's folder, to `found`; hidden files and folders are left out.
+/// the pack's folder, to `found`; hidden entries, linked folders and folders
+/// past [`MAX_SCRIPT_DEPTH`] are left out.
 fn find_scripts(
     dir: &Path,
     prefix: &str,
     depth: usize,
     found: &mut Vec<(std::path::PathBuf, String)>,
 ) -> Result<(), ReadPackError> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Ok(());
+    let io = |source| ReadPackError::Io {
+        file: if prefix.is_empty() {
+            ".".to_owned()
+        } else {
+            prefix.to_owned()
+        },
+        source,
     };
-    for entry in entries.filter_map(Result::ok) {
+    for entry in std::fs::read_dir(dir).map_err(io)? {
+        let entry = entry.map_err(io)?;
         let Some(file) = entry.file_name().to_str().map(str::to_owned) else {
             continue;
         };
@@ -329,12 +334,12 @@ fn find_scripts(
         }
         let name = format!("{prefix}{file}");
         let path = entry.path();
-        if path.is_dir() {
-            find_scripts(&path, &format!("{name}/"), depth + 1, found)?;
-        } else if is_script(&name) {
-            if depth > MAX_SCRIPT_DEPTH {
-                return Err(ReadPackError::TooDeep { file: name });
+        let kind = entry.file_type().map_err(io)?;
+        if kind.is_dir() {
+            if depth < MAX_SCRIPT_DEPTH {
+                find_scripts(&path, &format!("{name}/"), depth + 1, found)?;
             }
+        } else if is_script(&name) && path.is_file() {
             found.push((path, name));
             if found.len() > MAX_SCRIPTS {
                 return Err(ReadPackError::TooManyScripts);

@@ -358,7 +358,7 @@ mod tests {
     fn a_failing_reload_keeps_the_old_scripts() {
         let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
         let error = runtime().reload(main("local x = ")).unwrap_err();
-        assert!(error.contains("main.luau:1"), "{error}");
+        assert!(error.to_string().contains("main.luau:1"), "{error}");
         let _handled = loader.raise::<WorldSaved>(&());
         assert!(logged(&loader, "first"));
         assert!(loader.faults().is_empty());

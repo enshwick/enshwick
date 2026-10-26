@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo_enshwick::luau::definitions` writes the API's Luau definitions
+  (#543); `cargo enshwick luau` writes them to a file, and
+  `cargo enshwick new --luau` starts a Luau mod (#545).
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Fixed

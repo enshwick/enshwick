@@ -514,6 +514,7 @@ dependencies = [
  "arc-swap",
  "enshwick",
  "mlua",
+ "thiserror",
 ]
 
 [[package]]

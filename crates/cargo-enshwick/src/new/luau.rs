@@ -5,12 +5,10 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, bail};
 use cargo_enshwick::luau::{DEFINITIONS_FILE, definitions};
-use enshwick::packs::MANIFEST_FILE;
+use enshwick::packs::{MANIFEST_FILE, SCRIPT_MAIN as MAIN_FILE};
 
 use crate::Side;
 
-/// The script a Luau mod starts from.
-pub(crate) const MAIN_FILE: &str = "main.luau";
 /// Where a new mod keeps the API's definitions.
 pub(crate) const DEFINITIONS_DIR: &str = "types";
 

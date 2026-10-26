@@ -6,8 +6,7 @@ use std::sync::Arc;
 use mlua::Lua;
 use mlua::luau::{NavigateError, Require};
 
-/// The script that starts a Luau mod.
-pub const MAIN: &str = "main.luau";
+use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 /// The script files of one mod, by path relative to its folder with `/`
 /// between folders.

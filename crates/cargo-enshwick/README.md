@@ -20,6 +20,12 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `new --data <id>` creates a data pack folder `<dir>/<id>` instead: every
   pack file with its first change commented out, their JSON Schemas and a
   README. It checks clean as it is.
+- `new --luau <id>` creates a [Luau mod](https://github.com/enshwick/enshwick/blob/main/book/src/luau.md)
+  folder `<dir>/<id>`: `pack.toml`, a `main.luau`, the API's definitions in
+  `types/enshwick.d.luau`, the luau-lsp settings that read them and a
+  README. It runs on the server unless `--side` says otherwise.
+- `luau [--out <file>]` writes the API's Luau definitions for the loader the
+  tool was built with, to refresh a mod's `types/enshwick.d.luau`.
 - `manifest <dll>` prints what a built mod says about itself: id, version,
   side, join check and dependencies. With `--expect-version <version>` it fails
   when the DLL reports another version, which release pipelines can check.

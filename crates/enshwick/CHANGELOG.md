@@ -6,6 +6,21 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `script` describes the API for script languages beside the Rust items:
+  `#[derive(Script)]` for types, `#[script(<part>)]` for the methods a script
+  may call, a script entry for every loader event, and `NAMESPACES` (#543).
+- A data pack folder with a `main.luau` reads its scripts:
+  `PackFiles::scripts`, `SCRIPT_MAIN`, `SCRIPT_EXTENSION`,
+  `DEFINITIONS_SUFFIX`, `MAX_SCRIPTS`, `MAX_SCRIPT_DEPTH` and
+  `ReadPackError::TooManyScripts`; scripts count in the pack's hash (#545).
+
+### Fixed
+
+- Each mod handle has a scheduler queue of its own, so one copy of the API
+  can run tasks for several packs and scripts (#543).
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Added

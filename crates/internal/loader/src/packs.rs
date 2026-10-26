@@ -255,6 +255,12 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
         return Status::REFUSED;
     }
     let scripts = scripts_of(&files);
+    with(|packs| {
+        if let Some(loaded) = packs.get_mut(&id) {
+            loaded.hash = files.hash();
+            loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
+        }
+    });
     let mut runtime = None;
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
@@ -359,7 +365,15 @@ fn scripts_changed(id: &str, files: &PackFiles, dev: bool) {
         return;
     }
     match runtime.reload(scripts) {
-        Ok(()) => crate::log::write(Level::INFO, id, "scripts reloaded"),
+        Ok(()) => {
+            with(|packs| {
+                if let Some(loaded) = packs.get_mut(id) {
+                    loaded.hash = files.hash();
+                    loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
+                }
+            });
+            crate::log::write(Level::INFO, id, "scripts reloaded");
+        }
         Err(why) => crate::log::write(
             Level::WARN,
             id,

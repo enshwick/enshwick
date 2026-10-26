@@ -2,7 +2,7 @@
 
 A Luau mod is a [data pack](content/packs.md) with scripts: a folder in
 `mods/` with a `pack.toml`, a `main.luau`, and any other `.luau` files it
-loads. The loader runs it as it runs any pack: it is in the mod list and the
+loads, up to four folders deep. The loader runs it as it runs any pack: it is in the mod list and the
 lock, counts in [the join check](concepts/join-check.md) with the hash of
 every script, has its log `logs/enshwick/mods/<id>.log`, and is turned off
 alone when it goes wrong. It may hold data files too, such as `items.toml`.
@@ -124,7 +124,8 @@ fails at start leaves the mod off from the start, with the same line.
 
 ## Threads
 
-`main.luau` runs on the loader's start thread. Event handlers and tasks run
+`main.luau` runs on the loader's start thread, and after a reload on the
+thread that watches files. Event handlers and tasks run
 on the server's game thread, between simulation steps, where calls into the
 world are allowed (see [Threads](concepts/threads.md)). Hooks and filters
 inside a step stay in Rust: a Luau mod sees their results through events.
@@ -132,11 +133,13 @@ inside a step stay in Rust: a Luau mod sees their results through events.
 ## Change scripts while the game runs
 
 With `dev_reload = true` in the loader's settings, the loader watches a Luau
-mod's scripts. When one changes, it runs `main.luau` again in a new VM:
-handlers of events subscribed at start move to the new scripts, and tasks of
-the old ones stop. A new event or a data file change waits for the next
-start, and the log says so. When the new scripts fail, the old ones keep
-running. Without `dev_reload`, a change waits for the next start.
+mod's scripts; a script added while the game runs is watched from the next
+reload. When one changes, it runs `main.luau` again in a new VM: handlers of
+events subscribed at start move to the new scripts, and tasks of the old ones
+stop. A handler of an event the old scripts did not subscribe runs from the
+next start, and the log says so. When the new scripts fail, the old ones keep
+running. Without `dev_reload`, a script change waits for the next start. The
+pack's data files reload as any [data pack](content/packs.md)'s do.
 
 ## What a mod costs
 
