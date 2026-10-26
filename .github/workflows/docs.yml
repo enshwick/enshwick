@@ -1,0 +1,28 @@
+# Starts the docs site's build when what the site reads from this repository
+# changes on main: the book, the changelog, the API's version and id rules,
+# the build tables, the error codes and the list of our mods. The site
+# otherwise picks them up in its nightly run.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "book/**"
+      - "crates/enshwick/CHANGELOG.md"
+      - "crates/enshwick/Cargo.toml"
+      - "crates/enshwick/src/lib.rs"
+      - "crates/enshwick/src/abi.rs"
+      - "crates/enshwick-gamedata/tables/**"
+      - "crates/internal/loader/src/errors.toml"
+      - "tools/mods.toml"
+
+permissions: {}
+
+jobs:
+  site:
+    # main: the organization runners run only workflows from main.
+    uses: enshwick/.github/.github/workflows/docs-rebuild.yml@main # zizmor: ignore[unpinned-uses]
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
