@@ -150,7 +150,7 @@ assert!(!name.is_empty() && chest_name.is_none_or(|n| !n.is_empty()));
 `items::vanilla_name(item, language)` reads a vanilla item's name tag from
 its data and returns its text; `WorkshopSurvivor::name(language)` is the
 survivor's name, which the game gives its summoning staff.
-[`enshwick-survivors-per-altar`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+[`enshwick-survivors-per-altar`](https://github.com/enshwick/mod-survivors-per-altar)
 names its copy staffs this way: it registers each staff's name during
 `init` for every language it translates, with the survivor's name in that
 language.
