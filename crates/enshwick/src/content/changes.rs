@@ -17,9 +17,13 @@
 //! }
 //! ```
 
-use crate::abi::{ChangeOp, DataChange, DataField, Header, Str};
+use crate::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
 use crate::content::Guid;
 use crate::{Load, Off};
+
+mod items;
+
+pub use items::{ItemTraits, Items, ItemsChange};
 
 /// The largest factor a [`Value::Times`] takes.
 pub const MAX_FACTOR: f64 = 100.0;
@@ -452,6 +456,12 @@ pub enum ValueError {
         /// The step.
         step: f64,
     },
+    /// A selection of items for a field it does not reach.
+    #[error("{field} is no field a selection of items changes")]
+    NotSelectable {
+        /// The field.
+        field: Field,
+    },
     /// An item for a field that names none, or none for one that does.
     #[error("{field} {}", if *named { "names no item" } else { "needs an item" })]
     Item {
@@ -547,7 +557,8 @@ impl Change {
     }
 
     /// The change an ABI record describes, checked as [`Change::check`]
-    /// checks it; `None` for a field or operation this crate does not know.
+    /// checks it; `None` for a field or operation this crate does not know,
+    /// or a record that selects items ([`ItemsChange::from_abi`]).
     ///
     /// # Errors
     ///
@@ -556,7 +567,7 @@ impl Change {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{ChangeOp, DataChange, DataField, Header, Str};
+    /// use enshwick::abi::{ChangeOp, DataChange, DataField, DataSelect, Header, Str};
     /// use enshwick::content::changes::{Change, Field, Value};
     ///
     /// let raw = DataChange {
@@ -567,18 +578,18 @@ impl Change {
     ///     value: 4.0,
     ///     source: Str::EMPTY,
     ///     item: [0; 16],
+    ///     select: DataSelect::ENTRY,
+    ///     categories: 0,
     /// };
     /// let change = Change::from_abi(&raw)?.ok_or("unknown")?;
     /// assert_eq!(change.value, Value::Times(4.0));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn from_abi(raw: &DataChange) -> Result<Option<Self>, ValueError> {
-        let value = match raw.op {
-            ChangeOp::SET => Value::Set(raw.value),
-            ChangeOp::TIMES => Value::Times(raw.value),
-            _ => return Ok(None),
-        };
-        let Some(field) = Field::from_abi(raw.field) else {
+        if raw.select != DataSelect::ENTRY {
+            return Ok(None);
+        }
+        let Some((field, value)) = field_and_value(raw) else {
             return Ok(None);
         };
         let change = Self {
@@ -606,8 +617,21 @@ impl Change {
             value,
             source: Str::new(source),
             item: self.item.map_or([0; 16], |item| item.0),
+            select: DataSelect::ENTRY,
+            categories: 0,
         }
     }
+}
+
+/// The field and the value of an ABI record; `None` for a field or an
+/// operation this crate does not know.
+fn field_and_value(raw: &DataChange) -> Option<(Field, Value)> {
+    let value = match raw.op {
+        ChangeOp::SET => Value::Set(raw.value),
+        ChangeOp::TIMES => Value::Times(raw.value),
+        _ => return None,
+    };
+    Some((Field::from_abi(raw.field)?, value))
 }
 
 impl Load<'_> {

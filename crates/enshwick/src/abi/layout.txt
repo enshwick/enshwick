@@ -165,7 +165,7 @@ DamageCheck size 80 align 4
     attacker at 20 size 4
     amounts at 24 size 52
     total at 76 size 4
-DataChange size 72 align 8
+DataChange size 80 align 8
     header at 0 size 8
     entry at 8 size 16
     field at 24 size 4
@@ -173,7 +173,11 @@ DataChange size 72 align 8
     value at 32 size 8
     source at 40 size 16
     item at 56 size 16
+    select at 72 size 4
+    categories at 76 size 4
 DataField size 4 align 4
+    0 at 0 size 4
+DataSelect size 4 align 4
     0 at 0 size 4
 DaytimeInfo size 56 align 8
     header at 0 size 8

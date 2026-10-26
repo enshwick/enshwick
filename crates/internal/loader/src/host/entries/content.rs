@@ -105,19 +105,29 @@ pub(crate) extern "system" fn change_data(
         };
         // SAFETY: `HostApi::change_data` has the mod pass null or a record
         // with its header, valid for the call; an all-zero record is valid,
-        // and `item` reads as zero for a record of a mod built before it.
+        // and `item`, `select` and `categories` read as zero for a record of
+        // a mod built before them.
         let Some(raw) = (unsafe {
             api_frame::read_headed(change, core::mem::offset_of!(api_frame::DataChange, item))
         }) else {
             return Status::BAD_ARGS;
         };
+        let source = text(raw.source).unwrap_or_default().to_owned();
+        if raw.select != api_frame::DataSelect::ENTRY {
+            let Ok(Some(change)) = enshwick::content::changes::ItemsChange::from_abi(&raw) else {
+                return Status::BAD_ARGS;
+            };
+            if !crate::data_changes::reachable(loader, change.field) {
+                return Status::MISSING;
+            }
+            return crate::data_changes::declare_items(index, change, source);
+        }
         let Ok(Some(change)) = enshwick::content::changes::Change::from_abi(&raw) else {
             return Status::BAD_ARGS;
         };
         if !crate::data_changes::reachable(loader, change.field) {
             return Status::MISSING;
         }
-        let source = text(raw.source).unwrap_or_default().to_owned();
         crate::data_changes::declare(index, change, source)
     })
 }

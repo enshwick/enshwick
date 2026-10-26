@@ -91,7 +91,8 @@ impl RollRules {
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemCategoryMask, RollRules, roll};
+/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, RollRules, roll};
+/// use enshwick::content::categories::ItemCategoryMask;
 ///
 /// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);
 /// let pool = [Candidate { key: AffixKey(1), def: &ring }];
@@ -156,7 +157,8 @@ pub fn roll(pool: &[Candidate<'_>], category: u8, rules: RollRules, seed: u64) -
 /// # Examples
 ///
 /// ```
-/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, ItemCategoryMask, RollRules, reroll};
+/// use enshwick::affixes::{AffixDef, AffixKey, Candidate, RollRules, reroll};
+/// use enshwick::content::categories::ItemCategoryMask;
 /// use enshwick::stats::ItemStats;
 ///
 /// let ring = AffixDef::new("ring", ItemCategoryMask::EQUIPMENT);

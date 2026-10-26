@@ -92,7 +92,7 @@ pub(crate) struct State {
     /// after.
     pub(crate) rebuilds: Vec<ResourceKey>,
     /// The changes of vanilla values the mod declared, with their sources.
-    pub(crate) changes: Vec<(crate::content::changes::Change, String)>,
+    pub(crate) changes: DataChanges,
     /// The mod's recipe rules in force: kind and name.
     pub(crate) recipe_rules: Vec<(crate::abi::RecipeRuleKind, String)>,
     pub(crate) texts: Vec<(u32, u32, String)>,
@@ -309,6 +309,15 @@ pub(crate) struct Pacing {
     pub(crate) task_workers: Option<(u32, u32)>,
 }
 
+/// The changes of vanilla values a mod declared, each with its source.
+#[derive(Debug, Default)]
+pub(crate) struct DataChanges {
+    /// Changes of one entry.
+    pub(crate) one: Vec<(crate::content::changes::Change, String)>,
+    /// Changes of every item a selection picks.
+    pub(crate) items: Vec<(crate::content::changes::ItemsChange, String)>,
+}
+
 /// Waits for the table to be free, then answers from `host`.
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
@@ -322,7 +331,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         game_events: Vec::new(),
         served: Vec::new(),
         rebuilds: Vec::new(),
-        changes: Vec::new(),
+        changes: DataChanges::default(),
         recipe_rules: Vec::new(),
         texts: Vec::new(),
         code_patches: Vec::new(),

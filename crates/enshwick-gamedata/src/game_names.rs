@@ -56,8 +56,10 @@ macro_rules! constant {
     }};
 }
 
-use enshwick::affixes::{ItemCategoryMask, ItemRarity};
+use enshwick::affixes::ItemRarity;
+
 use enshwick::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
+use enshwick::content::categories::ItemCategoryMask;
 use enshwick::content::changes::Field;
 use enshwick::content::items::{FuelSetup, ImpactUiValue};
 use enshwick::damage::DamageTypeNew;
@@ -127,6 +129,18 @@ pub(crate) const GAME_NAMES: &[GameName] = &[
     constant!(ItemCategoryMask::TOOLS => "keen::ItemCategory"."Tools"),
     constant!(ItemCategoryMask::INSTRUMENT => "keen::ItemCategory"."Instrument"),
     constant!(ItemCategoryMask::FISHING_ROD => "keen::ItemCategory"."FishingRod"),
+    constant!(ItemCategoryMask::CUSTOMIZATION => "keen::ItemCategory"."Customization"),
+    constant!(ItemCategoryMask::BUILD_TOOLS => "keen::ItemCategory"."BuildTools"),
+    constant!(ItemCategoryMask::CONSUMABLES => "keen::ItemCategory"."Consumables"),
+    constant!(ItemCategoryMask::AMMUNITION => "keen::ItemCategory"."Ammunition"),
+    constant!(ItemCategoryMask::MATERIALS => "keen::ItemCategory"."Materials"),
+    constant!(ItemCategoryMask::BLUEPRINTS => "keen::ItemCategory"."Blueprints"),
+    constant!(ItemCategoryMask::CURRENCY => "keen::ItemCategory"."Currency"),
+    constant!(ItemCategoryMask::COLLECTIBLES => "keen::ItemCategory"."Collectibles"),
+    constant!(ItemCategoryMask::ANIMAL_FOOD => "keen::ItemCategory"."AnimalFood"),
+    constant!(ItemCategoryMask::PET_FOOD => "keen::ItemCategory"."PetFood"),
+    constant!(ItemCategoryMask::WEAPON_GEM => "keen::ItemCategory"."WeaponGem"),
+    constant!(ItemCategoryMask::COLOR_PALETTE => "keen::ItemCategory"."ColorPalette"),
     ty!(InventoryCategory => "keen::InventoryCategory"),
     constant!(InventoryCategory::INVALID => "keen::InventoryCategory"."Invalid"),
     constant!(InventoryCategory::CUSTOMIZATION => "keen::InventoryCategory"."Customization"),

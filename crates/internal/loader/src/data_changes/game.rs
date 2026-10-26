@@ -23,14 +23,15 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
 use super::{
-    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Raised, credited, edit_item,
-    grown_slots, hold_step, merge, template_slots,
+    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Pending, Raised, TraitOffsets,
+    credited, edit_item, expand, grouped, grown_slots, hold_step, merge, template_slots, traits_of,
 };
+use enshwick::content::changes::{ItemTraits, ItemsChange};
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
 struct Changes {
-    declared: Mutex<Vec<Declared>>,
+    declared: Mutex<Vec<Pending>>,
     sealed: OnceLock<Sealed>,
     raised: Mutex<Option<FxHashMap<ModIndex, Raised>>>,
 }
@@ -80,12 +81,66 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
     if CHANGES.sealed.get().is_some() {
         return Status::TOO_LATE;
     }
-    CHANGES.declared.relock().push(Declared {
+    CHANGES.declared.relock().push(Pending::One(Declared {
+        owner,
+        change,
+        source,
+    }));
+    Status::OK
+}
+
+/// Records mod `owner`'s `change` of every item a selection picks, from
+/// `source`; refused once init is over.
+pub(crate) fn declare_items(owner: ModIndex, change: ItemsChange, source: String) -> Status {
+    if CHANGES.sealed.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    CHANGES.declared.relock().push(Pending::Each {
         owner,
         change,
         source,
     });
     Status::OK
+}
+
+/// Every vanilla item with what a selection reads of it, from the game's
+/// archive; none when the build does not reflect a value it needs or the
+/// archive does not read.
+fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
+    let at = |id: &str| {
+        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let offsets = (|| {
+        Some(TraitOffsets {
+            max_stack: at(catalogue::ITEM_MAX_STACK)?,
+            category: at(catalogue::ITEM_CATEGORY)?,
+            flags: at(catalogue::ITEM_FLAGS)?,
+            placed: at(catalogue::ITEM_PLACED_ENTITY)?,
+        })
+    })();
+    let (Some(offsets), Some(archive)) = (offsets, crate::archive::game()) else {
+        crate::log!(
+            WARN,
+            "changes of selected items are off: this build does not reflect what they read, or the game's archive does not read"
+        );
+        return Vec::new();
+    };
+    let layout = ContainerLayout::resolve(&catalogue::Reflected(&loader.reflection)).ok();
+    let slots = |template: Guid| {
+        let layout = layout.as_ref()?;
+        let data = archive.resource(&template.key_by_hash(crate::catalogue::types::TEMPLATE))?;
+        container_slots(layout, &data)
+    };
+    let mut items: Vec<(Guid, ItemTraits)> = archive
+        .keys_of(crate::catalogue::types::ITEM_INFO)
+        .into_iter()
+        .filter_map(|key| {
+            let bytes = archive.resource(&key)?;
+            Some((Guid(key.guid), traits_of(&bytes, offsets, slots)?))
+        })
+        .collect();
+    items.sort_unstable_by_key(|(item, _)| item.0);
+    items
 }
 
 /// Whether the loader follows the world for changes: some mod declared one,
@@ -136,8 +191,13 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
 /// Reports each set another mod overrides in both mods' logs and the
 /// conflict report.
 fn report(loader: &Loader, conflicts: &[Conflict]) {
-    for conflict in conflicts {
+    for (conflict, more) in grouped(conflicts) {
         let line = conflict.describe(|m| id(loader, m));
+        let line = if more == 0 {
+            line
+        } else {
+            format!("{line}, and the same for {more} more items")
+        };
         let level = if conflict.intended {
             Level::INFO
         } else {
@@ -237,7 +297,29 @@ fn item_offsets(loader: &Loader) -> ItemOffsets {
 pub(crate) fn serve(
     loader: &'static Loader,
 ) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
-    let declared = std::mem::take(&mut *CHANGES.declared.relock());
+    let pending = std::mem::take(&mut *CHANGES.declared.relock());
+    let selects = pending.iter().any(|p| matches!(p, Pending::Each { .. }));
+    let items = if selects {
+        vanilla_items(loader)
+    } else {
+        Vec::new()
+    };
+    let (declared, picked) = expand(pending, &items);
+    for p in picked {
+        let level = if p.count == 0 {
+            Level::WARN
+        } else {
+            Level::INFO
+        };
+        crate::log::write(
+            level,
+            &id(loader, p.owner),
+            &format!(
+                "{} {}: changes {} vanilla items",
+                p.field, p.source, p.count
+            ),
+        );
+    }
     let (merged, conflicts) = merge(&declared, |a, b| requires(loader, a, b));
     report(loader, &conflicts);
     let labels: FxHashMap<Guid, String> = declared
