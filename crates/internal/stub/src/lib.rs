@@ -15,7 +15,7 @@ mod proxy;
 
 use core::ffi::c_void;
 use std::ffi::OsString;
-use std::os::windows::ffi::{OsStrExt as _, OsStringExt as _};
+use std::os::windows::ffi::OsStringExt as _;
 use std::path::PathBuf;
 
 use windows_sys::Win32::System::LibraryLoader::{
@@ -78,12 +78,7 @@ fn start(missing: u32) {
         return;
     };
     chain::load(&game_dir);
-    let path: Vec<u16> = game_dir
-        .join(r"mods\enshwick\enshwick.dll")
-        .as_os_str()
-        .encode_wide()
-        .chain([0])
-        .collect();
+    let path = chain::wide(game_dir.join(chain::LOADER).as_os_str());
     // SAFETY: `path` is NUL-terminated; the altered search path lets the
     // loader's own dependencies resolve next to it.
     let module = unsafe {

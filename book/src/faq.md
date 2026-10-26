@@ -183,10 +183,15 @@ and the mod, or delete `hold.txt` and accept the risk the reason names. See
 ## Another mod ships its own powrprof.dll
 
 Some mods come with their own `powrprof.dll`, `dinput8.dll`, `winmm.dll` or
-`dbghelp.dll`. When one of them replaced Enshwick's `powrprof.dll`, Enshwick
-does not start. Put Enshwick's `powrprof.dll` back into the game's folder and
-move the other mod's file into `mods/chain/`. Enshwick loads every DLL there,
-in file name order, before its own loader, so both run.
+`dbghelp.dll`. When one of them replaces Enshwick's `powrprof.dll`, Enshwick
+does not start.
+
+Put Enshwick's `powrprof.dll` back into the game's folder and move the other
+mod's file into `mods/chain/`. Enshwick starts every DLL there, in file name
+order, before its own mods.
+
+Under Proton, add each moved file's name to the overrides as well, such as
+`WINEDLLOVERRIDES="powrprof,dinput8=n,b" %command%` for a moved `dinput8.dll`.
 
 ## Nothing happens under Proton
 

@@ -1,8 +1,11 @@
 //! Other proxy DLLs, such as another mod's own `powrprof.dll`, `dinput8.dll`,
-//! `winmm.dll` or `dbghelp.dll`: placed in `mods\chain\` instead of the game's
-//! folder, each is loaded before the Enshwick loader, in file name order, so
-//! it runs as it would from the game's folder. Their exports are not used:
-//! the game calls the system copies, and this stub forwards `powrprof`.
+//! `winmm.dll` or `dbghelp.dll`, placed in `mods\chain\` instead of the game's
+//! folder: each is loaded on the stub's thread, in file name order, and its
+//! `DllMain` runs before the Enshwick loader starts. That is later than from
+//! the game's folder: the game keeps the imports it has already bound, on the
+//! client its code runs meanwhile, and on the server the loads count against
+//! the hold of its start. A later load by the same file name gets the chained
+//! copy.
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt as _;
@@ -14,14 +17,20 @@ use windows_sys::Win32::System::Threading::{CreateMutexW, GetCurrentProcessId};
 
 /// The folder, under the game's, that holds the DLLs to chainload.
 pub(crate) const FOLDER: &str = r"mods\chain";
+/// The loader, under the game's folder.
+pub(crate) const LOADER: &str = r"mods\enshwick\enshwick.dll";
+/// The name of the mutex the first stub of a process makes, before its id.
+const MUTEX_PREFIX: &str = r"Local\enshwick-stub-";
 
 /// Whether this is the first copy of the stub to start in this process. A
 /// copy of the stub among the chained DLLs, or a second proxy of ours under
-/// another name, then forwards its exports and starts nothing.
+/// another name, then forwards its exports and starts nothing. When the
+/// mutex cannot be made, no copy counts as first and the game runs vanilla:
+/// the loader never starts twice.
 pub(crate) fn first_in_process() -> bool {
     // SAFETY: no preconditions.
     let pid = unsafe { GetCurrentProcessId() };
-    first_holder(&format!("Local\\enshwick-stub-{pid}"))
+    first_holder(&format!("{MUTEX_PREFIX}{pid}"))
 }
 
 /// Whether this call made the named mutex, which stays open for the
@@ -50,7 +59,7 @@ pub(crate) fn files(folder: &Path) -> Vec<PathBuf> {
                     .is_some_and(|e| e.eq_ignore_ascii_case("dll"))
         })
         .collect();
-    files.sort_by_key(|path| path.file_name().map(OsStr::to_ascii_lowercase));
+    files.sort_by_cached_key(|path| path.file_name().map(OsStr::to_ascii_lowercase));
     files
 }
 
@@ -59,9 +68,11 @@ pub(crate) fn files(folder: &Path) -> Vec<PathBuf> {
 pub(crate) fn load(game_dir: &Path) {
     for path in files(&game_dir.join(FOLDER)) {
         let path = wide(path.as_os_str());
-        // SAFETY: a NUL-terminated path; the altered search path lets the
-        // DLL's own dependencies resolve beside it. Its `DllMain` runs here,
-        // on the stub's thread, outside the loader lock.
+        // SAFETY: an absolute, NUL-terminated path, as the altered search
+        // path needs to resolve the DLL's own dependencies beside it. This
+        // thread holds no loader lock, since the stub's `DllMain` returned
+        // before it started, so the DLL's `DllMain` takes the lock without
+        // deadlocking.
         let _module = unsafe {
             LoadLibraryExW(
                 path.as_ptr(),
@@ -73,7 +84,7 @@ pub(crate) fn load(game_dir: &Path) {
 }
 
 /// `text` as UTF-16, NUL-terminated.
-fn wide(text: &OsStr) -> Vec<u16> {
+pub(crate) fn wide(text: &OsStr) -> Vec<u16> {
     text.encode_wide().chain([0]).collect()
 }
 
@@ -88,19 +99,28 @@ mod tests {
         assert!(!first_holder(&name));
     }
 
-    #[test]
-    fn the_chain_is_every_dll_in_the_folder_in_name_order() {
-        let folder = std::env::temp_dir().join(format!("enshwick-chain-{}", std::process::id()));
-        std::fs::create_dir_all(folder.join("nested.dll")).unwrap();
-        for file in ["winmm.dll", "Dinput8.DLL", "powrprof.dll", "readme.txt"] {
-            std::fs::write(folder.join(file), b"").unwrap();
+    /// A folder of the system's temporary folder, removed when dropped.
+    struct Scratch(PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _removed = std::fs::remove_dir_all(&self.0);
         }
-        let names: Vec<String> = files(&folder)
+    }
+
+    #[test]
+    fn the_chain_is_every_dll_in_the_folder_in_name_order_ignoring_case() {
+        let folder =
+            Scratch(std::env::temp_dir().join(format!("enshwick-chain-{}", std::process::id())));
+        std::fs::create_dir_all(folder.0.join("nested.dll")).unwrap();
+        for file in ["winmm.dll", "Beta.DLL", "alpha.dll", "readme.txt"] {
+            std::fs::write(folder.0.join(file), b"").unwrap();
+        }
+        let names: Vec<String> = files(&folder.0)
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
-        std::fs::remove_dir_all(&folder).unwrap();
-        assert_eq!(names, ["Dinput8.DLL", "powrprof.dll", "winmm.dll"]);
+        assert_eq!(names, ["alpha.dll", "Beta.DLL", "winmm.dll"]);
     }
 
     #[test]
