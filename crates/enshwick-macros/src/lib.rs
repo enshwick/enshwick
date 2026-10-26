@@ -6,6 +6,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
+use std::fmt::Write as _;
 use syn::ext::IdentExt as _;
 use syn::spanned::Spanned as _;
 use syn::{
@@ -848,6 +849,7 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
         }
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
+        let schema = point_schema(&item, name.as_ref(), &mode, &output, refusable);
         let extra = quote! {
             const MODE: ::enshwick::points::Mode =
                 ::enshwick::points::Mode::#mode;
@@ -864,10 +866,77 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
                     ),
                 }];
             type Output = #output;
+            #schema
         };
         expand_declaration(&item, name, &extra, &quote!(points::Point))
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// The `SCHEMA` of a point: its `[[point]]` table with the layout hashes,
+/// then the `[[type]]` tables of its input and answer; and a check that a
+/// schema can describe every field and the answer.
+fn point_schema(
+    item: &syn::ItemStruct,
+    name: Option<&syn::LitStr>,
+    mode: &Ident,
+    output: &Type,
+    refusable: bool,
+) -> proc_macro2::TokenStream {
+    let shape = quote!(::enshwick::Shape);
+    let point = quote!(::enshwick::points::Point);
+    let ident = &item.ident;
+    let input = ident.unraw().to_string();
+    let head = format!(
+        "[[point]]\nname = {}\nmode = \"{}\"\nrefusable = {refusable}\ninput = {}\ndoc = {}\noutput = \"",
+        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        mode.to_string().to_lowercase(),
+        toml_string(&input),
+        toml_string(&doc_text(&item.attrs)),
+    );
+    let mut parts = vec![
+        quote!(#head, <#output as #shape>::SCHEMA_NAME, "\"\noutput_layout = \"", <#ident as #point>::OUTPUT[0].hash, "\"\nlayout = ["),
+    ];
+    let mut checks = vec![quote! {
+        assert!(
+            !<#output as #shape>::SCHEMA_NAME.is_empty(),
+            "a point schema cannot describe the answer's type: derive `Shape` for it",
+        );
+    }];
+    let mut fields = Vec::new();
+    let mut nested = Vec::new();
+    for (i, field) in item.fields.iter().enumerate() {
+        let Some(field_ident) = &field.ident else {
+            continue;
+        };
+        let ty = &field.ty;
+        let label = field_ident.unraw().to_string();
+        let separator = if i == 0 { "\"" } else { ", \"" };
+        parts.push(quote!(#separator, <#ident as #point>::LAYOUT[#i].hash, "\""));
+        let message =
+            format!("a point schema cannot describe the type of `{label}`: derive `Shape` for it");
+        checks.push(quote!(assert!(!<#ty as #shape>::SCHEMA_NAME.is_empty(), #message);));
+        let entry = format!(
+            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+            toml_string(&label),
+            toml_string(&doc_text(&field.attrs))
+        );
+        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
+        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+    }
+    let table = format!(
+        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
+        toml_string(&input),
+        toml_string(&doc_text(&item.attrs))
+    );
+    quote! {
+        const SCHEMA: &'static str = {
+            const _: () = { #(#checks)* };
+            ::enshwick::__private::concatcp!(
+                #(#parts,)* #table, #(#fields,)* #(#nested,)* <#output as #shape>::SCHEMA_TYPES,
+            )
+        };
+    }
 }
 
 /// Implements `enshwick::Shape`: the structural hash the layout
@@ -893,10 +962,23 @@ const PRIMITIVE_REPRS: [&str; 10] = [
     "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize",
 ];
 
-/// The `repr`s and the `#[shape(values(..))]` constants of a type.
-fn shape_attributes(attrs: &[Attribute]) -> syn::Result<(Vec<String>, Vec<Ident>)> {
+/// What `#[derive(Shape)]` reads from a type's attributes.
+struct ShapeAttributes {
+    /// The `repr`s.
+    reprs: Vec<String>,
+    /// The constants `#[shape(values(..))]` names.
+    values: Vec<Ident>,
+    /// The name `#[shape(api = "..")]` gives a type of the API crate in a
+    /// point schema.
+    api: Option<String>,
+}
+
+/// The `repr`s, the `#[shape(values(..))]` constants and the
+/// `#[shape(api = "..")]` name of a type.
+fn shape_attributes(attrs: &[Attribute]) -> syn::Result<ShapeAttributes> {
     let mut reprs = Vec::new();
     let mut values = Vec::new();
+    let mut api = None;
     for attr in attrs {
         if attr.path().is_ident("repr") {
             attr.parse_nested_meta(|meta| {
@@ -915,13 +997,36 @@ fn shape_attributes(attrs: &[Attribute]) -> syn::Result<(Vec<String>, Vec<Ident>
                         values.push(value.path.require_ident()?.clone());
                         Ok(())
                     })
+                } else if meta.path.is_ident("api") {
+                    api = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                    Ok(())
                 } else {
-                    Err(meta.error("expected `values(<CONSTANT>, ...)`"))
+                    Err(meta.error("expected `values(<CONSTANT>, ...)` or `api = \"<name>\"`"))
                 }
             })?;
         }
     }
-    Ok((reprs, values))
+    Ok(ShapeAttributes { reprs, values, api })
+}
+
+/// `text` as a TOML basic string, quotes included.
+fn toml_string(text: &str) -> String {
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\t' => quoted.push_str("\\t"),
+            c if c.is_control() => {
+                let _written = write!(quoted, "\\u{:04X}", u32::from(c));
+            }
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
@@ -932,9 +1037,10 @@ fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             "a shape crosses DLLs and takes no generics",
         ));
     }
-    let (reprs, values) = shape_attributes(&input.attrs)?;
+    let ShapeAttributes { reprs, values, api } = shape_attributes(&input.attrs)?;
     let name = ident.unraw().to_string();
     let shape = quote!(::enshwick::Shape);
+    let schema = shape_schema(input, &name, &reprs, &values, api.as_deref());
     let parts = match &input.data {
         Data::Struct(data) => {
             if !reprs.iter().any(|r| r == "C" || r == "transparent") {
@@ -1013,8 +1119,94 @@ fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 .layout::<Self>()
                 #parts
                 .finish();
+            #schema
         }
     })
+}
+
+/// The `SCHEMA_NAME` and `SCHEMA_TYPES` of a derived [`Shape`]: the type's
+/// own `[[type]]` table, then those of the named types inside it. Called
+/// after `expand_shape` has checked the type.
+fn shape_schema(
+    input: &DeriveInput,
+    name: &str,
+    reprs: &[String],
+    values: &[Ident],
+    api: Option<&str>,
+) -> proc_macro2::TokenStream {
+    if let Some(api) = api {
+        let api = format!("enshwick.{api}");
+        return quote!(const SCHEMA_NAME: &'static str = #api;);
+    }
+    let shape = quote!(::enshwick::Shape);
+    let ident = &input.ident;
+    let head = format!(
+        "[[type]]\nname = {}\ndoc = {}\n",
+        toml_string(name),
+        toml_string(&doc_text(&input.attrs))
+    );
+    let mut parts = vec![quote!(#head)];
+    let mut nested = Vec::new();
+    match &input.data {
+        Data::Struct(data) => {
+            let newtype = matches!(&data.fields, Fields::Unnamed(f) if f.unnamed.len() == 1);
+            if newtype && !values.is_empty() {
+                let inner = &data.fields.iter().next().map(|f| f.ty.clone());
+                parts.push(
+                    quote!("kind = \"values\"\nrepr = \"", <#inner as #shape>::SCHEMA_NAME, "\"\n"),
+                );
+                for value in values {
+                    let label = format!(
+                        "[[type.value]]\nname = {}\nvalue = ",
+                        toml_string(&value.to_string())
+                    );
+                    parts.push(quote!(#label, #ident::#value.0, "\n"));
+                }
+            } else {
+                let kind = if newtype { "newtype" } else { "struct" };
+                parts.push(quote!(concat!("kind = \"", #kind, "\"\n")));
+                for (i, field) in data.fields.iter().enumerate() {
+                    let ty = &field.ty;
+                    let label = field
+                        .ident
+                        .as_ref()
+                        .map_or_else(|| i.to_string(), |f| f.unraw().to_string());
+                    let entry = format!(
+                        "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+                        toml_string(&label),
+                        toml_string(&doc_text(&field.attrs))
+                    );
+                    parts.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
+                    nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+                }
+            }
+        }
+        Data::Enum(data) => {
+            let repr = reprs
+                .iter()
+                .find(|r| PRIMITIVE_REPRS.contains(&r.as_str()))
+                .cloned()
+                .unwrap_or_default();
+            let kind = format!("kind = \"enum\"\nrepr = \"{repr}\"\n");
+            parts.push(quote!(#kind));
+            let repr = Ident::new(&repr, Span::call_site());
+            for variant in &data.variants {
+                let v = &variant.ident;
+                let entry = format!(
+                    "[[type.variant]]\nname = {}\ndoc = {}\nvalue = ",
+                    toml_string(&v.unraw().to_string()),
+                    toml_string(&doc_text(&variant.attrs))
+                );
+                parts.push(quote!(#entry, #ident::#v as #repr, "\n"));
+            }
+        }
+        Data::Union(_) => return quote!(),
+    }
+    quote! {
+        const SCHEMA_NAME: &'static str = #name;
+        const SCHEMA_TYPES: &'static str =
+            ::enshwick::__private::concatcp!(#(#parts,)* #(#nested,)*);
+    }
 }
 
 /// The struct as `repr(C)` with its layout trait: `major` is `Some` for a
@@ -1034,8 +1226,6 @@ fn expand_layout(
     )
 }
 
-/// The struct as `repr(C)` with the declaration trait at
-/// `enshwick::<trait_path>`, named `<mod id>:<what>`, with
 /// Whether `id` is a mod id, `<author>.<name>`, or an id a renamed mod had
 /// before ids carried an author, of `[a-z0-9-]`; at most 64 characters. The
 /// API's `abi::is_valid_former_id`, which this crate cannot depend on.
@@ -1052,6 +1242,8 @@ fn is_mod_id(id: &str) -> bool {
         }
 }
 
+/// The struct as `repr(C)` with the declaration trait at
+/// `enshwick::<trait_path>`, named `<mod id>:<what>`, with
 /// `extra` items in the impl.
 fn expand_declaration(
     item: &syn::ItemStruct,
