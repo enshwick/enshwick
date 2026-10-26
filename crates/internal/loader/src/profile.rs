@@ -6,6 +6,7 @@
 //! chain's. `enshwick profile` on the console and the status summary show
 //! the busiest mods since start or since `enshwick profile reset`.
 
+use crate::mod_index::ModIndex;
 use std::cell::Cell;
 use std::fmt::Write as _;
 use std::sync::OnceLock;
@@ -138,8 +139,8 @@ pub fn start(mods: usize) {
 /// Runs mod `owner`'s callback `f` for `feature`, marking it for crash
 /// blame, and timing it when diagnostics are on.
 #[inline]
-pub fn call<R>(owner: usize, feature: Feature, f: impl FnOnce() -> R) -> R {
-    let marker = u32::try_from(owner)
+pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
+    let marker = u32::try_from(owner.get())
         .ok()
         .and_then(|o| o.checked_add(1))
         .and_then(|o| o.checked_mul(256))
@@ -147,7 +148,7 @@ pub fn call<R>(owner: usize, feature: Feature, f: impl FnOnce() -> R) -> R {
     let outer = RUNNING.replace(marker);
     let result = match BUCKETS
         .get()
-        .and_then(|b| b.get(owner * FEATURES + feature as usize))
+        .and_then(|b| b.get(owner.get() * FEATURES + feature as usize))
     {
         None => f(),
         Some(bucket) => timed(bucket, f),
@@ -239,8 +240,8 @@ impl Reading {
 /// One link of a chain, in running order, as the profile reads it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LinkReading {
-    /// Its owner's index, [`crate::chains::LOADER`] for the loader.
-    pub owner: usize,
+    /// Its owner's index, [`ModIndex::LOADER`] for the loader.
+    pub owner: ModIndex,
     /// Whether its owner still runs.
     pub live: bool,
     /// Its timed thunk's counter.
@@ -261,7 +262,7 @@ pub struct ChainReading {
 /// Each live link's own calls and ticks: its time less the time of what it
 /// calls on.
 #[must_use]
-pub fn own_times(chain: &ChainReading) -> Vec<(usize, u64, f64)> {
+pub fn own_times(chain: &ChainReading) -> Vec<(ModIndex, u64, f64)> {
     let live: Vec<&LinkReading> = chain.links.iter().filter(|l| l.live).collect();
     live.iter()
         .enumerate()
@@ -332,16 +333,16 @@ pub fn costs(
     chains: &[ChainReading],
     now: &[(u64, u64)],
     base: &[(u64, u64)],
-    name: impl Fn(usize) -> String,
+    name: impl Fn(ModIndex) -> String,
 ) -> Vec<Cost> {
     let mut by_owner: Vec<(usize, Vec<Item>)> = Vec::new();
-    let mut push = |owner: usize, item: Item| {
+    let mut push = |owner: ModIndex, item: Item| {
         if item.calls == 0 && item.ticks <= 0.0 {
             return;
         }
-        match by_owner.iter_mut().find(|(o, _)| *o == owner) {
+        match by_owner.iter_mut().find(|(o, _)| *o == owner.get()) {
             Some((_, items)) => items.push(item),
-            None => by_owner.push((owner, vec![item])),
+            None => by_owner.push((owner.get(), vec![item])),
         }
     };
     for chain in chains {
@@ -360,7 +361,7 @@ pub fn costs(
         let (base_calls, base_ticks) = base.get(index).copied().unwrap_or_default();
         let feature = Feature::ALL[index % FEATURES];
         push(
-            index / FEATURES,
+            ModIndex::new(index / FEATURES),
             Item {
                 what: feature.name().to_owned(),
                 calls: calls.saturating_sub(base_calls),
@@ -373,7 +374,7 @@ pub fn costs(
         .map(|(owner, mut items)| {
             items.sort_by(|a, b| b.ticks.total_cmp(&a.ticks));
             Cost {
-                id: name(owner),
+                id: name(ModIndex::new(owner)),
                 items,
             }
         })
@@ -454,12 +455,12 @@ mod tests {
             name: "building.place".into(),
             links: vec![
                 LinkReading {
-                    owner: 0,
+                    owner: ModIndex::new(0),
                     live: true,
                     reading: reading(100, 10, 10_000),
                 },
                 LinkReading {
-                    owner: 1,
+                    owner: ModIndex::new(1),
                     live: true,
                     reading: reading(100, 10, 6_000),
                 },
@@ -467,7 +468,13 @@ mod tests {
             original: reading(100, 10, 5_000),
         };
         let own = own_times(&chain);
-        assert_eq!(own, [(0, 100, 40_000.0), (1, 100, 10_000.0)]);
+        assert_eq!(
+            own,
+            [
+                (ModIndex::new(0), 100, 40_000.0),
+                (ModIndex::new(1), 100, 10_000.0)
+            ]
+        );
     }
 
     #[test]
@@ -476,19 +483,19 @@ mod tests {
             name: "f".into(),
             links: vec![
                 LinkReading {
-                    owner: 0,
+                    owner: ModIndex::new(0),
                     live: false,
                     reading: reading(10, 1, 100),
                 },
                 LinkReading {
-                    owner: 1,
+                    owner: ModIndex::new(1),
                     live: true,
                     reading: reading(10, 1, 50),
                 },
             ],
             original: reading(4, 1, 100),
         };
-        assert_eq!(own_times(&chain), [(1, 10, 100.0)]);
+        assert_eq!(own_times(&chain), [(ModIndex::new(1), 10, 100.0)]);
     }
 
     #[test]
@@ -496,7 +503,7 @@ mod tests {
         let chain = ChainReading {
             name: "f".into(),
             links: vec![LinkReading {
-                owner: 1,
+                owner: ModIndex::new(1),
                 live: true,
                 reading: reading(10, 10, 300),
             }],
@@ -506,7 +513,7 @@ mod tests {
         now[Feature::Events as usize] = (5, 50);
         now[FEATURES + Feature::Interactions as usize] = (3, 30);
         let base = vec![(1, 10); 2 * FEATURES];
-        let names = |i: usize| ["you.trading-post", "you.market-stalls"][i].to_owned();
+        let names = |i: ModIndex| ["you.trading-post", "you.market-stalls"][i.get()].to_owned();
         let costs = costs(&[chain], &now, &base, names);
         assert_eq!(costs.len(), 2);
         assert_eq!(costs[0].id, "you.market-stalls");
@@ -530,15 +537,15 @@ mod tests {
     #[test]
     fn a_running_callback_is_marked_for_crash_blame() {
         assert_eq!(current_callback(), None);
-        call(3, Feature::Actions, || {
+        call(ModIndex::new(3), Feature::Actions, || {
             assert_eq!(current_callback(), Some((3, Feature::Actions)));
-            call(5, Feature::ModEvents, || {
+            call(ModIndex::new(5), Feature::ModEvents, || {
                 assert_eq!(current_callback(), Some((5, Feature::ModEvents)));
             });
             assert_eq!(current_callback(), Some((3, Feature::Actions)));
         });
         assert_eq!(current_callback(), None);
-        call(usize::MAX, Feature::Events, || {
+        call(ModIndex::new(usize::MAX), Feature::Events, || {
             assert_eq!(current_callback(), None);
         });
     }

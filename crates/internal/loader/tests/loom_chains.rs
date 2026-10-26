@@ -10,6 +10,7 @@
 mod tests {
     use enshwick::abi::{HookFlags, Status};
     use enshwick_loader::chains::{Chains, Link};
+    use enshwick_loader::mod_index::ModIndex;
     use loom::sync::atomic::{AtomicUsize, Ordering};
     use loom::thread;
 
@@ -24,7 +25,7 @@ mod tests {
 
     fn link(owner: usize, detour: usize, priority: i32) -> Link {
         Link {
-            owner,
+            owner: ModIndex::new(owner),
             detour,
             next: slot(),
             priority,
@@ -82,7 +83,7 @@ mod tests {
                 let hops = hops.clone();
                 thread::spawn(move || walk(head, &hops))
             };
-            chains.rewire(|owner| owner == 2);
+            chains.rewire(|owner| owner == ModIndex::new(2));
             let during = walker.join().unwrap();
             assert!(
                 [vec![0xa, 0xb, 0xc], vec![0xa, 0xc]].contains(&during),
@@ -102,8 +103,8 @@ mod tests {
                 let hops = hops.clone();
                 thread::spawn(move || walk(head, &hops))
             };
-            chains.rewire(|owner| owner == 2);
-            chains.remove_owner(2);
+            chains.rewire(|owner| owner == ModIndex::new(2));
+            chains.remove_owner(ModIndex::new(2));
             assert_eq!(chains.relink(TARGET, reloaded), Status::OK);
             chains.rewire(|_| false);
             let during = walker.join().unwrap();
@@ -125,7 +126,7 @@ mod tests {
                     thread::spawn(move || walk(head, &hops))
                 })
                 .collect();
-            chains.rewire(|owner| owner == 1);
+            chains.rewire(|owner| owner == ModIndex::new(1));
             for walker in walkers {
                 let passed = walker.join().unwrap();
                 assert!([vec![0xa, 0xb], vec![0xb]].contains(&passed), "{passed:x?}");

@@ -2,6 +2,7 @@
 
 use crate::host::{self, Loader};
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
 use crate::patch::{self, FrameSlot};
 
 /// Arms every chain and mid-function hook past the mods that are off; an
@@ -24,7 +25,7 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         patch::Count::from_settings(),
     );
     let armed = (chains.len() + mids.len()).saturating_sub(failures.len());
-    let owners: Vec<(usize, u64)> = failures
+    let owners: Vec<(ModIndex, u64)> = failures
         .iter()
         .flat_map(|f| {
             let owners = if f.inside {
@@ -83,7 +84,7 @@ fn report_patches(
     for (patch, verdict) in patches.iter().zip(verdicts) {
         let owner = loader
             .mods
-            .get(patch.owner)
+            .get(patch.owner.get())
             .map_or(crate::settings::LOADER_ID, |m| m.id.as_str());
         let len = patch.replacement.len();
         match verdict {

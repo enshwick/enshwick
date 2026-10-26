@@ -59,6 +59,7 @@ loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
 bytemuck.workspace = true
+insta.workspace = true
 
 [package.metadata.enshwick]
 # Most of it runs only on Windows: off Windows, `cargo xtask check` runs its
