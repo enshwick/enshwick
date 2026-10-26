@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::abi::{Side, Status, StatusFn, Str};
+use enshwick::abi::{Side, Status, StatusFn, Str};
 
 use crate::diag::{HookStat, ModStatus, Summary};
 use crate::host::Loader;
@@ -373,12 +373,8 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
                         .map(|l| HookLink {
                             owner: name(l.owner),
                             priority: l.priority,
-                            exclusive: l
-                                .flags
-                                .contains(enshwick_loader_api::abi::HookFlags::EXCLUSIVE),
-                            caller_frame: l
-                                .flags
-                                .contains(enshwick_loader_api::abi::HookFlags::CALLER_FRAME),
+                            exclusive: l.flags.contains(enshwick::abi::HookFlags::EXCLUSIVE),
+                            caller_frame: l.flags.contains(enshwick::abi::HookFlags::CALLER_FRAME),
                         })
                         .collect(),
                     refused: chains

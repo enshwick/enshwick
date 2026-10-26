@@ -1,20 +1,20 @@
 # Buffs
 
-[`load.buffs()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/buffs.rs)
+[`load.buffs()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 returns the
-[`Buffs`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/buffs.rs)
+[`Buffs`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/buffs.rs)
 of the server's world: the buff and debuff types the game knows, the buffs an
 entity has, giving one and removing one. It is `Copy`; get it during `init`
 and move it into handlers, tasks and actions.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
-use enshwick_loader_api::buffs::{Apply, BuffId};
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::buffs::{Apply, BuffId};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let buffs = load.buffs();
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("buffs", "Your buffs"), move |request| {
         match buffs.of(request.player.entity) {
             Ok(on) => Outcome::done(

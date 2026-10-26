@@ -10,7 +10,7 @@
 //! lacks, the server's version and where to get it ([`refusal`]), and tells
 //! its mods which they are, with the versions and homepages the server
 //! advertises
-//! ([`Event::JOIN_REFUSED`](enshwick_loader_api::abi::Event::JOIN_REFUSED)).
+//! ([`Event::JOIN_REFUSED`](enshwick::abi::Event::JOIN_REFUSED)).
 //!
 //! Every join from the game's menus hands its online provider a target with
 //! the server's address and query port. The hook asks the server, over the
@@ -39,7 +39,7 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::Names;
+/// use enshwick_loader::join::Names;
 ///
 /// let mut names = Names::new();
 /// names.insert("safes".to_owned(), "Safes".to_owned());
@@ -59,7 +59,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
     list.split(',')
         .filter_map(|entry| entry.split_once('@'))
         .filter(|&(id, version)| {
-            enshwick_loader_api::abi::is_valid_id(id)
+            enshwick::abi::is_valid_id(id)
                 && !version.is_empty()
                 && version.len() <= MAX_VERSION
                 && version
@@ -70,7 +70,7 @@ pub(crate) fn entries(list: &str) -> impl Iterator<Item = (&str, &str)> {
 
 /// The name players read for mod `id`, or the id when `names` has none.
 fn label(names: &Names, id: &str) -> String {
-    enshwick_loader_api::mods::label(names.get(id).map_or("", String::as_str), id)
+    enshwick::mods::label(names.get(id).map_or("", String::as_str), id)
 }
 
 /// What the client does when it joins.
@@ -78,7 +78,7 @@ fn label(names: &Names, id: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::plan;
+/// use enshwick_loader::join::plan;
 ///
 /// let plan = plan("e5db5dca", "safes@1.0.0", Some(("989b6a71", "safes@2.0.0")), true);
 /// assert!(!plan.joins());
@@ -101,7 +101,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::Plan;
+    /// use enshwick_loader::join::Plan;
     ///
     /// assert!(Plan::default().joins());
     /// ```
@@ -116,7 +116,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::Plan;
+    /// use enshwick_loader::join::Plan;
     ///
     /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
     /// assert_eq!(plan.turned_off(), ["safes"]);
@@ -132,7 +132,7 @@ impl Plan {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::join::{Names, Plan};
+    /// use enshwick_loader::join::{Names, Plan};
     ///
     /// let plan = Plan { turn_off: vec!["safes".to_owned()], ..Plan::default() };
     /// assert!(plan.note(&Names::new()).is_some_and(|note| note.ends_with("safes")));
@@ -164,7 +164,7 @@ impl Plan {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::plan;
+/// use enshwick_loader::join::plan;
 ///
 /// let plan = plan("e5db5dca", "safes@1.0.0,camera@1.0.0", Some(("989b6a71", "safes@1.0.0")), true);
 /// assert!(plan.joins());
@@ -211,7 +211,7 @@ pub fn plan(ours: &str, ours_mods: &str, server: Option<(&str, &str)>, complete:
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{Names, differences};
+/// use enshwick_loader::join::{Names, differences};
 ///
 /// let found = differences("safes@2.0.0", "safes@1.0.0", &Names::new());
 /// assert_eq!(found, [("safes".to_owned(), true, "safes: server 2.0.0, yours 1.0.0".to_owned())]);
@@ -249,7 +249,7 @@ pub fn differences(server: &str, ours: &str, names: &Names) -> Vec<(String, bool
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::wanted;
+/// use enshwick_loader::join::wanted;
 ///
 /// let wanted = wanted("safes@2.0.0,camera@1.0.0", "camera@1.0.0");
 /// assert_eq!(wanted, [("safes".to_owned(), "2.0.0".to_owned())]);
@@ -279,9 +279,9 @@ pub fn wanted(server: &str, ours: &str) -> Vec<(String, String)> {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::page;
+/// use enshwick_loader::join::page;
 ///
-/// let reply = reply(&[("enshwick.page.safes", "https://github.com/themaiby/enshwick")]);
+/// let reply = reply(&[("enshwick.page.safes", "https://github.com/enshwick/enshwick")]);
 /// assert!(page(&reply, "safes").is_some());
 /// assert!(page(&reply, "camera").is_none());
 /// ```
@@ -307,7 +307,7 @@ pub fn page(reply: &[u8], id: &str) -> Option<String> {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::name;
+/// use enshwick_loader::join::name;
 ///
 /// let reply = reply(&[("enshwick.name.safes", "Safes")]);
 /// assert_eq!(name(&reply, "safes"), "Safes");
@@ -342,7 +342,7 @@ pub fn name(reply: &[u8], id: &str) -> String {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::mod_rules_value;
+/// use enshwick_loader::join::mod_rules_value;
 ///
 /// let reply = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
 /// assert_eq!(mod_rules_value(&reply), "safes@1.0.0,camera@1.0.0");
@@ -373,7 +373,7 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::mods_complete;
+/// use enshwick_loader::join::mods_complete;
 ///
 /// let cut = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.count", "2")]);
 /// assert!(!mods_complete(&cut));
@@ -402,7 +402,7 @@ pub fn mods_complete(reply: &[u8]) -> bool {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::sync_value;
+/// use enshwick_loader::join::sync_value;
 ///
 /// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
 /// assert_eq!(sync_value(&reply, "safes").as_deref(), Some("{ cost_multiplier = 2 }"));
@@ -431,7 +431,7 @@ pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::server_values;
+/// use enshwick_loader::join::server_values;
 ///
 /// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
 /// let values = server_values(&reply, ["safes", "camera"]);
@@ -457,7 +457,7 @@ pub fn server_values<'a>(
 /// ```
 /// use std::collections::BTreeMap;
 ///
-/// use enshwick::join::changes;
+/// use enshwick_loader::join::changes;
 ///
 /// let incoming = BTreeMap::from([("safes".to_owned(), "{ cost_multiplier = 2 }".to_owned())]);
 /// let changed = changes([("safes", None), ("", None)], &incoming);
@@ -484,7 +484,7 @@ pub fn changes<'a>(
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{HAS_ADDRESS, TARGET_BYTES};
+/// use enshwick_loader::join::{HAS_ADDRESS, TARGET_BYTES};
 ///
 /// assert_eq!(TARGET_BYTES, HAS_ADDRESS + 1);
 /// ```
@@ -496,7 +496,7 @@ pub const TARGET_BYTES: usize = HAS_ADDRESS + 1;
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{Destination, TARGET_BYTES, Target, destination};
+/// use enshwick_loader::join::{Destination, TARGET_BYTES, Target, destination};
 ///
 /// let lobby: Target = [0; TARGET_BYTES];
 /// assert_eq!(destination(&lobby), Destination::Lobby);
@@ -525,7 +525,7 @@ const _: () = assert!(
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{Destination, GAME_PORT, HAS_ADDRESS, IP, TARGET_BYTES, destination};
+/// use enshwick_loader::join::{Destination, GAME_PORT, HAS_ADDRESS, IP, TARGET_BYTES, destination};
 ///
 /// let mut target = [0; TARGET_BYTES];
 /// target[IP..IP + 4].copy_from_slice(&0x7f00_0001_u32.to_le_bytes());
@@ -560,7 +560,7 @@ pub enum Destination {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{
+/// use enshwick_loader::join::{
 ///     Destination, GAME_PORT, HAS_ADDRESS, IP, QUERY_PORT, TARGET_BYTES, destination,
 /// };
 ///
@@ -605,7 +605,7 @@ fn field<const N: usize>(target: &Target, at: usize) -> [u8; N] {
 /// # Examples
 ///
 /// ```
-/// use enshwick::join::{HOST, TARGET_BYTES, refuse};
+/// use enshwick_loader::join::{HOST, TARGET_BYTES, refuse};
 ///
 /// let mut target = [0; TARGET_BYTES];
 /// target[HOST..HOST + 8].copy_from_slice(&7_u64.to_le_bytes());
@@ -634,7 +634,7 @@ pub fn refuse(target: &mut Target) -> u64 {
 /// #     }
 /// #     reply
 /// # }
-/// use enshwick::join::rule;
+/// use enshwick_loader::join::rule;
 ///
 /// let reply = reply(&[("enshwick", "e5db5dca")]);
 /// assert_eq!(rule(&reply, "enshwick").as_deref(), Some("e5db5dca"));
@@ -713,7 +713,7 @@ impl Split {
 /// # Examples
 ///
 /// ```no_run
-/// use enshwick::join::{query_rules, rule};
+/// use enshwick_loader::join::{query_rules, rule};
 ///
 /// let reply = query_rules("127.0.0.1:15647".parse()?)?;
 /// let fingerprint = rule(&reply, "enshwick");
@@ -790,7 +790,7 @@ mod runtime {
     use std::collections::BTreeMap;
     use std::sync::OnceLock;
 
-    use enshwick_loader_api::abi::UiDialog;
+    use enshwick::abi::UiDialog;
 
     /// The online provider's join: every join from the game's menus, to a
     /// dedicated server or into a hosted game's lobby, passes a target
@@ -1215,12 +1215,12 @@ mod tests {
     #[test]
     fn pages_are_read_from_the_rules() {
         let reply = reply(&[
-            ("enshwick.page.a", "https://github.com/themaiby/enshwick"),
-            ("enshwick.page.b", "github:themaiby/enshwick:enshwick-b"),
+            ("enshwick.page.a", "https://github.com/enshwick/enshwick"),
+            ("enshwick.page.b", "github:enshwick/enshwick:enshwick-b"),
         ]);
         assert_eq!(
             page(&reply, "a").as_deref(),
-            Some("https://github.com/themaiby/enshwick")
+            Some("https://github.com/enshwick/enshwick")
         );
         assert_eq!(page(&reply, "b"), None);
         assert_eq!(page(&reply, "c"), None);

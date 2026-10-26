@@ -7,9 +7,9 @@
 //! The stack keeps its id, count and data, and once the mod is back it
 //! serves the item again and the stack is its item as before.
 
-use enshwick_loader_api::abi::ResourceKey;
-use enshwick_loader_api::content::items::{ItemLayout, NewItem, clone_item, list_item};
-use enshwick_loader_api::content::{Guid, Id, types};
+use enshwick::abi::ResourceKey;
+use enshwick::content::items::{ItemLayout, NewItem, clone_item, list_item};
+use enshwick::content::{Guid, Id, types};
 
 use crate::host::Loader;
 

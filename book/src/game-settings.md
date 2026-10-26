@@ -1,19 +1,19 @@
 # Game settings
 
-[`load.game_settings()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/game_settings.rs)
+[`load.game_settings()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs)
 returns the server's
-[`GameSettings`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/game_settings.rs):
+[`GameSettings`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/game_settings.rs):
 the difficulty and gameplay values of its configuration (`gameSettings` in
 `enshrouded_server.json`) or of the host's world menu, read typed and changed
 while the world runs. It is `Copy`; get it during `init` and move it into
 handlers, tasks and actions.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
+use enshwick::actions::{Action, Arg, Outcome, Value};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings = load.game_settings()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     let durability = Action::new("durability", "Item wear").admins().arg(Arg::toggle("On"));
     actions.add(durability, move |request| {
         let [Value::Toggle(on)] = request.args else {
@@ -64,11 +64,11 @@ every kept field of the world, any mod's, and puts back the values the world
 loaded with.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Outcome};
+use enshwick::actions::{Action, Outcome};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings = load.game_settings()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     let lush = Action::new("lush", "Plants grow twice as fast in this world").admins();
     actions.add(lush, move |_request| match settings.keep(|s| s.plant_growth = 2.0) {
         Ok(_) => Outcome::done("Kept for this world"),

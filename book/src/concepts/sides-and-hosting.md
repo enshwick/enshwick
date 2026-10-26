@@ -28,13 +28,13 @@ client hosts:
 - while no game is hosted, the server features rest: the world reads return
   nothing and no game events come.
 
-[`Host::hosting`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/host.rs)
+[`Host::hosting`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/host.rs)
 tells whether this process runs a server now: always on the dedicated server,
 on the client from the built-in server's first step until the game stops.
 
 ```rust
 fn acts() -> bool {
-    enshwick_loader_api::host().is_some_and(|host| host.hosting())
+    enshwick::host().is_some_and(|host| host.hosting())
 }
 ```
 
@@ -43,11 +43,11 @@ fn acts() -> bool {
 Server systems run only in the server's world, but some game functions serve
 both worlds of a hosting client, such as cursor checks and base stock. A hook
 on one of them acts for the server only after it asks
-[`ecs::Worlds`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/ecs.rs):
+[`ecs::Worlds`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs):
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    let worlds = enshwick_loader_api::ecs::Worlds::resolve(load)?;
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let worlds = enshwick::ecs::Worlds::resolve(load)?;
     // In a hooked system, with its context `ctx`:
     // if unsafe { worlds.is_server(ctx) } { ... }
 #   let _ = worlds;

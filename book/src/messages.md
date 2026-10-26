@@ -2,7 +2,7 @@
 
 A join mod with a client part, such as one that draws something the server
 decides, sends messages between its two halves through a channel.
-[`load.channel::<M, _>(name, version, handler)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/net.rs)
+[`load.channel::<M, _>(name, version, handler)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/net.rs)
 opens one during `init`, on both sides, for messages of type `M`, any type
 that serde serializes; `handler` runs on each message that comes in, with
 who sent it, a `Peer`:
@@ -14,8 +14,8 @@ who sent it, a `Peer`:
   server's chat, so keep it short and hand work to the mod's own state.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Outcome};
-use enshwick_loader_api::net::Peer;
+use enshwick::actions::{Action, Outcome};
+use enshwick::net::Peer;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 enum Waypoint {
@@ -23,14 +23,14 @@ enum Waypoint {
     Clear,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let waypoints = load.channel::<Waypoint, _>("waypoints", 1, |from, message| {
         if let (Peer::Server, Waypoint::Set(at)) = (from, message) {
-            enshwick_loader_api::info!("the server set a waypoint at {at:?}");
+            enshwick::info!("the server set a waypoint at {at:?}");
         }
     })?;
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("mark", "Send my position to my client"), move |request| {
         let me = request.player;
         let Some(at) = world.position(me.entity) else {

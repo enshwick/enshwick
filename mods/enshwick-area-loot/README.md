@@ -37,11 +37,11 @@ without a restart.
 
 ## Install
 
-Download [`enshwick-area-loot.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-area-loot.zip)
+Download [`enshwick-area-loot.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-area-loot.zip)
 and extract it into the folder that holds `enshrouded.exe` or
 `enshrouded_server.exe`. It needs Enshwick Loader:
-[`enshwick-loader.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick-loader.zip)
-alone, or [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip)
+[`enshwick-loader.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick-loader.zip)
+alone, or [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip)
 with every mod. These are development builds of the newest commit: until
 the first release, 1.0.0, there are no others.
 
@@ -55,6 +55,6 @@ the loot and see the corpses dissolve. It does not count in the join check.
 Other mods may leave out a container around the emptied one that would
 come along, at the extension point `area-loot:eligible`; they never add
 one the mod passed over, such as a container another player is at. See
-[Extending other mods](https://github.com/themaiby/enshwick/blob/main/book/src/extending.md).
+[Extending other mods](https://github.com/enshwick/enshwick/blob/main/book/src/extending.md).
 
 Licensed under [MIT](../../LICENSE).

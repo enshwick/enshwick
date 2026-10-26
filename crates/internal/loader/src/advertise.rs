@@ -70,7 +70,7 @@ pub fn fingerprint(
     for (id, values) in synced {
         let _written = write!(text, "\nsync {id} {values}");
     }
-    format!("{:08x}", enshwick_loader_reflect::fnv1a32(text.as_bytes()))
+    format!("{:08x}", enshwick_reflect::fnv1a32(text.as_bytes()))
 }
 
 /// `value` cut into parts of at most [`RULE_LIMIT`] bytes, on character
@@ -593,7 +593,7 @@ mod tests {
         let pages = vec![
             (
                 "count".to_owned(),
-                "https://github.com/themaiby/enshwick".to_owned(),
+                "https://github.com/enshwick/enshwick".to_owned(),
             ),
             ("zones".to_owned(), format!("https://{}", "x".repeat(200))),
             ("plain".to_owned(), String::new()),
@@ -602,7 +602,7 @@ mod tests {
             page_rules(&pages),
             [(
                 "enshwick.page.count".to_owned(),
-                "https://github.com/themaiby/enshwick".to_owned()
+                "https://github.com/enshwick/enshwick".to_owned()
             )]
         );
         let with = Advert::new(

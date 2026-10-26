@@ -16,7 +16,7 @@
 
 use std::sync::Mutex;
 
-use enshwick_loader_api::abi::Level;
+use enshwick::abi::Level;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, Instruction,
     InstructionBlock,

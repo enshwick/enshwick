@@ -1,21 +1,21 @@
 # Weather and chunks
 
-[`load.weather()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/weather.rs)
+[`load.weather()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)
 returns the
-[`Weather`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/weather.rs)
+[`Weather`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/weather.rs)
 of the server's world: how it is at a place, the fronts that make it, and
 starting new weather. It is `Copy`; get it during `init` and move it into
 handlers, tasks and actions.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
-use enshwick_loader_api::weather::Forecast;
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::weather::Forecast;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let weather = load.weather();
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("weather", "The weather here"), move |request| {
         let here = world.position(request.player.entity).unwrap_or_default();
         Outcome::done(format!("{:?}", weather.at(here).map(|now| now.state())))

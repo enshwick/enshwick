@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use enshwick_loader_api::content::Guid;
+use enshwick::content::Guid;
 
 /// The most items one `give` hands out.
 pub const MOST: u32 = 10_000;
@@ -149,7 +149,7 @@ pub fn placed(placed: &[Placed]) -> String {
 /// assert_eq!(mods(&[]), "no mods listed");
 /// ```
 #[must_use]
-pub fn mods(entries: &[enshwick_loader_api::mods::ModEntry]) -> String {
+pub fn mods(entries: &[enshwick::mods::ModEntry]) -> String {
     if entries.is_empty() {
         return "no mods listed".to_owned();
     }
@@ -157,8 +157,8 @@ pub fn mods(entries: &[enshwick_loader_api::mods::ModEntry]) -> String {
         .iter()
         .map(|m| {
             let side = match m.side {
-                enshwick_loader_api::abi::Side::SERVER => "server",
-                enshwick_loader_api::abi::Side::CLIENT => "client",
+                enshwick::abi::Side::SERVER => "server",
+                enshwick::abi::Side::CLIENT => "client",
                 _ => "both",
             };
             let join = if m.join { ", join" } else { "" };

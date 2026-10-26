@@ -49,7 +49,7 @@ use std::time::Duration;
 
 static PENDING: AtomicU32 = AtomicU32::new(0);
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let scheduler = load.scheduler()?;
     let world = load.world()?;
     scheduler.every(Duration::from_secs(1), move || {

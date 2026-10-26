@@ -3,9 +3,9 @@
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::Status;
-    use enshwick_loader_api::events::{ShutdownStarted, WorldLoaded};
-    use enshwick_loader_api::test::FakeHost;
+    use enshwick::abi::Status;
+    use enshwick::events::{ShutdownStarted, WorldLoaded};
+    use enshwick::test::FakeHost;
     use enshwick_safes::access::ACCESS;
 
     /// A loader that knows the item and recipe layouts the Safe needs.
@@ -97,8 +97,8 @@ mod tests {
 
     #[test]
     fn a_removed_safe_keeps_its_owner_on_disk_until_the_world_saves() {
-        use enshwick_loader_api::abi::{BuildingData, Header};
-        use enshwick_loader_api::events::{BuildingPlaced, BuildingRemoved, WorldSaved};
+        use enshwick::abi::{BuildingData, Header};
+        use enshwick::events::{BuildingPlaced, BuildingRemoved, WorldSaved};
 
         let dir =
             std::env::temp_dir().join(format!("enshwick-safes-removed-{}", std::process::id()));
@@ -180,10 +180,10 @@ mod tests {
 
     #[test]
     fn a_safe_nobody_looked_at_lends_its_stock_to_no_stranger() {
-        use enshwick_loader_api::abi::TickData;
-        use enshwick_loader_api::ecs::Entity;
-        use enshwick_loader_api::events::Ticked;
-        use enshwick_loader_api::interactions::{Interaction, Kind};
+        use enshwick::abi::TickData;
+        use enshwick::ecs::Entity;
+        use enshwick::events::Ticked;
+        use enshwick::interactions::{Interaction, Kind};
         use enshwick_safes::access::{Safe, Seen};
 
         let dir = std::env::temp_dir().join(format!("enshwick-safes-stock-{}", std::process::id()));
@@ -235,7 +235,7 @@ label_language = \"en\"
         assert!(enshwick_safes::access::filter(&stock), "not seen yet");
         std::thread::sleep(std::time::Duration::from_millis(2100));
         let _ticked = loader.raise::<Ticked>(&TickData {
-            header: enshwick_loader_api::abi::Header::of::<TickData>(),
+            header: enshwick::abi::Header::of::<TickData>(),
             step: 1,
         });
         assert!(
@@ -252,9 +252,9 @@ label_language = \"en\"
         use std::collections::HashMap;
         use std::sync::Arc;
 
-        use enshwick_loader_api::ecs::Entity;
-        use enshwick_loader_api::points::Verdict;
-        use enshwick_loader_api::points::safes::{Access, SafeAction};
+        use enshwick::ecs::Entity;
+        use enshwick::points::Verdict;
+        use enshwick::points::safes::{Access, SafeAction};
         use enshwick_safes::access::{Action, Seen};
 
         let dir = std::env::temp_dir().join(format!("enshwick-safes-point-{}", std::process::id()));
@@ -331,8 +331,8 @@ label_language = \"en\"
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
-    fn player(entity: u32, key: u64, name: &str) -> enshwick_loader_api::abi::PlayerInfo {
-        use enshwick_loader_api::abi::{Header, PlayerInfo};
+    fn player(entity: u32, key: u64, name: &str) -> enshwick::abi::PlayerInfo {
+        use enshwick::abi::{Header, PlayerInfo};
         let mut bytes = [0u8; 64];
         bytes[..name.len()].copy_from_slice(name.as_bytes());
         PlayerInfo {
@@ -348,16 +348,16 @@ label_language = \"en\"
 
     #[test]
     fn the_access_actions_act_on_the_nearest_safe_the_player_may_manage() {
-        use enshwick_loader_api::abi::ActionCall;
-        use enshwick_loader_api::points::Verdict;
-        use enshwick_loader_api::points::safes::{Access, SafeAction};
+        use enshwick::abi::ActionCall;
+        use enshwick::points::Verdict;
+        use enshwick::points::safes::{Access, SafeAction};
 
         let dir =
             std::env::temp_dir().join(format!("enshwick-safes-manage-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let at = |x: f64| -> Vec<u8> {
-            enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])
+            enshwick::ecs::fixed([x, 0.0, 0.0])
                 .iter()
                 .flat_map(|axis| axis.to_le_bytes())
                 .collect()
@@ -441,16 +441,16 @@ label_language = \"en\"
 
     #[test]
     fn the_access_window_lists_players_for_the_safe_at_hand_own_first() {
-        use enshwick_loader_api::abi::{ActionCall, PlayerInfo};
-        use enshwick_loader_api::actions::sheet::decode;
-        use enshwick_loader_api::i18n::Language;
+        use enshwick::abi::{ActionCall, PlayerInfo};
+        use enshwick::actions::sheet::decode;
+        use enshwick::i18n::Language;
 
         let dir =
             std::env::temp_dir().join(format!("enshwick-safes-window-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let at = |x: f64| -> Vec<u8> {
-            enshwick_loader_api::ecs::fixed([x, 0.0, 0.0])
+            enshwick::ecs::fixed([x, 0.0, 0.0])
                 .iter()
                 .flat_map(|axis| axis.to_le_bytes())
                 .collect()

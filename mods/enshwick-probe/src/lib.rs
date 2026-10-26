@@ -28,16 +28,16 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use enshwick_loader_api::actions::{Action, Actions, Arg, Outcome, Value};
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::{WorldLoaded, WorldSaved};
-use enshwick_loader_api::game_events::{
+use enshwick::actions::{Action, Actions, Arg, Outcome, Value};
+use enshwick::ecs::Entity;
+use enshwick::events::{WorldLoaded, WorldSaved};
+use enshwick::game_events::{
     AltarUsed, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained, Hit,
     Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
 };
-use enshwick_loader_api::i18n::Texts;
-use enshwick_loader_api::schedule::Scheduler;
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::i18n::Texts;
+use enshwick::schedule::Scheduler;
+use enshwick::{Load, Mod, Off};
 
 use crate::census::Census;
 use crate::checks::Checks;
@@ -50,7 +50,7 @@ const CHECK_DELAY: Duration = Duration::from_secs(10);
 const NOTICE: &str = "Probe notice";
 
 /// Probe settings, read at start.
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(default, deny_unknown_fields)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -84,31 +84,31 @@ fn extras(load: &mut Load<'_>, scheduler: Scheduler, settings: &Settings) -> Vec
     let mut extras: Vec<Check> = Vec::new();
     match clock::ClockChecks::new(load, scheduler) {
         Ok(clock) => extras.push(Box::new(move || clock.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL clock: {off}"),
+        Err(off) => enshwick::warn!("FAIL clock: {off}"),
     }
     match settings::SettingsChecks::new(load, settings.keep_across_restart) {
         Ok(settings) => extras.push(Box::new(move || settings.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL game settings: {off}"),
+        Err(off) => enshwick::warn!("FAIL game settings: {off}"),
     }
     match buffs::BuffChecks::new(load, scheduler) {
         Ok(buffs) => extras.push(Box::new(move || buffs.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL buffs: {off}"),
+        Err(off) => enshwick::warn!("FAIL buffs: {off}"),
     }
     match knowledge::KnowledgeChecks::new(load, scheduler) {
         Ok(knowledge) => extras.push(Box::new(move || knowledge.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL knowledge: {off}"),
+        Err(off) => enshwick::warn!("FAIL knowledge: {off}"),
     }
     match weather::WeatherChecks::new(load, scheduler) {
         Ok(weather) => extras.push(Box::new(move || weather.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL weather: {off}"),
+        Err(off) => enshwick::warn!("FAIL weather: {off}"),
     }
     match stats::StatChecks::new(load, scheduler) {
         Ok(stats) => extras.push(Box::new(move || stats.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL stats: {off}"),
+        Err(off) => enshwick::warn!("FAIL stats: {off}"),
     }
     match terrain::TerrainChecks::new(load) {
         Ok(terrain) => extras.push(Box::new(move || terrain.run())),
-        Err(off) => enshwick_loader_api::warn!("FAIL terrain: {off}"),
+        Err(off) => enshwick::warn!("FAIL terrain: {off}"),
     }
     extras
 }
@@ -119,9 +119,9 @@ pub struct Probe;
 
 /// Logs every event of kind `E`, or that its fields are missing.
 fn log_typed<E: Kind + core::fmt::Debug>(load: &mut Load<'_>) {
-    match load.on_game::<E>(|event| enshwick_loader_api::info!("event: {event:?}")) {
-        Ok(()) => enshwick_loader_api::info!("PASS typed {} resolves", E::TYPE_NAME),
-        Err(off) => enshwick_loader_api::warn!("FAIL typed {}: {off}", E::TYPE_NAME),
+    match load.on_game::<E>(|event| enshwick::info!("event: {event:?}")) {
+        Ok(()) => enshwick::info!("PASS typed {} resolves", E::TYPE_NAME),
+        Err(off) => enshwick::warn!("FAIL typed {}: {off}", E::TYPE_NAME),
     }
 }
 
@@ -130,26 +130,24 @@ fn log_typed<E: Kind + core::fmt::Debug>(load: &mut Load<'_>) {
 fn vetoes(load: &mut Load<'_>, settings: &Settings) {
     let refuse_crafting = settings.refuse_crafting;
     let crafts = load.on_craft(move |craft| {
-        enshwick_loader_api::info!("craft filter: {craft:?}, refused: {refuse_crafting}");
+        enshwick::info!("craft filter: {craft:?}, refused: {refuse_crafting}");
         !refuse_crafting
     });
     match crafts {
-        Ok(()) => enshwick_loader_api::info!("PASS craft filter registered"),
-        Err(off) => enshwick_loader_api::warn!("FAIL craft filter: {off}"),
+        Ok(()) => enshwick::info!("PASS craft filter registered"),
+        Err(off) => enshwick::warn!("FAIL craft filter: {off}"),
     }
     let refuse_building = settings.refuse_building;
     let seen = AtomicBool::new(false);
     let builds = load.on_build(move |placement| {
         if !seen.swap(true, Ordering::Relaxed) {
-            enshwick_loader_api::info!(
-                "build filter, first call: {placement:?}, refused: {refuse_building}"
-            );
+            enshwick::info!("build filter, first call: {placement:?}, refused: {refuse_building}");
         }
         !refuse_building
     });
     match builds {
-        Ok(()) => enshwick_loader_api::info!("PASS build filter registered"),
-        Err(off) => enshwick_loader_api::warn!("FAIL build filter: {off}"),
+        Ok(()) => enshwick::info!("PASS build filter registered"),
+        Err(off) => enshwick::warn!("FAIL build filter: {off}"),
     }
 }
 
@@ -173,7 +171,7 @@ fn actions(
 ) -> Result<(), Off> {
     let knowledge = load.knowledge();
     let raw_stats = raw_stats::RawStats::new(load)
-        .inspect_err(|off| enshwick_loader_api::warn!("FAIL raw stats: {off}"))
+        .inspect_err(|off| enshwick::warn!("FAIL raw stats: {off}"))
         .ok();
     let actions = load.actions(Texts::default())?;
     let admin = |id: &str, label: &str| Action::new(id, label).admins();
@@ -302,8 +300,8 @@ fn stat_actions(actions: &Actions, affix_checks: &Arc<affixes::AffixChecks>) -> 
 }
 
 impl Mod for Probe {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "probe", side: SERVER, name: "Probe")
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "probe", side: SERVER, name: "Probe")
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -332,11 +330,11 @@ impl Mod for Probe {
         vetoes(load, &settings);
         // The probe is no join mod, so the loader refuses it a channel.
         match load.channel::<u32, _>("probe", 1, |_, _| ()) {
-            Err(off) => enshwick_loader_api::info!(
-                "PASS a channel is refused to a mod that is no join mod: {off}"
-            ),
+            Err(off) => {
+                enshwick::info!("PASS a channel is refused to a mod that is no join mod: {off}")
+            }
             Ok(_) => {
-                enshwick_loader_api::warn!("FAIL a channel opened for a mod that is no join mod");
+                enshwick::warn!("FAIL a channel opened for a mod that is no join mod");
             }
         }
         let checks = Arc::new(Checks::new(load)?);
@@ -346,21 +344,21 @@ impl Mod for Probe {
         let scheduler = load.scheduler()?;
         let damage = match damage::DamageSeen::register(load, settings.soften_damage) {
             Ok(seen) => {
-                enshwick_loader_api::info!("PASS damage filter registered");
+                enshwick::info!("PASS damage filter registered");
                 Some(seen)
             }
             Err(off) => {
-                enshwick_loader_api::warn!("FAIL damage filter: {off}");
+                enshwick::warn!("FAIL damage filter: {off}");
                 None
             }
         };
         let logged = Arc::clone(&census);
         scheduler.every(CENSUS_PERIOD, move || {
             for line in logged.lines() {
-                enshwick_loader_api::info!("census: {line}");
+                enshwick::info!("census: {line}");
             }
             if let Some(damage) = &damage {
-                enshwick_loader_api::info!("{}", damage.line());
+                enshwick::info!("{}", damage.line());
             }
             ControlFlow::Continue(())
         });
@@ -385,9 +383,9 @@ impl Mod for Probe {
         let saved = Arc::clone(&checks);
         load.on::<WorldSaved>(move |()| saved.saved())?;
         actions(load, census, &checks, run_all, affix_checks)?;
-        enshwick_loader_api::info!("probe on");
+        enshwick::info!("probe on");
         Ok(Self)
     }
 }
 
-enshwick_loader_api::declare_mod!(Probe);
+enshwick::declare_mod!(Probe);

@@ -17,9 +17,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use enshwick_loader_api::abi::RecipeRuleKind;
-use enshwick_loader_api::content::recipes::RecipeLayout;
-use enshwick_loader_api::content::{Blob, Guid};
+use enshwick::abi::RecipeRuleKind;
+use enshwick::content::recipes::RecipeLayout;
+use enshwick::content::{Blob, Guid};
 
 /// The server's recipe file, in `mod-configs`.
 pub const FILE: &str = "enshwick.recipes.toml";
@@ -889,7 +889,7 @@ mod tests {
 
     #[test]
     fn an_index_reads_a_registry() {
-        use enshwick_loader_api::content::Blob;
+        use enshwick::content::Blob;
         let layout = layout();
         let mut base = vec![0u8; 16];
         base[8..12].copy_from_slice(&(-8i32).to_le_bytes());

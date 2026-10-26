@@ -9,7 +9,7 @@
 use core::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-use enshwick_loader_api::abi::{HookFlags, Status};
+use enshwick::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
 /// The owner of the loader's own links, which never turn off.

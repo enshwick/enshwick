@@ -4,11 +4,11 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::i18n::Texts;
+use enshwick::services::Emitter;
+use enshwick::{Load, Mod, Off};
 use enshwick_example_trading_post_api::{Prices, Sold};
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
-use enshwick_loader_api::i18n::Texts;
-use enshwick_loader_api::services::Emitter;
-use enshwick_loader_api::{Load, Mod, Off};
 
 /// Items with a price: ids 0 to 63.
 const ITEMS: usize = 64;
@@ -46,8 +46,8 @@ fn sell(item: u32) -> Outcome {
 pub struct TradingPost;
 
 impl Mod for TradingPost {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "trading-post", side: SERVER)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "trading-post", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -71,15 +71,15 @@ impl Mod for TradingPost {
     }
 }
 
-enshwick_loader_api::declare_mod!(TradingPost);
+enshwick::declare_mod!(TradingPost);
 
 #[cfg(test)]
 mod tests {
-    use enshwick_loader_api::abi::Status;
+    use enshwick::abi::Status;
 
     #[test]
     fn publishes_prices_and_defines_sold() {
-        let loader = enshwick_loader_api::test::FakeHost::new().install();
+        let loader = enshwick::test::FakeHost::new().install();
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);

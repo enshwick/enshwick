@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::abi::{ActionCall, ActionFn, Header, PlayerInfo, Status, Str};
-use enshwick_loader_api::actions::sheet::{self, Entry};
+use enshwick::abi::{ActionCall, ActionFn, Header, PlayerInfo, Status, Str};
+use enshwick::actions::sheet::{self, Entry};
 
 use crate::host::Loader;
 use crate::remote::Message;

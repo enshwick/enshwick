@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwapOption;
 
-use enshwick_loader_api::abi::{HookFlags, Side, Status};
+use enshwick::abi::{HookFlags, Side, Status};
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;

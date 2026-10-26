@@ -5,15 +5,15 @@ on the game thread for them through the scheduler.
 
 ## Subscribing
 
-[`load.on::<E>(|data| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.on::<E>(|data| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 runs a handler each time the loader raises event `E`, with its typed data:
 
 ```rust
-use enshwick_loader_api::events::{PlayerJoined, WorldSaved};
+use enshwick::events::{PlayerJoined, WorldSaved};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
-    load.on::<PlayerJoined>(|player| enshwick_loader_api::info!("entity {} joined", player.entity))?;
-    load.on::<WorldSaved>(|()| enshwick_loader_api::info!("saved"))
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity))?;
+    load.on::<WorldSaved>(|()| enshwick::info!("saved"))
 }
 ```
 
@@ -24,15 +24,15 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 - The loader links the game functions behind an event only when some mod
   subscribed to it, so an unused event costs nothing.
 
-[`load.on_raw_event(event, |raw| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.on_raw_event(event, |raw| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 is the untyped form: it takes an
-[`abi::Event`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs)
+[`abi::Event`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 and gives the handler the raw data pointer, null for events without data.
 
 ## Event kinds
 
 The types are in
-[`enshwick_loader_api::events`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs).
+[`enshwick::events`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs).
 
 | Event | Data | When | Thread |
 | --- | --- | --- | --- |
@@ -76,7 +76,7 @@ The data:
 `JoinRefused` is raised on the client, once the player closed the loader's
 dialog about mods the server runs and the client lacks or runs in another
 version.
-[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
+[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 lists them with the server's versions and homepages. The handler runs on the
 game thread.
 
@@ -101,9 +101,9 @@ A killed process raises no `ShutdownStarted`.
 
 ## The scheduler
 
-[`load.scheduler()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.scheduler()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns a
-[`Scheduler`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/schedule.rs),
+[`Scheduler`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/schedule.rs),
 a `Copy` handle that puts work on the server's game thread after a simulation
 step:
 
@@ -116,11 +116,11 @@ step:
 use std::ops::ControlFlow;
 use std::time::Duration;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let scheduler = load.scheduler()?;
-    scheduler.after(Duration::from_secs(5), || enshwick_loader_api::info!("five seconds in"));
+    scheduler.after(Duration::from_secs(5), || enshwick::info!("five seconds in"));
     scheduler.every(Duration::from_secs(60), || {
-        enshwick_loader_api::info!("a minute passed");
+        enshwick::info!("a minute passed");
         ControlFlow::Continue(())
     });
     Ok(())
@@ -141,9 +141,9 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 The scheduler's delays are wall-clock time. A wait that should not run out
 while the server stands still, such as a hold on a container or a grace
 period after a player's action, counts in the server's steps instead:
-[`load.step_clock()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/time.rs)
+[`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/time.rs)
 returns the mod's
-[`StepClock`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/time.rs),
+[`StepClock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/time.rs),
 which every `Ticked` moves on by the step's real length, at most
 `StepClock::MAX_STEP` (250 ms). A stalled server, a world loading or a
 debugger's pause takes no steps, so the clock stands still with it; the first
@@ -152,12 +152,12 @@ step after counts `MAX_STEP` at most.
 ```rust
 use std::time::Duration;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let clock = load.step_clock()?;
     let started = clock.now();
-    load.on::<enshwick_loader_api::events::Ticked>(move |_| {
+    load.on::<enshwick::events::Ticked>(move |_| {
         if clock.now().saturating_sub(started) > Duration::from_secs(10) {
-            enshwick_loader_api::info!("ten seconds of world time");
+            enshwick::info!("ten seconds of world time");
         }
     })
 }

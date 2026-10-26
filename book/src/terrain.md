@@ -1,20 +1,20 @@
 # Terrain
 
-[`load.terrain()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/terrain.rs)
+[`load.terrain()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)
 returns the
-[`Terrain`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/terrain.rs)
+[`Terrain`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/terrain.rs)
 of the server's world: the terrain materials, and adding, digging and
 flattening ground as the game's terraforming does. It is `Copy`; get it
 during `init` and move it into handlers, tasks and actions.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Outcome};
-use enshwick_loader_api::terrain::Shape;
+use enshwick::actions::{Action, Outcome};
+use enshwick::terrain::Shape;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let terrain = load.terrain();
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("level", "Flatten the ground around you").admins(), move |request| {
         let here = world.position(request.player.entity);
         let (Some(here), Some(fill)) = (here, terrain.materials().first().map(|m| m.id)) else {

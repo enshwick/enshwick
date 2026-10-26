@@ -10,10 +10,10 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::actions::{Action, Ask, Outcome, Request, Subject, Value};
-use enshwick_loader_api::i18n::{Language, Texts};
-use enshwick_loader_api::world::World;
-use enshwick_loader_api::{Load, Off};
+use enshwick::actions::{Action, Ask, Outcome, Request, Subject, Value};
+use enshwick::i18n::{Language, Texts};
+use enshwick::world::World;
+use enshwick::{Load, Off};
 
 use crate::access::{ACCESS, AllowOutcome, Cell, Safe, Seen, centre, nearest_own};
 

@@ -17,7 +17,7 @@ use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
+use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;
@@ -89,8 +89,8 @@ type TextFn =
     unsafe extern "system" fn(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3];
 
 /// The language the game shows its texts in, as far as the loader saw.
-pub(crate) fn language() -> enshwick_loader_api::i18n::Language {
-    enshwick_loader_api::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
+pub(crate) fn language() -> enshwick::i18n::Language {
+    enshwick::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
 }
 
 /// Registers a mod text; refused after init.
@@ -469,8 +469,7 @@ fn serve_stand_ins(
             rebuilding: Mutex::new(()),
         });
     }
-    let key = enshwick_loader_api::content::items::ITEM_REGISTRY
-        .key(enshwick_loader_api::content::types::ITEM_REGISTRY);
+    let key = enshwick::content::items::ITEM_REGISTRY.key(enshwick::content::types::ITEM_REGISTRY);
     match served.iter_mut().find(|s| s.key == key) {
         Some(listed) => listed.patches.push(patch(registry)),
         None => served.push(Served {
@@ -543,7 +542,7 @@ pub(crate) fn shared() -> Vec<(String, Vec<usize>)> {
 /// A resource key in words: the registries by name, others as type and
 /// GUID.
 fn key_name(key: &ResourceKey) -> String {
-    use enshwick_loader_api::content::types;
+    use enshwick::content::types;
     let kind = match key.type_hash {
         types::ITEM_REGISTRY => return "the item registry".to_owned(),
         types::RECIPE_REGISTRY => return "the recipe registry".to_owned(),
@@ -555,7 +554,7 @@ fn key_name(key: &ResourceKey) -> String {
         types::UI_IMAGE => "image",
         _ => "resource",
     };
-    format!("{kind} {}", enshwick_loader_api::content::Guid(key.guid))
+    format!("{kind} {}", enshwick::content::Guid(key.guid))
 }
 
 /// What mods serve, for the status summary.
@@ -577,7 +576,7 @@ pub(crate) fn summary() -> crate::diag::Served {
 
 /// The vanilla template to read for `key`, a cloned template no mod serves.
 fn alias(key: &ResourceKey) -> Option<ResourceKey> {
-    if key.type_hash != enshwick_loader_api::content::types::TEMPLATE {
+    if key.type_hash != enshwick::content::types::TEMPLATE {
         return None;
     }
     let vanilla = ALIASES.get()?.get(&key.guid)?;
@@ -608,7 +607,7 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 
 /// The game's recipe registry.
 fn recipe_registry() -> ResourceKey {
-    use enshwick_loader_api::content::{recipes::RECIPE_REGISTRY, types};
+    use enshwick::content::{recipes::RECIPE_REGISTRY, types};
     RECIPE_REGISTRY.key(types::RECIPE_REGISTRY)
 }
 

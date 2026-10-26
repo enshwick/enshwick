@@ -6,8 +6,8 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use enshwick_loader_api::content::vanilla::Vanilla;
-use enshwick_loader_api::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
+use enshwick::content::vanilla::Vanilla;
+use enshwick::packs::{MANIFEST_FILE, Pack, PackFiles, PackManifest};
 
 /// What `cargo enshwick pack` does.
 #[derive(Debug, Subcommand)]
@@ -55,12 +55,11 @@ pub(crate) fn run(command: &Command) -> Result<String, String> {
 
 /// The vanilla content of the game in `game`: the layouts from its
 /// executable's reflection, the data from its archive.
-#[cfg(windows)]
 fn vanilla(game: &Path) -> Result<Vanilla, String> {
-    use enshwick_loader_api::Off;
-    use enshwick_loader_api::content::items::ItemLayout;
-    use enshwick_loader_api::content::workshops::WorkshopLayout;
-    use enshwick_loader_reflect::{Image, Layout, Reflection};
+    use enshwick::Off;
+    use enshwick::content::items::ItemLayout;
+    use enshwick::content::workshops::WorkshopLayout;
+    use enshwick_reflect::{Image, Layout, Reflection};
 
     let (exe, name) = ["enshrouded", "enshrouded_server"]
         .into_iter()
@@ -91,18 +90,11 @@ fn vanilla(game: &Path) -> Result<Vanilla, String> {
     };
     let items = ItemLayout::with_lookup(field, size).map_err(|off| off.to_string())?;
     let workshops = WorkshopLayout::with_lookup(field, size).map_err(|off| off.to_string())?;
-    let archive = enshwick::archive::Archive::open(game, name)
+    let archive = enshwick_gamedata::archive::Archive::open(game, name)
         .ok_or_else(|| format!("{}: {name}.kfc does not read", game.display()))?;
     Ok(Vanilla::new(items, workshops, move |key| {
         archive.resource(&key)
     }))
-}
-
-/// Vanilla names need the game's archive, which only the Windows build
-/// reads.
-#[cfg(not(windows))]
-fn vanilla(_game: &Path) -> Result<Vanilla, String> {
-    Err("--game reads the game's data on Windows only".to_owned())
 }
 
 /// Reads and checks the pack in `dir`, with the game's vanilla names when
@@ -134,7 +126,7 @@ fn check(
 fn schema(out: &Path) -> Result<String, String> {
     std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut written = Vec::new();
-    for (file, schema) in enshwick_loader_api::packs::schemas() {
+    for (file, schema) in enshwick::packs::schemas() {
         let name = file.replace(".toml", ".schema.json");
         let path = out.join(&name);
         std::fs::write(&path, schema).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -232,7 +224,6 @@ mod tests {
     /// The installed client, when `ENSHWICK_CLIENT_DIR` names its folder
     /// (build 1269579): vanilla names and a forge clone check against its
     /// data, and a misspelt name is explained.
-    #[cfg(windows)]
     #[test]
     fn the_game_s_data_checks_vanilla_names() {
         let Ok(game) = std::env::var("ENSHWICK_CLIENT_DIR") else {

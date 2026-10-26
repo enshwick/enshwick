@@ -13,14 +13,14 @@ to edit `mod-data`.
 
 ## The data folder
 
-[`load.data_dir()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.data_dir()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns the mod's own folder, `mod-data/<id>`, and creates it when missing.
 The path is plain `std::path::PathBuf`; keep it and use it from any thread.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let dir = load.data_dir()?;
-    enshwick_loader_api::info!("data in {}", dir.display());
+    enshwick::info!("data in {}", dir.display());
     Ok(())
 }
 ```
@@ -30,7 +30,7 @@ game event handler: the game thread waits on the disk otherwise.
 
 ## Per-world state
 
-[`load.world_store::<T>(name)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.world_store::<T>(name)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 keeps a value per world, in `mod-data/<id>/worlds/<key>/<name>.toml`, never
 inside the game's save: removing the mod leaves the world as vanilla left it.
 The key is [`World::key`](world.md#destroying-entities-and-saving).
@@ -41,9 +41,9 @@ struct Bounties {
     paid: u64,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let bounties = load.world_store::<Bounties>("bounties")?;
-    load.on_game::<enshwick_loader_api::game_events::Died>(move |died| {
+    load.on_game::<enshwick::game_events::Died>(move |died| {
         if died.killer_player.is_some() {
             let _paid = bounties.update(|b| b.paid += 1);
         }
@@ -64,7 +64,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 
 ## Store
 
-[`state::Store<T>`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs)
+[`state::Store<T>`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs)
 keeps one serde value as `<dir>/<name>.toml`:
 
 - `load()` returns the stored value, or `T::default()` while nothing is stored;
@@ -73,14 +73,14 @@ keeps one serde value as `<dir>/<name>.toml`:
   one, so a crash never leaves half a file.
 
 ```rust
-use enshwick_loader_api::state::Store;
+use enshwick::state::Store;
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 struct Progress {
     highest_experience: u64,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let store: Store<Progress> = Store::new(&load.data_dir()?, "progress");
     let mut progress = store.load()?;
     progress.highest_experience = progress.highest_experience.max(42);
@@ -97,13 +97,13 @@ converts into `Off`, so `?` in `init` turns the mod off with that text; outside
 
 A mod whose changes let a world grow past what the vanilla game opens safely,
 such as more altars than the game groups into bases, sets a
-[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs)
+[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs)
 while that is so, and clears it when it is no longer so.
 
 ```rust
-use enshwick_loader_api::state::Hold;
+use enshwick::state::Hold;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let hold = Hold::new(&load.data_dir()?);
     hold.set("the world has 20 altar zones; the vanilla game groups only 16")?;
     // Later, once the world is back within vanilla limits:

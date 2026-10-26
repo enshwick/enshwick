@@ -5,13 +5,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
-use enshwick_loader_api::abi as api_frame;
-use enshwick_loader_api::abi::{
+use enshwick::abi as api_frame;
+use enshwick::abi::{
     BuildInfo, Event, EventFn, Header, HookFlags, HookSpec, HostApi, Level, Manifest,
     ManifestFlags, MidHookSpec, ModHandle, ModInfo, Side, Status, Str,
 };
-use enshwick_loader_api::mods::LOADER_FILE;
-use enshwick_loader_reflect::{Fingerprint, Reflection};
+use enshwick::mods::LOADER_FILE;
+use enshwick_reflect::{Fingerprint, Reflection};
 
 use crate::builds::KnownBuild;
 use crate::chains::{Chains, Link, Next};
@@ -43,11 +43,11 @@ pub(crate) struct ModRecord {
     /// The texts `sync` handed to the mod.
     pub(crate) sync_out: Kept,
     /// The settings schema the mod handed the loader.
-    pub(crate) schema: Mutex<Option<enshwick_loader_api::config::Schema>>,
+    pub(crate) schema: Mutex<Option<enshwick::config::Schema>>,
     /// The mod's check of new settings texts: callback and pointer.
     pub(crate) check: OnceLock<(api_frame::ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader, for its settings' labels.
-    pub(crate) texts: Mutex<Option<enshwick_loader_api::i18n::Texts>>,
+    pub(crate) texts: Mutex<Option<enshwick::i18n::Texts>>,
     /// Whether it is a content pack, a folder of data the loader runs.
     pub(crate) pack: bool,
 }
@@ -618,9 +618,9 @@ impl Loader {
     fn own_rows(
         &self,
         index: usize,
-    ) -> impl Iterator<Item = &'static enshwick_loader_api::abi::BuildRow> + '_ {
+    ) -> impl Iterator<Item = &'static enshwick::abi::BuildRow> + '_ {
         let manifest = self.mods.get(index).map(|record| record.manifest);
-        let rows: &'static [enshwick_loader_api::abi::BuildRow] = match manifest {
+        let rows: &'static [enshwick::abi::BuildRow] = match manifest {
             Some(m)
                 if m.header
                     .covers(core::mem::offset_of!(Manifest, build_count) + 8)
@@ -819,7 +819,7 @@ unsafe fn slice<T>(ptr: *const T, count: usize) -> &'static [T] {
 }
 
 /// The value of the symbol named `name`.
-fn find(symbols: &[enshwick_loader_api::abi::Symbol], name: &str) -> Option<u64> {
+fn find(symbols: &[enshwick::abi::Symbol], name: &str) -> Option<u64> {
     symbols
         .iter()
         .find_map(|symbol| (text(symbol.name) == Some(name)).then_some(symbol.rva))
@@ -830,7 +830,7 @@ fn find(symbols: &[enshwick_loader_api::abi::Symbol], name: &str) -> Option<u64>
 fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
     // SAFETY: a non-null out pointer from a mod points at its own version of
     // the struct, its header saying how far it reaches.
-    if unsafe { enshwick_loader_api::abi::write_headed(out, value) } {
+    if unsafe { enshwick::abi::write_headed(out, value) } {
         Status::OK
     } else {
         Status::BAD_ARGS
@@ -848,7 +848,7 @@ fn put_headed<T: Copy>(out: *mut T, value: T) -> Status {
 /// is valid for `T`, zero included.
 unsafe fn get_headed<T: Copy>(raw: *const T, required: usize) -> Option<T> {
     // SAFETY: forwarded from the caller.
-    unsafe { enshwick_loader_api::abi::read_headed(raw, required) }
+    unsafe { enshwick::abi::read_headed(raw, required) }
 }
 
 /// The size of each entry of a mod's list at `out`, from the header of its
@@ -953,13 +953,13 @@ extern "system" fn build(out: *mut BuildInfo) {
                 header: Header::of::<BuildInfo>(),
                 side: loader.side,
                 base: loader.base,
-                fingerprint: enshwick_loader_api::abi::Fingerprint {
+                fingerprint: enshwick::abi::Fingerprint {
                     guid: loader.fingerprint.guid(),
                     age: loader.fingerprint.age(),
                 },
                 table: match loader.build.kind {
-                    crate::builds::Kind::Exact => enshwick_loader_api::abi::BuildTable::EXACT,
-                    crate::builds::Kind::Fallback => enshwick_loader_api::abi::BuildTable::PATTERNS,
+                    crate::builds::Kind::Exact => enshwick::abi::BuildTable::EXACT,
+                    crate::builds::Kind::Fallback => enshwick::abi::BuildTable::PATTERNS,
                 },
             },
         );
@@ -983,9 +983,9 @@ extern "system" fn symbol(me: ModHandle, name: Str, out: *mut u64) -> Status {
     })
 }
 
-fn lookup(error: &enshwick_loader_reflect::LookupError) -> Status {
+fn lookup(error: &enshwick_reflect::LookupError) -> Status {
     match error {
-        enshwick_loader_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
+        enshwick_reflect::LookupError::Ambiguous(_) => Status::AMBIGUOUS,
         _ => Status::MISSING,
     }
 }
@@ -1200,7 +1200,7 @@ unsafe fn spec_parts(
 ) -> Option<(&str, crate::services::Fields)> {
     let name = text(name)?;
     // SAFETY: forwarded from the caller.
-    let fields = unsafe { enshwick_loader_api::services::read_layout(layout) }?;
+    let fields = unsafe { enshwick::services::read_layout(layout) }?;
     Some((name, fields))
 }
 
@@ -1374,7 +1374,7 @@ unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declare
     // SAFETY: forwarded from the caller.
     let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
     // SAFETY: as above.
-    let output = unsafe { enshwick_loader_api::services::read_layout(&spec.output) }?;
+    let output = unsafe { enshwick::services::read_layout(&spec.output) }?;
     Some(crate::points::Declared {
         name: name.to_owned(),
         input,
@@ -1827,7 +1827,7 @@ extern "system" fn rebuild_resource(me: ModHandle, key: *const api_frame::Resour
 
 extern "system" fn recipe_rule(
     me: ModHandle,
-    kind: enshwick_loader_api::abi::RecipeRuleKind,
+    kind: enshwick::abi::RecipeRuleKind,
     name: Str,
     disable: u32,
 ) -> Status {
@@ -1951,8 +1951,7 @@ extern "system" fn inventory_submit(
         let required = core::mem::offset_of!(api_frame::InventoryRequest, op_count) + 4;
         // SAFETY: a non-null request from a mod points at a valid request for the
         // call; an all-zero request is valid.
-        let Some(request) = (unsafe { enshwick_loader_api::abi::read_headed(request, required) })
-        else {
+        let Some(request) = (unsafe { enshwick::abi::read_headed(request, required) }) else {
             return Status::BAD_ARGS;
         };
         crate::inventory::submit(loader, index, &request, done, user)
@@ -2143,7 +2142,7 @@ extern "system" fn config_schema(me: ModHandle, schema: Str) -> Status {
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        let Ok(schema) = enshwick_loader_api::config::Schema::parse(schema) else {
+        let Ok(schema) = enshwick::config::Schema::parse(schema) else {
             return Status::BAD_ARGS;
         };
         let Ok(mut slot) = record.schema.lock() else {
@@ -2612,7 +2611,7 @@ extern "system" fn content_read(
 
 extern "system" fn resource_read(
     me: ModHandle,
-    key: *const enshwick_loader_api::abi::ResourceKey,
+    key: *const enshwick::abi::ResourceKey,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -2685,7 +2684,7 @@ extern "system" fn stat_open(
         };
         let def = match def {
             // SAFETY: the definition's text is borrowed for the call.
-            Some(data) => match unsafe { enshwick_loader_api::stats::StatDef::from_data(&data) } {
+            Some(data) => match unsafe { enshwick::stats::StatDef::from_data(&data) } {
                 Some(def) => Some(def),
                 None => return Status::BAD_ARGS,
             },
@@ -3140,16 +3139,13 @@ extern "system" fn emit(me: ModHandle, type_hash: u32, data: *const u8, size: u3
 
 extern "system" fn teleport(
     me: ModHandle,
-    request: *const enshwick_loader_api::abi::TeleportRequest,
+    request: *const enshwick::abi::TeleportRequest,
 ) -> Status {
     entry("teleport", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick_loader_api::abi::read_headed(
-                request,
-                size_of::<enshwick_loader_api::abi::TeleportRequest>(),
-            )
+            enshwick::abi::read_headed(request, size_of::<enshwick::abi::TeleportRequest>())
         }) else {
             return Status::BAD_ARGS;
         };
@@ -3162,17 +3158,14 @@ extern "system" fn teleport(
 
 extern "system" fn spawn(
     me: ModHandle,
-    request: *const enshwick_loader_api::abi::SpawnRequest,
+    request: *const enshwick::abi::SpawnRequest,
     out: *mut u32,
 ) -> Status {
     entry("spawn", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick_loader_api::abi::read_headed(
-                request,
-                size_of::<enshwick_loader_api::abi::SpawnRequest>(),
-            )
+            enshwick::abi::read_headed(request, size_of::<enshwick::abi::SpawnRequest>())
         }) else {
             return Status::BAD_ARGS;
         };
@@ -3290,10 +3283,7 @@ extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
     })
 }
 
-extern "system" fn time_of_day(
-    me: ModHandle,
-    out: *mut enshwick_loader_api::abi::DaytimeInfo,
-) -> Status {
+extern "system" fn time_of_day(me: ModHandle, out: *mut enshwick::abi::DaytimeInfo) -> Status {
     entry("time_of_day", || {
         match caller(me).and_then(crate::daytime::info) {
             Ok(info) => put_headed(out, info),
@@ -3408,7 +3398,7 @@ extern "system" fn forget_game_settings(me: ModHandle) -> Status {
 
 extern "system" fn damage_filter(
     me: ModHandle,
-    callback: enshwick_loader_api::abi::DamageFilterFn,
+    callback: enshwick::abi::DamageFilterFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("damage_filter", || match caller_index(me) {
@@ -3424,7 +3414,7 @@ extern "system" fn damage_filter(
 
 extern "system" fn knowledge_input_filter(
     me: ModHandle,
-    callback: enshwick_loader_api::abi::KnowledgeInputFn,
+    callback: enshwick::abi::KnowledgeInputFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
     entry("knowledge_input_filter", || match caller_index(me) {
@@ -3456,7 +3446,7 @@ fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -
 
 extern "system" fn buff_types(
     me: ModHandle,
-    out: *mut enshwick_loader_api::abi::BuffTypeInfo,
+    out: *mut enshwick::abi::BuffTypeInfo,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -3471,7 +3461,7 @@ extern "system" fn buff_types(
 extern "system" fn buffs(
     me: ModHandle,
     entity: u32,
-    out: *mut enshwick_loader_api::abi::ActiveBuff,
+    out: *mut enshwick::abi::ActiveBuff,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -3483,18 +3473,12 @@ extern "system" fn buffs(
     })
 }
 
-extern "system" fn apply_buff(
-    me: ModHandle,
-    request: *const enshwick_loader_api::abi::BuffRequest,
-) -> Status {
+extern "system" fn apply_buff(me: ModHandle, request: *const enshwick::abi::BuffRequest) -> Status {
     entry("apply_buff", || {
         // SAFETY: the caller passes null or a request with its header; an
         // all-zero request is valid.
         let Some(request) = (unsafe {
-            enshwick_loader_api::abi::read_headed(
-                request,
-                size_of::<enshwick_loader_api::abi::BuffRequest>(),
-            )
+            enshwick::abi::read_headed(request, size_of::<enshwick::abi::BuffRequest>())
         }) else {
             return Status::BAD_ARGS;
         };
@@ -3518,7 +3502,7 @@ extern "system" fn knowledge(
     me: ModHandle,
     entity: u32,
     id: u32,
-    out: *mut enshwick_loader_api::abi::KnowledgeInfo,
+    out: *mut enshwick::abi::KnowledgeInfo,
 ) -> Status {
     entry("knowledge", || {
         match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
@@ -3617,7 +3601,7 @@ extern "system" fn weather_at(
 
 extern "system" fn weather_fronts(
     me: ModHandle,
-    out: *mut enshwick_loader_api::abi::WeatherFront,
+    out: *mut enshwick::abi::WeatherFront,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -3640,7 +3624,7 @@ extern "system" fn set_weather(me: ModHandle, effect: u32, duration: i64) -> Sta
 
 extern "system" fn terrain_materials(
     me: ModHandle,
-    out: *mut enshwick_loader_api::abi::TerrainMaterialInfo,
+    out: *mut enshwick::abi::TerrainMaterialInfo,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -3654,18 +3638,15 @@ extern "system" fn terrain_materials(
 
 extern "system" fn terrain_edit(
     me: ModHandle,
-    edit: *const enshwick_loader_api::abi::TerrainEdit,
+    edit: *const enshwick::abi::TerrainEdit,
     amount: *mut f32,
 ) -> Status {
     entry("terrain_edit", || {
         // SAFETY: the caller passes null or an edit with its header; an
         // all-zero edit is valid.
-        let Some(edit) = (unsafe {
-            enshwick_loader_api::abi::read_headed(
-                edit,
-                size_of::<enshwick_loader_api::abi::TerrainEdit>(),
-            )
-        }) else {
+        let Some(edit) =
+            (unsafe { enshwick::abi::read_headed(edit, size_of::<enshwick::abi::TerrainEdit>()) })
+        else {
             return Status::BAD_ARGS;
         };
         match caller(me).and_then(|loader| crate::terrain::edit(loader, &edit)) {
@@ -3826,7 +3807,7 @@ extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
         let Some(toml) = text(toml) else {
             return Status::BAD_ARGS;
         };
-        let Ok(parsed) = enshwick_loader_api::i18n::Texts::parse(toml) else {
+        let Ok(parsed) = enshwick::i18n::Texts::parse(toml) else {
             return Status::BAD_ARGS;
         };
         let Ok(mut slot) = record.texts.lock() else {

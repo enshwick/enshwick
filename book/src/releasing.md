@@ -8,22 +8,22 @@ archives, and the page players are sent to when a server runs a mod they lack.
 
 Enshwick Loader has one version, such as Enshwick Loader 0.2.0: the loader
 (`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
-`enshwick-loader-api` with its test fake and its macros
-(`enshwick-loader-macros`), `enshwick-loader-reflect`, the build tables
-(`enshwick-loader-builds`) and `cargo-enshwick` always carry the same number
+`enshwick` with its test fake and its macros
+(`enshwick-macros`), `enshwick-reflect`, the build tables
+(`enshwick-gamedata`) and `cargo-enshwick` always carry the same number
 and are released together. Mods have versions of their own, released apart from the
 platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
-version `enshwick-loader-api` was built with (see
+version `enshwick` was built with (see
 [ABI reference](abi-reference.md#versions)). A mod built against
-`enshwick-loader-api` X.Y needs a loader of the same ABI major whose ABI minor is
+`enshwick` X.Y needs a loader of the same ABI major whose ABI minor is
 at least the one X.Y was built with; an older loader does not start the mod
 and logs `update Enshwick`. Any loader of the same ABI major loads a mod built
-against an older `enshwick-loader-api`.
+against an older `enshwick`.
 
 A mod's version is [SemVer](https://semver.org). Leave `version` out of
-[`manifest!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
+[`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
 and the manifest takes the crate's version (`CARGO_PKG_VERSION`), so the
 version you release is the one the DLL reports. Set `version: "0.3.0"` only
 when the two must differ.
@@ -45,9 +45,16 @@ cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
 
 ## Releases in this repository
 
-Until the first public release, 1.0.0, this repository has no releases.
-Every crate carries the version `0.0.0-dev`, and the
-[dev-build workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/dev-build.yml),
+Until the first public release, 1.0.0, this repository has no releases of
+its DLLs. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
+and reach crates.io through the
+[publish workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/publish.yml),
+run by hand: `enshwick-macros`, `enshwick-reflect`, `enshwick`,
+`enshwick-gamedata` and `cargo-enshwick`, each after the crates it needs and
+only in a version crates.io does not have yet. A mod depends on
+`enshwick = "1.0.0-alpha.N"`. The mods here carry the version `0.0.0-dev`,
+and the
+[dev-build workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/dev-build.yml),
 run by hand, builds the commit it runs on, packs the same archives as a
 release and replaces the files of the one prerelease tagged `dev`, whose tag
 moves to that commit. Two development builds of one commit join each other; builds of
@@ -56,7 +63,7 @@ them apart. The release workflow below runs by hand as well and makes 1.0.0
 the first version of every crate.
 
 Mods in this repository follow
-[CONTRIBUTING.md](https://github.com/themaiby/enshwick/blob/main/CONTRIBUTING.md):
+[CONTRIBUTING.md](https://github.com/enshwick/enshwick/blob/main/CONTRIBUTING.md):
 
 - the crate is `mods/enshwick-<id>`, named `enshwick-<id>`;
 - the pull request title is a conventional commit, which becomes the squashed
@@ -69,19 +76,19 @@ Mods in this repository follow
 The platform crates are linked (the `linked-versions` plugin, group
 `enshwick`): a change to any of them releases all of them at one version,
 each with its own tag, `enshwick-loader-v0.2.0`,
-`enshwick-loader-api-v0.2.0` and so on. The tags keep what relies on them
-working: `cargo enshwick new` pins `enshwick-loader-api-v<version>`. The
+`enshwick-v0.2.0` and so on. The tags keep what relies on them
+working: `cargo enshwick new` pins `enshwick-v<version>`. The
 loader's release is the platform release, titled
 `Enshwick Loader <version>` and kept as the repository's latest release. A platform
 release also bumps the patch version of every mod, since they all depend on
-`enshwick-loader-api`.
+`enshwick`.
 
 Before 1.0, a `feat` bumps the patch version and a breaking change the minor
 (see
-[release-please-config.json](https://github.com/themaiby/enshwick/blob/main/release-please-config.json)).
+[release-please-config.json](https://github.com/enshwick/enshwick/blob/main/release-please-config.json)).
 
 The
-[release workflow](https://github.com/themaiby/enshwick/blob/main/.github/workflows/release-please.yml)
+[release workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/release-please.yml)
 then builds the workspace and attaches to each mod's release:
 
 | File          | What it holds                    |
@@ -99,9 +106,9 @@ loader build.
 
 ## The list of loaded mods
 
-[`enshwick_loader_api::mods()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
+[`enshwick::mods()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 lists every loaded mod, the loader first (id `enshwick`), in load order. Each
-[`ModEntry`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
+[`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 has:
 
 | Field                                           | What it holds                                                                   |
@@ -117,8 +124,8 @@ has:
 | `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
 ```rust
-for entry in enshwick_loader_api::mods() {
-    enshwick_loader_api::info!("{} {} at {}", entry.id, entry.version, entry.file);
+for entry in enshwick::mods() {
+    enshwick::info!("{} {} at {}", entry.id, entry.version, entry.file);
 }
 ```
 
@@ -138,9 +145,9 @@ a mod without a page is "ask the server's admin".
 When the join check keeps a client out because the server runs join mods the
 client lacks or has in another version, the loader shows the player a dialog,
 then raises
-[`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
+[`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
 on the client.
-[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
+[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 then lists those mods: the server's version, `running` false, the client's
 DLL path when it has the mod (empty otherwise), and the name and homepage the
 server advertises.
@@ -148,12 +155,12 @@ server advertises.
 The handler runs on the game thread once the player closed the dialog:
 
 ```rust
-use enshwick_loader_api::events::JoinRefused;
+use enshwick::events::JoinRefused;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on::<JoinRefused>(|()| {
-        for entry in enshwick_loader_api::mods::join_missing() {
-            enshwick_loader_api::info!("the server runs {} {}", entry.id, entry.version);
+        for entry in enshwick::mods::join_missing() {
+            enshwick::info!("the server runs {} {}", entry.id, entry.version);
         }
     })
 }
@@ -178,7 +185,7 @@ which the loader never started, each with `replaced_by` and its `file`.
 ## Removed mods and holds
 
 A mod that keeps a world the vanilla game cannot open safely can set a
-[`state::Hold`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/state.rs).
+[`state::Hold`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/state.rs).
 While `mod-data/<id>/hold.txt` exists, the loader stops the game before the
 world loads when that mod does not run: removed, skipped, off, or on a game
 build the loader does not know. Removing such a mod therefore needs the

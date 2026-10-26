@@ -1,19 +1,19 @@
 # Effects
 
-[`load.effects()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs)
+[`load.effects()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs)
 returns the mod's
-[`Effects`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/effects.rs):
+[`Effects`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/effects.rs):
 game events it raises in the server's world, teleports and spawns. Like
 [`World`](world.md), it is `Copy`; get it during `init` and move it into
 handlers, tasks and actions.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Outcome};
-use enshwick_loader_api::effects::Teleport;
+use enshwick::actions::{Action, Outcome};
+use enshwick::effects::Teleport;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("home", "Go to the world's centre"), move |request| {
         let me = request.player.entity;
         match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
@@ -51,13 +51,13 @@ thread, `Refused` for a type the loader does not allow or when the step has
 no room for more events, `Missing` on a build without the event.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
-use enshwick_loader_api::effects::NpcOrder;
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::effects::NpcOrder;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     let come = Action::new("come", "Call a survivor to you")
         .arg(Arg::number("Survivor id", 0.0..=f64::from(u32::MAX), 1.0));
     actions.add(come, move |request| {
@@ -94,13 +94,13 @@ and `.facing_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
-use enshwick_loader_api::effects::Spawn;
+use enshwick::actions::{Action, Arg, Outcome, Value};
+use enshwick::effects::Spawn;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let effects = load.effects();
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     let decoy = Action::new("decoy", "A copy of an entity beside you for a minute")
         .admins()
         .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
@@ -108,7 +108,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
         let [Value::Number(id)] = request.args else {
             return Outcome::refused("Name an entity");
         };
-        let source = enshwick_loader_api::ecs::Entity(*id as u32);
+        let source = enshwick::ecs::Entity(*id as u32);
         let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
             return Outcome::refused("Nothing to copy, or you are nowhere");
         };

@@ -17,8 +17,8 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::Instant;
 
-use enshwick_loader_api::abi::Registers;
-use enshwick_loader_api::{Load, Off};
+use enshwick::abi::Registers;
+use enshwick::{Load, Off};
 
 use crate::memory;
 
@@ -120,7 +120,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
         let address = match load.symbol(site.symbol) {
             Ok(address) => address,
             Err(off) => {
-                enshwick_loader_api::warn!("{} off: {off}", site.name);
+                enshwick::warn!("{} off: {off}", site.name);
                 continue;
             }
         };
@@ -131,7 +131,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
             .checked_sub(start)
             .and_then(|offset| load.code().ok()?.get(offset..offset + site.expected.len()));
         if found != Some(&site.expected[..]) {
-            enshwick_loader_api::warn!(
+            enshwick::warn!(
                 "{} off: its bytes at {at:#x} are {found:02x?}, not those of build 1269579",
                 site.name
             );
@@ -142,7 +142,7 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<usize, Off> {
         // instruction; the handler only reads the registers.
         match unsafe { load.hook_at(address, move |registers| seen(kind, registers)) } {
             Ok(()) => hooked += 1,
-            Err(off) => enshwick_loader_api::warn!("{} off: {off}", site.name),
+            Err(off) => enshwick::warn!("{} off: {off}", site.name),
         }
     }
     Ok(hooked)
@@ -246,7 +246,7 @@ fn seen(kind: Kind, registers: &mut Registers) {
         last.insert(key, line.clone());
     }
     let site = SITES.iter().find(|s| s.kind == kind).map_or("", |s| s.name);
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "{site} at {:.3}s from {}: {line}",
         seen.start.elapsed().as_secs_f64(),
         memory::as_note(caller, seen.base)
@@ -273,11 +273,9 @@ mod tests {
         let Ok(bytes) = std::fs::read(path) else {
             return;
         };
-        let Ok(image) = enshwick_loader_reflect::Image::parse(
-            &bytes,
-            enshwick_loader_reflect::Layout::File,
-            None,
-        ) else {
+        let Ok(image) =
+            enshwick_reflect::Image::parse(&bytes, enshwick_reflect::Layout::File, None)
+        else {
             unreachable!("the client parses");
         };
         let rows = crate::tooltip::tests::pinned_in(&image);

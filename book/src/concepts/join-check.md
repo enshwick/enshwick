@@ -117,8 +117,8 @@ with the server's value over its own file, which stays as it is. See
 ## Mods the player lacks
 
 When the check keeps a player out, the loader raises
-[`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
+[`events::JoinRefused`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
 on the client after the player closes the dialog, and
-[`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
+[`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 lists the missing mods with the server's versions and homepages; see
 [Releasing mods](../releasing.md).

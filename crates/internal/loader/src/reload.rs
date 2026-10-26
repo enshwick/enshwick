@@ -22,7 +22,7 @@ use std::sync::{Mutex, OnceLock, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use arc_swap::ArcSwap;
-use enshwick_loader_api::abi::{Manifest, ManifestFlags, exports};
+use enshwick::abi::{Manifest, ManifestFlags, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
 
@@ -429,7 +429,7 @@ fn unlink(loader: &Loader, index: usize) {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .rewire(host::is_off);
-    if loader.side == enshwick_loader_api::abi::Side::CLIENT {
+    if loader.side == enshwick::abi::Side::CLIENT {
         // The new copy sets its own markers; the old copy's go.
         let _cleared = crate::ui::set_markers(index, &[]);
     }

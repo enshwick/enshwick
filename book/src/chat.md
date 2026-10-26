@@ -12,9 +12,9 @@ client while it hosts a game.
 
 ## Chat lines
 
-[`world.broadcast(text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 sends a line to every player and
-[`world.tell(&player, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 to one player. Call them from any thread: the line waits in a queue, and the
 server posts it after the next step. Each line of `text` becomes a message of
 its own, and a message keeps at most 16 lines. The queue holds at most 256
@@ -22,7 +22,7 @@ lines; more are dropped.
 
 ## Notices on screen
 
-[`world.notify(&player, text)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/world.rs)
+[`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 shows a line on the player's screen, as the game shows its own "can't do
 that" messages, and `world.notify_all(text)` on every player's. It returns
 how the line went: `Notice::OnScreen`, or `Notice::Chat` when the player's
@@ -30,12 +30,12 @@ client lacks Enshwick and gets the line in chat instead. Call it on the game
 thread. The game shows up to 255 bytes; keep it to a short line.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Outcome};
-use enshwick_loader_api::world::Notice;
+use enshwick::actions::{Action, Outcome};
+use enshwick::world::Notice;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("ping-me", "Show me a notice"), move |request| {
         match world.notify(request.player, "Pong") {
             Notice::OnScreen => Outcome::done("On screen"),
@@ -60,25 +60,25 @@ A line is one of:
 - a mod's id and the text form of one of its [actions](actions.md#from-the-console):
   `safes help`, `admin-tools give-to 3073 10 Ann`.
 
-[`console::run(line)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/console.rs)
+[`console::run(line)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/console.rs)
 runs a line and returns its answer. Call it on the server's game thread, from
 a scheduled task or a game event; elsewhere it returns
 `RunError::NotOnGameThread`. A first word that neither the loader nor a
 running mod with actions answers returns `RunError::Unknown`.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let scheduler = load.scheduler()?;
-    scheduler.next_tick(|| match enshwick_loader_api::console::run("enshwick status") {
-        Ok(answer) => enshwick_loader_api::info!("{answer}"),
-        Err(why) => enshwick_loader_api::warn!("not run: {why}"),
+    scheduler.next_tick(|| match enshwick::console::run("enshwick status") {
+        Ok(answer) => enshwick::info!("{answer}"),
+        Err(why) => enshwick::warn!("not run: {why}"),
     });
     Ok(())
 }
 ```
 
 The answer goes back to the caller, not to any chat.
-[`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
+[`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
 runs each line appended to `mod-data/admin-tools/commands.txt` this way: it
 is how a dedicated server's administrators and their scripts reach the
 console.
@@ -102,9 +102,9 @@ No mod may take the id `enshwick`.
 
 ## Worked examples
 
-- [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
+- [`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
   declares administrator actions, answers with `tell`, and runs each line of
   its command file with `console::run` from a scheduled task.
-- [`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+- [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.

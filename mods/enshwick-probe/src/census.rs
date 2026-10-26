@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::sync::{Mutex, PoisonError};
 
-use enshwick_loader_api::Load;
-use enshwick_loader_api::game_events::{EVENT_TYPE_NAMES, RawGameEvent};
+use enshwick::Load;
+use enshwick::game_events::{EVENT_TYPE_NAMES, RawGameEvent};
 
 /// Counts of game events by type hash, with the names the census knows.
 #[derive(Debug)]

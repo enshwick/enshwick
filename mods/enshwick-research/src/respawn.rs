@@ -7,8 +7,8 @@ use std::ops::ControlFlow;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use enshwick_loader_api::world::{ComponentType, World};
-use enshwick_loader_api::{Load, Off};
+use enshwick::world::{ComponentType, World};
+use enshwick::{Load, Off};
 use rustc_hash::FxHashMap;
 
 use crate::memory;
@@ -82,7 +82,7 @@ fn sweep(world: &World, slot: Slot) {
             continue;
         }
         last.insert(player.key, (metres, entity));
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R20 spawn target of {:?}: entity {entity} at {metres:?} m; the player stands at {:?}",
             player.name,
             world.position(player.entity)

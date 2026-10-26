@@ -1,28 +1,28 @@
 # Testing
 
-[`enshwick_loader_api::test`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/test.rs) is a
+[`enshwick::test`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs) is a
 fake loader for a mod's unit tests. You tell it what the game and the loader
 would answer, start the mod through the same exports the real loader calls,
 then check what the mod asked for and what its hooks and handlers do.
 
-It is part of `enshwick-loader-api`, behind the `test` feature. Turn the
+It is part of `enshwick`, behind the `test` feature. Turn the
 feature on for tests only: list the crate again under `[dev-dependencies]`,
 at the same tag `cargo enshwick new` pins under `[dependencies]`:
 
 ```toml
 [dev-dependencies]
-enshwick-loader-api = { git = "https://github.com/themaiby/enshwick", tag = "enshwick-loader-api-v<version>", features = ["test"] }
+enshwick = { git = "https://github.com/enshwick/enshwick", tag = "enshwick-v<version>", features = ["test"] }
 ```
 
 ## The shape of a test
 
-1. Build a [`FakeHost`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/test.rs)
+1. Build a [`FakeHost`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
    with what the game would answer: symbols, settings text, the side.
 2. Call `install()`. You get an
-   [`Installed`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/test.rs)
+   [`Installed`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
    fake, which is the loader of the process until it drops.
 3. Start the mod with `start(enshwick_mod_init, enshwick_mod_ready)`, the two
-   exports [`declare_mod!`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/declare.rs)
+   exports [`declare_mod!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
    writes. `start` runs `init`, and runs `ready` only when `init` returns
    `Status::OK`.
 4. Check the outcome: the status, the logs, the hooks it linked. Call a detour
@@ -33,11 +33,11 @@ A full test of a mod with a hook, settings and a settings change:
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick_loader_api::abi::{Level, Status};
-use enshwick_loader_api::{Load, Mod, Next, Off, events, hook};
+use enshwick::abi::{Level, Status};
+use enshwick::{Load, Mod, Next, Off, events, hook};
 
 /// Bonus settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
     /// Added to every quest reward.
     bonus: u32,
@@ -53,8 +53,8 @@ fn reward(next: Next<extern "system" fn(u32) -> u32>, base: u32) -> u32 {
 }
 
 impl Mod for Bonus {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "bonus", side: SERVER)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "bonus", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -70,15 +70,15 @@ impl Mod for Bonus {
     }
 }
 
-enshwick_loader_api::declare_mod!(Bonus);
+enshwick::declare_mod!(Bonus);
 
 // Stands in for the game's function: the hook's chain ends here.
 extern "system" fn vanilla(base: u32) -> u32 {
     base
 }
 
-let loader = enshwick_loader_api::test::FakeHost::new()
-    .symbol("quest.reward", enshwick_loader_api::test::address(vanilla as extern "system" fn(u32) -> u32))
+let loader = enshwick::test::FakeHost::new()
+    .symbol("quest.reward", enshwick::test::address(vanilla as extern "system" fn(u32) -> u32))
     .settings("bonus = 5\n")
     .install();
 // SAFETY: the exports of `declare_mod!` above.
@@ -99,7 +99,7 @@ assert!(loader.faults().is_empty());
 ```
 
 A hook's chain continues to its target address. Give the target as
-[`address`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/test.rs)
+[`address`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/test.rs)
 of a plain `extern "system"` function with the game function's signature, and
 that function plays the original.
 
@@ -112,14 +112,14 @@ side defaults to `Side::SERVER` and the log level to `Level::INFO`.
 A test of the path where the game build lacks what the mod needs:
 
 ```rust,standalone_crate
-use enshwick_loader_api::abi::{Level, Status};
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::abi::{Level, Status};
+use enshwick::{Load, Mod, Off};
 
 struct Picky;
 
 impl Mod for Picky {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(id: "picky", side: SERVER)
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(id: "picky", side: SERVER)
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -128,9 +128,9 @@ impl Mod for Picky {
     }
 }
 
-enshwick_loader_api::declare_mod!(Picky);
+enshwick::declare_mod!(Picky);
 
-let loader = enshwick_loader_api::test::FakeHost::new().install();
+let loader = enshwick::test::FakeHost::new().install();
 // SAFETY: the exports of `declare_mod!` above.
 let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
 assert_eq!(status, Status::REFUSED);
@@ -167,9 +167,9 @@ Every method of `FakeHost` takes and returns the builder.
 | `placed(type_hash, entity, at)`       | An entity with a component and a place, for `World::entities` and `World::near`.                      |
 | `world_key(key)`                      | The key of the running world, for `World::key` and world stores.                                      |
 | `player(info)`                        | A connected player with a character in the world.                                                     |
-| `loaded(info)`                        | A loaded mod that `enshwick_loader_api::mods()` lists.                                                |
-| `join_missing(info)`                  | A server mod that `enshwick_loader_api::mods::join_missing()` lists.                                  |
-| `replaced(info)`                      | A mod another mod replaces, which `enshwick_loader_api::mods::replaced()` lists.                      |
+| `loaded(info)`                        | A loaded mod that `enshwick::mods()` lists.                                                           |
+| `join_missing(info)`                  | A server mod that `enshwick::mods::join_missing()` lists.                                             |
+| `replaced(info)`                      | A mod another mod replaces, which `enshwick::mods::replaced()` lists.                                 |
 | `console_answer(word, answer)`        | The answer to console lines starting with `word`, which another mod or the loader gives.              |
 | `service(&TABLE)`                     | A service another mod publishes, typed by its `#[service]` declaration.                               |
 | `refuse_hook(target)`                 | Refuses hooks on a target, as when another mod holds it exclusively.                                  |
@@ -243,8 +243,8 @@ Playing the game:
 Mid-function hooks run on registers you set up:
 
 ```rust
-let loader = enshwick_loader_api::test::FakeHost::new().install();
-let mut registers = enshwick_loader_api::abi::Registers { rcx: 7, ..Default::default() };
+let loader = enshwick::test::FakeHost::new().install();
+let mut registers = enshwick::abi::Registers { rcx: 7, ..Default::default() };
 assert_eq!(loader.run_at(0x1_4000_1000, &mut registers), 0);
 ```
 
@@ -253,9 +253,9 @@ An inventory request stays open until the test finishes it. `outcome` is an
 callback runs inside the call, as on the game thread:
 
 ```rust
-use enshwick_loader_api::abi::{InventoryOpResult, InventoryResult};
+use enshwick::abi::{InventoryOpResult, InventoryResult};
 
-let loader = enshwick_loader_api::test::FakeHost::new().item(0x5e01, 20, 0).install();
+let loader = enshwick::test::FakeHost::new().item(0x5e01, 20, 0).install();
 assert!(loader.inventory_requests().is_empty());
 let done = [InventoryOpResult { error: 0, remaining: 0 }];
 assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &done));
@@ -286,14 +286,14 @@ The fake answers what you tell it; only the game says whether an engine
 fact holds on the running build. Run a dedicated server of your own, never
 one people play on, with a copy of a world:
 
-- [`enshwick-admin-tools`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-admin-tools)
+- [`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
   runs each line appended to its command file on the server's console, so a
   mod's actions run without anyone joining;
-- [`enshwick-probe`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-probe),
+- [`enshwick-probe`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-probe),
   a development mod that is never released, exercises the platform's world
   API and game events and logs each check as `PASS`, `FAIL` or `SKIP` to
   `logs/enshwick/mods/probe.log`;
-- [`enshwick-research`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-research),
+- [`enshwick-research`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-research),
   another development mod, logs what a running client hands its item
   tooltip and what a refused join leaves behind, to
   `logs/enshwick/mods/research.log`.
@@ -338,7 +338,7 @@ A mod opts in with `reload: true` in its `manifest!` and keeps a contract:
   or turned off; its version may change.
 
 The log says `<id> reloaded` or why not. The
-[hot-reload example](https://github.com/themaiby/enshwick/tree/main/examples/hot-reload)
+[hot-reload example](https://github.com/enshwick/enshwick/tree/main/examples/hot-reload)
 shows the contract: an event, a ticker thread stopped in `shutdown`, and a
 greeting to change. Reloads are for development only, and nothing is
 reloaded unless the setting is on.

@@ -6,8 +6,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use enshwick_loader_api::events::JoinRefused;
-use enshwick_loader_api::{Load, Next, Off};
+use enshwick::events::JoinRefused;
+use enshwick::{Load, Next, Off};
 
 use crate::memory;
 
@@ -35,17 +35,17 @@ static PAUSE_ENTRIES: AtomicU64 = AtomicU64::new(0);
 static JOINS: AtomicU64 = AtomicU64::new(0);
 static WATCHING: AtomicBool = AtomicBool::new(false);
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     // Ahead of the loader's join check, so the link sees refused joins too.
     static JOIN_GAME: unsafe extern "system" fn(provider: *mut u8, target: *mut u8) -> u8 =
         join_game, priority = i32::MIN;
 }
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static MAIN_ENTRY: unsafe extern "system" fn(menu: usize, entry: *const u8) -> u8 = main_entry;
 }
 
-enshwick_loader_api::detour! {
+enshwick::detour! {
     static PAUSE_ENTRY: unsafe extern "system" fn(text: *const u8, enabled: u8, attention: u8) -> u8 =
         pause_entry;
 }
@@ -82,27 +82,25 @@ pub(crate) fn link(load: &mut Load<'_>) -> Result<(), Off> {
         ),
     ] {
         if let Err(off) = hook {
-            enshwick_loader_api::warn!("R8 the {symbol} is not watched: {off}");
+            enshwick::warn!("R8 the {symbol} is not watched: {off}");
         }
     }
     load.on::<JoinRefused>(|()| {
-        let missing: Vec<String> = enshwick_loader_api::mods::join_missing()
+        let missing: Vec<String> = enshwick::mods::join_missing()
             .iter()
             .map(|entry| format!("{} {}", entry.id, entry.version))
             .collect();
-        enshwick_loader_api::info!(
-            "R8 the refusal note was closed; the loader reports missing: {missing:?}"
-        );
+        enshwick::info!("R8 the refusal note was closed; the loader reports missing: {missing:?}");
     })
 }
 
 fn join_game(next: Next<JoinGame>, provider: *mut u8, target: *mut u8) -> u8 {
     let number = JOINS.fetch_add(1, Ordering::Relaxed) + 1;
-    enshwick_loader_api::info!("R8 join {number} asked: {}; {}", described(target), menus());
+    enshwick::info!("R8 join {number} asked: {}; {}", described(target), menus());
     let start = Instant::now();
     // SAFETY: forwarded unchanged to the rest of the chain.
     let state_changed = unsafe { next.get()(provider, target) };
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "R8 join {number} returned {state_changed} after {} ms",
         start.elapsed().as_millis()
     );
@@ -170,7 +168,7 @@ fn watch() {
                     MAIN_ENTRIES.load(Ordering::Relaxed),
                     PAUSE_ENTRIES.load(Ordering::Relaxed),
                 );
-                enshwick_loader_api::info!(
+                enshwick::info!(
                     "R8 +{} s: main-menu entries {}/s, pause-menu entries {}/s, joins {}",
                     start.elapsed().as_secs(),
                     main_now - main,

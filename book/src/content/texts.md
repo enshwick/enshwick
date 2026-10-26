@@ -2,7 +2,7 @@
 
 A mod ships its texts, item names, descriptions and chat phrases, in one
 TOML file with a table per language. The
-[`i18n`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`i18n`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 module reads it, and a server owner can add to it or change it.
 
 ## The texts file
@@ -20,7 +20,7 @@ module reads it, and a server owner can add to it or change it.
 ```
 
 - Each table is a language code:
-  [`Language`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+  [`Language`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
   lists the 35 the game knows, such as `en`, `en-us`, `de`, `uk`, `pt-br` or
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
@@ -29,10 +29,10 @@ module reads it, and a server owner can add to it or change it.
 
 Embed the file with `include_str!("texts.toml")` and read it during `init`
 with
-[`Load::texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs):
+[`Load::texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs):
 
 ```rust
-use enshwick_loader_api::content::Id;
+use enshwick::content::Id;
 
 const SAFE_NAME: Id = Id::new("safes:safe.name");
 const SAFE_DESCRIPTION: Id = Id::new("safes:safe.description");
@@ -47,7 +47,7 @@ const TEXTS: &str = r#"
 "safe.name" = "Сейф"
 "#;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let texts = load.texts(TEXTS)?;
     load.add_texts(&texts, &[
         ("safe.name", SAFE_NAME),
@@ -61,7 +61,7 @@ below is malformed, with the file's path in the message for the override.
 
 ## Texts the game shows
 
-[`Load::add_texts(&texts, pairs)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`Load::add_texts(&texts, pairs)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 gives game tags their texts. Each pair is a key of the texts file and a tag,
 a [content id](../content.md#content-ids) of the mod's own, whose GUID goes
 into the `name` and `description` of a [`NewItem`](items.md). Every language that has a text for the key gets it;
@@ -79,7 +79,7 @@ Under the hood each text goes through
 ## Texts the mod uses itself
 
 The returned
-[`Texts`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`Texts`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 also serves the mod's own strings, such as chat replies:
 
 - `get(key, language)` returns the text in `language`, else in `en`, else
@@ -92,7 +92,7 @@ also serves the mod's own strings, such as chat replies:
 - `Texts::parse(toml)` reads a texts file without a `Load`, for tests.
 
 ```rust
-use enshwick_loader_api::i18n::{Language, Texts};
+use enshwick::i18n::{Language, Texts};
 
 let mut texts = Texts::parse("[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n").unwrap();
 assert_eq!(texts.get("greeting", Language::UK_UA), Some("Привіт"));
@@ -104,12 +104,12 @@ assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
 On a client,
-[`i18n::language()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`i18n::language()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 is the language the player reads the game in, for the mod's own dialogs and
 windows:
 
 ```rust
-use enshwick_loader_api::i18n::{Texts, language};
+use enshwick::i18n::{Texts, language};
 
 let texts = Texts::parse("[en]\nfound = \"{count} safes\"\n[uk]\nfound = \"Сейфів: {count}\"\n").unwrap();
 let line = texts.fill("found", language(), &[("count", "3")]);
@@ -119,7 +119,7 @@ assert!(line.contains('3'));
 The server does not know a player's language, and `language()` there is
 `Language::FALLBACK`; an [action](../actions.md)'s request carries the
 language the player's client reads.
-[`enshwick-safes`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+[`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
 
@@ -128,17 +128,17 @@ back to `Language::FALLBACK`.
 A mod that names vanilla things, such as a survivor in its item's name,
 reads the game's own text rather than shipping a copy of it, so the player
 sees it in their language as the game spells it.
-[`i18n::game_text(id)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
+[`i18n::game_text(id)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 is the text of a tag in the language the player reads the game in, and
 `game_text_in(id, language)` in any language; `id` is the tag's game id,
 `Guid::id` of the tag a resource names. A text missing in a language comes
 in English, as the game shows it.
 
 ```rust
-use enshwick_loader_api::content::Guid;
-use enshwick_loader_api::content::items::vanilla_name;
-use enshwick_loader_api::i18n::Language;
-use enshwick_loader_api::survivors::WorkshopSurvivor;
+use enshwick::content::Guid;
+use enshwick::content::items::vanilla_name;
+use enshwick::i18n::Language;
+use enshwick::survivors::WorkshopSurvivor;
 
 let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 let chest_name = vanilla_name(chest, Language::UK_UA);
@@ -150,7 +150,7 @@ assert!(!name.is_empty() && chest_name.is_none_or(|n| !n.is_empty()));
 `items::vanilla_name(item, language)` reads a vanilla item's name tag from
 its data and returns its text; `WorkshopSurvivor::name(language)` is the
 survivor's name, which the game gives its summoning staff.
-[`enshwick-survivors-per-altar`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-survivors-per-altar)
+[`enshwick-survivors-per-altar`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-survivors-per-altar)
 names its copy staffs this way: it registers each staff's name during
 `init` for every language it translates, with the survivor's name in that
 language.
@@ -173,7 +173,7 @@ without rebuilding it.
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
 name of an item whose mod is gone, ship in English and Ukrainian in
-[`texts.toml`](https://github.com/themaiby/enshwick/blob/main/crates/internal/loader/src/texts.toml),
+[`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
 and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.
 

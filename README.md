@@ -7,7 +7,7 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
 - **Enshwick Loader**, for players and servers: one archive, `enshwick.zip`,
   with the loader, its `powrprof.dll` stub and every mod below. See
   [Install](#install).
-- **[`enshwick-loader-api`](crates/enshwick-loader-api)**, for mod authors: the
+- **[`enshwick`](crates/enshwick)**, for mod authors: the
   one crate a mod depends on. Its `test` feature adds a fake loader for unit
   tests.
 - **[`cargo enshwick`](crates/cargo-enshwick)**, the one tool: it starts a mod,
@@ -15,9 +15,12 @@ every mod is a DLL in the `mods/` folder beside it. Four things make it up:
   of a new game build.
 - **Mods**, grouped by purpose below.
 
-The crates under [`crates/internal`](crates/internal) (the loader DLL, the
-stub, the reflection reader, the build tables and the macros) are parts of the
-loader, not for mods.
+The crates under [`crates/internal`](crates/internal) (the loader DLL and the
+stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros),
+[`enshwick-reflect`](crates/enshwick-reflect) and
+[`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, the reflection
+reader and the build tables) are published for `enshwick` and
+`cargo enshwick` to build on.
 [`examples`](examples) holds small mods that show one part of the API each;
 they are never released.
 
@@ -47,7 +50,7 @@ they are never released.
 ## Install
 
 1. Download
-   [`enshwick.zip`](https://github.com/themaiby/enshwick/releases/download/dev/enshwick.zip):
+   [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip):
    the loader with every mod of this repository. It is a development build
    of the newest commit; until the first release, 1.0.0, there are no others.
 2. Extract it into the folder that holds `enshrouded.exe` (players) or
@@ -98,7 +101,7 @@ such a change does.
 ## For mod authors
 
 Mods are written in Rust against
-[`enshwick-loader-api`](crates/enshwick-loader-api); start with
+[`enshwick`](crates/enshwick); start with
 [the modding book](book/src/SUMMARY.md).
 [`cargo enshwick`](crates/cargo-enshwick) starts a mod and installs it into the
 game. Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).

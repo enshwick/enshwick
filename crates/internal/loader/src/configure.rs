@@ -5,7 +5,7 @@
 //! The answer and the file edit are pure logic here; the console runs the
 //! line, writes the file and raises the mod's settings event.
 
-use enshwick_loader_api::config::{Field, Kind, Schema, Stage};
+use enshwick::config::{Field, Kind, Schema, Stage};
 use toml_edit::DocumentMut;
 
 use crate::texts;

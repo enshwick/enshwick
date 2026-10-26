@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use enshwick_loader_api::abi::{Header, PlayerInfo, Status};
+use enshwick::abi::{Header, PlayerInfo, Status};
 
 use super::{Line, Tool, log_query, parse};
 use crate::host::Loader;

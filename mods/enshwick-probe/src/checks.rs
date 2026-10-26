@@ -4,14 +4,14 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::effects::{Effects, Spawn, Teleport};
-use enshwick_loader_api::entity_data::{EntityData, Replication};
-use enshwick_loader_api::game_events::{EventType, RawGameEvent};
-use enshwick_loader_api::schedule::Scheduler;
-use enshwick_loader_api::state::WorldStore;
-use enshwick_loader_api::world::{ComponentType, World, WorldError};
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::effects::{Effects, Spawn, Teleport};
+use enshwick::entity_data::{EntityData, Replication};
+use enshwick::game_events::{EventType, RawGameEvent};
+use enshwick::schedule::Scheduler;
+use enshwick::state::WorldStore;
+use enshwick::world::{ComponentType, World, WorldError};
+use enshwick::{Load, Off};
 
 /// Entities whose stats a check compares.
 const SAMPLE: usize = 5;
@@ -66,11 +66,11 @@ pub(crate) struct Checks {
 }
 
 fn pass(what: &str) {
-    enshwick_loader_api::info!("PASS {what}");
+    enshwick::info!("PASS {what}");
 }
 
 fn fail(what: &str) {
-    enshwick_loader_api::warn!("FAIL {what}");
+    enshwick::warn!("FAIL {what}");
 }
 
 impl Checks {
@@ -179,9 +179,7 @@ impl Checks {
     fn stats(&self) {
         let actors = self.world.entities(self.network_health);
         if actors.is_empty() {
-            enshwick_loader_api::info!(
-                "SKIP vitals: no actor with replicated health in the loaded world"
-            );
+            enshwick::info!("SKIP vitals: no actor with replicated health in the loaded world");
         }
         for placed in actors.iter().take(SAMPLE) {
             self.compare(placed.entity);
@@ -194,7 +192,7 @@ impl Checks {
                 )),
                 None => fail(&format!("progress of entity {}: none", placed.entity.0)),
             },
-            None => enshwick_loader_api::info!("SKIP progress: no character in the world"),
+            None => enshwick::info!("SKIP progress: no character in the world"),
         }
     }
 
@@ -220,7 +218,7 @@ impl Checks {
             Some(entity) => {
                 Self::write_health(self.world, self.scheduler, self.network_health, entity);
             }
-            None => enshwick_loader_api::info!(
+            None => enshwick::info!(
                 "SKIP writes: no living actor with replicated health; the spawn check tries its own"
             ),
         }
@@ -316,7 +314,7 @@ impl Checks {
             .chain(self.world.entities(self.world.transform_type()))
             .find_map(|placed| Some((self.world.template(placed.entity)?, placed.position)));
         let Some((template, [x, y, z])) = source else {
-            enshwick_loader_api::info!("SKIP spawns: no entity with a template in the world");
+            enshwick::info!("SKIP spawns: no entity with a template in the world");
             return;
         };
         self.spawn(template, [x, y + 3.0, z]);
@@ -359,7 +357,7 @@ impl Checks {
                 )),
             }
             let vitals = world.vitals(entity);
-            enshwick_loader_api::info!("spawned entity {} has vitals {vitals:?}", entity.0);
+            enshwick::info!("spawned entity {} has vitals {vitals:?}", entity.0);
             if vitals.is_some_and(|v| v.health.current > 1) {
                 Self::write_health(world, scheduler, network_health, entity);
             }
@@ -381,7 +379,7 @@ impl Checks {
                 }
             }
             scheduler.after(TELEPORT_PEEK, move || {
-                enshwick_loader_api::info!(
+                enshwick::info!(
                     "entity {} a moment after its teleport: Teleport {}, TeleportCount {}, LastTransform {}",
                     entity.0,
                     world.component(entity, teleport_parts[0]).is_some(),
@@ -408,7 +406,7 @@ impl Checks {
     /// Notes a ping the game raised, and whether it is the probe's.
     pub(crate) fn pinged(&self, event: &RawGameEvent<'_>) {
         let x = event.read::<i64>(16);
-        if x == Some(enshwick_loader_api::ecs::fixed(PING_AT)[0])
+        if x == Some(enshwick::ecs::fixed(PING_AT)[0])
             && self.ping_sent.swap(false, Ordering::AcqRel)
         {
             pass("the game handed back the probe's ping as a game event");
@@ -418,7 +416,7 @@ impl Checks {
     /// Compares `entity`'s vitals with the health the server replicates,
     /// and logs its time in the shroud.
     fn compare(&self, entity: Entity) {
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "shroud of entity {}: {:?}, in it {:?}; skills {:?}",
             entity.0,
             self.world.shroud_time(entity),
@@ -492,9 +490,9 @@ impl Checks {
     }
 
     /// The `notice` action: shows the text to the player who asked.
-    pub(crate) fn notice(&self, player: &enshwick_loader_api::world::Player, text: &str) -> String {
+    pub(crate) fn notice(&self, player: &enshwick::world::Player, text: &str) -> String {
         let how = self.world.notify(player, text);
-        enshwick_loader_api::info!("notice to {}: {how:?}", player.name);
+        enshwick::info!("notice to {}: {how:?}", player.name);
         format!("{how:?}")
     }
 
@@ -513,7 +511,7 @@ impl Checks {
             ));
             return format!("{why}");
         }
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "R7 teleport of entity {} asked from {from:?} to {to:?}",
             entity.0
         );
@@ -535,7 +533,7 @@ impl Checks {
                         )
                     },
                 );
-                enshwick_loader_api::info!(
+                enshwick::info!(
                     "R7 +{} ms: entity {} at {place}; Teleport {}, TeleportCount {}, LastTransform {}",
                     (SELF_TELEPORT_STEP * step).as_millis(),
                     entity.0,
@@ -550,7 +548,7 @@ impl Checks {
                         Some(_) => "is elsewhere (it may have walked)",
                         None => "has no place",
                     };
-                    enshwick_loader_api::info!("R7 after 5 s entity {} {verdict}", entity.0);
+                    enshwick::info!("R7 after 5 s entity {} {verdict}", entity.0);
                 }
             });
         }
@@ -561,7 +559,7 @@ impl Checks {
     pub(crate) fn destroy(&self, entity: Entity) -> String {
         let template = self.world.template(entity);
         let outcome = self.world.destroy(entity);
-        enshwick_loader_api::info!(
+        enshwick::info!(
             "destroy of entity {} (template {template:02x?}): {outcome:?}",
             entity.0
         );
@@ -591,7 +589,7 @@ impl Checks {
                 .iter()
                 .filter(|(id, _)| self.marks.get(Entity(*id)) == Some(check - 1))
                 .count();
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "entity data across loads: {kept} of {} marked entities keep their mark",
                 before.len()
             );
@@ -625,7 +623,7 @@ impl Checks {
 /// now: whether entity ids stay with entities across loads.
 fn ids_across_loads(before: &[(u32, u64)], now: &[(u32, u64)]) {
     if before.is_empty() {
-        enshwick_loader_api::info!("SKIP ids across loads: the first check of this world");
+        enshwick::info!("SKIP ids across loads: the first check of this world");
         return;
     }
     let same = before.iter().filter(|seen| now.contains(seen)).count();
@@ -633,7 +631,7 @@ fn ids_across_loads(before: &[(u32, u64)], now: &[(u32, u64)]) {
         .iter()
         .filter(|(_, template)| !now.iter().any(|(_, t)| t == template))
         .count();
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "ids across loads: {same} of {} sampled entities keep their id and template ({moved} templates gone)",
         before.len()
     );
@@ -645,7 +643,7 @@ fn ids_across_loads(before: &[(u32, u64)], now: &[(u32, u64)]) {
 fn destroy_marked(world: World, scheduler: Scheduler, marks: EntityData<u32>, entity: Entity) {
     let marked = marks.set(entity, &7).is_ok();
     let destroyed = world.destroy(entity);
-    enshwick_loader_api::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
+    enshwick::info!("spawned entity {} destroyed: {destroyed:?}", entity.0);
     if !marked || destroyed.is_err() {
         return;
     }

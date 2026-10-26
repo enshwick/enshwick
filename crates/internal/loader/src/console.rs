@@ -5,7 +5,7 @@
 //!
 //! Reading a line is pure logic here; the run module answers it.
 
-use enshwick_loader_api::abi::Level;
+use enshwick::abi::Level;
 
 use crate::settings::LOADER_ID;
 

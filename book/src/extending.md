@@ -9,9 +9,9 @@ point's declaration field by field when the game starts, like
 can switch one link off without the mod, and the Mods screen and the
 [conflict report](logging.md#conflicts) show who extends what.
 
-The [examples](https://github.com/themaiby/enshwick/tree/main/examples)
+The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
 folder holds the mod this chapter follows: `safe-viewers` extends the
-[Safes](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-safes)
+[Safes](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
 mod's access rule. Players listed as viewers may open every Safe, and with
 `owner_removes_only` nobody but a Safe's owner removes it, administrators
 included.
@@ -19,7 +19,7 @@ included.
 ## The points of Enshwick's mods
 
 The points of Enshwick's own mods are declared in
-[`enshwick_loader_api::points`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/points.rs),
+[`enshwick::points`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs),
 so extending them needs no crate but the API:
 
 | Point                             | Declaration                               | Answer | Refusal                    |
@@ -35,20 +35,20 @@ point is asked, and what the answer means.
 
 ## Extending a point
 
-[`load.extend_point(order, link)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/points.rs)
+[`load.extend_point(order, link)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
 attaches `link` during `init`. The link gets the point's input and the answer
 so far, the owner's own or what the links before it left, and returns a
-[`Verdict`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/points.rs):
+[`Verdict`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs):
 `Pass` keeps the answer, `Set(value)` changes it, and `Refuse` stops the
 chain where the point allows refusals. The heart of `safe-viewers`:
 
 ```rust
-use enshwick_loader_api::points::safes::{Access, SafeAction};
-use enshwick_loader_api::points::{Order, Verdict};
+use enshwick::points::safes::{Access, SafeAction};
+use enshwick::points::{Order, Verdict};
 
 const VIEWERS: [u64; 1] = [0x00ab_cdef_0123_4567];
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.extend_point(&Order::new(), |access: &Access, may: &bool| {
         if access.action == SafeAction::REMOVE && access.player != access.owner {
             return Verdict::Refuse;
@@ -73,11 +73,11 @@ for logging or statistics.
 
 Links run one after another, each seeing the answer the ones before left, so
 the last change wins.
-[`Order`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/points.rs)
+[`Order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
 places a link:
 
 ```rust
-use enshwick_loader_api::points::Order;
+use enshwick::points::Order;
 
 let order = Order::new().after("safe-viewers").before("safe-locks").priority(10);
 assert_eq!(order.priority_value(), 10);
@@ -98,7 +98,7 @@ breaks the cycle by priority and logs which link's order it dropped.
 Declare the owner in the manifest, with a version range:
 
 ```rust
-let manifest = enshwick_loader_api::manifest!(
+let manifest = enshwick::manifest!(
     id: "safe-viewers",
     side: BOTH,
     recommends: ["safes" => ">=0.0.0-dev, <1.0"],
@@ -154,7 +154,7 @@ The change takes effect at the next start.
 ## Defining a point
 
 The mod that owns a rule declares its point once with
-[`#[point]`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/lib.rs):
+[`#[point]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs):
 the input struct, the name `<owner id>:<point>`, the mode, the answer's type
 and, when links may refuse, `refusable`. Publish the declaration in a crate
 other mods can depend on, as for a service; Enshwick's own mods keep theirs in
@@ -163,10 +163,10 @@ the API.
 ```rust
 use std::sync::OnceLock;
 
-use enshwick_loader_api::points::OwnedPoint;
+use enshwick::points::OwnedPoint;
 
 /// The price of an item at the trading post, in coins.
-#[enshwick_loader_api::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
+#[enshwick::point(name = "trading-post:price", mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {
     pub item: u32,
@@ -174,7 +174,7 @@ pub struct Price {
 
 static PRICE: OnceLock<OwnedPoint<Price>> = OnceLock::new();
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let _first = PRICE.set(load.define_point::<Price>()?);
     Ok(())
 }
@@ -198,7 +198,7 @@ The mode is the owner's choice:
 | `Advise`   | may change the answer; the owner reads `Decision` and may ignore it |
 | `Override` | may change the answer, and the owner takes it                       |
 
-[`decide`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/points.rs)
+[`decide`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/points.rs)
 returns `Kept(answer)`, `Changed(value)` or `Refused`. With no live link it
 is one atomic load and returns at once, so a point costs nothing until a mod
 extends it; with links it is one call into the loader and one call per link,
@@ -219,11 +219,11 @@ would and `defined_points` lists the points; for a mod that extends one,
 loader. The example's test:
 
 ```rust
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::points::Decision;
-use enshwick_loader_api::points::safes::{Access, SafeAction};
+use enshwick::ecs::Entity;
+use enshwick::points::Decision;
+use enshwick::points::safes::{Access, SafeAction};
 
-fn viewer_opens(loader: &enshwick_loader_api::test::Installed) {
+fn viewer_opens(loader: &enshwick::test::Installed) {
     let access = Access {
         player: 0x00ab_cdef_0123_4567,
         owner: 1,

@@ -1,7 +1,7 @@
 # Character progress
 
 Three typed hooks cover how characters grow, from
-[`progress`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/progress.rs).
+[`progress`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/progress.rs).
 
 ## Skills
 
@@ -13,9 +13,9 @@ names the gates it knows, such as `SkillGate::FlyMode`, so a mod can open one
 feature without touching the skill tree. It runs on both sides.
 
 ```rust
-use enshwick_loader_api::progress::{SkillGate, AIRBORNE_ARCHITECT};
+use enshwick::progress::{SkillGate, AIRBORNE_ARCHITECT};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_skill(AIRBORNE_ARCHITECT, |check| (check.gate == SkillGate::FlyMode).then_some(true))
 }
 ```
@@ -38,7 +38,7 @@ written back and sent to the players. `Levels` gives the level cap and what
 each level needs.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_experience(|rows, levels| {
         for row in rows.iter_mut().filter(|row| row.level < levels.cap()) {
             row.gained = row.gained.saturating_add(1);

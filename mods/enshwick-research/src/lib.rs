@@ -23,10 +23,10 @@ mod skills;
 mod tooltip;
 mod ui;
 
-use enshwick_loader_api::abi::Side;
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Request, Value};
-use enshwick_loader_api::i18n::Texts;
-use enshwick_loader_api::{Load, Mod, Off};
+use enshwick::abi::Side;
+use enshwick::actions::{Action, Arg, Outcome, Request, Value};
+use enshwick::i18n::Texts;
+use enshwick::{Load, Mod, Off};
 
 const fn yes() -> bool {
     true
@@ -41,7 +41,7 @@ const fn max_dumps() -> u32 {
 }
 
 /// Research settings, read at start.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -123,8 +123,8 @@ pub struct Research {
 }
 
 impl Mod for Research {
-    fn manifest() -> &'static enshwick_loader_api::abi::Manifest {
-        enshwick_loader_api::manifest!(
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
             id: "research",
             side: BOTH,
             name: "Research",
@@ -215,56 +215,54 @@ impl Mod for Research {
         }
         if settings.impact_health {
             match health::link(load) {
-                Ok(()) => enshwick_loader_api::info!("R17 impact health writes looked at"),
-                Err(off) => enshwick_loader_api::warn!("R17 off: {off}"),
+                Ok(()) => enshwick::info!("R17 impact health writes looked at"),
+                Err(off) => enshwick::warn!("R17 off: {off}"),
             }
         }
         if settings.skills {
             match skills::link(load) {
-                Ok(()) => enshwick_loader_api::info!("R19 skill changes looked at"),
-                Err(off) => enshwick_loader_api::warn!("R19 off: {off}"),
+                Ok(()) => enshwick::info!("R19 skill changes looked at"),
+                Err(off) => enshwick::warn!("R19 off: {off}"),
             }
         }
         if settings.respawn {
             match load.world().and_then(|world| respawn::link(load, world)) {
-                Ok(()) => enshwick_loader_api::info!("R20 spawn targets read every 5 s"),
-                Err(off) => enshwick_loader_api::warn!("R20 off: {off}"),
+                Ok(()) => enshwick::info!("R20 spawn targets read every 5 s"),
+                Err(off) => enshwick::warn!("R20 off: {off}"),
             }
         }
         if client {
             if settings.tooltip {
                 match tooltip::link(load, settings.dump_interval_ms, settings.max_dumps) {
                     Ok(hooked) => {
-                        enshwick_loader_api::info!("R1 {hooked} tooltip functions looked at");
+                        enshwick::info!("R1 {hooked} tooltip functions looked at");
                     }
-                    Err(off) => enshwick_loader_api::warn!("R1 off: {off}"),
+                    Err(off) => enshwick::warn!("R1 off: {off}"),
                 }
             }
             if settings.ui {
                 match ui::link(load) {
                     Ok(hooked) => {
-                        enshwick_loader_api::info!(
-                            "R2 R3 R5 {hooked} interface functions looked at"
-                        );
+                        enshwick::info!("R2 R3 R5 {hooked} interface functions looked at");
                     }
-                    Err(off) => enshwick_loader_api::warn!("R2 R3 R5 off: {off}"),
+                    Err(off) => enshwick::warn!("R2 R3 R5 off: {off}"),
                 }
             }
             if settings.join {
                 match join::link(load) {
-                    Ok(()) => enshwick_loader_api::info!("R8 join attempts looked at"),
-                    Err(off) => enshwick_loader_api::warn!("R8 off: {off}"),
+                    Ok(()) => enshwick::info!("R8 join attempts looked at"),
+                    Err(off) => enshwick::warn!("R8 off: {off}"),
                 }
             }
         }
         actions(load)?;
-        enshwick_loader_api::info!("research on");
+        enshwick::info!("research on");
         Ok(Self {
             fibers: settings.fibers,
         })
     }
 
-    fn ready(&'static self, _host: enshwick_loader_api::Host) {
+    fn ready(&'static self, _host: enshwick::Host) {
         if self.fibers {
             fibers::start();
         }
@@ -276,18 +274,18 @@ fn entities_link(load: &mut Load<'_>, client: bool) {
     let world = match load.world() {
         Ok(world) => world,
         Err(off) => {
-            enshwick_loader_api::warn!("R11 off: {off}");
+            enshwick::warn!("R11 off: {off}");
             return;
         }
     };
     match entities::link_server(load, world) {
-        Ok(()) => enshwick_loader_api::info!("R11 server sweeps every 5 s while players are in"),
-        Err(off) => enshwick_loader_api::warn!("R11 server side off: {off}"),
+        Ok(()) => enshwick::info!("R11 server sweeps every 5 s while players are in"),
+        Err(off) => enshwick::warn!("R11 server side off: {off}"),
     }
     if client {
         match entities::link_client(load, &world) {
-            Ok(()) => enshwick_loader_api::info!("R11 client sweeps every 5 s in a game"),
-            Err(off) => enshwick_loader_api::warn!("R11 client side off: {off}"),
+            Ok(()) => enshwick::info!("R11 client sweeps every 5 s in a game"),
+            Err(off) => enshwick::warn!("R11 client side off: {off}"),
         }
     }
 }
@@ -295,7 +293,7 @@ fn entities_link(load: &mut Load<'_>, client: bool) {
 /// Starts a new section of the log for `request`, looking for `values`.
 fn mark(request: &Request<'_>, values: &[u32]) -> Outcome {
     let mark = tooltip::mark(values);
-    enshwick_loader_api::info!(
+    enshwick::info!(
         "===== mark {mark} by {} (values looked for: {values:?}) =====",
         request.player.name
     );
@@ -334,4 +332,4 @@ fn actions(load: &mut Load<'_>) -> Result<(), Off> {
     })
 }
 
-enshwick_loader_api::declare_mod!(Research);
+enshwick::declare_mod!(Research);

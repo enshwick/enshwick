@@ -448,7 +448,7 @@ mod tests {
     use super::*;
 
     const MOD: &str = r#"
-        enshwick_loader_api::manifest!(
+        enshwick::manifest!(
             id: "safes",
             side: BOTH,
             builds: [

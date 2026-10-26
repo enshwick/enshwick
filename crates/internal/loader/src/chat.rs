@@ -17,7 +17,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use enshwick_loader_api::abi::{HookFlags, Status};
+use enshwick::abi::{HookFlags, Status};
 
 use crate::chains::Next;
 use crate::host::Loader;

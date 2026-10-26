@@ -3,17 +3,17 @@
 A mod's settings live in `mod-configs/<id>.toml` beside the game. The loader
 writes the file from the mod's defaults on first start, and the mod reads it
 during `init`. There are two ways to read it: a typed settings struct with
-`#[derive(enshwick_loader_api::Config)]`, or plain serde over a defaults string.
+`#[derive(enshwick::Config)]`, or plain serde over a defaults string.
 
 ## Typed settings
 
-Derive `enshwick_loader_api::Config` on a struct with named fields that also derives
+Derive `enshwick::Config` on a struct with named fields that also derives
 serde's `Deserialize` and `Serialize` and implements `Default`, and call
-[`load.config()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs):
+[`load.config()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs):
 
 ```rust
 /// Furniture comfort settings.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     /// Comfort each piece of furniture gives inside a base, times this factor.
@@ -27,9 +27,9 @@ impl Default for Settings {
     }
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings: Settings = load.config()?;
-    enshwick_loader_api::info!("furniture comfort x{}", settings.multiplier);
+    enshwick::info!("furniture comfort x{}", settings.multiplier);
     Ok(())
 }
 ```
@@ -86,10 +86,10 @@ default. The field's doc comment is its English description wherever no
 translation exists.
 
 ```rust
-use enshwick_loader_api::config::{Config, Stage};
+use enshwick::config::{Config, Stage};
 
 /// Safe settings.
-#[derive(serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
     /// The Safe costs the wooden chest's ingredients times this.
     #[config(startup, range = 1..=100)]
@@ -129,7 +129,7 @@ own settings, never inside the game's save. While a world runs in the
 process, a mod reads that world's settings with its own `client` settings
 over them; with no world, as in the main menu, the template. A mod reads its
 settings as before: when a world loads or stops, the loader raises
-[`Event::SETTINGS_REPLACED`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/abi.rs),
+[`Event::SETTINGS_REPLACED`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs),
 and `on_config_change` gets the world's settings, its `startup` values too:
 they apply when the world loads, with no restart of the game, so a mod applies
 them in its handler: a recipe added with `add_recipe_with` and rebuilt, drops
@@ -152,7 +152,7 @@ are.
 
 ## The schema and the console
 
-[`Config::schema()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/config.rs)
+[`Config::schema()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/config.rs)
 describes every field: key, stage, scope, type, default, range, choices, doc
 comment and text key. `load.config()` hands it to the loader, which keeps it
 for the process; it is the description the loader's screens build on, and
@@ -227,12 +227,12 @@ A file that does not parse turns the mod off at init with serde's message. Add
 being ignored. Add `#[serde(default)]` if a file written by an older version of
 the mod, without a newer key, should still load.
 
-[`enshwick-furniture-comfort`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-furniture-comfort)
+[`enshwick-furniture-comfort`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-furniture-comfort)
 is the example above in full.
 
 ## Untyped settings
 
-[`load.settings(DEFAULTS)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.settings(DEFAULTS)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 reads the same file into any `serde::Deserialize` type. When the file is
 missing, the loader writes `DEFAULTS` there as is, so write `DEFAULTS` as the
 commented file a player should see, and make sure your type accepts it.
@@ -249,21 +249,21 @@ struct Settings {
     altars_per_flame_level: Vec<u8>,
 }
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings: Settings = load.settings(DEFAULTS)?;
-    enshwick_loader_api::info!("table {:?}", settings.altars_per_flame_level);
+    enshwick::info!("table {:?}", settings.altars_per_flame_level);
     Ok(())
 }
 ```
 
 Untyped settings have no validation hook, no join values, no schema for the
 console and the screens, and no `on_config_change`; subscribe to
-[`events::SettingsChanged`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
+[`events::SettingsChanged`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
 and read the file again yourself if you need changes at run time.
 
 ## Changes while the game runs
 
-[`load.on_config_change(|settings: Settings| ...)`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/load.rs)
+[`load.on_config_change(|settings: Settings| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 applies an edited file without a restart:
 
 - the loader looks at every settings file once a second, so the handler runs
@@ -288,7 +288,7 @@ so keep what hooks read in atomics, or swapped whole in an
 use std::sync::atomic::{AtomicU32, Ordering};
 
 /// Comfort settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
     /// Comfort per piece of furniture, times this factor.
     multiplier: f32,
@@ -297,7 +297,7 @@ struct Settings {
 /// Read by the hook on every call, as `f32` bits.
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let settings: Settings = load.config()?;
     MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
     load.on_config_change(|settings: Settings| {
@@ -307,7 +307,7 @@ fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_
 ```
 
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
+[`enshwick-flame-altar-count`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-flame-altar-count/src/lib.rs)
 does with its altar table.
 
 ## Join values
@@ -316,10 +316,10 @@ Some values must be equal on the server and its players, such as a table the
 client's interface also reads. Mark such a field `#[config(sync)]`:
 
 ```rust
-use enshwick_loader_api::config::Config;
+use enshwick::config::Config;
 
 /// Altar settings.
-#[derive(Default, serde::Deserialize, serde::Serialize, enshwick_loader_api::Config)]
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
     /// Altars allowed at each Flame level. A joined player runs with the
     /// server's table.
@@ -374,6 +374,6 @@ is, once its `on_config_change` handler has run, and pushed at the same moment
 to every joined player whose client runs Enshwick: their mod's
 `on_config_change` runs with the new values, without joining again.
 
-[`enshwick-flame-altar-count`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-flame-altar-count)
+[`enshwick-flame-altar-count`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-flame-altar-count)
 keeps its altar table as a join value: the client's building interface asks
 the same function as the server's check.

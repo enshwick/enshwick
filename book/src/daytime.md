@@ -1,10 +1,10 @@
 # Time of day
 
-[`load.clock()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/daytime.rs)
+[`load.clock()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
 returns the
-[`Clock`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/daytime.rs)
+[`Clock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
 of the server's world: the time of day, and setting it.
-[`load.clock_speed()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/daytime.rs)
+[`load.clock_speed()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/daytime.rs)
 returns the mod's `ClockSpeed`, its say in how fast the clock runs. Both are
 `Copy`; get them during `init` and move them into handlers, tasks and
 actions.
@@ -15,11 +15,11 @@ both lengths. While players sleep at night, the game runs the clock up to 60
 times faster.
 
 ```rust
-use enshwick_loader_api::actions::{Action, Arg, Outcome, Value};
+use enshwick::actions::{Action, Arg, Outcome, Value};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let clock = load.clock();
-    let actions = load.actions(enshwick_loader_api::i18n::Texts::default())?;
+    let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("time", "The time of day"), move |_request| match clock.now() {
         Some(now) => Outcome::done(format!("{:05.2} h, {}", now.hours, if now.is_day { "day" } else { "night" })),
         None => Outcome::refused("No world runs"),
@@ -61,9 +61,9 @@ factor, so mods compose, and sleeping still speeds the night up. The loader
 sends a new speed to the clients only when it changes.
 
 ```rust
-use enshwick_loader_api::events::{DayStarted, NightStarted};
+use enshwick::events::{DayStarted, NightStarted};
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let speed = load.clock_speed()?;
     // Short nights: the night runs three times as fast, the day as usual.
     load.on::<NightStarted>(move |()| {

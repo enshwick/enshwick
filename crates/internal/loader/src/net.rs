@@ -30,7 +30,7 @@ use std::time::Instant;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use enshwick_loader_api::abi::{Header, NetMessage, NetMessageFn, Status};
+use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
 
 use crate::host::{Loader, Registered, take};
 
@@ -181,7 +181,7 @@ fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 
 /// The id of mod `id`'s channel `name`.
 fn channel_id(id: &str, name: &str) -> u32 {
-    let id = enshwick_loader_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
+    let id = enshwick_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
     // Zero is the protocol's own.
     id.max(1)
 }
@@ -201,7 +201,7 @@ pub(crate) fn open(
     if !record
         .manifest
         .flags
-        .contains(enshwick_loader_api::abi::ManifestFlags::JOIN)
+        .contains(enshwick::abi::ManifestFlags::JOIN)
     {
         return Err(Status::REFUSED);
     }
@@ -813,7 +813,7 @@ pub(crate) fn send(
     if peer == NetMessage::SERVER {
         return send_to_server(channel, data);
     }
-    let serving = crate::world::hosting() || loader.side == enshwick_loader_api::abi::Side::SERVER;
+    let serving = crate::world::hosting() || loader.side == enshwick::abi::Side::SERVER;
     if !serving {
         return Err(Status::WRONG_THREAD);
     }

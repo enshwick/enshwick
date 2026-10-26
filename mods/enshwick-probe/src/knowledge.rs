@@ -4,11 +4,11 @@
 
 use std::time::Duration;
 
-use enshwick_loader_api::ecs::Entity;
-use enshwick_loader_api::events::{KnowledgeChanged, PlayerDied, QuestCompleted};
-use enshwick_loader_api::knowledge::{Grant, Knowledge, KnowledgeKind, Revoke};
-use enshwick_loader_api::schedule::Scheduler;
-use enshwick_loader_api::{Load, Off};
+use enshwick::ecs::Entity;
+use enshwick::events::{KnowledgeChanged, PlayerDied, QuestCompleted};
+use enshwick::knowledge::{Grant, Knowledge, KnowledgeKind, Revoke};
+use enshwick::schedule::Scheduler;
+use enshwick::{Load, Off};
 
 /// A world counter of the 1.0 game, one of its three.
 const WORLD_COUNTER: u32 = 3_229_540_729;
@@ -27,7 +27,7 @@ pub(crate) struct KnowledgeChecks {
 impl KnowledgeChecks {
     pub(crate) fn new(load: &mut Load<'_>, scheduler: Scheduler) -> Result<Self, Off> {
         load.on::<KnowledgeChanged>(|changed| {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "event: knowledge {} of {} is {}",
                 changed.id,
                 changed.entity,
@@ -35,7 +35,7 @@ impl KnowledgeChecks {
             );
         })?;
         match load.on::<PlayerDied>(|death| {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "event: player {} died, cause {}, at {:?}, killer {:02x?} entity {}, deadly shroud {}, drowned {}",
                 death.entity,
                 death.cause,
@@ -46,14 +46,14 @@ impl KnowledgeChecks {
                 death.drowned
             );
         }) {
-            Ok(()) => enshwick_loader_api::info!("PASS player deaths subscribed"),
-            Err(off) => enshwick_loader_api::warn!("FAIL player deaths: {off}"),
+            Ok(()) => enshwick::info!("PASS player deaths subscribed"),
+            Err(off) => enshwick::warn!("FAIL player deaths: {off}"),
         }
         load.on::<QuestCompleted>(|done| {
-            enshwick_loader_api::info!("event: quest {} completed by {}", done.quest, done.entity);
+            enshwick::info!("event: quest {} completed by {}", done.quest, done.entity);
         })?;
         match load.on_knowledge_input(|request| {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "event: knowledge input {:#x} ({:?} {}) from {}: {:?}, allowed {}",
                 request.id,
                 request.kind,
@@ -64,8 +64,8 @@ impl KnowledgeChecks {
             );
             request.allowed
         }) {
-            Ok(()) => enshwick_loader_api::info!("PASS knowledge input filter registered"),
-            Err(off) => enshwick_loader_api::warn!("FAIL knowledge input filter: {off}"),
+            Ok(()) => enshwick::info!("PASS knowledge input filter registered"),
+            Err(off) => enshwick::warn!("FAIL knowledge input filter: {off}"),
         }
         Ok(Self {
             knowledge: load.knowledge(),
@@ -76,53 +76,53 @@ impl KnowledgeChecks {
     pub(crate) fn run(self) {
         let quests = self.knowledge.quests();
         if quests.is_empty() {
-            enshwick_loader_api::warn!("FAIL quests: none");
+            enshwick::warn!("FAIL quests: none");
         } else {
-            enshwick_loader_api::info!("PASS quests: {}", quests.len());
+            enshwick::info!("PASS quests: {}", quests.len());
         }
         let Some(before) = self.knowledge.world(WORLD_COUNTER) else {
-            enshwick_loader_api::warn!("FAIL knowledge: the world counter does not read");
+            enshwick::warn!("FAIL knowledge: the world counter does not read");
             return;
         };
-        enshwick_loader_api::info!("PASS knowledge reads {before:?}");
+        enshwick::info!("PASS knowledge reads {before:?}");
         match self.knowledge.grant_world(WORLD_COUNTER, Grant::Set) {
             Err(why) => {
-                enshwick_loader_api::info!("PASS a bool grant of a counter is refused: {why}");
+                enshwick::info!("PASS a bool grant of a counter is refused: {why}");
             }
-            Ok(()) => enshwick_loader_api::warn!("FAIL a bool grant of a counter was taken"),
+            Ok(()) => enshwick::warn!("FAIL a bool grant of a counter was taken"),
         }
         match self.knowledge.grant_world(1, Grant::Set) {
-            Err(why) => enshwick_loader_api::info!("PASS an unknown id is refused: {why}"),
-            Ok(()) => enshwick_loader_api::warn!("FAIL an unknown id was taken"),
+            Err(why) => enshwick::info!("PASS an unknown id is refused: {why}"),
+            Ok(()) => enshwick::warn!("FAIL an unknown id was taken"),
         }
         if let Err(why) = self.knowledge.grant_world(WORLD_COUNTER, Grant::Add(1)) {
-            enshwick_loader_api::warn!("FAIL knowledge grant: {why}");
+            enshwick::warn!("FAIL knowledge grant: {why}");
             return;
         }
         self.scheduler
             .after(SETTLE, move || match self.knowledge.world(WORLD_COUNTER) {
                 Some(now) if now.value == before.value.saturating_add(1) => {
-                    enshwick_loader_api::info!("PASS knowledge grant reads {}", now.value);
+                    enshwick::info!("PASS knowledge grant reads {}", now.value);
                     self.revoke(now.value);
                 }
-                other => enshwick_loader_api::warn!("FAIL knowledge grant reads {other:?}"),
+                other => enshwick::warn!("FAIL knowledge grant reads {other:?}"),
             });
         if let Some(&quest) = quests.first() {
             match self.knowledge.grant_account(NOBODY, quest, Grant::Set) {
-                Ok(()) => enshwick_loader_api::info!(
+                Ok(()) => enshwick::info!(
                     "PASS a grant for an account not in the game waits (quest {quest})"
                 ),
-                Err(why) => enshwick_loader_api::warn!("FAIL a grant for an account: {why}"),
+                Err(why) => enshwick::warn!("FAIL a grant for an account: {why}"),
             }
             match self
                 .knowledge
                 .grant_account(NOBODY, WORLD_COUNTER, Grant::Add(1))
             {
-                Err(why) => enshwick_loader_api::info!(
-                    "PASS an account grant of a world id is refused: {why}"
-                ),
+                Err(why) => {
+                    enshwick::info!("PASS an account grant of a world id is refused: {why}")
+                }
                 Ok(()) => {
-                    enshwick_loader_api::warn!("FAIL an account grant of a world id was taken");
+                    enshwick::warn!("FAIL an account grant of a world id was taken");
                 }
             }
         }
@@ -131,20 +131,20 @@ impl KnowledgeChecks {
     /// Takes the world counter's grant back and reads it at once.
     fn revoke(self, granted: u32) {
         if let Err(why) = self.knowledge.revoke_world(WORLD_COUNTER, Revoke::Sub(1)) {
-            enshwick_loader_api::warn!("FAIL knowledge revoke: {why}");
+            enshwick::warn!("FAIL knowledge revoke: {why}");
             return;
         }
         match self.knowledge.world(WORLD_COUNTER) {
             Some(now) if now.value == granted - 1 => {
-                enshwick_loader_api::info!("PASS knowledge revoke reads {}", now.value);
+                enshwick::info!("PASS knowledge revoke reads {}", now.value);
             }
-            other => enshwick_loader_api::warn!("FAIL knowledge revoke reads {other:?}"),
+            other => enshwick::warn!("FAIL knowledge revoke reads {other:?}"),
         }
         match self.knowledge.revoke_world(WORLD_COUNTER, Revoke::Clear) {
             Err(why) => {
-                enshwick_loader_api::info!("PASS a bool revoke of a counter is refused: {why}");
+                enshwick::info!("PASS a bool revoke of a counter is refused: {why}");
             }
-            Ok(()) => enshwick_loader_api::warn!("FAIL a bool revoke of a counter was taken"),
+            Ok(()) => enshwick::warn!("FAIL a bool revoke of a counter was taken"),
         }
     }
 }
@@ -179,6 +179,6 @@ pub(crate) fn command(
         _ => return format!("knowledge {id}: {known:?}"),
     };
     let line = format!("{word} {id} ({:?}): {done:?}; before {known:?}", known.kind);
-    enshwick_loader_api::info!("{line}");
+    enshwick::info!("{line}");
     line
 }

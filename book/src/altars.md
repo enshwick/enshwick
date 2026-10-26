@@ -2,17 +2,17 @@
 
 Flame Altars are game data, so the platform reads them for every mod. A mod
 asks for them during `init` with
-[`load.altars()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/altars.rs)
+[`load.altars()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
 and gets a `Copy` handle to keep in its state:
 
 ```rust
-use enshwick_loader_api::events::AltarsChanged;
+use enshwick::events::AltarsChanged;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let altars = load.altars()?;
     load.on::<AltarsChanged>(move |()| {
         for altar in altars.list() {
-            enshwick_loader_api::info!(
+            enshwick::info!(
                 "altar {} level {} zone {:?}",
                 altar.entity.0,
                 altar.level,
@@ -57,7 +57,7 @@ the bounds of all of them; `Base::contains` tells whether a cell lies in one
 of its zones. `bases_of` does the same for a list a mod already holds.
 
 ```rust
-fn based(altars: &enshwick_loader_api::altars::Altars, cell: [i64; 3]) -> bool {
+fn based(altars: &enshwick::altars::Altars, cell: [i64; 3]) -> bool {
     altars.bases().iter().any(|base| base.contains(cell))
 }
 ```
@@ -65,7 +65,7 @@ fn based(altars: &enshwick_loader_api::altars::Altars, cell: [i64; 3]) -> bool {
 ## Sizing the zones
 
 One mod may size the zones:
-[`load.control_altar_zones()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/altars.rs)
+[`load.control_altar_zones()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
 makes it the one, and a second mod asking is refused. It hands the loader a
 `ZoneSize` per altar: the vanilla zone of the altar's level grown by `grow`
 cells on every horizontal side and made `height` cells tall. The loader turns
@@ -74,10 +74,10 @@ server's next zone pass, while the altar stays at that level; an altar without
 a size, or at another level, keeps its vanilla zone.
 
 ```rust
-use enshwick_loader_api::altars::ZoneSize;
-use enshwick_loader_api::events::AltarsChanged;
+use enshwick::altars::ZoneSize;
+use enshwick::events::AltarsChanged;
 
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let control = load.control_altar_zones()?;
     load.on::<AltarsChanged>(move |()| {
         let sizes: Vec<ZoneSize> = control
@@ -118,13 +118,13 @@ the two zone limits.
 
 Vanilla accepts a placed object only when both corners of its box lie in one
 zone.
-[`load.on_zone_check`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/altars.rs)
+[`load.on_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
 runs a filter when the game refuses one for that reason, with the zones, the
 object's box and the margin in 32.32 fixed-point metres; returning `true`
 accepts it after all.
 
 ```rust
-fn init(load: &mut enshwick_loader_api::Load<'_>) -> Result<(), enshwick_loader_api::Off> {
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_zone_check(|check| {
         check.zones.iter().any(|zone| {
             (0..3).all(|a| zone.min[a] - check.margin <= check.object.min[a] && check.object.max[a] < zone.max[a] + check.margin)
