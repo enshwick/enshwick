@@ -513,7 +513,7 @@ mod tests {
             crate::reflect::Image::parse(bytes, crate::reflect::Layout::File, None).unwrap()
         });
         let reflections = images.each_ref().map(Reflection::scan);
-        for row in enshwick::__private::GAME_NAMES {
+        for row in crate::game_names::GAME_NAMES {
             let found = reflections.iter().any(|reflection| {
                 reflection.type_info(row.game_type).is_ok_and(|info| {
                     row.game_member.is_empty()

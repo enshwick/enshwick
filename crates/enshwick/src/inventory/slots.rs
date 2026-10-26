@@ -171,7 +171,7 @@ impl ItemInfo {
 
 /// A value with its maximum on an item's own entity, as the item's slot
 /// shows it: its durability, or its meter (see
-/// [`Meter`](crate::content::items::Meter)).
+/// [`FuelSetup`](crate::content::items::FuelSetup)).
 ///
 /// The name is enshwick's: the game's durability or fuel value with its
 /// maximum.

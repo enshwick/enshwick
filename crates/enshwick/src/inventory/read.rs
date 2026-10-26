@@ -612,7 +612,7 @@ impl Reader<'_> {
     }
 
     /// The meter of an item's own entity (see
-    /// [`Meter`](crate::content::items::Meter)), as clients see it; `None`
+    /// [`FuelSetup`](crate::content::items::FuelSetup)), as clients see it; `None`
     /// for an item without one.
     ///
     /// # Examples

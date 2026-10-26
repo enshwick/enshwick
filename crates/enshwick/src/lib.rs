@@ -88,7 +88,6 @@ pub mod entity_data;
 pub mod events;
 pub(crate) mod fresh;
 pub mod game_events;
-mod game_names;
 pub mod game_settings;
 mod hook;
 mod host;
@@ -290,7 +289,6 @@ pub mod __private {
     use crate::{Host, Load, Mod};
 
     pub use crate::engine_ids::ALL as ENGINE_IDS;
-    pub use crate::game_names::{GAME_NAMES, GameName};
 
     /// Each experience source with its catalogue id, for the loader's
     /// experience rates.

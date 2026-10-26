@@ -5,7 +5,7 @@
 
 /// One API name and the game's item it stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct GameName {
+pub(crate) struct GameName {
     /// The API type.
     pub api_type: &'static str,
     /// Its field, variant or constant; empty for the type itself.
@@ -56,22 +56,22 @@ macro_rules! constant {
     }};
 }
 
-use crate::affixes::{ItemCategoryMask, ItemRarity};
-use crate::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
-use crate::content::changes::Field;
-use crate::content::items::{FuelSetup, ImpactUiValue};
-use crate::damage::DamageTypeNew;
-use crate::daytime::TimeOfDay;
-use crate::effects::NpcCommandType;
-use crate::inventory::{InventoryCategory, ItemInfo};
-use crate::knowledge::{KnowledgeType, Known};
-use crate::loot::{Container, InteractionOfferRuntime};
-use crate::terrain::TerrainTerraformingConfig;
-use crate::weather::WeatherPhenomenonEffect;
+use enshwick::affixes::{ItemCategoryMask, ItemRarity};
+use enshwick::buffs::{Buff, BuffSlotType, BuffType, BuffTypeId};
+use enshwick::content::changes::Field;
+use enshwick::content::items::{FuelSetup, ImpactUiValue};
+use enshwick::damage::DamageTypeNew;
+use enshwick::daytime::TimeOfDay;
+use enshwick::effects::NpcCommandType;
+use enshwick::inventory::{InventoryCategory, ItemInfo};
+use enshwick::knowledge::{KnowledgeType, Known};
+use enshwick::loot::{Container, InteractionOfferRuntime};
+use enshwick::terrain::TerrainTerraformingConfig;
+use enshwick::weather::WeatherPhenomenonEffect;
 
 /// Every API name the game names itself outside the catalogue's ids, which
 /// hold the typed events, their values and the game settings.
-pub const GAME_NAMES: &[GameName] = &[
+pub(crate) const GAME_NAMES: &[GameName] = &[
     ty!(DamageTypeNew => "keen::impact::DamageTypeNew"),
     constant!(DamageTypeNew::PhysicalCut => "keen::impact::DamageTypeNew"."Physical_Cut"),
     constant!(DamageTypeNew::PhysicalPierce => "keen::impact::DamageTypeNew"."Physical_Pierce"),
