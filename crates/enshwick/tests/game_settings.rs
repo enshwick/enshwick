@@ -10,47 +10,73 @@ mod tests {
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
-    const TYPE: &str = "keen::ecs::GameSettings";
-    /// The layout of the 1.0 build: reflected name and offset.
+    const TYPE: &str = "game_settings";
+    /// The layout of the 1.0 build: id and offset.
     const FIELDS: [(&str, u64); 38] = [
-        ("playerHealthFactor", 0x00),
-        ("playerManaFactor", 0x04),
-        ("playerStaminaFactor", 0x08),
-        ("playerBodyHeatFactor", 0x0c),
-        ("playerDivingTimeFactor", 0x10),
-        ("enableDurability", 0x14),
-        ("enableStarvingDebuff", 0x15),
-        ("foodBuffDurationFactor", 0x18),
-        ("fromHungerToStarving", 0x20),
-        ("shroudTimeFactor", 0x28),
-        ("tombstoneMode", 0x2c),
-        ("enableGliderTurbulences", 0x2d),
-        ("weatherFrequency", 0x2e),
-        ("fishingDifficulty", 0x2f),
-        ("miningDamageFactor", 0x30),
-        ("plantGrowthSpeedFactor", 0x34),
-        ("resourceDropStackAmountFactor", 0x38),
-        ("factoryProductionSpeedFactor", 0x3c),
-        ("perkUpgradeRecyclingFactor", 0x40),
-        ("perkCostFactor", 0x44),
-        ("experienceCombatFactor", 0x48),
-        ("experienceMiningFactor", 0x4c),
-        ("experienceExplorationQuestsFactor", 0x50),
-        ("randomSpawnerAmount", 0x54),
-        ("aggroPoolAmount", 0x55),
-        ("enemyDamageFactor", 0x58),
-        ("enemyHealthFactor", 0x5c),
-        ("enemyStaminaFactor", 0x60),
-        ("enemyPerceptionRangeFactor", 0x64),
-        ("bossDamageFactor", 0x68),
-        ("bossHealthFactor", 0x6c),
-        ("threatBonus", 0x70),
-        ("pacifyAllEnemies", 0x74),
-        ("tamingStartleRepercussion", 0x75),
-        ("dayTimeDuration", 0x78),
-        ("nightTimeDuration", 0x80),
-        ("curseModifier", 0x88),
-        ("flameLevelFogRemoval", 0x89),
+        ("game_settings.player_health_factor", 0x00),
+        ("game_settings.player_mana_factor", 0x04),
+        ("game_settings.player_stamina_factor", 0x08),
+        ("game_settings.player_body_heat_factor", 0x0c),
+        ("game_settings.player_diving_time_factor", 0x10),
+        ("game_settings.enable_durability", 0x14),
+        ("game_settings.enable_starving_debuff", 0x15),
+        ("game_settings.food_buff_duration_factor", 0x18),
+        ("game_settings.from_hunger_to_starving", 0x20),
+        ("game_settings.shroud_time_factor", 0x28),
+        ("game_settings.tombstone_mode", 0x2c),
+        ("game_settings.enable_glider_turbulences", 0x2d),
+        ("game_settings.weather_frequency", 0x2e),
+        ("game_settings.fishing_difficulty", 0x2f),
+        ("game_settings.mining_damage_factor", 0x30),
+        ("game_settings.plant_growth_speed_factor", 0x34),
+        ("game_settings.resource_drop_stack_amount_factor", 0x38),
+        ("game_settings.factory_production_speed_factor", 0x3c),
+        ("game_settings.perk_upgrade_recycling_factor", 0x40),
+        ("game_settings.perk_cost_factor", 0x44),
+        ("game_settings.experience_combat_factor", 0x48),
+        ("game_settings.experience_mining_factor", 0x4c),
+        ("game_settings.experience_exploration_quests_factor", 0x50),
+        ("game_settings.random_spawner_amount", 0x54),
+        ("game_settings.aggro_pool_amount", 0x55),
+        ("game_settings.enemy_damage_factor", 0x58),
+        ("game_settings.enemy_health_factor", 0x5c),
+        ("game_settings.enemy_stamina_factor", 0x60),
+        ("game_settings.enemy_perception_range_factor", 0x64),
+        ("game_settings.boss_damage_factor", 0x68),
+        ("game_settings.boss_health_factor", 0x6c),
+        ("game_settings.threat_bonus", 0x70),
+        ("game_settings.pacify_all_enemies", 0x74),
+        ("game_settings.taming_startle_repercussion", 0x75),
+        ("game_settings.day_time_duration", 0x78),
+        ("game_settings.night_time_duration", 0x80),
+        ("game_settings.curse_modifier", 0x88),
+        ("game_settings.flame_level_fog_removal", 0x89),
+    ];
+
+    /// The fields that are factors, 1 for the game's normal value.
+    const FACTORS: [&str; 22] = [
+        "game_settings.player_health_factor",
+        "game_settings.player_mana_factor",
+        "game_settings.player_stamina_factor",
+        "game_settings.player_body_heat_factor",
+        "game_settings.player_diving_time_factor",
+        "game_settings.food_buff_duration_factor",
+        "game_settings.shroud_time_factor",
+        "game_settings.mining_damage_factor",
+        "game_settings.plant_growth_speed_factor",
+        "game_settings.resource_drop_stack_amount_factor",
+        "game_settings.factory_production_speed_factor",
+        "game_settings.perk_upgrade_recycling_factor",
+        "game_settings.perk_cost_factor",
+        "game_settings.experience_combat_factor",
+        "game_settings.experience_mining_factor",
+        "game_settings.experience_exploration_quests_factor",
+        "game_settings.enemy_damage_factor",
+        "game_settings.enemy_health_factor",
+        "game_settings.enemy_stamina_factor",
+        "game_settings.enemy_perception_range_factor",
+        "game_settings.boss_damage_factor",
+        "game_settings.boss_health_factor",
     ];
 
     static SETTINGS: OnceLock<GameSettings> = OnceLock::new();
@@ -74,7 +100,7 @@ mod tests {
         let mut bytes = vec![0u8; 144];
         for (name, at) in FIELDS {
             let at = usize::try_from(at).unwrap();
-            if name.ends_with("Factor") {
+            if FACTORS.contains(&name) {
                 bytes[at..at + 4].copy_from_slice(&1.0f32.to_le_bytes());
             }
         }
@@ -90,7 +116,7 @@ mod tests {
     fn settings_read_typed_and_change_in_place() {
         let mut host = enshwick::test::FakeHost::new().type_size(TYPE, 144);
         for (name, at) in FIELDS {
-            host = host.field_offset(TYPE, name, at);
+            host = host.constant(name, at);
         }
         let loader = host.install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Tuning)`.

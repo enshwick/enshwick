@@ -13,18 +13,19 @@
 //! resource the game holds. The game keeps reading the first build's
 //! address, so a rebuild must come out the same length.
 
-use crate::mod_index::ModIndex;
-use crate::pinned;
 use core::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Side, Status};
+use enshwick::abi::{HookFlags, ResourceKey, ResourcePatchFn, Status};
 use enshwick::raw::{read_at, write_at};
+use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -75,197 +76,8 @@ struct State {
     built_by: Vec<ModIndex>,
 }
 
-/// Mod texts while mods initialise: tag id, language, text.
-static PENDING_TEXTS: Mutex<Vec<(u32, u32, String)>> = Mutex::new(Vec::new());
-/// Mod texts once sealed: tag id to `(language, text)`, read without a lock.
-static TEXTS: OnceLock<std::collections::HashMap<u32, Vec<(u32, &'static str)>>> = OnceLock::new();
-// SAFETY: `TextFn` is the signature of the build table's `text.lookup`, and
-// `seal_texts` uses this slot only as that function's next.
-static TEXT_NEXT: Next<TextFn> = unsafe { Next::new() };
-// SAFETY: `TextFn` is the signature of the build table's
-// `text.lookup_english`, and `seal_texts` uses this slot only as that
-// function's next.
-static ENGLISH_NEXT: Next<TextFn> = unsafe { Next::new() };
-static POOL_LANGUAGE: AtomicUsize = AtomicUsize::new(usize::MAX);
-/// The language the game last asked a text in.
-static LANGUAGE: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(ENGLISH);
-/// The English the game falls back to.
-const ENGLISH: u32 = 1;
-
-type TextFn =
-    unsafe extern "system" fn(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3];
-
-/// The language the game shows its texts in, as far as the loader saw.
-pub(crate) fn language() -> enshwick::i18n::Language {
-    enshwick::i18n::Language(LANGUAGE.load(Ordering::Relaxed))
-}
-
-/// Registers a mod text; refused after init.
-pub(crate) fn add_text(id: u32, language: u32, text: &str) -> Status {
-    if TEXTS.get().is_some() {
-        return Status::TOO_LATE;
-    }
-    PENDING_TEXTS.relock().push((id, language, text.to_owned()));
-    Status::OK
-}
-
-/// UTF-8 text the loader hands the game as a text lookup's answer: its
-/// address and length.
-///
-/// The bytes stay readable at that address for as long as the game may keep
-/// the view; their maker says how. A view may outlive its text: a notice
-/// slot is written over in place while the game may still hold an older
-/// view of it, which then reads the slot's newer text (or a mix of the two
-/// cut short at the older length) but never freed memory.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Handed {
-    at: *const u8,
-    len: usize,
-}
-
-impl Handed {
-    /// The view of `len` bytes at `at`.
-    pub(crate) const fn new(at: *const u8, len: usize) -> Self {
-        Self { at, len }
-    }
-
-    /// Where the text starts.
-    #[cfg(test)]
-    pub(crate) const fn at(self) -> *const u8 {
-        self.at
-    }
-
-    /// The view of a text that lives for the process.
-    pub(crate) const fn of(text: &'static str) -> Self {
-        Self::new(text.as_ptr(), text.len())
-    }
-}
-
-/// The text of `id` for `language`: its own, else any-language, else English.
-fn text_for(id: u32, language: u32) -> Option<Handed> {
-    if let Some(text) = crate::notices::text(id) {
-        return Some(text);
-    }
-    if let Some(text) = crate::ui::text(id) {
-        return Some(Handed::of(text));
-    }
-    let texts = TEXTS.get()?.get(&id)?;
-    let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
-    pick(language)
-        .or_else(|| pick(0))
-        .or_else(|| pick(ENGLISH))
-        .map(Handed::of)
-}
-
-/// Answers a text lookup with `text`.
-///
-/// # Safety
-///
-/// - `out` is null or the lookup's writable out record of three `u64`,
-///   which nothing else touches during the call.
-unsafe fn answer(out: *mut [u64; 3], text: Handed) -> *mut [u64; 3] {
-    if !out.is_null() {
-        let record = [0, text.at.expose_provenance() as u64, text.len as u64];
-        // SAFETY: `out` is non-null by the check before it, and the caller
-        // guarantees the lookup's writable out record: error 0, the UTF-8
-        // text and its length.
-        unsafe { write_at(out.cast(), 0, record) };
-    }
-    out
-}
-
-/// The mod texts' switch.
-static TEXTS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("mod texts");
 /// The served resources' switch.
 static RESOURCES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("served resources");
-
-unsafe extern "system" fn lookup(out: *mut [u64; 3], pool: *mut u8, id: u32) -> *mut [u64; 3] {
-    let found = TEXTS_FUSE.run("the text lookup", || {
-        let offset = POOL_LANGUAGE.load(Ordering::Relaxed);
-        let language = if pool.is_null() || offset == usize::MAX {
-            ENGLISH
-        } else {
-            // SAFETY: `pool` is non-null by the check before it and is the
-            // lookup's text pool; its u32 current language sits at the build
-            // table's `text.pool_language` offset.
-            unsafe { read_at::<u32>(pool, offset) }
-        };
-        LANGUAGE.store(language, Ordering::Relaxed);
-        text_for(id, language)
-    });
-    match found.flatten() {
-        // SAFETY: `out` is the lookup's own out record argument, null or
-        // writable for the call.
-        Some(text) => unsafe { answer(out, text) },
-        // SAFETY: this detour runs only as the `text.lookup` link, so the
-        // slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        None => unsafe { TEXT_NEXT.get()(out, pool, id) },
-    }
-}
-
-unsafe extern "system" fn lookup_english(
-    out: *mut [u64; 3],
-    pool: *mut u8,
-    id: u32,
-) -> *mut [u64; 3] {
-    match TEXTS_FUSE
-        .run("the English text lookup", || text_for(id, ENGLISH))
-        .flatten()
-    {
-        // SAFETY: `out` is the lookup's own out record argument, null or
-        // writable for the call.
-        Some(text) => unsafe { answer(out, text) },
-        // SAFETY: this detour runs only as the `text.lookup_english` link, so
-        // the slot holds the next function of that signature; the game's
-        // arguments pass unchanged.
-        None => unsafe { ENGLISH_NEXT.get()(out, pool, id) },
-    }
-}
-
-/// Seals the mod texts and links the client's text lookups when there are any.
-fn seal_texts(loader: &'static Loader) {
-    let pending = std::mem::take(&mut *PENDING_TEXTS.relock());
-    let count = pending.len();
-    let mut texts: std::collections::HashMap<u32, Vec<(u32, &'static str)>> =
-        std::collections::HashMap::new();
-    for (id, language, text) in pending {
-        let text: &'static str = Box::leak(text.into_boxed_str());
-        texts.entry(id).or_default().push((language, text));
-    }
-    // The client always links its lookups, for the loader's notices.
-    if TEXTS.set(texts).is_err() || (count == 0 && loader.side != Side::CLIENT) {
-        return;
-    }
-    // Only the client shows text; the server has no lookups to link.
-    let (Some(lookup_rva), Some(english_rva), Some(offset)) = (
-        loader.build.symbol(pinned::text::LOOKUP.id()),
-        loader.build.symbol(pinned::text::LOOKUP_ENGLISH.id()),
-        loader.build.constant(pinned::text::POOL_LANGUAGE.id()),
-    ) else {
-        return;
-    };
-    POOL_LANGUAGE.store(
-        usize::try_from(offset).unwrap_or(usize::MAX),
-        Ordering::Relaxed,
-    );
-    let base = loader.base;
-    loader.link_feature(
-        "mod texts",
-        Some(base + lookup_rva),
-        &TEXT_NEXT,
-        lookup as TextFn,
-        HookFlags::NONE,
-    );
-    loader.link_feature(
-        "mod English texts",
-        Some(base + english_rva),
-        &ENGLISH_NEXT,
-        lookup_english as TextFn,
-        HookFlags::NONE,
-    );
-    crate::log!(INFO, "{count} texts from mods");
-}
 
 /// Registrations while mods initialise.
 static PENDING: Mutex<Vec<Served>> = Mutex::new(Vec::new());
@@ -441,6 +253,7 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
         serve_stand_ins(&mut served, items, registry)
     });
     let changed = serve_changes(&mut served, crate::data_changes::serve(loader));
+    let rated = serve_rates(&mut served, crate::rate_links::recipe_patch(loader));
     let orphans = aliases
         .keys()
         .filter(|guid| !served.iter().any(|s| s.key.guid == **guid))
@@ -449,11 +262,11 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let _first = RENAMES.set(renames);
     if SERVED_LIST.set(served.into_boxed_slice()).is_err()
         || ALIASES.set(aliases).is_err()
-        || count + recorded + renames.len() + standing + changed == 0
+        || count + recorded + renames.len() + standing + changed + rated == 0
     {
         return;
     }
-    if served_recipes() {
+    if mods_serve_recipes() {
         crate::code::lift_workshop_limit(loader);
     }
     let none = HookFlags::NONE;
@@ -537,6 +350,36 @@ fn serve_stand_ins(
         }),
     }
     count
+}
+
+/// Adds the loader's patch for the recipe output rates to `served`, last on
+/// the recipe registry, after every mod's and every data change, and keeps
+/// the registry's base, since a changed factor rebuilds it; how many keys.
+fn serve_rates(served: &mut Vec<Served>, patch: Option<ResourcePatchFn>) -> usize {
+    let Some(apply) = patch else {
+        return 0;
+    };
+    let key = recipe_registry();
+    let patch = Patch {
+        owner: ModIndex::LOADER,
+        apply,
+        user: 0,
+    };
+    match served.iter_mut().find(|s| s.key == key) {
+        Some(entry) => {
+            entry.patches.push(patch);
+            entry.keeps_base.store(true, Ordering::Relaxed);
+        }
+        None => served.push(Served {
+            key,
+            base: key,
+            patches: vec![patch],
+            keeps_base: AtomicBool::new(true),
+            state: Mutex::new(State::default()),
+            rebuilding: Mutex::new(()),
+        }),
+    }
+    1
 }
 
 /// Adds the loader's patches of changed vanilla values to `served`: first
@@ -699,7 +542,7 @@ fn find(key: &ResourceKey) -> Option<(usize, &'static Served)> {
 }
 
 /// The game's recipe registry.
-fn recipe_registry() -> ResourceKey {
+pub(crate) fn recipe_registry() -> ResourceKey {
     use enshwick::content::recipes::RECIPE_REGISTRY;
 
     use crate::catalogue::types;
@@ -712,6 +555,16 @@ pub(crate) fn served_recipes() -> bool {
     SERVED_LIST
         .get()
         .is_some_and(|served| serves(served, &recipe_registry(), mod_on))
+}
+
+/// Whether mods, not the loader's own changes of values alone, serve the
+/// recipe registry: only they add recipes past a workshop's vanilla count.
+fn mods_serve_recipes() -> bool {
+    SERVED_LIST.get().is_some_and(|served| {
+        serves(served, &recipe_registry(), |owner| {
+            !owner.is_loader() && mod_on(owner)
+        })
+    })
 }
 
 /// Whether `served` holds `key` with a patch of a mod `on` names and a build
@@ -1056,115 +909,7 @@ unsafe extern "system" fn key_of(out: *mut u8, database: *mut u8, handle: u32) -
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod tests;
+mod texts;
 
-    unsafe extern "system" fn add_one(
-        base: *const u8,
-        base_len: usize,
-        _user: *mut c_void,
-        out: *mut *const u8,
-        out_len: *mut usize,
-    ) -> Status {
-        // SAFETY: `base` holds `base_len` bytes for the call.
-        let mut built = unsafe { core::slice::from_raw_parts(base, base_len) }.to_vec();
-        built.push(1);
-        let built: &'static [u8] = Box::leak(built.into_boxed_slice());
-        // SAFETY: `run_patches` passes `out` pointing at a local
-        // `*const u8`, writable for the call.
-        unsafe { out.write(built.as_ptr()) };
-        // SAFETY: `run_patches` passes `out_len` pointing at a local
-        // `usize`, writable for the call.
-        unsafe { out_len.write(built.len()) };
-        Status::OK
-    }
-
-    #[test]
-    fn a_rebuild_runs_the_mods_of_the_first_build_although_they_are_off() {
-        let key = ResourceKey {
-            guid: [0; 16],
-            type_hash: 1,
-            part: 0,
-        };
-        let entry = Served {
-            key,
-            base: key,
-            patches: [3, 4]
-                .map(|owner| Patch {
-                    owner: ModIndex::new(owner),
-                    apply: add_one,
-                    user: 0,
-                })
-                .into(),
-            keeps_base: AtomicBool::new(true),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        };
-        let base = [7u8; 4];
-        let at = base.as_ptr().expose_provenance();
-        // No loader runs here, so every mod reads as off.
-        assert!(run_patches(&entry, at, base.len(), None).is_none());
-        let both = [ModIndex::new(3), ModIndex::new(4)];
-        let (_, len, by) = run_patches(&entry, at, base.len(), Some(&both)).unwrap();
-        assert_eq!((len, by), (6, both.to_vec()));
-    }
-
-    unsafe extern "system" fn no_patch(
-        _: *const u8,
-        _: usize,
-        _: *mut c_void,
-        _: *mut *const u8,
-        _: *mut usize,
-    ) -> Status {
-        Status::OK
-    }
-
-    fn served_by(key: ResourceKey, owners: &[usize]) -> Served {
-        Served {
-            key,
-            base: key,
-            patches: owners
-                .iter()
-                .map(|&owner| Patch {
-                    owner: ModIndex::new(owner),
-                    apply: no_patch,
-                    user: 0,
-                })
-                .collect(),
-            keeps_base: AtomicBool::new(false),
-            state: Mutex::new(State::default()),
-            rebuilding: Mutex::new(()),
-        }
-    }
-
-    #[test]
-    fn a_resource_counts_as_served_only_while_a_mod_is_on_and_it_built() {
-        let key = recipe_registry();
-        let served = [served_by(key, &[1, 2])];
-        assert!(serves(&served, &key, |owner| owner == ModIndex::new(2)));
-        assert!(!serves(&served, &key, |_| false));
-        served[0].state.relock().failed = true;
-        assert!(!serves(&served, &key, |_| true));
-        let other = ResourceKey { part: 1, ..key };
-        assert!(!serves(&[served_by(other, &[1])], &key, |_| true));
-    }
-
-    #[test]
-    fn a_rebuild_writes_only_the_bytes_that_differ() {
-        let mut held = vec![1u8, 2, 3, 4, 5];
-        let new = [1u8, 9, 3, 4, 7];
-        let changed = write_differences(
-            held.as_mut_ptr().expose_provenance(),
-            new.as_ptr().expose_provenance(),
-            new.len(),
-        );
-        assert_eq!(changed, 2);
-        assert_eq!(held, new);
-        let again = write_differences(
-            held.as_mut_ptr().expose_provenance(),
-            new.as_ptr().expose_provenance(),
-            new.len(),
-        );
-        assert_eq!(again, 0);
-    }
-}
+pub(crate) use texts::{Handed, add_text, language};
