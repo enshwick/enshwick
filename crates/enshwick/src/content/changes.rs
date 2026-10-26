@@ -22,8 +22,10 @@ use crate::content::Guid;
 use crate::{Load, Off};
 
 mod items;
+mod live;
 
 pub use items::{ItemTraits, Items, ItemsChange};
+pub use live::{ChangeHandle, SetChangeError, Target};
 
 /// The largest factor a [`Value::Times`] takes.
 pub const MAX_FACTOR: f64 = 100.0;
@@ -304,6 +306,22 @@ impl Field {
         value.clamp(low, high)
     }
 
+    /// Whether players' games read the field, so every side needs the same
+    /// change: an item's or a recipe's; loot only the server rolls.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::Field;
+    ///
+    /// assert!(Field::MaxStackSize.seen_by_clients());
+    /// assert!(!Field::SpawnProbability.seen_by_clients());
+    /// ```
+    #[must_use]
+    pub const fn seen_by_clients(self) -> bool {
+        !matches!(self.entry(), Entry::Loot)
+    }
+
     /// The field's number in the ABI.
     #[must_use]
     pub const fn to_abi(self) -> DataField {
@@ -455,6 +473,13 @@ pub enum ValueError {
         value: f64,
         /// The step.
         step: f64,
+    },
+    /// A field whose change alters a resource's length, which a change set
+    /// after init cannot.
+    #[error("{field} is no field a mod sets after init: its change alters a recipe's length")]
+    NotLive {
+        /// The field.
+        field: Field,
     },
     /// A selection of items for a field it does not reach.
     #[error("{field} is no field a selection of items changes")]

@@ -32,9 +32,9 @@ use build::{
     type_size,
 };
 use content::{
-    add_text, change_data, content_read, content_serve, entity_data_open, game_text, icons_ready,
-    item_data_get, item_data_open, item_data_set, rebuild_resource, recipe_disabled, recipe_kind,
-    recipe_rule, resource_read, serve_resource,
+    add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
+    game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
+    recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
 };
 use gameplay::{
     account_knowledge, altar_limit, altar_limit_filter, altar_zone_filter, altar_zones_changed,
@@ -316,6 +316,9 @@ pub(crate) struct DataChanges {
     pub(crate) one: Vec<(crate::content::changes::Change, String)>,
     /// Changes of every item a selection picks.
     pub(crate) items: Vec<(crate::content::changes::ItemsChange, String)>,
+    /// Changes the mod sets later, numbered from 1 in this order, with
+    /// the value in force.
+    pub(crate) live: Vec<crate::test::content::LiveChange>,
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -639,4 +642,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     altar_limit_filter,
     base_limit,
     voxel_read,
+    declare_change,
+    set_change,
 };

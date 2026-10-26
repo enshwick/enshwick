@@ -74,7 +74,7 @@ impl Items {
     }
 
     /// The selection's number in the ABI and its categories.
-    const fn to_abi(self) -> (DataSelect, u32) {
+    pub(super) const fn to_abi(self) -> (DataSelect, u32) {
         match self {
             Self::Category(mask) => (DataSelect::CATEGORY, mask.0),
             Self::Stackable => (DataSelect::STACKABLE, 0),
