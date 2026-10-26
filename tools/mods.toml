@@ -20,8 +20,8 @@ package = "enshwick-building-materials"
 repository = "enshwick/mod-building-materials"
 
 [[mod]]
-package = "enshwick-flame-altar-count"
-repository = "enshwick/mod-flame-altar-count"
+package = "enshwick-more-altars"
+repository = "enshwick/mod-more-altars"
 
 [[mod]]
 package = "enshwick-flame-altar-zones"
