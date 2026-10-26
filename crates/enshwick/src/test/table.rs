@@ -418,6 +418,7 @@ pub(crate) fn put_list<T: Copy>(
     Status::OK
 }
 
+/// The table every installed fake answers through.
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),

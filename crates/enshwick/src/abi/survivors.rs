@@ -186,10 +186,11 @@ impl Summon {
 pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut c_void) -> u8;
 
 /// The client's survivor menu merging the statuses of every entity of one
-/// survivor: the survivor, `count` status bytes at `statuses`, valid for the
-/// call, and the pointer given at registration; returns
-/// [`SURVIVOR_STATUS_SET`] or-ed with the byte to show, or 0 to leave the
-/// game's.
+/// survivor.
+///
+/// The survivor, `count` status bytes at `statuses`, valid for the call, and
+/// the pointer given at registration; returns [`SURVIVOR_STATUS_SET`] or-ed
+/// with the byte to show, or 0 to leave the game's.
 pub type SurvivorStatusFn = unsafe extern "system" fn(
     survivor: u32,
     statuses: *const u8,

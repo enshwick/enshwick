@@ -16,6 +16,7 @@
 //! before any item names it. Until both have happened [`ready`] stays false
 //! and items keep their vanilla icons.
 
+use crate::pinned::{self, Symbol};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -24,36 +25,34 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
+use crate::catalogue::types::UI_IMAGE;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "textures.keys",
-    "textures.registry_fill",
-    "textures.registry_listed",
-    "textures.registry_listed_at",
-    "textures.request",
-    "textures.request_context",
-    "textures.request_hash",
-    "textures.request_offset",
-    "textures.request_post",
-    "textures.request_ring",
-    "textures.request_signal",
-    "textures.request_size",
-    "textures.ring_event",
-    "textures.ring_head",
-    "textures.ring_last",
-    "textures.ring_records",
-    "textures.ring_tail",
-    "textures.ring_tail_next",
-    "textures.signal",
+    pinned::textures::KEYS.id(),
+    pinned::textures::REGISTRY_FILL.id(),
+    pinned::textures::REGISTRY_LISTED.id(),
+    pinned::textures::REGISTRY_LISTED_AT.id(),
+    pinned::textures::REQUEST.id(),
+    pinned::textures::REQUEST_CONTEXT.id(),
+    pinned::textures::REQUEST_HASH.id(),
+    pinned::textures::REQUEST_OFFSET.id(),
+    pinned::textures::REQUEST_POST.id(),
+    pinned::textures::REQUEST_RING.id(),
+    pinned::textures::REQUEST_SIGNAL.id(),
+    pinned::textures::REQUEST_SIZE.id(),
+    pinned::textures::RING_EVENT.id(),
+    pinned::textures::RING_HEAD.id(),
+    pinned::textures::RING_LAST.id(),
+    pinned::textures::RING_RECORDS.id(),
+    pinned::textures::RING_TAIL.id(),
+    pinned::textures::RING_TAIL_NEXT.id(),
+    pinned::textures::SIGNAL.id(),
 ];
 
-/// The type hash of the client's UI image resource, which items name in
-/// `iconImage` and the UI registry lists.
-pub(crate) const UI_IMAGE: u32 = 0xf9e8_6997;
 /// A served content hash's last word, so it never meets one of the game's
 /// by chance.
 const MARK: u32 = 0x4b57_4845;
@@ -139,7 +138,7 @@ struct Layout {
 
 /// Whether the eight bytes at `symbol` are the build table's
 /// `<symbol>.bytes`.
-fn code_matches(loader: &Loader, symbol: &str) -> bool {
+fn code_matches(loader: &Loader, symbol: Symbol) -> bool {
     let bytes = loader.build.constant(&format!("{symbol}.bytes"));
     let (Some(address), Some(expected)) = (loader.address(symbol), bytes) else {
         return false;
@@ -158,24 +157,24 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
             let checks = [
-                "textures.request",
-                "textures.request_ring",
-                "textures.request_post",
-                "textures.request_signal",
-                "textures.keys",
-                "textures.registry_fill",
-                "textures.registry_listed_at",
-                "textures.signal",
+                pinned::textures::REQUEST,
+                pinned::textures::REQUEST_RING,
+                pinned::textures::REQUEST_POST,
+                pinned::textures::REQUEST_SIGNAL,
+                pinned::textures::KEYS,
+                pinned::textures::REGISTRY_FILL,
+                pinned::textures::REGISTRY_LISTED_AT,
+                pinned::textures::SIGNAL,
             ];
-            if let Some(symbol) = checks.iter().find(|s| !code_matches(loader, s)) {
+            if let Some(symbol) = checks.iter().find(|s| !code_matches(loader, **s)) {
                 crate::log!(
                     WARN,
                     "mod textures off: {symbol} is not the code the loader knows"
                 );
                 return None;
             }
-            let o = |name: &str| loader.offset(&format!("textures.{name}"));
-            let signal = usize::try_from(loader.address("textures.signal")?).ok()?;
+            let o = |name: &str| loader.offset_by_name(&format!("textures.{name}"));
+            let signal = usize::try_from(loader.address(pinned::textures::SIGNAL)?).ok()?;
             Some(Layout {
                 // SAFETY: the build table's `textures.signal` is the game's
                 // event signal with the `SignalFn` signature on this build,
@@ -258,19 +257,19 @@ pub(crate) fn link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let linked = loader.link_feature(
         "mod textures (content)",
-        loader.address("textures.request"),
+        loader.address(pinned::textures::REQUEST),
         &REQUEST_NEXT,
         request as RequestFn,
         none,
     ) && loader.link_feature(
         "mod textures (keys)",
-        loader.address("textures.keys"),
+        loader.address(pinned::textures::KEYS),
         &KEYS_NEXT,
         keys as KeysFn,
         none,
     ) && loader.link_feature(
         "mod textures (UI registry)",
-        loader.address("textures.registry_fill"),
+        loader.address(pinned::textures::REGISTRY_FILL),
         &FILL_NEXT,
         fill as FillFn,
         none,

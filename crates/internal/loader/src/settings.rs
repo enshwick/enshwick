@@ -27,7 +27,8 @@ pub struct Settings {
     /// The most detailed lines kept in `logs/enshwick`: "error", "warn", "info" or "debug".
     pub log_level: Level,
     /// The same per mod id, over `log_level`; "enshwick" is the loader itself.
-    /// For example: `log_levels = { "you.my-mod" = "debug" }`
+    ///
+    /// For example, `log_levels = { "you.my-mod" = "debug" }`.
     pub log_levels: BTreeMap<String, Level>,
     /// Count the calls of every hooked game function for the status summary.
     /// A few instructions per call; read at start.
@@ -191,8 +192,8 @@ status_minutes = 0
         let template = Settings::template();
         let example = template
             .lines()
-            .find_map(|line| line.split_once("For example: `"))
-            .and_then(|(_, rest)| rest.strip_suffix('`'))
+            .find_map(|line| line.split_once("For example, `"))
+            .and_then(|(_, rest)| rest.strip_suffix("`."))
             .unwrap();
         let settings: Settings = toml::from_str(example).unwrap();
         let ids: Vec<&String> = settings.log_levels.keys().collect();

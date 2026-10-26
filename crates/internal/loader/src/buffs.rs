@@ -17,6 +17,8 @@
 //! the game's cleanse: the slot is marked, and `update_buffcontainer`
 //! destroys the buff in the next step.
 
+use crate::pinned::{self, Symbol};
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
@@ -26,23 +28,23 @@ use crate::memory::{read, write};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "buffs.cleanse",
-    "buffs.record_has_level",
-    "buffs.record_has_strength",
-    "buffs.record_level",
-    "buffs.record_lifetime",
-    "buffs.record_remaining",
-    "buffs.record_size",
-    "buffs.record_strength",
-    "buffs.record_type",
-    "buffs.registry",
-    "buffs.registry_blob",
-    "buffs.restore",
-    "buffs.type_by_id",
-    "game.balancing",
-    "server.player_infos",
-    "server.world",
-    "world.time",
+    pinned::buffs::CLEANSE.id(),
+    pinned::buffs::RECORD_HAS_LEVEL.id(),
+    pinned::buffs::RECORD_HAS_STRENGTH.id(),
+    pinned::buffs::RECORD_LEVEL.id(),
+    pinned::buffs::RECORD_LIFETIME.id(),
+    pinned::buffs::RECORD_REMAINING.id(),
+    pinned::buffs::RECORD_SIZE.id(),
+    pinned::buffs::RECORD_STRENGTH.id(),
+    pinned::buffs::RECORD_TYPE.id(),
+    pinned::buffs::REGISTRY.id(),
+    pinned::buffs::REGISTRY_BLOB.id(),
+    pinned::buffs::RESTORE.id(),
+    pinned::buffs::TYPE_BY_ID.id(),
+    pinned::game::BALANCING.id(),
+    pinned::server::PLAYER_INFOS.id(),
+    pinned::server::WORLD.id(),
+    pinned::world::TIME.id(),
 ];
 
 /// The room the loader keeps for the saved-buff record the restore reads;
@@ -145,7 +147,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 let info = reflection.type_info(ty).ok()?;
                 crate::world::type_hash(info.va())
             };
-            let function = |name: &str| {
+            let function = |name: Symbol| {
                 loader
                     .address(name)
                     .and_then(|address| usize::try_from(address).ok())
@@ -174,13 +176,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let lifetime = "keen::ecs::LifeTime";
             let ty = "keen::BuffType";
             let (type_by_id, restore, cleanse, now) = (
-                function("buffs.type_by_id")?,
-                function("buffs.restore")?,
-                function("buffs.cleanse")?,
-                function("world.time")?,
+                function(pinned::buffs::TYPE_BY_ID)?,
+                function(pinned::buffs::RESTORE)?,
+                function(pinned::buffs::CLEANSE)?,
+                function(pinned::world::TIME)?,
             );
             if loader
-                .offset("buffs.record_size")
+                .offset(pinned::buffs::RECORD_SIZE)
                 .is_none_or(|size| size > RECORD)
             {
                 return None;
@@ -202,11 +204,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 // function with the `NowFn` signature on this build, in the
                 // image, which stays mapped.
                 now: unsafe { core::mem::transmute::<usize, NowFn>(now) },
-                world: loader.offset("server.world")?,
-                game: loader.offset("server.player_infos")?,
-                registry: loader.offset("buffs.registry")?,
-                registry_blob: loader.offset("buffs.registry_blob")?,
-                balancing: loader.offset("game.balancing")?,
+                world: loader.offset(pinned::server::WORLD)?,
+                game: loader.offset(pinned::server::PLAYER_INFOS)?,
+                registry: loader.offset(pinned::buffs::REGISTRY)?,
+                registry_blob: loader.offset(pinned::buffs::REGISTRY_BLOB)?,
+                balancing: loader.offset(pinned::game::BALANCING)?,
                 container: hash(container)?,
                 groups,
                 instance_size,
@@ -228,13 +230,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 type_name: field(ty, "name")?,
                 type_hidden: field(ty, "hideInUi")?,
                 type_saved: field(ty, "isSaved")?,
-                record_type: loader.offset("buffs.record_type")?,
-                record_lifetime: loader.offset("buffs.record_lifetime")?,
-                record_remaining: loader.offset("buffs.record_remaining")?,
-                record_level: loader.offset("buffs.record_level")?,
-                record_has_level: loader.offset("buffs.record_has_level")?,
-                record_strength: loader.offset("buffs.record_strength")?,
-                record_has_strength: loader.offset("buffs.record_has_strength")?,
+                record_type: loader.offset(pinned::buffs::RECORD_TYPE)?,
+                record_lifetime: loader.offset(pinned::buffs::RECORD_LIFETIME)?,
+                record_remaining: loader.offset(pinned::buffs::RECORD_REMAINING)?,
+                record_level: loader.offset(pinned::buffs::RECORD_LEVEL)?,
+                record_has_level: loader.offset(pinned::buffs::RECORD_HAS_LEVEL)?,
+                record_strength: loader.offset(pinned::buffs::RECORD_STRENGTH)?,
+                record_has_strength: loader.offset(pinned::buffs::RECORD_HAS_STRENGTH)?,
             })
         })
         .as_ref()
@@ -365,7 +367,7 @@ fn slots(layout: &Layout, container: usize) -> impl Iterator<Item = (usize, u16)
 }
 
 /// The buffs `entity` has.
-pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status> {
+pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (_, _, _, now) = server(layout)?;
     let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
@@ -384,7 +386,7 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
         if buff == 0 || cleansed != 0 {
             continue;
         }
-        let Ok(network) = crate::world::component(loader, buff, layout.network) else {
+        let Ok(network) = crate::world::component(loader, Entity(buff), layout.network) else {
             continue;
         };
         let network = network.expose_provenance();
@@ -419,7 +421,7 @@ pub(crate) fn of(loader: &Loader, entity: u32) -> Result<Vec<ActiveBuff>, Status
 
 /// The type ids of the buffs `entity` has; empty for an entity without
 /// buffs. On the game thread.
-pub(crate) fn type_ids(loader: &Loader, entity: u32) -> Vec<u32> {
+pub(crate) fn type_ids(loader: &Loader, entity: Entity) -> Vec<u32> {
     let Some(layout) = layout(loader) else {
         return Vec::new();
     };
@@ -464,8 +466,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     } else {
         request.duration
     };
-    let container =
-        crate::world::component(loader, request.entity, layout.container)?.expose_provenance();
+    let container = crate::world::component(loader, Entity(request.entity), layout.container)?
+        .expose_provenance();
     for (slot, _) in slots(layout, container) {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
         // `crate::world::component` found on the game thread; the reflected
@@ -555,7 +557,7 @@ fn renew(
 }
 
 /// Cleanses every buff of type `id` from `entity`; whether it had one.
-pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Status> {
+pub(crate) fn remove(loader: &Loader, entity: Entity, id: u32) -> Result<bool, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     server(layout)?;
     let container = crate::world::component(loader, entity, layout.container)?.expose_provenance();
@@ -576,7 +578,7 @@ pub(crate) fn remove(loader: &Loader, entity: u32, id: u32) -> Result<bool, Stat
         return Ok(false);
     }
     let container =
-        crate::writes::component_mut(loader, entity, layout.container)?.expose_provenance();
+        crate::writes::component_mut(loader, entity.0, layout.container)?.expose_provenance();
     // SAFETY: `cleanse` is the table's `buffs.cleanse`, called on the
     // entity's live container, which `component_mut` marked changed, on the
     // game thread at a quiet moment (checked by `server`).

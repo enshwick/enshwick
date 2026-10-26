@@ -2,13 +2,14 @@
 //! workshop of its own that recipes can target.
 //!
 //! A workshop is only an id. A placed station crafts at it because its
-//! template's `Crafting`, `CraftingInteraction` and `ClientCraftingInteraction`
-//! components carry the id, and recipes name it in `RecipeInfo.workshopId`.
+//! template's crafting components (the station's own, the server's and the
+//! client's side of its menu) carry the id, and recipes name it.
 //! The workshop registry maps the id to a name and the station item.
 
 use super::items::{self, ItemLayout, NewItem};
 use super::recipes::NewRecipe;
-use super::{Blob, Guid, Id, types};
+use super::{Blob, EngineFacts, Guid, Id, types};
+use crate::engine_ids as ids;
 use crate::{Load, Off};
 
 /// The game's workshop registry resource.
@@ -42,18 +43,8 @@ pub mod stations {
 pub struct Station {
     /// The station item.
     pub item: Guid,
-    /// The template the item places, its `placedEntity`.
+    /// The template the item places.
     pub template: Guid,
-}
-
-/// Type hashes of the components that make a template a crafting station.
-pub mod components {
-    /// `ecs::Crafting`: the workshop the entity crafts at.
-    pub const CRAFTING: u32 = 0xad77_6575;
-    /// `ecs::CraftingInteraction`: the server side of the crafting menu.
-    pub const CRAFTING_INTERACTION: u32 = 0x1225_4fdb;
-    /// `ecs::ClientCraftingInteraction`: the client side of the crafting menu.
-    pub const CLIENT_CRAFTING_INTERACTION: u32 = 0x5bd7_81ae;
 }
 
 /// A workshop: recipes made at it name its id.
@@ -144,49 +135,54 @@ pub struct NewWorkshop {
     pub debug_name: String,
 }
 
-/// Where the fields a workshop edit touches sit, from the game's reflection.
+/// Where the fields a workshop edit touches sit on the running build,
+/// resolved by the loader.
 ///
 /// # Examples
 ///
 /// See [`clone_template`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WorkshopLayout {
-    /// `ecs::TemplateResource.components`.
+    /// A template's components.
     pub components: usize,
-    /// `ecs::Crafting.workshop`, `.workshopId` and the component's size.
+    /// The hashes of the three crafting component types: the workshop the
+    /// entity crafts at, then the server and the client side of its menu.
+    pub crafting_types: [u32; 3],
+    /// The crafting component's workshop GUID, its id and its size.
     pub crafting: [usize; 3],
-    /// `ecs::CraftingInteraction.workshop`, `.workshopId` and its size.
+    /// The menu's server side: workshop GUID, id and size.
     pub interaction: [usize; 3],
-    /// `ecs::ClientCraftingInteraction.workshopId` and its size.
+    /// The menu's client side: workshop id and size.
     pub client: [usize; 2],
-    /// `ItemInfo.equipment` plus `EquipmentSetup.placedEntity`.
+    /// The template an item places, inside the item data.
     pub placed_entity: usize,
-    /// `ecs::TemplateCollectionResource.templates`.
+    /// The template collection's list of templates.
     pub templates: usize,
-    /// `WorkshopRegistryResource.workshops`.
+    /// The workshop registry's list of workshops.
     pub workshops: usize,
-    /// `WorkshopResource` size.
+    /// One workshop entry's size.
     pub entry: usize,
-    /// `WorkshopResource.workshopGuid`.
+    /// The entry's workshop GUID.
     pub entry_guid: usize,
-    /// `WorkshopResource.workshopId`.
+    /// The entry's workshop id.
     pub entry_id: usize,
-    /// `WorkshopResource.name`.
+    /// The entry's name tag.
     pub entry_name: usize,
-    /// `WorkshopResource.item`.
+    /// The entry's station item id.
     pub entry_item: usize,
-    /// `WorkshopResource.itemRef`.
+    /// The entry's station item GUID.
     pub entry_item_ref: usize,
-    /// `WorkshopResource.isNpc`: set for a survivor's workshop.
+    /// The entry's flag set for a survivor's workshop.
     pub entry_npc: usize,
 }
 
 impl WorkshopLayout {
-    /// The layout on the running build.
+    /// The layout `facts` give: the running game's through [`Load`], a game
+    /// image's in a tool.
     ///
     /// # Errors
     ///
-    /// [`Off`] when a field or type is not reflected.
+    /// The first [`Off`] a fact returns, when the build lacks it.
     ///
     /// # Examples
     ///
@@ -197,65 +193,39 @@ impl WorkshopLayout {
     ///     Ok(())
     /// }
     /// ```
-    pub fn resolve(load: &Load<'_>) -> Result<Self, Off> {
-        Self::with_lookup(
-            |ty, name| {
-                load.field_offset(ty, name)
-                    .map(|o| usize::try_from(o).unwrap_or(usize::MAX))
-            },
-            |ty| load.type_size(ty).map(|s| s as usize),
-        )
-    }
-
-    /// The layout of a game whose reflection `field` (a type's field offset)
-    /// and `size` (a type's size) read, for a tool that reads a game image
-    /// rather than running in the game.
-    ///
-    /// # Errors
-    ///
-    /// The first [`Off`] a lookup returns.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::Off;
-    /// use enshwick::content::workshops::WorkshopLayout;
-    ///
-    /// let none = WorkshopLayout::with_lookup(|ty, f| Err(Off::new(format!("{ty}.{f}"))), |_| Ok(0));
-    /// assert!(none.is_err());
-    /// ```
-    pub fn with_lookup(
-        field: impl Fn(&str, &str) -> Result<usize, Off>,
-        size: impl Fn(&str) -> Result<usize, Off>,
-    ) -> Result<Self, Off> {
-        let entry = |name: &str| field("keen::WorkshopResource", name);
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        let at = |id: &str| facts.offset(id);
         Ok(Self {
-            components: field("keen::ecs::TemplateResource", "components")?,
+            components: at(ids::TEMPLATE_COMPONENTS)?,
+            crafting_types: [
+                facts.hash(ids::CRAFTING)?,
+                facts.hash(ids::CRAFTING_INTERACTION)?,
+                facts.hash(ids::CLIENT_CRAFTING_INTERACTION)?,
+            ],
             crafting: [
-                field("keen::ecs::Crafting", "workshop")?,
-                field("keen::ecs::Crafting", "workshopId")?,
-                size("keen::ecs::Crafting")?,
+                at(ids::CRAFTING_WORKSHOP)?,
+                at(ids::CRAFTING_WORKSHOP_ID)?,
+                facts.size(ids::CRAFTING)?,
             ],
             interaction: [
-                field("keen::ecs::CraftingInteraction", "workshop")?,
-                field("keen::ecs::CraftingInteraction", "workshopId")?,
-                size("keen::ecs::CraftingInteraction")?,
+                at(ids::CRAFTING_INTERACTION_WORKSHOP)?,
+                at(ids::CRAFTING_INTERACTION_WORKSHOP_ID)?,
+                facts.size(ids::CRAFTING_INTERACTION)?,
             ],
             client: [
-                field("keen::ecs::ClientCraftingInteraction", "workshopId")?,
-                size("keen::ecs::ClientCraftingInteraction")?,
+                at(ids::CLIENT_CRAFTING_INTERACTION_WORKSHOP_ID)?,
+                facts.size(ids::CLIENT_CRAFTING_INTERACTION)?,
             ],
-            placed_entity: field("keen::ItemInfo", "equipment")?
-                .saturating_add(field("keen::EquipmentSetup", "placedEntity")?),
-            templates: field("keen::ecs::TemplateCollectionResource", "templates")?,
-            workshops: field("keen::WorkshopRegistryResource", "workshops")?,
-            entry: size("keen::WorkshopResource")?,
-            entry_guid: entry("workshopGuid")?,
-            entry_id: entry("workshopId")?,
-            entry_name: entry("name")?,
-            entry_item: entry("item")?,
-            entry_item_ref: entry("itemRef")?,
-            entry_npc: entry("isNpc")?,
+            placed_entity: at(ids::ITEM_INFO_PLACED_ENTITY)?,
+            templates: at(ids::TEMPLATE_COLLECTION_TEMPLATES)?,
+            workshops: at(ids::WORKSHOP_REGISTRY_WORKSHOPS)?,
+            entry: facts.size(ids::WORKSHOP)?,
+            entry_guid: at(ids::WORKSHOP_GUID)?,
+            entry_id: at(ids::WORKSHOP_ID)?,
+            entry_name: at(ids::WORKSHOP_NAME)?,
+            entry_item: at(ids::WORKSHOP_ITEM)?,
+            entry_item_ref: at(ids::WORKSHOP_ITEM_REF)?,
+            entry_npc: at(ids::WORKSHOP_NPC)?,
         })
     }
 }
@@ -267,9 +237,10 @@ const REFERENCE: usize = 16;
 
 /// The station template with its crafting components moved to `workshop`;
 /// `None` unless it has all three, each of the reflected size.
-/// [`Load::add_workshop`] serves it, with [`clone_station`],
-/// [`list_template`] and [`list_workshop`]; call them from [`Load::serve`]
-/// builders of your own for a station it does not make.
+///
+/// [`Load::add_workshop`] serves it, with [`clone_station`], [`list_template`]
+/// and [`list_workshop`]; call them from [`Load::serve`] builders of your own
+/// for a station it does not make.
 ///
 /// # Examples
 ///
@@ -283,7 +254,7 @@ const REFERENCE: usize = 16;
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let (template, like, workshop) = (new.template, new.like.template, new.workshop.guid());
-///     load.serve(template.key(types::TEMPLATE), like.key(types::TEMPLATE), move |base| {
+///     load.serve(template.key(types::TEMPLATE)?, like.key(types::TEMPLATE)?, move |base| {
 ///         clone_template(&layout, base, workshop)
 ///     })
 /// }
@@ -298,23 +269,13 @@ pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) 
         let hash = blob.read_u32(variant)?;
         let data = (variant + 4).checked_add(usize::try_from(blob.read_u32(variant + 4)?).ok()?)?;
         let size = usize::try_from(blob.read_u32(variant + 8)?).ok()?;
-        let [guid_at, id_at, expected, slot] = match hash {
-            components::CRAFTING => [
-                layout.crafting[0],
-                layout.crafting[1],
-                layout.crafting[2],
-                0,
-            ],
-            components::CRAFTING_INTERACTION => [
-                layout.interaction[0],
-                layout.interaction[1],
-                layout.interaction[2],
-                1,
-            ],
-            components::CLIENT_CRAFTING_INTERACTION => {
-                [usize::MAX, layout.client[0], layout.client[1], 2]
-            }
-            _ => continue,
+        let Some(slot) = layout.crafting_types.iter().position(|&ty| ty == hash) else {
+            continue;
+        };
+        let [guid_at, id_at, expected] = match slot {
+            0 => layout.crafting,
+            1 => layout.interaction,
+            _ => [usize::MAX, layout.client[0], layout.client[1]],
         };
         if size != expected {
             return None;
@@ -346,7 +307,7 @@ pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) 
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
 ///     let items = ItemLayout::resolve(load)?;
-///     let (item, like) = (new.item.key(types::ITEM_INFO), new.like.item.key(types::ITEM_INFO));
+///     let (item, like) = (new.item.key(types::ITEM_INFO)?, new.like.item.key(types::ITEM_INFO)?);
 ///     load.serve(item, like, move |base| clone_station(&items, &layout, base, &new))
 /// }
 /// ```
@@ -386,7 +347,7 @@ pub fn clone_station(
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
+///     let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
 ///     load.serve(collection, collection, move |base| list_template(&layout, base, new.template.guid()))
 /// }
 /// ```
@@ -423,7 +384,7 @@ pub fn list_template(
 ///     new: NewWorkshop,
 /// ) -> Result<(), enshwick::Off> {
 ///     let layout = WorkshopLayout::resolve(load)?;
-///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY);
+///     let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY)?;
 ///     load.serve(registry, registry, move |base| list_workshop(&layout, base, &new))
 /// }
 /// ```
@@ -516,27 +477,27 @@ impl Load<'_> {
         let workshop = WorkshopId::new(new.workshop.guid());
         let (like, template) = (new.like, new.template);
         self.serve(
-            template.key(types::TEMPLATE),
-            like.template.key(types::TEMPLATE),
+            template.key(types::TEMPLATE)?,
+            like.template.key(types::TEMPLATE)?,
             move |base| clone_template(&layout, base, workshop.guid()),
         )?;
-        let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION);
+        let collection = TEMPLATE_COLLECTION.key(types::TEMPLATE_COLLECTION)?;
         self.serve(collection, collection, move |base| {
             list_template(&layout, base, template.guid())
         })?;
         let station = new.clone();
         self.serve(
-            new.item.key(types::ITEM_INFO),
-            like.item.key(types::ITEM_INFO),
+            new.item.key(types::ITEM_INFO)?,
+            like.item.key(types::ITEM_INFO)?,
             move |base| clone_station(&item_layout, &layout, base, &station),
         )?;
         let (item, debug_name) = (new.item.guid(), new.debug_name.clone());
-        let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY);
+        let registry = items::ITEM_REGISTRY.key(types::ITEM_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             items::list_item(&item_layout, base, item, &debug_name)
         })?;
         let recipe = new.station_recipe;
-        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY);
+        let registry = WORKSHOP_REGISTRY.key(types::WORKSHOP_REGISTRY)?;
         self.serve(registry, registry, move |base| {
             list_workshop(&layout, base, &new)
         })?;
@@ -563,6 +524,7 @@ pub(crate) mod tests {
 
     pub(crate) const LAYOUT: WorkshopLayout = WorkshopLayout {
         components: 16,
+        crafting_types: [CRAFTING, INTERACTION, CLIENT],
         crafting: [0, 16, 20],
         interaction: [12, 28, 32],
         client: [12, 16],
@@ -590,6 +552,9 @@ pub(crate) mod tests {
         refs: 0,
         names: 0x38,
     };
+    pub(crate) const CRAFTING: u32 = 0xc1;
+    pub(crate) const INTERACTION: u32 = 0xc2;
+    pub(crate) const CLIENT: u32 = 0xc3;
     const WORKSHOP_ID: Id = Id::new("test:bench.workshop");
     const ITEM_ID: Id = Id::new("test:bench");
     const TEMPLATE_ID: Id = Id::new("test:bench.template");
@@ -644,9 +609,9 @@ pub(crate) mod tests {
     fn the_template_clone_crafts_at_the_new_workshop_only() {
         let (blob, data) = station(&[
             (0x1234_5678, 24),
-            (components::CRAFTING, 20),
-            (components::CRAFTING_INTERACTION, 32),
-            (components::CLIENT_CRAFTING_INTERACTION, 16),
+            (CRAFTING, 20),
+            (INTERACTION, 32),
+            (CLIENT, 16),
         ]);
         let clone = clone_template(&LAYOUT, blob.bytes(), WORKSHOP).unwrap();
         let id = WORKSHOP.id();
@@ -666,16 +631,9 @@ pub(crate) mod tests {
 
     #[test]
     fn a_template_missing_a_component_or_of_another_size_is_refused() {
-        let (blob, _) = station(&[
-            (components::CRAFTING, 20),
-            (components::CRAFTING_INTERACTION, 32),
-        ]);
+        let (blob, _) = station(&[(CRAFTING, 20), (INTERACTION, 32)]);
         assert!(clone_template(&LAYOUT, blob.bytes(), WORKSHOP).is_none());
-        let (blob, _) = station(&[
-            (components::CRAFTING, 24),
-            (components::CRAFTING_INTERACTION, 32),
-            (components::CLIENT_CRAFTING_INTERACTION, 16),
-        ]);
+        let (blob, _) = station(&[(CRAFTING, 24), (INTERACTION, 32), (CLIENT, 16)]);
         assert!(clone_template(&LAYOUT, blob.bytes(), WORKSHOP).is_none());
     }
 

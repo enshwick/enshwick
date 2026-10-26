@@ -9,8 +9,11 @@
 //! ([`Table::fall_back`]), and what no pattern finds stays missing. The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
+//! The [`catalogue`] maps the ids the API asks engine facts by to the
+//! game's reflected types and fields.
 
 pub mod archive;
+pub mod catalogue;
 mod entries;
 mod locks;
 mod parts;

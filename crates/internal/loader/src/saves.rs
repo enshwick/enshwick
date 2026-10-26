@@ -13,6 +13,8 @@
 //! (client 410 and 426). There the key is the last one built since the
 //! hosted game started to initialise, and none once that game ends.
 
+use crate::pinned;
+use crate::pinned::Constant;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
@@ -25,15 +27,15 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "save.flags",
-    "save.path",
-    "save.path_data",
-    "save.path_lengths",
-    "save.path_parts",
-    "save.phase",
-    "server.save_blocked",
-    "server.save_request",
-    "server.save_system",
+    pinned::save::FLAGS.id(),
+    pinned::save::PATH.id(),
+    pinned::save::PATH_DATA.id(),
+    pinned::save::PATH_LENGTHS.id(),
+    pinned::save::PATH_PARTS.id(),
+    pinned::save::PHASE.id(),
+    pinned::server::SAVE_BLOCKED.id(),
+    pinned::server::SAVE_REQUEST.id(),
+    pinned::server::SAVE_SYSTEM.id(),
 ];
 
 /// The file name extension of a world save.
@@ -108,26 +110,28 @@ static KEYS: Mutex<Keys> = Mutex::new(Keys::CLOSED);
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let constant = |name: &str| {
+            let constant = |name: Constant| {
                 loader
                     .build
-                    .constant(name)
+                    .constant(name.id())
                     .and_then(|v| usize::try_from(v).ok())
             };
-            let request =
-                usize::try_from(loader.base + loader.build.symbol("server.save_request")?).ok()?;
+            let request = usize::try_from(
+                loader.base + loader.build.symbol(pinned::server::SAVE_REQUEST.id())?,
+            )
+            .ok()?;
             Some(Layout {
                 // SAFETY: `request` is the build table's `server.save_request`
                 // in the loaded executable, the game function `RequestFn`
                 // types.
                 request: unsafe { core::mem::transmute::<usize, RequestFn>(request) },
-                save_system: constant("server.save_system")?,
-                blocked: constant("server.save_blocked")?,
-                flags: constant("save.flags")?,
-                phase: constant("save.phase")?,
-                path_data: constant("save.path_data")?,
-                path_lengths: constant("save.path_lengths")?,
-                path_parts: constant("save.path_parts")?,
+                save_system: constant(pinned::server::SAVE_SYSTEM)?,
+                blocked: constant(pinned::server::SAVE_BLOCKED)?,
+                flags: constant(pinned::save::FLAGS)?,
+                phase: constant(pinned::save::PHASE)?,
+                path_data: constant(pinned::save::PATH_DATA)?,
+                path_lengths: constant(pinned::save::PATH_LENGTHS)?,
+                path_parts: constant(pinned::save::PATH_PARTS)?,
                 side: loader.side,
             })
         })
@@ -140,7 +144,7 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "world keys off: this build has no save layout");
         return;
     }
-    let target = loader.address("save.path");
+    let target = loader.address(pinned::save::PATH);
     loader.link_feature("world keys", target, &PATH_NEXT, built, HookFlags::NONE);
 }
 
