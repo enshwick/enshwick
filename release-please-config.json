@@ -127,10 +127,6 @@
       "package-name": "enshwick-safes",
       "component": "enshwick-safes"
     },
-    "mods/enshwick-area-loot": {
-      "package-name": "enshwick-area-loot",
-      "component": "enshwick-area-loot"
-    },
     "mods/enshwick-build-camera": {
       "package-name": "enshwick-build-camera",
       "component": "enshwick-build-camera"

@@ -38,7 +38,7 @@ they are never released.
 | [Building materials x2](https://github.com/enshwick/mod-building-materials) | twice the output of block, roof, overgrowth and decor recipes      |
 | [Build camera](mods/enshwick-build-camera)                                  | the building fly mode for every player, without the skill          |
 | [Shared experience](mods/enshwick-shared-experience)                        | every character keeps up with the one furthest ahead in experience |
-| [Area loot](mods/enshwick-area-loot)                                        | emptying one enemy corpse takes the loot of the others around it   |
+| [Area loot](https://github.com/enshwick/mod-area-loot)                      | emptying one enemy corpse takes the loot of the others around it   |
 
 ### Server
 
