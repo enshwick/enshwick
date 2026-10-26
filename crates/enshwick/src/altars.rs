@@ -549,6 +549,8 @@ pub struct BaseLimit {
     pub zones: u32,
     /// Bases the game holds.
     pub bases: u32,
+    /// Altar zones the game's own grouping takes, without the raised limit.
+    pub vanilla_zones: u32,
 }
 
 /// The most altar zones and bases the game groups now; `None` without a
@@ -569,9 +571,19 @@ pub struct BaseLimit {
 #[must_use]
 pub fn base_limit() -> Option<BaseLimit> {
     let host = crate::host()?;
-    let (mut zones, mut bases) = (0u32, 0u32);
-    let status = (host.api().base_limit)(host.handle(), &raw mut zones, &raw mut bases);
-    status.is_ok().then_some(BaseLimit { zones, bases })
+    let mut out = crate::abi::BaseLimitInfo {
+        header: crate::abi::Header::of::<crate::abi::BaseLimitInfo>(),
+        zones: 0,
+        bases: 0,
+        vanilla_zones: 0,
+        reserved: 0,
+    };
+    let status = (host.api().base_limit)(host.handle(), &raw mut out);
+    status.is_ok().then_some(BaseLimit {
+        zones: out.zones,
+        bases: out.bases,
+        vanilla_zones: out.vanilla_zones,
+    })
 }
 
 /// A placement the game refused because the object does not lie in a single

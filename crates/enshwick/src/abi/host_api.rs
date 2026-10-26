@@ -5,18 +5,18 @@ use core::ffi::c_void;
 
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
-    AltarZoneFn, AltarZoneSize, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo,
-    CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
-    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
-    GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData,
-    ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec,
-    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
-    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
-    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
-    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
-    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
-    TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget,
-    WeatherFront, ZoneCheckFn,
+    AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
+    BuildInfo, CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange,
+    DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
+    ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
+    LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
+    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
+    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiDialog,
+    UiFrameFn, UiMarker, UiWidget, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1139,9 +1139,10 @@ pub struct HostApi {
         callback: AltarLimitFilterFn,
         user: *mut c_void,
     ) -> Status,
-    /// Writes the most altar zones and bases the game groups now: its own
-    /// 16 and 16, or the loader's maximum once [`HostApi::raise_base_limit`]
-    /// is in force, from `enshwick_mod_ready` on. Both pointers are written;
-    /// [`Status::BAD_ARGS`] for a null one. Any thread. Since minor 82.
-    pub base_limit: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
+    /// Writes to `out` the most altar zones and bases the game groups now:
+    /// its own, or the loader's maximum once [`HostApi::raise_base_limit`] is
+    /// in force, from `enshwick_mod_ready` on, with the zones its own
+    /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
+    /// Since minor 82.
+    pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
 }

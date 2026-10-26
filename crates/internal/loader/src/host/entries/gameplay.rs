@@ -560,23 +560,28 @@ pub(crate) extern "system" fn altar_limit_filter(
 
 pub(crate) extern "system" fn base_limit(
     me: ModHandle,
-    zones: *mut u32,
-    bases: *mut u32,
+    out: *mut api_frame::BaseLimitInfo,
 ) -> Status {
     entry("base_limit", || {
         if let Err(status) = caller(me) {
             return status;
         }
-        let (zone_count, base_count) = crate::bases::base_limit();
-        // SAFETY: `HostApi::base_limit` has the mod pass `zones` null or
-        // pointing at a writable, aligned `u32` that no other thread touches
-        // during the call.
-        let status = unsafe { put(zones, zone_count) };
-        if !status.is_ok() {
-            return status;
+        let (zones, bases) = crate::bases::base_limit();
+        // SAFETY: `HostApi::base_limit` has the mod pass `out` null or
+        // readable for its header and writable for the size it names, with no
+        // other thread touching it during the call.
+        unsafe {
+            put_headed(
+                out,
+                api_frame::BaseLimitInfo {
+                    header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
+                    zones,
+                    bases,
+                    vanilla_zones: crate::bases::VANILLA_ZONES,
+                    reserved: 0,
+                },
+            )
         }
-        // SAFETY: as for `zones`, for `bases`.
-        unsafe { put(bases, base_count) }
     })
 }
 

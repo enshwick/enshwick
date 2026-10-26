@@ -249,6 +249,34 @@ pub struct AltarLimit {
 
 impl_headed!(AltarLimit);
 
+/// The most altar zones and bases the game groups, as
+/// [`HostApi::base_limit`](super::HostApi::base_limit) writes it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{BaseLimitInfo, Header};
+///
+/// let limit = BaseLimitInfo { header: Header::of::<BaseLimitInfo>(), zones: 16, bases: 16, vanilla_zones: 16, reserved: 0 };
+/// assert_eq!(limit.zones, limit.vanilla_zones);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct BaseLimitInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Altar zones the game puts into bases now.
+    pub zones: u32,
+    /// Bases the game holds.
+    pub bases: u32,
+    /// Altar zones the game's own grouping takes, without the raised limit.
+    pub vanilla_zones: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl_headed!(BaseLimitInfo);
+
 /// An altar limit filter: the limit so far, writable, and the pointer given
 /// at registration. It must not unwind.
 pub type AltarLimitFilterFn = unsafe extern "system" fn(limit: *mut AltarLimit, user: *mut c_void);

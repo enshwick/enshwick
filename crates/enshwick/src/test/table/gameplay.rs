@@ -4,9 +4,10 @@ use core::ffi::c_void;
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarLimitFn, AltarZoneFn, AltarZoneSize,
-    BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn,
-    ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId,
-    Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn,
+    DamageFilterFn, ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn,
+    ModHandle, RateId, Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    ZoneCheckFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -223,17 +224,22 @@ pub(crate) fn zones_and_bases() -> (u32, u32) {
     }
 }
 
-pub(crate) extern "system" fn base_limit(
-    _me: ModHandle,
-    zones: *mut u32,
-    bases: *mut u32,
-) -> Status {
-    let (zone_count, base_count) = zones_and_bases();
-    let status = put(zones, zone_count);
-    if !status.is_ok() {
-        return status;
+pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo) -> Status {
+    let (zones, bases) = zones_and_bases();
+    let limit = BaseLimitInfo {
+        header: Header::of::<BaseLimitInfo>(),
+        zones,
+        bases,
+        vanilla_zones: 16,
+        reserved: 0,
+    };
+    // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
+    // its header set, writable for the call.
+    if unsafe { crate::abi::write_headed(out, limit) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
     }
-    put(bases, base_count)
 }
 
 pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {

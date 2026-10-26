@@ -684,6 +684,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);
     assert!(core::mem::offset_of!(HostApi, base_limit) == 24 + 153 * 8);
     assert!(size_of::<AltarLimit>() == 8 + 8);
+    assert!(size_of::<BaseLimitInfo>() == 8 + 16);
     assert!(core::mem::offset_of!(HostApi, altar_zone_filter) == 24 + 150 * 8);
     assert!(core::mem::offset_of!(HostApi, altar_zones_changed) == 24 + 151 * 8);
     assert!(size_of::<AltarZone>() == 8 + 8 + 16);

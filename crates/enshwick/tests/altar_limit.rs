@@ -31,6 +31,9 @@ mod tests {
         assert_eq!(loader.altar_limit(3, 6), 18);
         assert_eq!(loader.altar_limit(11, 16), 32);
         let limit = enshwick::altars::base_limit().unwrap();
-        assert_eq!((limit.zones, limit.bases), (32, 16));
+        assert_eq!(
+            (limit.zones, limit.bases, limit.vanilla_zones),
+            (32, 16, 16)
+        );
     }
 }

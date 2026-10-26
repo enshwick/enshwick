@@ -274,7 +274,6 @@ fn take_turn() -> MutexGuard<'static, ()> {
     turn
 }
 
-/// The mod's altar zone filters, and how often it asked for a new sizing.
 /// Whether the mod raised the base limit, and whether the hooks are armed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct BaseLimitState {
@@ -284,6 +283,7 @@ pub(crate) struct BaseLimitState {
     pub(crate) armed: bool,
 }
 
+/// The mod's altar zone filters, and how often it asked for a new sizing.
 #[derive(Debug, Default)]
 pub(crate) struct ZoneSizing {
     /// The filters and their pointers.

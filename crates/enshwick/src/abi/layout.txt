@@ -69,6 +69,12 @@ AltarZoneSize size 24 align 8
     reserved at 5 size 3
     grow at 8 size 8
     height at 16 size 8
+BaseLimitInfo size 24 align 4
+    header at 0 size 8
+    zones at 8 size 4
+    bases at 12 size 4
+    vanilla_zones at 16 size 4
+    reserved at 20 size 4
 BedCheck size 72 align 8
     header at 0 size 8
     survivor at 8 size 4

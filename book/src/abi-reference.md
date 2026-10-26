@@ -353,4 +353,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_zone_filter`      | Adds a filter to the chain that sizes altar zones; init only                                         | 78          |
 | `altar_zones_changed`    | Has the altar zones sized again on the server's next step; any thread                                | 78          |
 | `altar_limit_filter`     | Adds a filter to the chain that decides how many altars a Flame level allows; init only              | 82          |
-| `base_limit`             | The most altar zones and bases the game groups now; any thread                                       | 82          |
+| `base_limit`             | The most altar zones and bases the game groups now, and its own grouping's zones; any thread         | 82          |

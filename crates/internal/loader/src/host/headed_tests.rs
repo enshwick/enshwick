@@ -23,6 +23,7 @@ macro_rules! headed {
             AltarInfo,
             AltarLimit,
             AltarZone,
+            BaseLimitInfo,
             BedCheck,
             BuffRequest,
             BuffTypeInfo,

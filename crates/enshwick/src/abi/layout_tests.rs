@@ -103,6 +103,7 @@ shapes! {
         Bounds { min, max },
         AltarInfo { header, entity, level, tilted, level_count, reserved, zone, levels, position },
         AltarLimit { header, flame_level, vanilla, allowed, reserved },
+        BaseLimitInfo { header, zones, bases, vanilla_zones, reserved },
         AltarZone { header, altar, level, reserved, grow, height },
         AltarZoneSize { altar, level, reserved, grow, height },
         ZoneCheck { header, zones, zone_count, object, margin },

@@ -36,7 +36,8 @@ use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
-use self::limit::{Aabb, MAX_BASES, MAX_ZONES, VANILLA_ZONES, Zone, Zones};
+pub(crate) use self::limit::VANILLA_ZONES;
+use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered};
