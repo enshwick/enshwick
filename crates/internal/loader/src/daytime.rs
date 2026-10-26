@@ -20,6 +20,7 @@
 //! what the game asks for by every mod's factor, and skips a call that would
 //! change nothing, so the version moves only when the speed does.
 
+use crate::mod_index::ModIndex;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -81,9 +82,9 @@ struct Layout {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// Mods that asked to change the speed, during init.
-static SPEED_MODS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+static SPEED_MODS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 /// Each speed mod and its factor, as `f32` bits; sealed at link.
-static FACTORS: OnceLock<Box<[(usize, AtomicU32)]>> = OnceLock::new();
+static FACTORS: OnceLock<Box<[(ModIndex, AtomicU32)]>> = OnceLock::new();
 /// The speed the game itself last asked for, as `f32` bits.
 static GAME_SPEED: AtomicU32 = AtomicU32::new(0x3f80_0000);
 /// Whether it was day after the last step: 0 unknown, 1 night, 2 day.
@@ -268,7 +269,7 @@ fn forward(before: i64, within: i64, cycle: i64) -> i64 {
 }
 
 /// Registers mod `owner` as one that changes the speed.
-pub(crate) fn register_speed(loader: &Loader, owner: usize) -> Status {
+pub(crate) fn register_speed(loader: &Loader, owner: ModIndex) -> Status {
     if FACTORS.get().is_some() {
         return Status::TOO_LATE;
     }
@@ -283,7 +284,7 @@ pub(crate) fn register_speed(loader: &Loader, owner: usize) -> Status {
 }
 
 /// Sets mod `owner`'s factor on the speed and applies the product at once.
-pub(crate) fn set_speed(loader: &Loader, owner: usize, factor: f32) -> Result<(), Status> {
+pub(crate) fn set_speed(loader: &Loader, owner: ModIndex, factor: f32) -> Result<(), Status> {
     if !(0.0..=MAX_FACTOR).contains(&factor) {
         return Err(Status::BAD_ARGS);
     }
@@ -318,7 +319,7 @@ fn product() -> f32 {
     FACTORS.get().map_or(1.0, |factors| {
         factors
             .iter()
-            .filter(|(owner, _)| !is_off(*owner))
+            .filter(|(owner, _)| !is_off(ModIndex::new((*owner).get())))
             .map(|(_, factor)| f32::from_bits(factor.load(Ordering::Relaxed)))
             .product()
     })

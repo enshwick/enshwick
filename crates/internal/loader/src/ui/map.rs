@@ -11,6 +11,7 @@
 //! The layouts below are pinned for that build alone and no pattern finds
 //! them on another, so map markers stay off on a build without its own table.
 
+use crate::mod_index::ModIndex;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -62,7 +63,7 @@ const STATE_PLAY_DATA: usize = 0x38;
 
 /// One marker, owned by the loader.
 struct Owned {
-    owner: usize,
+    owner: ModIndex,
     position: [i64; 3],
     label: Box<[u8]>,
     color: u8,
@@ -101,7 +102,7 @@ fn snapshot() -> &'static ArcSwap<Sets> {
 }
 
 /// Replaces mod `owner`'s markers with `markers`.
-pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
+pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
     if given.len() > MAX_MARKERS {
         return Status::BAD_ARGS;
     }
@@ -117,9 +118,9 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
         })
         .collect();
     let mut sets = SETS.relock();
-    sets.retain(|(o, _)| *o != owner);
+    sets.retain(|(o, _)| *o != owner.get());
     if !copied.is_empty() {
-        sets.push((owner, copied.into()));
+        sets.push((owner.get(), copied.into()));
     }
     let next: Sets = sets.iter().map(|(_, list)| Arc::clone(list)).collect();
     drop(sets);

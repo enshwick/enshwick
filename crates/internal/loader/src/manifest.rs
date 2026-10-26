@@ -9,6 +9,67 @@ use crate::resolve::{self, Candidate};
 /// which defaults to none.
 const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
 
+/// Why a mod's manifest is refused.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ManifestError {
+    /// The DLL hands out no manifest.
+    #[error("the manifest is missing")]
+    Missing,
+    /// The manifest is shorter than this ABI needs.
+    #[error("the manifest is truncated")]
+    Truncated,
+    /// The mod is built for another ABI major.
+    #[error("built for ABI {0}, the loader speaks {ABI_MAJOR}")]
+    OtherMajor(u16),
+    /// The mod is built for a newer ABI minor.
+    #[error(
+        "built for ABI {ABI_MAJOR}.{0}, newer than the loader's {ABI_MAJOR}.{ABI_MINOR}: update Enshwick"
+    )]
+    NewerMinor(u16),
+    /// A text of the manifest is not UTF-8.
+    #[error("the {0} is not UTF-8")]
+    NotUtf8(&'static str),
+    /// The mod claims the loader's own id.
+    #[error("the id {0:?} is the loader's own")]
+    LoadersId(String),
+    /// The id is not of the form mods take.
+    #[error("the id {0:?} is not <author>.<name>, each of [a-z0-9-]")]
+    BadId(String),
+    /// The version does not parse.
+    #[error("version {version:?}: {reason}")]
+    BadVersion {
+        /// The version as the manifest gives it.
+        version: String,
+        /// Why it does not parse.
+        reason: String,
+    },
+    /// The side is none the loader knows.
+    #[error("unknown side {0}")]
+    UnknownSide(u8),
+    /// A dependency's range does not parse.
+    #[error("range {range:?} of {id}: {reason}")]
+    BadRange {
+        /// The dependency's id.
+        id: String,
+        /// The range as the manifest gives it.
+        range: String,
+        /// Why it does not parse.
+        reason: String,
+    },
+    /// A dependency names a relation the loader does not know.
+    #[error("unknown relation {relation} to {id}")]
+    UnknownRelation {
+        /// The dependency's id.
+        id: String,
+        /// The relation's raw value.
+        relation: u8,
+    },
+    /// A rename or replacement names the loader's own id.
+    #[error("{0} is the loader's own id; no mod takes it over")]
+    TakesLoadersId(String),
+}
+
 /// Copies the manifest a mod's `enshwick_mod_query` returned, for the
 /// process; the fields of a newer minor than the mod's stay empty.
 ///
@@ -23,14 +84,14 @@ const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
 /// # Errors
 ///
 /// A reason for the log when `raw` is null or shorter than every manifest.
-pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, String> {
+pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, ManifestError> {
     if raw.is_null() {
-        return Err("the manifest is missing".into());
+        return Err(ManifestError::Missing);
     }
     // SAFETY: `raw` is non-null, checked just before, and the caller
     // guarantees it readable for the size its header says, with no
     // concurrent writer.
-    let manifest = unsafe { read_headed(raw, REQUIRED) }.ok_or("the manifest is truncated")?;
+    let manifest = unsafe { read_headed(raw, REQUIRED) }.ok_or(ManifestError::Truncated)?;
     // SAFETY: `manifest` copies the mod's pointers, and the caller guarantees
     // every string and list they point at readable and unchanged for the call.
     Ok(Box::leak(Box::new(unsafe { own(manifest) })))
@@ -112,41 +173,37 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
 /// major, or from a newer minor than the loader's: a mod meets only loaders
 /// that know every entry it calls, and an older minor's mod is read as far
 /// as it knows each struct.
-pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
+pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
     if manifest.header.abi_major != ABI_MAJOR {
-        return Err(format!(
-            "built for ABI {}, the loader speaks {ABI_MAJOR}",
-            manifest.header.abi_major
-        ));
+        return Err(ManifestError::OtherMajor(manifest.header.abi_major));
     }
     if manifest.header.abi_minor > ABI_MINOR {
-        return Err(format!(
-            "built for ABI {ABI_MAJOR}.{}, newer than the loader's {ABI_MAJOR}.{ABI_MINOR}: update Enshwick",
-            manifest.header.abi_minor
-        ));
+        return Err(ManifestError::NewerMinor(manifest.header.abi_minor));
     }
     if !manifest.header.covers(REQUIRED) {
-        return Err("the manifest is truncated".into());
+        return Err(ManifestError::Truncated);
     }
     // SAFETY: the caller guarantees the manifest's strings readable and
     // unchanged for the call.
-    let id = unsafe { manifest.id.as_str() }.ok_or("the id is not UTF-8")?;
+    let id = unsafe { manifest.id.as_str() }.ok_or(ManifestError::NotUtf8("id"))?;
     if id == crate::settings::LOADER_ID {
-        return Err(format!("the id {id:?} is the loader's own"));
+        return Err(ManifestError::LoadersId(id.to_owned()));
     }
     if !enshwick::abi::is_valid_id(id) {
-        return Err(format!(
-            "the id {id:?} is not <author>.<name>, each of [a-z0-9-]"
-        ));
+        return Err(ManifestError::BadId(id.to_owned()));
     }
     // SAFETY: the caller guarantees the manifest's strings readable and
     // unchanged for the call.
-    let version = unsafe { manifest.version.as_str() }.ok_or("the version is not UTF-8")?;
-    let version: Version = version
-        .parse()
-        .map_err(|e| format!("version {version:?}: {e}"))?;
+    let version = unsafe { manifest.version.as_str() }.ok_or(ManifestError::NotUtf8("version"))?;
+    let version: Version =
+        version
+            .parse()
+            .map_err(|e: semver::Error| ManifestError::BadVersion {
+                version: version.to_owned(),
+                reason: e.to_string(),
+            })?;
     if !matches!(manifest.side, Side::SERVER | Side::CLIENT | Side::BOTH) {
-        return Err(format!("unknown side {}", manifest.side.0));
+        return Err(ManifestError::UnknownSide(manifest.side.0));
     }
     let raw = if manifest.dependencies.is_null() || manifest.dependency_count == 0 {
         &[][..]
@@ -258,19 +315,23 @@ pub unsafe fn meta(manifest: &Manifest) -> Meta {
 ///
 /// - The dependency's `id` and `range` are readable for their lengths and
 ///   unchanged for the call.
-unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
+unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, ManifestError> {
     // SAFETY: the caller guarantees `id` readable and unchanged for the call.
-    let id = unsafe { raw.id.as_str() }.ok_or("a dependency id is not UTF-8")?;
+    let id = unsafe { raw.id.as_str() }.ok_or(ManifestError::NotUtf8("dependency id"))?;
     // SAFETY: the caller guarantees `range` readable and unchanged for the
     // call.
-    let range = unsafe { raw.range.as_str() }.ok_or("a version range is not UTF-8")?;
+    let range = unsafe { raw.range.as_str() }.ok_or(ManifestError::NotUtf8("version range"))?;
     let range = if range.is_empty() {
         None
     } else {
         Some(
             range
                 .parse::<VersionReq>()
-                .map_err(|e| format!("range {range:?} of {id}: {e}"))?,
+                .map_err(|e| ManifestError::BadRange {
+                    id: id.to_owned(),
+                    range: range.to_owned(),
+                    reason: e.to_string(),
+                })?,
         )
     };
     if !matches!(
@@ -282,12 +343,15 @@ unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
             | Relation::REPLACES
             | Relation::WAS
     ) {
-        return Err(format!("unknown relation {} to {id}", raw.relation.0));
+        return Err(ManifestError::UnknownRelation {
+            id: id.to_owned(),
+            relation: raw.relation.0,
+        });
     }
     if id == crate::settings::LOADER_ID
         && matches!(raw.relation, Relation::REPLACES | Relation::WAS)
     {
-        return Err(format!("{id} is the loader's own id; no mod takes it over"));
+        return Err(ManifestError::TakesLoadersId(id.to_owned()));
     }
     Ok(resolve::Dependency {
         id: id.to_owned(),
@@ -442,7 +506,7 @@ mod tests {
             u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
         // SAFETY: `short` is a whole local manifest, its strings and lists
         // pointing at `'static` data.
-        let reason = unsafe { read(&raw const short) }.unwrap_err();
+        let reason = unsafe { read(&raw const short) }.unwrap_err().to_string();
         assert!(reason.contains("truncated"), "{reason}");
         // SAFETY: `read` returns an error for a null pointer before it reads.
         assert!(unsafe { read(core::ptr::null()) }.is_err());
@@ -486,21 +550,27 @@ mod tests {
     fn bad_manifests_say_why() {
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let id = unsafe { parse(&manifest("Bad Id", "0.1.0")) }.unwrap_err();
+        let id = unsafe { parse(&manifest("Bad Id", "0.1.0")) }
+            .unwrap_err()
+            .to_string();
         assert!(id.contains("not <author>.<name>"), "{id}");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let version = unsafe { parse(&manifest("you.ok", "one")) }.unwrap_err();
+        let version = unsafe { parse(&manifest("you.ok", "one")) }
+            .unwrap_err()
+            .to_string();
         assert!(version.starts_with("version"), "{version}");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }.unwrap_err();
+        let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }
+            .unwrap_err()
+            .to_string();
         assert!(loader.contains("loader's own"), "{loader}");
         let mut other = manifest("you.ok", "0.1.0");
         other.header.abi_major = ABI_MAJOR + 1;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let major = unsafe { parse(&other) }.unwrap_err();
+        let major = unsafe { parse(&other) }.unwrap_err().to_string();
         assert!(major.contains(&format!("ABI {}", ABI_MAJOR + 1)), "{major}");
     }
 
@@ -525,7 +595,7 @@ mod tests {
         renamed.dependencies = LOADER.as_ptr();
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let why = unsafe { parse(&renamed) }.unwrap_err();
+        let why = unsafe { parse(&renamed) }.unwrap_err().to_string();
         assert!(why.contains("loader's own"), "{why}");
     }
 
@@ -535,7 +605,7 @@ mod tests {
         old.header.abi_minor = 69;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let why = unsafe { parse(&old) }.unwrap_err();
+        let why = unsafe { parse(&old) }.unwrap_err().to_string();
         assert!(why.contains("not <author>.<name>"), "{why}");
     }
 
@@ -545,7 +615,7 @@ mod tests {
         newer.header.abi_minor = ABI_MINOR + 1;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let why = unsafe { parse(&newer) }.unwrap_err();
+        let why = unsafe { parse(&newer) }.unwrap_err().to_string();
         assert!(why.contains("update Enshwick"), "{why}");
         let mut older = manifest("you.ok", "0.1.0");
         older.header.abi_minor = ABI_MINOR - 1;

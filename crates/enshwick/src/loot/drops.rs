@@ -794,11 +794,13 @@ impl Load<'_> {
     }
 }
 
-/// Replaces the drops the mod added with [`Load::add_loot`] with `drops`,
-/// from any thread, such as when a setting turns a drop off or changes its
-/// chance; no drops stops them all. A kind of roll nothing linked at start
-/// stays off until a restart, so a mod that may turn its drops on later adds
-/// them at init and replaces them with none at once.
+/// Replaces the drops the mod added with [`Load::add_loot`] with `drops`, from
+/// any thread, such as when a setting turns a drop off or changes its chance;
+/// no drops stops them all.
+///
+/// A kind of roll nothing linked at start stays off until a restart, so a mod
+/// that may turn its drops on later adds them at init and replaces them with
+/// none at once.
 ///
 /// # Errors
 ///
