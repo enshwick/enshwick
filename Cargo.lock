@@ -265,15 +265,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "enshwick-building-materials"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "serde",
- "toml",
-]
-
-[[package]]
 name = "enshwick-compat"
 version = "0.0.0"
 dependencies = [
@@ -345,15 +336,6 @@ dependencies = [
  "proptest",
  "serde",
  "thiserror",
- "toml",
-]
-
-[[package]]
-name = "enshwick-furniture-comfort"
-version = "0.0.0-dev"
-dependencies = [
- "enshwick",
- "serde",
  "toml",
 ]
 

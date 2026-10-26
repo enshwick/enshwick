@@ -127,10 +127,6 @@
       "package-name": "enshwick-safes",
       "component": "enshwick-safes"
     },
-    "mods/enshwick-building-materials": {
-      "package-name": "enshwick-building-materials",
-      "component": "enshwick-building-materials"
-    },
     "mods/enshwick-area-loot": {
       "package-name": "enshwick-area-loot",
       "component": "enshwick-area-loot"
