@@ -284,7 +284,7 @@ fn any_destroyed() -> bool {
 /// id may be another's by then.
 fn take_destroyed() -> FxHashSet<u32> {
     let count = DESTROYED_COUNT
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
             Some(((count >> 32) + 1) << 32)
         })
         .unwrap_or_else(|count| count);
