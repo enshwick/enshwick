@@ -6,13 +6,19 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.7] - 2026-10-26
+
 ### Added
 
+- `load.voxels()` reads up to 64³ voxels of the server's world with
+  `Voxels::read` and `Voxels::sample`, on the game thread at a quiet
+  moment, as `VoxelBox` of `Voxel`s; `Status::NOT_LOADED` and
+  `WorldError::NotLoaded` name a part of the world that is not loaded
+  (#541).
 - `Load::change_items` changes a stack size or container slots of every
   vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
   `Items::Containers`), read from the game's data by the loader;
-  `ItemCategoryMask` moved to `content::categories` and names every item
-  category (#540).
+  `ItemCategoryMask` names every item category (#540).
 - `Load::declare_change` declares a change of a vanilla value at init whose
   value the mod sets any time later through its `ChangeHandle`
   (`set`, `reset`); the loader merges it with every mod's and pack's
@@ -30,6 +36,11 @@ Each entry names the pull request that made the change.
 - `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
   edits and transactions past the world's edge or above 1,024 metres are
   refused, where the game would read air (#548).
+
+### Changed
+
+- `ItemCategoryMask` lives in `content::categories`, beside the selections
+  that use it, instead of `affixes` (#540).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 
