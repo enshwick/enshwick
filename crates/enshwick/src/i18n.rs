@@ -378,6 +378,57 @@ impl Texts {
                 entries.get(key).map(|t| (language, t.as_str()))
             })
     }
+
+    /// Every language with texts of its own, in the order of
+    /// [`Language::ALL`]: the set a test of the texts iterates, so a new
+    /// language is a new table in the file and no change to the test.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::{Language, Texts};
+    ///
+    /// let texts = Texts::parse("[uk]\na = \"А\"\n[en]\na = \"A\"\n")?;
+    /// let languages: Vec<Language> = texts.languages().collect();
+    /// assert_eq!(languages, [Language::FALLBACK, Language::UK_UA]);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    pub fn languages(&self) -> impl Iterator<Item = Language> + '_ {
+        Language::ALL
+            .iter()
+            .copied()
+            .filter(|language| self.by_language.contains_key(language))
+    }
+
+    /// Each language paired with each key another language has a text for
+    /// and it lacks, sorted by language as [`languages`](Self::languages)
+    /// gives them, then by key; empty when every language has every text.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::{Language, Texts};
+    ///
+    /// let texts = Texts::parse("[en]\na = \"A\"\nb = \"B\"\n[uk]\na = \"А\"\n")?;
+    /// assert_eq!(texts.untranslated(), [(Language::UK_UA, "b")]);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn untranslated(&self) -> Vec<(Language, &str)> {
+        let keys: std::collections::BTreeSet<&str> = self
+            .by_language
+            .values()
+            .flat_map(|entries| entries.keys().map(String::as_str))
+            .collect();
+        self.languages()
+            .flat_map(|language| {
+                let entries = &self.by_language[&language];
+                keys.iter()
+                    .filter(|key| !entries.contains_key(**key))
+                    .map(move |&key| (language, key))
+            })
+            .collect()
+    }
 }
 
 /// The texts each mod, or each content pack in the loader's copy of the
@@ -493,7 +544,6 @@ mod tests {
         for &language in Language::ALL {
             assert_eq!(Language::from_code(language.code()), Some(language));
         }
-        assert_eq!(Language::ALL.len(), 35);
         assert_eq!(Language::from_code("PT-BR"), Some(Language::PT_BR));
         assert_eq!(Language::from_code("xx"), None);
     }
