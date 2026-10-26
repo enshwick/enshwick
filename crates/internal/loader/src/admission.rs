@@ -12,6 +12,7 @@
 //! hello names it and only while the host's key holds a player slot in the
 //! game.
 
+use crate::pinned;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
@@ -21,15 +22,12 @@ mod note;
 
 pub use note::{note, place};
 
-/// The table id of the server's session, an offset in the server object.
-pub const SESSION: &str = "server.session";
-/// The table id of the game's kick of one machine from its session.
-pub const KICK: &str = "session.kick";
-/// The table id of the session's own machine, an offset in the session: the
-/// machine the game itself never kicks, the host's in a hosted game.
-pub const HOST_MACHINE: &str = "session.host_machine";
 /// The build table ids this part of the loader names.
-pub const TABLE_IDS: &[&str] = &[SESSION, KICK, HOST_MACHINE];
+pub const TABLE_IDS: &[&str] = &[
+    pinned::server::SESSION.id(),
+    pinned::session::KICK.id(),
+    pinned::session::HOST_MACHINE.id(),
+];
 
 /// Players the gate follows at most; the game has 16 slots.
 const MAX_PLAYERS: usize = 64;

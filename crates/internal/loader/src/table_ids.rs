@@ -43,7 +43,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::{Path, PathBuf};
 
     use enshwick_gamedata::{self as tables, Table};
@@ -152,18 +152,69 @@ mod tests {
         assert!(named.is_empty(), "listed, so no longer unnamed: {named:?}");
     }
 
+    /// Every typed id of `crate::pinned`, by its path below it, such as
+    /// `world::TIME`, read from the catalogue's sources.
+    fn catalogue() -> BTreeMap<String, String> {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pinned");
+        let mut ids = BTreeMap::new();
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let part = path.file_stem().unwrap().to_string_lossy().into_owned();
+            let text = std::fs::read_to_string(&path).unwrap();
+            for item in text.split("pub(crate) const ").skip(1) {
+                let (name, rest) = item.split_once(':').unwrap();
+                let id = rest.split('"').nth(1).unwrap();
+                ids.insert(format!("{part}::{name}"), id.to_owned());
+            }
+        }
+        ids
+    }
+
     #[test]
-    fn every_id_a_module_spells_out_is_in_its_list() {
+    fn every_catalogued_id_is_pinned() {
         let pinned = pinned();
+        let stale: Vec<_> = catalogue()
+            .into_values()
+            .filter(|id| !pinned.contains(id))
+            .collect();
+        assert!(stale.is_empty(), "catalogued but in no table: {stale:?}");
+    }
+
+    #[test]
+    fn every_id_a_module_names_is_in_its_list() {
+        let catalogue = catalogue();
         for (name, ids) in TABLE_IDS {
             let text = sources(name);
             let missing: Vec<_> = text
+                .split("pinned::")
+                .skip(1)
+                .filter_map(|rest| {
+                    let end = rest
+                        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
+                        .unwrap_or(rest.len());
+                    catalogue.get(&rest[..end])
+                })
+                .filter(|id| !ids.contains(&id.as_str()))
+                .collect();
+            assert!(missing.is_empty(), "{name} names {missing:?} unlisted");
+        }
+    }
+
+    #[test]
+    fn no_module_spells_a_pinned_id_as_text() {
+        let pinned = pinned();
+        for (name, _) in TABLE_IDS {
+            let text = sources(name);
+            let spelled: Vec<_> = text
                 .split('"')
                 .skip(1)
                 .step_by(2)
-                .filter(|literal| pinned.contains(*literal) && !ids.contains(literal))
+                .filter(|literal| pinned.contains(*literal))
                 .collect();
-            assert!(missing.is_empty(), "{name} names {missing:?} unlisted");
+            assert!(
+                spelled.is_empty(),
+                "{name} spells {spelled:?}; name them through crate::pinned"
+            );
         }
     }
 }

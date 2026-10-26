@@ -1,6 +1,7 @@
 //! The loader's side of the API: its state and the `HostApi` table.
 
 use crate::mod_index::ModIndex;
+use crate::pinned::{Constant, Symbol};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -210,6 +211,8 @@ pub(crate) struct Loader {
     pub(crate) data_dir: PathBuf,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
+    /// The DLLs that run beside the mods without the API.
+    pub(crate) others: Vec<crate::others::OtherDll>,
     /// Every hook chain.
     pub(crate) chains: Mutex<Chains>,
     /// Every mid-function hook.
@@ -297,13 +300,24 @@ pub(crate) fn is_off(owner: ModIndex) -> bool {
 }
 
 impl Loader {
-    /// The address of the build table's symbol `name` in the running game.
-    pub(crate) fn address(&self, name: &str) -> Option<u64> {
+    /// The address of the build table's symbol `id` in the running game.
+    pub(crate) fn address(&self, id: Symbol) -> Option<u64> {
+        self.address_by_name(id.id())
+    }
+
+    /// The build table's constant `id` as an offset or a size.
+    pub(crate) fn offset(&self, id: Constant) -> Option<usize> {
+        self.offset_by_name(id.id())
+    }
+
+    /// The address of the symbol `name`, an id put together at run time.
+    pub(crate) fn address_by_name(&self, name: &str) -> Option<u64> {
         self.build.symbol(name).map(|rva| self.base + rva)
     }
 
-    /// The build table's constant `name` as an offset or a size.
-    pub(crate) fn offset(&self, name: &str) -> Option<usize> {
+    /// The constant `name`, an id put together at run time, as an offset or
+    /// a size.
+    pub(crate) fn offset_by_name(&self, name: &str) -> Option<usize> {
         self.build
             .constant(name)
             .and_then(|value| usize::try_from(value).ok())

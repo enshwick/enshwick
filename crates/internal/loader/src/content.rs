@@ -14,6 +14,7 @@
 //! address, so a rebuild must come out the same length.
 
 use crate::mod_index::ModIndex;
+use crate::pinned;
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -27,12 +28,12 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "resource.key_of",
-    "resource.open",
-    "resource.resolve",
-    "text.lookup",
-    "text.lookup_english",
-    "text.pool_language",
+    pinned::resource::KEY_OF.id(),
+    pinned::resource::OPEN.id(),
+    pinned::resource::RESOLVE.id(),
+    pinned::text::LOOKUP.id(),
+    pinned::text::LOOKUP_ENGLISH.id(),
+    pinned::text::POOL_LANGUAGE.id(),
 ];
 
 /// Marks a handle the loader made.
@@ -204,9 +205,9 @@ fn seal_texts(loader: &'static Loader) {
     }
     // Only the client shows text; the server has no lookups to link.
     let (Some(lookup_rva), Some(english_rva), Some(offset)) = (
-        loader.build.symbol("text.lookup"),
-        loader.build.symbol("text.lookup_english"),
-        loader.build.constant("text.pool_language"),
+        loader.build.symbol(pinned::text::LOOKUP.id()),
+        loader.build.symbol(pinned::text::LOOKUP_ENGLISH.id()),
+        loader.build.constant(pinned::text::POOL_LANGUAGE.id()),
     ) else {
         return;
     };
@@ -422,19 +423,19 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let _linked = loader.link_feature(
         "served resources (resource.open)",
-        loader.address("resource.open"),
+        loader.address(pinned::resource::OPEN),
         &OPEN_NEXT,
         open,
         none,
     ) && loader.link_feature(
         "served resources (resource.resolve)",
-        loader.address("resource.resolve"),
+        loader.address(pinned::resource::RESOLVE),
         &RESOLVE_NEXT,
         resolve,
         none,
     ) && loader.link_feature(
         "served resources (resource.key_of)",
-        loader.address("resource.key_of"),
+        loader.address(pinned::resource::KEY_OF),
         &KEY_NEXT,
         key_of,
         none,
