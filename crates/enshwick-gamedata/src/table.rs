@@ -1,19 +1,14 @@
 //! A build table: reading its TOML, resolving it for a build and carrying
 //! it over to a build without one.
 
-use crate::Constant;
-use crate::Fingerprint;
-use crate::GameVersion;
-use crate::Kind;
-use crate::Locate;
-use crate::Operand;
-use crate::Resolved;
-use crate::Side;
-use crate::SteamBuild;
-use crate::Symbol;
-use crate::entries::read;
-use enshwick::code::Pattern;
 use std::collections::BTreeMap;
+
+use enshwick::code::Pattern;
+
+use crate::entries::read;
+use crate::{
+    Constant, Fingerprint, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol,
+};
 
 /// Why a table does not read.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
