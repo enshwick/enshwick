@@ -41,7 +41,7 @@ serde = { workspace = true, features = ["derive"] }
 [features]
 # `enshwick::test`: a fake loader for a mod's unit tests.
 test = []
-# `packs::schemas`: the JSON Schemas of a content pack's files, for tools.
+# `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
 
 [[test]]

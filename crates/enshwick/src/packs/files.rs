@@ -61,7 +61,7 @@ impl ParsePackError {
 
 impl From<ParsePackError> for Off {
     fn from(errors: ParsePackError) -> Self {
-        Self::new(format!("content pack: {errors}"))
+        Self::new(format!("data pack: {errors}"))
     }
 }
 

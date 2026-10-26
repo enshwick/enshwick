@@ -197,6 +197,20 @@ impl Installed {
         })
     }
 
+    /// The changes of vanilla values the mod declared, in order, each with
+    /// its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn changes(&self) -> Vec<(crate::content::changes::Change, String)> {
+        table::with(Vec::new(), |s| s.changes.clone())
+    }
+
     /// The mod's recipe rules in force, from
     /// [`recipes::disable`](crate::content::recipes::disable) less those
     /// [`recipes::enable`](crate::content::recipes::enable) took back: kind

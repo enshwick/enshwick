@@ -459,7 +459,7 @@ impl Texts {
     }
 }
 
-/// The texts each mod, or each content pack in the loader's copy of the
+/// The texts each mod, or each data pack in the loader's copy of the
 /// API, handed the loader so far.
 static HANDED: crate::fresh::Fresh<std::sync::Mutex<Vec<(crate::abi::ModHandle, Texts)>>> =
     crate::fresh::Fresh::new();

@@ -89,6 +89,30 @@ pub(crate) extern "system" fn recipe_kind(
     found(with(None, |s| s.host.recipe_kinds.get(&item).copied()), out)
 }
 
+pub(crate) extern "system" fn change_data(
+    _me: ModHandle,
+    change: *const crate::abi::DataChange,
+) -> Status {
+    // SAFETY: the safe layer passes null or a record with its header, valid
+    // for the call; an all-zero record is valid.
+    let Some(raw) =
+        (unsafe { crate::abi::read_headed(change, size_of::<crate::abi::DataChange>()) })
+    else {
+        return Status::BAD_ARGS;
+    };
+    let Ok(Some(change)) = crate::content::changes::Change::from_abi(&raw) else {
+        return Status::BAD_ARGS;
+    };
+    // SAFETY: the safe layer borrows the source for the call.
+    let source = unsafe { raw.source.as_str() }
+        .unwrap_or_default()
+        .to_owned();
+    with(Status::MISSING, |s| {
+        s.changes.push((change, source));
+        Status::OK
+    })
+}
+
 pub(crate) extern "system" fn add_text(
     _me: ModHandle,
     id: u32,
