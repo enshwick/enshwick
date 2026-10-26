@@ -254,7 +254,14 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
             .unwrap_or_else(|| patch.item.to_string());
         let mut raised = CHANGES.raised.relock();
         let raised = raised.get_or_insert_with(FxHashMap::default);
-        for owner in credited(&owners, f64::from(new), without) {
+        let alone = |m: ModIndex| {
+            merged
+                .value(patch.item, Field::MaxStack, f64::from(old), |o| {
+                    live(o) && o == m
+                })
+                .unwrap_or(f64::from(old))
+        };
+        for owner in credited(&owners, f64::from(old), f64::from(new), without, alone) {
             raised
                 .entry(owner)
                 .and_modify(|r| r.note(patch.item))

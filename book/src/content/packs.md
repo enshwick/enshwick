@@ -158,8 +158,9 @@ error you.stacks holds this game (it lets Wood_Log and 12 more items stack past 
 ```
 
 To remove such a pack safely, split every stack larger than the game's size
-first, then delete `mod-data/<id>/hold.txt`. A pack that only lowers stack
-sizes sets no hold; while it runs, the game cuts larger stacks to its value.
+first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
+item, each of them holds. A pack that only lowers stack sizes sets no hold;
+while it runs, the game cuts larger stacks to its value.
 
 ## `workshops.toml`
 

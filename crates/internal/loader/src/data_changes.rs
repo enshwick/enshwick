@@ -224,14 +224,31 @@ impl Raised {
     }
 }
 
-/// The owners in `owners` whose changes raise a value to `new`: those
-/// without whom it would come out lower, as `without` works it out.
+/// The owners in `owners` whose changes raise a value from `old` to `new`.
+///
+/// Those are the owners without whom it would come out lower, as `without`
+/// works it out; when none is, every owner whose changes alone raise it, as
+/// `alone` works it out, so two packs that raise one value both hold.
 #[must_use]
-pub fn credited(owners: &[ModIndex], new: f64, without: impl Fn(ModIndex) -> f64) -> Vec<ModIndex> {
-    owners
+pub fn credited(
+    owners: &[ModIndex],
+    old: f64,
+    new: f64,
+    without: impl Fn(ModIndex) -> f64,
+    alone: impl Fn(ModIndex) -> f64,
+) -> Vec<ModIndex> {
+    let needed: Vec<ModIndex> = owners
         .iter()
         .copied()
         .filter(|&owner| without(owner) < new)
+        .collect();
+    if !needed.is_empty() || new <= old {
+        return needed;
+    }
+    owners
+        .iter()
+        .copied()
+        .filter(|&owner| alone(owner) > old)
         .collect()
 }
 
@@ -366,12 +383,44 @@ mod tests {
         let (merged, _) = merge(&all, no_requires);
         let new = merged.value(WOOD, Field::MaxStack, 20.0, |_| true).unwrap();
         let owners = merged.owners(WOOD, Field::MaxStack, |_| true);
+        let (without, alone) = sides(&merged);
+        assert_eq!(
+            credited(&owners, 20.0, new, without, alone),
+            [ModIndex::new(0)]
+        );
+    }
+
+    fn sides(merged: &Merged) -> (impl Fn(ModIndex) -> f64 + '_, impl Fn(ModIndex) -> f64 + '_) {
         let without = |m: ModIndex| {
             merged
                 .value(WOOD, Field::MaxStack, 20.0, |o| o != m)
                 .unwrap_or(20.0)
         };
-        assert_eq!(credited(&owners, new, without), [ModIndex::new(0)]);
+        let alone = |m: ModIndex| {
+            merged
+                .value(WOOD, Field::MaxStack, 20.0, |o| o == m)
+                .unwrap_or(20.0)
+        };
+        (without, alone)
+    }
+
+    #[test]
+    fn two_packs_that_each_raise_a_value_are_both_credited() {
+        for later in [999.0, 500.0] {
+            let all = [
+                declared(0, WOOD, Value::Set(999.0), ""),
+                declared(1, WOOD, Value::Set(later), ""),
+            ];
+            let (merged, _) = merge(&all, no_requires);
+            let new = merged.value(WOOD, Field::MaxStack, 20.0, |_| true).unwrap();
+            let owners = merged.owners(WOOD, Field::MaxStack, |_| true);
+            let (without, alone) = sides(&merged);
+            assert_eq!(
+                credited(&owners, 20.0, new, without, alone),
+                [ModIndex::new(0), ModIndex::new(1)],
+                "later set {later}"
+            );
+        }
     }
 
     #[test]
