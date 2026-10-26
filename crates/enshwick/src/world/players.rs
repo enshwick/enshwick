@@ -12,7 +12,7 @@ impl World {
     #[must_use]
     pub fn player(&self, entity: Entity) -> Option<Player> {
         let mut info = blank_info();
-        let status = (self.host.api().player)(self.host.handle(), entity.0, &raw mut info);
+        let status = (self.0.host.api().player)(self.0.host.handle(), entity.0, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
     }
 
@@ -27,7 +27,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn player_by_key(&self, key: u64) -> Option<Player> {
+    pub fn player_by_key(self, key: u64) -> Option<Player> {
         self.players().into_iter().find(|player| player.key == key)
     }
 
@@ -47,7 +47,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn players_named(&self, name: &str) -> Vec<Player> {
+    pub fn players_named(self, name: &str) -> Vec<Player> {
         let mut players = self.players();
         players.retain(|player| player.is_named(name));
         players
@@ -74,8 +74,8 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn set_label(&self, entity: Entity, text: &str) -> bool {
-        (self.host.api().set_label)(self.host.handle(), entity.0, Str::new(text)).is_ok()
+    pub fn set_label(self, entity: Entity, text: &str) -> bool {
+        (self.0.host.api().set_label)(self.0.host.handle(), entity.0, Str::new(text)).is_ok()
     }
 
     /// Sends `text` to every player's chat, after the next step; callable
@@ -88,7 +88,7 @@ impl World {
     ///     world.broadcast("The server restarts in five minutes");
     /// }
     /// ```
-    pub fn broadcast(&self, text: &str) {
+    pub fn broadcast(self, text: &str) {
         self.chat(0, text);
     }
 
@@ -102,7 +102,7 @@ impl World {
     ///     world.tell(player, "Welcome back");
     /// }
     /// ```
-    pub fn tell(&self, player: &Player, text: &str) {
+    pub fn tell(self, player: &Player, text: &str) {
         if player.key != 0 {
             self.chat(player.key, text);
         }
@@ -128,8 +128,8 @@ impl World {
         clippy::must_use_candidate,
         reason = "shown is the point; how is for the curious"
     )]
-    pub fn notify(&self, player: &Player, text: &str) -> Notice {
-        if (self.host.api().notify)(self.host.handle(), player.key, Str::new(text)).is_ok() {
+    pub fn notify(self, player: &Player, text: &str) -> Notice {
+        if (self.0.host.api().notify)(self.0.host.handle(), player.key, Str::new(text)).is_ok() {
             return Notice::OnScreen;
         }
         self.tell(player, text);
@@ -145,14 +145,14 @@ impl World {
     ///     world.notify_all("A storm is coming");
     /// }
     /// ```
-    pub fn notify_all(&self, text: &str) {
+    pub fn notify_all(self, text: &str) {
         for player in self.players() {
             self.notify(&player, text);
         }
     }
 
-    pub(super) fn chat(&self, to: u64, text: &str) {
-        let _queued = (self.host.api().chat)(self.host.handle(), to, Str::new(text));
+    pub(super) fn chat(self, to: u64, text: &str) {
+        let _queued = (self.0.host.api().chat)(self.0.host.handle(), to, Str::new(text));
     }
 
     /// Every connected player with a character in the world.
@@ -165,7 +165,7 @@ impl World {
     /// }
     /// ```
     #[must_use]
-    pub fn players(&self) -> Vec<Player> {
-        online(self.host)
+    pub fn players(self) -> Vec<Player> {
+        online(self.0.host)
     }
 }

@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- `World` is one pointer to what the mod resolved once, instead of 320
+  bytes: a copy is cheap, and passing it by value or moving it into a
+  closure no longer trips `clippy::large_types_passed_by_value`. Its
+  methods take `self`, so calls read the same.
+
 ## [1.0.0-alpha.5] - 2026-10-26
 
 ### Added

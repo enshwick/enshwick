@@ -3,7 +3,7 @@
 
 use core::ops::BitOr;
 
-use crate::Load;
+use crate::Host;
 use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::world::{ComponentType, Placed, World};
@@ -98,10 +98,9 @@ impl Containers {
     /// The holders' component and every marker; `None` on a build that
     /// lacks any of them, since a holder whose marker is missing would fall
     /// to a later kind, a summoned NPC to the built ones.
-    pub(crate) fn resolve(load: &Load<'_>, world: &World) -> Option<Self> {
+    pub(crate) fn resolve(host: Host) -> Option<Self> {
         let resolve = |id| {
-            world
-                .component_type(load, id)
+            super::type_named(host, id)
                 .inspect_err(|off| crate::debug!("container queries off: {off}"))
                 .ok()
         };
@@ -114,7 +113,7 @@ impl Containers {
     }
 
     /// The kind of the holder `entity`.
-    fn kind(&self, world: &World, entity: Entity) -> ContainerKinds {
+    fn kind(&self, world: World, entity: Entity) -> ContainerKinds {
         self.markers
             .iter()
             .find(|&&(_, ty)| world.component(entity, ty).is_some())
@@ -122,7 +121,7 @@ impl Containers {
     }
 
     /// The holders of a kind in `kinds`.
-    pub(crate) fn of(&self, world: &World, kinds: ContainerKinds) -> Vec<Placed> {
+    pub(crate) fn of(&self, world: World, kinds: ContainerKinds) -> Vec<Placed> {
         let mut found = world.entities(self.setup);
         found.retain(|placed| kinds.contains(self.kind(world, placed.entity)));
         found
