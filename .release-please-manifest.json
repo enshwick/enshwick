@@ -11,7 +11,6 @@
   "crates/enshwick-reflect": "0.0.0-dev",
   "crates/enshwick-gamedata": "0.0.0-dev",
   "mods/enshwick-safes": "0.0.0-dev",
-  "mods/enshwick-building-materials": "0.0.0-dev",
   "mods/enshwick-area-loot": "0.0.0-dev",
   "mods/enshwick-build-camera": "0.0.0-dev",
   "mods/enshwick-shared-experience": "0.0.0-dev",
