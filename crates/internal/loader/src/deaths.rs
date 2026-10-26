@@ -10,11 +10,13 @@
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
+
+use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 use crate::chains::Next;
 use crate::host::Loader;
-use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &["player.death_sink"];
@@ -180,7 +182,7 @@ unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8)
                 // call, and `at` is below that size.
                 *byte = unsafe { enshwick::raw::read_at(death, at) };
             }
-            let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut seen = SEEN.relock();
             if seen.len() < MOST {
                 seen.push(bytes);
             }
@@ -231,7 +233,7 @@ pub(crate) fn after_step(loader: &Loader) {
     let Some(layout) = RECORD.get() else {
         return;
     };
-    let seen = std::mem::take(&mut *SEEN.lock().unwrap_or_else(PoisonError::into_inner));
+    let seen = std::mem::take(&mut *SEEN.relock());
     if seen.is_empty() {
         return;
     }

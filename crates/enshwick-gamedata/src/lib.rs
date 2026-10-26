@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use enshwick::code::Pattern;
 
 pub mod archive;
+mod locks;
 mod parts;
 
 pub use parts::{Part, PartState};

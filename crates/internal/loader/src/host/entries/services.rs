@@ -8,6 +8,7 @@ use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str};
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
 use crate::host::{Loader, Subscription, caller, caller_index, calling, entry, mark_handled};
+use crate::locks::Relock;
 
 impl crate::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {
@@ -470,9 +471,7 @@ pub(crate) extern "system" fn subscribe(
             }
             return Status::TOO_LATE;
         }
-        let Ok(mut subscriptions) = loader.subscriptions.lock() else {
-            return Status::REFUSED;
-        };
+        let mut subscriptions = loader.subscriptions.relock();
         subscriptions.push(subscription);
         Status::OK
     })

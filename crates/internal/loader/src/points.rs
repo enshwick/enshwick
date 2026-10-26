@@ -7,12 +7,13 @@
 
 use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Level, PointFn, PointMode, PointVerdict, Status};
 use enshwick::points::{LinkPlace, order};
 use enshwick::services::{LayoutError, compare};
 
+use crate::locks::Relock;
 use crate::services::{Fields, Names};
 
 /// A point as one side declares it.
@@ -481,7 +482,7 @@ static INERT: OnceLock<Vec<Inert>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.lock().unwrap_or_else(PoisonError::into_inner)
+    REGISTRY.relock()
 }
 
 /// Whether the points are sealed: defining and attaching are over.

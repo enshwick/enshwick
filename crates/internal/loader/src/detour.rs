@@ -37,6 +37,7 @@ use windows_sys::Win32::System::Threading::{
     THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
 };
 
+use crate::locks::Relock;
 use crate::pages;
 use crate::settings::LOADER_ID;
 
@@ -243,9 +244,7 @@ fn far_jump(destination: usize) -> [u8; FAR_JUMP] {
 /// `ENTRY` bytes within `rel32` reach of `target`, from a block allocated in
 /// this batch.
 fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, String> {
-    let mut blocks = BLOCKS
-        .lock()
-        .map_err(|_| "the relay allocator is poisoned".to_owned())?;
+    let mut blocks = BLOCKS.relock();
     let reaches = |base: usize| base.abs_diff(target) < REACH;
     if let Some((base, used)) = blocks
         .iter_mut()

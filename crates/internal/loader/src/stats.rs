@@ -13,12 +13,14 @@
 //! account in `mod-data/enshwick/worlds/<key>/stats.bin` and come back when
 //! the player joins.
 
+use crate::locks::Relock;
+
 mod equipment;
 mod vitals;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
@@ -182,7 +184,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     if SEALED.get().is_some() {
         return Err(Status::TOO_LATE);
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let pending = pending.get_or_insert_with(|| {
         let mut fresh = Pending::default();
         for (id, def) in builtin::ALL {
@@ -396,8 +398,7 @@ pub(crate) fn wanted() -> bool {
 /// keep item stats as item data of their own.
 pub(crate) fn seal() {
     let pending = PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .take()
         .filter(|p| p.used)
         .unwrap_or_default();
@@ -501,7 +502,7 @@ fn serves() -> bool {
 }
 
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = STATE.relock();
     f(state.get_or_insert_with(State::default))
 }
 
@@ -1002,7 +1003,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 .and_then(|bytes| postcard::from_bytes(&bytes).ok())
                 .unwrap_or_default();
             crate::log!(INFO, "stats: {} saved modifiers", saved.len());
-            *STATE.lock().unwrap_or_else(PoisonError::into_inner) = Some(State {
+            *STATE.relock() = Some(State {
                 saved,
                 world: key,
                 ..State::default()
@@ -1020,7 +1021,7 @@ pub(crate) fn forget() {
     if let Some(loader) = crate::host::loader() {
         save(loader);
     }
-    *STATE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *STATE.relock() = None;
     snapshot().store(Arc::new(Snapshot::default()));
 }
 
@@ -1064,12 +1065,7 @@ mod tests {
         values.values.insert(7, Box::new([2.0]));
         snapshot().store(Arc::new(values));
         forget();
-        assert!(
-            STATE
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .is_none()
-        );
+        assert!(STATE.relock().is_none());
         assert!(snapshot().load().values.is_empty());
     }
 

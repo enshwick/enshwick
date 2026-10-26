@@ -10,6 +10,7 @@ use enshwick::mods::LOADER_FILE;
 use crate::host::join::JOIN_MISSING;
 use crate::host::memory::{get_headed, put, text};
 use crate::host::{LOADER_HANDLE, ModRecord, calling, entry, loader};
+use crate::locks::Relock;
 
 pub(crate) extern "system" fn fault(me: ModHandle, reason: Str) {
     entry("fault", || {
@@ -77,13 +78,11 @@ pub(crate) extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut S
             }
         };
         let content = crate::worlds::effective(loader, record, &content);
-        match record.settings.keep(&content) {
-            // SAFETY: `HostApi::settings` has the mod pass `out` null or
-            // pointing at a writable, aligned `Str` that no other thread
-            // touches during the call.
-            Some(kept) => unsafe { put(out, kept) },
-            None => Status::REFUSED,
-        }
+        let kept = record.settings.keep(&content);
+        // SAFETY: `HostApi::settings` has the mod pass `out` null or pointing
+        // at a writable, aligned `Str` that no other thread touches during the
+        // call.
+        unsafe { put(out, kept) }
     })
 }
 
@@ -189,10 +188,7 @@ pub(crate) extern "system" fn join_missing(
         if loader.record(me).is_none() {
             return Status::BAD_ARGS;
         }
-        let held = JOIN_MISSING
-            .lock()
-            .map(|held| held.clone())
-            .unwrap_or_default();
+        let held = JOIN_MISSING.relock().clone();
         let infos: Vec<ModInfo> = held
             .iter()
             .map(|missing| ModInfo {
@@ -310,9 +306,7 @@ pub(crate) extern "system" fn config_schema(me: ModHandle, schema: Str) -> Statu
         let Ok(schema) = enshwick::config::Schema::parse(schema) else {
             return Status::BAD_ARGS;
         };
-        let Ok(mut slot) = record.schema.lock() else {
-            return Status::REFUSED;
-        };
+        let mut slot = record.schema.relock();
         *slot = Some(schema);
         Status::OK
     })
@@ -326,7 +320,8 @@ pub(crate) extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) ->
         let Some((_, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
-        if let Ok(mut reported) = record.synced.lock() {
+        {
+            let mut reported = record.synced.relock();
             let now = (!synced.is_empty()).then(|| synced.to_owned());
             // A server whose join values changed tells the joined clients at
             // once; the first report, at init, finds none joined.
@@ -339,19 +334,11 @@ pub(crate) extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) ->
             }
             *reported = now;
         }
-        let server = record
-            .server_synced
-            .lock()
-            .ok()
-            .and_then(|held| held.clone())
-            .unwrap_or_default();
-        match record.sync_out.keep(&server) {
-            // SAFETY: `HostApi::sync` has the mod pass `out` null or pointing
-            // at a writable, aligned `Str` that no other thread touches during
-            // the call.
-            Some(kept) => unsafe { put(out, kept) },
-            None => Status::REFUSED,
-        }
+        let server = record.server_synced.relock().clone().unwrap_or_default();
+        let kept = record.sync_out.keep(&server);
+        // SAFETY: `HostApi::sync` has the mod pass `out` null or pointing at a
+        // writable, aligned `Str` that no other thread touches during the call.
+        unsafe { put(out, kept) }
     })
 }
 
@@ -423,9 +410,7 @@ pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
         let Ok(parsed) = enshwick::i18n::Texts::parse(toml) else {
             return Status::BAD_ARGS;
         };
-        let Ok(mut slot) = record.texts.lock() else {
-            return Status::REFUSED;
-        };
+        let mut slot = record.texts.relock();
         *slot = Some(parsed);
         Status::OK
     })

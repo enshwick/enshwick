@@ -3,10 +3,12 @@
 //! names with one key would read as one thing, so the second is refused,
 //! with both names and both mods in the reason.
 
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use enshwick::content::Guid;
 use rustc_hash::FxHashMap;
+
+use crate::locks::Relock;
 
 /// What an id names; each kind has keys of its own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -77,7 +79,7 @@ static IDS: Mutex<Option<Ids>> = Mutex::new(None);
 
 /// Runs `f` on the process's ids.
 pub(crate) fn with<R>(f: impl FnOnce(&mut Ids) -> R) -> R {
-    let mut ids = IDS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut ids = IDS.relock();
     f(ids.get_or_insert_with(Ids::default))
 }
 

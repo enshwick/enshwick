@@ -21,11 +21,12 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Status};
 
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -352,7 +353,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 .as_deref()
                 .map(|key| read_kept(loader, key))
                 .unwrap_or_default();
-            *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Kept {
+            *KEPT.relock() = Kept {
                 key,
                 fields,
                 loaded: None,
@@ -362,7 +363,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
         }
         Event::SHUTDOWN_STARTED => {
             PENDING.store(false, Ordering::Release);
-            *KEPT.lock().unwrap_or_else(PoisonError::into_inner) = Kept::default();
+            *KEPT.relock() = Kept::default();
         }
         _ => {}
     }
@@ -388,7 +389,7 @@ fn settle(loader: &Loader) {
         return;
     }
     PENDING.store(false, Ordering::Release);
-    let mut kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut kept = KEPT.relock();
     kept.loaded = Some(bytes.clone());
     if kept.fields.is_empty() {
         return;
@@ -407,7 +408,7 @@ pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Stat
     if mask.len() != data.len() {
         return Err(Status::BAD_ARGS);
     }
-    let mut kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut kept = KEPT.relock();
     let key = kept.key.clone().ok_or(Status::MISSING)?;
     write(loader, data)?;
     let fields = masked(layout, data, mask);
@@ -423,7 +424,7 @@ pub(crate) fn keep(loader: &Loader, data: &[u8], mask: &[u8]) -> Result<(), Stat
 /// loaded with.
 pub(crate) fn forget(loader: &Loader) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let mut kept = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut kept = KEPT.relock();
     let key = kept.key.clone().ok_or(Status::MISSING)?;
     if kept.fields.is_empty() {
         return Ok(());

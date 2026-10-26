@@ -10,13 +10,14 @@
 //! reply reaches the player as one of the game's notices and on the screen
 //! that sent it.
 
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use enshwick::abi::{ActionCall, ActionFn, Header, PlayerInfo, Status, Str};
 use enshwick::actions::sheet::{self, Entry};
 
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::remote::Message;
 
 /// How often the server looks for hints.
@@ -51,7 +52,7 @@ struct ServerState {
 static SERVER: Mutex<Option<ServerState>> = Mutex::new(None);
 
 fn server_state<R>(f: impl FnOnce(&mut ServerState) -> R) -> R {
-    let mut slot = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut slot = SERVER.relock();
     f(slot.get_or_insert_with(|| ServerState {
         clients: rustc_hash::FxHashMap::default(),
         next_hints: None,
@@ -66,7 +67,7 @@ pub(crate) fn register(
     user: *mut core::ffi::c_void,
     again: bool,
 ) -> Status {
-    let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut registered = REGISTERED.relock();
     if let Some(known) = registered.iter_mut().find(|r| r.owner == owner) {
         if !again {
             return Status::REFUSED;
@@ -85,7 +86,7 @@ pub(crate) fn register(
 
 /// The registered mods that are running.
 fn running(loader: &Loader) -> Vec<Registered> {
-    let registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+    let registered = REGISTERED.relock();
     registered
         .iter()
         .copied()
@@ -357,7 +358,7 @@ pub(crate) fn after_step(loader: &Loader) {
 
 /// Forgets the clients, as when the server's world goes away.
 pub(crate) fn forget() {
-    *SERVER.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *SERVER.relock() = None;
 }
 
 /// A mod's actions as the client heard them.
@@ -403,12 +404,12 @@ static HEARD: Mutex<Option<Heard>> = Mutex::new(None);
 
 /// Reads what the client heard, under the lock.
 pub(crate) fn heard<R>(read: impl FnOnce(&Heard) -> R) -> R {
-    let mut slot = HEARD.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut slot = HEARD.relock();
     read(slot.get_or_insert_with(Heard::default))
 }
 
 fn hear(change: impl FnOnce(&mut Heard)) {
-    let mut slot = HEARD.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut slot = HEARD.relock();
     let heard = slot.get_or_insert_with(Heard::default);
     change(heard);
     heard.news += 1;
@@ -479,7 +480,7 @@ pub(crate) fn run_on_server(id: &str, action: &str, args: &str) -> bool {
 /// The client joined a server that answered: it tells the server its
 /// language, which the hints need, and forgets the last server's actions.
 pub(crate) fn joined() {
-    *HEARD.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *HEARD.relock() = None;
     let _asked = ask_server();
 }
 

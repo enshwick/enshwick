@@ -13,16 +13,18 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
-use super::engine::{Buf, UiText};
 use crate::builds::Kind;
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
+
+use super::engine::{Buf, UiText};
 
 /// The most markers one mod shows.
 const MAX_MARKERS: usize = 256;
@@ -114,7 +116,7 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
         })
         .collect();
-    let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut sets = SETS.relock();
     sets.retain(|(o, _)| *o != owner);
     if !copied.is_empty() {
         sets.push((owner, copied.into()));
@@ -122,7 +124,7 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
     let next: Sets = sets.iter().map(|(_, list)| Arc::clone(list)).collect();
     drop(sets);
     let old = snapshot().swap(Arc::new(next));
-    let mut retired = RETIRED_SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut retired = RETIRED_SETS.relock();
     retired.push_back((FRAME.load(Ordering::Acquire), old));
     retire(&mut retired, FRAME.load(Ordering::Acquire));
     Status::OK
