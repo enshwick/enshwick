@@ -94,7 +94,8 @@ pub enum Rate {
     /// number; points from knowledge stay as they are. Clients count it
     /// too, for the points their skill tree shows, and the server checks
     /// every unlock against its own count, so only a mod with
-    /// `join: true` declares it, set from a synced setting.
+    /// `join: true` declares it, set from a synced setting. Lowering it
+    /// mid-game can leave a character with more points spent than it has.
     SkillPoints,
     /// How many items each stack of random loot holds, rounded and held
     /// to the item's stack size: the loot of chests, corpses and animals and
@@ -289,7 +290,8 @@ impl RateHandle {
     }
 
     /// Puts `factor` in force as this mod's factor for the rate: 1 is
-    /// vanilla, 2 doubles, 0 takes it all. The game uses it from the next
+    /// vanilla, 2 doubles, 0 takes it all, except where a rate keeps a
+    /// least value ([`Rate::WorkshopSpeed`], [`Rate::Loot`]). The game uses it from the next
     /// time it reads the rate. Any thread; neither allocates nor locks once
     /// every mod is initialised.
     ///
@@ -314,8 +316,10 @@ impl RateHandle {
 
 impl Load<'_> {
     /// Declares that this mod multiplies `rate` and hands back the handle
-    /// that sets its factor, 1 until set. Rates apply where the world runs:
-    /// on the dedicated server and on a client while it hosts a game.
+    /// that sets its factor, 1 until set. The loader scales the game's
+    /// answers in every process the mod runs in; what the server decides,
+    /// such as experience and loot, counts on the dedicated server and on a
+    /// client while it hosts a game.
     ///
     /// # Errors
     ///

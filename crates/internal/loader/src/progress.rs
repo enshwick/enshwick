@@ -167,7 +167,7 @@ pub(crate) fn register_comfort(
     if too_late(loader) {
         return Status::TOO_LATE;
     }
-    if symbol(loader, "comfort.base_register").is_none() {
+    if symbol(loader, crate::rates::COMFORT_REGISTER).is_none() {
         return Status::MISSING;
     }
     COMFORT
@@ -202,7 +202,7 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     let wants = [
         !sealed.skills.is_empty(),
-        !sealed.comfort.is_empty() || crate::rate_links::wanted("comfort.base_register"),
+        !sealed.comfort.is_empty() || crate::rate_links::wanted(crate::rates::COMFORT_REGISTER),
         !sealed.experience.is_empty(),
     ];
     let _first = SEALED.set(sealed);
@@ -238,7 +238,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[1]
         && loader.link_feature(
             "comfort",
-            address("comfort.base_register"),
+            address(crate::rates::COMFORT_REGISTER),
             &COMFORT_NEXT,
             register,
             HookFlags::NONE,

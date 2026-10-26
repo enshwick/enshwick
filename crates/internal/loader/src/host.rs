@@ -328,6 +328,35 @@ impl Loader {
         self.chains.relock().add(target, link)
     }
 
+    /// Whether the code at symbol `id` is what the table expects: its
+    /// pattern matches where the symbol's code starts, on the build the
+    /// table was made for; a table carried over found it by that pattern,
+    /// which holds only where it matches once with its bytes. False for a
+    /// symbol the build lacks or whose pattern finds it through a
+    /// displacement.
+    pub(crate) fn code_holds(&self, id: &str) -> bool {
+        let (Some(address), Some((pattern, at))) = (self.address(id), self.build.head(id)) else {
+            return false;
+        };
+        if self.build.kind == crate::builds::Kind::Fallback {
+            return true;
+        }
+        let Some(start) = address
+            .checked_sub(at)
+            .and_then(|a| usize::try_from(a).ok())
+        else {
+            return false;
+        };
+        let mut code = vec![0u8; pattern.len()];
+        // SAFETY: `start` is the table's `id` less the distance its pattern
+        // starts before it, code inside the game's image, which stays mapped
+        // and readable for the life of the process; a pattern spans code of
+        // the function it was made from, which the table checks against
+        // its build.
+        unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+        pattern.matches(&code)
+    }
+
     /// [`Loader::link`] for a feature, logging why it stays off: a target
     /// this build lacks, or a refused link. True when linked.
     pub(crate) fn link_feature<F: Copy>(

@@ -8,7 +8,6 @@ use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, RateId};
 
-use crate::builds::Kind;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::Loader;
@@ -173,7 +172,8 @@ fn link_one<F: Copy>(
     if !wanted(symbol) {
         return false;
     }
-    let Some(target) = verified(loader, symbol) else {
+    let target = loader.address(symbol).filter(|_| loader.code_holds(symbol));
+    let Some(target) = target else {
         crate::log!(
             WARN,
             "{feature} off on {}: the code at `{symbol}` is not what the table expects",
@@ -182,24 +182,6 @@ fn link_one<F: Copy>(
         return false;
     };
     loader.link_feature(feature, Some(target), next, detour, HookFlags::NONE)
-}
-
-/// The address of `symbol` when its code is what the table expects: its
-/// first eight bytes are the table's `<symbol>.bytes` on the build the
-/// table was made for; a table carried over found it by its pattern, which
-/// holds only where it matches once with its bytes.
-fn verified(loader: &Loader, symbol: &str) -> Option<u64> {
-    let address = loader.address(symbol)?;
-    if loader.build.kind == Kind::Fallback {
-        return Some(address);
-    }
-    let expected = loader.build.constant(&format!("{symbol}.bytes"))?;
-    let at = usize::try_from(address).ok()?;
-    // SAFETY: `at` is the build table's `symbol`, the start of a function in
-    // the game's image, which stays mapped and readable for the life of the
-    // process and is not patched before this check.
-    let found: u64 = unsafe { crate::memory::read(at, 0) };
-    (found == expected).then_some(address)
 }
 
 unsafe extern "system" fn resource_drops(data: *const u8) -> f32 {

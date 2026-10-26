@@ -5,7 +5,8 @@ workshop speed. A mod declares each
 [`Rate`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs)
 it multiplies with `load.rate(rate)` during `init`. The call returns a
 `RateHandle`, and its `set(factor)` puts the mod's factor in force: 1 is
-vanilla, 2 doubles, 0 takes it all. Factors run from 0 to 100.
+vanilla, 2 doubles, 0 takes it all. Factors run from 0 to 100; workshop
+speed keeps at least 0.01 and a loot stack at least 1.
 
 ```rust
 use enshwick::rates::{ExperienceGroup, Rate};
@@ -72,7 +73,8 @@ of the product at once.
 
 Clients count `WorkshopSpeed` and `SkillPoints` too, for the time and the
 points their screens show, and the server checks every skill unlock against
-its own count. Only a
+its own count, so lowering `SkillPoints` mid-game can leave a character
+with more points spent than it has. Only a
 mod with `join: true` may declare it, and `Rate::seen_by_clients` says which
 rates need it. Set such a rate from a `sync` setting: every player who joins
 then runs the mod with the server's factor, and a player without the mod

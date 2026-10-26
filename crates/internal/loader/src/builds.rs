@@ -51,6 +51,13 @@ impl KnownBuild {
         self.table.symbol(name)
     }
 
+    /// The pattern of symbol `id` and how many bytes before the symbol it
+    /// starts; see [`Resolved::head`].
+    #[must_use]
+    pub fn head(&self, id: &str) -> Option<(&enshwick::code::Pattern, u64)> {
+        self.table.head(id)
+    }
+
     /// Systems whose reflected entry must equal the pinned address.
     #[must_use]
     pub fn checks(&self) -> &[(String, u64)] {

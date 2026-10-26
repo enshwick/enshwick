@@ -836,7 +836,20 @@ impl Table {
             missing: Vec::new(),
             uncarried: Vec::new(),
             attributes: self.attributes(),
+            heads: self.heads(),
         }
+    }
+
+    /// Each symbol whose pattern matches where its code starts, or a fixed
+    /// distance before it, with that pattern and distance.
+    fn heads(&self) -> Vec<(String, Pattern, u64)> {
+        self.symbols
+            .iter()
+            .filter_map(|s| match (&s.pattern, s.locate) {
+                (Some(pattern), Locate::At(at)) => Some((s.id.clone(), pattern.clone(), at)),
+                _ => None,
+            })
+            .collect()
     }
 
     fn attributes(&self) -> Vec<(String, String)> {
@@ -906,6 +919,7 @@ impl Table {
             missing,
             uncarried: uncarried.iter().map(|c| c.id.clone()).collect(),
             attributes: self.attributes(),
+            heads: self.heads(),
         }
     }
 
@@ -1023,9 +1037,22 @@ pub struct Resolved {
     missing: Vec<String>,
     uncarried: Vec<String>,
     attributes: Vec<(String, String)>,
+    heads: Vec<(String, Pattern, u64)>,
 }
 
 impl Resolved {
+    /// The pattern of symbol `id` and how many bytes before the symbol it
+    /// starts, for a symbol its pattern finds directly: a hook checks the
+    /// code there before it patches. `None` for a symbol without one, or
+    /// one its pattern finds through a displacement.
+    #[must_use]
+    pub fn head(&self, id: &str) -> Option<(&Pattern, u64)> {
+        self.heads
+            .iter()
+            .find(|(head, ..)| head == id)
+            .map(|(_, pattern, at)| (pattern, *at))
+    }
+
     /// The name the log shows.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -1326,6 +1353,14 @@ mod tests {
         assert_eq!(resolved.constant("c.used"), Some(0x48));
         assert_eq!(resolved.checks(), [("a_system".to_owned(), 0x10)]);
         assert!(resolved.missing().is_empty());
+        let (head, at) = resolved.head("f.found").unwrap();
+        assert_eq!(at, 1);
+        assert!(head.matches(&[0x11, 0x22, 0x00, 0x44]));
+        assert!(resolved.head("f.plain").is_none(), "no pattern");
+        assert!(
+            resolved.head("f.called").is_none(),
+            "found through a displacement"
+        );
     }
 
     #[test]
