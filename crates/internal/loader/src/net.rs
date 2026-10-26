@@ -25,6 +25,7 @@
 use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -235,12 +236,12 @@ fn control(kind: u8) -> Vec<u8> {
 
 /// Sends the client of the player with account key `key` a notice for the
 /// player's entity `entity`; the client shows `text`.
-pub(crate) fn notice(key: u64, entity: u32, text: &str) -> Result<(), Status> {
+pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status> {
     if !ready(key) {
         return Err(Status::MISSING);
     }
     let mut data = control(NOTICE);
-    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(&entity.0.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
     for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
         crate::chat::send_frame(key, &line);
@@ -572,7 +573,7 @@ pub(crate) fn client_received(text: &str) -> bool {
             && let Some((entity, text)) = rest.split_first_chunk::<4>()
             && let Ok(text) = core::str::from_utf8(text)
         {
-            crate::notices::queue(u32::from_le_bytes(*entity), text);
+            crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
         } else if single && let Some(rest) = frame.part.strip_prefix(control(UI_DEMO).as_slice()) {
             crate::ui::open_demo(demo_position(rest));
         } else {

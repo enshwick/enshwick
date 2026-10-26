@@ -20,10 +20,7 @@ mod bases;
 mod buffs;
 pub mod builds;
 pub mod carry;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the running game answers engine facts")
-)]
+#[cfg(windows)]
 mod catalogue;
 pub mod chains;
 #[cfg(windows)]
@@ -111,6 +108,11 @@ mod module;
 mod net;
 #[cfg(windows)]
 mod notices;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "used by the start, which runs on Windows")
+)]
+mod others;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]

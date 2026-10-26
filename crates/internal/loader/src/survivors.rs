@@ -8,6 +8,7 @@
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Symbol};
 use core::ffi::c_void;
+use enshwick::ecs::Entity;
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -658,13 +659,19 @@ fn ask(call: &SurvivorLookup) -> Option<u32> {
     (answered != 0).then_some(out)
 }
 
-fn call(survivor: u32, vanilla: u32, purpose: u32, entity: u32, cell: [i64; 3]) -> SurvivorLookup {
+fn call(
+    survivor: u32,
+    vanilla: u32,
+    purpose: u32,
+    entity: Entity,
+    cell: [i64; 3],
+) -> SurvivorLookup {
     SurvivorLookup {
         header: Header::of::<SurvivorLookup>(),
         survivor,
         vanilla,
         purpose,
-        entity,
+        entity: entity.0,
         cell,
         bed_of: None,
         token: core::ptr::null_mut(),
@@ -752,7 +759,13 @@ unsafe fn resolve(
         if !hosting && !client_site {
             return None;
         }
-        return ask(&call(survivor, found, SurvivorLookup::CURSOR, 0, [0; 3]));
+        return ask(&call(
+            survivor,
+            found,
+            SurvivorLookup::CURSOR,
+            Entity(0),
+            [0; 3],
+        ));
     }
     if !hosting {
         return None;
@@ -783,7 +796,13 @@ unsafe fn resolve(
         // components, which the uniqueness pass holds while it runs.
         let home = unsafe { home(saved, transform) };
         SKIP_UPDATE.with(|skip| skip.set(None));
-        let answer = ask(&call(survivor, found, SurvivorLookup::UNIQUENESS, me, home))?;
+        let answer = ask(&call(
+            survivor,
+            found,
+            SurvivorLookup::UNIQUENESS,
+            Entity(me),
+            home,
+        ))?;
         SKIP_UPDATE
             .with(|skip| skip.set((answer == me && found != 0 && me != found).then_some(survivor)));
         return Some(answer);
@@ -799,7 +818,7 @@ unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::SPAWN,
-            0,
+            Entity(0),
             cell_of_fixed(target),
         ))?;
         if answer != 0 {
@@ -824,7 +843,7 @@ unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::BED_OWNER,
-            0,
+            Entity(0),
             cell_of_fixed(position),
         ));
     }
@@ -833,7 +852,7 @@ unsafe fn resolve(
             survivor,
             found,
             SurvivorLookup::BED_BINDING,
-            0,
+            Entity(0),
             [0; 3],
         ));
     }
@@ -869,7 +888,7 @@ unsafe fn resolve(
     };
     // SAFETY: `ctx` is null or the caller's live query context, used on its
     // system's thread while it runs.
-    let cell = unsafe { position_of(engine, ctx, entity) }?;
+    let cell = unsafe { position_of(engine, ctx, Entity(entity)) }?;
     let purpose = if roaming {
         SurvivorLookup::ROAMING
     } else if caller == c.assign[0] {
@@ -877,7 +896,7 @@ unsafe fn resolve(
     } else {
         SurvivorLookup::PREVIOUS_OCCUPANT
     };
-    let mut lookup = call(survivor, found, purpose, entity, cell);
+    let mut lookup = call(survivor, found, purpose, Entity(entity), cell);
     let mut token = BedToken {
         engine,
         ctx,
@@ -906,7 +925,7 @@ unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> u32 {
     let token = unsafe { &*token.cast::<BedToken<'_>>() };
     // SAFETY: `token.ctx` is null or the running caller's live query context,
     // used on its system's thread while the lookup runs.
-    let common = unsafe { token.engine.component(token.ctx, kind, entity) };
+    let common = unsafe { token.engine.component(token.ctx, kind, Entity(entity)) };
     if common.is_null() {
         return 0;
     }
@@ -922,9 +941,9 @@ unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> u32 {
 ///
 /// - `ctx` is null or a live query context, used on its system's thread
 ///   while the system runs.
-unsafe fn position_of(engine: &Engine, ctx: *mut u64, entity: u32) -> Option<[i64; 3]> {
+unsafe fn position_of(engine: &Engine, ctx: *mut u64, entity: Entity) -> Option<[i64; 3]> {
     let kind = TRANSFORM_TYPE.load(Ordering::Acquire);
-    if kind == u16::MAX || ctx.is_null() || entity == 0 {
+    if kind == u16::MAX || ctx.is_null() || entity == Entity(0) {
         return None;
     }
     // SAFETY: the caller's contract makes the non-null `ctx` (checked earlier)
@@ -1109,7 +1128,7 @@ unsafe fn bed_kept(ctx: *const u8) -> bool {
     let ecs = unsafe { read_ptr_at::<u64>(ctx, 0) };
     // SAFETY: `ecs` is null or the behaviour's live query context, used on
     // its system's thread by the caller's contract.
-    let Some(bed_at) = (unsafe { position_of(engine, ecs, bed) }) else {
+    let Some(bed_at) = (unsafe { position_of(engine, ecs, Entity(bed)) }) else {
         return true;
     };
     // SAFETY: `ecs` is null or the behaviour's live query context, used on
@@ -1182,7 +1201,8 @@ fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
         let info = loader.reflection.type_info("keen::ecs::NetworkFuel").ok()?;
         crate::world::type_hash(info.va())
     });
-    let Some(data) = ty.and_then(|ty| crate::world::component(loader, pide, ty).ok()) else {
+    let Some(data) = ty.and_then(|ty| crate::world::component(loader, Entity(pide), ty).ok())
+    else {
         return [0; 2];
     };
     // SAFETY: `world::component` returned the item's live `NetworkFuel`, two

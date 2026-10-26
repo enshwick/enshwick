@@ -10,6 +10,8 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     const CHEST: &str = "6943053a-32c1-4718-ae22-e61427ddf54d";
+    const ITEM: u32 = 1;
+    const RECIPES: u32 = 3;
 
     struct Lanterns;
 
@@ -40,48 +42,51 @@ mod tests {
 
     fn host() -> FakeHost {
         let mut host = FakeHost::new()
-            .type_size("keen::ImpactUiValue", 0x28)
-            .type_size("keen::RecipeInfo", 0xa8)
-            .type_size("keen::RecipeInputResource", 0x18)
-            .type_size("keen::RecipeItemStackResource", 0x18);
-        for (field, at) in [
-            ("itemId", 0),
-            ("objectId", 4),
-            ("name", 0x48),
-            ("iconImage", 0x58),
-            ("description", 0x68),
-            ("flags", 0x78),
-            ("pidEntity", 0x80),
-            ("uiValues", 0x90),
+            .type_hash(types::ITEM_INFO.id(), ITEM)
+            .type_hash(types::ITEM_REGISTRY.id(), 2)
+            .type_hash(types::RECIPE_REGISTRY.id(), RECIPES)
+            .type_size("item_stat", 0x28)
+            .type_size("recipe", 0xa8)
+            .type_size("recipe_ingredient", 0x18)
+            .type_size("recipe_stack", 0x18);
+        for (id, at) in [
+            ("item_info.id", 0),
+            ("item_info.object", 4),
+            ("item_info.name", 0x48),
+            ("item_info.icon_image", 0x58),
+            ("item_info.description", 0x68),
+            ("item_info.flags", 0x78),
+            ("item_info.pid_entity", 0x80),
+            ("item_info.ui_values", 0x90),
         ] {
-            host = host.field_offset("keen::ItemInfo", field, at);
+            host = host.constant(id, at);
         }
-        for (field, at) in [
-            ("locaId", 0),
-            ("valueFormat", 4),
-            ("value", 8),
-            ("isSigned", 0x24),
+        for (id, at) in [
+            ("item_stat.label", 0),
+            ("item_stat.format", 4),
+            ("item_stat.value", 8),
+            ("item_stat.signed", 0x24),
         ] {
-            host = host.field_offset("keen::ImpactUiValue", field, at);
+            host = host.constant(id, at);
         }
-        for (field, at) in [
-            ("recipeGuid", 0),
-            ("recipeId", 0x10),
-            ("workshopGuid", 0x14),
-            ("workshopId", 0x24),
-            ("input", 0x28),
-            ("output", 0x30),
-            ("completionRequirementQuery", 0x5c),
-            ("requiredProps", 0x38),
-            ("debugName", 0x40),
+        for (id, at) in [
+            ("recipe.guid", 0),
+            ("recipe.id", 0x10),
+            ("recipe.workshop_guid", 0x14),
+            ("recipe.workshop", 0x24),
+            ("recipe.input", 0x28),
+            ("recipe.output", 0x30),
+            ("recipe.completion", 0x5c),
+            ("recipe.required_props", 0x38),
+            ("recipe.debug_name", 0x40),
         ] {
-            host = host.field_offset("keen::RecipeInfo", field, at);
+            host = host.constant(id, at);
         }
-        host.field_offset("keen::RecipeRegistryResource", "recipes", 0)
-            .field_offset("keen::RecipeItemStackResource", "item", 0x10)
-            .field_offset("keen::RecipeItemStackResource", "count", 0x14)
-            .field_offset("keen::ItemRegistryResource", "itemRefs", 0)
-            .field_offset("keen::ItemRegistryResource", "dbgNames", 0x38)
+        host.constant("recipe_registry.recipes", 0)
+            .constant("recipe_stack.item", 0x10)
+            .constant("recipe_stack.count", 0x14)
+            .constant("item_registry.refs", 0)
+            .constant("item_registry.names", 0x38)
     }
 
     fn start() -> enshwick::test::Installed {
@@ -111,14 +116,10 @@ mod tests {
         let served: Vec<_> = loader.resources().iter().map(|r| (r.key, r.base)).collect();
         let lantern = Guid::named("you.lanterns:lantern");
         assert!(served.contains(&(
-            lantern.key(types::ITEM_INFO),
-            Guid::parse(CHEST).key(types::ITEM_INFO)
+            lantern.key_by_hash(ITEM),
+            Guid::parse(CHEST).key_by_hash(ITEM)
         )));
-        assert!(
-            served
-                .iter()
-                .any(|(key, _)| key.type_hash == types::RECIPE_REGISTRY)
-        );
+        assert!(served.iter().any(|(key, _)| key.type_hash == RECIPES));
     }
 
     #[test]

@@ -15,6 +15,8 @@ mod tests {
     const VANILLA: Guid = Guid::parse("505ccfbc-440d-4d63-a3d6-d689d3d55e78");
     const ICON_ID: Id = Id::new("you.staffs:staff.icon");
     const ICON: Guid = ICON_ID.guid();
+    const ITEM: u32 = 1;
+    const IMAGE: u32 = 3;
 
     struct Staffs;
 
@@ -43,30 +45,34 @@ mod tests {
 
     /// The fake's reflection for an item edit.
     fn host() -> FakeHost {
-        let mut host = FakeHost::new().type_size("keen::ImpactUiValue", 0x28);
-        for (field, at) in [
-            ("itemId", 0),
-            ("objectId", 4),
-            ("name", 0x48),
-            ("iconImage", 0x58),
-            ("description", 0x68),
-            ("flags", 0x78),
-            ("pidEntity", 0x80),
-            ("uiValues", 0x90),
+        let mut host = FakeHost::new()
+            .type_hash(types::ITEM_INFO.id(), ITEM)
+            .type_hash(types::ITEM_REGISTRY.id(), 2)
+            .type_hash(types::UI_IMAGE.id(), IMAGE)
+            .type_size("item_stat", 0x28);
+        for (id, at) in [
+            ("item_info.id", 0),
+            ("item_info.object", 4),
+            ("item_info.name", 0x48),
+            ("item_info.icon_image", 0x58),
+            ("item_info.description", 0x68),
+            ("item_info.flags", 0x78),
+            ("item_info.pid_entity", 0x80),
+            ("item_info.ui_values", 0x90),
         ] {
-            host = host.field_offset("keen::ItemInfo", field, at);
+            host = host.constant(id, at);
         }
-        for (field, at) in [
-            ("locaId", 0),
-            ("valueFormat", 4),
-            ("value", 8),
-            ("isSigned", 0x24),
+        for (id, at) in [
+            ("item_stat.label", 0),
+            ("item_stat.format", 4),
+            ("item_stat.value", 8),
+            ("item_stat.signed", 0x24),
         ] {
-            host = host.field_offset("keen::ImpactUiValue", field, at);
+            host = host.constant(id, at);
         }
         host = host
-            .field_offset("keen::ItemRegistryResource", "itemRefs", 0)
-            .field_offset("keen::ItemRegistryResource", "dbgNames", 0x38);
+            .constant("item_registry.refs", 0)
+            .constant("item_registry.names", 0x38);
         host
     }
 
@@ -80,11 +86,11 @@ mod tests {
             !loader
                 .resources()
                 .iter()
-                .any(|r| r.key == ICON.key(types::UI_IMAGE)),
+                .any(|r| r.key == ICON.key_by_hash(IMAGE)),
             "a build without the layout serves no icon"
         );
         let item = loader
-            .build_resource(&STAFF.key(types::ITEM_INFO), &[0u8; 0x98])
+            .build_resource(&STAFF.key_by_hash(ITEM), &[0u8; 0x98])
             .unwrap();
         assert_eq!(&item[0x58..0x68], &[0; 16]);
     }

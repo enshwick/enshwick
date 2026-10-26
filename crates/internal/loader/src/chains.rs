@@ -8,6 +8,11 @@
 
 use crate::mod_index::ModIndex;
 use core::marker::PhantomData;
+// The loom model in `tests/loom_chains.rs` swaps in loom's atomics, which
+// record every load and store for the model to permute.
+#[cfg(loom)]
+use loom::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+#[cfg(not(loom))]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use enshwick::abi::{HookFlags, Status};
@@ -34,6 +39,7 @@ impl<F: Copy> Next<F> {
     ///
     /// Chains are wired before their targets jump to them, so the slot holds
     /// a function of type `F` whenever the detour runs.
+    #[cfg(not(loom))]
     #[must_use]
     pub const unsafe fn new() -> Self {
         const {
@@ -372,6 +378,8 @@ impl Chains {
     }
 }
 
+// Static std slots; the loom model has its own test.
+#[cfg(not(loom))]
 #[cfg(test)]
 mod tests {
     use super::*;
