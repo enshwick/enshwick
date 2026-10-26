@@ -209,7 +209,21 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn changes(&self) -> Vec<(crate::content::changes::Change, String)> {
-        table::with(Vec::new(), |s| s.changes.clone())
+        table::with(Vec::new(), |s| s.changes.one.clone())
+    }
+
+    /// The changes of every item a selection picks the mod declared, in
+    /// order, each with its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.item_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn item_changes(&self) -> Vec<(crate::content::changes::ItemsChange, String)> {
+        table::with(Vec::new(), |s| s.changes.items.clone())
     }
 
     /// The mod's recipe rules in force, from

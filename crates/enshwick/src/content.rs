@@ -11,6 +11,7 @@ use core::ffi::c_void;
 use crate::abi::{ResourceKey, ResourcePatchFn, Status, Str};
 use crate::{Load, Off};
 
+pub mod categories;
 pub mod changes;
 pub mod containers;
 pub mod icons;

@@ -7,9 +7,9 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::abi::{ItemData, Status};
-    use enshwick::affixes::{
-        AffixDef, Affixes, ItemCategoryMask, ItemRarity, Range, RollError, RollRules,
-    };
+    use enshwick::affixes::{AffixDef, Affixes, ItemRarity, Range, RollError, RollRules};
+
+    use enshwick::content::categories::ItemCategoryMask;
     use enshwick::ecs::Entity;
     use enshwick::item_data::ItemInstance;
     use enshwick::stats::{Op, Stat, StatDef, Stats};

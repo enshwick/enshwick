@@ -1,0 +1,295 @@
+//! Changes of every vanilla item a selection picks, turned into one change
+//! per item from the game's data when the loader seals the changes, and
+//! the summary of the conflicts many items share.
+
+use enshwick::content::Guid;
+use enshwick::content::changes::{Field, ItemTraits, ItemsChange};
+
+use super::{Conflict, Declared};
+use crate::mod_index::ModIndex;
+
+/// A change as a mod declared it: of one entry, or of every item a
+/// selection picks.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pending {
+    /// A change of one entry.
+    One(Declared),
+    /// A change of every vanilla item a selection picks.
+    Each {
+        /// The mod.
+        owner: ModIndex,
+        /// The change.
+        change: ItemsChange,
+        /// Its source; may be empty.
+        source: String,
+    },
+}
+
+/// How many items one selection picked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Picked {
+    /// The mod.
+    pub owner: ModIndex,
+    /// The field it changes.
+    pub field: Field,
+    /// Its source.
+    pub source: String,
+    /// How many vanilla items it reached.
+    pub count: usize,
+}
+
+/// Every change of `pending` as changes of one entry each, in load order:
+/// a selection becomes a change of each item of `items` it picks, in its
+/// own place; with how many items each selection picked.
+#[must_use]
+pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Declared>, Vec<Picked>) {
+    let mut declared = Vec::new();
+    let mut picked = Vec::new();
+    for change in pending {
+        match change {
+            Pending::One(one) => declared.push(one),
+            Pending::Each {
+                owner,
+                change,
+                source,
+            } => {
+                let before = declared.len();
+                declared.extend(
+                    items
+                        .iter()
+                        .filter(|(_, traits)| change.items.picks(change.field, traits))
+                        .map(|(item, _)| Declared {
+                            owner,
+                            change: change.of(*item),
+                            source: source.clone(),
+                        }),
+                );
+                picked.push(Picked {
+                    owner,
+                    field: change.field,
+                    source,
+                    count: declared.len() - before,
+                });
+            }
+        }
+    }
+    (declared, picked)
+}
+
+/// Where the values a selection reads sit in an item's static data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TraitOffsets {
+    /// The stack size, a `u16`.
+    pub max_stack: usize,
+    /// The `ItemCategory`, a `u8`.
+    pub category: usize,
+    /// The flags, a `u32`.
+    pub flags: usize,
+    /// The GUID of the template the item places.
+    pub placed: usize,
+}
+
+/// What a selection reads of the item whose static data is `bytes`, with
+/// `slots` answering how many slots a placed template's container holds;
+/// `None` when the data is too short.
+#[must_use]
+pub fn traits_of(
+    bytes: &[u8],
+    at: TraitOffsets,
+    slots: impl FnOnce(Guid) -> Option<u8>,
+) -> Option<ItemTraits> {
+    let max_stack = u16::from_le_bytes(bytes.get(at.max_stack..at.max_stack + 2)?.try_into().ok()?);
+    let category = *bytes.get(at.category)?;
+    let flags = u32::from_le_bytes(bytes.get(at.flags..at.flags + 4)?.try_into().ok()?);
+    let placed: [u8; 16] = bytes.get(at.placed..at.placed + 16)?.try_into().ok()?;
+    let slots = (placed != [0; 16]).then(|| slots(Guid(placed))).flatten();
+    Some(ItemTraits {
+        max_stack,
+        category,
+        flags,
+        slots,
+    })
+}
+
+/// One line for each group of conflicts that differ only in their entry,
+/// as two selections that overlap make: the first conflict of the group and
+/// how many more the group holds, in the order of `conflicts`.
+#[must_use]
+pub fn grouped(conflicts: &[Conflict]) -> Vec<(&Conflict, usize)> {
+    let mut groups: Vec<(&Conflict, usize)> = Vec::new();
+    for conflict in conflicts {
+        let same = |first: &Conflict| {
+            first.key.field == conflict.key.field
+                && first.key.item == conflict.key.item
+                && first.intended == conflict.intended
+                && same_source(&first.winner, &conflict.winner)
+                && same_source(&first.overridden, &conflict.overridden)
+        };
+        match groups.iter_mut().find(|(first, _)| same(first)) {
+            Some((_, more)) => *more += 1,
+            None => groups.push((conflict, 0)),
+        }
+    }
+    groups
+}
+
+/// Whether two changes come from one mod's one line with one value.
+fn same_source(a: &Declared, b: &Declared) -> bool {
+    a.owner == b.owner && a.source == b.source && a.change.value == b.change.value
+}
+
+#[cfg(test)]
+mod tests {
+    use enshwick::abi::ItemData;
+    use enshwick::content::categories::ItemCategoryMask;
+    use enshwick::content::changes::{Change, Items, Value};
+
+    use super::*;
+    use crate::data_changes::merge;
+
+    fn guid(n: u8) -> Guid {
+        Guid([n; 16])
+    }
+
+    fn items() -> Vec<(Guid, ItemTraits)> {
+        let stack = |max_stack, category| ItemTraits {
+            max_stack,
+            category,
+            flags: 0,
+            slots: None,
+        };
+        vec![
+            (guid(1), stack(20, 9)),
+            (guid(2), stack(50, 8)),
+            (
+                guid(3),
+                ItemTraits {
+                    flags: ItemData::HAS_PIDE,
+                    ..stack(1, 2)
+                },
+            ),
+            (
+                guid(4),
+                ItemTraits {
+                    slots: Some(24),
+                    ..stack(1, 6)
+                },
+            ),
+        ]
+    }
+
+    fn one(owner: usize, entry: Guid, value: Value) -> Pending {
+        Pending::One(Declared {
+            owner: ModIndex::new(owner),
+            change: Change::new(entry, Field::MaxStackSize, value),
+            source: "items.toml:2".to_owned(),
+        })
+    }
+
+    fn each(owner: usize, items: Items, field: Field, value: Value) -> Pending {
+        Pending::Each {
+            owner: ModIndex::new(owner),
+            change: ItemsChange::new(items, field, value),
+            source: format!("mod {owner}"),
+        }
+    }
+
+    #[test]
+    fn a_selection_becomes_one_change_per_item_in_its_place() {
+        let pending = vec![
+            one(0, guid(1), Value::Set(30.0)),
+            each(1, Items::Stackable, Field::MaxStackSize, Value::Times(2.0)),
+            one(2, guid(2), Value::Set(10.0)),
+        ];
+        let (declared, picked) = expand(pending, &items());
+        let order: Vec<(usize, Guid)> = declared
+            .iter()
+            .map(|d| (d.owner.get(), d.change.entry))
+            .collect();
+        assert_eq!(
+            order,
+            vec![(0, guid(1)), (1, guid(1)), (1, guid(2)), (2, guid(2))]
+        );
+        assert_eq!(picked.len(), 1);
+        assert_eq!(picked[0].count, 2);
+    }
+
+    #[test]
+    fn categories_and_containers_pick_from_the_game_s_data() {
+        let pending = vec![
+            each(
+                0,
+                Items::Category(ItemCategoryMask::MATERIALS),
+                Field::MaxStackSize,
+                Value::Set(999.0),
+            ),
+            each(1, Items::Containers, Field::Slots, Value::Set(48.0)),
+        ];
+        let (declared, picked) = expand(pending, &items());
+        assert_eq!(declared.len(), 2);
+        assert_eq!(declared[0].change.entry, guid(1));
+        assert_eq!(declared[1].change.entry, guid(4));
+        assert!(picked.iter().all(|p| p.count == 1));
+    }
+
+    #[test]
+    fn a_selection_that_picks_nothing_is_counted_as_none() {
+        let pending = vec![each(
+            0,
+            Items::Category(ItemCategoryMask::CURRENCY),
+            Field::MaxStackSize,
+            Value::Set(999.0),
+        )];
+        let (declared, picked) = expand(pending, &items());
+        assert!(declared.is_empty());
+        assert_eq!(picked[0].count, 0);
+    }
+
+    #[test]
+    fn an_item_s_traits_read_from_its_data() {
+        let at = TraitOffsets {
+            max_stack: 0x14,
+            category: 0xcc,
+            flags: 0x5d8,
+            placed: 0x600,
+        };
+        let mut bytes = vec![0u8; 0x620];
+        bytes[0x14..0x16].copy_from_slice(&999u16.to_le_bytes());
+        bytes[0xcc] = 9;
+        bytes[0x5d8..0x5dc].copy_from_slice(&ItemData::HAS_PIDE.to_le_bytes());
+        let traits = traits_of(&bytes, at, |_| Some(24)).unwrap();
+        assert_eq!(
+            (
+                traits.max_stack,
+                traits.category,
+                traits.flags,
+                traits.slots
+            ),
+            (999, 9, ItemData::HAS_PIDE, None)
+        );
+        bytes[0x600..0x610].copy_from_slice(&[7; 16]);
+        let chest = traits_of(&bytes, at, |t| (t == guid(7)).then_some(24)).unwrap();
+        assert_eq!(chest.slots, Some(24));
+        assert_eq!(traits_of(&bytes[..0x20], at, |_| None), None);
+    }
+
+    #[test]
+    fn overlapping_selections_report_one_line_per_pair_of_sources() {
+        let counts = |pending: Vec<Pending>| {
+            let (declared, _) = expand(pending, &items());
+            let (_, conflicts) = merge(&declared, |_, _| false);
+            grouped(&conflicts)
+                .iter()
+                .map(|(c, more)| (c.winner.owner.get(), c.overridden.owner.get(), *more))
+                .collect::<Vec<_>>()
+        };
+        let both = vec![
+            each(0, Items::Stackable, Field::MaxStackSize, Value::Set(100.0)),
+            each(1, Items::Stackable, Field::MaxStackSize, Value::Set(999.0)),
+        ];
+        assert_eq!(counts(both.clone()), vec![(1, 0, 1)]);
+        let mut three = both;
+        three.push(one(2, guid(1), Value::Set(5.0)));
+        assert_eq!(counts(three), vec![(1, 0, 0), (2, 0, 0), (2, 1, 0)]);
+    }
+}

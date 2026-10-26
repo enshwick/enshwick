@@ -69,6 +69,14 @@ pub const ITEM_MAX_STACK: &str = "item_info.max_stack";
 /// nanoseconds, in a recipe.
 pub const RECIPE_DURATION: &str = "recipe.duration";
 
+/// The id of the offset of an item's flags, a `u32`, in an item's static
+/// data.
+pub const ITEM_FLAGS: &str = "item_info.flags";
+
+/// The id of the offset of an item's `ItemCategory`, a `u8`, in an item's
+/// static data.
+pub const ITEM_CATEGORY: &str = "item_info.category";
+
 /// The id of the offset of the template an item places, a GUID, in an
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
