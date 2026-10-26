@@ -11,15 +11,15 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const OLD_SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
-    const SAFE_ID: Id = Id::new("you.safes:safe");
-    const SAFE: Guid = SAFE_ID.guid();
+    const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const LOCKER_ID: Id = Id::new("you.lockers:locker");
+    const LOCKER: Guid = LOCKER_ID.guid();
 
-    struct Safes;
+    struct Lockers;
 
-    impl Mod for Safes {
+    impl Mod for Lockers {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.safes", side: SERVER)
+            enshwick::manifest!(id: "you.lockers", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -28,7 +28,7 @@ mod tests {
                     .add("2", |m| {
                         m.rename_setting("cost", "cost_multiplier")
                             .remove_setting("legacy")
-                            .rename_content(OLD_SAFE, SAFE)
+                            .rename_content(OLD_LOCKER, LOCKER)
                     })
                     .add("3", |m| {
                         m.map_setting("limit", |old| {
@@ -42,12 +42,12 @@ mod tests {
                         })
                     }),
             )?;
-            load.add_item(NewItem::new(SAFE_ID, CHEST))?;
+            load.add_item(NewItem::new(LOCKER_ID, CHEST))?;
             Ok(Self)
         }
     }
 
-    enshwick::declare_mod!(Safes);
+    enshwick::declare_mod!(Lockers);
 
     fn host() -> FakeHost {
         let mut host = FakeHost::new().type_size("keen::ImpactUiValue", 0x28);
@@ -115,15 +115,15 @@ mod tests {
     fn a_renamed_item_is_served_under_its_old_guid_too() {
         let loader = start();
         let served: Vec<_> = loader.resources().iter().map(|r| r.key).collect();
-        assert!(served.contains(&SAFE.key(types::ITEM_INFO)));
-        assert!(served.contains(&OLD_SAFE.key(types::ITEM_INFO)));
+        assert!(served.contains(&LOCKER.key(types::ITEM_INFO)));
+        assert!(served.contains(&OLD_LOCKER.key(types::ITEM_INFO)));
     }
 
     #[test]
     fn the_item_s_id_is_declared_and_old_stacks_read_as_it() {
         let loader = start();
-        assert_eq!(loader.content_ids(), ["you.safes:safe"]);
-        assert_eq!(current_id(OLD_SAFE.id()), SAFE.id());
+        assert_eq!(loader.content_ids(), ["you.lockers:locker"]);
+        assert_eq!(current_id(OLD_LOCKER.id()), LOCKER.id());
         assert_eq!(current_id(CHEST.id()), CHEST.id());
     }
 }

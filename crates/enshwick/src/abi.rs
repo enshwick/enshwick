@@ -258,9 +258,9 @@ pub unsafe fn write_headed<T: Copy>(out: *mut T, value: T) -> bool {
 /// ```
 /// use enshwick::abi::Str;
 ///
-/// let id = Str::new("flame-altar-zones");
+/// let id = Str::new("you.lockers");
 /// // SAFETY: `id` borrows a `'static` string.
-/// assert_eq!(unsafe { id.as_str() }, Some("flame-altar-zones"));
+/// assert_eq!(unsafe { id.as_str() }, Some("you.lockers"));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1356,7 +1356,7 @@ impl Relation {
 /// use enshwick::abi::{Dependency, Relation, Str};
 ///
 /// let zones = Dependency {
-///     id: Str::new("flame-altar-zones"),
+///     id: Str::new("you.lockers"),
 ///     range: Str::new(">=0.1, <1.0"),
 ///     relation: Relation::REQUIRES,
 /// };
@@ -1420,7 +1420,7 @@ impl ManifestFlags {
 ///
 /// let manifest = Manifest {
 ///     header: Header::of::<Manifest>(),
-///     id: Str::new("flame-altar-count"),
+///     id: Str::new("you.lanterns"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
 ///     flags: ManifestFlags::JOIN,
@@ -1636,15 +1636,15 @@ impl CallerFrame {
 /// ```
 /// use enshwick::abi::{Header, ManifestFlags, ModInfo, Side, Str};
 ///
-/// let safes = ModInfo {
+/// let post = ModInfo {
 ///     header: Header::of::<ModInfo>(),
-///     id: Str::new("safes"),
+///     id: Str::new("you.trading-post"),
 ///     version: Str::new("0.1.0"),
 ///     side: Side::BOTH,
 ///     flags: ManifestFlags::JOIN,
 ///     off: 0,
-///     file: Str::new("mods/enshwick_safes.dll"),
-///     name: Str::new("Safes"),
+///     file: Str::new("mods/trading_post.dll"),
+///     name: Str::new("Trading Post"),
 ///     description: Str::EMPTY,
 ///     authors: core::ptr::null(),
 ///     author_count: 0,
@@ -1652,7 +1652,7 @@ impl CallerFrame {
 ///     homepage: Str::EMPTY,
 ///     replaced_by: Str::EMPTY,
 /// };
-/// assert_eq!(safes.off, 0);
+/// assert_eq!(post.off, 0);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -1671,7 +1671,7 @@ pub struct ModInfo {
     /// 1 when the mod is off: refused at init or faulted since.
     pub off: u8,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/enshwick_safes.dll`.
+    /// such as `mods/trading_post.dll`.
     pub file: Str,
     /// The manifest's human metadata, as in [`Manifest`]; in
     /// [`HostApi::join_missing`], the name and homepage the server advertises
@@ -1700,8 +1700,8 @@ impl ModInfo {
     /// ```
     /// use enshwick::abi::{ModInfo, Str};
     ///
-    /// let safes = ModInfo { id: Str::new("safes"), ..ModInfo::EMPTY };
-    /// assert!(safes.version.is_empty());
+    /// let post = ModInfo { id: Str::new("you.trading-post"), ..ModInfo::EMPTY };
+    /// assert!(post.version.is_empty());
     /// ```
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
@@ -3872,7 +3872,7 @@ impl UiWidget {
 /// let marker = UiMarker {
 ///     header: Header::of::<UiMarker>(),
 ///     position: [100 << 32, 40 << 32, -(20 << 32)],
-///     label: Str::new("Safe of Bob"),
+///     label: Str::new("Locker of Bob"),
 ///     color: UiMarker::GREEN,
 ///     reserved: 0,
 /// };
@@ -3923,7 +3923,7 @@ impl UiMarker {
 /// let dialog = UiDialog {
 ///     header: Header::of::<UiDialog>(),
 ///     title: Str::new("Enshwick"),
-///     message: Str::new("Open every safe in the world?"),
+///     message: Str::new("Open every locker in the world?"),
 ///     detail: Str::EMPTY,
 ///     buttons: 1 << UiDialog::OK | 1 << UiDialog::CANCEL,
 ///     flags: 0,
@@ -5359,7 +5359,7 @@ impl PointFlags {
 /// let empty = Layout { fields: core::ptr::null(), count: 0, size: 0 };
 /// let spec = PointSpec {
 ///     header: Header::of::<PointSpec>(),
-///     name: Str::new("safes:access"),
+///     name: Str::new("you.trading-post:price"),
 ///     mode: PointMode::OVERRIDE,
 ///     flags: PointFlags::REFUSE,
 ///     input: empty,

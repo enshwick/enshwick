@@ -4,10 +4,10 @@
 //!
 //! ```toml
 //! [en]
-//! "safe.name" = "Safe"
+//! "locker.name" = "Locker"
 //!
 //! [uk]
-//! "safe.name" = "Сейф"
+//! "locker.name" = "Шафка"
 //! ```
 //!
 //! `en` is the fallback for every language without a text of its own. A file
@@ -302,8 +302,8 @@ impl Texts {
     /// use enshwick::i18n::{Language, Texts};
     ///
     /// let texts = Texts::parse("[en]\nupdate = \"{name}: {from} to {to}\"\n")?;
-    /// let line = texts.fill("update", Language::UK_UA, &[("name", "Safes"), ("from", "0.1.0"), ("to", "0.2.0")]);
-    /// assert_eq!(line, "Safes: 0.1.0 to 0.2.0");
+    /// let line = texts.fill("update", Language::UK_UA, &[("name", "Lanterns"), ("from", "0.1.0"), ("to", "0.2.0")]);
+    /// assert_eq!(line, "Lanterns: 0.1.0 to 0.2.0");
     /// assert_eq!(texts.fill("missing", Language::FALLBACK, &[]), "missing");
     /// # Ok::<(), enshwick::Off>(())
     /// ```
@@ -400,7 +400,7 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let texts = load.texts("[en]\n\"safe.name\" = \"Safe\"\n")?;
+    ///     let texts = load.texts("[en]\n\"locker.name\" = \"Locker\"\n")?;
     ///     let _ = texts;
     ///     Ok(())
     /// }
@@ -461,11 +461,11 @@ impl Load<'_> {
     /// ```
     /// use enshwick::content::Id;
     ///
-    /// const SAFE_NAME: Id = Id::new("safes:safe.name");
+    /// const LOCKER_NAME: Id = Id::new("you.lockers:locker.name");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let texts = load.texts("[en]\n\"safe.name\" = \"Safe\"\n[uk]\n\"safe.name\" = \"Сейф\"\n")?;
-    ///     load.add_texts(&texts, &[("safe.name", SAFE_NAME)])
+    ///     let texts = load.texts("[en]\n\"locker.name\" = \"Locker\"\n[uk]\n\"locker.name\" = \"Шафка\"\n")?;
+    ///     load.add_texts(&texts, &[("locker.name", LOCKER_NAME)])
     /// }
     /// ```
     pub fn add_texts(&mut self, texts: &Texts, tags: &[(&str, Id)]) -> Result<(), Off> {
