@@ -93,14 +93,16 @@ pub(crate) extern "system" fn stat_open(
     def: *const StatDefData,
     out: *mut StatRef,
 ) -> Status {
-    // SAFETY: strings are borrowed for the call.
+    // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
+    // not outlive it.
     let Some(id) = unsafe { id.as_str() }.and_then(full) else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer passes a valid definition or null.
+    // SAFETY: the safe layer, the fake's only caller, passes null or a
+    // definition alive for the call.
     let def = unsafe { def.as_ref() };
     let parsed = match def {
-        // SAFETY: the definition's text is borrowed for the call.
+        // SAFETY: the ABI lends the definition's text for the call.
         Some(data) => match unsafe { StatDef::from_data(data) } {
             Some(def) => Some(def),
             None => return Status::BAD_ARGS,
@@ -122,7 +124,8 @@ pub(crate) extern "system" fn stat_open(
     });
     match opened {
         Ok(index) if !out.is_null() => {
-            // SAFETY: checked above; the safe layer's out pointer.
+            // SAFETY: the match guard refused null; the safe layer passes an
+            // aligned `StatRef` it owns.
             unsafe {
                 out.write(StatRef {
                     index,
@@ -157,9 +160,11 @@ pub(crate) extern "system" fn stat_info(
     if def.is_null() || id.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: checked above; the safe layer's out pointers.
+    // SAFETY: the `is_null` check refused null; the safe layer passes an
+    // aligned `StatDefData` it owns.
     unsafe { def.write(data) };
-    // SAFETY: as above.
+    // SAFETY: the `is_null` check refused null; the safe layer passes an
+    // aligned `Str` it owns.
     unsafe { id.write(name) };
     Status::OK
 }
@@ -253,7 +258,8 @@ pub(crate) extern "system" fn stat_value(
 ) -> Status {
     match with(None, |s| value(s, entity, stat)) {
         Some(v) if !out.is_null() => {
-            // SAFETY: checked above; the safe layer's out pointer.
+            // SAFETY: the match guard refused null; the safe layer passes an
+            // aligned `f32` it owns.
             unsafe { out.write(v) };
             Status::OK
         }
@@ -263,7 +269,8 @@ pub(crate) extern "system" fn stat_value(
 }
 
 pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatModify) -> Status {
-    // SAFETY: the safe layer passes a valid request.
+    // SAFETY: the safe layer, the fake's only caller, passes null or a
+    // request alive for the call.
     let Some(request) = (unsafe { request.as_ref() }) else {
         return Status::BAD_ARGS;
     };
@@ -299,7 +306,8 @@ pub(crate) extern "system" fn stat_buff(
     let list = if count == 0 {
         Vec::new()
     } else {
-        // SAFETY: the safe layer passes `count` modifiers.
+        // SAFETY: the check before refused null with a nonzero `count`; the
+        // safe layer passes `count` aligned modifiers alive for the call.
         unsafe { core::slice::from_raw_parts(modifiers, count as usize) }.to_vec()
     };
     with(Status::MISSING, |s| {
@@ -391,7 +399,10 @@ pub(crate) fn settle() -> usize {
     });
     for change in &changes {
         for &(callback, user) in &handlers {
-            // SAFETY: a valid change; `user` is the mod's pointer.
+            // SAFETY: `change` is a live `StatChange` borrowed for the call, and
+            // `user` is the pointer the mod registered with `callback`, as
+            // `StatChangeFn` expects; the thread that drives the fake stands
+            // for the game thread.
             unsafe { callback(change, core::ptr::with_exposed_provenance_mut(user)) };
         }
     }
@@ -449,11 +460,13 @@ pub(crate) extern "system" fn affix_open(
     def: *const AffixDefData,
     out: *mut StatRef,
 ) -> Status {
-    // SAFETY: strings are borrowed for the call.
+    // SAFETY: the ABI lends `id`'s bytes for the call, and the result does
+    // not outlive it.
     let Some(id) = unsafe { id.as_str() }.and_then(full) else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: the safe layer passes a valid definition.
+    // SAFETY: the safe layer, the fake's only caller, passes null or a
+    // definition alive for the call.
     let Some(data) = (unsafe { def.as_ref() }) else {
         return Status::BAD_ARGS;
     };
@@ -466,7 +479,8 @@ pub(crate) extern "system" fn affix_open(
                 key: key_of(&kind.id).0,
             }))
         };
-        // SAFETY: the definition's text and ranges are borrowed for the call.
+        // SAFETY: the ABI lends the definition's text, group and ranges for
+        // the call.
         let Some(parsed) = (unsafe { AffixDef::from_data(data, stat) }) else {
             return Err(Status::BAD_ARGS);
         };
@@ -493,7 +507,8 @@ pub(crate) extern "system" fn affix_roll(
     roll: *const AffixRoll,
     count: *mut u32,
 ) -> Status {
-    // SAFETY: the safe layer passes a valid request.
+    // SAFETY: the safe layer, the fake's only caller, passes null or a roll
+    // alive for the call.
     let Some(roll) = (unsafe { roll.as_ref() }) else {
         return Status::BAD_ARGS;
     };

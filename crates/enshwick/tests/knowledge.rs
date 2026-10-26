@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn knowledge_reads_grants_and_quests() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Scholar)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let knowledge = KNOWLEDGE.get().unwrap();

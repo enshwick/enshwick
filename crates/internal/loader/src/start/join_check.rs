@@ -114,8 +114,9 @@ fn verified_join(
     let code = crate::code::text(base)
         .and_then(|(start, len)| range(u64::try_from(start).ok()?, len))
         .ok_or(Error::NoCode)?;
-    // SAFETY: `image` is the game's executable image, mapped for the life of
-    // the process.
+    // SAFETY: `image` is the game's executable image, mapped by Windows at
+    // `base` for the life of the process, and the code words it reads are
+    // never written.
     let join = unsafe { verify_mapped(&pins, image, code.clone()) }?;
     Ok((join, code))
 }

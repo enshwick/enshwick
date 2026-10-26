@@ -199,9 +199,10 @@ impl Load<'_> {
         };
         if let Some(at) = wait_site {
             let handler = handler.clone();
-            // SAFETY: the site follows the clamp of the wait helper, where
-            // `r9` holds the milliseconds and `rbx` the nanoseconds left;
-            // the handler only reads them.
+            // SAFETY: `site` found the one match of `WAIT`, and `WAIT_AT` is
+            // the instruction after its clamp, where `r9` holds the
+            // milliseconds; `checks` found the division that leaves the
+            // nanoseconds in `rbx`. The handler writes no register.
             unsafe {
                 self.hook_at(at, move |registers: &mut Registers| {
                     handler(wait(registers.r9, registers.rbx));
@@ -210,7 +211,10 @@ impl Load<'_> {
             found.handles = true;
         }
         if let Some(at) = message_site {
-            // SAFETY: as above, with the milliseconds in `r8`.
+            // SAFETY: `site` found the one match of `MESSAGE_WAIT`, and
+            // `WAIT_AT` is the instruction after its clamp, where `r8` holds
+            // the milliseconds; `checks` found the division that leaves the
+            // nanoseconds in `rbx`. The handler writes no register.
             unsafe {
                 self.hook_at(at, move |registers: &mut Registers| {
                     handler(wait(registers.r8, registers.rbx));
@@ -255,8 +259,10 @@ impl Load<'_> {
         let Some(at) = site(self, SERVER_WAIT, SERVER_WAIT_AT) else {
             return Ok(false);
         };
-        // SAFETY: `r9` holds the wait in nanoseconds at the site and the
-        // event loop takes any value there as its wait.
+        // SAFETY: `site` found the one match of `SERVER_WAIT`, and
+        // `SERVER_WAIT_AT` is the instruction after the `cmovg` that leaves
+        // the wait in nanoseconds in `r9`; the event loop takes any value there as
+        // its wait, and the handler writes no other register.
         unsafe {
             self.hook_at(at, move |registers: &mut Registers| {
                 handler(&mut registers.r9);
@@ -302,8 +308,10 @@ impl Load<'_> {
             (BACKGROUND_WORKERS_AT, caps.background),
         ] {
             if cap > 0 {
-                // SAFETY: `eax` holds the group's cap at the site, and a
-                // lower cap is one the task system takes.
+                // SAFETY: `site` found the one match of `WORKERS`, and
+                // `offset` is the instruction after the `movzx` that loads
+                // the group's cap into `eax`; the handler only lowers `rax`,
+                // and a lower cap is one the task system takes.
                 unsafe {
                     self.hook_at(at + offset, move |registers: &mut Registers| {
                         registers.rax = registers.rax.min(u64::from(cap));

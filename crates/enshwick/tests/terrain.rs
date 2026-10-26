@@ -29,7 +29,7 @@ mod tests {
     #[test]
     fn edits_reach_the_loader_as_asked() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Digger)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let terrain = TERRAIN.get().unwrap();

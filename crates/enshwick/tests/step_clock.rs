@@ -33,7 +33,7 @@ mod tests {
     #[test]
     fn steps_move_the_clock_and_it_stands_still_between_them() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Timed)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let clock = CLOCK.get().unwrap();

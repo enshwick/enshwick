@@ -122,7 +122,7 @@ mod tests {
         let loader = enshwick::test::FakeHost::new()
             .settings("viewers = [\"00abcdef01234567\", \"nope\"]\nowner_removes_only = true\n")
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this crate's `declare_mod!(SafeViewers)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.attached_points(), ["safes:access"]);

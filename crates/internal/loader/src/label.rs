@@ -78,7 +78,9 @@ struct Filter {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
-// SAFETY: the slot joins the chain of the string swap, typed `ReplaceFn`.
+// SAFETY: `ReplaceFn` is the exact signature of the game's string swap at the
+// table's `label.replace`, and the slot is used only as the `next` of the
+// `replace` link on that function.
 static REPLACE_NEXT: Next<ReplaceFn> = unsafe { Next::new() };
 static FILTERS: Mutex<Vec<Filter>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Box<[Filter]>> = OnceLock::new();
@@ -105,12 +107,15 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             );
             let descriptor = loader.reflection.type_info(LABEL_TYPE).ok()?.va();
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `label.find` is the address of
+                // the game function with the `FindFn` signature on this build.
                 find: unsafe { core::mem::transmute::<usize, FindFn>(find) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `label.replace` is the address of
+                // the game function with the `ReplaceFn` signature on this
+                // build.
                 replace: unsafe { core::mem::transmute::<usize, ReplaceFn>(replace) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `label.add` is the address of the
+                // game function with the `AddFn` signature on this build.
                 add: unsafe { core::mem::transmute::<usize, AddFn>(add) },
                 label_type: crate::world::type_hash(descriptor)?,
                 world: constant("server.world")?,
@@ -183,49 +188,57 @@ pub(crate) fn set(loader: &Loader, entity: u32, text: &str) -> Status {
     if crate::world::template(loader, entity).is_err() {
         return Status::MISSING;
     }
-    // SAFETY: the server holds its world and its string table.
-    let world: usize = unsafe { crate::memory::read(server, layout.world) };
-    // SAFETY: as above.
-    let strings: usize = unsafe { crate::memory::read(server, layout.strings) };
-    if world == 0 || strings == 0 {
+    // SAFETY: `world::server` returned the live server on its game thread at
+    // a quiet moment, when nothing else writes it; it holds its world pointer
+    // at the table's `server.world`.
+    let world = unsafe { crate::memory::read_ptr::<u8>(server, layout.world) };
+    // SAFETY: `world::server` returned the live server on its game thread at
+    // a quiet moment, when nothing else writes it; it holds its string table
+    // pointer at the table's `server.custom_strings`.
+    let strings = unsafe { crate::memory::read_ptr::<u8>(server, layout.strings) };
+    if world.is_null() || strings.is_null() {
         return Status::MISSING;
     }
-    let world = core::ptr::with_exposed_provenance_mut::<u8>(world);
     let text = cut(text, layout.max_text);
     let mut found = [0usize; 4];
-    // SAFETY: the game's component lookup, on the game thread outside systems.
+    // SAFETY: the game's component lookup at the table's `label.find`, with
+    // the non-null world checked earlier and our own four-word out record, on
+    // the game thread at a quiet moment, outside systems.
     let slot = unsafe { (layout.find)(&raw mut found, world, layout.label_type, entity) };
     // SAFETY: the lookup returns its out record, whose first word is the
-    // component or null.
-    let component = core::ptr::with_exposed_provenance_mut::<u64>(unsafe { slot.read() });
+    // component pointer or null.
+    let component = unsafe { enshwick::raw::read_ptr_at::<u8>(slot.cast_const().cast(), 0) };
     let old = if component.is_null() {
         0
     } else {
-        // SAFETY: a live CustomPlayerString is its string id.
-        unsafe { component.read_unaligned() }
+        // SAFETY: `component` is the entity's live `CustomPlayerString`,
+        // non-null by the earlier check, on the game thread at a quiet moment;
+        // the component is its `u64` string id.
+        unsafe { enshwick::raw::read_at::<u64>(component, 0) }
     };
     let span = [text.as_ptr().expose_provenance(), text.len()];
     let mut result = [0u64; 2];
-    // SAFETY: the game's string swap through its chain, with the table the
-    // rename path passes it; on the game thread.
-    unsafe {
-        (layout.replace)(
-            &raw mut result,
-            core::ptr::with_exposed_provenance_mut(strings),
-            old,
-            &raw const span,
-        );
-    };
+    // SAFETY: the rest of the string swap chain at the table's
+    // `label.replace`, with our own result record, the server's non-null
+    // string table checked earlier and a span over `text`, which outlives the
+    // call; on the game thread at a quiet moment.
+    unsafe { (layout.replace)(&raw mut result, strings, old, &raw const span) };
     if result[0] & 0xff != 0 {
         return Status::REFUSED;
     }
     let id = result[1];
     if !component.is_null() {
-        // SAFETY: as above; the rename path writes the id the same way.
-        unsafe { component.write_unaligned(id) };
+        // SAFETY: `component` is the entity's live `CustomPlayerString`,
+        // non-null by the check, on the game thread at a quiet moment; it
+        // holds the `u64` string id, which the game's rename path writes the
+        // same way.
+        unsafe { enshwick::raw::write_at(component, 0, id) };
     } else if id != 0 {
         let data = [(&raw const id).expose_provenance(), size_of::<u64>()];
-        // SAFETY: the game's add-component, as the rename path calls it.
+        // SAFETY: the game's add-component at the table's `label.add`, with
+        // the non-null world checked earlier and a span over `id`, which
+        // outlives the call; called as the game's rename path calls it, on the
+        // game thread at a quiet moment.
         let _added = unsafe { (layout.add)(world, entity, layout.label_type, &raw const data) };
     }
     Status::OK
@@ -241,15 +254,19 @@ unsafe extern "system" fn replace(
     text: *const [usize; 2],
 ) -> *mut u8 {
     let refused = LABELS_FUSE.run("the replace", || {
-        // SAFETY: the game's arguments at the swap's entry.
+        // SAFETY: `text` is the swap's own text argument, null or a span the
+        // game keeps for the call, and this runs at the chain's entry on the
+        // thread the game called the swap on.
         unsafe { refused(text) }
     });
     if matches!(refused, Some(true)) && !out.is_null() {
-        // SAFETY: the game's result record; its first byte is the error.
-        unsafe { out.cast::<u8>().write(REFUSED) };
+        // SAFETY: `out` is the swap's non-null result record (checked earlier),
+        // writable for the call; its first byte is the error code.
+        unsafe { enshwick::raw::write_at(out.cast(), 0, REFUSED) };
         return out.cast();
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the string swap's signature.
     unsafe { REPLACE_NEXT.get()(out, strings, old, text) }
 }
 
@@ -257,7 +274,10 @@ unsafe extern "system" fn replace(
 ///
 /// # Safety
 ///
-/// The game's text argument at the swap's entry.
+/// - `text` is null, or readable for a `[usize; 2]` span whose first word is
+///   null or the address of `len` readable bytes, unchanged during the call.
+/// - The call runs at the entry of the string swap chain, on the thread the
+///   game called the swap on, so the loader's caller frame is the swap's.
 unsafe fn refused(text: *const [usize; 2]) -> bool {
     let (Some(loader), Some(filters)) = (LOADED.get(), SEALED.get()) else {
         return false;
@@ -266,7 +286,9 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         return false;
     };
     let frame = (loader.caller_frame)();
-    // SAFETY: the frame was taken at this chain's entry, on this thread.
+    // SAFETY: by the caller's contract the frame was taken at this chain's
+    // entry on this thread, so a non-zero `rsp` (checked first) points at the
+    // swap's return address on the live stack.
     if frame.rsp == 0 || unsafe { frame.return_address() } != layout.rename_return {
         return false;
     }
@@ -276,17 +298,24 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     if rbp == 0 || rdi == 0 || text.is_null() {
         return false;
     }
-    // SAFETY: the rename message lies in the caller's frame; its first field
-    // is the entity.
+    // SAFETY: the return address matched the table's `label.rename_return`,
+    // so the caller is the game's rename path, whose non-zero `rbp` (checked
+    // earlier) frames the rename message holding the `u32` entity at the
+    // table's `label.rename_entity`; the frame is live while the swap runs.
     let entity: u32 = unsafe { crate::memory::read(rbp, layout.rename_entity) };
-    // SAFETY: the caller walks its connections' handles with `rdi`.
+    // SAFETY: the caller is the game's rename path (return address checked
+    // earlier), which holds the `u32` handle of the renaming connection at its
+    // non-zero `rdi` (checked earlier) for the call.
     let machine: u32 = unsafe { crate::memory::read(rdi, 0) };
-    // SAFETY: the game's text span for the call.
-    let [ptr, len] = unsafe { text.read() };
+    // SAFETY: the caller's contract makes the non-null `text` (checked
+    // earlier) a readable `[usize; 2]` span for the call.
+    let [ptr, len] = unsafe { enshwick::raw::read_at::<[usize; 2]>(text.cast(), 0) };
     let name = if ptr == 0 || len > 0x1000 {
         String::new()
     } else {
-        // SAFETY: as above.
+        // SAFETY: the caller's contract makes the span's non-null first word
+        // (checked earlier) the address of `len` readable bytes, unchanged
+        // during the call; the slice is dropped before the function returns.
         let bytes = unsafe {
             core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len)
         };
@@ -318,8 +347,10 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         })
         .any(|f| {
             let user = core::ptr::with_exposed_provenance_mut(f.user);
-            // SAFETY: the filter lives in the mod's DLL, which stays loaded;
-            // the safe layer catches its panics.
+            // SAFETY: the filter is the mod's registered `RenameCallFn` in
+            // its DLL, which stays loaded for the process, called with a
+            // `RenameCall` that outlives the call and the mod's own `user`
+            // word; the mod's safe layer catches its panics.
             let allowed =
                 crate::profile::call(f.owner, crate::profile::Feature::Renames, || unsafe {
                     (f.callback)(&raw const call, user)

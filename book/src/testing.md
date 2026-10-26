@@ -261,21 +261,25 @@ let done = [InventoryOpResult { error: 0, remaining: 0 }];
 assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &done));
 ```
 
-## One mod life per process
+## One mod life per install
 
-A mod initialises once per process, as in the game: its state and the table it
-talks to are process-wide. So write one test per mod life, and run the tests
-with [`cargo nextest`](https://nexte.st), which gives each test its own
-process:
+Every `install` starts a new mod life, as a fresh load of the DLL would in
+the game: the mod's `init` runs again, and the platform's own state starts
+empty. Under `cargo test` the tests of one binary share a process, and the
+fake serves one test at a time: `install` waits while another test holds an
+installed fake.
 
-```bash
-cargo nextest run
+State a mod keeps in a `static` outside its own type survives into the next
+test, unless it lives in a `ModLocal`, which reads as empty again in every
+mod life:
+
+```rust
+use enshwick::state::ModLocal;
+
+static COPY_LIMIT: ModLocal<u32> = ModLocal::new();
+
+assert_eq!(COPY_LIMIT.get_or_init(|| 2), &2);
 ```
-
-Under `cargo test` the tests of one binary share a process. The fake then
-serves one test at a time: `install` waits while another test holds an
-installed fake. A second test in the same process still sees the mod's state
-from the first, so it cannot start the mod again.
 
 Dropping the `Installed` fake uninstalls it; calls the mod makes afterwards
 answer `Status::MISSING` and are not recorded.

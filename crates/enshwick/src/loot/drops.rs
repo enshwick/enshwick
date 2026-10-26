@@ -9,11 +9,12 @@
 //! item's place at its chance.
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::ecs::{Components, Entity};
+use crate::fresh::Fresh;
 use crate::inventory::Fill;
-use crate::raw::{read_at, read_ptr_at};
+use crate::raw::{read_at, read_ptr_at, write_at};
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -430,15 +431,18 @@ struct Engine {
     lock_item: usize,
 }
 
-static ENGINE: OnceLock<Engine> = OnceLock::new();
+static ENGINE: Fresh<Engine> = Fresh::new();
 /// Every drop, with the group it belongs to: 0 for a mod's own, a content
 /// pack's hash for the pack's, which a reload replaces whole.
-static DROPS: Mutex<Vec<(u64, Drop)>> = Mutex::new(Vec::new());
+static DROPS: Fresh<Mutex<Vec<(u64, Drop)>>> = Fresh::new();
 /// Whether the single-item roll is linked.
-static ONE_LINKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static ONE_LINKED: Fresh<std::sync::atomic::AtomicBool> = Fresh::new();
 /// The queues of the rolls watchers asked to hear of.
-static WATCHERS: Mutex<Vec<Arc<Mutex<Vec<Roll>>>>> = Mutex::new(Vec::new());
-static DICE: OnceLock<Dice> = OnceLock::new();
+static WATCHERS: Fresh<Mutex<Vec<Watcher>>> = Fresh::new();
+
+/// The rolls one watcher collects.
+type Watcher = Arc<Mutex<Vec<Roll>>>;
+static DICE: Fresh<Dice> = Fresh::new();
 
 fn dice() -> &'static Dice {
     DICE.get_or_init(|| {
@@ -452,12 +456,15 @@ fn dice() -> &'static Dice {
     })
 }
 
+/// Turns a resolved address into a function pointer of type `F`.
+///
 /// # Safety
 ///
-/// The loader pins `address` to a function of type `F`.
-unsafe fn function<F: Copy>(address: u64) -> F {
+/// - `address` is the entry of a function with the signature and ABI of `F`.
+unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
     let address = usize::try_from(address).unwrap_or(0);
-    // SAFETY: forwarded from the caller; `F` is a function pointer.
+    // SAFETY: `F: FnPtr` is a function pointer the size of `usize`, and the
+    // caller guarantees `address` is a function of type `F`.
     unsafe { core::mem::transmute_copy(&address) }
 }
 
@@ -475,8 +482,8 @@ impl Engine {
         };
         let give = load.symbol("inventory.give")?;
         Ok(Self {
-            // SAFETY: the loader pins this id to the game's add to a
-            // transaction.
+            // SAFETY: the build table's `inventory.give` is the game's add of
+            // items to a transaction, with the signature of `GiveFn`.
             give: unsafe { function(give) },
             components: Components::resolve(load)?,
             txn_context: size("loot.txn_context")?,
@@ -496,22 +503,30 @@ impl Engine {
     ///
     /// # Safety
     ///
-    /// `txn` and `request` are the live arguments of the roll, on its thread.
+    /// - `txn` and `request` are the non-null arguments the game passed to
+    ///   the container roll, used on its thread inside the hook.
     unsafe fn roll(&self, txn: *mut u8, request: *const u8) -> (Roll, *mut u64) {
-        // SAFETY: the transaction keeps its system context and the
-        // container it fills at these offsets.
+        // SAFETY: the caller guarantees the roll's live transaction, which
+        // keeps its system context pointer at the build table's
+        // `loot.txn_context`.
         let ctx = unsafe { read_ptr_at::<u64>(txn, self.txn_context) };
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees the roll's live transaction, which
+        // keeps the u32 entity it fills at the build table's
+        // `loot.txn_entity`.
         let entity = Entity(unsafe { read_at(txn, self.txn_entity) });
-        // SAFETY: the request holds the node and label ids here.
+        // SAFETY: the caller guarantees the roll's live request, which keeps
+        // its u32 node id at the build table's `loot.request_node`.
         let node: u32 = unsafe { read_at(request, self.request_node) };
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees the roll's live request, which keeps
+        // its u32 label ids at the build table's `loot.request_labels`.
         let labels: u32 = unsafe { read_at(request, self.request_labels) };
-        // SAFETY: the roll's system context, on its thread.
+        // SAFETY: `ctx` is the live system context the transaction holds,
+        // used on the roll's thread inside the hook.
         let has = |hash| unsafe { self.components.component(ctx, entity, hash) };
         let corpse = has(self.destroy_on_loot).is_some() || node == 0;
         let locked = has(self.lock).is_some_and(|data| {
-            // SAFETY: a live InteractionLock holds the item it asks for here.
+            // SAFETY: `data` is the entity's live InteractionLock, whose
+            // `requiredItem` u32 sits at the reflected offset `lock_item`.
             unsafe { read_at::<u32>(data, self.lock_item) != 0 }
         });
         let roll = Roll {
@@ -538,29 +553,45 @@ fn after_roll(
     labels: *mut u8,
     request: *const u8,
 ) -> *mut u8 {
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the arguments the game passed to the roll, forwarded unchanged
+    // to the rest of the chain.
     let out = unsafe { next.get()(res, txn, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
     crate::host::guard(
         "panic in a loot roll",
         || (),
-        || add_drops(res, txn, request),
+        // SAFETY: `res`, `txn` and `request` are the arguments the game passed
+        // to the roll that just returned, on its thread inside the hook.
+        || unsafe { add_drops(res, txn, request) },
     );
     out
 }
 
 /// Adds the mods' drops to a container roll the game committed.
-fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
+///
+/// # Safety
+///
+/// - `res`, `txn` and `request` are null or the arguments the game passed to
+///   the container roll that just returned, used on its thread inside the
+///   hook.
+unsafe fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     let Some(engine) = ENGINE.get() else {
         return;
     };
-    // SAFETY: the roll's status byte; 0 means the game commits `txn`.
-    if res.is_null() || txn.is_null() || request.is_null() || unsafe { res.read() } != 0 {
+    if res.is_null() || txn.is_null() || request.is_null() {
         return;
     }
-    // SAFETY: the live arguments of the roll, on its thread.
+    // SAFETY: `res` is not null, as the early return ensures, and the caller
+    // guarantees the roll's status byte there; 0 means the game commits `txn`.
+    if unsafe { read_at::<u8>(res, 0) } != 0 {
+        return;
+    }
+    // SAFETY: `txn` and `request` are not null, as the early return ensures,
+    // and the caller guarantees they are the roll's live arguments on its
+    // thread.
     let (roll, _) = unsafe { engine.roll(txn, request) };
     for watcher in WATCHERS
+        .get_or_init(Mutex::default)
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .iter()
@@ -573,7 +604,10 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
     let Some(container) = roll.entity else {
         return;
     };
-    let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let absent = [0u8; 16];
     for drop in drops
         .iter()
@@ -589,9 +623,10 @@ fn add_drops(res: *mut u8, txn: *mut u8, request: *const u8) {
             extra[4] = 1;
         }
         let mut added = [0u64; 2];
-        // SAFETY: the game's add into the transaction the roll filled, with
-        // no level or rarity; its last option is the new items' fuel fill. A
-        // full container keeps what fits.
+        // SAFETY: `txn` is the live transaction the roll filled, as the caller
+        // guarantees, on its thread; the build table's `inventory.give` takes
+        // it with three 16-byte options, here locals: no level, no rarity, and
+        // the new items' fuel fill. A full container keeps what fits.
         unsafe {
             (engine.give)(
                 &raw mut added,
@@ -627,15 +662,30 @@ fn after_roll_one(
     labels: *mut u8,
     request: *const u8,
 ) -> *mut u8 {
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the arguments the game passed to the single roll, forwarded
+    // unchanged to the rest of the chain.
     let ret = unsafe { next.get()(res, out, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
-    crate::host::guard("panic in a loot roll", || (), || add_one(res, out));
+    crate::host::guard(
+        "panic in a loot roll",
+        || (),
+        // SAFETY: `res` and `out` are the arguments the game passed to the
+        // single roll that just returned, on its thread inside the hook.
+        || unsafe { add_one(res, out) },
+    );
     ret
 }
 
 /// Puts a mod's drop into a single roll that came out empty.
-fn add_one(res: *mut u8, out: *mut u8) {
+///
+/// # Safety
+///
+/// - `res` is null or the single roll's status byte, writable.
+/// - `out` is null or the single roll's output, writable for `ONE_SIZE`
+///   bytes.
+/// - Both are the arguments the game passed to the single roll that just
+///   returned, used on its thread inside the hook.
+unsafe fn add_one(res: *mut u8, out: *mut u8) {
     if ENGINE.get().is_none() || res.is_null() || out.is_null() {
         return;
     }
@@ -647,7 +697,10 @@ fn add_one(res: *mut u8, out: *mut u8) {
         boss: false,
         locked: false,
     };
-    let drops = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let drops = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let Some((item, count, _)) = drops
         .iter()
         .map(|(_, d)| d)
@@ -659,11 +712,14 @@ fn add_one(res: *mut u8, out: *mut u8) {
     let mut stack = [0u8; ONE_SIZE];
     stack[ONE_ITEM..ONE_ITEM + 4].copy_from_slice(&item.to_le_bytes());
     stack[ONE_COUNT..ONE_COUNT + 2].copy_from_slice(&count.to_le_bytes());
-    // SAFETY: the roll's 16-byte output; the callers drop the stack when
-    // the status is 0 and the item and count are set.
-    unsafe { out.cast::<[u8; ONE_SIZE]>().write_unaligned(stack) };
-    // SAFETY: the roll's status byte.
-    unsafe { res.write(0) };
+    // SAFETY: `out` is not null, as the early return ensures, and the caller
+    // guarantees the single roll's `ONE_SIZE` writable output bytes; the game's
+    // callers drop the stack when the status is 0 and the item and count are
+    // set.
+    unsafe { write_at(out, 0, stack) };
+    // SAFETY: `res` is not null, as the early return ensures, and the caller
+    // guarantees the single roll's writable status byte.
+    unsafe { write_at(res, 0, 0u8) };
     crate::debug!("loot: {count} of item {item} from a single roll");
 }
 
@@ -686,6 +742,7 @@ pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, 
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));
     WATCHERS
+        .get_or_init(Mutex::default)
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .push(Arc::clone(&queue));
@@ -728,14 +785,21 @@ impl Load<'_> {
     pub(crate) fn add_loot_in(&mut self, group: u64, drop: Drop) -> Result<(), Off> {
         drop.check()?;
         link_roll(self)?;
-        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
+        if drop.from.kinds.contains(Kinds::DESTROYED)
+            && !ONE_LINKED
+                .get_or_init(Default::default)
+                .load(Ordering::Acquire)
+        {
             let roll_one = self.symbol("loot.roll_one")?;
             // SAFETY: the build table's `loot.roll_one` is the single roll
             // `ROLL_ONE` declares.
             unsafe { self.hook(&ROLL_ONE, roll_one) }?;
-            ONE_LINKED.store(true, Ordering::Release);
+            ONE_LINKED
+                .get_or_init(Default::default)
+                .store(true, Ordering::Release);
         }
         DROPS
+            .get_or_init(Mutex::default)
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push((group, drop));
@@ -787,13 +851,20 @@ pub(crate) fn replace_group(group: u64, drops: Vec<Drop>) -> Result<(), String> 
         if ENGINE.get().is_none() {
             return Err("no loot was linked at start; it takes a restart".to_owned());
         }
-        if drop.from.kinds.contains(Kinds::DESTROYED) && !ONE_LINKED.load(Ordering::Acquire) {
+        if drop.from.kinds.contains(Kinds::DESTROYED)
+            && !ONE_LINKED
+                .get_or_init(Default::default)
+                .load(Ordering::Acquire)
+        {
             return Err(
                 "single-item rolls were not linked at start; they take a restart".to_owned(),
             );
         }
     }
-    let mut all = DROPS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut all = DROPS
+        .get_or_init(Mutex::default)
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     all.retain(|(g, _)| *g != group);
     all.extend(drops.into_iter().map(|drop| (group, drop)));
     Ok(())

@@ -22,6 +22,16 @@ pub struct Candidate {
     pub dependencies: Vec<Dependency>,
 }
 
+impl Candidate {
+    /// The ids the mod had before a rename.
+    pub fn former_ids(&self) -> impl Iterator<Item = &str> {
+        self.dependencies
+            .iter()
+            .filter(|d| d.relation == Relation::WAS && d.id != self.id)
+            .map(|d| d.id.as_str())
+    }
+}
+
 /// A relation to another mod.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dependency {
@@ -135,7 +145,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
             continue;
         }
         for dependency in &candidate.dependencies {
-            if dependency.relation != Relation::REPLACES || dependency.id == candidate.id {
+            if !takes_place(dependency.relation) || dependency.id == candidate.id {
                 continue;
             }
             for (old, _) in candidates
@@ -152,6 +162,18 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         }
     }
     replaced.sort_unstable();
+
+    // A renamed mod answers for the ids it had.
+    for (i, candidate) in candidates.iter().enumerate() {
+        if by_id.get(candidate.id.as_str()) != Some(&i) || skipped.contains_key(&i) {
+            continue;
+        }
+        for dependency in &candidate.dependencies {
+            if dependency.relation == Relation::WAS && dependency.id != candidate.id {
+                by_id.insert(&dependency.id, i);
+            }
+        }
+    }
 
     // Requirements and conflicts, until nothing changes: skipping one mod can
     // break another's requirement.
@@ -183,7 +205,7 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
             pending.iter().position(|&i| {
                 candidates[i].dependencies.iter().all(|d| {
                     d.relation == Relation::BREAKS
-                        || d.relation == Relation::REPLACES
+                        || takes_place(d.relation)
                         || (!soft && d.relation != Relation::REQUIRES)
                         || by_id
                             .get(d.id.as_str())
@@ -208,6 +230,11 @@ pub fn resolve(candidates: &[Candidate], side: Side) -> Plan {
         skipped: skipped.into_iter().collect(),
         replaced,
     }
+}
+
+/// Whether a relation makes the declaring mod take the other's place.
+fn takes_place(relation: Relation) -> bool {
+    matches!(relation, Relation::REPLACES | Relation::WAS)
 }
 
 /// Whether `version` is a dev build, the version of every crate before the
@@ -501,6 +528,35 @@ mod tests {
         let plan = resolve(&mods[1..2], Side::SERVER);
         assert_eq!(plan.order, [0]);
         assert!(plan.replaced.is_empty());
+    }
+
+    #[test]
+    fn a_former_id_is_replaced_and_answers_for_the_renamed_mod() {
+        let mods = [
+            candidate(
+                "enshwick.more-altars",
+                "0.3.0",
+                Side::BOTH,
+                &[("flame-altar-count", "", Relation::WAS)],
+            ),
+            candidate("flame-altar-count", "0.2.0", Side::BOTH, &[]),
+            candidate(
+                "uses-old",
+                "1.0.0",
+                Side::BOTH,
+                &[("flame-altar-count", ">=0.2", Relation::REQUIRES)],
+            ),
+        ];
+        let plan = resolve(&mods, Side::SERVER);
+        assert_eq!(plan.order, [0, 2]);
+        assert_eq!(plan.replaced, [(1, 0)]);
+        assert_eq!(
+            plan.skipped,
+            [(1, "replaced by enshwick.more-altars".into())]
+        );
+        // Without the old DLL the requirement still finds the renamed mod.
+        let plan = resolve(&[mods[0].clone(), mods[2].clone()], Side::SERVER);
+        assert_eq!(plan.order, [0, 1]);
     }
 
     #[test]

@@ -321,21 +321,24 @@ impl Credit {
     /// The attacker of the last hit `entity` took.
     fn killer(&self, entity: Entity) -> Option<Entity> {
         let history = self.world.component(entity, self.history)?.cast::<u8>();
-        // SAFETY: the entity's live HitHistory, on the game thread; `resolve`
-        // checked that `lastIndex` lies inside it.
+        // SAFETY: `component` returned the entity's live HitHistory, valid
+        // until the game thread moves on; `resolve` checked that the u32 at
+        // `lastIndex` lies inside its reflected size.
         let last: u32 = unsafe { read_at(history, self.last_index) };
         let last = usize::try_from(last).ok().filter(|&i| i < self.slots)?;
         let at = self.entries + last * self.entry_size + self.entry_attacker;
-        // SAFETY: as above; `resolve` checked that every slot, and the
-        // attacker inside it, lies inside the HitHistory.
+        // SAFETY: `history` is the entity's live HitHistory; `last < slots`
+        // was checked above, and `resolve` checked that every slot, and the
+        // u32 attacker inside it, lies inside its reflected size.
         some(Entity(unsafe { read_at(history, at) }))
     }
 
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
         let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: the entity's live ExperienceSource, on the game thread;
-        // `resolve` checked that `lastHitPlayerId` lies inside it.
+        // SAFETY: `component` returned the entity's live ExperienceSource,
+        // valid until the game thread moves on; `resolve` checked that the u32
+        // at `lastHitPlayerId` lies inside its reflected size.
         some(Entity(unsafe { read_at(source, self.last_player) }))
     }
 }

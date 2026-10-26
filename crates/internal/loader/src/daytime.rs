@@ -87,7 +87,9 @@ static FACTORS: OnceLock<Box<[(usize, AtomicU32)]>> = OnceLock::new();
 static GAME_SPEED: AtomicU32 = AtomicU32::new(0x3f80_0000);
 /// Whether it was day after the last step: 0 unknown, 1 night, 2 day.
 static WAS_DAY: AtomicU32 = AtomicU32::new(0);
-// SAFETY: the slot joins the chain of the speed setter, typed `SetSpeedFn`.
+// SAFETY: `SetSpeedFn` is the signature of the table's `daytime.set_speed`,
+// and this slot is the `next` of the one link `link` makes on it, whose
+// detour `speed` calls `get`; `set_speed` calls through `wired` only.
 static SPEED_NEXT: Next<SetSpeedFn> = unsafe { Next::new() };
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
@@ -100,11 +102,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let (set_time, now) = (function("daytime.set_time")?, function("world.time")?);
             Some(Layout {
-                // SAFETY: the symbol is the game's time setter with this
-                // signature on this build.
+                // SAFETY: the table's `daytime.set_time` is the address of the
+                // game function with the `SetTimeFn` signature on this build,
+                // in the image, which stays mapped.
                 set_time: unsafe { core::mem::transmute::<usize, SetTimeFn>(set_time) },
-                // SAFETY: the symbol is the game's ECS time with this
-                // signature on this build.
+                // SAFETY: the table's `world.time` is the address of the game
+                // function with the `NowFn` signature on this build, in the
+                // image, which stays mapped.
                 now: unsafe { core::mem::transmute::<usize, NowFn>(now) },
                 world: loader.offset("server.world")?,
                 game: loader.offset("server.player_infos")?,
@@ -127,14 +131,20 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let server = crate::world::server()?;
-    // SAFETY: the server holds its world pointer and its game object.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `server.world` offset holds its world
+    // pointer.
     let world: usize = unsafe { crate::memory::read(server, layout.world) };
-    // SAFETY: as above.
+    // SAFETY: `server` comes from `crate::world::server`, on the game thread
+    // that alone writes it; the table's `server.player_infos` offset holds
+    // its game object pointer.
     let game: usize = unsafe { crate::memory::read(server, layout.game) };
     if world == 0 || game == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the game object holds the `Daytime` pointer from its creation.
+    // SAFETY: `game` is non-zero (`game == 0` returns first), read on the game
+    // thread; the table's `daytime.object` offset holds its `Daytime` pointer
+    // from its creation.
     let daytime: usize = unsafe { crate::memory::read(game, layout.daytime) };
     if daytime == 0 {
         return Err(Status::MISSING);
@@ -145,22 +155,41 @@ fn daytime(loader: &Loader) -> Result<(&'static Layout, usize, usize), Status> {
 /// The clock as it is.
 pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, Status> {
     let (layout, _world, daytime) = daytime(loader)?;
-    let read = |at: usize| -> i64 {
-        // SAFETY: each field lies inside the live `Daytime`, on the game
-        // thread that writes it.
-        unsafe { crate::memory::read(daytime, at) }
-    };
-    // SAFETY: as above.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.clock`
+    // offset holds its `i64` time of day.
+    let time: i64 = unsafe { crate::memory::read(daytime, layout.clock) };
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.day_start`
+    // offset holds its `i64` start of day.
+    let day_start: i64 = unsafe { crate::memory::read(daytime, layout.day_start) };
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.day_end`
+    // offset holds its `i64` end of day.
+    let day_end: i64 = unsafe { crate::memory::read(daytime, layout.day_end) };
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.day_length`
+    // offset holds its `i64` day length.
+    let day_length: i64 = unsafe { crate::memory::read(daytime, layout.day_length) };
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's
+    // `daytime.night_length` offset holds its `i64` night length.
+    let night_length: i64 = unsafe { crate::memory::read(daytime, layout.night_length) };
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.speed`
+    // offset holds its `f32` speed.
     let speed: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
-    // SAFETY: as above.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.is_day`
+    // offset holds its day flag byte, read as an integer.
     let is_day: u8 = unsafe { crate::memory::read(daytime, layout.is_day) };
     Ok(DaytimeInfo {
         header: Header::of::<DaytimeInfo>(),
-        time: read(layout.clock),
-        day_start: read(layout.day_start),
-        day_end: read(layout.day_end),
-        day_length: read(layout.day_length),
-        night_length: read(layout.night_length),
+        time,
+        day_start,
+        day_end,
+        day_length,
+        night_length,
         speed,
         flags: if is_day == 0 { 0 } else { DaytimeInfo::DAY },
     })
@@ -170,38 +199,53 @@ pub(crate) fn info(loader: &Loader) -> Result<DaytimeInfo, Status> {
 pub(crate) fn set_time(loader: &Loader, time: i64) -> Result<(), Status> {
     let (layout, world, daytime) = daytime(loader)?;
     let time = time.rem_euclid(DAY);
-    // SAFETY: the game's ECS time of its live world, on the game thread.
+    // SAFETY: `now` is the table's `world.time`, called with the server's
+    // live, non-zero world (checked by `daytime`) on the game thread.
     let now = unsafe { (layout.now)(core::ptr::with_exposed_provenance(world)) };
     let before = game_time(layout, daytime, now);
-    // SAFETY: the game's setter on its live `Daytime`, on the game thread
-    // between steps, as its admin command calls it.
+    // SAFETY: `set_time` is the table's `daytime.set_time`, called as the
+    // game's admin command calls it: on the live, non-zero `Daytime` (checked
+    // by `daytime`), on the game thread at a quiet moment (checked by
+    // `crate::world::server`).
     unsafe { (layout.set_time)(core::ptr::with_exposed_provenance_mut(daytime), time, now) };
-    // SAFETY: the lengths of a day and a night inside the live `Daytime`.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.day_length`
+    // offset holds its `i64` day length.
     let day: i64 = unsafe { crate::memory::read(daytime, layout.day_length) };
-    // SAFETY: as above.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's
+    // `daytime.night_length` offset holds its `i64` night length.
     let night: i64 = unsafe { crate::memory::read(daytime, layout.night_length) };
     let cycle = day.saturating_add(night);
-    // SAFETY: the anchor's game time the setter just wrote.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.game_time`
+    // offset holds the anchor's `i64` game time, which the setter just wrote.
     let within: i64 = unsafe { crate::memory::read(daytime, layout.game_time) };
     let after = forward(before, within, cycle);
     if after != within {
-        // SAFETY: the anchor's game time inside the live `Daytime`, which
-        // the server sends with the version the setter bumped.
-        unsafe {
-            core::ptr::with_exposed_provenance_mut::<i64>(daytime + layout.game_time)
-                .write_unaligned(after);
-        };
+        // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`,
+        // on the game thread at a quiet moment, where nothing else touches
+        // it; the table's `daytime.game_time` offset holds the anchor's `i64`
+        // game time, which the server sends with the version the setter
+        // bumped.
+        unsafe { crate::memory::write(daytime, layout.game_time, after) };
     }
     Ok(())
 }
 
 /// The game time at ECS time `now`, as the game works it out.
 fn game_time(layout: &Layout, daytime: usize, now: i64) -> i64 {
-    // SAFETY: the anchor and the speed inside the live `Daytime`.
+    // SAFETY: callers pass the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.anchor`
+    // offset holds the anchor's `i64` ECS time.
     let anchor: i64 = unsafe { crate::memory::read(daytime, layout.anchor) };
-    // SAFETY: as above.
+    // SAFETY: callers pass the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.game_time`
+    // offset holds the anchor's `i64` game time.
     let game: i64 = unsafe { crate::memory::read(daytime, layout.game_time) };
-    // SAFETY: as above.
+    // SAFETY: callers pass the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.speed`
+    // offset holds its `f32` speed.
     let speed: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
     #[expect(
         clippy::cast_possible_truncation,
@@ -250,13 +294,19 @@ pub(crate) fn set_speed(loader: &Loader, owner: usize, factor: f32) -> Result<()
     let next = SPEED_NEXT.wired().ok_or(Status::MISSING)?;
     slot.1.store(factor.to_bits(), Ordering::Relaxed);
     let wanted = f32::from_bits(GAME_SPEED.load(Ordering::Relaxed)) * product();
-    // SAFETY: the speed lies inside the live `Daytime`, on the game thread.
+    // SAFETY: `daytime` is the live, non-zero `Daytime` from `daytime`, on
+    // the game thread that alone writes it; the table's `daytime.speed`
+    // offset holds its `f32` speed.
     let current: f32 = unsafe { crate::memory::read(daytime, layout.speed) };
     if !same(current, wanted) {
-        // SAFETY: the game's ECS time of its live world, on the game thread.
+        // SAFETY: `now` is the table's `world.time`, called with the
+        // server's live, non-zero world (checked by `daytime`) on the game
+        // thread.
         let now = unsafe { (layout.now)(core::ptr::with_exposed_provenance(world)) };
-        // SAFETY: the game's speed setter, past the loader's detour, on its
-        // live `Daytime` on the game thread between steps.
+        // SAFETY: `next` is the wired rest of the `daytime.set_speed` chain,
+        // past the loader's detour, called on the live, non-zero `Daytime`
+        // (checked by `daytime`) on the game thread at a quiet moment
+        // (checked by `crate::world::server`), as the game calls it.
         unsafe { next(core::ptr::with_exposed_provenance_mut(daytime), wanted, now) };
     }
     Ok(())
@@ -311,17 +361,25 @@ unsafe extern "system" fn speed(daytime: *mut u8, game: f32, now: i64) {
             .and_then(Option::as_ref)
             .map(|layout| layout.speed);
         if let Some(at) = at {
-            // SAFETY: the game's live `Daytime`, passed to its setter.
-            let current = unsafe { daytime.wrapping_add(at).cast::<f32>().read_unaligned() };
+            // SAFETY: `daytime` is non-null (the `is_null` condition) and the
+            // live `Daytime` the game passed to `daytime.set_speed`; the
+            // table's `daytime.speed` offset holds its `f32` speed, which the
+            // setter writes only after this read.
+            let current: f32 = unsafe { enshwick::raw::read_at(daytime, at) };
             if same(current, wanted) {
                 return;
             }
         }
-        // SAFETY: forwarded with the speed changed.
+        // SAFETY: the game's arguments to `daytime.set_speed`, with the speed
+        // scaled by the mods' factors, passed on to the rest of the chain,
+        // which the slot holds since the chain is wired before the target
+        // jumps here.
         unsafe { SPEED_NEXT.get()(daytime, wanted, now) };
         return;
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's arguments to `daytime.set_speed`, passed on
+    // unchanged to the rest of the chain, which the slot holds since the
+    // chain is wired before the target jumps here.
     unsafe { SPEED_NEXT.get()(daytime, game, now) };
 }
 

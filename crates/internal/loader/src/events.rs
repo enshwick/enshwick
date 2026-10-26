@@ -129,17 +129,25 @@ static SESSION: Mutex<Session> = Mutex::new(Session {
 });
 
 static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `StepFn` is the signature of the build table's `server.post_step`,
+// and `link` uses this slot only as that function's next.
 static STEP_NEXT: Next<StepFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `StateFn` is the signature of the build table's `server.set_state`,
+// and `link` uses this slot only as that function's next.
 static STATE_NEXT: Next<StateFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `SaveFn` is the signature of the build table's `server.save_step`,
+// and `link` uses this slot only as that function's next.
 static SAVE_NEXT: Next<SaveFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `RemoveFn` is the signature of the build table's
+// `server.player_remove`, and `link` uses this slot only as that function's
+// next.
 static REMOVE_NEXT: Next<RemoveFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `PlaceFn` is the signature of the build table's
+// `building.spawn_prop`, and `link` uses this slot only as that function's
+// next.
 static PLACE_NEXT: Next<PlaceFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `PickupFn` is the signature of the build table's `building.pickup`,
+// and `link` uses this slot only as that function's next.
 static PICKUP_NEXT: Next<PickupFn> = unsafe { Next::new() };
 /// Building events from worker threads, raised after the step.
 static BUILDING: Mutex<Vec<BuildingData>> = Mutex::new(Vec::new());
@@ -261,24 +269,37 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
+/// The player in the server's player slot `slot`, number `slot_index`.
+///
+/// # Safety
+///
+/// - `slot` is one of the live server's player slots, readable for the
+///   build table's `server.player_slot_size` bytes.
+/// - Called on a thread the game reads the slot on, with no writer
+///   meanwhile.
+unsafe fn player(slot_index: usize, slot: *const u8, offsets: &Offsets) -> PlayerData {
     PlayerData {
         header: Header::of::<PlayerData>(),
         slot: u32::try_from(slot_index).unwrap_or(u32::MAX),
-        // SAFETY: the slot is one of the server's player slots.
+        // SAFETY: the caller guarantees a live player slot; its u32 entity
+        // sits at the build table's `server.player_slot_entity` offset.
         entity: unsafe { read_at(slot, offsets.slot_entity) },
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees a live player slot; its u64 account
+        // key sits at the build table's `server.player_slot_key` offset.
         key: unsafe { read_at(slot, offsets.slot_key) },
     }
 }
 
 unsafe extern "system" fn step(server: *mut u8) {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `server.post_step` link, so the
+    // slot holds the next function of that signature; the game's server
+    // passes unchanged.
     unsafe { STEP_NEXT.get()(server) };
     let Some((loader, offsets)) = loaded().filter(|_| !STEP_FUSE.is_off()) else {
         return;
     };
-    // SAFETY: the game's server, as passed to the step.
+    // SAFETY: `server` is the post-step's own argument, the game's server or
+    // null, and this runs on the game thread right after its step.
     guarded(&STEP_FUSE, "the post-step link", || unsafe {
         after_step(loader, offsets, server);
     });
@@ -288,14 +309,18 @@ unsafe extern "system" fn step(server: *mut u8) {
 ///
 /// # Safety
 ///
-/// `server` is the game's server, or null.
+/// - `server` is null or the game's live server, which holds
+///   `server.player_slot_count` player slots of `server.player_slot_size`
+///   bytes from the build table's `server.player_slots` offset.
+/// - Called on the game thread after its step, where nothing else writes
+///   the slots.
 unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let seen = SESSION
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .step(server.addr(), thread);
+        .step(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
         Step::New if loader.side == Side::CLIENT => {
@@ -308,7 +333,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         Step::New | Step::Same => {}
     }
     crate::world::capture(
-        server.addr(),
+        server.expose_provenance(),
         thread,
         offsets.server_world,
         offsets.entities,
@@ -366,17 +391,23 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         let slot = server
             .cast_const()
             .wrapping_add(offsets.slots + index * offsets.slot_size);
-        // SAFETY: the server holds `slot_count` slots from `slots`.
+        // SAFETY: `server` is non-null by the check before it and live by the
+        // caller's contract, and `index` is below its slot count, so `slot`
+        // is one of its player slots, which starts with its u32 handle.
         let handle: u32 = unsafe { read_at(slot, 0) };
-        // SAFETY: as above.
+        // SAFETY: `slot` is a live player slot of the server; its u8 state
+        // sits at the build table's `server.player_slot_state` offset.
         let state: u8 = unsafe { read_at(slot, offsets.slot_state) };
-        // SAFETY: as above.
+        // SAFETY: `slot` is a live player slot of the server; its u32 entity
+        // sits at the build table's `server.player_slot_entity` offset.
         let entity: u32 = unsafe { read_at(slot, offsets.slot_entity) };
         if handle == 0 {
             joined.store(0, Ordering::Relaxed);
         } else if state == SLOT_IN_GAME && entity != 0 && joined.load(Ordering::Relaxed) != handle {
             joined.store(handle, Ordering::Relaxed);
-            let data = player(index, slot, offsets);
+            // SAFETY: `slot` is a live player slot of the server, read on the
+            // game thread after its step, as the caller guarantees.
+            let data = unsafe { player(index, slot, offsets) };
             crate::admission::joined(data.key);
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);
@@ -428,9 +459,13 @@ fn end_session() {
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     let old = loaded()
         .filter(|_| !entry.is_null())
-        // SAFETY: the entry is the game's server instance entry.
+        // SAFETY: `entry` is non-null by the filter before it and is the hooked
+        // function's server instance entry; its u8 state sits at the build
+        // table's `server.entry_state` offset.
         .map(|(_, offsets)| unsafe { read_at::<u8>(entry, offsets.entry_state) });
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `server.set_state` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     unsafe { STATE_NEXT.get()(entry, state) };
     let (Some((loader, _)), Some(old)) = (loaded().filter(|_| !STATE_FUSE.is_off()), old) else {
         return;
@@ -462,10 +497,13 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
 }
 
 unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) -> *mut u8 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `server.save_step` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     let result = unsafe { SAVE_NEXT.get()(out, save, context) };
-    // SAFETY: the game wrote its result's first byte through `out`.
-    let done = !out.is_null() && unsafe { out.read() } == 0;
+    // SAFETY: `out` is non-null by the check before it and is the save
+    // step's result, whose first byte the game has just written.
+    let done = !out.is_null() && unsafe { read_at::<u8>(out, 0) } == 0;
     if done && let Some((loader, _)) = loaded() {
         guarded(&SAVE_FUSE, "the save link", || {
             loader.emit(Event::WORLD_SAVED, None, core::ptr::null());
@@ -481,14 +519,19 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
     {
         let first = server.addr() + offsets.slots;
         let index = slot.addr().wrapping_sub(first) / offsets.slot_size.max(1);
-        // SAFETY: the game passes one of its player slots, intact on entry.
+        // SAFETY: `slot` is non-null by the check before it and is the hooked
+        // removal's player slot argument, intact on entry; a slot starts with
+        // its u32 handle.
         let handle: u32 = unsafe { read_at(slot, 0) };
         if handle != 0
             && let Some(joined) = JOINED.get(index).filter(|_| index < offsets.slot_count)
             && joined.load(Ordering::Relaxed) == handle
         {
             joined.store(0, Ordering::Relaxed);
-            let data = player(index, slot, offsets);
+            // SAFETY: `slot` is the removal's own player slot argument, below
+            // the slot count by the check before it and intact on entry, on the
+            // thread the game removes it on.
+            let data = unsafe { player(index, slot, offsets) };
             crate::net::forget_peer(data.key);
             crate::admission::left(data.key);
             guarded(&REMOVE_FUSE, "the player removal link", || {
@@ -496,7 +539,9 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             });
         }
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `server.player_remove` link, so
+    // the slot holds the next function of that signature; the game's
+    // arguments pass unchanged.
     unsafe { REMOVE_NEXT.get()(server, slot) };
 }
 
@@ -521,7 +566,9 @@ unsafe extern "system" fn place(
     variant: u32,
     material: *const u8,
 ) -> u32 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `building.spawn_prop` link, so
+    // the slot holds the next function of that signature; the game's
+    // arguments pass unchanged.
     let entity = unsafe {
         PLACE_NEXT.get()(
             context, template, position, rotation, item, variant, material,
@@ -534,16 +581,30 @@ unsafe extern "system" fn place(
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
             entity,
-            // SAFETY: the build context holds the acting player and the replay flag.
+            // SAFETY: `context` is non-null by the check before it and is the
+            // hooked function's build context; its u32 acting player sits at
+            // the build table's `building.ctx_player` offset.
             player: unsafe { read_at(context, offsets.ctx_player) },
             item,
             kind: BuildingData::PLACED,
-            // SAFETY: as above.
+            // SAFETY: `context` is non-null by the check before it and is the
+            // hooked function's build context; its u8 replay flag sits at the
+            // build table's `building.ctx_replay` offset.
             replay: unsafe { read_at(context, offsets.ctx_replay) },
-            // SAFETY: the game passes its template GUID and position.
-            template: unsafe { template.as_ref() }.copied().unwrap_or_default(),
-            // SAFETY: as above.
-            position: unsafe { position.as_ref() }.copied().unwrap_or_default(),
+            template: if template.is_null() {
+                [0; 16]
+            } else {
+                // SAFETY: `template` is non-null by the check before it and is the
+                // hooked function's 16-byte template GUID argument.
+                unsafe { read_at(template.cast(), 0) }
+            },
+            position: if position.is_null() {
+                [0.0; 3]
+            } else {
+                // SAFETY: `position` is non-null by the check before it and is the
+                // hooked function's three-float position argument.
+                unsafe { read_at(position.cast(), 0) }
+            },
         });
     }
     entity
@@ -554,17 +615,28 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
     let before = loaded()
         .filter(|_| !context.is_null() && !target.is_null())
         .map(|(_, offsets)| {
-            // SAFETY: the target holds the entity id and the mode byte.
+            // SAFETY: `target` is non-null by the filter before it and is the
+            // hooked function's target, whose entity still lives; its u32
+            // entity sits at the build table's `building.pickup_entity`
+            // offset.
             let entity: u32 = unsafe { read_at(target, offsets.pickup_entity) };
-            // SAFETY: as above.
+            // SAFETY: `target` is non-null by the filter before it and is the
+            // hooked function's target; its u8 mode sits at the build table's
+            // `building.pickup_mode` offset.
             let mode: u8 = unsafe { read_at(target, offsets.pickup_mode) };
-            // SAFETY: the build context holds the acting player and the replay flag.
+            // SAFETY: `context` is non-null by the filter before it and is the
+            // hooked function's build context; its u32 acting player sits at
+            // the build table's `building.ctx_player` offset.
             let player: u32 = unsafe { read_at(context, offsets.ctx_player) };
-            // SAFETY: as above.
+            // SAFETY: `context` is non-null by the filter before it and is the
+            // hooked function's build context; its u8 replay flag sits at the
+            // build table's `building.ctx_replay` offset.
             let replay: u8 = unsafe { read_at(context, offsets.ctx_replay) };
             (entity, mode, player, replay)
         });
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `building.pickup` link, so the
+    // slot holds the next function of that signature; the game's arguments
+    // pass unchanged.
     let done = unsafe { PICKUP_NEXT.get()(context, target, tool) };
     if done != 0
         && let Some((entity, mode, player, replay)) = before

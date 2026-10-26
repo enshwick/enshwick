@@ -31,7 +31,7 @@ mod tests {
             .symbol("game.present", 0x1_4000_1000)
             .symbol("game.null", 0)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Pinned)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::REFUSED);
     }

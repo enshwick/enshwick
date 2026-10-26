@@ -30,7 +30,7 @@ mod tests {
         let loader = enshwick::test::FakeHost::new()
             .language(Language::UK_UA)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Reader)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(SEEN.load(Ordering::Relaxed), Language::UK_UA.0);

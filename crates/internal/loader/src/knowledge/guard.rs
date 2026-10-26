@@ -222,9 +222,13 @@ fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
     let (scope, def) = definition(layout, state, id)?;
     let player = scope == KnowledgeInfo::PLAYER;
     let (experience, skill_points) = if player {
-        // SAFETY: a player's definition, its fields as reflected.
+        // SAFETY: `def` is a player's definition `definition` found in the
+        // live blob, which stays put while the world runs; its experience
+        // id sits at the reflected `experienceGainId` field.
         let experience = unsafe { read(def, site.experience) };
-        // SAFETY: as above.
+        // SAFETY: `def` is a player's definition `definition` found in the
+        // live blob, which stays put while the world runs; its skill points
+        // sit at the reflected `unlockedSkillPoints` field.
         let skill_points = unsafe { read(def, site.skill_points) };
         (experience, skill_points)
     } else {
@@ -232,7 +236,9 @@ fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
     };
     Some(Definition {
         scope,
-        // SAFETY: the definition's fields, as reflected.
+        // SAFETY: `def` is the definition `definition` found in the live
+        // blob, which stays put while the world runs; its kind sits at the
+        // reflected `type` field.
         kind: unsafe { read(def, layout.def_kind) },
         experience,
         skill_points,
@@ -244,8 +250,9 @@ fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
 fn decide(call: &mut KnowledgeInput) -> bool {
     if let Some(filters) = SEALED.get() {
         for f in filters.iter().filter(|f| f.live()) {
-            // SAFETY: the callback lives in the mod's DLL, which stays loaded,
-            // and takes the pointer it registered; the call is valid for it.
+            // SAFETY: `f` is live, so the mod's DLL that holds the callback
+            // stays loaded; the callback gets the user pointer its mod
+            // registered and `call`, which lives for the call.
             let verdict =
                 crate::profile::call(f.owner, crate::profile::Feature::Vetoes, || unsafe {
                     (f.callback)(&raw const *call, f.user())
@@ -301,7 +308,8 @@ static GUARD_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("knowledge guard")
 
 unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
     let _caught = GUARD_FUSE.run("the check", || {
-        // SAFETY: the stub's saved registers, valid for the call.
+        // SAFETY: the mid-function stub passes its own saved register block,
+        // or null, live and unaliased for the call.
         let Some(registers) = (unsafe { registers.as_mut() }) else {
             return;
         };
@@ -316,15 +324,21 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         };
         let action = address(registers.rbx).wrapping_add(site.action);
         // SAFETY: at the site `rbx` is the player's input row, which holds
-        // the action, a trigger request with its id first; `rdi` is the
-        // system's query context; 1.0 build 1269579.
+        // the action at the build table's `knowledge.input_action` offset, a
+        // trigger request with its u32 id first (1.0 build 1269579).
         let id: u32 = unsafe { read(action, 0) };
-        // SAFETY: as above.
+        // SAFETY: `action` is the input row's trigger request at the site
+        // (1.0 build 1269579); its u8 definition kind sits at the build
+        // table's `knowledge.request_kind` offset.
         let kind: u8 = unsafe { read(action, site.kind) };
-        // SAFETY: as above.
+        // SAFETY: `action` is the input row's trigger request at the site
+        // (1.0 build 1269579); its u32 value sits at the build table's
+        // `knowledge.request_value` offset.
         let value: u32 = unsafe { read(action, site.value) };
         let player = crate::ecs::resolved().map_or(0, |engine| {
-            // SAFETY: as above.
+            // SAFETY: at the site `rdi` is the running system's live query
+            // context (1.0 build 1269579), and this runs on that system's
+            // worker thread.
             unsafe {
                 engine.entity(core::ptr::with_exposed_provenance_mut(address(
                     registers.rdi,

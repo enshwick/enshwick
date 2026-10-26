@@ -6,6 +6,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::raw::{read_at, write_at};
+
 use crate::host::Loader;
 
 /// The pools with a maximum the loader raises.
@@ -89,30 +91,33 @@ pub(super) fn add_max(loader: &Loader, entity: u32, pool: Pool, delta: i32) -> b
         return false;
     };
     let data = data.cast::<u8>();
-    let read = |at: usize| data.wrapping_add(at);
-    // SAFETY: the entity's live attribute set, handed out for writing on the
-    // game thread, starts with the id it keeps and holds its header at the
-    // build's offsets.
-    let root = unsafe { read(0).cast::<u32>().read_unaligned() };
-    // SAFETY: as above.
-    let offset = usize::from(unsafe { read(layout.data_offset).cast::<u16>().read_unaligned() });
-    // SAFETY: as above.
-    let flags = unsafe { read(layout.flags).read() };
-    // SAFETY: as above.
-    let count = usize::from(unsafe { read(layout.count).read() });
+    // SAFETY: `writes::component_mut` handed out the entity's live attribute
+    // set for writing on the game thread; the set starts with the `u32` id it
+    // keeps.
+    let root: u32 = unsafe { read_at(data, 0) };
+    // SAFETY: the live attribute set from `writes::component_mut`, on the game
+    // thread, holds a `u16` data offset at the build table's
+    // `ecs.level_data_offset`.
+    let offset = usize::from(unsafe { read_at::<u16>(data, layout.data_offset) });
+    // SAFETY: the live attribute set from `writes::component_mut`, on the game
+    // thread, holds a one-byte flag set at the build table's `ecs.level_flags`.
+    let flags: u8 = unsafe { read_at(data, layout.flags) };
+    // SAFETY: the live attribute set from `writes::component_mut`, on the game
+    // thread, holds a one-byte value count at the build table's
+    // `ecs.attribute_count`.
+    let count = usize::from(unsafe { read_at::<u8>(data, layout.count) });
     if root != set.root || flags & SET_INITIALISED == 0 || set.max.max(set.adder) >= count {
         return false;
     }
     let add = |slot: usize| {
-        let at = read(offset + slot * size_of::<i32>());
-        // SAFETY: the engine keeps `count` values from `offset`, and `slot`
-        // is below it.
-        let old = i32::from_le_bytes(unsafe { at.cast::<[u8; 4]>().read() });
-        // SAFETY: as above; the set was handed out for writing.
-        unsafe {
-            at.cast::<[u8; 4]>()
-                .write(old.saturating_add(delta).to_le_bytes());
-        };
+        let at = offset + slot * size_of::<i32>();
+        // SAFETY: the live attribute set keeps `count` `i32` values from
+        // `offset`, and the earlier check keeps `slot` below `count`.
+        let old: i32 = unsafe { read_at(data, at) };
+        // SAFETY: the same `i32` value slot inside the live attribute set,
+        // handed out for writing by `writes::component_mut` on the game
+        // thread, which holds an `i32` there.
+        unsafe { write_at(data, at, old.saturating_add(delta)) };
     };
     // The game works the maximum out from its base and adder in the next
     // step, as for an impact's change; writing both keeps them in step until

@@ -247,7 +247,8 @@ mod runtime {
     /// started (client builds 410 and 426).
     pub(crate) type StartFn = unsafe extern "system" fn(users: *mut u8, request: *const u8) -> u32;
 
-    // SAFETY: the slot joins the chain of the start, typed `StartFn`.
+    // SAFETY: the slot is linked only into the chain of the start of user
+    // interactions, whose functions all have the `StartFn` signature.
     /// The rest of the chain after the loader's link.
     pub(crate) static NEXT: Next<StartFn> = unsafe { Next::new() };
 
@@ -293,18 +294,27 @@ mod runtime {
     }
 
     /// The loader's link on the start of user interactions.
+    ///
+    /// # Safety
+    ///
+    /// - The game calls it in place of its start of user interactions.
+    /// - `request` is null or the game's request, readable at the build's
+    ///   kind offset for the call.
     pub(crate) unsafe extern "system" fn detour(users: *mut u8, request: *const u8) -> u32 {
         if STATE.hold.armed()
             && !request.is_null()
             && let Some(layout) = STATE.layout.get()
-            // SAFETY: the game's interaction request holds its kind byte at
-            // the table's `user.interaction_kind` (client builds 410 and 426).
-            && unsafe { crate::memory::read::<u8>(request.addr(), layout.kind) } == layout.join_failed
+            // SAFETY: `request` is non-null, checked just before, and is the
+            // request the game passes the hooked start, which holds its kind
+            // byte at the table's `user.interaction_kind` (client builds 410
+            // and 426).
+            && unsafe { enshwick::raw::read_at::<u8>(request, layout.kind) } == layout.join_failed
             && held()
         {
             return 0;
         }
-        // SAFETY: forwarded unchanged.
+        // SAFETY: the chain's rest takes the user system and request the game
+        // passed this link, unchanged.
         unsafe { NEXT.get()(users, request) }
     }
 

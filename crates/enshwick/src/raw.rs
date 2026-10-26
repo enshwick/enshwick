@@ -12,7 +12,7 @@
 //! use enshwick::raw::read_at;
 //!
 //! let state = [0u8, 1];
-//! // SAFETY: two readable bytes of the array above.
+//! // SAFETY: `state` holds two readable bytes, and offset 1 is the second.
 //! let open = unsafe { read_at::<u8>(state.as_ptr(), 1) } != 0;
 //! assert!(open);
 //! ```

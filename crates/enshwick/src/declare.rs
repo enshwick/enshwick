@@ -23,8 +23,12 @@ mod unwind;
 ///   and that the loader notes as missing otherwise;
 /// - `breaks: ["id" => "range", ...]`: mods this one does not work beside in
 ///   that range; the loader skips this mod when one of them loads;
-/// - `replaces: ["id", ...]`: old ids of this mod, from before a rename;
-///   while this mod is present the loader never starts theirs;
+/// - `replaces: ["id", ...]`: mods this one takes the place of, such as
+///   mods it folds in; while this mod is present the loader never starts
+///   them;
+/// - `was: ["id", ...]`: ids this mod had before a rename; it replaces them,
+///   answers requirements and points named by them, and on its first start
+///   takes over their settings and data;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -43,6 +47,7 @@ mod unwind;
 ///     requires: ["flame-altar-zones" => ">=0.1, <1.0"],
 ///     breaks: ["old-survivors" => "<0.3"],
 ///     replaces: ["survivors"],
+///     was: ["survivor-copies"],
 ///     builds: [{
 ///         side: SERVER,
 ///         guid: "1c129660cd6efc4f9f0b21652d5ff2bf",
@@ -51,16 +56,17 @@ mod unwind;
 ///         constants: ["survivors.bed_id" => 0x48],
 ///     }],
 /// );
-/// assert_eq!(manifest.dependency_count, 3);
+/// assert_eq!(manifest.dependency_count, 4);
 /// assert_eq!(manifest.build_count, 1);
 /// assert_eq!(manifest.author_count, 1);
-/// // SAFETY: static strings.
+/// // SAFETY: `manifest!` points the name at a string literal, alive for the process.
 /// assert_eq!(unsafe { manifest.name.as_str() }, Some("Survivors per Altar"));
-/// // SAFETY: as above; the license comes from this crate's Cargo.toml.
+/// // SAFETY: `manifest!` points the license at a literal from this crate's
+/// // Cargo.toml, alive for the process.
 /// assert_eq!(unsafe { manifest.license.as_str() }, Some("MIT"));
 ///
 /// let pinned = enshwick::manifest!(id: "safes", side: SERVER, version: "0.3.0");
-/// // SAFETY: a static string.
+/// // SAFETY: `manifest!` points the version at a string literal, alive for the process.
 /// assert_eq!(unsafe { pinned.version.as_str() }, Some("0.3.0"));
 /// ```
 #[macro_export]
@@ -81,6 +87,7 @@ macro_rules! manifest {
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
         $(, breaks: [$($breaks:literal => $breaks_range:literal),* $(,)?])?
         $(, replaces: [$($replaces:literal),* $(,)?])?
+        $(, was: [$($was:literal),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -92,6 +99,7 @@ macro_rules! manifest {
     ) => {{
         const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is [a-z0-9-]+");
         $($(const _: () = ::core::assert!($crate::abi::is_valid_id($replaces), "a replaced mod id is [a-z0-9-]+");)*)?
+        $($(const _: () = ::core::assert!($crate::abi::is_valid_id($was), "a former mod id is [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
             $($($crate::abi::Dependency {
                 id: $crate::abi::Str::new($req),
@@ -117,6 +125,11 @@ macro_rules! manifest {
                 id: $crate::abi::Str::new($replaces),
                 range: $crate::abi::Str::EMPTY,
                 relation: $crate::abi::Relation::REPLACES,
+            },)*)?
+            $($($crate::abi::Dependency {
+                id: $crate::abi::Str::new($was),
+                range: $crate::abi::Str::EMPTY,
+                relation: $crate::abi::Relation::WAS,
             },)*)?
         ];
         const AUTHOR_COUNT: usize = $crate::__private::author_count(
@@ -202,7 +215,7 @@ macro_rules! declare_mod {
     ($ty:ty) => {
         $crate::__require_unwind!();
 
-        static __ENSHWICK_INSTANCE: ::std::sync::OnceLock<$ty> = ::std::sync::OnceLock::new();
+        static __ENSHWICK_INSTANCE: $crate::__private::Slot<$ty> = $crate::__private::Slot::new();
 
         impl $ty {
             /// The mod's state, once the loader has initialised it.
@@ -227,13 +240,16 @@ macro_rules! declare_mod {
         ///
         /// # Safety
         ///
-        /// Called by the loader with its table and this mod's handle.
+        /// - `api` points at the loader's table, alive and unchanged for the
+        ///   process.
+        /// - `me` is the handle the loader gave this mod.
         #[unsafe(no_mangle)]
         pub unsafe extern "system" fn enshwick_mod_init(
             api: *const $crate::abi::HostApi,
             me: $crate::abi::ModHandle,
         ) -> $crate::abi::Status {
-            // SAFETY: the loader passes its process-wide table.
+            // SAFETY: the caller guarantees `api` is the loader's table, alive
+            // for the process, which is the contract of `init`.
             unsafe { $crate::__private::init::<$ty>(api, me, &__ENSHWICK_INSTANCE) }
         }
 
@@ -241,7 +257,7 @@ macro_rules! declare_mod {
         ///
         /// # Safety
         ///
-        /// Called by the loader after `enshwick_mod_init` succeeded.
+        /// - `enshwick_mod_init` of this mod returned OK before the call.
         #[unsafe(no_mangle)]
         pub unsafe extern "system" fn enshwick_mod_ready(
             _api: *const $crate::abi::HostApi,

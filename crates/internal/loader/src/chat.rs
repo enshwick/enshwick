@@ -117,10 +117,12 @@ struct ClientLayout {
 }
 
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
-// SAFETY: the slot joins the chain of the chat post, typed `PostFn`.
+// SAFETY: `PostFn` is the signature of the game's `chat.post`, and `link`
+// uses this slot only as the `next` of `post`, its link on that function.
 static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
-// SAFETY: the slot joins the chain of the client's chat send, typed
-// `ClientSendFn`.
+// SAFETY: `ClientSendFn` is the signature of the game's `chat.client_send`,
+// and `link_client` uses this slot only as the `next` of `client_send`, its
+// link on that function.
 static CLIENT_SEND_NEXT: Next<ClientSendFn> = unsafe { Next::new() };
 static CLIENT: OnceLock<ClientLayout> = OnceLock::new();
 static OUTBOX: Mutex<Vec<Line>> = Mutex::new(Vec::new());
@@ -205,8 +207,8 @@ pub(crate) fn link(loader: &'static Loader) {
                 symbol("chat.receive_return_a").unwrap_or(0),
                 symbol("chat.receive_return_b").unwrap_or(0),
             ],
-            // SAFETY: the symbol is the game's mark-delivered function on
-            // this build.
+            // SAFETY: `mark` is the build table's `chat.mark_delivered` in
+            // the loaded executable, the game function `MarkFn` types.
             mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
             store: constant("server.chat_store")?,
             slots: constant("chat.store_slots")?,
@@ -247,8 +249,8 @@ fn link_client(loader: &'static Loader, target: Option<u64>) {
         return;
     };
     let _first = CLIENT.set(ClientLayout {
-        // SAFETY: the symbol is the client's chat queue with this signature
-        // on this build.
+        // SAFETY: `queue` is the build table's `chat.client_queue` in the
+        // loaded executable, the game function `ClientQueueFn` types.
         queue: unsafe { core::mem::transmute::<usize, ClientQueueFn>(queue) },
         store,
     });
@@ -264,12 +266,23 @@ fn link_client(loader: &'static Loader, target: Option<u64>) {
 /// The switch of the chat lines and mod messages.
 static CHAT_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("chat lines and mod messages");
 
+/// The loader's link on the client's chat send: queues the client's frame
+/// lines before the game sends.
+///
+/// # Safety
+///
+/// - Called only by the game through the chain on `chat.client_send`, on the
+///   thread that sends the client's chat, with the game client or null.
 unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
     let _caught = CHAT_FUSE.run("the client send", || {
-        // SAFETY: the game client, on the thread that sends its chat.
+        // SAFETY: `client` is the game's own argument, null or the game
+        // client, on the thread that sends its chat, by this function's
+        // `# Safety`.
         unsafe { queue_frames(client) };
     });
-    // SAFETY: forwarded unchanged.
+    // SAFETY: `CLIENT_SEND_NEXT` holds the rest of `chat.client_send`'s chain
+    // while this detour runs, and `client` is the game's own argument, passed
+    // on unchanged.
     unsafe { CLIENT_SEND_NEXT.get()(client) }
 }
 
@@ -277,7 +290,9 @@ unsafe extern "system" fn client_send(client: *mut u8) -> u64 {
 ///
 /// # Safety
 ///
-/// `client` is the game client, on the thread that sends its chat.
+/// - `client` is null or the game client, whose chat store pointer sits at
+///   `chat.client_store`.
+/// - Called on the thread that sends the client's chat.
 unsafe fn queue_frames(client: *mut u8) {
     let Some(layout) = CLIENT.get() else {
         return;
@@ -289,16 +304,21 @@ unsafe fn queue_frames(client: *mut u8) {
     if lines.is_empty() {
         return;
     }
-    // SAFETY: the game client holds its chat store here.
-    let store: usize = unsafe { crate::memory::read(client.addr(), layout.store) };
+    // SAFETY: `client` is non-null, checked by the guard before it, and is the
+    // game client by this function's `# Safety`; its chat store pointer sits at
+    // the table's `chat.client_store`.
+    let store: usize = unsafe { crate::memory::read(client.expose_provenance(), layout.store) };
     if store == 0 {
         return;
     }
     for line in lines {
         let span = [line.as_ptr().expose_provenance(), line.len()];
         let mut result = [0u8; 16];
-        // SAFETY: the client's chat store, on its own thread, with a line
-        // the game copies before the call returns.
+        // SAFETY: `layout.queue` is the table's `chat.client_queue`, on the
+        // non-zero chat store checked by the guard before it, on the thread
+        // that sends the client's chat by this function's `# Safety`; `result`
+        // is 16 writable bytes, and `span` names the live `line`, which the
+        // game copies before the call returns.
         unsafe {
             (layout.queue)(
                 result.as_mut_ptr(),
@@ -316,6 +336,14 @@ fn next() -> Option<PostFn> {
     POST_NEXT.wired()
 }
 
+/// The loader's link on the game's chat post: takes frame lines out of the
+/// chat and hands them to the net.
+///
+/// # Safety
+///
+/// - Called only by the game through the chain on `chat.post`, with its own
+///   arguments: `out` null or a result record of at least 8 writable bytes,
+///   `text` null or a span of pointer and byte length readable for the call.
 unsafe extern "system" fn post(
     out: *mut u8,
     store: *mut u8,
@@ -328,21 +356,27 @@ unsafe extern "system" fn post(
     extra: *const [u64; 2],
 ) -> *mut u8 {
     let frame = CHAT_FUSE.run("the frame check", || {
-        // SAFETY: the game's arguments, read before anything else is called.
+        // SAFETY: `out` and `text` are the game's own arguments at the entry
+        // of `chat.post`, by this function's `# Safety`.
         unsafe { server_frame(out, kind, text) }
     });
     if frame.unwrap_or(false) {
-        // SAFETY: the game's result record holds at least 8 bytes.
-        unsafe { out.cast::<u64>().write_unaligned(0) };
+        // SAFETY: `server_frame` returned true only for a non-null `out`, a
+        // result record of at least 8 writable bytes by this function's
+        // `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
         return out;
     }
     let caught = CHAT_FUSE.run("the client frame check", || {
-        // SAFETY: the game's arguments, read before anything else is called.
+        // SAFETY: `out` and `text` are the game's own arguments at the entry
+        // of `chat.post`, by this function's `# Safety`.
         unsafe { posted_frame(out, kind, text) }
     });
     if let Some(Some(frame)) = caught {
-        // SAFETY: the game's result record holds at least 8 bytes.
-        unsafe { out.cast::<u64>().write_unaligned(0) };
+        // SAFETY: `posted_frame` returned a frame only for a non-null `out`, a
+        // result record of at least 8 writable bytes by this function's
+        // `# Safety`.
+        unsafe { enshwick::raw::write_at(out, 0, 0u64) };
         let _outcome = CHAT_FUSE.run("a client frame", || {
             crate::net::server_received(hash, &frame);
         });
@@ -350,7 +384,9 @@ unsafe extern "system" fn post(
         return out;
     }
     match next() {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: `next` is the rest of `chat.post`'s chain, wired while this
+        // detour runs, and the arguments are the game's own, passed on
+        // unchanged.
         Some(next) => unsafe { next(out, store, kind, text, loca1, loca2, handle, hash, extra) },
         None => out,
     }
@@ -361,7 +397,10 @@ unsafe extern "system" fn post(
 ///
 /// # Safety
 ///
-/// The game's chat post arguments, at its entry.
+/// - Called at the entry of the loader's link on `chat.post`, on the game's
+///   calling thread.
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
 unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool {
     let Some((loader, layout)) = LOADED.get() else {
         return false;
@@ -377,17 +416,24 @@ unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool 
     if frame.rsp == 0 {
         return false;
     }
-    // SAFETY: the frame was taken at this chain's entry, on this thread.
+    // SAFETY: `frame.rsp` is non-zero, checked by the guard before it, and
+    // `caller_frame` took the frame at the entry of this chain on this thread,
+    // linked with `HookFlags::CALLER_FRAME`, so it points at the live return
+    // address.
     let caller = unsafe { frame.return_address() };
     if !layout.receive_returns.contains(&caller) {
         return false;
     }
-    // SAFETY: the game passes its text span: pointer and byte length.
-    let [ptr, len] = unsafe { text.read() };
+    // SAFETY: `text` is non-null, checked by the guard before it, and is the
+    // game's span of two words, readable for the call by this function's `#
+    // Safety`.
+    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
     if ptr == 0 || len == 0 || len > layout.max_text {
         return false;
     }
-    // SAFETY: the span holds `len` bytes for the call.
+    // SAFETY: `ptr` is non-null, checked by the guard before it, and the span's
+    // `len` bytes are readable and unchanged for the call by this function's `#
+    // Safety`; the slice does not outlive the call.
     let bytes =
         unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
     if !crate::net::is_frame(bytes) {
@@ -400,23 +446,32 @@ unsafe fn server_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> bool 
 ///
 /// # Safety
 ///
-/// The game's chat post arguments, at its entry.
+/// - Called at the entry of the loader's link on `chat.post`, on the game's
+///   calling thread.
+/// - `text` is null or the game's span of pointer and byte length, its bytes
+///   readable and unchanged for the call.
 unsafe fn posted_frame(out: *mut u8, kind: u8, text: *const [usize; 2]) -> Option<String> {
     let (loader, layout) = LOADED.get()?;
     if kind != 0 || out.is_null() || text.is_null() {
         return None;
     }
     let frame = (loader.caller_frame)();
-    // SAFETY: the frame was taken at this chain's entry, on this thread.
+    // SAFETY: `frame.rsp` is non-zero, checked first, and `caller_frame`
+    // took the frame at the entry of this chain on this thread, linked with
+    // `HookFlags::CALLER_FRAME`, so it points at the live return address.
     if frame.rsp == 0 || unsafe { frame.return_address() } != layout.post_return {
         return None;
     }
-    // SAFETY: the game passes its text span: pointer and byte length.
-    let [ptr, len] = unsafe { text.read() };
+    // SAFETY: `text` is non-null, checked by the guard before it, and is the
+    // game's span of two words, readable for the call by this function's `#
+    // Safety`.
+    let [ptr, len]: [usize; 2] = unsafe { enshwick::raw::read_at(text.cast(), 0) };
     if ptr == 0 || len == 0 || len > layout.max_text {
         return None;
     }
-    // SAFETY: the span holds `len` bytes for the call.
+    // SAFETY: `ptr` is non-null, checked by the guard before it, and the span's
+    // `len` bytes are readable and unchanged for the call by this function's `#
+    // Safety`; the slice does not outlive the call.
     let bytes =
         unsafe { core::slice::from_raw_parts(core::ptr::with_exposed_provenance::<u8>(ptr), len) };
     client_frame(bytes).map(str::to_owned)
@@ -450,8 +505,9 @@ pub(crate) fn drain() {
     let Ok(server) = crate::world::server() else {
         return;
     };
-    // SAFETY: the server holds its chat store's pointer; null while it loads
-    // or closes.
+    // SAFETY: `world::server` returned the live server on its game thread
+    // between steps; its chat store pointer, null while it loads or closes,
+    // sits at the table's `server.chat_store`.
     let store: usize = unsafe { crate::memory::read(server, layout.store) };
     if store == 0 {
         return;
@@ -476,7 +532,9 @@ pub(crate) fn drain() {
             },
             other => other,
         };
-        // SAFETY: the live chat store, on the game thread outside systems.
+        // SAFETY: `store` is the server's non-zero chat store, checked by the
+        // guard before it, read on its game thread between steps
+        // (`world::server`), and `post` is the rest of `chat.post`'s chain.
         unsafe { post_line(post, layout, store, to, cut(&line.text, layout.max_text)) };
     }
 }
@@ -485,7 +543,10 @@ pub(crate) fn drain() {
 ///
 /// # Safety
 ///
-/// `store` is the server's live chat store, used on the game thread.
+/// - `store` is the server's live, non-zero chat store.
+/// - Called on the server's game thread between steps, where no system
+///   touches the store.
+/// - `post` is the rest of the chain on the game's `chat.post`.
 unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &str) {
     let (handle, key, target) = match to {
         To::Machine(handle, key) => {
@@ -501,8 +562,10 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     let span = [text.as_ptr().expose_provenance(), text.len()];
     let extra = [0u64; 2];
     let store_ptr = core::ptr::with_exposed_provenance_mut::<u8>(store);
-    // SAFETY: the rest of the chat post's chain, with the arguments the game
-    // passes it.
+    // SAFETY: `post` is the rest of `chat.post`'s chain and `store` the live
+    // chat store on the game thread, by this function's `# Safety`; `result`
+    // is 16 writable bytes, `span` names the live `text` and `extra` two live
+    // words, as the game passes them.
     unsafe {
         post(
             result.as_mut_ptr(),
@@ -519,22 +582,31 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     let Some(target) = target.filter(|_| result[0] == POSTED) else {
         return;
     };
-    // SAFETY: the store's list tail is the node just posted.
+    // SAFETY: `store` is the live chat store on the game thread, by this
+    // function's `# Safety`; its list tail, the node just posted, sits at the
+    // table's `chat.store_tail`.
     let node: usize = unsafe { crate::memory::read(store, layout.tail) };
     if node == 0 {
         return;
     }
     let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
     for slot in (0..layout.slot_count).filter(|&s| s != target) {
-        // SAFETY: the store holds `slot_count` connection slots.
+        // SAFETY: `store` is the live chat store on the game thread, by this
+        // function's `# Safety`, and holds the table's
+        // `chat.store_slot_count` connection slots, `slot` being under it.
         let active: u8 =
             unsafe { crate::memory::read(store, layout.slots + slot * layout.slot_size) };
-        // SAFETY: the node's delivered mask, a bit per slot.
+        // SAFETY: `node` is non-zero, checked by the guard before it, and is
+        // the store's tail node just posted; its delivered mask sits at the
+        // table's `chat.node_delivered`.
         let mask: u32 = unsafe { crate::memory::read(node, layout.delivered) };
         if active != 0 && mask & (1 << slot) == 0 {
             #[expect(clippy::cast_possible_truncation, reason = "slots are under 32")]
             let slot = slot as u32;
-            // SAFETY: the game's own step for a line a connection received.
+            // SAFETY: `layout.mark` is the table's `chat.mark_delivered`, the
+            // game's own step for a line a connection received, on the live
+            // store and its non-zero tail node, on the game thread by this
+            // function's `# Safety`; `slot` is under the store's slots.
             unsafe {
                 (layout.mark)(
                     store_ptr,

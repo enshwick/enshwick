@@ -295,7 +295,9 @@ impl Host {
         infos.truncate(count as usize);
         infos
             .iter()
-            // SAFETY: the loader keeps every string it lists for the process.
+            // SAFETY: `list` filled `count` entries, and the loader keeps every
+            // string and author array it lists alive and unchanged for the
+            // process, past this call.
             .filter_map(|info| unsafe { entry(info) })
             .collect()
     }
@@ -310,22 +312,34 @@ type Listing = extern "system" fn(
     count: *mut u32,
 ) -> crate::abi::Status;
 
+/// An owned copy of one listed mod; `None` when its id, version or file is
+/// not UTF-8.
+///
 /// # Safety
 ///
-/// The info's strings are valid for the call.
+/// - Every [`Str`] in `info` is null or points at `len` bytes that stay alive
+///   and unchanged for the call.
+/// - `info.authors` is null or points at `author_count` initialised [`Str`]s,
+///   each meeting the bullet above, alive for the call.
 unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller keeps the id's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let id = unsafe { info.id.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: the caller keeps the version's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let version = unsafe { info.version.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: the caller keeps the file's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let file = unsafe { info.file.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: every `Str` this closure is given is one of `info`'s or one of
+    // its authors, whose bytes the caller keeps alive and unchanged for the
+    // call; the text is copied at once.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().to_owned();
     let authors = if info.authors.is_null() {
         &[][..]
     } else {
-        // SAFETY: the loader points at `author_count` strings it keeps.
+        // SAFETY: the caller guarantees a non-null `authors` points at
+        // `author_count` initialised `Str`s alive for the call.
         unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
     };
     let (name, description, authors, license, homepage) = (
@@ -375,7 +389,8 @@ mod tests {
             homepage: Str::EMPTY,
             replaced_by: Str::EMPTY,
         };
-        // SAFETY: static strings.
+        // SAFETY: every `Str` in `info` and `AUTHORS` points at a static
+        // string, alive and unchanged for the process.
         let entry = unsafe { entry(&info) }.unwrap();
         assert!(entry.join);
         assert!(!entry.running);

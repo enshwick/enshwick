@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn publishes_prices_and_defines_sold() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this crate's `declare_mod!(TradingPost)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.published(), [("trading-post:prices".to_owned(), 1)]);

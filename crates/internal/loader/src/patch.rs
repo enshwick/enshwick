@@ -83,7 +83,8 @@ impl FrameSlot {
     pub(crate) fn allocate() -> Option<Self> {
         let mut indices = [0u32; 9];
         for index in &mut indices {
-            // SAFETY: no preconditions.
+            // SAFETY: `TlsAlloc` takes no arguments; a failure returns
+            // `TLS_OUT_OF_INDEXES`, checked below.
             let allocated = unsafe { TlsAlloc() };
             if allocated == TLS_OUT_OF_INDEXES || allocated >= TLS_INLINE_SLOTS {
                 return None;
@@ -96,7 +97,8 @@ impl FrameSlot {
     /// The caller frame the thunk stored on this thread.
     #[must_use]
     pub(crate) fn read(self) -> enshwick::abi::CallerFrame {
-        // SAFETY: each index was allocated by `allocate`.
+        // SAFETY: `allocate` built `self` only from indices `TlsAlloc` gave
+        // and the loader never frees; `i` is under their nine.
         let value = |i: usize| unsafe { TlsGetValue(self.0[i]) }.addr() as u64;
         enshwick::abi::CallerFrame {
             rsp: value(0),
@@ -174,7 +176,8 @@ pub(crate) fn tsc_hz() -> Option<f64> {
 }
 
 fn rdtsc() -> u64 {
-    // SAFETY: `rdtsc` has no preconditions on x86-64.
+    // SAFETY: `rdtsc` reads the time stamp counter, present on every
+    // x86-64 processor, and touches no memory.
     unsafe { core::arch::x86_64::_rdtsc() }
 }
 
@@ -245,30 +248,38 @@ pub(crate) fn arm(
     if block.is_null() {
         return unarmed(chains, mids, patches, "no memory for thunks");
     }
-    // SAFETY: `block` spans `code_len + data_len` committed bytes.
+    // SAFETY: `block` is non-null, checked by the guard before it, and
+    // `reserve` committed `code_len + data_len` bytes there, so `code_len`
+    // stays inside.
     let data_start = unsafe { block.add(code_len) };
     #[expect(
         clippy::cast_ptr_alignment,
         reason = "the data pages start on a page boundary"
     )]
     let data = data_start.cast::<AtomicUsize>();
-    // SAFETY: inside the data pages, after the slots.
+    // SAFETY: the data pages hold `data_len` bytes, at least `slots_len +
+    // counters_len + functions_len + UNWIND.len()`, so `slots_len` stays
+    // inside.
     let counter_start = unsafe { data_start.add(slots_len) };
     #[expect(
         clippy::cast_ptr_alignment,
         reason = "the slots end on an 8-byte boundary"
     )]
     let counter_base = counter_start.cast::<Counter>();
-    // SAFETY: inside the data pages, after the counters.
+    // SAFETY: the data pages hold at least `slots_len + counters_len +
+    // functions_len + UNWIND.len()` bytes, so this offset stays inside.
     let function_start = unsafe { data_start.add(slots_len + counters_len) };
     #[expect(
         clippy::cast_ptr_alignment,
         reason = "the counters end on an 8-byte boundary"
     )]
     let function_base = function_start.cast::<RuntimeFunction>();
-    // SAFETY: inside the data pages, after the function table.
+    // SAFETY: the data pages hold at least `slots_len + counters_len +
+    // functions_len + UNWIND.len()` bytes, so this offset stays inside.
     let unwind = unsafe { data_start.add(slots_len + counters_len + functions_len) };
-    // SAFETY: `UNWIND.len()` bytes of the data pages are left for it.
+    // SAFETY: `data_len` leaves `UNWIND.len()` read-write bytes at `unwind`,
+    // which nothing else uses yet; `UNWIND` is a constant, so the ranges do
+    // not overlap.
     unsafe { unwind.copy_from_nonoverlapping(UNWIND.as_ptr(), UNWIND.len()) };
 
     let mut failures = Vec::new();
@@ -281,11 +292,16 @@ pub(crate) fn arm(
         count: 0,
     };
     for (i, chain) in chains.iter_mut().enumerate() {
-        // SAFETY: `i < count`, inside the data pages.
+        // SAFETY: `i < count` and the slot area holds `count + hops` words,
+        // so slot `i` lies inside the data pages.
         let slot_ptr = unsafe { data.add(i) };
-        // SAFETY: committed, zeroed and aligned memory that is never freed.
+        // SAFETY: `reserve` committed and zeroed the block, and the loader never
+        // frees it; the data pages start on a page
+        // boundary, so the word is aligned, and a zeroed `AtomicUsize` is
+        // valid.
         let slot: &'static AtomicUsize = unsafe { &*slot_ptr };
-        // SAFETY: `i < count`, inside the code pages.
+        // SAFETY: `i < count` and the code pages hold `count * thunk` bytes at
+        // least, so thunk `i` lies inside them.
         let code = unsafe { block.add(i * thunk) };
         let frame_index = match (chain.wants_caller_frame(), frame) {
             (false, _) => None,
@@ -299,36 +315,49 @@ pub(crate) fn arm(
             }
         };
         let counter = (counting != Count::Off).then(|| {
-            // SAFETY: `i < count`, inside the counter area.
+            // SAFETY: `i < count` and the counter area holds `count + hops`
+            // counters, so counter `i` lies inside the data pages.
             let counter_ptr = unsafe { counter_base.add(i) };
-            // SAFETY: committed, zeroed and aligned memory that is never
-            // freed; zero is a valid counter.
+            // SAFETY: `reserve` committed and zeroed the block, and the
+            // loader never frees it; the slots end on an 8-byte boundary,
+            // and a zeroed `Counter` is valid.
             let counter: &'static Counter = unsafe { &*counter_ptr };
             counters.push((chain.target, counter));
             (counter, counting == Count::Timed)
         });
-        // SAFETY: `code` has `thunk` writable bytes; the slot and the counter
-        // are within ±2 GiB.
+        // SAFETY: thunk `i` has `thunk` read-write bytes at `code` in the
+        // block, which nothing runs yet, and the slot and the counter lie in
+        // the same block, a few pages per chain, far under 2 GiB.
         let written = unsafe { write_thunk(code, thunk, slot, frame_index, counter) };
-        // SAFETY: one entry per thunk fits the table, all inside `block`.
+        // SAFETY: the function table has room for `count + hops` entries and
+        // gets at most one per thunk; `code` and the unwind data lie in
+        // `block`.
         unsafe { table.add(code, &written) };
         chain.head = Some(slot);
         thunks.push((chain.target, code));
     }
     if hops > 0 {
         let hop_code = Hops {
-            // SAFETY: the hops' thunks follow the heads', inside the code pages.
+            // SAFETY: the code pages hold `count * thunk + hops *
+            // TIMED_THUNK` bytes at least, so the hops' thunks start inside.
             code: unsafe { block.add(count * thunk) },
-            // SAFETY: the hops' slots follow the heads', inside the data pages.
+            // SAFETY: the slot area holds `count + hops` words, so the hops'
+            // slots start inside the data pages.
             slots: unsafe { data.add(count) },
-            // SAFETY: as above, for the counters.
+            // SAFETY: the counter area holds `count + hops` counters, so the
+            // hops' counters start inside the data pages.
             counters: unsafe { counter_base.add(count) },
             count: hops,
         };
-        // SAFETY: the hop areas hold `hops` entries each, never freed.
+        // SAFETY: the hop areas hold `hops` thunks, slots and counters each,
+        // committed, zeroed, read-write and never freed, in one block far
+        // under 2 GiB; the table has room for `count + hops` entries and the heads
+        // took at most `count`.
         unsafe { hop_code.arm(chains, &mut table) };
     }
-    // SAFETY: the entries written above, in memory never freed.
+    // SAFETY: `table.add` wrote `table.count` entries in thunk order, so
+    // sorted by address, naming code and unwind data inside `block`, which
+    // the loader never frees.
     unsafe { register_unwind(block, function_base, table.count) };
     if counting != Count::Off {
         let _first = COUNTERS.set(counters.into_boxed_slice());
@@ -336,14 +365,17 @@ pub(crate) fn arm(
     }
 
     let mut old = 0;
-    // SAFETY: the code pages belong to `block`.
+    // SAFETY: `block` and `code_len` are the code pages `reserve` gave this
+    // batch, and `old` is a live `u32` the call writes.
     let sealed = unsafe { VirtualProtect(block.cast(), code_len, PAGE_EXECUTE_READ, &raw mut old) };
     if sealed == 0 {
         return unarmed(chains, mids, patches, "thunk pages not executable");
     }
-    // SAFETY: no preconditions.
+    // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+    // pseudo-handle that needs no closing.
     let process = unsafe { GetCurrentProcess() };
-    // SAFETY: flushing our own process's freshly written code.
+    // SAFETY: `process` is this process's pseudo-handle and the range is the
+    // batch's own code pages; the call only flushes the cache.
     unsafe { FlushInstructionCache(process, block.cast(), code_len) };
 
     let code = hook(chains, mids, &thunks, off, patches, &mut failures);
@@ -352,7 +384,8 @@ pub(crate) fn arm(
 
 /// `len` bytes of fresh read-write memory; null when there is none.
 fn reserve(len: usize) -> *mut u8 {
-    // SAFETY: a fresh reservation; null on failure.
+    // SAFETY: `VirtualAlloc` with a null address reserves fresh pages and
+    // touches no memory of ours; null on failure, which callers check.
     unsafe {
         VirtualAlloc(
             core::ptr::null(),
@@ -377,16 +410,18 @@ impl Table {
     ///
     /// # Safety
     ///
-    /// The table has room for one more entry, and `code` and the unwind data
-    /// lie inside the block at `base`.
+    /// - `entries` has room for one more writable, aligned entry.
+    /// - `code` and the unwind data lie inside the block at `base`.
     unsafe fn add(&mut self, code: *mut u8, written: &Written) {
         let Some((timed, end)) = written.timed else {
             return;
         };
         let offset = |at: usize| u32::try_from(at - self.base.addr()).unwrap_or(0);
-        // SAFETY: the caller guarantees room for this entry.
+        // SAFETY: `entries` has room for entry `count` by this function's
+        // `# Safety`, so the offset stays inside the table.
         let entry = unsafe { self.entries.add(self.count as usize) };
-        // SAFETY: as above, writable.
+        // SAFETY: entry `count` is writable and aligned by this function's
+        // `# Safety`, and nothing reads it yet.
         unsafe {
             entry.write(RuntimeFunction {
                 begin: offset(code.addr() + timed),
@@ -412,9 +447,10 @@ impl Hops {
     ///
     /// # Safety
     ///
-    /// The areas hold `count` thunks, slots and counters, committed, zeroed,
-    /// writable and never freed, within ±2 GiB of each other, and `table`
-    /// has room for `count` more entries.
+    /// - `code`, `slots` and `counters` each hold `count` entries, committed,
+    ///   zeroed, writable, aligned and never freed.
+    /// - The three areas lie within 2 GiB of each other.
+    /// - `table` has room for `count` more entries.
     unsafe fn arm(&self, chains: &mut Chains, table: &mut Table) {
         let mut next = 0;
         let mut hop = |detour: usize| -> Option<Hop> {
@@ -423,22 +459,33 @@ impl Hops {
                 return None;
             }
             next += 1;
-            // SAFETY: `i < count`, inside the slot area.
+            // SAFETY: `i < self.count`, checked by the guard before it, and the
+            // slot area holds `count` slots by this function's `# Safety`.
             let slot_ptr = unsafe { self.slots.add(i) };
-            // SAFETY: committed, zeroed, aligned and never freed.
+            // SAFETY: slot `i` is committed, zeroed, aligned and never freed
+            // by this function's `# Safety`, and a zeroed `AtomicUsize` is
+            // valid.
             let slot: &'static AtomicUsize = unsafe { &*slot_ptr };
-            // SAFETY: `i < count`, inside the counter area.
+            // SAFETY: `i < self.count`, checked by the guard before it, and the
+            // counter area holds `count` counters by this function's `#
+            // Safety`.
             let counter_ptr = unsafe { self.counters.add(i) };
-            // SAFETY: as for the slot; zero is a valid counter.
+            // SAFETY: counter `i` is committed, zeroed, aligned and never
+            // freed by this function's `# Safety`, and a zeroed `Counter` is
+            // valid.
             let counter: &'static Counter = unsafe { &*counter_ptr };
-            // SAFETY: `i < count`, inside the code area.
+            // SAFETY: `i < self.count`, checked by the guard before it, and the
+            // code area holds `count` thunks of `TIMED_THUNK` bytes by this
+            // function's `# Safety`.
             let code = unsafe { self.code.add(i * TIMED_THUNK) };
             slot.store(detour, Ordering::Relaxed);
-            // SAFETY: `code` has `TIMED_THUNK` writable bytes; the slot and
-            // the counter are within ±2 GiB.
+            // SAFETY: thunk `i` has `TIMED_THUNK` writable bytes at `code`,
+            // and the slot and the counter lie within 2 GiB of it, by this
+            // function's `# Safety`.
             let written =
                 unsafe { write_thunk(code, TIMED_THUNK, slot, None, Some((counter, true))) };
-            // SAFETY: the caller guarantees room in the table.
+            // SAFETY: `table` has room for one entry per hop by this
+            // function's `# Safety`, and `code` lies in its block.
             unsafe { table.add(code, &written) };
             Some(Hop {
                 entry: code.addr(),
@@ -460,13 +507,17 @@ impl Hops {
 ///
 /// # Safety
 ///
-/// `table` holds `count` sorted entries naming code and unwind data inside
-/// the block at `base`, all of it never freed.
+/// - `table` holds `count` entries sorted by address, aligned for
+///   `IMAGE_RUNTIME_FUNCTION_ENTRY`.
+/// - Each entry names code and unwind data inside the block at `base`.
+/// - The table, the code and the unwind data are never freed.
 unsafe fn register_unwind(base: *mut u8, table: *const RuntimeFunction, count: u32) {
     if count == 0 {
         return;
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `table` holds `count` sorted entries naming code and unwind
+    // data in the never-freed block at `base`, by this function's
+    // `# Safety`, which is what `RtlAddFunctionTable` keeps a pointer to.
     let added = unsafe {
         RtlAddFunctionTable(
             table.cast::<IMAGE_RUNTIME_FUNCTION_ENTRY>(),
@@ -731,8 +782,9 @@ impl Asm {
 ///
 /// # Safety
 ///
-/// `code` has `len` writable bytes, and `slot` and the counter lie within
-/// ±2 GiB of it.
+/// - `code` has `len` writable bytes that no thread runs or reads during
+///   the call.
+/// - `slot` and the counter lie within 2 GiB of `code`.
 unsafe fn write_thunk(
     code: *mut u8,
     len: usize,
@@ -772,7 +824,9 @@ unsafe fn write_thunk(
     }
     let mut bytes = asm.bytes;
     bytes.resize(len, 0xcc);
-    // SAFETY: the caller guarantees `len` writable bytes at `code`.
+    // SAFETY: `code` has `len` writable bytes by this function's `# Safety`,
+    // and `bytes` is a fresh vector of `len` bytes, so the ranges do not
+    // overlap.
     unsafe { code.copy_from_nonoverlapping(bytes.as_ptr(), len) };
     written
 }
@@ -822,7 +876,8 @@ mod tests {
         let slot = AtomicUsize::new(0);
         let mut code = [0u8; THUNK];
         let base = code.as_mut_ptr();
-        // SAFETY: a local buffer of `THUNK` bytes; the slot is on the same stack.
+        // SAFETY: `code` is a local buffer of `THUNK` writable bytes, and
+        // `slot` sits on the same stack, well within 2 GiB.
         unsafe { write_thunk(base, THUNK, &slot, None, None) };
         assert_eq!(code[..2], [0xff, 0x25]);
         let relative = i32::from_le_bytes(code[2..6].try_into().unwrap());
@@ -834,7 +889,8 @@ mod tests {
     fn a_frame_thunk_saves_the_stack_pointer_first() {
         let slot = AtomicUsize::new(0);
         let mut code = [0u8; THUNK];
-        // SAFETY: as above.
+        // SAFETY: `code` is a local buffer of `THUNK` writable bytes, and
+        // `slot` sits on the same stack, well within 2 GiB.
         unsafe {
             write_thunk(
                 code.as_mut_ptr(),
@@ -863,7 +919,8 @@ mod tests {
         let slot = AtomicUsize::new(0);
         let counter = Counter::default();
         let mut code = [0u8; THUNK];
-        // SAFETY: as above.
+        // SAFETY: `code` is a local buffer of `THUNK` writable bytes, and
+        // `slot` and `counter` sit on the same stack, well within 2 GiB.
         let written = unsafe {
             write_thunk(
                 code.as_mut_ptr(),
@@ -885,7 +942,9 @@ mod tests {
 
     impl Page {
         fn new() -> Self {
-            // SAFETY: a fresh allocation, written before it runs.
+            // SAFETY: `VirtualAlloc` with a null address reserves a fresh
+            // page and touches no memory of ours; null on failure, asserted
+            // below.
             let base = unsafe {
                 VirtualAlloc(
                     core::ptr::null(),
@@ -900,23 +959,31 @@ mod tests {
         }
 
         fn slot(&self) -> &'static AtomicUsize {
-            // SAFETY: inside the page.
+            // SAFETY: `TIMED_THUNK` bytes are under `PAGE`, so word
+            // `TIMED_THUNK / 8` lies inside the page at `self.base`.
             let slot = unsafe { self.base.add(TIMED_THUNK / 8) }.cast::<AtomicUsize>();
-            // SAFETY: an aligned word of the page, which is never freed.
+            // SAFETY: the word is aligned in the committed, zeroed page,
+            // which the test never frees, and a zeroed `AtomicUsize` is
+            // valid.
             unsafe { &*slot }
         }
 
         fn counter(&self) -> &'static Counter {
-            // SAFETY: inside the page.
+            // SAFETY: `TIMED_THUNK` bytes and a slot are under `PAGE`, so
+            // word `TIMED_THUNK / 8 + 1` lies inside the page at `self.base`.
             let counter = unsafe { self.base.add(TIMED_THUNK / 8 + 1) }.cast::<Counter>();
-            // SAFETY: aligned words of the page, which is never freed.
+            // SAFETY: the words are aligned in the committed, zeroed page,
+            // which the test never frees, a `Counter` fits after the slot,
+            // and a zeroed `Counter` is valid.
             unsafe { &*counter }
         }
 
         /// The thunk, timed or only counting, jumping to `target`.
         fn thunk(&self, target: usize, timed: bool) -> usize {
             self.slot().store(target, Ordering::Release);
-            // SAFETY: the page has `TIMED_THUNK` bytes before the slot.
+            // SAFETY: the page has `TIMED_THUNK` writable bytes before the
+            // slot, which no thread runs yet, and the slot and the counter
+            // lie in the same page.
             let written = unsafe {
                 write_thunk(
                     self.base.cast(),
@@ -954,7 +1021,8 @@ mod tests {
     fn a_timed_thunk_counts_every_call_and_times_one_in_256() {
         let page = Page::new();
         let thunk = page.thunk((weigh as Eight as *const ()).addr(), true);
-        // SAFETY: the thunk forwards to `weigh`, with its signature.
+        // SAFETY: `page.thunk` wrote a thunk that jumps through its slot to
+        // `weigh`, so it has `Eight`'s signature.
         let call = unsafe { core::mem::transmute::<usize, Eight>(thunk) };
         for i in 0..600 {
             assert_eq!(call(1, 1, 1, 1, 1, 1, 1, i), 28 + 8 * i);
@@ -974,7 +1042,8 @@ mod tests {
             (halve as extern "system" fn(f64) -> f64 as *const ()).addr(),
             true,
         );
-        // SAFETY: the thunk forwards to `halve`, with its signature.
+        // SAFETY: `page.thunk` wrote a thunk that jumps through its slot to
+        // `halve`, so it has `halve`'s signature.
         let call = unsafe { core::mem::transmute::<usize, extern "system" fn(f64) -> f64>(thunk) };
         for _ in 0..512 {
             assert!((call(3.0) - 1.5).abs() < f64::EPSILON);
@@ -987,7 +1056,8 @@ mod tests {
     fn a_counting_thunk_counts_without_timing() {
         let page = Page::new();
         let thunk = page.thunk((weigh as Eight as *const ()).addr(), false);
-        // SAFETY: the thunk forwards to `weigh`, with its signature.
+        // SAFETY: `page.thunk` wrote a thunk that jumps through its slot to
+        // `weigh`, so it has `Eight`'s signature.
         let call = unsafe { core::mem::transmute::<usize, Eight>(thunk) };
         for _ in 0..300 {
             assert_eq!(call(1, 0, 0, 0, 0, 0, 0, 1), 9);
@@ -1004,7 +1074,7 @@ mod tests {
         use enshwick::abi::{HookFlags, Registers};
 
         static NEXT: [AtomicUsize; 2] = [const { AtomicUsize::new(0) }; 2];
-        unsafe extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
+        extern "system" fn handler(_: *mut Registers, _: *mut core::ffi::c_void) {}
 
         let mut chains = Chains::default();
         let link = |owner: usize| Link {

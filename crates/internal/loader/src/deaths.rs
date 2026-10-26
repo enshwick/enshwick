@@ -25,7 +25,9 @@ const MOST: usize = 64;
 type SinkFn =
     unsafe extern "system" fn(out: *mut u8, tracker: *mut u8, death: *const u8) -> *mut u8;
 
-// SAFETY: the slot joins the chain of the death sink, whose type it names.
+// SAFETY: `SinkFn` is the exact signature of the game's death sink at the
+// table's `player.death_sink`, and the slot is used only as the `next` of the
+// `sink` link on that function.
 static SINK_NEXT: Next<SinkFn> = unsafe { Next::new() };
 
 /// Where the record keeps what the event carries, from reflection.
@@ -89,16 +91,19 @@ impl History {
         let Ok(history) = crate::world::component(loader, entity, self.hash) else {
             return 0;
         };
-        let history = history.addr();
-        // SAFETY: the entity's live HitHistory, on the game thread after the
-        // step; `resolve` checked that `lastIndex` lies inside it.
+        let history = history.expose_provenance();
+        // SAFETY: `world::component` returned the entity's live HitHistory,
+        // read on the game thread after the step; `resolve` checked that the
+        // `u32` at `lastIndex` lies inside the reflected size.
         let last: u32 = unsafe { crate::memory::read(history, self.last_index) };
         let Some(last) = usize::try_from(last).ok().filter(|&i| i < self.slots) else {
             return 0;
         };
         let at = self.entries + last * self.entry_size + self.attacker;
-        // SAFETY: as above; `resolve` checked that every slot, and the
-        // attacker inside it, lies inside the HitHistory.
+        // SAFETY: the live HitHistory from `world::component`, on the game
+        // thread after the step; `last` is below `slots` by the earlier filter,
+        // and `resolve` checked that every slot, with the `u32` attacker
+        // inside it, lies inside the reflected size.
         unsafe { crate::memory::read(history, at) }
     }
 }
@@ -169,16 +174,20 @@ unsafe extern "system" fn sink(out: *mut u8, tracker: *mut u8, death: *const u8)
     {
         let _caught = DEATHS_FUSE.run("the sink", || {
             let mut bytes = [0u8; 64];
-            // SAFETY: the game hands the sink a whole record of the
-            // reflected size, valid for the call.
-            unsafe { core::ptr::copy_nonoverlapping(death, bytes.as_mut_ptr(), layout.size) };
+            for (at, byte) in bytes.iter_mut().enumerate().take(layout.size) {
+                // SAFETY: the game hands the sink a non-null record (checked
+                // earlier) of the reflected `PlayerDeath` size, valid for the
+                // call, and `at` is below that size.
+                *byte = unsafe { enshwick::raw::read_at(death, at) };
+            }
             let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
             if seen.len() < MOST {
                 seen.push(bytes);
             }
         });
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the death sink's signature.
     unsafe { SINK_NEXT.get()(out, tracker, death) }
 }
 

@@ -30,6 +30,8 @@ pub(crate) struct ModRecord {
     pub(crate) manifest: &'static Manifest,
     /// What its manifest tells players about it.
     pub(crate) meta: crate::manifest::Meta,
+    /// The ids it had before a rename.
+    pub(crate) former: Vec<String>,
     /// Notes on its relations, such as a recommended mod that is missing.
     pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
@@ -640,7 +642,8 @@ impl Loader {
 
     fn resolve_symbol(&self, index: usize, name: &str) -> Option<u64> {
         let own = self.own_rows(index).find_map(|row| {
-            // SAFETY: the row points at `symbol_count` static symbols.
+            // SAFETY: a manifest's build row points at `symbol_count` symbols in
+            // the mod's statics, and the mod's DLL stays loaded for the process.
             let symbols = unsafe { slice(row.symbols, row.symbol_count) };
             find(symbols, name)
         });
@@ -650,7 +653,9 @@ impl Loader {
 
     fn resolve_constant(&self, index: usize, name: &str) -> Option<u64> {
         let own = self.own_rows(index).find_map(|row| {
-            // SAFETY: the row points at `constant_count` static constants.
+            // SAFETY: a manifest's build row points at `constant_count`
+            // constants in the mod's statics, and the mod's DLL stays loaded for
+            // the process.
             let constants = unsafe { slice(row.constants, row.constant_count) };
             find(constants, name)
         });
@@ -805,16 +810,21 @@ pub(crate) static API: HostApi = HostApi {
     actions,
 };
 
-/// A static slice from a pointer and a count, empty for a null pointer.
+/// A slice from a pointer and a count, empty for a null pointer.
 ///
 /// # Safety
 ///
-/// A non-null `ptr` points at `count` static values.
-unsafe fn slice<T>(ptr: *const T, count: usize) -> &'static [T] {
+/// - A non-null `ptr` with a nonzero `count` points at `count` initialised,
+///   aligned values.
+/// - Those values stay alive and unchanged for the lifetime `'a` the caller
+///   picks.
+unsafe fn slice<'a, T>(ptr: *const T, count: usize) -> &'a [T] {
     if ptr.is_null() || count == 0 {
         return &[];
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `ptr` is non-null and `count` nonzero, checked just before; the
+    // caller guarantees `count` aligned values there, alive and unchanged for
+    // `'a`.
     unsafe { core::slice::from_raw_parts(ptr, count) }
 }
 
@@ -843,11 +853,12 @@ fn put_headed<T: enshwick::abi::Headed>(out: *mut T, value: T) -> Status {
 ///
 /// # Safety
 ///
-/// `raw` is null or points at the mod's version of the struct, readable for
-/// the size its header gives; every bit pattern of the bytes past `required`
-/// is valid for `T`, zero included.
+/// - `raw` is null or points at the mod's version of the struct, readable
+///   for the size its header gives; no alignment is needed.
+/// - No other thread writes that struct during the copy.
 unsafe fn get_headed<T: enshwick::abi::Headed>(raw: *const T, required: usize) -> Option<T> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `raw` null or readable for the size its
+    // header gives, with no concurrent writer, as `read_headed` requires.
     unsafe { enshwick::abi::read_headed(raw, required) }
 }
 
@@ -856,9 +867,12 @@ unsafe fn get_headed<T: enshwick::abi::Headed>(raw: *const T, required: usize) -
 ///
 /// # Safety
 ///
-/// `out` points at an entry that starts with a [`Header`].
+/// - `out` is readable for the eight bytes of a [`Header`]; no alignment is
+///   needed.
+/// - No other thread writes those bytes during the read.
 unsafe fn stride_of<T>(out: *const T) -> Option<usize> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `out` readable for a `Header`'s eight
+    // bytes with no concurrent writer; the read is unaligned.
     let size = unsafe { out.cast::<Header>().read_unaligned() }.size as usize;
     (size >= size_of::<Header>()).then_some(size)
 }
@@ -884,13 +898,18 @@ fn put_headed_list<T: enshwick::abi::Headed>(
         let known = stride.min(size_of::<T>());
         let size = u32::try_from(known).unwrap_or(u32::MAX);
         for (index, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            // SAFETY: `index` is below `capacity`, and the mod's list holds
+            // `capacity` entries of `stride` bytes, so entry `index` starts
+            // `index * stride` bytes into the same allocation.
             let entry = unsafe { out.cast::<u8>().add(index * stride) };
-            // SAFETY: as above; `known` bytes fit both the entry and `item`.
+            // SAFETY: `entry` is writable for `stride` bytes by the list's
+            // contract, `item` is readable for `size_of::<T>()`, `known` is at
+            // most both, and the loader's `items` do not overlap the mod's list.
             unsafe {
                 core::ptr::copy_nonoverlapping((&raw const *item).cast::<u8>(), entry, known);
             }
-            // SAFETY: the header's size is the entry's first field.
+            // SAFETY: the header's `size` is the entry's first field, inside the
+            // `stride` bytes, at least a `Header`, that `stride_of` checked.
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
@@ -903,9 +922,11 @@ fn put_headed_list<T: enshwick::abi::Headed>(
 ///
 /// # Safety
 ///
-/// `raw` is null with `count` zero, or points at `count` entries of the
-/// mod's version of the struct, each starting with its header; every bit
-/// pattern of the bytes past `required` is valid for `T`, zero included.
+/// - `count` is zero, or `raw` is null or points at `count` consecutive
+///   entries of the mod's version of the struct.
+/// - Each entry starts with its header and is readable for the size the
+///   first entry's header gives; no alignment is needed.
+/// - No other thread writes the list during the copy.
 unsafe fn get_headed_list<T: enshwick::abi::Headed>(
     raw: *const T,
     count: u32,
@@ -917,18 +938,22 @@ unsafe fn get_headed_list<T: enshwick::abi::Headed>(
     if raw.is_null() {
         return None;
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: `raw` is non-null, checked just before, and `count` is nonzero,
+    // so the caller guarantees a first entry that starts with its header.
     let stride = unsafe { stride_of(raw) }?;
     (0..count as usize)
         .map(|index| {
-            // SAFETY: as above; entry `index` starts `index * stride` bytes in.
+            // SAFETY: `index` is below `count`, and the caller guarantees
+            // `count` entries, each as large as the first entry's header says,
+            // so entry `index` starts `index * stride` bytes into the list.
             let entry = unsafe { raw.cast::<u8>().add(index * stride) }.cast::<T>();
-            // SAFETY: as above; an entry is readable for `stride` bytes, which
-            // its header must give too.
+            // SAFETY: `entry` starts one of the caller's `count` entries, each
+            // starting with its header.
             if unsafe { stride_of(entry) } != Some(stride) {
                 return None;
             }
-            // SAFETY: as above.
+            // SAFETY: `entry` starts one of the caller's entries, readable for
+            // `stride` bytes, the size its own header gives as just checked.
             unsafe { get_headed(entry, required) }
         })
         .collect()
@@ -1140,7 +1165,7 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
         let (Some(loader), Some(defaults)) = (loader(), text(defaults)) else {
             return Status::BAD_ARGS;
         };
-        let Some((_, record)) = loader.record(me) else {
+        let Some((index, record)) = loader.record(me) else {
             return Status::BAD_ARGS;
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
@@ -1157,8 +1182,11 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
                         &record.id,
                         "could not write the default settings",
                     );
+                    defaults.to_owned()
+                } else {
+                    crate::migrations::settings_written(loader, index);
+                    std::fs::read_to_string(&path).unwrap_or_else(|_| defaults.to_owned())
                 }
-                defaults.to_owned()
             }
             // The player's file stays as it is, for them to fix.
             Err(e) => {
@@ -1180,7 +1208,11 @@ extern "system" fn settings(me: ModHandle, defaults: Str, out: *mut Str) -> Stat
 
 impl crate::points::Mods for Loader {
     fn find(&self, id: &str) -> Option<usize> {
-        self.mods.iter().position(|m| m.id == id)
+        self.mods.iter().position(|m| m.id == id).or_else(|| {
+            self.mods
+                .iter()
+                .position(|m| m.former.iter().any(|old| old == id))
+        })
     }
 }
 
@@ -1202,13 +1234,16 @@ impl crate::services::Names for Loader {
 ///
 /// # Safety
 ///
-/// `name` and `layout` come from a spec valid for the call.
+/// - `name` is borrowed and unchanged for the call.
+/// - `layout` points at `count` fields readable for the call, each name
+///   borrowed and unchanged for the call, as a spec the safe layer passed.
 unsafe fn spec_parts(
     name: Str,
     layout: &api_frame::Layout,
 ) -> Option<(&str, crate::services::Fields)> {
     let name = text(name)?;
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `layout`'s fields and their names readable
+    // and unchanged for the call.
     let fields = unsafe { enshwick::services::read_layout(layout) }?;
     Some((name, fields))
 }
@@ -1224,7 +1259,8 @@ extern "system" fn publish(me: ModHandle, spec: *const api_frame::ServiceSpec) -
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::ServiceSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1265,7 +1301,8 @@ extern "system" fn service(
         else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(wanted.name, &wanted.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1310,7 +1347,8 @@ extern "system" fn define_event(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1347,7 +1385,8 @@ extern "system" fn subscribe_event(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::EventSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layout, with its
+        // fields and their names, readable and unchanged for the call.
         let Some((name, fields)) = (unsafe { spec_parts(spec.name, &spec.layout) }) else {
             return Status::BAD_ARGS;
         };
@@ -1366,11 +1405,16 @@ extern "system" fn subscribe_event(
 ///
 /// # Safety
 ///
-/// `spec` is null or a mod's version of the spec, valid for the call.
+/// - `spec` is null or points at a mod's version of the spec, readable for
+///   the size its header gives, with no concurrent writer.
+/// - Its name and both layouts, with their fields and names, are readable
+///   and unchanged for the call.
 unsafe fn point_parts(spec: *const api_frame::PointSpec) -> Option<crate::points::Declared> {
-    // SAFETY: forwarded from the caller; all of the spec is required.
+    // SAFETY: the caller guarantees `spec` null or readable for the size its
+    // header gives, with no concurrent writer; all of the spec is required.
     let spec = unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }?;
-    // SAFETY: the spec is valid for the call.
+    // SAFETY: the caller guarantees the spec's name and layouts readable and
+    // unchanged for the call; `spec` is a copy holding the same pointers.
     unsafe { declared(&spec) }
 }
 
@@ -1378,11 +1422,15 @@ unsafe fn point_parts(spec: *const api_frame::PointSpec) -> Option<crate::points
 ///
 /// # Safety
 ///
-/// The spec's name and layouts are valid for the call.
+/// - The spec's name is borrowed and unchanged for the call.
+/// - Its `input` and `output` layouts point at fields readable for the call,
+///   each name borrowed and unchanged for the call.
 unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declared> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees the spec's name and its `input` layout
+    // readable and unchanged for the call.
     let (name, input) = unsafe { spec_parts(spec.name, &spec.input) }?;
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the spec's `output` layout, its fields and
+    // their names, readable and unchanged for the call.
     let output = unsafe { enshwick::services::read_layout(&spec.output) }?;
     Some(crate::points::Declared {
         name: name.to_owned(),
@@ -1397,7 +1445,8 @@ unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::points::Declare
 ///
 /// # Safety
 ///
-/// `raw` is null or points at `count` strings valid for the call.
+/// - `raw` is null or points at `count` aligned `Str`s readable for the call.
+/// - Each string's bytes are borrowed and unchanged for the call.
 unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
     if count == 0 {
         return Some(Vec::new());
@@ -1405,7 +1454,8 @@ unsafe fn point_ids(raw: *const Str, count: u32) -> Option<Vec<String>> {
     if raw.is_null() {
         return None;
     }
-    // SAFETY: the caller guarantees `count` readable strings.
+    // SAFETY: `raw` is non-null and `count` nonzero, checked just before; the
+    // caller guarantees `count` aligned `Str`s there, readable for the call.
     let ids = unsafe { core::slice::from_raw_parts(raw, count as usize) };
     ids.iter().map(|id| text(*id).map(str::to_owned)).collect()
 }
@@ -1428,7 +1478,8 @@ extern "system" fn define_point(
         let Some(spec) = (unsafe { get_headed(spec, size_of::<api_frame::PointSpec>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the spec is valid for the call.
+        // SAFETY: the ABI has the mod pass the spec's name and layouts, with
+        // their fields and names, readable and unchanged for the call.
         let Some(declared) = (unsafe { declared(&spec) }) else {
             return Status::BAD_ARGS;
         };
@@ -1476,11 +1527,15 @@ extern "system" fn attach_point(
         let Some(link) = (unsafe { get_headed(link, size_of::<api_frame::PointLink>()) }) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the link's spec is valid for the call.
+        // SAFETY: the ABI has the mod pass `link.point` null or its version of
+        // the spec, with its name and layouts readable and unchanged for the
+        // call.
         let declared = unsafe { point_parts(link.point) };
-        // SAFETY: the link's ids are valid for the call.
+        // SAFETY: the ABI has the mod pass `link.before` null or pointing at
+        // `before_count` strings readable and unchanged for the call.
         let before = unsafe { point_ids(link.before, link.before_count) };
-        // SAFETY: as above.
+        // SAFETY: the ABI has the mod pass `link.after` null or pointing at
+        // `after_count` strings readable and unchanged for the call.
         let after = unsafe { point_ids(link.after, link.after_count) };
         let parts = (declared, before, after);
         let (Some(declared), Some(before), Some(after)) = parts else {
@@ -1860,7 +1915,8 @@ extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *mut u32) ->
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller's out value, checked for null.
+        // SAFETY: `out` is non-null, checked just before; the ABI has the mod
+        // pass it pointing at a writable, aligned `u32`.
         unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe))) };
         Status::OK
     })
@@ -1908,10 +1964,13 @@ extern "system" fn patch_code(
         else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the mod passes `len` readable bytes behind each pointer,
-        // copied before the call returns.
+        // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
+        // `expected`, unchanged for the call; `register` copies them into a box
+        // before it returns.
         let expected = unsafe { slice(expected, len) };
-        // SAFETY: as above.
+        // SAFETY: the ABI has the mod pass `len` readable bytes at a non-null
+        // `replacement`, unchanged for the call; `register` copies them into a
+        // box before it returns.
         let replacement = unsafe { slice(replacement, len) };
         crate::code::register(
             crate::code::CodePatch {
@@ -2027,7 +2086,9 @@ extern "system" fn mods(
         let infos: Vec<ModInfo> = core::iter::once(loader_info())
             .chain(loader.mods.iter().map(mod_info))
             .collect();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
     })
 }
@@ -2065,7 +2126,9 @@ extern "system" fn join_missing(
                 ..ModInfo::EMPTY
             })
             .collect();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&infos, out, entry_size, capacity, count) }
     })
 }
@@ -2102,7 +2165,9 @@ extern "system" fn replaced(
                 })
                 .collect()
         });
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(infos, out, entry_size, capacity, count) }
     })
 }
@@ -2112,7 +2177,10 @@ extern "system" fn replaced(
 ///
 /// # Safety
 ///
-/// A non-null `out` has room for `capacity` entries of `entry_size` bytes.
+/// - A non-null `out` is writable for `capacity` entries of `entry_size`
+///   bytes each; no alignment is needed.
+/// - A non-null `count` points at a writable, aligned `u32`.
+/// - Nothing else reads or writes those entries during the call.
 unsafe fn list<T: Copy>(
     infos: &[T],
     out: *mut T,
@@ -2128,15 +2196,19 @@ unsafe fn list<T: Copy>(
         let copied = stride.min(size_of::<T>());
         let size = u32::try_from(copied).unwrap_or(u32::MAX);
         for (index, info) in infos.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries of
-            // `entry_size` bytes each.
+            // SAFETY: `index` is below `capacity`, and the caller guarantees
+            // `capacity` entries of `stride` bytes at the non-null `out`, so
+            // entry `index` starts inside that list.
             let entry = unsafe { out.cast::<u8>().add(index * stride) };
-            // SAFETY: as above; `copied` bytes fit both the entry and `info`.
+            // SAFETY: the caller guarantees `entry` writable for `stride` bytes,
+            // `info` is readable for `size_of::<T>()`, `copied` is at most
+            // both, and the loader's `infos` do not overlap the mod's list.
             unsafe {
                 core::ptr::copy_nonoverlapping((&raw const *info).cast::<u8>(), entry, copied);
             };
             // The header says what the entry holds, never more than it has.
-            // SAFETY: the header's size is the entry's first field.
+            // SAFETY: the header's `size` is the entry's first field, inside the
+            // `stride` bytes, at least a `Header` as checked before the loop.
             unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
@@ -2346,7 +2418,9 @@ extern "system" fn altars(
             return Status::REFUSED;
         }
         let altars = crate::altars::list();
-        // SAFETY: forwarded from the mod's call.
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
         unsafe { list(&altars, out, entry_size, capacity, count) }
     })
 }
@@ -2518,13 +2592,16 @@ extern "system" fn item_data_get(
         };
         let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
         Status::OK
     })
@@ -2606,13 +2683,16 @@ extern "system" fn content_read(
         };
         let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         Status::OK
     })
@@ -2638,13 +2718,16 @@ extern "system" fn resource_read(
         };
         let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
         if !len.is_null() {
-            // SAFETY: the caller's length out pointer.
+            // SAFETY: `len` is non-null, checked just before; the ABI has the
+            // mod pass it pointing at a writable, aligned `u32`.
             unsafe { len.write(size) };
         }
         if size > capacity || out.is_null() {
             return Status::BAD_ARGS;
         }
-        // SAFETY: the caller passes room for `capacity` bytes at `out`.
+        // SAFETY: `out` is non-null and the copy is at most `capacity` bytes,
+        // both checked just before; the ABI has the mod pass `capacity`
+        // writable bytes at `out`, apart from the loader's own buffer.
         unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
         Status::OK
     })
@@ -3079,7 +3162,9 @@ extern "system" fn entities(
         };
         if !out.is_null() {
             for (index, place) in found.iter().take(capacity as usize).enumerate() {
-                // SAFETY: the caller passes room for `capacity` entries.
+                // SAFETY: `out` is non-null, checked just before, and `index` is
+                // below `capacity`; the ABI has the mod pass `capacity` writable,
+                // aligned entries at `out`.
                 unsafe { out.wrapping_add(index).write(*place) };
             }
         }
@@ -3385,9 +3470,11 @@ extern "system" fn keep_game_settings(
         let Ok(len) = usize::try_from(size) else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the caller passes `size` bytes at each, valid for the call.
+        // SAFETY: `data` is non-null, checked at the top; the ABI has the mod
+        // pass `size` readable bytes there, unchanged for the call.
         let bytes = unsafe { core::slice::from_raw_parts(data, len) };
-        // SAFETY: as above.
+        // SAFETY: `mask` is non-null, checked at the top; the ABI has the mod
+        // pass `size` readable bytes there, unchanged for the call.
         let mask = unsafe { core::slice::from_raw_parts(mask, len) };
         match caller(me).and_then(|loader| crate::game_settings::keep(loader, bytes, mask)) {
             Ok(()) => Status::OK,
@@ -3444,9 +3531,12 @@ fn put_list<T: Copy>(items: &[T], out: *mut T, capacity: u32, count: *mut u32) -
     };
     if !out.is_null() {
         for (i, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the caller passes room for `capacity` entries at `out`.
+            // SAFETY: `out` is non-null, checked just before, and `i` is below
+            // `capacity`; the ABI has the mod pass `capacity` entries at `out`,
+            // so the offset stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned entries
+            // the ABI has the mod pass at `out`.
             unsafe { slot.write(*item) };
         }
     }
@@ -3578,9 +3668,12 @@ extern "system" fn quests(me: ModHandle, out: *mut u32, capacity: u32, count: *m
             Ok(ids) => {
                 if !out.is_null() {
                     for (i, id) in ids.iter().take(capacity as usize).enumerate() {
-                        // SAFETY: the caller passes room for `capacity` ids at `out`.
+                        // SAFETY: `out` is non-null, checked just before, and
+                        // `i` is below `capacity`; the ABI has the mod pass
+                        // `capacity` ids at `out`, so the offset stays inside.
                         let slot = unsafe { out.add(i) };
-                        // SAFETY: as above.
+                        // SAFETY: `slot` is inside the `capacity` writable,
+                        // aligned ids the ABI has the mod pass at `out`.
                         unsafe { slot.write(*id) };
                     }
                 }

@@ -57,6 +57,7 @@ impl Step {
             }
             MigrationStep::MAP_SETTING => format!("change setting {}", self.from),
             MigrationStep::REMOVE_SETTING => format!("remove setting {}", self.from),
+            MigrationStep::TAKE_SETTING => format!("take setting {} from {}", self.to, self.from),
             MigrationStep::RENAME_STORE => format!("rename store {} to {}", self.from, self.to),
             MigrationStep::MAP_STORE => format!("change store {}", self.from),
             MigrationStep::RENAME_CONTENT => format!(
@@ -76,7 +77,14 @@ impl Step {
             MigrationStep::RENAME_SETTING
                 | MigrationStep::MAP_SETTING
                 | MigrationStep::REMOVE_SETTING
+                | MigrationStep::TAKE_SETTING
         )
+    }
+
+    /// Whether the step takes a setting from another mod's files.
+    #[must_use]
+    pub fn takes(&self) -> bool {
+        self.kind == MigrationStep::TAKE_SETTING
     }
 }
 
@@ -93,7 +101,12 @@ pub struct Migration {
 /// or why it failed.
 pub type MapFn<'a> = &'a dyn Fn(usize, usize, &str) -> Result<String, String>;
 
-/// What ran, for the settings files and per world: mod id to migration ids.
+/// The text of another mod's settings file beside the one migrated, by that
+/// mod's id; `None` when it has none.
+pub type SourceFn<'a> = &'a dyn Fn(&str) -> Option<String>;
+
+/// What ran, for the settings files and per world: mod id to migration ids;
+/// and the former ids whose files each renamed mod took over.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct Record {
@@ -101,6 +114,8 @@ pub struct Record {
     pub settings: BTreeMap<String, Vec<String>>,
     /// Migrations that ran on each world, by world key.
     pub worlds: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    /// The former ids each mod carried its files over from.
+    pub carried: BTreeMap<String, Vec<String>>,
 }
 
 impl Record {
@@ -131,12 +146,34 @@ impl Record {
         }
         let body = toml::to_string(self).map_err(std::io::Error::other)?;
         let text = format!(
-            "# Mod migrations that ran: on each mod's settings file, and per world.\n\
-             # The loader keeps this file; a migration listed here never runs again.\n\n{body}"
+            "# Mod migrations that ran: on each mod's settings file, and per world;\n\
+             # and the former ids whose files each renamed mod took over.\n\
+             # The loader keeps this file; nothing listed here runs again.\n\n{body}"
         );
         let staged = path.with_extension("toml.new");
         std::fs::write(&staged, text)?;
         std::fs::rename(&staged, path)
+    }
+
+    /// Counts every migration that ran under the former id `old` as run
+    /// under `id` too, and records `old` as carried over to `id`.
+    pub fn take_over(&mut self, id: &str, old: &str) {
+        let lists = std::iter::once(&mut self.settings).chain(self.worlds.values_mut());
+        for list in lists {
+            let Some(ran) = list.get(old).cloned() else {
+                continue;
+            };
+            let now = list.entry(id.to_owned()).or_default();
+            for migration in ran {
+                if !now.contains(&migration) {
+                    now.push(migration);
+                }
+            }
+        }
+        let carried = self.carried.entry(id.to_owned()).or_default();
+        if !carried.iter().any(|o| o == old) {
+            carried.push(old.to_owned());
+        }
     }
 
     /// The list of migrations that ran for mod `id` on the settings file,
@@ -183,7 +220,8 @@ pub fn plan(id: &str, pending: &[(usize, &Migration)], only_settings: bool) -> S
         .join("; ")
 }
 
-/// `text` with the settings steps of migration `index` applied.
+/// `text` with the settings steps of migration `index` applied; `source`
+/// reads the files of the mods a setting is taken from.
 ///
 /// # Errors
 ///
@@ -194,10 +232,12 @@ pub fn apply_settings(
     index: usize,
     migration: &Migration,
     map: MapFn<'_>,
+    source: SourceFn<'_>,
 ) -> Result<String, String> {
     let mut doc: DocumentMut = text.parse().map_err(|e| format!("settings: {e}"))?;
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
+            MigrationStep::TAKE_SETTING => take(&mut doc, &step.from, &step.to, source)?,
             MigrationStep::RENAME_SETTING => rename_key(doc.as_table_mut(), &step.from, &step.to),
             MigrationStep::REMOVE_SETTING => {
                 let _gone = doc.remove(&step.from);
@@ -222,6 +262,51 @@ pub fn apply_settings(
         }
     }
     Ok(doc.to_string())
+}
+
+/// Sets `to` in `doc` from `from`, `<mod id>:<key>`, in the file `source`
+/// reads for that mod, the comments on `to` kept; nothing when that mod has
+/// no such value. Both keys may be dotted paths into tables, such as
+/// `comfort.multiplier`; a missing table on the way to `to` is made.
+fn take(doc: &mut DocumentMut, from: &str, to: &str, source: SourceFn<'_>) -> Result<(), String> {
+    let Some((id, key)) = from.split_once(':') else {
+        return Err(format!("setting {from}: not <mod id>:<key>"));
+    };
+    let Some(text) = source(id) else {
+        return Ok(());
+    };
+    let other: DocumentMut = text.parse().map_err(|e| format!("settings of {id}: {e}"))?;
+    let mut item = other.as_item();
+    for part in key.split('.') {
+        match item.get(part) {
+            Some(next) => item = next,
+            None => return Ok(()),
+        }
+    }
+    let Some(value) = item.as_value() else {
+        return Ok(());
+    };
+    let mut value = value.clone().decorated(" ", "");
+    let (path, leaf) = to.rsplit_once('.').map_or(("", to), |(p, l)| (p, l));
+    let mut table = doc.as_table_mut();
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        let next = table
+            .entry(part)
+            .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+        table = next
+            .as_table_mut()
+            .ok_or_else(|| format!("setting {to}: {part} is not a table"))?;
+    }
+    match table.get_mut(leaf).and_then(toml_edit::Item::as_value_mut) {
+        Some(old) => {
+            *value.decor_mut() = old.decor().clone();
+            *old = value;
+        }
+        None => {
+            table.insert(leaf, toml_edit::Item::Value(value));
+        }
+    }
+    Ok(())
 }
 
 /// Renames the key `from` of `table` to `to` in its place, comments kept;
@@ -351,24 +436,30 @@ fn stage_stores(
     Ok(())
 }
 
-/// Writes `text` to `path` through a temporary file and a rename.
+/// Writes `text` to `path` through a temporary file and a rename, its
+/// folder made when missing.
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
     let staged = path.with_extension("toml.new");
     std::fs::write(&staged, text)?;
     std::fs::rename(&staged, path)
 }
 
-/// Runs the pending migrations of mod `id` on its settings file `path`, or
-/// on the world folder `world_dir` with its `settings.toml`, and records
-/// them in `record`; returns the plan line, when anything was pending.
+/// Runs the pending migrations of mod `id` on its settings file, or on a
+/// world folder with its `settings.toml`, and records them in `record`;
+/// returns the plan line, when anything was pending.
 ///
-/// A file or world the mod has never seen starts current: every migration
-/// is recorded and none runs.
+/// A settings file that is not there yet waits, unrecorded, for the loader
+/// to write it. A file or world the mod has never seen starts current: only
+/// the steps that take settings from other mods run, and every migration is
+/// recorded.
 ///
 /// # Errors
 ///
 /// The plan line and why the first failing migration failed; the ones
-/// before it are recorded.
+/// before it are recorded, and all of them on a file the mod never saw.
 pub fn run(
     record: &mut Record,
     target: Target<'_>,
@@ -378,18 +469,37 @@ pub fn run(
     dry: bool,
 ) -> Result<Option<String>, (String, String)> {
     let (world, fresh) = match target {
-        Target::Settings(path) => (None, !path.exists()),
+        Target::Settings { path, .. } if !path.exists() => return Ok(None),
+        Target::Settings { born, .. } => (None, born),
         Target::World { key, dir } => (Some(key), !dir.exists()),
     };
+    let source = |other: &str| std::fs::read_to_string(target.source(other)).ok();
     let ran = record.ran(world, id);
-    if fresh {
-        if !dry {
-            ran.clear();
-            ran.extend(all.iter().map(|m| m.id.clone()));
-        }
-        return Ok(None);
+    let taking: Vec<(usize, Migration)>;
+    let pending: Vec<(usize, &Migration)> = if fresh {
+        taking = all
+            .iter()
+            .enumerate()
+            .map(|(index, m)| {
+                let steps = m.steps.iter().filter(|s| s.takes()).cloned().collect();
+                (
+                    index,
+                    Migration {
+                        id: m.id.clone(),
+                        steps,
+                    },
+                )
+            })
+            .filter(|(_, m)| !m.steps.is_empty())
+            .collect();
+        taking.iter().map(|(index, m)| (*index, m)).collect()
+    } else {
+        pending(all, ran)
+    };
+    if fresh && !dry {
+        ran.clear();
+        ran.extend(all.iter().map(|m| m.id.clone()));
     }
-    let pending: Vec<(usize, &Migration)> = pending(all, ran);
     if pending.is_empty() {
         return Ok(None);
     }
@@ -397,43 +507,57 @@ pub fn run(
     if dry {
         return Ok(Some(line));
     }
+    let mut changed = false;
     for (index, migration) in pending {
         let mut staged = Staged::default();
         let applied = match target {
-            Target::Settings(path) => stage_settings(&mut staged, path, index, migration, map),
+            Target::Settings { path, .. } => {
+                stage_settings(&mut staged, path, index, migration, map, &source)
+            }
             Target::World { dir, .. } => stage_settings(
                 &mut staged,
                 &dir.join("settings.toml"),
                 index,
                 migration,
                 map,
+                &source,
             )
             .and_then(|()| stage_stores(&mut staged, dir, index, migration, map)),
         }
-        .and_then(|()| staged.commit());
+        .and_then(|()| {
+            changed |= !staged.files.is_empty();
+            staged.commit()
+        });
         if let Err(reason) = applied {
             return Err((line, format!("migration {}: {reason}", migration.id)));
         }
-        ran.push(migration.id.clone());
+        if !fresh {
+            ran.push(migration.id.clone());
+        }
     }
-    Ok(Some(line))
+    Ok((changed || !fresh).then_some(line))
 }
 
-/// Stages a migration's settings steps on the file at `path`, if any.
+/// Stages a migration's settings steps on the file at `path`: on an empty
+/// file when there is none and the migration takes settings from another
+/// mod.
 fn stage_settings(
     staged: &mut Staged,
     path: &Path,
     index: usize,
     migration: &Migration,
     map: MapFn<'_>,
+    source: SourceFn<'_>,
 ) -> Result<(), String> {
     if !migration.steps.iter().any(Step::on_settings) {
         return Ok(());
     }
-    let Some(text) = staged.read(path) else {
-        return Ok(());
+    let text = match staged.read(path) {
+        Some(text) => text,
+        None if migration.steps.iter().any(Step::takes) => String::new(),
+        None => return Ok(()),
     };
-    let new = apply_settings(&text, index, migration, map)?;
+    let new = apply_settings(&text, index, migration, map, source)?;
     if new != text {
         staged.put(path.to_path_buf(), Some(new));
     }
@@ -443,8 +567,14 @@ fn stage_settings(
 /// What migrations run on.
 #[derive(Clone, Copy, Debug)]
 pub enum Target<'a> {
-    /// A mod's settings file.
-    Settings(&'a Path),
+    /// A mod's settings file, `mod-configs/<id>.toml`.
+    Settings {
+        /// The file.
+        path: &'a Path,
+        /// Whether the loader wrote it from the mod's defaults in this
+        /// process, so the mod has never seen it.
+        born: bool,
+    },
     /// A world: its key and the mod's folder for it.
     World {
         /// The world key.
@@ -454,8 +584,26 @@ pub enum Target<'a> {
     },
 }
 
+impl Target<'_> {
+    /// The settings file the mod `other` keeps for the same target.
+    #[must_use]
+    pub fn source(&self, other: &str) -> PathBuf {
+        match *self {
+            Target::Settings { path, .. } => path.with_file_name(format!("{other}.toml")),
+            Target::World { key, dir } => dir
+                .ancestors()
+                .nth(3)
+                .unwrap_or(dir)
+                .join(other)
+                .join("worlds")
+                .join(key)
+                .join("settings.toml"),
+        }
+    }
+}
+
 #[cfg(windows)]
-pub(crate) use live::{register, renamed, world_loaded};
+pub(crate) use live::{register, renamed, settings_written, world_loaded};
 
 #[cfg(windows)]
 mod live {
@@ -480,6 +628,9 @@ mod live {
     static REGISTERED: Mutex<Vec<Arc<Registered>>> = Mutex::new(Vec::new());
     /// The record, read once and written after every run.
     static RECORD: Mutex<Option<Record>> = Mutex::new(None);
+    /// The mods whose settings file the loader wrote from their defaults in
+    /// this process, before they registered their migrations.
+    static BORN: Mutex<Vec<usize>> = Mutex::new(Vec::new());
     /// Content renames, old GUID to new, once content is sealed.
     static RENAMES: OnceLock<FxHashMap<[u8; 16], [u8; 16]>> = OnceLock::new();
 
@@ -495,8 +646,10 @@ mod live {
             return Err("too many steps".to_owned());
         };
         let mut out = Str::EMPTY;
-        // SAFETY: the map lives in the mod's DLL, which stays loaded; the
-        // input is valid for the call and the safe layer catches panics.
+        // SAFETY: `reg.map` is the mod's migration function in its DLL, which
+        // stays loaded for the process, called with the `user` pointer it was
+        // registered with; `input` and `out` are locals alive for the call, and
+        // the safe layer catches the map's panics.
         let status =
             crate::profile::call(reg.owner, crate::profile::Feature::Migrations, || unsafe {
                 (reg.map)(
@@ -507,7 +660,9 @@ mod live {
                     &raw mut out,
                 )
             });
-        // SAFETY: the text stays valid until the mod's next map call.
+        // SAFETY: `out` is `Str::EMPTY` or the text the map wrote, which the ABI
+        // keeps valid and unchanged until the mod's next map call; it is copied
+        // here.
         let Some(text) = (unsafe { out.as_str() }).map(str::to_owned) else {
             return Err("the result is not UTF-8".to_owned());
         };
@@ -524,27 +679,37 @@ mod live {
     ///
     /// # Safety
     ///
-    /// `set` is the mod's valid set, its strings and arrays valid for the
-    /// call.
+    /// - `set.migrations` is null or points at `set.count` aligned
+    ///   migrations, and each migration's `steps` at its `count` aligned
+    ///   steps, all readable and unchanged for the call.
+    /// - Every migration id and step text is readable for its length and
+    ///   unchanged for the call.
     unsafe fn copy(set: &MigrationSet) -> Option<Vec<Migration>> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `set.migrations` null or pointing at
+        // `set.count` aligned migrations, readable and unchanged for the call.
         let migrations = unsafe { slice(set.migrations, set.count) }?;
         migrations
             .iter()
             .map(|m| {
-                // SAFETY: as above.
+                // SAFETY: the caller guarantees each migration's `steps` null or
+                // pointing at its `count` aligned steps, readable and unchanged.
                 let steps = unsafe { slice(m.steps, m.count) }?;
                 Some(Migration {
-                    // SAFETY: as above.
+                    // SAFETY: the caller guarantees every migration id readable
+                    // and unchanged for the call; it is copied here.
                     id: unsafe { m.id.as_str() }?.to_owned(),
                     steps: steps
                         .iter()
                         .map(|s| {
                             Some(Step {
                                 kind: s.kind,
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 from: unsafe { s.from.as_str() }?.to_owned(),
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 to: unsafe { s.to.as_str() }?.to_owned(),
                                 from_guid: s.from_guid,
                                 to_guid: s.to_guid,
@@ -560,7 +725,10 @@ mod live {
     ///
     /// # Safety
     ///
-    /// A non-null `ptr` points at `count` valid items.
+    /// - A non-null `ptr` with a nonzero `count` points at `count`
+    ///   initialised, aligned items.
+    /// - Those items stay alive and unchanged for the lifetime `'a` the
+    ///   caller picks.
     unsafe fn slice<'a, T>(ptr: *const T, count: u32) -> Option<&'a [T]> {
         if count == 0 {
             return Some(&[]);
@@ -568,7 +736,9 @@ mod live {
         if ptr.is_null() {
             return None;
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `ptr` is non-null and `count` nonzero, checked just before;
+        // the caller guarantees `count` aligned items there, alive and
+        // unchanged for `'a`.
         Some(unsafe { core::slice::from_raw_parts(ptr, count as usize) })
     }
 
@@ -636,9 +806,9 @@ mod live {
 
     /// Registers mod `index`'s migrations and runs them on its settings file.
     pub(crate) fn register(loader: &Loader, index: usize, set: &MigrationSet) -> Status {
-        let Some(record) = loader.mods.get(index) else {
+        if loader.mods.get(index).is_none() {
             return Status::BAD_ARGS;
-        };
+        }
         let taken = |registered: &[Arc<Registered>]| {
             registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some()
         };
@@ -648,7 +818,9 @@ mod live {
         let Some(map) = set.map else {
             return Status::BAD_ARGS;
         };
-        // SAFETY: the safe layer passes its valid set for the call.
+        // SAFETY: the only caller, the `migrate` entry of the host table, passes
+        // the set a mod handed over in that call, whose arrays and texts the ABI
+        // has the mod keep readable and unchanged for the call.
         let Some(list) = (unsafe { copy(set) }) else {
             return Status::BAD_ARGS;
         };
@@ -658,24 +830,12 @@ mod live {
             map,
             user: set.user.expose_provenance(),
         };
-        let path = loader.configs_dir.join(format!("{}.toml", record.id));
-        let outcome = with_entry(loader, None, &record.id, |rec| {
-            run(
-                rec,
-                Target::Settings(&path),
-                &record.id,
-                &reg.list,
-                &|m, s, input| call(&reg, m, s, input),
-                dry_run(),
-            )
-        })
-        .unwrap_or(Ok(None));
-        report(&record.id, "the settings file", &outcome);
-        if outcome.is_err() {
+        let born = BORN
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(&index);
+        if !run_settings(loader, &reg, born) {
             return Status::REFUSED;
-        }
-        if matches!(outcome, Ok(Some(_))) {
-            crate::watch::wrote(&path);
         }
         let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
         if taken(&registered) {
@@ -683,6 +843,53 @@ mod live {
         }
         registered.push(Arc::new(reg));
         Status::OK
+    }
+
+    /// Runs `reg`'s pending migrations on its mod's settings file; whether
+    /// they ran without a failure.
+    fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
+        let Some(record) = loader.mods.get(reg.owner) else {
+            return false;
+        };
+        let path = loader.configs_dir.join(format!("{}.toml", record.id));
+        let outcome = with_entry(loader, None, &record.id, |rec| {
+            run(
+                rec,
+                Target::Settings { path: &path, born },
+                &record.id,
+                &reg.list,
+                &|m, s, input| call(reg, m, s, input),
+                dry_run(),
+            )
+        })
+        .unwrap_or(Ok(None));
+        report(&record.id, "the settings file", &outcome);
+        if matches!(outcome, Ok(Some(_))) {
+            crate::watch::wrote(&path);
+        }
+        outcome.is_ok()
+    }
+
+    /// The loader wrote mod `index`'s settings file from its defaults: the
+    /// mod has never seen it, so its migrations start current there, and
+    /// the settings it takes from other mods come in. A failure is logged,
+    /// and the mod reads its defaults.
+    pub(crate) fn settings_written(loader: &Loader, index: usize) {
+        let reg = REGISTERED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|r| r.owner == index)
+            .cloned();
+        match reg {
+            Some(reg) => {
+                let _logged = run_settings(loader, &reg, true);
+            }
+            None => BORN
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(index),
+        }
     }
 
     /// A world loaded: runs every running mod's pending migrations on it,
@@ -814,6 +1021,10 @@ mod tests {
         Ok((n * 2).to_string())
     }
 
+    fn none(_: &str) -> Option<String> {
+        None
+    }
+
     fn scratch(name: &str) -> PathBuf {
         let dir =
             std::env::temp_dir().join(format!("enshwick-migrations-{name}-{}", std::process::id()));
@@ -834,7 +1045,7 @@ mod tests {
                 step(MigrationStep::MAP_SETTING, "missing", ""),
             ],
         );
-        let new = apply_settings(text, 0, &m, &double).unwrap();
+        let new = apply_settings(text, 0, &m, &double, &none).unwrap();
         assert_eq!(
             new,
             "# Cost.\ncost_multiplier = 3 # each\n# Limit.\nlimit = 8\n"
@@ -844,14 +1055,14 @@ mod tests {
     #[test]
     fn a_rename_never_overwrites() {
         let m = migration("2", vec![step(MigrationStep::RENAME_SETTING, "a", "b")]);
-        let new = apply_settings("a = 1\nb = 2\n", 0, &m, &double).unwrap();
+        let new = apply_settings("a = 1\nb = 2\n", 0, &m, &double, &none).unwrap();
         assert_eq!(new, "a = 1\nb = 2\n");
     }
 
     #[test]
     fn a_refused_map_names_the_setting() {
         let m = migration("2", vec![step(MigrationStep::MAP_SETTING, "limit", "")]);
-        let error = apply_settings("limit = \"x\"\n", 0, &m, &double).unwrap_err();
+        let error = apply_settings("limit = \"x\"\n", 0, &m, &double, &none).unwrap_err();
         assert!(error.starts_with("setting limit: not a number"), "{error}");
     }
 
@@ -1035,7 +1246,10 @@ mod tests {
         let mut record = Record::default();
         let line = run(
             &mut record,
-            Target::Settings(&file),
+            Target::Settings {
+                path: &file,
+                born: false,
+            },
             "safes",
             &all,
             &double,
@@ -1060,7 +1274,10 @@ mod tests {
         let mut record = Record::default();
         let (_, reason) = run(
             &mut record,
-            Target::Settings(&file),
+            Target::Settings {
+                path: &file,
+                born: false,
+            },
             "safes",
             &all,
             &double,
@@ -1074,5 +1291,138 @@ mod tests {
             "b = 1\nlimit = \"x\"\n"
         );
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+    #[test]
+    fn a_taken_setting_comes_from_the_other_mod_s_file_with_its_value() {
+        let m = migration(
+            "2",
+            vec![
+                step(
+                    MigrationStep::TAKE_SETTING,
+                    "comfort:multiplier",
+                    "comfort_multiplier",
+                ),
+                step(MigrationStep::TAKE_SETTING, "comfort:missing", "nothing"),
+                step(MigrationStep::TAKE_SETTING, "gone:limit", "limit"),
+            ],
+        );
+        let source = |id: &str| (id == "comfort").then(|| "multiplier = 2.5\n".to_owned());
+        let text = "# Comfort per piece.\ncomfort_multiplier = 1.0\nlimit = 3\n";
+        let new = apply_settings(text, 0, &m, &double, &source).unwrap();
+        assert_eq!(
+            new,
+            "# Comfort per piece.\ncomfort_multiplier = 2.5\nlimit = 3\n"
+        );
+        let nested = migration(
+            "3",
+            vec![
+                step(
+                    MigrationStep::TAKE_SETTING,
+                    "comfort:multiplier",
+                    "comfort.multiplier",
+                ),
+                step(MigrationStep::TAKE_SETTING, "rates:recipes.cost", "cost"),
+            ],
+        );
+        let source = |id: &str| match id {
+            "comfort" => Some("multiplier = 2.5\n".to_owned()),
+            _ => Some("[recipes]\ncost = 3\n".to_owned()),
+        };
+        let new = apply_settings("a = 1\n", 0, &nested, &double, &source).unwrap();
+        assert_eq!(new, "a = 1\ncost = 3\n\n[comfort]\nmultiplier = 2.5\n");
+        let bad = migration("4", vec![step(MigrationStep::TAKE_SETTING, "no-key", "a")]);
+        assert!(apply_settings("", 0, &bad, &double, &source).is_err());
+    }
+
+    #[test]
+    fn a_settings_file_waits_until_written_then_starts_current_with_taken_values() {
+        let dir = scratch("born");
+        let file = dir.join("rates.toml");
+        std::fs::write(dir.join("comfort.toml"), "multiplier = 2.5\n").unwrap();
+        let all = [
+            migration("1", vec![step(MigrationStep::MAP_SETTING, "comfort", "")]),
+            migration(
+                "2",
+                vec![step(
+                    MigrationStep::TAKE_SETTING,
+                    "comfort:multiplier",
+                    "comfort",
+                )],
+            ),
+        ];
+        let mut record = Record::default();
+        let target = |born| Target::Settings { path: &file, born };
+        assert_eq!(
+            run(&mut record, target(false), "rates", &all, &double, false),
+            Ok(None)
+        );
+        assert!(
+            record.settings.is_empty(),
+            "nothing recorded before the file"
+        );
+
+        std::fs::write(&file, "comfort = 1.0\n").unwrap();
+        let line = run(&mut record, target(true), "rates", &all, &double, false).unwrap();
+        assert_eq!(
+            line.as_deref(),
+            Some("rates 2: take setting comfort from comfort:multiplier")
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "comfort = 2.5\n");
+        assert_eq!(record.settings["rates"], ["1", "2"]);
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_new_world_takes_the_other_mod_s_world_values() {
+        let data = scratch("take-world");
+        let old = data.join("comfort/worlds/w-1");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("settings.toml"), "multiplier = 4.0\n").unwrap();
+        let dir = data.join("rates/worlds/w-1");
+        let all = [migration(
+            "2",
+            vec![step(
+                MigrationStep::TAKE_SETTING,
+                "comfort:multiplier",
+                "comfort",
+            )],
+        )];
+        let mut record = Record::default();
+        let target = Target::World {
+            key: "w-1",
+            dir: &dir,
+        };
+        let outcome = run(&mut record, target, "rates", &all, &double, false);
+        assert!(outcome.is_ok(), "{outcome:?}");
+        assert_eq!(
+            std::fs::read_to_string(dir.join("settings.toml")).unwrap(),
+            "comfort = 4.0\n"
+        );
+        assert_eq!(record.worlds["w-1"]["rates"], ["2"]);
+        let other = Target::World {
+            key: "w-2",
+            dir: &data.join("rates/worlds/w-2"),
+        };
+        assert_eq!(
+            run(&mut record, other, "rates", &all, &double, false),
+            Ok(None)
+        );
+        assert!(!data.join("rates/worlds/w-2").exists());
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn taking_over_a_former_id_counts_its_migrations() {
+        let mut record = Record::default();
+        record.ran(None, "old").push("2".into());
+        record
+            .ran(Some("w-1"), "old")
+            .extend(["2".into(), "3".into()]);
+        record.ran(Some("w-1"), "new").push("3".into());
+        record.take_over("new", "old");
+        record.take_over("new", "old");
+        assert_eq!(record.settings["new"], ["2"]);
+        assert_eq!(record.worlds["w-1"]["new"], ["3", "2"]);
+        assert_eq!(record.carried["new"], ["old"]);
     }
 }

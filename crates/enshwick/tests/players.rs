@@ -48,7 +48,7 @@ mod tests {
             .player(player(11, 8, "ann"))
             .player(player(12, 9, "Bob"))
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Lookups)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let world = WORLD.get().unwrap();

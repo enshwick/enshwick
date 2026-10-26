@@ -95,7 +95,9 @@ fn answer_name(raw: Option<u32>) -> &'static str {
 ///
 /// # Safety
 ///
-/// Inside a frame, on its thread, with no other window open.
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
 pub(super) unsafe fn draw(engine: &Engine, context: usize) {
     if OPEN.swap(false, Ordering::AcqRel) {
         DEMO.set(Some(Demo {
@@ -118,7 +120,8 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
         if let Some(answer) = ANSWER.lock().unwrap_or_else(PoisonError::into_inner).take() {
             demo.answer = Some(answer);
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: this function's `# Safety` gives the frame, its thread, its
+        // `context` and no other open window, which `page` asks for.
         let close = unsafe { page(engine, context, demo) };
         *HUD_SAMPLES.lock().unwrap_or_else(PoisonError::into_inner) =
             (demo.hud && !close).then_some(demo.smooth);
@@ -136,14 +139,20 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
 ///
 /// # Safety
 ///
-/// Inside a frame, on its thread, with no other window open.
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
 unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
     let title = super::copy(&[b"Enshwick interface demo"]);
     let name = super::copy(&[b"enshwick/loader/ui-demo"]);
-    // SAFETY: forwarded from the caller; the window object lives in the
-    // demo's state until the window ends below.
+    // SAFETY: this function's `# Safety` gives the frame, its thread and its
+    // `context`; `demo.window` stays in the thread-local demo state, unmoved,
+    // until `window_end` below, and `name` and `title` live in the frame's
+    // text arena.
     unsafe { engine.window_begin(context, &mut demo.window, &name, &title) };
-    // SAFETY: inside the window just started, until it ends below.
+    // SAFETY: the window started one call earlier in this frame, on its
+    // thread, with the frame's `context`, and `paint` is not used after
+    // `window_end` below.
     let paint = unsafe { Painter::new(engine, context) };
     match demo.page {
         0 => text_page(&paint),
@@ -158,7 +167,9 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
         demo.page -= 1;
     }
     let close = paint.button(b"Close", true);
-    // SAFETY: the window started above, in this frame.
+    // SAFETY: `window_begin` started `demo.window` in this frame, on this
+    // thread, with this `context`; it did not move, and the painter's widgets
+    // close every frame they open.
     unsafe { engine.window_end(context, &mut demo.window) };
     close
 }

@@ -122,7 +122,9 @@ fn give_back(mut batch: Batch) {
 static PENDING: Mutex<Vec<Subscriber>> = Mutex::new(Vec::new());
 static SEALED: OnceLock<Sealed> = OnceLock::new();
 static LOADED: OnceLock<(&'static Loader, Layout)> = OnceLock::new();
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `MergeFn` is the signature of the table's `ecs.event_merge`, and
+// this slot is the `next` of the one link `link` makes on it, whose detour
+// `merge` calls `get`.
 static MERGE_NEXT: Next<MergeFn> = unsafe { Next::new() };
 /// Game events, off once the loader's own copy or delivery panicked.
 static EVENTS_FUSE: Fuse = Fuse::new("game events");
@@ -217,8 +219,9 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         .filter(|_| !EVENTS_FUSE.is_off() && is_server(entity_world));
     if let Some((_, layout)) = ours {
         let _quiet = crate::world::Quiet::enter();
-        // SAFETY: the server's entity world on its game thread, before the
-        // engine moves its streams.
+        // SAFETY: `entity_world` is the running server's entity world and this
+        // is its game thread (checked by `is_server`); the game passed it to
+        // `ecs.event_merge`, which has not moved its streams yet.
         let _copied = EVENTS_FUSE.run("the event link's copy", || unsafe {
             copy(layout, entity_world);
         });
@@ -227,13 +230,17 @@ unsafe extern "system" fn merge(entity_world: *mut u8) {
         && !entity_world.is_null()
         && entity_world.addr() as u64 != crate::world::server_world()
     {
-        // SAFETY: the client's own entity world on its thread, before the
-        // engine moves its streams.
+        // SAFETY: on a client, `entity_world` is non-null and not the hosted
+        // server's (the `if let` conditions), so the client's own live entity
+        // world, which the game passed to `ecs.event_merge` on its game thread
+        // before moving its streams.
         let _raised = NOTICES_FUSE.run("the event link", || unsafe {
-            crate::notices::raise(loader, entity_world.addr());
+            crate::notices::raise(loader, entity_world.expose_provenance());
         });
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: `entity_world` is the game's argument to `ecs.event_merge`,
+    // passed on unchanged to the rest of the chain, which the slot holds
+    // since the chain is wired before the target jumps here.
     unsafe { MERGE_NEXT.get()(entity_world) };
     if let Some((loader, _)) = ours {
         let _quiet = crate::world::Quiet::enter();
@@ -252,16 +259,21 @@ fn is_server(entity_world: *mut u8) -> bool {
 ///
 /// # Safety
 ///
-/// `entity_world` is the server's entity world, on its game thread, before
-/// the engine moves its streams.
+/// - `entity_world` is the running server's live entity world.
+/// - Called on the server's game thread before the engine moves its event
+///   streams, so no system writes them during the call.
 unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     let Some(sealed) = SEALED.get() else {
         return;
     };
-    let world = entity_world.addr();
-    // SAFETY: the entity world holds its stream array and count.
+    let world = entity_world.expose_provenance();
+    // SAFETY: `world` is the server's live entity world on its game thread
+    // (the caller's contract); the table's `ecs.event_streams` offset holds
+    // its stream array pointer.
     let streams: usize = unsafe { crate::memory::read(world, layout.streams) };
-    // SAFETY: as above.
+    // SAFETY: `world` is the server's live entity world on its game thread
+    // (the caller's contract); the table's `ecs.event_stream_count` offset
+    // holds its stream count.
     let count: usize = unsafe { crate::memory::read(world, layout.stream_count) };
     if streams == 0 {
         return;
@@ -269,9 +281,15 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
     let mut batch = take_batch();
     for index in 0..count {
         let stream = streams + index * layout.stream_size;
-        // SAFETY: each stream starts with its buffer.
+        // SAFETY: `streams` is non-zero (`streams == 0` returns first) and
+        // holds `count` streams of the table's `ecs.event_stream_size` bytes,
+        // `index < count`; each starts with its buffer pointer; no system
+        // writes them during the call (the caller's contract).
         let base: usize = unsafe { crate::memory::read(stream, 0) };
-        // SAFETY: and holds the bytes used at `stream_used`.
+        // SAFETY: `stream` is stream `index < count` of the non-zero
+        // `streams`; the table's `ecs.event_stream_used` offset holds its
+        // `u32` count of bytes used; no system writes it during the call (the
+        // caller's contract).
         let used = unsafe { crate::memory::read::<u32>(stream, layout.stream_used) } as usize;
         if base == 0 {
             continue;
@@ -279,17 +297,23 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
         let mut at = 0;
         while at + layout.record_header <= used {
             let record = base + at;
-            // SAFETY: a record starts with its type hash, inside the
-            // bytes used.
+            // SAFETY: `base` is non-zero (`base == 0` skips the stream) and
+            // `record` lies inside its bytes used, header included (`at +
+            // record_header <= used`, checked by the loop); a record starts
+            // with its `u32` type hash.
             let type_hash: u32 = unsafe { crate::memory::read(record, 0) };
-            // SAFETY: and holds its payload size at `record_size`.
+            // SAFETY: `record`'s header lies inside the bytes used (checked by
+            // the loop) and holds its payload size byte at the table's
+            // `ecs.event_record_size` offset.
             let size =
                 usize::from(unsafe { crate::memory::read::<u8>(record, layout.record_size) });
             if at + layout.record_header + size > used {
                 break;
             }
-            // SAFETY: the record's payload, inside the bytes used, on
-            // the game thread before the engine moves the streams.
+            // SAFETY: the payload is the live event of `type_hash` after the
+            // record's header, `size` bytes inside the bytes used (the `> used`
+            // check breaks first), on the game thread before the engine moves
+            // the streams (the caller's contract).
             unsafe {
                 crate::vetoes::screen(
                     type_hash,
@@ -298,19 +322,22 @@ unsafe fn copy(layout: &Layout, entity_world: *mut u8) {
                 );
             };
             if sealed.wants(type_hash) {
-                // SAFETY: as above.
-                let payload = unsafe {
-                    core::slice::from_raw_parts(
-                        core::ptr::with_exposed_provenance::<u8>(record + layout.record_header),
-                        size,
-                    )
-                };
                 batch.events.push(Copied {
                     type_hash,
                     size: u32::try_from(size).unwrap_or(0),
                     start: batch.bytes.len(),
                 });
-                batch.bytes.extend_from_slice(payload);
+                let payload = record + layout.record_header;
+                batch.bytes.reserve(size);
+                for byte in 0..size {
+                    // SAFETY: `byte < size` and the payload's `size` bytes lie
+                    // inside the bytes used (the `> used` check breaks first);
+                    // no system writes them during the call (the caller's
+                    // contract).
+                    batch
+                        .bytes
+                        .push(unsafe { crate::memory::read(payload, byte) });
+                }
             }
             at += layout.record_header + size.next_multiple_of(layout.record_align);
         }
@@ -341,8 +368,10 @@ fn deliver(loader: &Loader) {
                     .get(s.owner)
                     .is_some_and(|m| !m.off.load(Ordering::Acquire))
         }) {
-            // SAFETY: the handler lives in the mod's DLL, which stays
-            // loaded; the safe layer catches its panics.
+            // SAFETY: `callback` is a `GameEventFn` the mod registered, in
+            // its DLL, which stays loaded; `user` is the pointer it
+            // registered with it, and `data` and the bytes it points at live
+            // in this batch for the call.
             crate::profile::call(
                 subscriber.owner,
                 crate::profile::Feature::GameEvents,

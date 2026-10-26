@@ -149,12 +149,15 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 function("ecs.command_append")?,
             );
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: `push` is the build table's `ecs.event_push`, the
+                // game function `PushFn` types, resolved by `loader.address`.
                 push: unsafe { core::mem::transmute::<usize, PushFn>(push) },
-                // SAFETY: as above.
+                // SAFETY: `time` is the build table's `world.time`, the game
+                // function `TimeFn` types, resolved by `loader.address`.
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
-                // SAFETY: as above.
+                // SAFETY: `append` is the build table's `ecs.command_append`,
+                // the game function `AppendFn` types, resolved by
+                // `loader.address`.
                 append: unsafe { core::mem::transmute::<usize, AppendFn>(append) },
                 allowed,
                 time_offset: offset("keen::ecs::GameEvent", "timeStamp")?,
@@ -205,21 +208,25 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
         .filter(|&size| size < MAX_EVENT)
         .ok_or(Status::BAD_ARGS)?;
     let world = entity_world()?;
-    // SAFETY: the entity world holds its stream array; the first stream is
-    // the one the game's game-thread code pushes into.
+    // SAFETY: `entity_world` returned the server's non-zero entity world on
+    // its game thread between steps, where no system writes it; the pointer
+    // to its first event stream sits at the table's `ecs.event_streams`.
     let stream: usize = unsafe { crate::memory::read(world, layout.streams) };
     if stream == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: the World holds its time where the game's own function reads
-    // it; the entity world lies inside the World.
+    // SAFETY: `layout.time` is the table's `world.time`; the entity world
+    // lies at the table's `world.entities` inside the live server World, so
+    // the subtraction gives the World the function reads its time from.
     let now = unsafe {
         (layout.time)(core::ptr::with_exposed_provenance(
             world - layout.world_entities,
         ))
     };
-    // SAFETY: the server's first stream on its game thread between steps,
-    // where no system pushes; the size is under the stream's limit.
+    // SAFETY: `layout.push` is the table's `ecs.event_push`, on the non-zero
+    // first stream checked by the guard before it, on the server's game thread
+    // between steps (`entity_world`), where no system pushes; `size` is under
+    // `MAX_EVENT`, checked by the guard before it.
     let payload = unsafe {
         (layout.push)(
             core::ptr::with_exposed_provenance_mut(stream),
@@ -231,10 +238,14 @@ pub(crate) fn push(loader: &Loader, hash: u32, bytes: &[u8]) -> Result<(), Statu
     if payload.is_null() {
         return Err(Status::REFUSED);
     }
-    // SAFETY: the game handed out `size` zeroed bytes for the event.
-    let out = unsafe { core::slice::from_raw_parts_mut(payload, bytes.len()) };
-    out.copy_from_slice(bytes);
-    out[layout.time_offset..layout.time_offset + 8].copy_from_slice(&now.to_le_bytes());
+    // SAFETY: `payload` is non-null, checked by the guard before it, and the
+    // game's push handed out `size` writable bytes for the event, `size` being
+    // `bytes.len()`; nothing else touches them before the next step.
+    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), payload, bytes.len()) };
+    // SAFETY: the same `size` bytes of the event; `time_offset + 8` is at
+    // most `size`, checked at the top, and the event's reflected `timeStamp`
+    // is an `i64`.
+    unsafe { enshwick::raw::write_at(payload, layout.time_offset, now) };
     Ok(())
 }
 
@@ -254,8 +265,10 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         return Err(Status::REFUSED);
     }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
-        // SAFETY: a live CurrentTransform is a WorldTransform.
-        unsafe { crate::memory::read(current.addr(), teleport.current_orientation) }
+        // SAFETY: `component` found the entity's live `CurrentTransform` on
+        // the game thread between steps; it is a `WorldTransform`, whose
+        // reflected `orientation` holds four floats.
+        unsafe { crate::memory::read(current.expose_provenance(), teleport.current_orientation) }
     } else {
         request.orientation
     };
@@ -278,14 +291,18 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
         teleport.best_spawn,
         &[u8::from(request.flags & TeleportRequest::BEST_SPAWN != 0)],
     );
-    // SAFETY: the entity world holds a pointer to its command buffers.
+    // SAFETY: `entity_world` returned the server's non-zero entity world on
+    // its game thread between steps; the pointer to its command buffers
+    // sits at the table's `ecs.command_buffers`.
     let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
     if buffer == 0 {
         return Err(Status::MISSING);
     }
     let size = u32::try_from(layout.record_data + data.len()).map_err(|_| Status::BAD_ARGS)?;
-    // SAFETY: the world's first command buffer and its record list, on the
-    // game thread between steps, where no system writes it.
+    // SAFETY: `layout.append` is the table's `ecs.command_append`, on the
+    // non-zero first command buffer checked by the guard before it and its
+    // record list at the table's `ecs.command_records`, on the game thread
+    // between steps (`entity_world`), where no system writes it.
     let record = unsafe {
         (layout.append)(
             core::ptr::with_exposed_provenance_mut(buffer),
@@ -298,24 +315,23 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     if record.is_null() {
         return Err(Status::REFUSED);
     }
-    let record = record.addr();
     let component_size = u16::try_from(data.len()).map_err(|_| Status::BAD_ARGS)?;
-    // SAFETY: the game handed out `size` zeroed bytes for the record: the
-    // component's hash, its size and its bytes at the build's offsets.
-    unsafe {
-        core::ptr::with_exposed_provenance_mut::<u32>(record + layout.record_hash)
-            .write_unaligned(teleport.hash);
-    };
-    // SAFETY: as above.
-    unsafe {
-        core::ptr::with_exposed_provenance_mut::<u16>(record + layout.record_size)
-            .write_unaligned(component_size);
-    };
-    // SAFETY: as above.
+    // SAFETY: `record` is non-null, checked by the guard before it: the game's
+    // append handed out `size` writable bytes for the record, which nothing
+    // else touches before the next step; the component hash is a `u32` at the
+    // table's `ecs.command_set_hash`, in the record's header before its data.
+    unsafe { enshwick::raw::write_at(record, layout.record_hash, teleport.hash) };
+    // SAFETY: the same record of `size` writable bytes; the component size is
+    // a `u16` at the table's `ecs.command_set_size`, in the header before its
+    // data.
+    unsafe { enshwick::raw::write_at(record, layout.record_size, component_size) };
+    // SAFETY: the same record of `size` writable bytes, `size` being
+    // `ecs.command_set_data + data.len()`, so the component's bytes fit
+    // after its header.
     unsafe {
         core::ptr::copy_nonoverlapping(
             data.as_ptr(),
-            core::ptr::with_exposed_provenance_mut(record + layout.record_data),
+            record.wrapping_add(layout.record_data),
             data.len(),
         );
     };

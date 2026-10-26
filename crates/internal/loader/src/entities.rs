@@ -71,10 +71,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 function("ecs.destroy_request")?,
             );
             Some(Layout {
-                // SAFETY: each symbol is the game function with this
-                // signature on this build.
+                // SAFETY: the build table's `ecs.entities_with` is the
+                // address of the game function with the `QueryFn` signature
+                // on this build.
                 query: unsafe { core::mem::transmute::<usize, QueryFn>(query) },
-                // SAFETY: as above.
+                // SAFETY: the build table's `ecs.destroy_request` is the
+                // address of the game function with the `DestroyFn` signature
+                // on this build.
                 destroy: unsafe { core::mem::transmute::<usize, DestroyFn>(destroy) },
                 entry_size: constant("ecs.entities_entry_size")?,
                 entry_transform: constant("ecs.entities_entry_transform")?,
@@ -107,8 +110,11 @@ pub(crate) fn with_component(loader: &Loader, ty: u32) -> Result<Vec<EntityPlace
             capacity: capacity as u64,
             grow: 0,
         };
-        // SAFETY: the server's entity world on its game thread between steps,
-        // and an array with room for `capacity` entries.
+        // SAFETY: `entity_world` checked that the caller is on the server's
+        // game thread and the world is non-null; `found` points at `entries`,
+        // which has room for `capacity` entries of the table's
+        // `ecs.entities_entry_size`, and no grow function, so the engine
+        // writes no further.
         let whole = unsafe {
             (layout.query)(
                 &raw mut found,
@@ -163,15 +169,17 @@ pub(crate) fn destroy(loader: &Loader, entity: u32) -> Result<(), Status> {
     {
         return Err(Status::REFUSED);
     }
-    // SAFETY: the entity world holds a pointer to its command buffers.
-    let buffer: usize = unsafe { crate::memory::read(world, layout.command_buffers) };
-    if buffer == 0 {
+    // SAFETY: `entity_world` checked the caller is on the server's game
+    // thread and the world is non-null; the world holds the pointer to its
+    // command buffers at the table's `ecs.command_buffers`.
+    let buffer = unsafe { crate::memory::read_ptr::<u8>(world, layout.command_buffers) };
+    if buffer.is_null() {
         return Err(Status::MISSING);
     }
-    // SAFETY: the world's first command buffer, on the game thread between
-    // steps, where no system writes it.
-    let queued =
-        unsafe { (layout.destroy)(core::ptr::with_exposed_provenance_mut(buffer), 0, entity) };
+    // SAFETY: `buffer` is the world's first command buffer, non-null by the
+    // earlier check, used on the game thread between steps, where no system
+    // writes it.
+    let queued = unsafe { (layout.destroy)(buffer, 0, entity) };
     if queued == 0 {
         return Err(Status::REFUSED);
     }

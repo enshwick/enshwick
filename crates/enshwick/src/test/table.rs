@@ -713,7 +713,8 @@ extern "system" fn serve_resource(
     let Some(key) = (unsafe { key.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
-    // SAFETY: as for `key`.
+    // SAFETY: the safe layer passes `base` null or pointing at a key valid
+    // for the call; `as_ref` turns away null.
     let Some(base) = (unsafe { base.as_ref() }).copied() else {
         return Status::BAD_ARGS;
     };
@@ -873,9 +874,11 @@ extern "system" fn patch_code(
     if expected.is_null() || replacement.is_null() || len == 0 {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes `len` bytes behind each pointer.
+    // SAFETY: `expected` is non-null, checked at the top; the safe layer
+    // passes `len` readable bytes there for the call.
     let expected = unsafe { core::slice::from_raw_parts(expected, len) }.to_vec();
-    // SAFETY: as above.
+    // SAFETY: `replacement` is non-null, checked at the top; the safe layer
+    // passes `len` readable bytes there for the call.
     let replacement = unsafe { core::slice::from_raw_parts(replacement, len) }.to_vec();
     with(Status::MISSING, |s| {
         s.code_patches.push((address, expected, replacement));
@@ -1176,13 +1179,16 @@ extern "system" fn item_data_get(
     };
     let size = u32::try_from(value.len()).unwrap_or(u32::MAX);
     if !len.is_null() {
-        // SAFETY: the safe layer's length out pointer.
+        // SAFETY: `len` is non-null, checked just before; the safe layer
+        // passes it pointing at a writable, aligned `u32` for the call.
         unsafe { len.write(size) };
     }
     if size > capacity || out.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes room for `capacity` bytes.
+    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
+    // checked just before; the safe layer passes `capacity` writable bytes at
+    // `out`, apart from the fake's own buffer.
     unsafe { out.copy_from_nonoverlapping(value.as_ptr(), value.len()) };
     Status::OK
 }
@@ -1259,13 +1265,16 @@ extern "system" fn content_read(
     };
     let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
     if !len.is_null() {
-        // SAFETY: the safe layer's length out pointer.
+        // SAFETY: `len` is non-null, checked just before; the safe layer
+        // passes it pointing at a writable, aligned `u32` for the call.
         unsafe { len.write(size) };
     }
     if size > capacity || out.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes room for `capacity` bytes.
+    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
+    // checked just before; the safe layer passes `capacity` writable bytes at
+    // `out`, apart from the fake's own buffer.
     unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
     Status::OK
 }
@@ -1669,11 +1678,14 @@ extern "system" fn game_settings(
     if out.is_null() || preset.is_null() || size as usize != bytes.len() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes `size` writable bytes and a preset.
+    // SAFETY: `out` is non-null and `size` equals `bytes.len()`, both checked
+    // just before; the safe layer passes `size` writable bytes at `out`, apart
+    // from the fake's own copy.
     unsafe {
         core::ptr::copy_nonoverlapping(bytes.as_ptr(), out, bytes.len());
     };
-    // SAFETY: as above.
+    // SAFETY: `preset` is non-null, checked just before; the safe layer passes
+    // it pointing at a writable, aligned `u32` for the call.
     unsafe { preset.write(value) };
     Status::OK
 }
@@ -1682,7 +1694,8 @@ extern "system" fn set_game_settings(_me: ModHandle, data: *const u8, size: u32)
     if data.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes `size` bytes for the call.
+    // SAFETY: `data` is non-null, checked just before; the safe layer passes
+    // `size` readable bytes there for the call.
     let bytes = unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec();
     with(Status::MISSING, |s| match s.game_settings.as_mut() {
         Some(current) if current.0.len() == bytes.len() => {
@@ -1707,9 +1720,11 @@ extern "system" fn keep_game_settings(
     if status != Status::OK {
         return status;
     }
-    // SAFETY: the safe layer passes `size` bytes of each for the call.
+    // SAFETY: `data` is non-null, since `set_game_settings` refuses null and
+    // returned `OK`; the safe layer passes `size` readable bytes there.
     let data = unsafe { core::slice::from_raw_parts(data, size as usize) };
-    // SAFETY: as above.
+    // SAFETY: `mask` is non-null, checked at the top; the safe layer passes
+    // `size` readable bytes there for the call.
     let mask = unsafe { core::slice::from_raw_parts(mask, size as usize) };
     with(Status::MISSING, |s| {
         s.kept_settings.resize(data.len(), None);
@@ -1777,13 +1792,16 @@ extern "system" fn resource_read(
     };
     let size = u32::try_from(data.len()).unwrap_or(u32::MAX);
     if !len.is_null() {
-        // SAFETY: the safe layer's length out pointer.
+        // SAFETY: `len` is non-null, checked just before; the safe layer
+        // passes it pointing at a writable, aligned `u32` for the call.
         unsafe { len.write(size) };
     }
     if size > capacity || out.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: the safe layer passes room for `capacity` bytes.
+    // SAFETY: `out` is non-null and the copy is at most `capacity` bytes, both
+    // checked just before; the safe layer passes `capacity` writable bytes at
+    // `out`, apart from the fake's own buffer.
     unsafe { out.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
     Status::OK
 }
@@ -1853,13 +1871,17 @@ pub(crate) fn put_list<T: Copy>(
     }
     if !out.is_null() {
         for (i, item) in items.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the safe layer passes room for `capacity` entries.
+            // SAFETY: `i` is below `capacity` and the safe layer passes a
+            // non-null `out` with room for `capacity` entries, so the offset
+            // stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned
+            // entries the safe layer passes at `out`.
             unsafe { slot.write(*item) };
         }
     }
-    // SAFETY: as above.
+    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
+    // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(items.len()).unwrap_or(u32::MAX)) };
     Status::OK
 }
@@ -1932,7 +1954,8 @@ extern "system" fn remove_buff(_me: ModHandle, entity: u32, id: u32, removed: *m
         };
         let before = on.len();
         on.retain(|buff| buff.id != id);
-        // SAFETY: checked above; the safe layer passes a writable byte.
+        // SAFETY: `removed` is non-null, checked at the top; the safe layer
+        // passes it pointing at a writable byte for the call.
         unsafe { removed.write(u8::from(on.len() != before)) };
         Status::OK
     })
@@ -1992,13 +2015,17 @@ extern "system" fn quests(_me: ModHandle, out: *mut u32, capacity: u32, count: *
     }
     if !out.is_null() {
         for (i, id) in ids.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the safe layer passes room for `capacity` ids.
+            // SAFETY: `i` is below `capacity` and the safe layer passes a
+            // non-null `out` with room for `capacity` ids, so the offset
+            // stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned
+            // ids the safe layer passes at `out`.
             unsafe { slot.write(*id) };
         }
     }
-    // SAFETY: checked above.
+    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
+    // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(ids.len()).unwrap_or(u32::MAX)) };
     Status::OK
 }
@@ -2013,7 +2040,8 @@ extern "system" fn weather_at(
     }
     match with(None, |s| s.weather.as_ref().map(|w| w.0)) {
         Some(weights) => {
-            // SAFETY: checked above; the safe layer passes a writable array.
+            // SAFETY: `out` is non-null, checked at the top; the safe layer
+            // passes it pointing at a writable, aligned `[f32; 4]`.
             unsafe { out.write(weights) };
             Status::OK
         }
@@ -2035,13 +2063,17 @@ extern "system" fn weather_fronts(
     }
     if !out.is_null() {
         for (i, front) in fronts.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the safe layer passes room for `capacity` fronts.
+            // SAFETY: `i` is below `capacity` and the safe layer passes a
+            // non-null `out` with room for `capacity` fronts, so the offset
+            // stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned
+            // fronts the safe layer passes at `out`.
             unsafe { slot.write(*front) };
         }
     }
-    // SAFETY: checked above.
+    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
+    // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(fronts.len()).unwrap_or(u32::MAX)) };
     Status::OK
 }
@@ -2070,13 +2102,17 @@ extern "system" fn terrain_materials(
     }
     if !out.is_null() {
         for (i, material) in materials.iter().take(capacity as usize).enumerate() {
-            // SAFETY: the safe layer passes room for `capacity` entries.
+            // SAFETY: `i` is below `capacity` and the safe layer passes a
+            // non-null `out` with room for `capacity` entries, so the offset
+            // stays inside that array.
             let slot = unsafe { out.add(i) };
-            // SAFETY: as above.
+            // SAFETY: `slot` is inside the `capacity` writable, aligned
+            // entries the safe layer passes at `out`.
             unsafe { slot.write(*material) };
         }
     }
-    // SAFETY: checked above.
+    // SAFETY: `count` is non-null, checked at the top; the safe layer passes
+    // it pointing at a writable, aligned `u32` for the call.
     unsafe { count.write(u32::try_from(materials.len()).unwrap_or(u32::MAX)) };
     Status::OK
 }
@@ -2101,7 +2137,8 @@ extern "system" fn terrain_edit(
             return Status::MISSING;
         }
         s.terrain_edits.push(edit);
-        // SAFETY: checked above; the fake moves one cubic metre per edit.
+        // SAFETY: `amount` is non-null, checked after the edit is read; the
+        // safe layer passes it pointing at a writable, aligned `f32`.
         unsafe { amount.write(1.0) };
         Status::OK
     })

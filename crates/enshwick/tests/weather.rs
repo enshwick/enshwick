@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn weather_reads_and_starts_and_chunks_arrive() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Rainmaker)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let weather = WEATHER.get().unwrap();
