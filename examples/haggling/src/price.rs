@@ -1,9 +1,12 @@
-//! The extension point `you.trading-post:price` of you.trading-post 0.0.0-dev, written by
-//! `cargo enshwick point you.trading-post:price`. Write it again for a newer you.trading-post
-//! rather than edit it; the checks at the end hold it to the owner's
+//! The extension point `you.trading-post:price` of you.trading-post 0.0.0-dev.
+//!
+//! Written by `cargo enshwick point you.trading-post:price`. Write it again for a newer
+//! you.trading-post rather than edit it; the checks at the end hold it to the owner's
 //! layout. Declare this module `pub`.
 
-/// The price of an item at the trading post, in coins: the trading post's own price first. A refusal means the trading post does not deal. Asked on the thread that runs the player's action.
+/// The price of an item at the trading post, in coins: the trading post's own price first.
+///
+/// A refusal means the trading post does not deal. Asked on the thread that runs the player's action.
 #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
 #[derive(Clone, Copy, Debug)]
 pub struct Price {

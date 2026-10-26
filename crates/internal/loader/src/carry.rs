@@ -24,10 +24,12 @@ pub struct Dirs<'a> {
     pub data: &'a Path,
 }
 
-/// Carries the settings and data of the former id `old` to the mod `id`,
-/// unless `record` says it was carried; returns how many files were copied,
-/// or `None` when it was carried before. In a dry run nothing is copied or
-/// recorded, and the count is what would be copied.
+/// Carries the settings and data of the former id `old` to the mod `id`, unless
+/// `record` says it was carried; returns how many files were copied, or `None`
+/// when it was carried before.
+///
+/// In a dry run nothing is copied or recorded, and the count is what would be
+/// copied.
 ///
 /// # Errors
 ///

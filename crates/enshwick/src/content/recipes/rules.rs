@@ -164,12 +164,13 @@ fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
 }
 
 /// Disables recipes in the whole game while the mod runs: they leave every
-/// crafting menu, and the server refuses to craft them. On the server and in
-/// single player, the server's rules sync to the players who join. The
-/// loader resolves the name against the recipe registry and logs one it
-/// cannot resolve in the mod's log; the server's recipe file
-/// (`mod-configs/enshwick.recipes.toml`) wins over every mod's rules. Call it
-/// at any time, from any thread; it applies within a second.
+/// crafting menu, and the server refuses to craft them.
+///
+/// On the server and in single player, the server's rules sync to the players
+/// who join. The loader resolves the name against the recipe registry and logs
+/// one it cannot resolve in the mod's log; the server's recipe file (`mod-
+/// configs/enshwick.recipes.toml`) wins over every mod's rules. Call it at any
+/// time, from any thread; it applies within a second.
 ///
 /// # Errors
 ///
@@ -206,8 +207,10 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 }
 
 /// Whether the recipe `recipe`, a GUID or a content id, is disabled in this
-/// process now, by the server's recipe file or a mod's rule; on a client
-/// joined to a server, by the server's. `false` outside the game.
+/// process now, by the server's recipe file or a mod's rule; on a client joined
+/// to a server, by the server's.
+///
+/// `false` outside the game.
 ///
 /// # Examples
 ///
