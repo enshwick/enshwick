@@ -874,7 +874,8 @@ mod tests {
         }])
         .into_iter()
         .next()
-        .unwrap()?;
+        .unwrap()
+        .map_err(|e| e.to_string())?;
         stubs.finish(0, pending.original);
         assert!(stubs.seal());
         assert!(detour::commit(&[&pending], &[]));
