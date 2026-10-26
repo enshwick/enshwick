@@ -22,6 +22,16 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Altar zone sizes are a chain any mod joins: `Load::on_altar_zone` adds a
+  filter that sees each altar's zone so far, the vanilla one first, in load
+  order, and `ZoneSizes::changed` asks for a new sizing from any thread
+  (#499).
+- The loader owns the event loop, server loop and task worker hooks:
+  `on_loop_wait`, `on_server_wait` and `cap_task_workers` keep their
+  signatures but run through the host, handlers of several mods run in load
+  order and the lowest worker cap wins; a fake host test runs them with
+  `Installed::loop_wait`, `server_wait` and `task_workers`, no longer
+  through `mid_hooks` or `run_at` (#486).
 - Game settings, hit damage types and attack categories, experience
   sources, altar actions, equipment slots and inventory error codes resolve
   through engine ids and the game's constant names; no engine number is
@@ -179,6 +189,8 @@ Each entry names the pull request that made the change.
 
 ### Removed
 
+- `control_altar_zones`, `ZoneControl`, `ZoneSize` and `SetSizesError`
+  (#499).
 - `progress::AIRBORNE_ARCHITECT`, `OpResult::TOO_LARGE`,
   `OpResult::NO_ROOM`, `ExperienceSource::from_raw` and
   `AltarAction::from_raw` (#494).
