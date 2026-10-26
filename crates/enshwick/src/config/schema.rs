@@ -136,6 +136,19 @@ impl Field {
         }
     }
 
+    /// The field inside the group `group`: its key and its default text key
+    /// prefixed with the group's.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, group: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{group}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+
     /// The field accepting numbers from `min` to `max`, each `None` for no
     /// bound.
     ///
@@ -178,8 +191,8 @@ impl Field {
     /// ```
     /// use enshwick::config::{Field, Stage};
     ///
-    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "safes.limit");
-    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "safes.limit"));
+    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "lockers.limit");
+    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "lockers.limit"));
     /// ```
     #[must_use]
     pub fn with_doc(mut self, doc: &str, text: &str) -> Self {
@@ -336,7 +349,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 /// ```
 /// use enshwick::config::{Field, Schema, Stage};
 ///
-/// let schema = Schema::new("Safe settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
+/// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
 /// assert_eq!(Schema::parse(&schema.to_text())?, schema);
 /// # Ok::<(), enshwick::config::ConfigError>(())
 /// ```
@@ -347,9 +360,85 @@ pub struct Schema {
     pub doc: String,
     /// The key of the set's translated title in the mod's texts.
     pub text: String,
-    /// Every field, in file order.
+    /// Every field, in file order; a field of a group has a dotted key,
+    /// `<group>.<key>`.
     #[serde(default, rename = "field")]
     pub fields: Vec<Field>,
+    /// The groups, each a table in the settings file, in file order.
+    #[serde(default, rename = "group", skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
+}
+
+/// A group of settings: a table of the settings file, such as `[comfort]`,
+/// which the Mods screen shows together.
+///
+/// # Examples
+///
+/// See [`Config`].
+#[non_exhaustive]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    /// The table's key; a dotted path for a group inside a group.
+    pub key: String,
+    /// Its documentation, in English: the field's doc comment.
+    pub doc: String,
+    /// The key of its translated title in the mod's texts.
+    pub text: String,
+}
+
+impl Group {
+    /// The group `key`, documented by `doc`, translated under
+    /// `config.<key>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let group = enshwick::config::Group::new("comfort", "Comfort rules.");
+    /// assert_eq!(group.text, "config.comfort");
+    /// ```
+    #[must_use]
+    pub fn new(key: &str, doc: &str) -> Self {
+        Self {
+            key: key.to_owned(),
+            doc: doc.trim().to_owned(),
+            text: format!("config.{key}"),
+        }
+    }
+
+    /// The group inside the group `outer`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, outer: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{outer}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+}
+
+/// The value at `key` of `settings`, a dotted key reaching into tables:
+/// `comfort.multiplier` is `multiplier` in `[comfort]`.
+///
+/// # Examples
+///
+/// ```
+/// let settings: toml::Table = toml::from_str("limit = 4\n[comfort]\nmultiplier = 2.0\n")?;
+/// let at = |key| enshwick::config::value_at(&settings, key).cloned();
+/// assert_eq!(at("comfort.multiplier"), Some(toml::Value::Float(2.0)));
+/// assert_eq!(at("limit"), Some(toml::Value::Integer(4)));
+/// assert_eq!(at("comfort.missing"), None);
+/// # Ok::<(), toml::de::Error>(())
+/// ```
+#[must_use]
+pub fn value_at<'a>(settings: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    let mut parts = key.split('.');
+    let mut value = settings.get(parts.next()?)?;
+    for part in parts {
+        value = value.as_table()?.get(part)?;
+    }
+    Some(value)
 }
 
 impl Schema {
@@ -364,7 +453,44 @@ impl Schema {
             doc: doc.trim().to_owned(),
             text: text.to_owned(),
             fields,
+            groups: Vec::new(),
         }
+    }
+
+    /// The schema with `groups`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Group, Schema, Stage};
+    ///
+    /// let multiplier = Field::new("comfort.multiplier", Stage::Runtime, &1.0);
+    /// let schema = Schema::new("", "config", vec![multiplier])
+    ///     .with_groups(vec![Group::new("comfort", "Comfort rules.")]);
+    /// assert_eq!(schema.groups[0].key, "comfort");
+    /// ```
+    #[must_use]
+    pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
+        self.groups = groups;
+        self
+    }
+
+    /// The group a field with key `key` belongs to, if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Group, Schema};
+    ///
+    /// let schema = Schema::new("", "config", vec![])
+    ///     .with_groups(vec![Group::new("comfort", "")]);
+    /// assert_eq!(schema.group_of("comfort.multiplier").map(|g| g.key.as_str()), Some("comfort"));
+    /// assert!(schema.group_of("limit").is_none());
+    /// ```
+    #[must_use]
+    pub fn group_of(&self, key: &str) -> Option<&Group> {
+        let (group, _) = key.rsplit_once('.')?;
+        self.groups.iter().find(|g| g.key == group)
     }
 
     /// The field with key `key`.
@@ -420,9 +546,7 @@ impl Schema {
     /// ```
     pub fn check(&self, settings: &toml::Table) -> Result<(), ConfigError> {
         self.fields.iter().try_for_each(|field| {
-            settings
-                .get(&field.key)
-                .map_or(Ok(()), |value| field.check(value))
+            value_at(settings, &field.key).map_or(Ok(()), |value| field.check(value))
         })
     }
 }

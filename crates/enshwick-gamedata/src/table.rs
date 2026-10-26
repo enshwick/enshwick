@@ -502,22 +502,39 @@ pub(crate) fn search<T: Sync, R: Send>(
     entries: &[T],
     find: impl Fn(&T) -> Option<R> + Sync,
 ) -> Vec<Option<R>> {
-    let threads = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .clamp(1, 16);
-    let chunk = entries.len().div_ceil(threads).max(1);
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    search_on(threads, entries, find)
+}
+
+/// [`search`] on at most `threads` threads, at most 16.
+pub(crate) fn search_on<T: Sync, R: Send>(
+    threads: usize,
+    entries: &[T],
+    find: impl Fn(&T) -> Option<R> + Sync,
+) -> Vec<Option<R>> {
+    let chunk = entries.len().div_ceil(threads.clamp(1, 16)).max(1);
     std::thread::scope(|scope| {
         let workers: Vec<_> = entries
             .chunks(chunk)
             .map(|part| {
                 (
                     part.len(),
-                    scope.spawn(|| part.iter().map(&find).collect::<Vec<_>>()),
+                    scope.spawn(|| {
+                        part.iter()
+                            .map(|entry| {
+                                // A panicking entry counts as not found, and
+                                // the rest of its chunk is still searched.
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    find(entry)
+                                }))
+                                .ok()
+                                .flatten()
+                            })
+                            .collect::<Vec<_>>()
+                    }),
                 )
             })
             .collect();
-        // A chunk that panicked counts as not found, entry for entry, so the
-        // entries after it keep their places.
         workers
             .into_iter()
             .flat_map(|(len, worker)| {

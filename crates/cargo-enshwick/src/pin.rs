@@ -10,6 +10,7 @@
 //! With `--patterns` it writes the patterns of one build's table from its own
 //! executable. See the README.
 
+use anyhow::{Context as _, anyhow, bail};
 mod anchor;
 mod exe;
 mod patterns;
@@ -81,41 +82,41 @@ pub(crate) struct Args {
 /// The exit code when the run worked but some entries need a human.
 pub(crate) const NEEDS_HUMAN: u8 = 2;
 
-fn read(path: &Path) -> Result<Vec<u8>, String> {
-    fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+fn read(path: &Path) -> anyhow::Result<Vec<u8>> {
+    fs::read(path).with_context(|| path.display().to_string())
 }
 
 /// Runs the tool; `Ok(true)` when nothing needs a human.
-pub(crate) fn run(args: &Args) -> Result<bool, String> {
+pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     if let Some(exe) = &args.patterns {
         return patterns_only(args, exe);
     }
     let (Some(old_path), Some(new_path)) = (&args.old, &args.new) else {
-        return Err("--old and --new are needed".to_owned());
+        bail!("--old and --new are needed");
     };
     let old_bytes = read(old_path)?;
     let new_bytes = read(new_path)?;
-    let old = Exe::parse(&old_bytes).map_err(|e| format!("{}: {e}", old_path.display()))?;
-    let new = Exe::parse(&new_bytes).map_err(|e| format!("{}: {e}", new_path.display()))?;
+    let old = Exe::parse(&old_bytes).with_context(|| old_path.display().to_string())?;
+    let new = Exe::parse(&new_bytes).with_context(|| new_path.display().to_string())?;
     let old_fp = old
         .fingerprint()
-        .ok_or("the old executable has no fingerprint")?;
+        .context("the old executable has no fingerprint")?;
     let new_fp = new
         .fingerprint()
-        .ok_or("the new executable has no fingerprint")?;
+        .context("the new executable has no fingerprint")?;
     if args.write && old_fp == new_fp {
-        return Err("both executables are the same build; nothing to write".to_owned());
+        bail!("both executables are the same build; nothing to write");
     }
     let mut staged = Staged::default();
     let mut sections = port_tables(args, &old, &new, &mut staged)?;
     sections.extend(port_mods(args, &old, &new, &mut staged)?);
     if sections.is_empty() {
-        return Err(format!("no row is for the old build {}", spell(old_fp)));
+        bail!("no row is for the old build {}", spell(old_fp));
     }
     staged.commit()?;
     let text = report::render(&spell(old_fp), &spell(new_fp), &sections);
     match &args.report {
-        Some(path) => fs::write(path, &text).map_err(|e| format!("{}: {e}", path.display()))?,
+        Some(path) => fs::write(path, &text).with_context(|| path.display().to_string())?,
         None => {
             let _shown = write!(std::io::stdout(), "{text}");
         }
@@ -133,29 +134,29 @@ fn port_tables(
     old: &Exe<'_>,
     new: &Exe<'_>,
     staged: &mut Staged,
-) -> Result<Vec<report::Section>, String> {
+) -> anyhow::Result<Vec<report::Section>> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
     };
     let mut sections = Vec::new();
     for path in table_files(&args.repo)? {
-        let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let row = table::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
+        let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+        let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if !matches(&row, old_fp) {
             continue;
         }
         let target = path.with_file_name(table_file(row.side, new_fp));
         if args.write {
             if target.exists() {
-                return Err(format!("{} already exists", target.display()));
+                bail!("{} already exists", target.display());
             }
             if args.steam_build.is_none() {
-                return Err("--write needs --steam-build for the loader table".to_owned());
+                bail!("--write needs --steam-build for the loader table");
             }
         }
         let mut ported = row::port_row(&row, old, new);
-        let source = enshwick_gamedata::Table::parse(&src)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let source =
+            enshwick_gamedata::Table::parse(&src).with_context(|| path.display().to_string())?;
         let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
         row::confirm_by_patterns(&mut ported, &source, new);
         let name = new_name(
@@ -174,7 +175,7 @@ fn port_tables(
         };
         let (text, patterned) =
             table::render(&src, &row, &identity, &ported.edits, Some(new), &anchors)
-                .map_err(|e| format!("{}: {e}", path.display()))?;
+                .with_context(|| path.display().to_string())?;
         sections.push(report::Section {
             file: relative(&args.repo, &target),
             title: name,
@@ -196,14 +197,14 @@ fn port_mods(
     old: &Exe<'_>,
     new: &Exe<'_>,
     staged: &mut Staged,
-) -> Result<Vec<report::Section>, String> {
+) -> anyhow::Result<Vec<report::Section>> {
     let (Some(old_fp), Some(new_fp)) = (old.fingerprint(), new.fingerprint()) else {
         return Ok(Vec::new());
     };
     let mut sections = Vec::new();
     for path in mod_sources(&args.repo) {
-        let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let rows = rows::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
+        let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+        let rows = rows::parse(&src).with_context(|| path.display().to_string())?;
         let file = relative(&args.repo, &path);
         let mut inserts = Vec::new();
         for row in rows.iter().filter(|r| matches(r, old_fp)) {
@@ -212,7 +213,7 @@ fn port_mods(
                 .any(|r| r.side == row.side && matches(r, new_fp))
                 && args.write
             {
-                return Err(format!("{file} already has a row for the new build"));
+                bail!("{file} already has a row for the new build");
             }
             let ported = row::port_row(row, old, new);
             let text = row.render(
@@ -249,15 +250,15 @@ fn port_mods(
 
 /// `--patterns`: the table of the build `exe` is, with every pattern taken
 /// from it.
-fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
+fn patterns_only(args: &Args, exe_path: &Path) -> anyhow::Result<bool> {
     let bytes = read(exe_path)?;
-    let exe = Exe::parse(&bytes).map_err(|e| format!("{}: {e}", exe_path.display()))?;
+    let exe = Exe::parse(&bytes).with_context(|| exe_path.display().to_string())?;
     let fp = exe
         .fingerprint()
-        .ok_or("the executable has no fingerprint")?;
+        .context("the executable has no fingerprint")?;
     for path in table_files(&args.repo)? {
-        let src = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let row = table::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
+        let src = fs::read_to_string(&path).with_context(|| path.display().to_string())?;
+        let row = table::parse(&src).with_context(|| path.display().to_string())?;
         if !matches(&row, fp) {
             continue;
         }
@@ -271,7 +272,7 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
         };
         let anchors = picks(args, &row, &exe)?;
         let (text, patterned) = table::render(&src, &row, &identity, &[], Some(&exe), &anchors)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+            .with_context(|| path.display().to_string())?;
         let mut summary = format!(
             "{}: patterns for {} of {} symbols and {} of {} constants\n",
             relative(&args.repo, &path),
@@ -296,15 +297,15 @@ fn patterns_only(args: &Args, exe_path: &Path) -> Result<bool, String> {
         }
         return Ok(patterned.problems.is_empty());
     }
-    Err(format!("no table is for the build {}", spell(fp)))
+    Err(anyhow!("no table is for the build {}", spell(fp)))
 }
 
 /// The anchors `--from` and `--from-file` pick for the entries of `row`, in
 /// `exe`.
-fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> Result<HashMap<String, anchor::Anchor>, String> {
+fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> anyhow::Result<HashMap<String, anchor::Anchor>> {
     let mut lines: Vec<String> = args.from.clone();
     if let Some(path) = &args.from_file {
-        let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let text = fs::read_to_string(path).with_context(|| path.display().to_string())?;
         lines.extend(
             text.lines()
                 .map(|l| l.split('#').next().unwrap_or_default().trim().to_owned())
@@ -317,16 +318,16 @@ fn picks(args: &Args, row: &Row, exe: &Exe<'_>) -> Result<HashMap<String, anchor
             .split_once('=')
             .or_else(|| line.split_once(char::is_whitespace))
             .map(|(id, pick)| (id.trim(), pick.trim()))
-            .ok_or_else(|| format!("{line:?} is no `<id>=<pick>`"))?;
+            .with_context(|| format!("{line:?} is no `<id>=<pick>`"))?;
         let (value, symbol) = if let Some(e) = row.symbols.iter().find(|e| e.id == id) {
             (e.value, true)
         } else if let Some(e) = row.constants.iter().find(|e| e.id == id) {
             (e.value, false)
         } else {
-            return Err(format!("{id}: no such entry in the table"));
+            bail!("{id}: no such entry in the table");
         };
         let anchor =
-            anchor::parse_pick(pick, value, symbol, exe).map_err(|why| format!("{id}: {why}"))?;
+            anchor::parse_pick(pick, value, symbol, exe).with_context(|| id.to_string())?;
         out.insert(id.to_owned(), anchor);
     }
     Ok(out)
@@ -353,10 +354,10 @@ fn table_file(side: rows::Side, fingerprint: Fingerprint) -> String {
 }
 
 /// The loader's table files, sorted.
-fn table_files(repo: &Path) -> Result<Vec<PathBuf>, String> {
+fn table_files(repo: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let dir = repo.join(table::DIR);
-    let entries =
-        fs::read_dir(&dir).map_err(|_| format!("{} is no Enshwick repository", repo.display()))?;
+    let entries = fs::read_dir(&dir)
+        .with_context(|| format!("{} is no Enshwick repository", repo.display()))?;
     let mut out: Vec<PathBuf> = entries
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| {

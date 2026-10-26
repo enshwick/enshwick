@@ -1,5 +1,6 @@
 //! `cargo enshwick install`: build the mod in release and copy it into the game.
 
+use anyhow::{Context as _, anyhow, bail};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -24,27 +25,26 @@ struct Target {
 }
 
 /// Builds the chosen mod and copies it to `<game>/mods/<package>.dll`.
-pub(crate) fn install(game: &Path, package: Option<&str>) -> Result<String, String> {
+pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<String> {
     if !["enshrouded.exe", "enshrouded_server.exe"]
         .iter()
         .any(|exe| game.join(exe).is_file())
     {
-        return Err(format!(
+        bail!(
             "{} holds neither enshrouded.exe nor enshrouded_server.exe",
             game.display()
-        ));
+        );
     }
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let output = Command::new(&cargo)
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .output()
-        .map_err(|e| format!("cargo metadata: {e}"))?;
+        .context("cargo metadata")?;
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
-    let metadata: Metadata =
-        serde_json::from_slice(&output.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
-    let here = std::env::current_dir().map_err(|e| e.to_string())?;
+    let metadata: Metadata = serde_json::from_slice(&output.stdout).context("cargo metadata")?;
+    let here = std::env::current_dir()?;
     let (package, library) = choose(&metadata.packages, package, &here)?;
     let built = Command::new(&cargo)
         .args([
@@ -56,9 +56,9 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> Result<String, Stri
         ])
         .stderr(std::process::Stdio::inherit())
         .output()
-        .map_err(|e| format!("cargo build: {e}"))?;
+        .context("cargo build")?;
     if !built.status.success() {
-        return Err(format!("cargo build failed for {}", package.name));
+        bail!("cargo build failed for {}", package.name);
     }
     // Cargo names the file it built, wherever a build target puts it.
     let from = built_dll(&String::from_utf8_lossy(&built.stdout), library).unwrap_or_else(|| {
@@ -68,10 +68,9 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> Result<String, Stri
             .join(format!("{library}.dll"))
     });
     let mods = game.join("mods");
-    std::fs::create_dir_all(&mods).map_err(|e| format!("{}: {e}", mods.display()))?;
+    std::fs::create_dir_all(&mods).with_context(|| mods.display().to_string())?;
     let to = mods.join(format!("{}.dll", package.name));
-    std::fs::copy(&from, &to)
-        .map_err(|e| format!("{} -> {}: {e}", from.display(), to.display()))?;
+    std::fs::copy(&from, &to).with_context(|| format!("{} -> {}", from.display(), to.display()))?;
     let mut done = format!("installed {}", to.display());
     if !mods.join("enshwick").join("enshwick.dll").is_file() {
         done.push_str(
@@ -113,7 +112,7 @@ fn choose<'a>(
     packages: &'a [Package],
     wanted: Option<&str>,
     here: &Path,
-) -> Result<(&'a Package, &'a str), String> {
+) -> anyhow::Result<(&'a Package, &'a str)> {
     let mods: Vec<(&Package, &str)> = packages
         .iter()
         .filter_map(|p| {
@@ -127,7 +126,7 @@ fn choose<'a>(
         return mods
             .into_iter()
             .find(|(p, _)| p.name == wanted)
-            .ok_or_else(|| format!("no mod package named {wanted}"));
+            .with_context(|| format!("no mod package named {wanted}"));
     }
     let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_owned());
     let here = canonical(here);
@@ -144,8 +143,8 @@ fn choose<'a>(
     }
     match mods.as_slice() {
         [only] => Ok(*only),
-        [] => Err("no package here builds a cdylib".into()),
-        _ => Err("several mods here; name one with --package".into()),
+        [] => Err(anyhow!("no package here builds a cdylib")),
+        _ => Err(anyhow!("several mods here; name one with --package")),
     }
 }
 
@@ -157,14 +156,14 @@ mod tests {
     fn the_dll_is_where_cargo_says_it_built_it() {
         let messages = [
             r#"{"reason":"compiler-artifact","target":{"name":"serde","crate_types":["lib"]},"filenames":["C:/t/libserde.rlib"]}"#,
-            r#"{"reason":"compiler-artifact","target":{"name":"area_loot","crate_types":["cdylib"]},"filenames":["C:/t/x86_64-pc-windows-msvc/release/area_loot.dll","C:/t/x86_64-pc-windows-msvc/release/area_loot.dll.lib"]}"#,
+            r#"{"reason":"compiler-artifact","target":{"name":"market_stalls","crate_types":["cdylib"]},"filenames":["C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll","C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll.lib"]}"#,
             r#"{"reason":"build-finished","success":true}"#,
         ]
         .join("\n");
         assert_eq!(
-            built_dll(&messages, "area_loot"),
+            built_dll(&messages, "market_stalls"),
             Some(PathBuf::from(
-                "C:/t/x86_64-pc-windows-msvc/release/area_loot.dll"
+                "C:/t/x86_64-pc-windows-msvc/release/market_stalls.dll"
             ))
         );
         assert_eq!(built_dll(&messages, "other"), None);
@@ -184,20 +183,25 @@ mod tests {
     #[test]
     fn the_package_is_named_found_here_or_the_only_mod() {
         let packages = [
-            package("area-loot", "/w/area-loot", &["cdylib"]),
-            package("safes", "/w/safes", &["cdylib", "rlib"]),
+            package("market-stalls", "/w/market-stalls", &["cdylib"]),
+            package("trading-post", "/w/trading-post", &["cdylib", "rlib"]),
             package("geometry", "/w/geometry", &["lib"]),
         ];
-        let named = choose(&packages, Some("safes"), Path::new("/w")).unwrap();
-        assert_eq!((named.0.name.as_str(), named.1), ("safes", "safes"));
-        let here = choose(&packages, None, Path::new("/w/area-loot")).unwrap();
-        let below = choose(&packages, None, Path::new("/w/area-loot/src")).unwrap();
+        let named = choose(&packages, Some("trading-post"), Path::new("/w")).unwrap();
+        assert_eq!(
+            (named.0.name.as_str(), named.1),
+            ("trading-post", "trading_post")
+        );
+        let here = choose(&packages, None, Path::new("/w/market-stalls")).unwrap();
+        let below = choose(&packages, None, Path::new("/w/market-stalls/src")).unwrap();
         assert_eq!(below.0.name, here.0.name);
-        assert_eq!(here.1, "area_loot");
+        assert_eq!(here.1, "market_stalls");
         assert!(choose(&packages, None, Path::new("/w")).is_err());
         assert!(choose(&packages, Some("geometry"), Path::new("/w")).is_err());
         assert_eq!(
-            choose(&packages[2..], None, Path::new("/w")).unwrap_err(),
+            choose(&packages[2..], None, Path::new("/w"))
+                .unwrap_err()
+                .to_string(),
             "no package here builds a cdylib"
         );
         assert_eq!(
@@ -205,14 +209,14 @@ mod tests {
                 .unwrap()
                 .0
                 .name,
-            "safes"
+            "trading-post"
         );
     }
 
     #[test]
     fn metadata_parses() {
-        let json = r#"{"packages":[{"name":"safes","manifest_path":"/w/safes/Cargo.toml",
-            "targets":[{"name":"safes","crate_types":["cdylib"],"kind":["cdylib"]}],"version":"0.1.0"}],
+        let json = r#"{"packages":[{"name":"trading-post","manifest_path":"/w/trading-post/Cargo.toml",
+            "targets":[{"name":"trading_post","crate_types":["cdylib"],"kind":["cdylib"]}],"version":"0.1.0"}],
             "target_directory":"/w/target","workspace_root":"/w"}"#;
         let metadata: Metadata = serde_json::from_str(json).unwrap();
         assert_eq!(metadata.packages[0].targets[0].crate_types, ["cdylib"]);

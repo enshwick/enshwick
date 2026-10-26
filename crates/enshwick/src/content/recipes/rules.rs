@@ -15,7 +15,7 @@ use super::super::{DebugName, Guid, Id};
 /// use enshwick::content::{DebugName, Guid, Id};
 ///
 /// let by_guid = Name::from(Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34"));
-/// let by_id = Name::from(Id::new("safes:safe.recipe"));
+/// let by_id = Name::from(Id::new("you.lockers:locker.recipe"));
 /// let by_debug = Name::from(DebugName("Tool_Torch01_T0_PK"));
 /// assert_ne!(by_guid, by_id);
 /// assert_ne!(by_id, by_debug);
@@ -29,6 +29,35 @@ pub enum Name<'a> {
     Content(Id),
     /// A debug name, such as `Tool_Torch01_T0_PK`.
     Debug(DebugName<'a>),
+}
+
+impl From<Guid> for Name<'_> {
+    fn from(guid: Guid) -> Self {
+        Self::Guid(guid)
+    }
+}
+
+impl From<Id> for Name<'_> {
+    fn from(id: Id) -> Self {
+        Self::Content(id)
+    }
+}
+
+impl<'a> From<DebugName<'a>> for Name<'a> {
+    fn from(name: DebugName<'a>) -> Self {
+        Self::Debug(name)
+    }
+}
+
+impl Name<'_> {
+    /// The name as the loader's recipe file writes it.
+    fn text(self) -> std::borrow::Cow<'static, str> {
+        match self {
+            Self::Guid(guid) => guid.to_string().into(),
+            Self::Content(id) => id.name().into(),
+            Self::Debug(name) => name.0.to_owned().into(),
+        }
+    }
 }
 
 /// What a recipe rule disables, in the forms the loader's recipe file
@@ -49,6 +78,73 @@ pub enum RecipeRule<'a> {
     Workshop(Name<'a>),
     /// Every recipe crafted by hand.
     Hand,
+}
+
+impl<'a> RecipeRule<'a> {
+    /// The rule for one recipe.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Id;
+    /// use enshwick::content::recipes::{Name, RecipeRule};
+    ///
+    /// const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
+    /// assert_eq!(RecipeRule::recipe(LOCKER_RECIPE), RecipeRule::Recipe(Name::Content(LOCKER_RECIPE)));
+    /// ```
+    #[must_use]
+    pub fn recipe(name: impl Into<Name<'a>>) -> Self {
+        Self::Recipe(name.into())
+    }
+
+    /// The rule for every recipe that makes an item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::DebugName;
+    /// use enshwick::content::recipes::RecipeRule;
+    ///
+    /// let torches = RecipeRule::output(DebugName("Tool_Torch01_T0"));
+    /// # let _ = torches;
+    /// ```
+    #[must_use]
+    pub fn output(item: impl Into<Name<'a>>) -> Self {
+        Self::Output(item.into())
+    }
+
+    /// The rule for every recipe made at the workshop of an item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::DebugName;
+    /// use enshwick::content::recipes::RecipeRule;
+    ///
+    /// let workbench = RecipeRule::workshop(DebugName("Craftingstation_Workbench"));
+    /// # let _ = workbench;
+    /// ```
+    #[must_use]
+    pub fn workshop(item: impl Into<Name<'a>>) -> Self {
+        Self::Workshop(item.into())
+    }
+
+    /// The rule's kind, its kind in words and the name it carries.
+    fn parts(
+        self,
+    ) -> (
+        crate::abi::RecipeRuleKind,
+        &'static str,
+        std::borrow::Cow<'static, str>,
+    ) {
+        use crate::abi::RecipeRuleKind;
+        match self {
+            Self::Recipe(name) => (RecipeRuleKind::RECIPE, "recipe", name.text()),
+            Self::Output(name) => (RecipeRuleKind::OUTPUT, "output", name.text()),
+            Self::Workshop(name) => (RecipeRuleKind::WORKSHOP, "workshop", name.text()),
+            Self::Hand => (RecipeRuleKind::WORKSHOP, "workshop", "hand".into()),
+        }
+    }
 }
 
 fn rule(rule: RecipeRule<'_>, disable: bool) -> Result<(), Off> {
@@ -121,7 +217,7 @@ pub fn enable(rule: RecipeRule<'_>) -> Result<(), Off> {
 ///
 /// let torch = Guid::parse("7fa62007-a38e-4790-8591-873055fc3f34");
 /// assert!(!is_disabled(torch));
-/// assert!(!is_disabled(Id::new("safes:safe.recipe")));
+/// assert!(!is_disabled(Id::new("you.lockers:locker.recipe")));
 /// ```
 #[must_use]
 pub fn is_disabled(recipe: impl Into<Guid>) -> bool {
@@ -131,100 +227,4 @@ pub fn is_disabled(recipe: impl Into<Guid>) -> bool {
     let api = host.api();
     let mut out = 0u32;
     (api.recipe_disabled)(host.handle(), recipe.into().id(), &raw mut out).is_ok() && out != 0
-}
-
-impl From<Guid> for Name<'_> {
-    fn from(guid: Guid) -> Self {
-        Self::Guid(guid)
-    }
-}
-
-impl From<Id> for Name<'_> {
-    fn from(id: Id) -> Self {
-        Self::Content(id)
-    }
-}
-
-impl<'a> From<DebugName<'a>> for Name<'a> {
-    fn from(name: DebugName<'a>) -> Self {
-        Self::Debug(name)
-    }
-}
-
-impl Name<'_> {
-    /// The name as the loader's recipe file writes it.
-    fn text(self) -> std::borrow::Cow<'static, str> {
-        match self {
-            Self::Guid(guid) => guid.to_string().into(),
-            Self::Content(id) => id.name().into(),
-            Self::Debug(name) => name.0.to_owned().into(),
-        }
-    }
-}
-
-impl<'a> RecipeRule<'a> {
-    /// The rule for one recipe.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::Id;
-    /// use enshwick::content::recipes::{Name, RecipeRule};
-    ///
-    /// const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
-    /// assert_eq!(RecipeRule::recipe(SAFE_RECIPE), RecipeRule::Recipe(Name::Content(SAFE_RECIPE)));
-    /// ```
-    #[must_use]
-    pub fn recipe(name: impl Into<Name<'a>>) -> Self {
-        Self::Recipe(name.into())
-    }
-
-    /// The rule for every recipe that makes an item.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::DebugName;
-    /// use enshwick::content::recipes::RecipeRule;
-    ///
-    /// let torches = RecipeRule::output(DebugName("Tool_Torch01_T0"));
-    /// # let _ = torches;
-    /// ```
-    #[must_use]
-    pub fn output(item: impl Into<Name<'a>>) -> Self {
-        Self::Output(item.into())
-    }
-
-    /// The rule for every recipe made at the workshop of an item.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::DebugName;
-    /// use enshwick::content::recipes::RecipeRule;
-    ///
-    /// let workbench = RecipeRule::workshop(DebugName("Craftingstation_Workbench"));
-    /// # let _ = workbench;
-    /// ```
-    #[must_use]
-    pub fn workshop(item: impl Into<Name<'a>>) -> Self {
-        Self::Workshop(item.into())
-    }
-
-    /// The rule's kind, its kind in words and the name it carries.
-    fn parts(
-        self,
-    ) -> (
-        crate::abi::RecipeRuleKind,
-        &'static str,
-        std::borrow::Cow<'static, str>,
-    ) {
-        use crate::abi::RecipeRuleKind;
-        match self {
-            Self::Recipe(name) => (RecipeRuleKind::RECIPE, "recipe", name.text()),
-            Self::Output(name) => (RecipeRuleKind::OUTPUT, "output", name.text()),
-            Self::Workshop(name) => (RecipeRuleKind::WORKSHOP, "workshop", name.text()),
-            Self::Hand => (RecipeRuleKind::WORKSHOP, "workshop", "hand".into()),
-        }
-    }
 }

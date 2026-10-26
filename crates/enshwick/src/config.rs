@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 mod schema;
 mod values;
 
-pub use schema::{Field, Kind, Schema};
+pub use schema::{Field, Group, Kind, Schema, value_at};
 pub(crate) use values::changed_keys;
 #[doc(hidden)]
 pub use values::{__Values, __check_field, __entry};
@@ -37,7 +37,11 @@ pub use values::{__Values, __check_field, __entry};
 ///   before the console or the Mods screen writes a value;
 /// - `text = "key"`, the text key of the field's translated label in the
 ///   mod's texts, `config.<field>` by default; its description is the key
-///   with `.doc` appended.
+///   with `.doc` appended;
+/// - `#[config(group)]` on a field whose type is a `Config` of its own: its
+///   settings are a table of the file, `[<field>]`, with dotted keys such as
+///   `<field>.<key>`, and the Mods screen shows them together. A group's
+///   fields take their own stages, ranges and texts.
 ///
 /// `#[config(validate = path)]` on the struct adds a check of its own, and
 /// `#[config(text = "key")]` names the text key of the whole set, `config`
@@ -124,6 +128,15 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// The commented file written when the mod's settings are missing.
     fn template() -> String;
 
+    /// The template's entries without its heading, its tables under
+    /// `path`, for a group of another `Config`.
+    #[doc(hidden)]
+    #[must_use]
+    fn __template_body(path: &str) -> String {
+        let _ = path;
+        Self::template()
+    }
+
     /// What every field is, for the loader, the console and a settings menu.
     ///
     /// # Examples
@@ -131,10 +144,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup, range = 1..=16)]
     ///     limit: u32,
     /// }
@@ -159,10 +172,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     ///     /// The language of replies.
@@ -191,10 +204,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     /// }
@@ -533,7 +546,7 @@ mod tests {
 
     /// Staged settings.
     #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
-    #[config(text = "safes.config")]
+    #[config(text = "lockers.config")]
     struct Staged {
         /// How many, read when the world loads.
         #[config(startup, range = 1..=16)]
@@ -542,7 +555,7 @@ mod tests {
         #[config(restart)]
         workers: u8,
         /// The mode.
-        #[config(choices = ["auto", "on"], text = "safes.mode")]
+        #[config(choices = ["auto", "on"], text = "lockers.mode")]
         mode: String,
         /// This player's own.
         #[config(client, range = 0.0..)]
@@ -609,7 +622,7 @@ mod tests {
 
         let schema = Staged::schema();
         assert_eq!(schema.doc, "Staged settings.");
-        assert_eq!(schema.text, "safes.config");
+        assert_eq!(schema.text, "lockers.config");
         let limit = schema.field("limit").unwrap();
         assert_eq!(
             (limit.stage, limit.kind, limit.min, limit.max),
@@ -623,7 +636,7 @@ mod tests {
         let mode = schema.field("mode").unwrap();
         assert_eq!(mode.stage, Stage::Runtime);
         assert_eq!(mode.choices, ["\"auto\"", "\"on\""]);
-        assert_eq!(mode.text, "safes.mode");
+        assert_eq!(mode.text, "lockers.mode");
         let volume = schema.field("volume").unwrap();
         assert_eq!(
             (volume.stage, volume.min, volume.max),

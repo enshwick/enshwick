@@ -975,18 +975,18 @@ mod tests {
     fn the_arena_keeps_texts_until_its_buffer_comes_round() {
         let mut arena = Arena::new();
         arena.next_frame();
-        let first = arena.text(&[b"enshwick/", b"probe"]);
+        let first = arena.text(&[b"enshwick/", b"lamps"]);
         assert_eq!(first.len, 14);
         // SAFETY: the text points into the arena's current buffer.
         let bytes = unsafe { core::slice::from_raw_parts(first.ptr, 14) };
-        assert_eq!(bytes, b"enshwick/probe");
+        assert_eq!(bytes, b"enshwick/lamps");
         let big = vec![b'x'; ARENA_BYTES];
         assert_eq!(arena.text(&[&big]).len, 0);
         arena.next_frame();
         assert_eq!(arena.text(&[b"next"]).len, 4);
         // SAFETY: two frames on, the first buffer is still untouched.
         let again = unsafe { core::slice::from_raw_parts(first.ptr, 14) };
-        assert_eq!(again, b"enshwick/probe");
+        assert_eq!(again, b"enshwick/lamps");
     }
 
     #[test]

@@ -70,8 +70,20 @@ impl std::fmt::Display for GameVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::table::{expected_bytes, search};
+    use crate::table::{expected_bytes, search, search_on};
     use enshwick::code::Pattern;
+
+    #[test]
+    fn a_panicking_entry_on_one_thread_costs_only_that_entry() {
+        let entries: Vec<u32> = (0..10).collect();
+        let found = search_on(1, &entries, |&n| {
+            assert!(n != 3, "a broken pattern");
+            Some(n)
+        });
+        assert_eq!(found[3], None);
+        assert_eq!(found[9], Some(9));
+        assert_eq!(found.iter().flatten().count(), 9);
+    }
 
     #[test]
     fn a_panicking_search_keeps_the_other_entries_in_place() {

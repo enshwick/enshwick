@@ -151,7 +151,7 @@ impl Ui {
     /// use enshwick::ui::{Dialog, Response, Ui};
     ///
     /// fn confirm(ui: Ui) -> bool {
-    ///     let dialog = Dialog::new("Safes", "Open every safe in the world?")
+    ///     let dialog = Dialog::new("Lockers", "Open every locker in the world?")
     ///         .buttons(&[Response::Ok, Response::Cancel]);
     ///     ui.ask(&dialog) == Ok(Some(Response::Ok))
     /// }

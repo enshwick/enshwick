@@ -132,6 +132,57 @@ pub struct RecipeView<'a> {
     pub(super) layout: &'a RecipeLayout,
 }
 
+impl RecipeView<'_> {
+    /// The recipe's GUID.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::derive_recipes`].
+    #[must_use]
+    pub fn guid(&self) -> Guid {
+        let mut guid = [0u8; 16];
+        if let Some(bytes) = self
+            .blob
+            .bytes()
+            .get(self.at + self.layout.guid..self.at + self.layout.guid + 16)
+        {
+            guid.copy_from_slice(bytes);
+        }
+        Guid(guid)
+    }
+
+    /// The recipe's debug name, such as `Block_T2_Metal_Copper_CRAFTING`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::derive_recipes`].
+    #[must_use]
+    pub fn debug_name(&self) -> String {
+        self.blob
+            .array(self.at + self.layout.relative[3])
+            .and_then(|(start, len)| self.blob.bytes().get(start..start + len as usize))
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+            .unwrap_or_default()
+    }
+
+    /// The item the recipe makes and how many.
+    ///
+    /// # Examples
+    ///
+    /// See [`Load::derive_recipes`].
+    #[must_use]
+    pub fn output(&self) -> Option<(Guid, u32)> {
+        let (outputs, count) = self.blob.array(self.at + self.layout.output)?;
+        if count == 0 {
+            return None;
+        }
+        let mut guid = [0u8; 16];
+        guid.copy_from_slice(self.blob.bytes().get(outputs..outputs + 16)?);
+        let made = self.blob.read_u32(outputs + self.layout.stack_count)?;
+        Some((Guid(guid), made))
+    }
+}
+
 /// How a derived recipe differs from the vanilla one it copies.
 ///
 /// # Examples
@@ -306,99 +357,6 @@ pub struct RecipeEdit<'a> {
     changed: bool,
 }
 
-/// The recipe registry with `modify` called on each recipe in turn; the
-/// second value is how many recipes it changed. [`Load::modify_recipes`]
-/// serves it.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout, modify_recipes_in};
-/// use enshwick::content::types;
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
-///     load.serve(registry, registry, move |base| {
-///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
-///         enshwick::info!("{changed} recipes doubled");
-///         Some(built)
-///     })
-/// }
-/// ```
-#[must_use]
-pub fn modify_recipes_in(
-    layout: &RecipeLayout,
-    registry: &[u8],
-    modify: &dyn Fn(&mut RecipeEdit<'_>),
-) -> Option<(Vec<u8>, usize)> {
-    let mut blob = Blob::new(registry);
-    let (start, count) = blob.array(layout.recipes)?;
-    let mut changed = 0;
-    for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.recipe) {
-        let mut edit = RecipeEdit {
-            blob: &mut blob,
-            at,
-            layout,
-            changed: false,
-        };
-        modify(&mut edit);
-        changed += usize::from(edit.changed);
-    }
-    Some((blob.into_bytes(), changed))
-}
-
-impl RecipeView<'_> {
-    /// The recipe's GUID.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::derive_recipes`].
-    #[must_use]
-    pub fn guid(&self) -> Guid {
-        let mut guid = [0u8; 16];
-        if let Some(bytes) = self
-            .blob
-            .bytes()
-            .get(self.at + self.layout.guid..self.at + self.layout.guid + 16)
-        {
-            guid.copy_from_slice(bytes);
-        }
-        Guid(guid)
-    }
-
-    /// The recipe's debug name, such as `Block_T2_Metal_Copper_CRAFTING`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::derive_recipes`].
-    #[must_use]
-    pub fn debug_name(&self) -> String {
-        self.blob
-            .array(self.at + self.layout.relative[3])
-            .and_then(|(start, len)| self.blob.bytes().get(start..start + len as usize))
-            .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
-            .unwrap_or_default()
-    }
-
-    /// The item the recipe makes and how many.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::derive_recipes`].
-    #[must_use]
-    pub fn output(&self) -> Option<(Guid, u32)> {
-        let (outputs, count) = self.blob.array(self.at + self.layout.output)?;
-        if count == 0 {
-            return None;
-        }
-        let mut guid = [0u8; 16];
-        guid.copy_from_slice(self.blob.bytes().get(outputs..outputs + 16)?);
-        let made = self.blob.read_u32(outputs + self.layout.stack_count)?;
-        Some((Guid(guid), made))
-    }
-}
-
 impl RecipeEdit<'_> {
     /// The recipe as it reads now: GUID, debug name and output.
     ///
@@ -449,4 +407,46 @@ impl RecipeEdit<'_> {
             }
         }
     }
+}
+
+/// The recipe registry with `modify` called on each recipe in turn; the
+/// second value is how many recipes it changed. [`Load::modify_recipes`]
+/// serves it.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout, modify_recipes_in};
+/// use enshwick::content::types;
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let layout = RecipeLayout::resolve(load)?;
+///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY);
+///     load.serve(registry, registry, move |base| {
+///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
+///         enshwick::info!("{changed} recipes doubled");
+///         Some(built)
+///     })
+/// }
+/// ```
+#[must_use]
+pub fn modify_recipes_in(
+    layout: &RecipeLayout,
+    registry: &[u8],
+    modify: &dyn Fn(&mut RecipeEdit<'_>),
+) -> Option<(Vec<u8>, usize)> {
+    let mut blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    let mut changed = 0;
+    for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.recipe) {
+        let mut edit = RecipeEdit {
+            blob: &mut blob,
+            at,
+            layout,
+            changed: false,
+        };
+        modify(&mut edit);
+        changed += usize::from(edit.changed);
+    }
+    Some((blob.into_bytes(), changed))
 }

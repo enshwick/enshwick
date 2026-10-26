@@ -43,6 +43,28 @@ impl __Values {
         }
     }
 
+    /// Adds the values `text` of the group `key`, an inline table as
+    /// [`finish`](Self::finish) writes it.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] when `text` is not one.
+    pub fn put_group(&mut self, key: &str, text: &str) -> Result<(), ConfigError> {
+        let group = Self::parse(text)?;
+        self.0.insert(key.to_owned(), toml::Value::Table(group.0));
+        Ok(())
+    }
+
+    /// The values of the group `key` as an inline table, `None` when it is
+    /// absent.
+    #[must_use]
+    pub fn group(&self, key: &str) -> Option<String> {
+        self.0
+            .get(key)
+            .and_then(toml::Value::as_table)
+            .map(|table| toml::Value::Table(table.clone()).to_string())
+    }
+
     /// The values as an inline table, keys sorted.
     #[must_use]
     pub fn finish(self) -> String {

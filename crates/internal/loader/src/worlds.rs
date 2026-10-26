@@ -85,30 +85,84 @@ pub fn client_keys(schema: &Schema) -> Vec<&str> {
         .collect()
 }
 
+/// The value at the dotted `key` of `doc`: `comfort.multiplier` is
+/// `multiplier` in `[comfort]`.
+#[must_use]
+pub fn value_at<'a>(doc: &'a toml_edit::Table, key: &str) -> Option<&'a toml_edit::Value> {
+    let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
+    let mut table = doc;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        table = table.get(part)?.as_table()?;
+    }
+    table.get(leaf)?.as_value()
+}
+
+/// Sets the dotted `key` of `doc` to `value`, the old value's comments kept
+/// and missing tables made; `false` when a part of the key is a value.
+pub fn set_at(doc: &mut toml_edit::Table, key: &str, mut value: toml_edit::Value) -> bool {
+    let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
+    let mut table = doc;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        let item = table
+            .entry(part)
+            .or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+        let Some(next) = item.as_table_mut() else {
+            return false;
+        };
+        table = next;
+    }
+    match table.get_mut(leaf).and_then(toml_edit::Item::as_value_mut) {
+        Some(old) => {
+            *value.decor_mut() = old.decor().clone();
+            *old = value;
+        }
+        None => {
+            table.insert(leaf, toml_edit::Item::Value(value));
+        }
+    }
+    true
+}
+
+/// Removes the dotted `key` of `doc`, if it is there.
+pub fn remove_at(doc: &mut toml_edit::Table, key: &str) {
+    let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
+    let mut table = doc;
+    for part in path.split('.').filter(|p| !p.is_empty()) {
+        let Some(next) = table.get_mut(part).and_then(toml_edit::Item::as_table_mut) else {
+            return;
+        };
+        table = next;
+    }
+    let _removed = table.remove(leaf);
+}
+
+/// Every value of `table` with its dotted key, tables walked in order.
+fn leaves(table: &toml_edit::Table, prefix: &str, found: &mut Vec<(String, toml_edit::Value)>) {
+    for (key, item) in table {
+        let path = format!("{prefix}{key}");
+        if let Some(inner) = item.as_table() {
+            leaves(inner, &format!("{path}."), found);
+        } else if let Some(value) = item.as_value() {
+            found.push((path, value.clone()));
+        }
+    }
+}
+
 /// `base` with every key of `over` set from it, `base`'s comments kept; keys
-/// in `only` alone when it is given. A text that is no TOML leaves `base`.
+/// in `only` alone when it is given. Keys inside tables count by their
+/// dotted path. A text that is no TOML leaves `base`.
 #[must_use]
 pub fn overlay(base: &str, over: &str, only: Option<&[&str]>) -> String {
     let (Ok(mut doc), Ok(over)) = (base.parse::<DocumentMut>(), over.parse::<DocumentMut>()) else {
         return base.to_owned();
     };
-    for (key, item) in over.iter() {
-        if only.is_some_and(|keys| !keys.contains(&key)) {
+    let mut found = Vec::new();
+    leaves(over.as_table(), "", &mut found);
+    for (key, value) in found {
+        if only.is_some_and(|keys| !keys.contains(&key.as_str())) {
             continue;
         }
-        let Some(value) = item.as_value() else {
-            continue;
-        };
-        match doc.get_mut(key).and_then(toml_edit::Item::as_value_mut) {
-            Some(old) => {
-                let mut new = value.clone();
-                *new.decor_mut() = old.decor().clone();
-                *old = new;
-            }
-            None => {
-                doc.insert(key, toml_edit::Item::Value(value.clone()));
-            }
-        }
+        let _set = set_at(doc.as_table_mut(), &key, value);
     }
     doc.to_string()
 }
@@ -145,13 +199,12 @@ pub fn with_new_keys(world: &str, template: &str) -> String {
     ) else {
         return world.to_owned();
     };
+    let mut found = Vec::new();
+    leaves(template.as_table(), "", &mut found);
     let mut added = false;
-    for (key, item) in template.iter() {
-        if doc.get(key).is_none()
-            && let Some(value) = item.as_value()
-        {
-            doc.insert(key, toml_edit::Item::Value(value.clone()));
-            added = true;
+    for (key, value) in found {
+        if value_at(doc.as_table(), &key).is_none() {
+            added |= set_at(doc.as_table_mut(), &key, value);
         }
     }
     if added {
@@ -382,8 +435,39 @@ workers = 6
         );
         assert_eq!(destination(Stage::Sync, None), Destination::Next);
         assert_eq!(client_keys(&schema()), ["labels"]);
-        let file = world_file(Path::new("d"), "safes", "w-1");
-        assert!(file.ends_with("safes/worlds/w-1/settings.toml"));
-        assert!(next_file(Path::new("d"), "safes").ends_with("safes/worlds/next.toml"));
+        let file = world_file(Path::new("d"), "you.trading-post", "w-1");
+        assert!(file.ends_with("you.trading-post/worlds/w-1/settings.toml"));
+        assert!(
+            next_file(Path::new("d"), "you.trading-post")
+                .ends_with("you.trading-post/worlds/next.toml")
+        );
+    }
+
+    #[test]
+    fn grouped_settings_overlay_and_fill_in_by_their_dotted_keys() {
+        let template = "limit = 4\n\n# Comfort.\n[comfort]\nmultiplier = 1.0\nshown = true\n";
+        let world = "limit = 6\n\n[comfort]\nmultiplier = 2.0\n";
+        let filled = with_new_keys(world, template);
+        assert_eq!(
+            filled,
+            "limit = 6\n\n[comfort]\nmultiplier = 2.0\nshown = true\n"
+        );
+        let global = "[comfort]\nmultiplier = 9.0\nshown = false\n";
+        let composed = overlay(&filled, global, Some(&["comfort.shown"]));
+        assert_eq!(
+            composed,
+            "limit = 6\n\n[comfort]\nmultiplier = 2.0\nshown = false\n"
+        );
+        let mut doc: DocumentMut = "a = 1\n".parse().unwrap();
+        assert!(set_at(doc.as_table_mut(), "comfort.multiplier", 3.into()));
+        assert!(!set_at(doc.as_table_mut(), "a.b", 3.into()), "a is a value");
+        assert_eq!(
+            value_at(doc.as_table(), "comfort.multiplier")
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("3")
+        );
+        remove_at(doc.as_table_mut(), "comfort.multiplier");
+        assert!(value_at(doc.as_table(), "comfort.multiplier").is_none());
     }
 }

@@ -45,9 +45,9 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe(NewRecipe {
-    ///         id: Id::new("my-mod:safe.recipe"),
+    ///         id: Id::new("my-mod:locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:safe"),
+    ///         output: Guid::named("my-mod:locker"),
     ///         output_count: 1,
     ///         cost: 2,
     ///         workshop: None,
@@ -88,9 +88,9 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.add_recipe_with(|| NewRecipe {
-    ///         id: Id::new("my-mod:safe.recipe"),
+    ///         id: Id::new("my-mod:locker.recipe"),
     ///         like: Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
-    ///         output: Guid::named("my-mod:safe"),
+    ///         output: Guid::named("my-mod:locker"),
     ///         output_count: 1,
     ///         cost: COST.load(Ordering::Relaxed),
     ///         workshop: None,
@@ -271,7 +271,7 @@ mod tests {
         stack_count: 0x14,
     };
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    const SAFE: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
+    const LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
     const RECIPE_ID: Id = Id::new("test:recipe");
     const RECIPE: Guid = RECIPE_ID.guid();
 
@@ -298,7 +298,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 2,
             workshop: None,
@@ -314,8 +314,8 @@ mod tests {
         let (inputs, _) = built.array(copy + 0x28).unwrap();
         assert_eq!(u32_at(built.bytes(), inputs + 0x14), 10);
         let (outputs, _) = built.array(copy + 0x30).unwrap();
-        assert_eq!(&built.bytes()[outputs..outputs + 16], &SAFE.0);
-        assert_eq!(u32_at(built.bytes(), outputs + 0x10), SAFE.id());
+        assert_eq!(&built.bytes()[outputs..outputs + 16], &LOCKER.0);
+        assert_eq!(u32_at(built.bytes(), outputs + 0x10), LOCKER.id());
         let (name, len) = built.array(copy + 0x78).unwrap();
         assert_eq!(&built.bytes()[name..name + len as usize], b"Chest");
         let (inputs, _) = built.array(recipes + 0x28).unwrap();
@@ -380,7 +380,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 1,
             workshop: Some(bench),
@@ -482,7 +482,7 @@ mod tests {
         let new = NewRecipe {
             id: RECIPE_ID,
             like: CHEST,
-            output: SAFE,
+            output: LOCKER,
             output_count: 1,
             cost: 1,
             workshop: None,

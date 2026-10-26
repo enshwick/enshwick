@@ -252,8 +252,7 @@ nothing, `|_| {}`, is fine when you poll.
 - The loader runs requests inside the game's inventory system, one at a
   time, in the order they came.
 - The callback runs on the server's game thread after a later step, so it
-  may [read](#reads) inventories and submit further requests, as area loot
-  does to empty one container after another.
+  may [read](#reads) inventories and submit further requests, such as to empty one container after another.
 - A refused batch, and a request the loader turns away, get their outcome
   the same way, on the game thread after the next step.
 - If the mod is turned off before the outcome arrives, the callback never
@@ -281,4 +280,4 @@ records a mod's requests: `inventory_requests()` lists them and
 
 [`enshwick-area-loot`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs)
 uses reads, `MoveAll` batches with `actor`, `allow_partial` and `notify`,
-and chained callbacks; see [Loot containers](content/loot.md#a-worked-example-area-loot).
+and chained callbacks; see [Loot containers](content/loot.md#a-worked-example).

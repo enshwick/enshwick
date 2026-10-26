@@ -96,10 +96,10 @@ impl Response {
 /// ```
 /// use enshwick::ui::{Dialog, Response};
 ///
-/// let dialog = Dialog::new("Safes", "Open every safe in the world?")
-///     .detail("12 safes")
+/// let dialog = Dialog::new("Lockers", "Open every locker in the world?")
+///     .detail("12 lockers")
 ///     .buttons(&[Response::Ok, Response::Cancel]);
-/// assert_eq!(dialog.title(), "Safes");
+/// assert_eq!(dialog.title(), "Lockers");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Dialog<'a> {
