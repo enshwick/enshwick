@@ -208,7 +208,7 @@ limit holds.
 
 ## A worked example
 
-[`enshwick-building-materials`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-building-materials/src/lib.rs)
+[`enshwick-building-materials`](https://github.com/enshwick/mod-building-materials/blob/main/src/lib.rs)
 doubles the output of the vanilla recipes for building blocks, overgrowth
 and decor with one `modify_recipes` call. It picks categories by debug name,
 and reads the multiplier and the categories from join values, which a client
