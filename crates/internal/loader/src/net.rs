@@ -809,7 +809,7 @@ mod tests {
                 parts: Vec::new(),
             },
         );
-        let lines = control_frames(&hello("safes@0.3.0", 0)).unwrap();
+        let lines = control_frames(&hello("you.trading-post@0.3.0", 0)).unwrap();
         let hellos =
             core::iter::repeat_with(|| take_frame(&mut state, 7, parsed(&lines).remove(0)))
                 .take(100)
@@ -822,8 +822,8 @@ mod tests {
 
     #[test]
     fn a_hello_names_the_join_mods_within_its_frames() {
-        let said = read_hello(&hello("safes@0.3.0,zones@0.1.0", 9)).unwrap();
-        assert_eq!(said.mods, "safes@0.3.0,zones@0.1.0");
+        let said = read_hello(&hello("you.trading-post@0.3.0,zones@0.1.0", 9)).unwrap();
+        assert_eq!(said.mods, "you.trading-post@0.3.0,zones@0.1.0");
         assert!(said.complete);
         assert_eq!(said.nonce, 9);
         let bare = read_hello(&control(HELLO)).unwrap();
@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
         let mut state = State::default();
-        let lines = control_frames(&hello("safes@0.3.0", 0)).unwrap();
+        let lines = control_frames(&hello("you.trading-post@0.3.0", 0)).unwrap();
         for key in 1..=MAX_GREETING as u64 {
             let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
         }

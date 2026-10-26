@@ -10,6 +10,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context as _, anyhow};
 use enshwick_gamedata::reflect::{Image, Layout};
 use serde::Deserialize;
 
@@ -110,10 +111,10 @@ impl Schema {
     /// # Errors
     ///
     /// When the text is no schema this tool reads.
-    pub(crate) fn parse(text: &str) -> Result<Self, String> {
-        let schema: Self = toml::from_str(text).map_err(|e| format!("the schema: {e}"))?;
+    pub(crate) fn parse(text: &str) -> anyhow::Result<Self> {
+        let schema: Self = toml::from_str(text).context("the schema")?;
         if schema.format != FORMAT {
-            return Err(format!(
+            return Err(anyhow!(
                 "the schema is format {}; this cargo-enshwick reads {FORMAT}: update it",
                 schema.format
             ));
@@ -127,27 +128,26 @@ impl Schema {
 /// # Errors
 ///
 /// When the bytes are no x64 DLL, or the section is no text.
-pub(crate) fn from_dll(bytes: &[u8]) -> Result<Option<String>, String> {
-    let image = Image::parse(bytes, Layout::File, None).map_err(|e| e.to_string())?;
+pub(crate) fn from_dll(bytes: &[u8]) -> anyhow::Result<Option<String>> {
+    let image = Image::parse(bytes, Layout::File, None)?;
     let Some(section) = image.section(SECTION) else {
         return Ok(None);
     };
     let range = image.range(section);
     let raw = image
         .read(range.start, range.end - range.start)
-        .ok_or("the point section is cut short")?;
+        .context("the point section is cut short")?;
     let end = raw.iter().rposition(|&b| b != 0).map_or(0, |at| at + 1);
-    let text = std::str::from_utf8(&raw[..end]).map_err(|e| format!("the point section: {e}"))?;
+    let text = std::str::from_utf8(&raw[..end]).context("the point section")?;
     Ok((!text.is_empty()).then(|| text.to_owned()))
 }
 
 /// The schema texts `from` holds: of a schema file, of a DLL, or of every
 /// DLL in a folder and in its `mods/`, each with where it came from.
-fn schemas(from: &Path) -> Result<Vec<(PathBuf, String)>, String> {
-    let read = |path: &Path| std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()));
+fn schemas(from: &Path) -> anyhow::Result<Vec<(PathBuf, String)>> {
+    let read = |path: &Path| std::fs::read(path).with_context(|| path.display().to_string());
     if from.extension().is_some_and(|e| e == "toml") {
-        let text =
-            String::from_utf8(read(from)?).map_err(|e| format!("{}: {e}", from.display()))?;
+        let text = String::from_utf8(read(from)?).with_context(|| from.display().to_string())?;
         return Ok(vec![(from.to_path_buf(), text)]);
     }
     let mut found = Vec::new();
@@ -161,7 +161,7 @@ fn schemas(from: &Path) -> Result<Vec<(PathBuf, String)>, String> {
 
 /// The DLLs `from` names: the file itself, or every DLL in the folder and in
 /// its `mods/`.
-fn dlls(from: &Path) -> Result<Vec<PathBuf>, String> {
+fn dlls(from: &Path) -> anyhow::Result<Vec<PathBuf>> {
     if from.is_file() {
         return Ok(vec![from.to_path_buf()]);
     }
@@ -182,7 +182,7 @@ fn dlls(from: &Path) -> Result<Vec<PathBuf>, String> {
     }
     found.sort();
     if found.is_empty() {
-        return Err(format!("no mod DLL in {}", from.display()));
+        return Err(anyhow!("no mod DLL in {}", from.display()));
     }
     Ok(found)
 }
@@ -193,18 +193,18 @@ fn dlls(from: &Path) -> Result<Vec<PathBuf>, String> {
 /// # Errors
 ///
 /// When no DLL there defines the point, or its schema does not read.
-pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> Result<String, String> {
+pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> anyhow::Result<String> {
     let (owner, _) = name
         .split_once(':')
-        .ok_or_else(|| format!("{name:?} is no point: <mod id>:<point>"))?;
+        .with_context(|| format!("{name:?} is no point: <mod id>:<point>"))?;
     let mut owners_seen = Vec::new();
     for (dll, text) in schemas(from)? {
-        let schema = Schema::parse(&text).map_err(|e| format!("{}: {e}", dll.display()))?;
+        let schema = Schema::parse(&text).with_context(|| dll.display().to_string())?;
         if schema.point.iter().any(|p| p.name == name) {
             let code = rust(&schema, name)?;
             return match out {
                 Some(path) => {
-                    std::fs::write(path, &code).map_err(|e| format!("{}: {e}", path.display()))?;
+                    std::fs::write(path, &code).with_context(|| path.display().to_string())?;
                     Ok(format!(
                         "wrote {name} of {} {} to {}",
                         schema.owner,
@@ -218,9 +218,9 @@ pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> Result<String,
         owners_seen.push(schema.owner);
     }
     if owners_seen.iter().any(|o| o == owner) {
-        Err(format!("{owner} defines no point {name}"))
+        Err(anyhow!("{owner} defines no point {name}"))
     } else {
-        Err(format!(
+        Err(anyhow!(
             "no DLL in {} defines points of {owner}",
             from.display()
         ))
@@ -263,22 +263,22 @@ fn doc(code: &mut String, indent: &str, text: &str, fallback: &str) {
 /// # Errors
 ///
 /// When the schema lacks the point or a type it names.
-pub(crate) fn rust(schema: &Schema, name: &str) -> Result<String, String> {
+pub(crate) fn rust(schema: &Schema, name: &str) -> anyhow::Result<String> {
     let point = schema
         .point
         .iter()
         .find(|p| p.name == name)
-        .ok_or_else(|| format!("{} defines no point {name}", schema.owner))?;
+        .with_context(|| format!("{} defines no point {name}", schema.owner))?;
     let find = |type_name: &str| {
         schema
             .types
             .iter()
             .find(|t| t.name == type_name)
-            .ok_or_else(|| format!("the schema of {name} lacks the type {type_name}"))
+            .with_context(|| format!("the schema of {name} lacks the type {type_name}"))
     };
     let input = find(&point.input)?;
     if input.kind != Kind::Struct || input.field.len() != point.layout.len() {
-        return Err(format!("the schema of {name} describes its input wrongly"));
+        return Err(anyhow!("the schema of {name} describes its input wrongly"));
     }
     let mut reached: Vec<&TypeSchema> = Vec::new();
     let mut pending: Vec<&str> = input
@@ -301,7 +301,7 @@ pub(crate) fn rust(schema: &Schema, name: &str) -> Result<String, String> {
         "observe" => "Observe",
         "advise" => "Advise",
         "override" => "Override",
-        other => return Err(format!("the point {name} has the unknown mode {other:?}")),
+        other => return Err(anyhow!("the point {name} has the unknown mode {other:?}")),
     };
     let mut code = String::new();
     let _ = writeln!(
@@ -344,7 +344,7 @@ pub(crate) fn rust(schema: &Schema, name: &str) -> Result<String, String> {
     for (i, hash) in point.layout.iter().enumerate() {
         let hash: u64 = hash
             .parse()
-            .map_err(|_| format!("the schema of {name} has a bad layout hash"))?;
+            .with_context(|| format!("the schema of {name} has a bad layout hash"))?;
         let _ = writeln!(
             code,
             "    assert!(\n        <{} as enshwick::points::Point>::LAYOUT[{i}].hash == {},\n        \"`{}` differs from the owner's\",\n    );",
@@ -356,7 +356,7 @@ pub(crate) fn rust(schema: &Schema, name: &str) -> Result<String, String> {
     let output: u64 = point
         .output_layout
         .parse()
-        .map_err(|_| format!("the schema of {name} has a bad layout hash"))?;
+        .with_context(|| format!("the schema of {name} has a bad layout hash"))?;
     let _ = writeln!(
         code,
         "    assert!(\n        <{} as enshwick::points::Point>::OUTPUT[0].hash == {},\n        \"the answer differs from the owner's\",\n    );\n}};",
@@ -374,7 +374,7 @@ fn hex(hash: u64) -> String {
 }
 
 /// The Rust definition of the named type `named` of `owner`'s schema.
-fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), String> {
+fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> anyhow::Result<()> {
     doc(code, "", &named.doc, &format!("A type of `{owner}`."));
     match named.kind {
         Kind::Struct => {
@@ -398,7 +398,7 @@ fn named_type(code: &mut String, named: &TypeSchema, owner: &str) -> Result<(), 
             let inner = named
                 .field
                 .first()
-                .ok_or_else(|| format!("the newtype {} has no field", named.name))?;
+                .with_context(|| format!("the newtype {} has no field", named.name))?;
             let _ = writeln!(
                 code,
                 "#[repr(transparent)]\n#[derive(Clone, Copy, Debug, enshwick::Shape)]\npub struct {}(pub {});",
@@ -482,6 +482,11 @@ mod tests {
         let schema = Schema::parse(SCHEMA).unwrap();
         assert!(rust(&schema, "you.stalls:other").is_err());
         let newer = SCHEMA.replace("schema = 1", "schema = 2");
-        assert!(Schema::parse(&newer).unwrap_err().contains("update it"));
+        assert!(
+            Schema::parse(&newer)
+                .unwrap_err()
+                .to_string()
+                .contains("update it")
+        );
     }
 }

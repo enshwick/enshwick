@@ -362,7 +362,7 @@ mod tests {
     fn dependencies_load_first_and_order_is_stable() {
         let mods = [
             candidate(
-                "survivors",
+                "you.market-stalls",
                 "0.1.0",
                 Side::BOTH,
                 &[("zones", "^0.1", Relation::REQUIRES)],
@@ -384,12 +384,12 @@ mod tests {
                 Side::BOTH,
                 &[
                     ("post", ">=0.1, <1.0", Relation::REQUIRES),
-                    ("safes", ">=0.5", Relation::RECOMMENDS),
+                    ("you.trading-post", ">=0.5", Relation::RECOMMENDS),
                     ("zones", "<0.3", Relation::BREAKS),
                 ],
             ),
             candidate("post", "0.0.0-dev", Side::BOTH, &[]),
-            candidate("safes", "0.0.0-dev", Side::BOTH, &[]),
+            candidate("you.trading-post", "0.0.0-dev", Side::BOTH, &[]),
             candidate("zones", "0.0.0-dev", Side::BOTH, &[]),
         ];
         let plan = resolve(&mods, Side::SERVER);
@@ -411,7 +411,7 @@ mod tests {
     fn a_missing_or_old_requirement_skips_only_its_dependents() {
         let mods = [
             candidate(
-                "survivors",
+                "you.market-stalls",
                 "0.1.0",
                 Side::BOTH,
                 &[("zones", "^0.2", Relation::REQUIRES)],
@@ -421,7 +421,7 @@ mod tests {
                 "extra",
                 "1.0.0",
                 Side::BOTH,
-                &[("survivors", "", Relation::REQUIRES)],
+                &[("you.market-stalls", "", Relation::REQUIRES)],
             ),
         ];
         let plan = resolve(&mods, Side::SERVER);
@@ -432,7 +432,7 @@ mod tests {
         );
         assert_eq!(
             plan.skipped[1],
-            (2, "requires survivors, which is not loaded".into())
+            (2, "requires you.market-stalls, which is not loaded".into())
         );
     }
 
@@ -499,18 +499,18 @@ mod tests {
     fn a_renamed_mod_replaces_its_old_id() {
         let mods = [
             candidate(
-                "optimizer",
+                "you.market-stalls",
                 "0.2.0",
                 Side::BOTH,
-                &[("proton-optimizer", "", Relation::REPLACES)],
+                &[("you.stalls", "", Relation::REPLACES)],
             ),
-            candidate("proton-optimizer", "0.1.0", Side::BOTH, &[]),
-            candidate("proton-optimizer", "0.1.1", Side::BOTH, &[]),
+            candidate("you.stalls", "0.1.0", Side::BOTH, &[]),
+            candidate("you.stalls", "0.1.1", Side::BOTH, &[]),
             candidate(
                 "uses-old",
                 "1.0.0",
                 Side::BOTH,
-                &[("proton-optimizer", "", Relation::REQUIRES)],
+                &[("you.stalls", "", Relation::REQUIRES)],
             ),
         ];
         let plan = resolve(&mods, Side::SERVER);
@@ -519,9 +519,9 @@ mod tests {
         assert_eq!(
             plan.skipped,
             [
-                (1, "replaced by optimizer".into()),
-                (2, "replaced by optimizer".into()),
-                (3, "requires proton-optimizer, which is not loaded".into()),
+                (1, "replaced by you.market-stalls".into()),
+                (2, "replaced by you.market-stalls".into()),
+                (3, "requires you.stalls, which is not loaded".into()),
             ]
         );
         // Alone, the old id loads.
@@ -534,26 +534,23 @@ mod tests {
     fn a_former_id_is_replaced_and_answers_for_the_renamed_mod() {
         let mods = [
             candidate(
-                "enshwick.more-altars",
+                "you.lanterns",
                 "0.3.0",
                 Side::BOTH,
-                &[("flame-altar-count", "", Relation::WAS)],
+                &[("you.lamps", "", Relation::WAS)],
             ),
-            candidate("flame-altar-count", "0.2.0", Side::BOTH, &[]),
+            candidate("you.lamps", "0.2.0", Side::BOTH, &[]),
             candidate(
                 "uses-old",
                 "1.0.0",
                 Side::BOTH,
-                &[("flame-altar-count", ">=0.2", Relation::REQUIRES)],
+                &[("you.lamps", ">=0.2", Relation::REQUIRES)],
             ),
         ];
         let plan = resolve(&mods, Side::SERVER);
         assert_eq!(plan.order, [0, 2]);
         assert_eq!(plan.replaced, [(1, 0)]);
-        assert_eq!(
-            plan.skipped,
-            [(1, "replaced by enshwick.more-altars".into())]
-        );
+        assert_eq!(plan.skipped, [(1, "replaced by you.lanterns".into())]);
         // Without the old DLL the requirement still finds the renamed mod.
         let plan = resolve(&[mods[0].clone(), mods[2].clone()], Side::SERVER);
         assert_eq!(plan.order, [0, 1]);
@@ -663,18 +660,8 @@ mod tests {
     fn a_renamed_file_with_the_same_version_runs_when_it_is_newer() {
         let dev: Version = "0.0.0-dev".parse().unwrap();
         let files = [
-            installed(
-                "flame-altar-count",
-                &dev,
-                at(100),
-                "enshwick-flame-altar-count.dll",
-            ),
-            installed(
-                "flame-altar-count",
-                &dev,
-                at(200),
-                "enshwick-more-altars.dll",
-            ),
+            installed("you.lanterns", &dev, at(100), "lanterns.dll"),
+            installed("you.lanterns", &dev, at(200), "lanterns-renamed.dll"),
         ];
         assert_eq!(duplicates(&files), [(0, 1)]);
     }

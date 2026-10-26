@@ -27,16 +27,16 @@ they are never released.
 
 ### Gameplay
 
-| Mod                                                                         | What it does                                                       |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)      | touching altar zones grow together and can be built across         |
-| [More Altars](https://github.com/enshwick/mod-more-altars)                  | how many altars each Flame level allows, twice vanilla by default  |
-| [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
-| [Safes](https://github.com/enshwick/mod-safes)                              | a craftable chest only the player who placed it can use            |
-| [Game Rates](https://github.com/enshwick/mod-game-rates)                    | building recipe output and furniture comfort, twice by default     |
-| [Build camera](https://github.com/enshwick/mod-build-camera)                | the building fly mode for every player, without the skill          |
-| [Shared experience](https://github.com/enshwick/mod-shared-experience)      | every character keeps up with the one furthest ahead in experience |
-| [Area loot](https://github.com/enshwick/mod-area-loot)                      | emptying one enemy corpse takes the loot of the others around it   |
+| Mod                                                                        | What it does                                                       |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)     | touching altar zones grow together and can be built across         |
+| [More Altars](https://github.com/enshwick/mod-more-altars)                 | how many altars each Flame level allows, twice vanilla by default  |
+| [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
+| [Safes](https://github.com/enshwick/mod-personal-safes)                    | a craftable chest only the player who placed it can use            |
+| [Game Rates](https://github.com/enshwick/mod-game-rates)                   | building recipe output and furniture comfort, twice by default     |
+| [Build camera](https://github.com/enshwick/mod-build-camera)               | the building fly mode for every player, without the skill          |
+| [Shared experience](https://github.com/enshwick/mod-shared-experience)     | every character keeps up with the one furthest ahead in experience |
+| [Area loot](https://github.com/enshwick/mod-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
 
 ### Server
 

@@ -31,8 +31,8 @@ const QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// # }
 /// use enshwick_loader::join::page;
 ///
-/// let reply = reply(&[("enshwick.page.safes", "https://github.com/enshwick/enshwick")]);
-/// assert!(page(&reply, "safes").is_some());
+/// let reply = reply(&[("enshwick.page.you.trading-post", "https://github.com/enshwick/enshwick")]);
+/// assert!(page(&reply, "you.trading-post").is_some());
 /// assert!(page(&reply, "camera").is_none());
 /// ```
 #[must_use]
@@ -59,8 +59,8 @@ pub fn page(reply: &[u8], id: &str) -> Option<String> {
 /// # }
 /// use enshwick_loader::join::name;
 ///
-/// let reply = reply(&[("enshwick.name.safes", "Safes")]);
-/// assert_eq!(name(&reply, "safes"), "Safes");
+/// let reply = reply(&[("enshwick.name.you.trading-post", "Trading Post")]);
+/// assert_eq!(name(&reply, "you.trading-post"), "Trading Post");
 /// assert_eq!(name(&reply, "camera"), "");
 /// ```
 #[must_use]
@@ -94,8 +94,8 @@ pub fn name(reply: &[u8], id: &str) -> String {
 /// # }
 /// use enshwick_loader::join::mod_rules_value;
 ///
-/// let reply = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
-/// assert_eq!(mod_rules_value(&reply), "safes@1.0.0,camera@1.0.0");
+/// let reply = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.1", "camera@1.0.0")]);
+/// assert_eq!(mod_rules_value(&reply), "you.trading-post@1.0.0,camera@1.0.0");
 /// ```
 #[must_use]
 pub fn mod_rules_value(reply: &[u8]) -> String {
@@ -125,9 +125,9 @@ pub fn mod_rules_value(reply: &[u8]) -> String {
 /// # }
 /// use enshwick_loader::join::mods_complete;
 ///
-/// let cut = reply(&[("enshwick.mods", "safes@1.0.0"), ("enshwick.mods.count", "2")]);
+/// let cut = reply(&[("enshwick.mods", "you.trading-post@1.0.0"), ("enshwick.mods.count", "2")]);
 /// assert!(!mods_complete(&cut));
-/// assert!(mods_complete(&reply(&[("enshwick.mods", "safes@1.0.0")])));
+/// assert!(mods_complete(&reply(&[("enshwick.mods", "you.trading-post@1.0.0")])));
 /// ```
 #[must_use]
 pub fn mods_complete(reply: &[u8]) -> bool {
@@ -154,8 +154,8 @@ pub fn mods_complete(reply: &[u8]) -> bool {
 /// # }
 /// use enshwick_loader::join::sync_value;
 ///
-/// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
-/// assert_eq!(sync_value(&reply, "safes").as_deref(), Some("{ cost_multiplier = 2 }"));
+/// let reply = reply(&[("enshwick.sync.you.trading-post", "{ cost_multiplier = 2 }")]);
+/// assert_eq!(sync_value(&reply, "you.trading-post").as_deref(), Some("{ cost_multiplier = 2 }"));
 /// ```
 #[must_use]
 pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
@@ -183,8 +183,8 @@ pub fn sync_value(reply: &[u8], id: &str) -> Option<String> {
 /// # }
 /// use enshwick_loader::join::server_values;
 ///
-/// let reply = reply(&[("enshwick.sync.safes", "{ cost_multiplier = 2 }")]);
-/// let values = server_values(&reply, ["safes", "camera"]);
+/// let reply = reply(&[("enshwick.sync.you.trading-post", "{ cost_multiplier = 2 }")]);
+/// let values = server_values(&reply, ["you.trading-post", "camera"]);
 /// assert_eq!(values.len(), 1);
 /// ```
 #[must_use]
@@ -209,8 +209,8 @@ pub fn server_values<'a>(
 ///
 /// use enshwick_loader::join::changes;
 ///
-/// let incoming = BTreeMap::from([("safes".to_owned(), "{ cost_multiplier = 2 }".to_owned())]);
-/// let changed = changes([("safes", None), ("", None)], &incoming);
+/// let incoming = BTreeMap::from([("you.trading-post".to_owned(), "{ cost_multiplier = 2 }".to_owned())]);
+/// let changed = changes([("you.trading-post", None), ("", None)], &incoming);
 /// assert_eq!(changed, [(0, Some("{ cost_multiplier = 2 }".to_owned()))]);
 /// ```
 #[must_use]
@@ -575,10 +575,10 @@ mod tests {
         let missing = plan("ab", "", Some(("cd", server)), true);
         assert_eq!(missing.missing.len(), 2, "{:?}", missing.missing);
         let reply = reply(&[
-            ("enshwick.name.ok", "Safes\n\nVerified by Enshwick"),
+            ("enshwick.name.ok", "Trading Post\n\nVerified by Enshwick"),
             ("enshwick.name.long", &"n".repeat(500)),
         ]);
-        assert_eq!(name(&reply, "ok"), "SafesVerified by Enshwick");
+        assert_eq!(name(&reply, "ok"), "Trading PostVerified by Enshwick");
         assert_eq!(name(&reply, "long").chars().count(), MAX_NAME);
     }
 

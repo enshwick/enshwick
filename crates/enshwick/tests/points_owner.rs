@@ -9,7 +9,7 @@ mod tests {
     use enshwick::points::{Decision, OwnedPoint, Verdict};
     use enshwick::{Load, Mod, Off};
 
-    #[enshwick::point(name = "you.probe:limit", mode = Override, output = u32, refusable)]
+    #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32, refusable)]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Limit {
         pub(crate) level: u32,
@@ -17,7 +17,7 @@ mod tests {
 
     /// The same point with a changed input field.
     mod changed {
-        #[enshwick::point(name = "you.probe:limit", mode = Override, output = u32, refusable)]
+        #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32, refusable)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Limit {
             pub(crate) level: u64,
@@ -26,7 +26,7 @@ mod tests {
 
     /// The same point declared with another answer.
     mod other_answer {
-        #[enshwick::point(name = "you.probe:limit", mode = Override, output = u16, refusable)]
+        #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u16, refusable)]
         #[derive(Clone, Copy, Debug)]
         pub(crate) struct Limit {
             pub(crate) level: u32,
@@ -44,7 +44,7 @@ mod tests {
 
     impl Mod for Probe {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.probe", side: SERVER)
+            enshwick::manifest!(id: "you.my-mod", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -63,7 +63,7 @@ mod tests {
         // SAFETY: the exports of `declare_mod!` above.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        assert_eq!(loader.defined_points(), ["you.probe:limit"]);
+        assert_eq!(loader.defined_points(), ["you.my-mod:limit"]);
         loader
     }
 

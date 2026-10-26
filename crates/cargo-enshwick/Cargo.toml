@@ -12,6 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
+anyhow.workspace = true
 clap = { workspace = true }
 enshwick = { workspace = true, features = ["schema"] }
 enshwick-gamedata.workspace = true

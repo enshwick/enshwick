@@ -35,6 +35,7 @@
 
 use crate::abi::{Header, SpawnRequest, TeleportRequest};
 use crate::ecs::Entity;
+use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
@@ -175,7 +176,7 @@ impl Spawn {
     }
 }
 
-/// The fields of a `keen::WorldTransform` inside an event.
+/// The fields of a world transform inside an event.
 #[derive(Clone, Copy, Debug)]
 struct TransformAt {
     position: u64,
@@ -257,44 +258,44 @@ impl Effects {
         let host = load.host();
         let transform = |base: u64| -> Result<TransformAt, Off> {
             Ok(TransformAt {
-                position: base + load.field_offset("keen::WorldTransform", "position")?,
-                orientation: base + load.field_offset("keen::WorldTransform", "orientation")?,
-                scale: base + load.field_offset("keen::WorldTransform", "scale")?,
+                position: base + load.constant(ids::WORLD_TRANSFORM_POSITION)?,
+                orientation: base + load.constant(ids::WORLD_TRANSFORM_ORIENTATION)?,
+                scale: base + load.constant(ids::WORLD_TRANSFORM_SCALE)?,
             })
         };
         let npc = (|| {
-            let ty = load.event_type("keen::ecs::NpcCommandEvent")?;
+            let ty = load.event_type(ids::NPC_COMMAND_EVENT)?;
             Ok::<_, Off>(NpcCommand {
                 ty,
-                kind: ty.field(load, "type")?,
-                npc: ty.field(load, "npcId")?,
-                target: transform(load.field_offset(ty.name(), "targetTransform")?)?,
+                kind: ty.field_by_id(load, ids::NPC_COMMAND_KIND)?,
+                npc: ty.field_by_id(load, ids::NPC_COMMAND_NPC)?,
+                target: transform(load.constant(ids::NPC_COMMAND_TARGET)?)?,
             })
         })();
         let toggle = (|| {
-            let ty = load.event_type("keen::ecs::SetToggleStateEvent")?;
+            let ty = load.event_type(ids::SET_TOGGLE_STATE_EVENT)?;
             Ok::<_, Off>(SetToggle {
                 ty,
-                sender: ty.field(load, "senderId")?,
-                signal: ty.field(load, "signalId")?,
-                state: ty.field(load, "newState")?,
+                sender: ty.field_by_id(load, ids::SET_TOGGLE_SENDER)?,
+                signal: ty.field_by_id(load, ids::SET_TOGGLE_SIGNAL)?,
+                state: ty.field_by_id(load, ids::SET_TOGGLE_STATE)?,
             })
         })();
         let threat = (|| {
-            let ty = load.event_type("keen::ecs::AddThreatTargetEvent")?;
+            let ty = load.event_type(ids::ADD_THREAT_TARGET_EVENT)?;
             Ok::<_, Off>(AddThreat {
                 ty,
-                attacker: ty.field(load, "attackerId")?,
-                target: ty.field(load, "targetId")?,
-                threat: ty.field(load, "threatValue")?,
+                attacker: ty.field_by_id(load, ids::ADD_THREAT_ATTACKER)?,
+                target: ty.field_by_id(load, ids::ADD_THREAT_TARGET)?,
+                threat: ty.field_by_id(load, ids::ADD_THREAT_THREAT)?,
             })
         })();
         let ping = (|| {
-            let ty = load.event_type("keen::ecs::UiPingEvent")?;
+            let ty = load.event_type(ids::UI_PING_EVENT)?;
             Ok::<_, Off>(Ping {
                 ty,
-                sender: ty.field(load, "senderEntityId")?,
-                position: load.field_offset(ty.name(), "position")?,
+                sender: ty.field_by_id(load, ids::UI_PING_SENDER)?,
+                position: load.constant(ids::UI_PING_POSITION)?,
             })
         })();
         Self {

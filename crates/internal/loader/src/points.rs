@@ -780,10 +780,10 @@ mod tests {
 
     fn loaded() -> Loaded {
         Loaded(vec![
-            ("safes", "0.3.0", false),
-            ("safe-viewers", "0.1.0", false),
-            ("safe-rules", "0.1.0", false),
-            ("safe-locks", "0.1.0", false),
+            ("you.trading-post", "0.3.0", false),
+            ("you.haggling", "0.1.0", false),
+            ("you.discounts", "0.1.0", false),
+            ("you.lockers", "0.1.0", false),
         ])
     }
 
@@ -797,7 +797,7 @@ mod tests {
 
     fn access() -> Declared {
         Declared {
-            name: "safes:access".to_owned(),
+            name: "you.trading-post:price".to_owned(),
             input: fields(&["player", "owner"]),
             output: fields(&["output"]),
             mode: PointMode::OVERRIDE,
@@ -856,15 +856,18 @@ mod tests {
     }
 
     fn defined(registry: &mut Registry) -> &'static AtomicU32 {
-        registry.define(0, &["safes"], access()).unwrap().1
+        registry
+            .define(0, &["you.trading-post"], access())
+            .unwrap()
+            .1
     }
 
-    /// A mod renamed from `safes`, and a mod that links it by that id.
+    /// A mod renamed from `you.trading-post`, and a mod that links it by that id.
     struct Renamed;
 
     impl Names for Renamed {
         fn name(&self, index: usize) -> (&str, &str) {
-            [("me.safes", "0.4.0"), ("safe-viewers", "0.1.0")]
+            [("me.trading-post", "0.4.0"), ("you.haggling", "0.1.0")]
                 .get(index)
                 .copied()
                 .unwrap_or(("?", "?"))
@@ -877,8 +880,8 @@ mod tests {
     impl Mods for Renamed {
         fn find(&self, id: &str) -> Option<usize> {
             match id {
-                "me.safes" | "safes" => Some(0),
-                "safe-viewers" => Some(1),
+                "me.trading-post" | "you.trading-post" => Some(0),
+                "you.haggling" => Some(1),
                 _ => None,
             }
         }
@@ -888,10 +891,10 @@ mod tests {
     fn a_link_named_by_a_former_id_finds_the_renamed_owner() {
         let mut registry = Registry::default();
         let declared = Declared {
-            name: "me.safes:access".to_owned(),
+            name: "me.trading-post:price".to_owned(),
             ..access()
         };
-        registry.define(0, &["me.safes"], declared).unwrap();
+        registry.define(0, &["me.trading-post"], declared).unwrap();
         registry.attach(link(1, set(7))).unwrap();
         let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
         assert!(inert.is_empty(), "{inert:?}");
@@ -901,18 +904,21 @@ mod tests {
     #[test]
     fn points_are_named_after_their_owner_once() {
         let mut registry = Registry::default();
-        assert!(registry.define(0, &["safes"], access()).is_ok());
-        assert!(registry.define(0, &["safes"], access()).is_err(), "twice");
+        assert!(registry.define(0, &["you.trading-post"], access()).is_ok());
+        assert!(
+            registry.define(0, &["you.trading-post"], access()).is_err(),
+            "twice"
+        );
         let foreign = Declared {
-            name: "area-loot:eligible".to_owned(),
+            name: "you.lanterns:lit".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, &["safes"], foreign).is_err());
+        assert!(registry.define(0, &["you.trading-post"], foreign).is_err());
         let empty = Declared {
-            name: "safes:".to_owned(),
+            name: "you.trading-post:".to_owned(),
             ..access()
         };
-        assert!(registry.define(0, &["safes"], empty).is_err());
+        assert!(registry.define(0, &["you.trading-post"], empty).is_err());
         assert!(registry.attach(link(1, 0)).is_ok());
         assert!(registry.attach(link(1, 0)).is_err(), "a mod links once");
     }
@@ -922,9 +928,9 @@ mod tests {
         let mut registry = Registry::default();
         let live = defined(&mut registry);
         let mut first = link(3, set(30));
-        first.before = vec!["safe-viewers".to_owned()];
+        first.before = vec!["you.haggling".to_owned()];
         let mut last = link(2, set(20));
-        last.after = vec!["safe-viewers".to_owned()];
+        last.after = vec!["you.haggling".to_owned()];
         last.priority = -5;
         assert!(registry.attach(last).is_ok());
         assert!(registry.attach(link(1, set(10))).is_ok());
@@ -951,7 +957,7 @@ mod tests {
         assert!(registry.attach(early).is_ok());
         let (points, _) = seal(&mut registry);
         let order: Vec<usize> = points[0].links.iter().map(|l| l.owner).collect();
-        // safe-locks first by priority, then safe-rules < safe-viewers by id.
+        // you.lockers first by priority, then you.discounts < you.haggling by id.
         assert_eq!(order, [3, 2, 1]);
     }
 
@@ -975,7 +981,11 @@ mod tests {
             refuse: false,
             ..access()
         };
-        assert!(registry.define(0, &["safes"], plain.clone()).is_ok());
+        assert!(
+            registry
+                .define(0, &["you.trading-post"], plain.clone())
+                .is_ok()
+        );
         let mut refuses = link(1, PointVerdict::REFUSE.0 as usize);
         refuses.declared = plain.clone();
         let mut sets = link(2, set(4));
@@ -994,7 +1004,11 @@ mod tests {
             refuse: false,
             ..access()
         };
-        assert!(registry.define(0, &["safes"], observed.clone()).is_ok());
+        assert!(
+            registry
+                .define(0, &["you.trading-post"], observed.clone())
+                .is_ok()
+        );
         let mut watcher = link(1, PointVerdict::REFUSE.0 as usize);
         watcher.declared = observed;
         assert!(registry.attach(watcher).is_ok());
@@ -1022,7 +1036,7 @@ mod tests {
             |_, link| told.set(told.get() + link.owner),
         );
         assert_eq!((verdict, value), (PointVerdict::SET, 5));
-        assert_eq!(told.get(), 1, "told once, of safe-viewers");
+        assert_eq!(told.get(), 1, "told once, of you.haggling");
         assert!(!points[0].links[0].is_on());
         assert_eq!(live.load(Ordering::Relaxed), 1);
         assert_eq!(ask(&points[0], 1), (PointVerdict::SET, 5));
@@ -1055,7 +1069,7 @@ mod tests {
         assert!(registry.attach(link(1, set(5))).is_ok());
         assert!(registry.attach(link(2, set(6))).is_ok());
         let (points, inert, _) = registry.seal(&loaded(), |id, point| {
-            id == "safe-viewers" && point == "safes:access"
+            id == "you.haggling" && point == "you.trading-post:price"
         });
         points[0].arm(|_| false);
         assert_eq!(live.load(Ordering::Relaxed), 1);
@@ -1071,7 +1085,7 @@ mod tests {
         let mut registry = Registry::default();
         defined(&mut registry);
         let mut newer = link(1, 0);
-        newer.declared.input = fields(&["player", "owner", "safe"]);
+        newer.declared.input = fields(&["player", "owner", "stall"]);
         let mut changed = link(2, 0);
         changed.declared.input = vec![("player".to_owned(), 1), ("owner".to_owned(), 99)];
         let mut other_answer = link(3, 0);
@@ -1083,7 +1097,7 @@ mod tests {
         assert!(points[0].links.is_empty());
         let reasons: Vec<&str> = inert.iter().map(|n| n.reason.as_str()).collect();
         assert!(
-            reasons[0].contains("`safe`") && reasons[0].ends_with("update safes"),
+            reasons[0].contains("`stall`") && reasons[0].ends_with("update you.trading-post"),
             "{}",
             reasons[0]
         );
@@ -1112,25 +1126,25 @@ mod tests {
     fn a_missing_owner_leaves_the_link_inert_without_a_warning() {
         let mut registry = Registry::default();
         let mut gone = link(1, 0);
-        gone.declared.name = "area-loot:eligible".to_owned();
+        gone.declared.name = "you.lanterns:lit".to_owned();
         let mut old = link(2, 0);
-        old.declared.name = "safes:open".to_owned();
+        old.declared.name = "you.trading-post:open".to_owned();
         assert!(registry.attach(gone).is_ok());
         assert!(registry.attach(old).is_ok());
         let (points, inert) = seal(&mut registry);
         assert!(points.is_empty());
-        assert_eq!(inert[0].reason, "area-loot does not run");
+        assert_eq!(inert[0].reason, "you.lanterns does not run");
         assert_eq!(inert[0].level, Level::INFO);
         assert!(inert[1].reason.contains("defines no such point"));
         assert_eq!(inert[1].level, Level::WARN);
         let mut off = loaded();
         off.0[0].2 = true;
         let mut registry = Registry::default();
-        assert!(registry.define(0, &["safes"], access()).is_ok());
+        assert!(registry.define(0, &["you.trading-post"], access()).is_ok());
         assert!(registry.attach(link(1, 0)).is_ok());
         let (points, inert, _) = registry.seal(&off, |_, _| false);
         assert!(points[0].links.is_empty());
-        assert_eq!(inert[0].reason, "safes 0.3.0 is off");
+        assert_eq!(inert[0].reason, "you.trading-post 0.3.0 is off");
     }
 
     #[test]
@@ -1140,28 +1154,31 @@ mod tests {
         assert!(registry.attach(link(2, set(1))).is_ok());
         assert!(registry.attach(link(1, set(0))).is_ok());
         let mut gone = link(3, 0);
-        gone.declared.name = "area-loot:eligible".to_owned();
+        gone.declared.name = "you.lanterns:lit".to_owned();
         assert!(registry.attach(gone).is_ok());
         let (points, inert) = seal(&mut registry);
         let _ = ask(&points[0], 1);
         assert_eq!(
             super::conflict_lines(&points, &loaded()),
             [
-                "point safes:access: safe-rules then safe-viewers, each may change the answer; safe-viewers changed the answer safe-rules had set, once"
+                "point you.trading-post:price: you.discounts then you.haggling, each may change the answer; you.haggling changed the answer you.discounts had set, once"
             ]
         );
         let (defines, extends) = super::screen_lines(&points, &inert, 0, &loaded());
-        assert_eq!(defines, ["safes:access (safe-rules, safe-viewers)"]);
+        assert_eq!(
+            defines,
+            ["you.trading-post:price (you.discounts, you.haggling)"]
+        );
         assert!(extends.is_empty());
         let (_, extends) = super::screen_lines(&points, &inert, 3, &loaded());
-        assert_eq!(extends, ["area-loot:eligible (off)"]);
+        assert_eq!(extends, ["you.lanterns:lit (off)"]);
         let mut off = loaded();
         off.0[1].2 = true;
         assert!(super::conflict_lines(&points, &off).is_empty());
         let (defines, _) = super::screen_lines(&points, &inert, 0, &off);
-        assert_eq!(defines, ["safes:access (safe-rules)"]);
+        assert_eq!(defines, ["you.trading-post:price (you.discounts)"]);
         let (_, extends) = super::screen_lines(&points, &inert, 1, &off);
-        assert_eq!(extends, ["safes:access (off)"]);
+        assert_eq!(extends, ["you.trading-post:price (off)"]);
     }
 
     #[test]
@@ -1170,19 +1187,22 @@ mod tests {
         defined(&mut registry);
         assert!(registry.attach(link(1, 0)).is_ok());
         let (_, inert, _) = registry.seal(&loaded(), |id, point| {
-            id == "safe-viewers" && point == "safes:access"
+            id == "you.haggling" && point == "you.trading-post:price"
         });
         let entries = [
-            ("safe-viewers", "safes:access"),
-            ("safe-viewers", "safes:gate"),
-            ("safes", "safes:access"),
-            ("not-installed", "safes:access"),
+            ("you.haggling", "you.trading-post:price"),
+            ("you.haggling", "you.trading-post:gate"),
+            ("you.trading-post", "you.trading-post:price"),
+            ("not-installed", "you.trading-post:price"),
         ]
         .map(|(id, point)| (id.to_owned(), point.to_owned()));
         let unmatched: Vec<_> = super::unmatched_links_off(&entries, &inert, &loaded()).collect();
         assert_eq!(
             unmatched,
-            [("safe-viewers", "safes:gate"), ("safes", "safes:access")]
+            [
+                ("you.haggling", "you.trading-post:gate"),
+                ("you.trading-post", "you.trading-post:price")
+            ]
         );
     }
 
@@ -1191,9 +1211,9 @@ mod tests {
         let mut registry = Registry::default();
         defined(&mut registry);
         let mut a = link(1, 0);
-        a.after = vec!["safe-rules".to_owned()];
+        a.after = vec!["you.discounts".to_owned()];
         let mut b = link(2, 0);
-        b.after = vec!["safe-viewers".to_owned()];
+        b.after = vec!["you.haggling".to_owned()];
         assert!(registry.attach(a).is_ok());
         assert!(registry.attach(b).is_ok());
         let (points, inert, cycles) = registry.seal(&loaded(), |_, _| false);

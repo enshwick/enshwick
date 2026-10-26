@@ -196,7 +196,7 @@ static TYPE_HASHES: OnceLock<Option<[u32; 2]>> = OnceLock::new();
 static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-/// Each copy's survivor id, row order and status, and one survivor's statuses.
+/// Each entity's survivor id, row order and status, and one survivor's statuses.
 type StatusRows = (Vec<(u32, u32, u8)>, Vec<u8>);
 
 thread_local! {
