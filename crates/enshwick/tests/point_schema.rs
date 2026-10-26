@@ -122,3 +122,39 @@ mod tests {
         assert_eq!(generated::Deal::SELL.0, Deal::SELL.0);
     }
 }
+
+/// A limit, with an example that only compiles in its owner.
+///
+/// # Examples
+///
+/// ```
+/// let limit = 4;
+/// ```
+#[enshwick::point(name = "you.stalls:limit", mode = Observe, output = u32)]
+#[derive(Clone, Copy, Debug)]
+pub struct Limit {
+    /// The level.
+    ///
+    /// # Panics
+    ///
+    /// Never.
+    pub level: u32,
+}
+
+#[cfg(test)]
+mod docs {
+    use enshwick::points::Point;
+
+    #[test]
+    fn a_schema_s_docs_stop_before_the_first_heading() {
+        let schema = <super::Limit as Point>::SCHEMA;
+        assert!(
+            schema.contains("doc = \"A limit, with an example that only compiles in its owner.\"")
+        );
+        assert!(schema.contains("doc = \"The level.\""));
+        assert!(
+            !schema.contains("Examples") && !schema.contains("Panics"),
+            "{schema}"
+        );
+    }
+}
