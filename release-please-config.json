@@ -99,10 +99,6 @@
       "package-name": "enshwick-loader-stub",
       "component": "enshwick-loader-stub"
     },
-    "mods/enshwick-flame-altar-zones": {
-      "package-name": "enshwick-flame-altar-zones",
-      "component": "enshwick-flame-altar-zones"
-    },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"
