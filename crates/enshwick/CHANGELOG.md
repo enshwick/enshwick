@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `ContainerKinds`, `ItemCategoryMask` and the event masks have a
+  `const fn union`, so a combined set can be a `const`; `|` gives the same.
+
 ### Changed
 
 - `World` is one pointer to what the mod resolved once, instead of 320
