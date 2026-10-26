@@ -5,6 +5,8 @@ name: ci
 
 on:
   pull_request:
+  # The merge queue checks each group of pull requests on top of main.
+  merge_group:
   schedule:
     - cron: "17 2 * * *"
   workflow_dispatch:
