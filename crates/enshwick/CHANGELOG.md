@@ -9,7 +9,8 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `ContainerKinds`, `ItemCategoryMask` and the event masks have a
-  `const fn union`, so a combined set can be a `const`; `|` gives the same.
+  `const fn union`, so a combined set can be a `const`; `|` gives the same
+  (#539).
 
 ### Changed
 
