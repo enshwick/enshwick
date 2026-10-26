@@ -286,6 +286,11 @@ fn build(sources: &[Source]) -> Result<PathBuf, String> {
     } else {
         vec!["xwin".to_owned(), "build".to_owned()]
     };
+    // CI's dev builds embed the dependency tree in each DLL, for
+    // `cargo audit bin` and other scanners.
+    if std::env::var_os("ENSHWICK_AUDITABLE").is_some_and(|value| value == "1") {
+        args.insert(0, "auditable".to_owned());
+    }
     args.extend(
         ["--release", "--locked", "--target", WINDOWS_TARGET]
             .iter()
