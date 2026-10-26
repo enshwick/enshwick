@@ -99,22 +99,6 @@
       "package-name": "enshwick-loader-stub",
       "component": "enshwick-loader-stub"
     },
-    "mods/enshwick-flame-altar-count": {
-      "package-name": "enshwick-flame-altar-count",
-      "component": "enshwick-flame-altar-count"
-    },
-    "mods/enshwick-flame-altar-zones": {
-      "package-name": "enshwick-flame-altar-zones",
-      "component": "enshwick-flame-altar-zones"
-    },
-    "mods/enshwick-survivors-per-altar": {
-      "package-name": "enshwick-survivors-per-altar",
-      "component": "enshwick-survivors-per-altar"
-    },
-    "mods/enshwick-furniture-comfort": {
-      "package-name": "enshwick-furniture-comfort",
-      "component": "enshwick-furniture-comfort"
-    },
     "crates/enshwick-macros": {
       "package-name": "enshwick-macros",
       "component": "enshwick-macros"
@@ -126,26 +110,6 @@
     "crates/enshwick-gamedata": {
       "package-name": "enshwick-gamedata",
       "component": "enshwick-gamedata"
-    },
-    "mods/enshwick-safes": {
-      "package-name": "enshwick-safes",
-      "component": "enshwick-safes"
-    },
-    "mods/enshwick-area-loot": {
-      "package-name": "enshwick-area-loot",
-      "component": "enshwick-area-loot"
-    },
-    "mods/enshwick-build-camera": {
-      "package-name": "enshwick-build-camera",
-      "component": "enshwick-build-camera"
-    },
-    "mods/enshwick-shared-experience": {
-      "package-name": "enshwick-shared-experience",
-      "component": "enshwick-shared-experience"
-    },
-    "mods/enshwick-admin-tools": {
-      "package-name": "enshwick-admin-tools",
-      "component": "enshwick-admin-tools"
     }
   }
 }

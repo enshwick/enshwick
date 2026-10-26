@@ -11,7 +11,7 @@ can switch one link off without the mod, and the Mods screen and the
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
 folder holds the mod this chapter follows: `safe-viewers` extends the
-[Safes](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+[Safes](https://github.com/enshwick/mod-safes)
 mod's access rule. Players listed as viewers may open every Safe, and with
 `owner_removes_only` nobody but a Safe's owner removes it, administrators
 included.

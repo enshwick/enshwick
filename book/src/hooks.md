@@ -245,7 +245,7 @@ fn raise(next: enshwick::Next<extern "system" fn(u32) -> u32>, level: u32) -> u3
 
 A panic is a last resort, not error handling. A hook that can fail returns to
 vanilla on its own, as
-[`enshwick-area-loot`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-area-loot/src/take.rs)
+[`enshwick-area-loot`](https://github.com/enshwick/mod-area-loot/blob/main/src/take.rs)
 does with its `OFF` flag.
 
 ## One function, both halves of a mod

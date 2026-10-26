@@ -119,7 +119,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-[`enshwick-safes`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-safes/src/lib.rs)
+[`enshwick-safes`](https://github.com/enshwick/mod-safes/blob/main/src/lib.rs)
 gets the `InventorySetup` type this way to find the world's Safes.
 
 ### Positions
@@ -154,7 +154,7 @@ the same row, both from the query's words. Mark the component changed with
 
 For experience, `Load::on_experience` does this work and hands the mod each
 character's row (see [Progress](progress.md)), as
-[`enshwick-shared-experience`](https://github.com/enshwick/enshwick/blob/main/mods/enshwick-shared-experience/src/lib.rs)
+[`enshwick-shared-experience`](https://github.com/enshwick/mod-shared-experience/blob/main/src/lib.rs)
 uses it.
 
 ## Which world: `Worlds`

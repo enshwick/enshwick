@@ -78,7 +78,11 @@ pub(crate) fn run(args: &[String]) -> Result<bool, String> {
             .ok_or_else(|| format!("{package} builds no library"))
     };
     let sources = plan(&listed, &workspace, |repository| {
-        !local && has_dev_release(repository)
+        if local {
+            Ok(false)
+        } else {
+            has_dev_release(repository)
+        }
     })?;
     for source in &sources {
         match source {
@@ -235,11 +239,12 @@ fn release_dir_of() -> PathBuf {
 
 /// Where each listed mod comes from: its repository's `dev` prerelease
 /// where `has_dev` says there is one, else this workspace. A listed mod
-/// with neither, or a workspace mod the list lacks, is an error.
+/// with neither, a workspace mod the list lacks, or a failed lookup is an
+/// error.
 fn plan(
     listed: &[Listed],
     workspace: &BTreeMap<String, String>,
-    has_dev: impl Fn(&str) -> bool,
+    has_dev: impl Fn(&str) -> Result<bool, String>,
 ) -> Result<Vec<Source>, String> {
     let names: BTreeSet<&str> = listed.iter().map(|l| l.package.as_str()).collect();
     let unlisted: Vec<&str> = workspace
@@ -253,7 +258,7 @@ fn plan(
     listed
         .iter()
         .map(|l| {
-            if has_dev(&l.repository) {
+            if has_dev(&l.repository)? {
                 Ok(Source::Released {
                     package: l.package.clone(),
                     repository: l.repository.clone(),
@@ -304,13 +309,26 @@ fn build(sources: &[Source]) -> Result<PathBuf, String> {
     Ok(release_dir_of())
 }
 
-fn has_dev_release(repository: &str) -> bool {
-    Command::new("gh")
+/// Whether `repository` has a `dev` prerelease; an error when gh cannot
+/// tell, as when it is missing or not logged in, rather than a mod built
+/// here in place of its released one.
+fn has_dev_release(repository: &str) -> Result<bool, String> {
+    /// gh's exit code when it needs a login.
+    const NOT_LOGGED_IN: i32 = 4;
+    let output = Command::new("gh")
         .args([
             "release", "view", "dev", "--repo", repository, "--json", "tagName",
         ])
         .output()
-        .is_ok_and(|output| output.status.success())
+        .map_err(|error| {
+            format!("running gh, which looks for the mods' dev prereleases: {error}; --local builds every mod here")
+        })?;
+    if output.status.code() == Some(NOT_LOGGED_IN) {
+        return Err(format!(
+            "gh needs a login (gh auth login, or GH_TOKEN) to look at {repository}"
+        ));
+    }
+    Ok(output.status.success())
 }
 
 /// The DLL of `package` from the `dev` prerelease of `repository`: its
@@ -394,7 +412,7 @@ mod tests {
     fn a_mod_comes_from_its_dev_prerelease_once_its_repository_has_one() {
         let list = [listed("safes"), listed("zones")];
         let sources = plan(&list, &workspace(&["safes", "zones"]), |repository| {
-            repository == "enshwick/mod-safes"
+            Ok(repository == "enshwick/mod-safes")
         })
         .unwrap();
         assert_eq!(
@@ -415,8 +433,16 @@ mod tests {
     #[test]
     fn a_mod_that_left_the_workspace_needs_its_dev_prerelease() {
         let list = [listed("safes")];
-        assert!(plan(&list, &workspace(&[]), |_| false).is_err());
-        assert!(plan(&list, &workspace(&[]), |_| true).is_ok());
+        assert!(plan(&list, &workspace(&[]), |_| Ok(false)).is_err());
+        assert!(plan(&list, &workspace(&[]), |_| Ok(true)).is_ok());
+    }
+
+    #[test]
+    fn a_lookup_that_cannot_run_stops_the_plan() {
+        let failed = plan(&[listed("safes")], &workspace(&["safes"]), |_| {
+            Err("gh: not found".to_owned())
+        });
+        assert_eq!(failed, Err("gh: not found".to_owned()));
     }
 
     #[test]
@@ -424,7 +450,7 @@ mod tests {
         let error = plan(
             &[listed("safes")],
             &workspace(&["safes", "new-mod"]),
-            |_| false,
+            |_| Ok(false),
         );
         assert_eq!(error, Err(format!("{MODS} lacks new-mod")));
     }

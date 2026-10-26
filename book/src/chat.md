@@ -78,7 +78,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 The answer goes back to the caller, not to any chat.
-[`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
+[`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
 runs each line appended to `mod-data/admin-tools/commands.txt` this way: it
 is how a dedicated server's administrators and their scripts reach the
 console.
@@ -102,9 +102,9 @@ No mod may take the id `enshwick`.
 
 ## Worked examples
 
-- [`enshwick-admin-tools`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-admin-tools)
+- [`enshwick-admin-tools`](https://github.com/enshwick/mod-admin-tools)
   declares administrator actions, answers with `tell`, and runs each line of
   its command file with `console::run` from a scheduled task.
-- [`enshwick-safes`](https://github.com/enshwick/enshwick/tree/main/mods/enshwick-safes)
+- [`enshwick-safes`](https://github.com/enshwick/mod-safes)
   declares who may open a Safe as [player actions](actions.md) and guards its
   labels with a rename filter.

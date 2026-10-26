@@ -30,22 +30,22 @@ they are never released.
 
 | Mod                                                                         | What it does                                                       |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| [Flame altar zones](mods/enshwick-flame-altar-zones)                        | touching altar zones grow together and can be built across         |
-| [Flame altar count](mods/enshwick-flame-altar-count)                        | how many altars each Flame level allows, twice vanilla by default  |
-| [Furniture comfort](mods/enshwick-furniture-comfort)                        | more comfort from furniture, twice vanilla by default              |
-| [Survivors per altar](mods/enshwick-survivors-per-altar)                    | a copy of each survivor at every altar, with beds of its own altar |
-| [Safes](mods/enshwick-safes)                                                | a craftable chest only the player who placed it can use            |
+| [Flame altar zones](https://github.com/enshwick/mod-flame-altar-zones)      | touching altar zones grow together and can be built across         |
+| [Flame altar count](https://github.com/enshwick/mod-flame-altar-count)      | how many altars each Flame level allows, twice vanilla by default  |
+| [Furniture comfort](https://github.com/enshwick/mod-furniture-comfort)      | more comfort from furniture, twice vanilla by default              |
+| [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar)  | a copy of each survivor at every altar, with beds of its own altar |
+| [Safes](https://github.com/enshwick/mod-safes)                              | a craftable chest only the player who placed it can use            |
 | [Building materials x2](https://github.com/enshwick/mod-building-materials) | twice the output of block, roof, overgrowth and decor recipes      |
-| [Build camera](mods/enshwick-build-camera)                                  | the building fly mode for every player, without the skill          |
-| [Shared experience](mods/enshwick-shared-experience)                        | every character keeps up with the one furthest ahead in experience |
-| [Area loot](mods/enshwick-area-loot)                                        | emptying one enemy corpse takes the loot of the others around it   |
+| [Build camera](https://github.com/enshwick/mod-build-camera)                | the building fly mode for every player, without the skill          |
+| [Shared experience](https://github.com/enshwick/mod-shared-experience)      | every character keeps up with the one furthest ahead in experience |
+| [Area loot](https://github.com/enshwick/mod-area-loot)                      | emptying one enemy corpse takes the loot of the others around it   |
 
 ### Server
 
-| Mod                                                    | What it does                                                              |
-| ------------------------------------------------------ | ------------------------------------------------------------------------- |
-| [Admin tools](mods/enshwick-admin-tools)               | administrator actions and a command file run on the server's console      |
-| [Optimizer](https://github.com/enshwick/mod-optimizer) | less CPU on Windows and under Wine and Proton, with a report and measures |
+| Mod                                                        | What it does                                                              |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Admin tools](https://github.com/enshwick/mod-admin-tools) | administrator actions and a command file run on the server's console      |
+| [Optimizer](https://github.com/enshwick/mod-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
 
 ## Install
 
@@ -93,7 +93,7 @@ changed in the game, while hosting or on the screen that creates or starts a
 world: the world settings list every mod's settings under their last tab.
 On a dedicated server an administrator changes them from "Server settings"
 on the Mods screen, or with `enshwick config <mod> <key> <value>` in the
-[admin tools'](mods/enshwick-admin-tools) command file. Such a change applies at once, except where a mod's page says it
+[admin tools'](https://github.com/enshwick/mod-admin-tools) command file. Such a change applies at once, except where a mod's page says it
 waits for the world to load again or for the game to start again. A hand
 edit of the running world's copy applies about a second after it is saved, as
 such a change does.
