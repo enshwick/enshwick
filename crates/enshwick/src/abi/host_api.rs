@@ -1,4 +1,5 @@
-//! The table of functions the loader hands every mod.
+//! The table of functions the loader hands every mod. One `repr(C)` struct
+//! whose fields keep their ABI order, so it stays in one file.
 
 use core::ffi::c_void;
 
