@@ -113,8 +113,8 @@ jobs:
       - name: Miri
         if: ${{ !cancelled() }}
         run: |
-          rustup toolchain install nightly-2026-10-19 --profile minimal --component miri
-          cargo +nightly-2026-10-19 miri test --workspace --lib --locked
+          rustup toolchain install nightly-2026-10-26 --profile minimal --component miri
+          cargo +nightly-2026-10-26 miri test --workspace --lib --locked
 
   rust:
     if: github.event_name == 'workflow_dispatch'
