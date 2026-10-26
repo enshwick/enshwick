@@ -35,7 +35,6 @@ proptest.workspace = true
 criterion.workspace = true
 insta.workspace = true
 libloading = "0.9.0"
-proptest.workspace = true
 syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
