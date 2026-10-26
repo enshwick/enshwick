@@ -105,8 +105,10 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 }
 
 /// The random loot table `table` with each item's stack sizes as `value`
-/// gives them, and how many items changed: the least, the largest and the
-/// largest when the roll scales it, each from its own value.
+/// gives them, and how many items changed.
+///
+/// The least and the largest change from their own values, and the ceiling
+/// of a scaled roll follows by [`scaled_ceiling`].
 ///
 /// # Examples
 ///
@@ -130,23 +132,47 @@ pub fn change_random_loot(
     let mut changed = 0;
     for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.item) {
         let item = blob.read_u32(at + layout.item_id)?;
-        let mut touched = false;
-        for field_at in [
-            at + layout.stack_min,
-            at + layout.stack_max,
-            at + layout.stack_max_scaled,
-        ] {
-            let bytes = blob.bytes().get(field_at..field_at + 2)?;
-            let old = u16::from_le_bytes(bytes.try_into().ok()?);
-            if let Some(new) = value(item, Field::StackSize, f64::from(old)).and_then(whole::<u16>)
-                && new != old
-            {
-                touched |= blob.write(field_at, &new.to_le_bytes());
-            }
+        let read = |blob: &Blob, at: usize| -> Option<u16> {
+            Some(u16::from_le_bytes(
+                blob.bytes().get(at..at + 2)?.try_into().ok()?,
+            ))
+        };
+        let (min, max, scaled) = (
+            read(&blob, at + layout.stack_min)?,
+            read(&blob, at + layout.stack_max)?,
+            read(&blob, at + layout.stack_max_scaled)?,
+        );
+        let new_min = value(item, Field::StackSize, f64::from(min)).and_then(whole::<u16>);
+        let new_max = value(item, Field::StackSize, f64::from(max)).and_then(whole::<u16>);
+        let (Some(new_min), Some(new_max)) = (new_min, new_max) else {
+            continue;
+        };
+        let new_scaled = scaled_ceiling(scaled, max, new_max);
+        if (new_min, new_max, new_scaled) == (min, max, scaled) {
+            continue;
         }
-        changed += usize::from(touched);
+        let written = blob.write(at + layout.stack_min, &new_min.to_le_bytes())
+            && blob.write(at + layout.stack_max, &new_max.to_le_bytes())
+            && blob.write(at + layout.stack_max_scaled, &new_scaled.to_le_bytes());
+        changed += usize::from(written);
     }
     Some((blob.into_bytes(), changed))
+}
+
+/// The ceiling the game holds a scaled roll to, after an item's largest
+/// stack went from `max` to `new_max`.
+///
+/// It keeps the proportion to the largest stack it had and never falls
+/// below the new largest, so the game's own drop factor keeps its room.
+#[must_use]
+pub fn scaled_ceiling(scaled: u16, max: u16, new_max: u16) -> u16 {
+    if max == 0 {
+        return scaled.max(new_max);
+    }
+    let ratio = f64::from(scaled) / f64::from(max);
+    whole::<u16>((f64::from(new_max) * ratio).min(65535.0))
+        .unwrap_or(u16::MAX)
+        .max(new_max)
 }
 
 /// The item ids every stack of the fill table `table` names, its groups'
@@ -345,6 +371,21 @@ mod tests {
             bytes[at + 0x24 + 0x18..at + 0x24 + 0x1e],
             [1, 0, 3, 0, 3, 0]
         );
+    }
+
+    #[test]
+    fn a_set_stack_keeps_the_room_the_game_s_factor_had() {
+        assert_eq!(scaled_ceiling(20, 5, 10), 40);
+        assert_eq!(scaled_ceiling(3, 3, 999), 999);
+        assert_eq!(scaled_ceiling(250, 1, 999), 65535);
+        assert_eq!(scaled_ceiling(7, 0, 4), 7);
+        let set = |item: u32, field: Field, base: f64| {
+            (item == WOOD).then(|| field.resolve(base, [Value::Set(10.0)]))
+        };
+        let (bytes, _) = change_random_loot(&LAYOUT, &random_table(), &set).unwrap();
+        let blob = Blob::new(&bytes);
+        let (at, _) = blob.array(0x14).unwrap();
+        assert_eq!(bytes[at + 0x18..at + 0x1e], [10, 0, 10, 0, 40, 0]);
     }
 
     #[test]

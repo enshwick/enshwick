@@ -302,7 +302,7 @@ count = { times = 2 }
 
 | Field | Meaning | Values |
 | --- | --- | --- |
-| `stack_size` | how many of the item random loot gives in one stack: the least, the largest and the largest the game scales to, each alike | 1 to 65535 |
+| `stack_size` | how many of the item random loot gives in one stack, at least and at most alike | 1 to 65535 |
 | `count` | how many of the item a container's fill table gives, at least and at most alike | 0 to 65535 |
 | `spawn_probability` | the chance a fill table gives the item | 0 to 1 |
 | `weight` | the item's weight among the ones a fill table picks from | 0 to 1000000 |
@@ -311,7 +311,13 @@ Random loot fills world chests, corpses and animals by the item's labels;
 fill tables are the fixed lists a container names. A change reaches every
 fill table that lists the item. Only the server rolls loot, so a pack of
 loot changes alone may run `side = "server"` and turn `join` off.
-[Game rates](../rates.md) multiply the counts a pack sets.
+
+A pack changes the table itself, before any roll, and each factor after it
+applies once. For items the game scales, the world's resource drop setting
+times the [resource drop rate](../rates.md) scales the pack's least and
+largest stack, up to a ceiling that `stack_size` keeps in proportion; the
+loot rate then scales the rolled stack, held to the item's stack size, which
+an `items.toml` change may have raised.
 
 ## `texts.toml`
 
