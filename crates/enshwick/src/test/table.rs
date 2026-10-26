@@ -6,10 +6,10 @@ use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFn, AltarZoneSize, BedCheckFn, BuffTypeInfo, BuildCheckFn,
     ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, Event, EventFn,
     ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, InventoryResultFn,
-    KnowledgeInfo, KnowledgeInputFn, Level, MidHookFn, ModEventFn, NetMessageFn, RenameCallFn,
-    ResourceKey, ResourcePatchFn, SkillCheckFn, SpawnRequest, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn, NetMessageFn,
+    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn, SpawnRequest, Status,
+    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
 };
 use crate::locks::Relock;
 
@@ -22,6 +22,7 @@ mod hooks;
 mod inventory;
 mod mods;
 mod net;
+mod pacing;
 mod services;
 mod ui;
 mod world;
@@ -223,6 +224,12 @@ pub(crate) struct State {
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
+    /// The mod's loop wait handlers and their pointers.
+    pub(crate) loop_waits: Vec<(LoopWaitFn, usize)>,
+    /// The mod's server wait handlers and their pointers.
+    pub(crate) server_waits: Vec<(ServerWaitFn, usize)>,
+    /// The lowest worker caps asked for, default and background.
+    pub(crate) task_workers: Option<(u32, u32)>,
     pub(crate) experience_filters: Vec<(ExperiencePassFn, usize)>,
     pub(crate) altar_limit: Option<(AltarLimitFn, usize)>,
     pub(crate) base_limit_raised: bool,
@@ -355,6 +362,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         interaction_filters: Vec::new(),
         skills: Vec::new(),
         comfort_filters: Vec::new(),
+        loop_waits: Vec::new(),
+        server_waits: Vec::new(),
+        task_workers: None,
         experience_filters: Vec::new(),
         altar_limit: None,
         base_limit_raised: false,
@@ -571,4 +581,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     event_types,
     recipe_kind,
     feature,
+    loop_wait: pacing::loop_wait,
+    server_wait: pacing::server_wait,
+    task_workers: pacing::task_workers,
 };

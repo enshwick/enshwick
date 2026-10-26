@@ -1,4 +1,4 @@
-abi 2.74
+abi 2.75
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -207,7 +207,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1176 align 8
+HostApi size 1200 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -354,6 +354,9 @@ HostApi size 1176 align 8
     event_types at 1152 size 8
     recipe_kind at 1160 size 8
     feature at 1168 size 8
+    loop_wait at 1176 size 8
+    server_wait at 1184 size 8
+    task_workers at 1192 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -427,6 +430,13 @@ LayoutField size 24 align 8
     hash at 16 size 8
 Level size 1 align 1
     0 at 0 size 1
+LoopWaitData size 24 align 8
+    header at 0 size 8
+    ms at 8 size 4
+    reserved at 12 size 4
+    left_ns at 16 size 8
+LoopWaitSites size 4 align 4
+    0 at 0 size 4
 Manifest size 176 align 8
     header at 0 size 8
     id at 8 size 16

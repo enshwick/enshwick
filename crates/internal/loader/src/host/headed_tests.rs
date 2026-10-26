@@ -43,6 +43,7 @@ macro_rules! headed {
             KnowledgeData,
             KnowledgeInfo,
             KnowledgeInput,
+            LoopWaitData,
             Manifest,
             MigrationSet,
             ModInfo,

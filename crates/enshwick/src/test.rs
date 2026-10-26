@@ -80,6 +80,7 @@ mod events;
 mod gameplay;
 mod hooks;
 mod inventory;
+mod pacing;
 mod players;
 mod points;
 mod settings;
