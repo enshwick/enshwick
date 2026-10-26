@@ -81,6 +81,7 @@ fn enforce_holds(loader: &Loader) {
         .iter()
         .filter(|m| !m.off.load(Ordering::Acquire))
         .flat_map(ModRecord::names)
+        .chain([crate::settings::LOADER_ID])
         .collect();
     crate::holds::enforce(&loader.data_dir, &running, false);
 }

@@ -356,6 +356,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `altar_limit_filter`     | Adds a filter to the chain that decides how many altars a Flame level allows; init only              | 82          |
 | `base_limit`             | The most altar zones and bases the game groups now, and its own grouping's zones; any thread         | 82          |
 | `voxel_read`             | Reads a box of up to 64³ voxels at full detail, decoded; server game thread, quiet moment only       | 84          |
-| `transaction_commit`     | Queues terrain edits as one transaction written at quiet moments, with undo; any thread              | 85          |
-| `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 85          |
-| `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 85          |
+| `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
+| `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
+| `transaction_commit`     | Queues terrain edits as one transaction written at quiet moments, with undo; any thread              | 86          |
+| `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 86          |
+| `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 86          |

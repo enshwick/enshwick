@@ -6,18 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, CallerFrame, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange,
-    DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
-    ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
-    InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
-    LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn,
-    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
-    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TransactionInfo,
-    TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
-    ZoneCheckFn,
+    BuildInfo, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn,
+    DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn,
+    EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn,
+    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
+    Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
+    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1166,6 +1166,37 @@ pub struct HostApi {
         out: *mut Voxel,
         capacity: u64,
     ) -> Status,
+    /// Declares a change of a vanilla value, as
+    /// [`HostApi::change_data`] does, whose value the mod sets later with
+    /// [`HostApi::set_change`]; until then the mod changes nothing. The
+    /// loader builds every resource the change reaches from the first read,
+    /// so a later set takes effect in place. Writes the change's number to
+    /// `out`. `change.op` and `change.value` are ignored.
+    /// [`Status::BAD_ARGS`] for a null `change` or `out`, an unknown field
+    /// or selection, and an ingredient, whose change alters a recipe's
+    /// length; [`Status::MISSING`] when the build does not reflect the
+    /// field; [`Status::REFUSED`] for a field clients read in a mod without
+    /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN); [`Status::TOO_LATE`] after
+    /// `enshwick_mod_init`. Since minor 85.
+    pub declare_change:
+        extern "system" fn(me: ModHandle, change: *const DataChange, out: *mut ChangeId) -> Status,
+    /// Puts `value` in force for the calling mod's change `id` by `op`:
+    /// [`ChangeOp::SET`], [`ChangeOp::TIMES`], or [`ChangeOp::RESET`] to
+    /// take the mod's value out. The loader merges every mod's changes
+    /// again and builds each resource it patches anew in place; the game
+    /// reads the new value from then on. During `enshwick_mod_init` the
+    /// value counts from the first read. [`Status::BAD_ARGS`] for an id
+    /// the mod did not declare, an unknown operation, or a value the field
+    /// does not take; [`Status::FAULTED`] for a mod that is off;
+    /// [`Status::TOO_LATE`] when the value takes a restart, and the log says
+    /// why: it reaches something the loader did not patch at start (the
+    /// value is dropped and the old one stays in force), or a resource does
+    /// not build again in place (the value is in force for what did build
+    /// and for every first read, the rest until a restart). Any
+    /// thread; it allocates and builds resources, so it is no per-frame
+    /// call. Since minor 85.
+    pub set_change:
+        extern "system" fn(me: ModHandle, id: ChangeId, op: ChangeOp, value: f64) -> Status,
     /// Queues the `count` changes at `ops` as one transaction of the
     /// server's world and writes its id to `id`: the loader writes them in
     /// order on the server's game thread at quiet moments, a budget of
@@ -1177,7 +1208,7 @@ pub struct HostApi {
     /// cap of changes or bricks; [`Status::REFUSED`] while the queue is
     /// full; [`Status::MISSING`] while no world runs or on a build without
     /// the edits, the voxel read or the undo write. Any thread. Since minor
-    /// 85.
+    /// 86.
     pub transaction_commit: extern "system" fn(
         me: ModHandle,
         ops: *const TransactionOp,
@@ -1193,13 +1224,13 @@ pub struct HostApi {
     /// [`TransactionInfo::UNDO_REFUSED`]. [`Status::OK`] when queued or
     /// already undoing; [`Status::REFUSED`] for an id this mod did not get,
     /// one the loader forgot, one undone, or one whose undo data is gone.
-    /// Any thread. Since minor 85.
+    /// Any thread. Since minor 86.
     pub transaction_undo: extern "system" fn(me: ModHandle, id: u64) -> Status,
     /// Writes where transaction `id` of this mod stands to `out`, a
     /// [`TransactionInfo`] with its header. [`Status::BAD_ARGS`] for a null
     /// `out`; [`Status::MISSING`] for an id this mod did not get or one the
     /// loader forgot (it keeps the newest few thousand). Any thread. Since
-    /// minor 85.
+    /// minor 86.
     pub transaction_status:
         extern "system" fn(me: ModHandle, id: u64, out: *mut TransactionInfo) -> Status,
 }

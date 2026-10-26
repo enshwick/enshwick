@@ -23,17 +23,26 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
 use super::{
-    Conflict, Declared, HoldStep, ItemOffsets, Key, Merged, Pending, Raised, TraitOffsets,
-    credited, edit_item, expand, grouped, grown_slots, hold_step, merge, template_slots, traits_of,
+    Conflict, Declared, HoldStep, ItemOffsets, Kept, Key, Merged, Pending, Raised, TraitOffsets,
+    UNSET, credited, edit_item, expand, grouped, grown_slots, hold_reason, hold_step, merge,
+    served, template_slots, traits_of,
 };
-use enshwick::content::changes::{ItemTraits, ItemsChange};
+use enshwick::abi::ChangeId;
+use enshwick::content::changes::{ItemTraits, ItemsChange, Value};
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
 struct Changes {
     declared: Mutex<Vec<Pending>>,
+    /// The changes mods set later: owner, number and field, in the order
+    /// declared.
+    live: Mutex<Vec<(ModIndex, ChangeId, Field)>>,
     sealed: OnceLock<Sealed>,
     raised: Mutex<Option<FxHashMap<ModIndex, Raised>>>,
+    /// The stack sizes kept for saved worlds, read when the changes seal.
+    kept: Mutex<Option<Kept>>,
+    /// Each patched item's game stack size and the size served now.
+    stacks: Mutex<Option<FxHashMap<Guid, (u16, u16)>>>,
 }
 
 /// What the end of init fixed for the process; the changes themselves
@@ -65,8 +74,11 @@ impl Sealed {
 
 static CHANGES: Changes = Changes {
     declared: Mutex::new(Vec::new()),
+    live: Mutex::new(Vec::new()),
     sealed: OnceLock::new(),
     raised: Mutex::new(None),
+    kept: Mutex::new(None),
+    stacks: Mutex::new(None),
 };
 
 /// What the loader's patch of one item needs: the item and where its
@@ -85,6 +97,7 @@ pub(crate) fn declare(owner: ModIndex, change: Change, source: String) -> Status
         owner,
         change,
         source,
+        live: None,
     }));
     Status::OK
 }
@@ -99,8 +112,101 @@ pub(crate) fn declare_items(owner: ModIndex, change: ItemsChange, source: String
         owner,
         change,
         source,
+        live: None,
     });
     Status::OK
+}
+
+/// Records mod `owner`'s change of `target`, whose value it sets later;
+/// its number. `TOO_LATE` once init is over.
+///
+/// # Errors
+///
+/// The status the entry answers.
+pub(crate) fn declare_change(
+    owner: ModIndex,
+    target: LiveTarget,
+    field: Field,
+) -> Result<ChangeId, Status> {
+    let mut declared = CHANGES.declared.relock();
+    if CHANGES.sealed.get().is_some() {
+        return Err(Status::TOO_LATE);
+    }
+    let mut live = CHANGES.live.relock();
+    let id = ChangeId(u32::try_from(live.len() + 1).map_err(|_| Status::BAD_ARGS)?);
+    let pending = match target {
+        LiveTarget::Entry(entry, source) => Pending::One(Declared {
+            owner,
+            change: Change::new(entry, field, UNSET),
+            source,
+            live: Some(id),
+        }),
+        LiveTarget::Items(items, source) => Pending::Each {
+            owner,
+            change: ItemsChange::new(items, field, UNSET),
+            source,
+            live: Some(id),
+        },
+    };
+    declared.push(pending);
+    live.push((owner, id, field));
+    Ok(id)
+}
+
+/// What a change a mod sets later reaches, with its source.
+pub(crate) enum LiveTarget {
+    /// One entry.
+    Entry(Guid, String),
+    /// Every vanilla item a selection picks.
+    Items(enshwick::content::changes::Items, String),
+}
+
+/// Puts `value` in force for mod `owner`'s change `id`, or takes the
+/// mod's value out for `None`, and builds what it reaches again.
+pub(crate) fn set_change(owner: ModIndex, id: ChangeId, value: Option<Value>) -> Status {
+    let field = CHANGES
+        .live
+        .relock()
+        .iter()
+        .find(|(o, i, _)| *o == owner && *i == id)
+        .map(|(_, _, field)| *field);
+    let Some(field) = field else {
+        return Status::BAD_ARGS;
+    };
+    if value.is_some_and(|value| field.check(value).is_err()) {
+        return Status::BAD_ARGS;
+    }
+    let sealed = {
+        let mut pending = CHANGES.declared.relock();
+        let Some(sealed) = CHANGES.sealed.get() else {
+            super::set_pending(&mut pending, owner, id, value);
+            return Status::OK;
+        };
+        sealed
+    };
+    let rebuilt = {
+        let mut declared = sealed.declared.relock();
+        let next = super::set_live(&declared, owner, id, value);
+        apply(sealed, &mut declared, next)
+    }
+    .and_then(|patched| rebuild(&patched));
+    match rebuilt {
+        Ok(_) => Status::OK,
+        Err(why) => {
+            crate::log::write(
+                Level::WARN,
+                &self::id(sealed.loader, owner),
+                &format!("{field}: the new value is not in force and takes a restart: {why}"),
+            );
+            Status::TOO_LATE
+        }
+    }
+}
+
+/// Whether some mod declared a change it sets later, so the resources the
+/// changes patch keep their base for a rebuild.
+pub(crate) fn has_live() -> bool {
+    !CHANGES.live.relock().is_empty()
 }
 
 /// Every vanilla item with what a selection reads of it, from the game's
@@ -150,7 +256,12 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
         || !CHANGES.declared.relock().is_empty(),
         |sealed| !sealed.merged().is_empty(),
     );
+    let kept = CHANGES.kept.relock().as_ref().map_or_else(
+        || !Kept::load(&loader_dir(loader)).is_empty(),
+        |kept| !kept.is_empty(),
+    );
     declared
+        || kept
         || enshwick::state::holds(&loader.data_dir)
             .iter()
             .any(|(id, _)| loader.mods.iter().any(|m| m.pack && &m.id == id))
@@ -297,7 +408,8 @@ fn item_offsets(loader: &Loader) -> ItemOffsets {
 pub(crate) fn serve(
     loader: &'static Loader,
 ) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
-    let pending = std::mem::take(&mut *CHANGES.declared.relock());
+    let mut open = CHANGES.declared.relock();
+    let pending = std::mem::take(&mut *open);
     let selects = pending.iter().any(|p| matches!(p, Pending::Each { .. }));
     let items = if selects {
         vanilla_items(loader)
@@ -327,7 +439,20 @@ pub(crate) fn serve(
         .filter_map(|d| label(&d.source).map(|l| (d.change.entry, l.to_owned())))
         .collect();
     let offsets = item_offsets(loader);
-    let items = edited(&merged);
+    let kept = Kept::load(&loader_dir(loader));
+    let mut items = edited(&merged);
+    items.extend(kept.items().map(|(item, _)| item));
+    items.sort_unstable_by_key(|item| item.0);
+    items.dedup();
+    if !kept.is_empty() {
+        crate::log!(
+            INFO,
+            "{} items keep a stack size above the game's, so saved stacks are never cut ({})",
+            kept.items().count(),
+            super::KEPT_FILE
+        );
+    }
+    *CHANGES.kept.relock() = Some(kept);
     let slots_order: FxHashMap<Guid, usize> = declared
         .iter()
         .enumerate()
@@ -344,6 +469,7 @@ pub(crate) fn serve(
         templates: OnceLock::new(),
         loot_items: OnceLock::new(),
     });
+    drop(open);
     let mut patches = Vec::new();
     if !items.is_empty() {
         crate::log!(INFO, "{} items get changed values", items.len());
@@ -381,21 +507,41 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
         .sealed
         .get()
         .ok_or_else(|| "no changes were in force at start".to_owned())?;
+    let patched = {
+        let mut declared = sealed.declared.relock();
+        let next = super::replace_owner(
+            &declared,
+            owner,
+            changes
+                .into_iter()
+                .map(|(change, source)| Declared {
+                    owner,
+                    change,
+                    source,
+                    live: None,
+                })
+                .collect(),
+        );
+        apply(sealed, &mut declared, next)?
+    };
+    rebuild(&patched)
+}
+
+/// Puts `next` in force as every change: merges it and reports the
+/// overridden sets; the resources the loader patches, for [`rebuild`]
+/// once `declared` is unlocked.
+///
+/// # Errors
+///
+/// A change that reaches an entry the loader did not patch at start, which
+/// takes a restart; `declared` then stays as it was.
+fn apply(
+    sealed: &Sealed,
+    declared: &mut Vec<Declared>,
+    next: Vec<Declared>,
+) -> Result<Vec<ResourceKey>, String> {
     let loader = sealed.loader;
     let patched = sealed.patched.get().cloned().unwrap_or_default();
-    let mut declared = sealed.declared.relock();
-    let next = super::replace_owner(
-        &declared,
-        owner,
-        changes
-            .into_iter()
-            .map(|(change, source)| Declared {
-                owner,
-                change,
-                source,
-            })
-            .collect(),
-    );
     let (merged, conflicts) = merge(&next, |a, b| requires(loader, a, b));
     if let Some(item) = edited(&merged)
         .into_iter()
@@ -432,9 +578,18 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
     report(loader, &conflicts);
     sealed.merged.store(Arc::new(merged));
     *declared = next;
-    drop(declared);
+    Ok(patched)
+}
+
+/// Builds each of `patched` again in place from its base; how many.
+///
+/// # Errors
+///
+/// The resources that did not build again: their base was not kept, or
+/// their length changed, such as an ingredient taken out or added.
+fn rebuild(patched: &[ResourceKey]) -> Result<usize, String> {
     let mut failed = Vec::new();
-    for key in &patched {
+    for key in patched {
         let status = crate::content::rebuild(ModIndex::LOADER, *key);
         if !status.is_ok() {
             failed.push(format!("{}:{:08x}", Guid(key.guid), key.type_hash));
@@ -444,7 +599,7 @@ pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<
         Ok(patched.len())
     } else {
         Err(format!(
-            "{} resources take a restart, as their length changed: {}",
+            "{} resources do not build again in place: {}",
             failed.len(),
             failed.join(", ")
         ))
@@ -888,9 +1043,11 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
         .into_iter()
         .map(|key| key.field)
         .collect();
+    let vanilla = stack_at(bytes, patch.offsets);
     let edit = edit_item(bytes, patch.offsets, &fields, |field, base| {
         merged.value(Key::new(patch.item, field), base, live)
     });
+    keep_stack(patch, bytes, vanilla);
     for field in &edit.lacking {
         crate::log!(
             WARN,
@@ -927,13 +1084,88 @@ fn changed_item(patch: &ItemPatch, bytes: &mut [u8]) {
     }
 }
 
-/// On the side that keeps the world, when it loads: sets the hold of every
-/// pack that raised a stack size, and releases that of every other pack
-/// still on. A mod with code keeps its own hold.
+/// The stack size in `bytes`, an item's static data.
+fn stack_at(bytes: &[u8], offsets: &ItemOffsets) -> Option<u16> {
+    let at = offsets.max_stack?;
+    Some(u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?))
+}
+
+/// Serves at least the kept stack size of the patched item in `bytes`,
+/// whose game size is `vanilla`, and notes the size served.
+fn keep_stack(patch: &ItemPatch, bytes: &mut [u8], vanilla: Option<u16>) {
+    let (Some(at), Some(vanilla), Some(merged)) = (
+        patch.offsets.max_stack,
+        vanilla,
+        stack_at(bytes, patch.offsets),
+    ) else {
+        return;
+    };
+    let kept = CHANGES
+        .kept
+        .relock()
+        .as_ref()
+        .and_then(|kept| kept.of(patch.item));
+    let (size, won) = served(merged, kept);
+    if won {
+        if let Some(slot) = bytes.get_mut(at..at + 2) {
+            slot.copy_from_slice(&size.to_le_bytes());
+        }
+        crate::log!(
+            INFO,
+            "stacks of {} stay at {size}, not {merged}: a saved world may hold stacks that large",
+            patch.item
+        );
+    }
+    CHANGES
+        .stacks
+        .relock()
+        .get_or_insert_with(FxHashMap::default)
+        .insert(patch.item, (vanilla, size));
+}
+
+/// The loader's own data folder.
+fn loader_dir(loader: &Loader) -> std::path::PathBuf {
+    loader.data_dir.join(crate::settings::LOADER_ID)
+}
+
+/// On the side that keeps the world, when it loads or saves: keeps every
+/// stack size in force above the game's, and holds the game while any is
+/// kept, so a game the loader leaves vanilla stops before it cuts them.
+fn keep_sizes(loader: &Loader) {
+    let stacks = CHANGES.stacks.relock().clone().unwrap_or_default();
+    let mut kept = CHANGES.kept.relock();
+    let kept = kept.get_or_insert_with(|| Kept::load(&loader_dir(loader)));
+    let mut grew = false;
+    for (item, (vanilla, size)) in stacks {
+        grew |= kept.record(item, vanilla, size);
+    }
+    let dir = loader_dir(loader);
+    if grew && let Err(why) = kept.save(&dir) {
+        crate::log!(WARN, "kept stack sizes not written: {why}");
+    }
+    let hold = Hold::new(&dir);
+    let result = if kept.is_empty() {
+        hold.clear()
+    } else {
+        hold.set(&hold_reason(kept))
+    };
+    if let Err(why) = result {
+        crate::log!(WARN, "hold not kept: {why}");
+    }
+}
+
+/// On the side that keeps the world: keeps the stack sizes in force when it
+/// loads and saves, and when it loads sets the hold of every pack that
+/// raised a stack size, and releases that of every other pack still on. A
+/// mod with code keeps its own hold.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
+    if event == Event::WORLD_SAVED {
+        keep_sizes(loader);
+    }
     if event != Event::WORLD_LOADED {
         return;
     }
+    keep_sizes(loader);
     let raised = CHANGES.raised.relock().clone().unwrap_or_default();
     for (index, record) in loader.mods.iter().enumerate() {
         let index = ModIndex::new(index);

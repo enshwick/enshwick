@@ -154,7 +154,7 @@ impl WritableType {
 /// # Examples
 ///
 /// See [`World`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct Player {
     /// The player character's entity.
     pub entity: Entity,
@@ -254,7 +254,7 @@ impl Placed {
 /// # Examples
 ///
 /// See [`World::notify`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 #[non_exhaustive]
 pub enum Notice {
     /// On screen, as the game shows its own messages: the player's client
@@ -359,6 +359,17 @@ fn blank_info() -> PlayerInfo {
 #[derive(Clone, Copy, Debug)]
 pub struct World(&'static Resolved);
 
+impl crate::script::Bound for World {
+    const NAME: &'static str = "world";
+    const DOC: &'static str = "The server's world: players, chat, notices and positions.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] =
+        &[Self::SCRIPT_PLAYERS, Self::SCRIPT_THINGS];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.world()
+    }
+}
+
 // A copy of the world is one pointer, whatever it resolves.
 const _: () = assert!(size_of::<World>() == size_of::<usize>());
 
@@ -384,6 +395,7 @@ fn type_named(host: Host, name: &str) -> Result<ComponentType, Off> {
     })
 }
 
+#[crate::script(things)]
 impl World {
     pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         if let Some(resolved) = RESOLVED.get() {
@@ -619,6 +631,7 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
+    #[script]
     pub fn position(&self, entity: Entity) -> Option<[f64; 3]> {
         let data = self.component(entity, self.0.transform)?;
         // SAFETY: `component` returned the entity's live CurrentTransform,
