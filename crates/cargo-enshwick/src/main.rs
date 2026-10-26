@@ -13,6 +13,7 @@ mod manifest;
 mod new;
 mod pack;
 mod pin;
+mod point;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -69,6 +70,19 @@ enum Command {
     /// Checks, describes and packages content packs.
     #[command(subcommand)]
     Pack(pack::Command),
+    /// Writes the Rust definition of another mod's extension point, read
+    /// from the owner's DLL without running it.
+    Point {
+        /// The point, `<mod id>:<point>`.
+        name: String,
+        /// The owner's DLL, a folder (such as the game's) with its DLL in it
+        /// or in its `mods/`, or a schema file (`.toml`) the owner published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the definition is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -92,7 +106,7 @@ fn ids(names: &[String]) -> Result<String, String> {
         .iter()
         .map(|name| {
             let guid = Guid::try_named(name).ok_or_else(|| {
-                format!("{name:?} is no content id: <mod>:<name>, the mod side 1 to 64 of [a-z0-9_-], the name 1 to 128 of [a-z0-9_./-]")
+                format!("{name:?} is no content id: <mod>:<name>, the mod side a mod id, the name 1 to 128 of [a-z0-9_./-]")
             })?;
             Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
         })
@@ -120,6 +134,7 @@ fn main() -> ExitCode {
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()),
         Command::Id { names } => ids(&names),
+        Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
         Command::Pack(command) => pack::run(&command),
     };
     match outcome {
