@@ -69,6 +69,7 @@ mod tests {
         "loot.roll_one",
         "loot.txn_context",
         "loot.txn_entity",
+        "skill.airborne_architect",
         "ui_image.content",
         "ui_image.flags",
         "ui_image.format",

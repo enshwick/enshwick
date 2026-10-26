@@ -35,11 +35,10 @@
 
 use core::time::Duration;
 
+use crate::content::EngineFacts;
+use crate::engine_ids as ids;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
-
-/// The reflected type the settings are.
-const TYPE: &str = "keen::ecs::GameSettings";
 
 macro_rules! game_enum {
     ($(#[$doc:meta])* $name:ident { $($(#[$vdoc:meta])* $variant:ident = $value:literal,)* }) => {
@@ -276,7 +275,7 @@ enum_value!(
 );
 
 macro_rules! settings {
-    ($($(#[$doc:meta])* $field:ident: $ty:ty = $reflected:literal,)*) => {
+    ($($(#[$doc:meta])* $field:ident: $ty:ty = $id:path,)*) => {
         /// The server's game settings, typed; read and changed through
         /// [`GameSettings`]. Factors are 1 for the game's normal value.
         ///
@@ -289,7 +288,7 @@ macro_rules! settings {
             $($(#[$doc])* pub $field: $ty,)*
         }
 
-        /// Where each field lies, from reflection.
+        /// Where each field lies, as the loader answers its id.
         #[derive(Clone, Copy, Debug)]
         struct Offsets {
             $($field: usize,)*
@@ -299,10 +298,9 @@ macro_rules! settings {
             fn resolve(load: &Load<'_>, size: usize) -> Result<Self, Off> {
                 Ok(Self {
                     $($field: {
-                        let at = usize::try_from(load.field_offset(TYPE, $reflected)?)
-                            .map_err(|_| Off::new(concat!("game settings: ", $reflected)))?;
+                        let at = load.offset($id)?;
                         if at + <$ty as Value>::SIZE > size {
-                            return Err(Off::new(concat!("game settings: ", $reflected, " past the end")));
+                            return Err(Off::new(format!("{}: past the end", $id)));
                         }
                         at
                     },)*
@@ -330,81 +328,81 @@ macro_rules! settings {
 
 settings! {
     /// The characters' health.
-    player_health: f32 = "playerHealthFactor",
+    player_health: f32 = ids::GAME_SETTINGS_PLAYER_HEALTH_FACTOR,
     /// The characters' mana.
-    player_mana: f32 = "playerManaFactor",
+    player_mana: f32 = ids::GAME_SETTINGS_PLAYER_MANA_FACTOR,
     /// The characters' stamina.
-    player_stamina: f32 = "playerStaminaFactor",
+    player_stamina: f32 = ids::GAME_SETTINGS_PLAYER_STAMINA_FACTOR,
     /// The characters' body heat.
-    player_body_heat: f32 = "playerBodyHeatFactor",
+    player_body_heat: f32 = ids::GAME_SETTINGS_PLAYER_BODY_HEAT_FACTOR,
     /// How long characters hold their breath.
-    player_diving_time: f32 = "playerDivingTimeFactor",
+    player_diving_time: f32 = ids::GAME_SETTINGS_PLAYER_DIVING_TIME_FACTOR,
     /// Whether items wear out.
-    durability: bool = "enableDurability",
+    durability: bool = ids::GAME_SETTINGS_ENABLE_DURABILITY,
     /// Whether hunger turns into starving.
-    starving: bool = "enableStarvingDebuff",
+    starving: bool = ids::GAME_SETTINGS_ENABLE_STARVING_DEBUFF,
     /// How long food buffs last.
-    food_buff_duration: f32 = "foodBuffDurationFactor",
+    food_buff_duration: f32 = ids::GAME_SETTINGS_FOOD_BUFF_DURATION_FACTOR,
     /// How long a character goes hungry before starving, in game time.
-    hunger_to_starving: Duration = "fromHungerToStarving",
+    hunger_to_starving: Duration = ids::GAME_SETTINGS_FROM_HUNGER_TO_STARVING,
     /// How long characters last in the shroud.
-    shroud_time: f32 = "shroudTimeFactor",
+    shroud_time: f32 = ids::GAME_SETTINGS_SHROUD_TIME_FACTOR,
     /// What a dead character leaves behind.
-    tombstone: TombstoneMode = "tombstoneMode",
+    tombstone: TombstoneMode = ids::GAME_SETTINGS_TOMBSTONE_MODE,
     /// Whether gliders meet turbulence.
-    glider_turbulence: bool = "enableGliderTurbulences",
+    glider_turbulence: bool = ids::GAME_SETTINGS_ENABLE_GLIDER_TURBULENCES,
     /// How often rain and storms come.
-    weather: WeatherFrequency = "weatherFrequency",
+    weather: WeatherFrequency = ids::GAME_SETTINGS_WEATHER_FREQUENCY,
     /// How hard fishing is.
-    fishing: Difficulty = "fishingDifficulty",
+    fishing: Difficulty = ids::GAME_SETTINGS_FISHING_DIFFICULTY,
     /// Damage to terrain and resources when mining.
-    mining_damage: f32 = "miningDamageFactor",
+    mining_damage: f32 = ids::GAME_SETTINGS_MINING_DAMAGE_FACTOR,
     /// How fast plants grow.
-    plant_growth: f32 = "plantGrowthSpeedFactor",
+    plant_growth: f32 = ids::GAME_SETTINGS_PLANT_GROWTH_SPEED_FACTOR,
     /// How many resources a drop stacks.
-    resource_drops: f32 = "resourceDropStackAmountFactor",
+    resource_drops: f32 = ids::GAME_SETTINGS_RESOURCE_DROP_STACK_AMOUNT_FACTOR,
     /// How fast workshops produce.
-    factory_speed: f32 = "factoryProductionSpeedFactor",
+    factory_speed: f32 = ids::GAME_SETTINGS_FACTORY_PRODUCTION_SPEED_FACTOR,
     /// What recycling a perk upgrade returns.
-    perk_recycling: f32 = "perkUpgradeRecyclingFactor",
+    perk_recycling: f32 = ids::GAME_SETTINGS_PERK_UPGRADE_RECYCLING_FACTOR,
     /// What perks cost.
-    perk_cost: f32 = "perkCostFactor",
+    perk_cost: f32 = ids::GAME_SETTINGS_PERK_COST_FACTOR,
     /// Experience from combat.
-    experience_combat: f32 = "experienceCombatFactor",
+    experience_combat: f32 = ids::GAME_SETTINGS_EXPERIENCE_COMBAT_FACTOR,
     /// Experience from mining.
-    experience_mining: f32 = "experienceMiningFactor",
+    experience_mining: f32 = ids::GAME_SETTINGS_EXPERIENCE_MINING_FACTOR,
     /// Experience from exploration and quests.
-    experience_exploration: f32 = "experienceExplorationQuestsFactor",
+    experience_exploration: f32 = ids::GAME_SETTINGS_EXPERIENCE_EXPLORATION_QUESTS_FACTOR,
     /// How many enemies random spawners bring.
-    random_spawns: Amount = "randomSpawnerAmount",
+    random_spawns: Amount = ids::GAME_SETTINGS_RANDOM_SPAWNER_AMOUNT,
     /// How many enemies attack at once.
-    aggro_pool: Amount = "aggroPoolAmount",
+    aggro_pool: Amount = ids::GAME_SETTINGS_AGGRO_POOL_AMOUNT,
     /// The enemies' damage, for enemies spawned after a change.
-    enemy_damage: f32 = "enemyDamageFactor",
+    enemy_damage: f32 = ids::GAME_SETTINGS_ENEMY_DAMAGE_FACTOR,
     /// The enemies' health, for enemies spawned after a change.
-    enemy_health: f32 = "enemyHealthFactor",
+    enemy_health: f32 = ids::GAME_SETTINGS_ENEMY_HEALTH_FACTOR,
     /// The enemies' stamina, for enemies spawned after a change.
-    enemy_stamina: f32 = "enemyStaminaFactor",
+    enemy_stamina: f32 = ids::GAME_SETTINGS_ENEMY_STAMINA_FACTOR,
     /// How far enemies notice characters.
-    enemy_perception: f32 = "enemyPerceptionRangeFactor",
+    enemy_perception: f32 = ids::GAME_SETTINGS_ENEMY_PERCEPTION_RANGE_FACTOR,
     /// The bosses' damage.
-    boss_damage: f32 = "bossDamageFactor",
+    boss_damage: f32 = ids::GAME_SETTINGS_BOSS_DAMAGE_FACTOR,
     /// The bosses' health.
-    boss_health: f32 = "bossHealthFactor",
+    boss_health: f32 = ids::GAME_SETTINGS_BOSS_HEALTH_FACTOR,
     /// The threat bonus.
-    threat_bonus: f32 = "threatBonus",
+    threat_bonus: f32 = ids::GAME_SETTINGS_THREAT_BONUS,
     /// Whether enemies leave characters alone until attacked.
-    pacify_enemies: bool = "pacifyAllEnemies",
+    pacify_enemies: bool = ids::GAME_SETTINGS_PACIFY_ALL_ENEMIES,
     /// What startling a tamed animal costs.
-    startle: StartleRepercussion = "tamingStartleRepercussion",
+    startle: StartleRepercussion = ids::GAME_SETTINGS_TAMING_STARTLE_REPERCUSSION,
     /// How long the day lasts in real time; the clock keeps its hour.
-    day_length: Duration = "dayTimeDuration",
+    day_length: Duration = ids::GAME_SETTINGS_DAY_TIME_DURATION,
     /// How long the night lasts in real time.
-    night_length: Duration = "nightTimeDuration",
+    night_length: Duration = ids::GAME_SETTINGS_NIGHT_TIME_DURATION,
     /// How hard the shroud's curse hits.
-    curse: CurseModifier = "curseModifier",
+    curse: CurseModifier = ids::GAME_SETTINGS_CURSE_MODIFIER,
     /// The Flame level from which the shroud lifts where it is cleared.
-    flame_level_fog_removal: u8 = "flameLevelFogRemoval",
+    flame_level_fog_removal: u8 = ids::GAME_SETTINGS_FLAME_LEVEL_FOG_REMOVAL,
 }
 
 impl Settings {
@@ -579,8 +577,7 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn game_settings(&mut self) -> Result<GameSettings, Off> {
         let host = self.host();
-        let size =
-            usize::try_from(self.type_size(TYPE)?).map_err(|_| Off::new("game settings: size"))?;
+        let size = self.size(ids::GAME_SETTINGS)?;
         Ok(GameSettings {
             host,
             offsets: Offsets::resolve(self, size)?,
