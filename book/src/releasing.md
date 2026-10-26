@@ -8,8 +8,8 @@ archives, and the page players are sent to when a server runs a mod they lack.
 
 The platform's crates carry versions of their own: the loader
 (`enshwick-loader`), the `powrprof.dll` stub (`enshwick-loader-stub`),
-`enshwick` with its test fake, `enshwick-macros`, `enshwick-reflect`, the
-build tables (`enshwick-gamedata`) and `cargo-enshwick`. A new build table is
+`enshwick` with its test fake, `enshwick-macros`, the build tables with the
+reflection reader (`enshwick-gamedata`) and `cargo-enshwick`. A new build table is
 a loader patch release and leaves the API's version alone. Mods have versions
 of their own too, released apart from the platform and from each other.
 

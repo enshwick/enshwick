@@ -127,8 +127,9 @@ fn is_part(part: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-/// The full id of `id` asked for by mod `mod_id`: `name` names the mod's
-/// own kind, `mod:name` any mod's.
+/// The full id of `id` asked for by a mod whose bare names take the
+/// namespace `mod_id` (its first former id after a rename): `name` names the
+/// mod's own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
@@ -163,7 +164,7 @@ fn open_kind(
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
-    let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
+    let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
     let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
     let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
         let kind = &mut pending[index];

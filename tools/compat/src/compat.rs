@@ -12,8 +12,8 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
+use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use enshwick_gamedata::{self as tables, Kind, PartState, Resolved, Table};
-use enshwick_reflect::{Fingerprint, Image, Layout, Reflection};
 
 /// Each part of the loader with the build table ids it names; only a
 /// Windows build carries the loader.
@@ -398,7 +398,7 @@ fn check_exact(build: &Build, table: &Table) -> Vec<String> {
         let entry = build
             .reflection
             .system(name)
-            .map_or(0, enshwick_reflect::System::entry);
+            .map_or(0, enshwick_gamedata::reflect::System::entry);
         if entry != build.base + rva {
             problems.push(format!(
                 "system `{name}` is not where the table says: nothing loads"

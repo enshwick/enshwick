@@ -5874,3 +5874,6 @@ mod tests {
         assert_eq!((null, huge), (None, None));
     }
 }
+
+#[cfg(test)]
+mod layout_tests;

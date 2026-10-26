@@ -208,10 +208,12 @@ fn is_part(part: &str) -> bool {
 }
 
 /// The full id of `id` asked for by the mod named `names` (its id first,
-/// then its former ids), and whether the namespace is the mod's own.
+/// then its former ids), and whether the namespace is the mod's own. A bare
+/// name takes the namespace where the mod's data lives: its first former
+/// id, or else its id.
 fn full_id(names: &[&str], id: &str) -> Option<(String, bool)> {
-    let mod_id = names.first()?;
-    let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
+    let home = names.get(1).or_else(|| names.first())?;
+    let (namespace, name) = id.split_once(':').unwrap_or((home, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
         .then(|| (format!("{namespace}:{name}"), names.contains(&namespace)))
 }
@@ -1128,6 +1130,15 @@ mod tests {
     #[test]
     fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
         assert_eq!(full_id(&["rpg"], "crit"), Some(("rpg:crit".into(), true)));
+        assert_eq!(
+            full_id(&["me.rpg", "rpg"], "crit"),
+            Some(("rpg:crit".into(), true)),
+            "a renamed mod's bare names stay where its data lives"
+        );
+        assert_eq!(
+            full_id(&["me.rpg", "rpg"], "me.rpg:luck"),
+            Some(("me.rpg:luck".into(), true))
+        );
         assert_eq!(
             full_id(&["rpg"], "rpg:crit"),
             Some(("rpg:crit".into(), true))
