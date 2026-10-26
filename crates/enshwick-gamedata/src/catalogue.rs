@@ -327,6 +327,42 @@ mod tests {
     }
 
     #[test]
+    fn every_event_id_is_named_after_its_engine_type_and_field() {
+        let events: Vec<(&str, &str)> = FACTS
+            .iter()
+            .filter_map(|&(id, fact)| match fact {
+                Fact::Type(ty) if ty.ends_with("Event") => Some((id, ty)),
+                _ => None,
+            })
+            .collect();
+        for &(id, ty) in &events {
+            let (_, short) = ty.rsplit_once("::").unwrap();
+            assert_eq!(plain(id), plain(short), "{id}");
+        }
+        for &(id, fact) in FACTS {
+            let Some((event, suffix)) = id.split_once('.') else {
+                continue;
+            };
+            if let (true, Fact::Offset { field, .. }) =
+                (events.iter().any(|&(e, _)| e == event), fact)
+            {
+                assert_eq!(plain(suffix), plain(field), "{id}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_game_settings_id_is_named_after_its_engine_field() {
+        for &(id, fact) in FACTS {
+            if let (Some(suffix), Fact::Offset { field, .. }) =
+                (id.strip_prefix("game_settings."), fact)
+            {
+                assert_eq!(plain(suffix), plain(field), "{id}");
+            }
+        }
+    }
+
+    #[test]
     fn an_enum_constant_is_neither_a_type_nor_an_offset() {
         let fact = fact("damage_type.magical_fire");
         assert!(matches!(fact, Some(Fact::Constant { .. })));
