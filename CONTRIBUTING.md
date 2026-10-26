@@ -6,7 +6,7 @@ and on Windows the MSVC build tools.
 
 ```bash
 bun install                                 # repository tools and the git hooks
-cargo install --locked cargo-nextest@0.9.148
+cargo install --locked cargo-nextest@0.9.149
 cargo nextest run --workspace
 ```
 
@@ -16,9 +16,15 @@ of them compiles, so they take seconds. Before asking for review, run
 `cargo xtask check`: clippy and the doctests, and the tests of the packages the
 change touches and of the packages that depend on them. Off Windows it also
 lints the workspace for Windows through
-[cargo-xwin](https://github.com/rust-cross/cargo-xwin). `cargo xtask check
---all` runs the whole suite. The rules the hooks enforce, and the ones they
-cannot, are in this file:
+[cargo-xwin](https://github.com/rust-cross/cargo-xwin). The loader, research
+and optimizer crates build only for Windows: off Windows, `cargo xtask check
+--windows` runs their tests under Wine in Docker, in an image built from
+[tools/wine/Dockerfile](tools/wine/Dockerfile) on first use, or under Wine
+directly on an amd64 Linux host that has it. On Apple silicon
+the container runs through Rosetta, which cannot run the tests of crashes,
+detours, patches and threads, so those are skipped there. `cargo xtask check
+--all` runs the whole suite, the Wine tests included when Docker runs. The
+rules the hooks enforce, and the ones they cannot, are in this file:
 
 - branch from `main` as `feature/<slug>`, `fix/<slug>` or `chore/<slug>` and
   open a pull request into `main`; its title is a conventional commit,

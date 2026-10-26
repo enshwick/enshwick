@@ -74,13 +74,11 @@ The data:
 `LoaderSettingsChanged` for every mod by itself.
 
 `JoinRefused` is raised on the client, once the player closed the loader's
-note about mods the server runs and the client lacks or runs in another
+dialog about mods the server runs and the client lacks or runs in another
 version.
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
-lists them with the server's versions and update sources. The handler runs on
-the game thread, so hand downloads to a thread of your own, as
-[`enshwick-updater`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-does.
+lists them with the server's versions and homepages. The handler runs on the
+game thread.
 
 ## Game events
 

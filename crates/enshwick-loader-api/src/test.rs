@@ -864,7 +864,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str, UpdateSource};
+    /// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str};
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new()
     ///     .loaded(ModInfo {
@@ -875,8 +875,6 @@ impl FakeHost {
     ///         flags: ManifestFlags::NONE,
     ///         off: 0,
     ///         file: Str::new("mods/enshwick/enshwick.dll"),
-    ///         updates: UpdateSource::NONE,
-    ///         signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
     ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
@@ -894,7 +892,7 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str, UpdateSource};
+    /// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str};
     ///
     /// let loader = enshwick_loader_api::test::FakeHost::new()
     ///     .join_missing(ModInfo {
@@ -905,8 +903,7 @@ impl FakeHost {
     ///         flags: ManifestFlags::JOIN,
     ///         off: 1,
     ///         file: Str::EMPTY,
-    ///         updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
-    ///         signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
+    ///         homepage: Str::new("https://github.com/themaiby/enshwick"),
     ///         ..ModInfo::EMPTY
     ///     })
     ///     .install();
@@ -3042,41 +3039,6 @@ impl Installed {
     #[must_use]
     pub fn published_texts(&self) -> Option<String> {
         table::with(None, |s| s.published_texts.clone())
-    }
-
-    /// The updates the mod published last; empty before it published any.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// assert!(loader.published_updates().is_empty());
-    /// ```
-    #[must_use]
-    pub fn published_updates(&self) -> Vec<crate::updates::Update> {
-        table::with(None, |s| s.published_updates.clone())
-            .and_then(|text| crate::updates::from_toml(&text).ok())
-            .unwrap_or_default()
-    }
-
-    /// Picks the update of mod `id` as the player would on the Mods screen;
-    /// false when the mod hears no picks.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let loader = enshwick_loader_api::test::FakeHost::new().install();
-    /// assert!(!loader.pick_update("safes"));
-    /// ```
-    #[must_use]
-    pub fn pick_update(&self, id: &str) -> bool {
-        let Some((callback, user)) = table::with(None, |s| s.update_pick) else {
-            return false;
-        };
-        // SAFETY: the mod's registered callback with its own pointer and an
-        // id valid for the call.
-        unsafe { callback(Str::new(id), core::ptr::with_exposed_provenance_mut(user)) };
-        true
     }
 
     /// The mod's markers on the map, as it set them last.

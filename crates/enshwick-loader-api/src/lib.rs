@@ -117,7 +117,6 @@ pub mod terrain;
 pub mod test;
 pub mod time;
 pub mod ui;
-pub mod updates;
 pub mod vetoes;
 pub mod weather;
 pub mod world;
@@ -293,33 +292,6 @@ pub mod __private {
             _ => 0,
         };
         ManifestFlags(join | reload)
-    }
-
-    #[must_use]
-    pub const fn first_or_null<T>(given: &'static [T]) -> *const T {
-        if given.is_empty() {
-            core::ptr::null()
-        } else {
-            given.as_ptr()
-        }
-    }
-
-    /// The author keys `signed_by:` names; the build fails on a key that
-    /// is not a minisign public key, or on more than two.
-    #[must_use]
-    pub const fn signed_by(keys: &[&'static str]) -> [crate::abi::Str; 2] {
-        let mut out = [crate::abi::Str::EMPTY; 2];
-        assert!(keys.len() <= out.len(), "signed_by names at most two keys");
-        let mut i = 0;
-        while i < keys.len() {
-            assert!(
-                crate::mods::is_author_key(keys[i]),
-                "a signed_by key is a minisign public key, RW... (56 characters)"
-            );
-            out[i] = crate::abi::Str::new(keys[i]);
-            i += 1;
-        }
-        out
     }
 
     /// The first non-empty text of `texts`, or empty.

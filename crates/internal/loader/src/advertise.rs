@@ -6,12 +6,10 @@
 //! count, `id@version`, split to fit Steam's rule length), and for each join
 //! mod with join values `enshwick.sync.<id>`, `enshwick.sync.<id>.1`, ...
 //! (its values as an inline TOML table, split the same way), and for each join
-//! mod with an update source `enshwick.src.<id>` (`github:<owner/name>:<component>`
-//! or `url:<url>`), so a client that lacks the mod knows where to get it, and
-//! for each join mod that declares author keys `enshwick.key.<id>` (the keys,
-//! `RW...`, separated by a space), so the client knows who must have signed it,
-//! and for each join mod with a name `enshwick.name.<id>`, so the client's
-//! notes name a mod it lacks as players know it.
+//! mod with a homepage `enshwick.page.<id>` (an `https://` address), so a
+//! client that lacks the mod knows where to get it, and for each join mod with
+//! a name `enshwick.name.<id>`, so the client's notes name a mod it lacks as
+//! players know it.
 //! Players see it before they join, with or without mods, and a modded client
 //! compares it with its own. The game sets its name once at start, so the
 //! loader sets it again now and then, and with it the join values, which a
@@ -39,10 +37,8 @@ pub const RULE_MOD_COUNT: &str = "enshwick.mods.count";
 pub const RULE_SYNC: &str = "enshwick.sync";
 /// The most rules one mod's join values spread over.
 pub const SYNC_RULES: usize = 8;
-/// The prefix of a mod's update source rule, `enshwick.src.<id>`.
-pub const RULE_SOURCE: &str = "enshwick.src";
-/// The prefix of a mod's author key rule, `enshwick.key.<id>`.
-pub const RULE_KEY: &str = "enshwick.key";
+/// The prefix of a mod's homepage rule, `enshwick.page.<id>`.
+pub const RULE_PAGE: &str = "enshwick.page";
 /// The prefix of a mod's name rule, `enshwick.name.<id>`.
 pub const RULE_NAME: &str = "enshwick.name";
 
@@ -50,10 +46,8 @@ pub const RULE_NAME: &str = "enshwick.name";
 /// `(id, line)`; they stay out of the fingerprint.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Lines {
-    /// Update sources, as `Updates::to_line` writes them.
-    pub sources: Vec<(String, String)>,
-    /// Author keys, as `keys_line` writes them.
-    pub keys: Vec<(String, String)>,
+    /// Homepages, `https://` addresses.
+    pub pages: Vec<(String, String)>,
     /// Names players read.
     pub names: Vec<(String, String)>,
 }
@@ -113,18 +107,11 @@ pub fn sync_rules(id: &str, values: &str) -> Option<Vec<(String, String)>> {
     })
 }
 
-/// The update source rules of the mods `sources`, `(id, source line)`: one
-/// `enshwick.src.<id>` each, leaving out a source too long for one rule.
+/// The homepage rules of the mods `pages`, `(id, page)`: one
+/// `enshwick.page.<id>` each, leaving out a page too long for one rule.
 #[must_use]
-pub fn source_rules(sources: &[(String, String)]) -> Vec<(String, String)> {
-    line_rules(RULE_SOURCE, sources)
-}
-
-/// The author key rules of the mods `keys`, `(id, keys line)`: one
-/// `enshwick.key.<id>` each, leaving out a line too long for one rule.
-#[must_use]
-pub fn key_rules(keys: &[(String, String)]) -> Vec<(String, String)> {
-    line_rules(RULE_KEY, keys)
+pub fn page_rules(pages: &[(String, String)]) -> Vec<(String, String)> {
+    line_rules(RULE_PAGE, pages)
 }
 
 /// The name rules of the mods `names`, `(id, name)`: one
@@ -178,8 +165,7 @@ impl Advert {
         if mods_cut > 0 {
             rules.push((RULE_MOD_COUNT.to_owned(), mods.len().to_string()));
         }
-        rules.extend(source_rules(&lines.sources));
-        rules.extend(key_rules(&lines.keys));
+        rules.extend(page_rules(&lines.pages));
         rules.extend(name_rules(&lines.names));
         let mut too_long = Vec::new();
         for (id, values) in synced {
@@ -603,23 +589,20 @@ mod tests {
     }
 
     #[test]
-    fn sources_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
-        let sources = vec![
+    fn pages_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
+        let pages = vec![
             (
                 "count".to_owned(),
-                "github:themaiby/enshwick:enshwick-flame-altar-count".to_owned(),
+                "https://github.com/themaiby/enshwick".to_owned(),
             ),
-            (
-                "zones".to_owned(),
-                format!("url:https://{}", "x".repeat(200)),
-            ),
+            ("zones".to_owned(), format!("https://{}", "x".repeat(200))),
             ("plain".to_owned(), String::new()),
         ];
         assert_eq!(
-            source_rules(&sources),
+            page_rules(&pages),
             [(
-                "enshwick.src.count".to_owned(),
-                "github:themaiby/enshwick:enshwick-flame-altar-count".to_owned()
+                "enshwick.page.count".to_owned(),
+                "https://github.com/themaiby/enshwick".to_owned()
             )]
         );
         let with = Advert::new(
@@ -627,33 +610,7 @@ mod tests {
             "Homelab",
             &mods(),
             &Lines {
-                sources: sources.clone(),
-                ..Lines::default()
-            },
-            &none(),
-        );
-        let without = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default(), &none());
-        assert_eq!(with.fingerprint, without.fingerprint);
-        assert_eq!(with.rules.len(), without.rules.len() + 1);
-    }
-
-    #[test]
-    fn keys_are_rules_that_fit_and_stay_out_of_the_fingerprint() {
-        let key = "RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF";
-        let keys = vec![
-            ("count".to_owned(), format!("{key} {key}")),
-            ("zones".to_owned(), "x".repeat(200)),
-        ];
-        assert_eq!(
-            key_rules(&keys),
-            [("enshwick.key.count".to_owned(), format!("{key} {key}"))]
-        );
-        let with = Advert::new(
-            "0.1.0",
-            "Homelab",
-            &mods(),
-            &Lines {
-                keys: keys.clone(),
+                pages: pages.clone(),
                 ..Lines::default()
             },
             &none(),

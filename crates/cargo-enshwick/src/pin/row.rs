@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use enshwick_loader_builds::Table;
+use enshwick_loader_builds::{Symbol, Table};
 
 use super::anchor::{self, Anchor};
 use super::exe::Exe;
@@ -340,9 +340,23 @@ pub(crate) fn port_anchors<'r>(
     let finder = Porter::new(old, new);
     // The entry's own pattern finds its instruction on the new build while
     // the code around it holds; else the instruction is ported.
-    let in_new = anchor::of_table(table, new);
+    let pinned = |id: &str| {
+        table
+            .symbols()
+            .iter()
+            .find(|s| s.id() == id)
+            .map(Symbol::rva)
+    };
+    let ported_to = |id: &str| {
+        ported
+            .lines
+            .iter()
+            .find(|l| l.kind == Kind::Symbol && l.id == id)
+            .and_then(|l| l.new)
+    };
+    let in_new = anchor::of_table(table, new, ported_to);
     let mut out = HashMap::new();
-    for (id, anchor) in anchor::of_table(table, old) {
+    for (id, anchor) in anchor::of_table(table, old, pinned) {
         let by_port = || {
             let site = anchor.site().and_then(|s| finder.symbol(s).outcome.rva())?;
             Some(anchor.moved_to(site))

@@ -12,7 +12,6 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `mods/<id>.log` | One mod's lines                                       |
 | `status.log`    | The latest status summary                             |
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
-| `stub.log`      | What the `powrprof.dll` stub did with staged updates  |
 
 `all.log`, `loader.log` and the mod logs start empty each session; the two
 sessions before stay as `all.1.log` and `all.2.log` (and so on for each
@@ -140,7 +139,7 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
 
 A mod built for a newer ABI minor than the loader's never starts: the log
-shows `built for ABI 1.<n>, newer than the loader's 1.<m>: update Enshwick`.
+shows `built for ABI 2.<n>, newer than the loader's 2.<m>: update Enshwick`.
 A settings file that stops parsing while the game runs does
 not turn the mod off: the mod logs
 `settings change skipped, the running values stay: ...` and keeps its values.
@@ -197,14 +196,14 @@ stays out and goes back to the menu, and one dialog, "Mods missing", lists
 them by where to get them:
 
 ```text
-From github.com/themaiby/enshwick/releases:
+From github.com/themaiby/enshwick:
 Safes 0.2.0, yours 0.1.0
 Ask the server's admin for:
 Survivors per altar 0.1.4
 ```
 
-A mod's place is the releases page of the update source the server advertises
-for it, or the server's admin when it advertises none. A mod you turned off in
+A mod's place is the homepage the server advertises for it, or the server's
+admin when it advertises none. A mod you turned off in
 `mods/enshwick/mods.toml` is listed under "Turn on in": turn it on and restart
 the game. `loader.log` then has
 `join refused: the server runs mods this client lacks`. Other cases do not keep

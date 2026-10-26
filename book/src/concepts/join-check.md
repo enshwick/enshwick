@@ -18,10 +18,8 @@ running join mods (the ones that are on):
   split to fit Steam's rule length; a [content pack](../content/packs.md)'s
   version carries the hash of its files, `lanterns@1.0.0+3f2a9c1e`;
 - `enshwick.sync.<id>`: a mod's join values, as an inline TOML table;
-- `enshwick.src.<id>`: a mod's update source, `github:<owner/name>:<component>`
-  or `url:<url>`;
-- `enshwick.key.<id>`: the author keys a mod declares with `signed_by:`, the
-  `RW...` lines separated by a space;
+- `enshwick.page.<id>`: a mod's homepage, where a player who lacks it gets
+  it;
 - `enshwick.name.<id>`: a mod's name, so a client's notes name a mod it lacks
   as players know it.
 
@@ -63,8 +61,8 @@ compares the fingerprint with its own:
   restarts, a note lists them, and the player joins.
 - **The server runs join mods the player lacks or has in another version.**
   The client does not join, and one dialog lists each, with the server's
-  version, the player's, and where to get it: the releases page of the source
-  the server advertises, or the server's admin. Then the loader raises
+  version, the player's, and where to get it: the mod's page the server
+  advertises, or the server's admin. Then the loader raises
   `JoinRefused` (below). A mod the player turned off in
   `mods/enshwick/mods.toml` is named as such, left out of `JoinRefused`'s list,
   and is the player's to turn back on.
@@ -122,5 +120,5 @@ When the check keeps a player out, the loader raises
 [`events::JoinRefused`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/events.rs)
 on the client after the player closes the dialog, and
 [`mods::join_missing()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/mods.rs)
-lists the missing mods with the server's versions and update sources; see
-[Releasing and updates](../releasing.md).
+lists the missing mods with the server's versions and homepages; see
+[Releasing mods](../releasing.md).

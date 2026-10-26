@@ -259,8 +259,8 @@ const CARGO_TOML: &str = r#"[package]
 name = "{id}"
 version = "0.1.0"
 edition = "2024"
-# The loader shows these to players: on the Mods screen, in the status
-# summary and in the updater's notes.
+# The loader shows these to players on the Mods screen and in the status
+# summary; the homepage is where players are sent to get the mod.
 description = "What {name} does, in one sentence"
 authors = ["Your Name"]
 license = "MIT OR Apache-2.0"
@@ -330,11 +330,6 @@ impl Mod for {type} {
             // breaks: ["old-mod" => "<0.3"],
             // After a rename, the old ids, whose DLLs then never start:
             // replaces: ["old-id"],
-            // Players get your releases from the updater once you name where
-            // they come from and the minisign key you sign them with; see
-            // "Releasing and updates" in the modding book.
-            // updates: github("you/your-repo", "{id}"),
-            // signed_by: ["RW...: the second line of your minisign .pub file"],
         )
     }
 
@@ -392,7 +387,7 @@ mod tests {
         assert!(text("Cargo.toml").contains("name = \"area-loot\""));
         assert!(text("Cargo.toml").contains(&api_source()));
         assert!(text("src/lib.rs").contains("id: \"area-loot\",\n            side: BOTH,"));
-        assert!(text("src/lib.rs").contains("// signed_by: [\"RW..."));
+        assert!(text("src/lib.rs").contains("// replaces: [\"old-id\"]"));
         assert!(text("src/lib.rs").contains("declare_mod!(AreaLoot)"));
         assert!(!files.iter().any(|(_, text)| text.contains("{type}")
             || text.contains("{id}")
