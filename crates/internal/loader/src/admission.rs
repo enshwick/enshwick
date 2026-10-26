@@ -405,7 +405,7 @@ mod runtime;
 mod tests {
     use super::*;
 
-    const SERVER: &str = "safes@0.3.0,zones@0.1.0";
+    const SERVER: &str = "you.trading-post@0.3.0,zones@0.1.0";
 
     fn rules() -> Rules {
         Rules {
@@ -435,7 +435,10 @@ mod tests {
     }
 
     fn all_lacking() -> Vec<Need> {
-        vec![need("safes", "0.3.0", None), need("zones", "0.1.0", None)]
+        vec![
+            need("you.trading-post", "0.3.0", None),
+            need("zones", "0.1.0", None),
+        ]
     }
 
     fn at(start: Instant, seconds: u64) -> Instant {
@@ -486,7 +489,7 @@ mod tests {
     fn kicked_never_left_joins_again() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        let (stays, step) = gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules());
+        let (stays, step) = gate.hello(7, SERVER, &said("you.trading-post@0.2.0"), start, rules());
         assert_eq!(
             (stays, step),
             (false, None),
@@ -498,7 +501,7 @@ mod tests {
                 7,
                 true,
                 vec![
-                    need("safes", "0.3.0", Some("0.2.0")),
+                    need("you.trading-post", "0.3.0", Some("0.2.0")),
                     need("zones", "0.1.0", None)
                 ]
             )]
@@ -525,7 +528,7 @@ mod tests {
         let mut gate = Gate::default();
         let start = Instant::now();
         gate.joined(7, SERVER, start, rules());
-        gate.hello(8, SERVER, &said("safes@0.2.0"), start, rules());
+        gate.hello(8, SERVER, &said("you.trading-post@0.2.0"), start, rules());
         gate.keep(&[9]);
         assert!(!gate.busy());
         assert_eq!(gate.due(SERVER, at(start, 60), rules()), []);
@@ -554,7 +557,7 @@ mod tests {
         let mut gate = Gate::default();
         let start = Instant::now();
         gate.joined(7, SERVER, start, rules());
-        let client = said("camera@1.0.0,safes@0.3.0,zones@0.1.0");
+        let client = said("camera@1.0.0,you.trading-post@0.3.0,zones@0.1.0");
         assert_eq!(gate.hello(7, SERVER, &client, start, rules()), (true, None));
         assert_eq!(gate.due(SERVER, at(start, 3600), rules()), []);
     }
@@ -575,7 +578,13 @@ mod tests {
     fn an_admitted_player_is_checked_again_when_the_server_s_mods_changed() {
         let mut gate = Gate::default();
         let start = Instant::now();
-        gate.hello(7, "safes@0.3.0", &said("safes@0.3.0"), start, rules());
+        gate.hello(
+            7,
+            "you.trading-post@0.3.0",
+            &said("you.trading-post@0.3.0"),
+            start,
+            rules(),
+        );
         assert_eq!(
             gate.joined(7, SERVER, start, rules()),
             [note(7, true, vec![need("zones", "0.1.0", None)])]
@@ -587,7 +596,7 @@ mod tests {
         let mut gate = Gate::default();
         let start = Instant::now();
         gate.joined(7, SERVER, start, rules());
-        let (stays, step) = gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules());
+        let (stays, step) = gate.hello(7, SERVER, &said("you.trading-post@0.2.0"), start, rules());
         assert!(!stays);
         assert_eq!(
             step,
@@ -595,13 +604,13 @@ mod tests {
                 7,
                 true,
                 vec![
-                    need("safes", "0.3.0", Some("0.2.0")),
+                    need("you.trading-post", "0.3.0", Some("0.2.0")),
                     need("zones", "0.1.0", None)
                 ]
             ))
         );
         assert_eq!(
-            gate.hello(7, SERVER, &said("safes@0.2.0"), start, rules()),
+            gate.hello(7, SERVER, &said("you.trading-post@0.2.0"), start, rules()),
             (false, None),
             "a repeated hello is not told again"
         );
@@ -796,7 +805,7 @@ mod tests {
     fn needs_name_the_server_s_mods_the_game_lacks_or_runs_otherwise() {
         assert_eq!(
             needs(SERVER, Some(&said("zones@0.1.0,other@1.0.0"))),
-            [need("safes", "0.3.0", None)]
+            [need("you.trading-post", "0.3.0", None)]
         );
         assert_eq!(needs(SERVER, Some(&said(SERVER))), []);
         assert_eq!(needs(SERVER, None).len(), 2);
@@ -811,16 +820,16 @@ mod tests {
     #[test]
     fn a_cut_hello_lacks_only_what_its_list_could_have_named() {
         let cut = Hello {
-            mods: "area@1.0.0,safes@0.2.0".to_owned(),
+            mods: "area@1.0.0,you.trading-post@0.2.0".to_owned(),
             complete: false,
             nonce: 0,
         };
-        let server = "area@1.0.0,camera@1.0.0,safes@0.3.0,zones@0.1.0";
+        let server = "area@1.0.0,camera@1.0.0,you.trading-post@0.3.0,zones@0.1.0";
         assert_eq!(
             needs(server, Some(&cut)),
             [
                 need("camera", "1.0.0", None),
-                need("safes", "0.3.0", Some("0.2.0"))
+                need("you.trading-post", "0.3.0", Some("0.2.0"))
             ],
             "zones sorts after the cut"
         );

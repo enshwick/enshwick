@@ -16,6 +16,7 @@
 //!   only confirms the value. No pattern is guessed for a constant: a value
 //!   found in some code says nothing about what that code means.
 
+use anyhow::{Context as _, bail};
 use std::ops::Range;
 
 use enshwick_gamedata::Locate;
@@ -86,14 +87,14 @@ pub(crate) fn symbol(exe: &Exe<'_>, rva: u64) -> Option<SymbolPattern> {
 /// # Errors
 ///
 /// Why no such pattern can be made.
-pub(crate) fn symbol_through(exe: &Exe<'_>, site: u64) -> Result<(SymbolPattern, u64), String> {
+pub(crate) fn symbol_through(exe: &Exe<'_>, site: u64) -> anyhow::Result<(SymbolPattern, u64)> {
     let (masked, _, index) = instruction(exe, site)?;
     let insn = masked.insns[index];
     let (Some(reference), Some(rel)) = (insn.reference, insn.reference_at) else {
-        return Err(format!("{site:#x} neither calls nor addresses anything"));
+        bail!("{site:#x} neither calls nor addresses anything");
     };
     let window = unique_window(exe, &masked, index..index + 1, &[], &[], false)
-        .ok_or_else(|| format!("no unique window around {site:#x}"))?;
+        .with_context(|| format!("no unique window around {site:#x}"))?;
     let at = insn.offset + rel - window.start;
     let end = insn.offset + insn.len - window.start;
     let (Reference::Code(target) | Reference::Data(target)) = reference;
@@ -101,8 +102,8 @@ pub(crate) fn symbol_through(exe: &Exe<'_>, site: u64) -> Result<(SymbolPattern,
         SymbolPattern {
             text: render(&window),
             locate: Locate::Rel {
-                at: u64::try_from(at).map_err(|e| e.to_string())?,
-                end: u64::try_from(end).map_err(|e| e.to_string())?,
+                at: u64::try_from(at)?,
+                end: u64::try_from(end)?,
             },
         },
         target,
@@ -119,11 +120,11 @@ pub(crate) fn constant_from(
     exe: &Exe<'_>,
     site: u64,
     carrier: Carrier,
-) -> Result<ConstantPattern, String> {
+) -> anyhow::Result<ConstantPattern> {
     let (masked, _, index) = instruction(exe, site)?;
     let insn = masked.insns[index];
     let (at, width) =
-        carried(&insn, carrier).ok_or_else(|| format!("{site:#x} has no such operand"))?;
+        carried(&insn, carrier).with_context(|| format!("{site:#x} has no such operand"))?;
     let operand = insn.offset + at;
     let hide = operand..operand + width;
     let window = unique_window(
@@ -134,13 +135,10 @@ pub(crate) fn constant_from(
         &[],
         false,
     )
-    .ok_or_else(|| format!("no unique window around {site:#x}"))?;
+    .with_context(|| format!("no unique window around {site:#x}"))?;
     Ok(ConstantPattern {
         text: render(&window),
-        operand: Some((
-            u64::try_from(operand - window.start).map_err(|e| e.to_string())?,
-            u8::try_from(width).map_err(|e| e.to_string())?,
-        )),
+        operand: Some((u64::try_from(operand - window.start)?, u8::try_from(width)?)),
         negative: matches!(carrier, Carrier::Displacement { negative: true }),
         shift: carrier == Carrier::Shift,
     })
@@ -151,10 +149,10 @@ pub(crate) fn constant_from(
 /// # Errors
 ///
 /// Why no such pattern can be made.
-pub(crate) fn constant_confirmed(exe: &Exe<'_>, site: u64) -> Result<ConstantPattern, String> {
+pub(crate) fn constant_confirmed(exe: &Exe<'_>, site: u64) -> anyhow::Result<ConstantPattern> {
     let (masked, _, index) = instruction(exe, site)?;
     let window = unique_window(exe, &masked, index..index + 1, &[], &[index], false)
-        .ok_or_else(|| format!("no unique window around {site:#x}"))?;
+        .with_context(|| format!("no unique window around {site:#x}"))?;
     Ok(ConstantPattern {
         text: render(&window),
         operand: None,
@@ -206,12 +204,12 @@ pub(crate) fn value_of(insn: &Insn, carrier: Carrier) -> Option<u64> {
 /// # Errors
 ///
 /// When no instruction starts at `site`.
-pub(crate) fn instruction(exe: &Exe<'_>, site: u64) -> Result<(Masked, u64, usize), String> {
-    let (bounds, masked) = decode(exe, site).ok_or_else(|| format!("no code at {site:#x}"))?;
+pub(crate) fn instruction(exe: &Exe<'_>, site: u64) -> anyhow::Result<(Masked, u64, usize)> {
+    let (bounds, masked) = decode(exe, site).with_context(|| format!("no code at {site:#x}"))?;
     let index = usize::try_from(site - bounds.start)
         .ok()
         .and_then(|offset| masked.insn_at(offset))
-        .ok_or_else(|| format!("no instruction starts at {site:#x}"))?;
+        .with_context(|| format!("no instruction starts at {site:#x}"))?;
     Ok((masked, bounds.start, index))
 }
 

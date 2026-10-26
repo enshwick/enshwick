@@ -1,5 +1,5 @@
 //! The loader's own texts, such as the Mods screen's words and the
-//! stand-ins' names: `texts.toml` beside this file, in English and Ukrainian,
+//! stand-ins' names: `texts.toml` beside this file, a table per language,
 //! with `mod-configs/enshwick.texts.toml` over it, read once, the first time
 //! a text is needed after the loader is installed.
 
@@ -78,21 +78,37 @@ pub(crate) fn translations(key: &'static str) -> impl Iterator<Item = (Language,
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
+
+    /// Every source file of the loader but this one.
+    fn sources() -> Vec<PathBuf> {
+        let mut dirs = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+        let this = Path::new(file!()).file_name().unwrap();
+        let mut files = Vec::new();
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs")
+                    && path.file_name() != Some(this)
+                {
+                    files.push(path);
+                }
+            }
+        }
+        files
+    }
 
     /// The keys the loader's code asks for: the first argument of each
     /// `texts::` call that is a literal, and the stand-ins' keys.
     fn keys() -> Vec<String> {
-        let source = [
-            include_str!("ui/mods.rs"),
-            include_str!("configure.rs"),
-            include_str!("configure/apply.rs"),
-            include_str!("chat.rs"),
-            include_str!("remote.rs"),
-            include_str!("host.rs"),
-            include_str!("admission.rs"),
-        ]
-        .concat();
+        let source: String = sources()
+            .iter()
+            .map(|path| std::fs::read_to_string(path).unwrap())
+            .collect();
         let mut keys: Vec<String> = source
             .split("texts::")
             .skip(1)
@@ -112,36 +128,23 @@ mod tests {
     }
 
     #[test]
-    fn every_key_the_loader_asks_for_has_english_and_ukrainian() {
+    fn every_key_the_loader_asks_for_has_a_fallback_text() {
         let texts = Texts::parse(EMBEDDED).unwrap();
         let keys = keys();
         assert!(keys.len() > 30, "{keys:?}");
         for key in keys {
-            for language in [Language::FALLBACK, Language::UK_UA] {
-                let found = texts.translations(&key).any(|(other, _)| other == language);
-                assert!(found, "{key} has no {}", language.code());
-            }
+            assert!(texts.get(&key, Language::FALLBACK).is_some(), "{key}");
         }
     }
 
     #[test]
-    fn english_and_ukrainian_hold_the_same_keys() {
-        let table: toml::Table = EMBEDDED.parse().unwrap();
-        let keys = |language: &str| -> Vec<String> {
-            let mut keys: Vec<String> = table[language]
-                .as_table()
-                .unwrap()
-                .keys()
-                .cloned()
-                .collect();
-            keys.sort_unstable();
-            keys
-        };
-        assert_eq!(keys("en"), keys("uk"));
+    fn every_text_exists_in_all_languages() {
+        let texts = Texts::parse(EMBEDDED).unwrap();
+        assert_eq!(texts.untranslated(), []);
     }
 
     #[test]
-    fn english_and_ukrainian_name_the_same_placeholders() {
+    fn every_language_names_the_fallback_s_placeholders() {
         fn placeholders(text: &str) -> Vec<&str> {
             let mut names: Vec<&str> = text
                 .split('{')
@@ -153,14 +156,12 @@ mod tests {
         }
         let texts = Texts::parse(EMBEDDED).unwrap();
         let table: toml::Table = EMBEDDED.parse().unwrap();
-        let all = table["en"].as_table().unwrap().keys();
-        for (english, ukrainian) in all.filter_map(|key| {
-            Some((
-                texts.get(key, Language::FALLBACK)?,
-                texts.get(key, Language::UK_UA)?,
-            ))
-        }) {
-            assert_eq!(placeholders(english), placeholders(ukrainian), "{english}");
+        let fallback = table[Language::FALLBACK.code()].as_table().unwrap();
+        for key in fallback.keys() {
+            let expected = placeholders(texts.get(key, Language::FALLBACK).unwrap());
+            for (language, text) in texts.translations(key) {
+                assert_eq!(placeholders(text), expected, "{key} in {}", language.code());
+            }
         }
     }
 

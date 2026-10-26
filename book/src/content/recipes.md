@@ -22,14 +22,14 @@ use enshwick::content::{Guid, Id};
 use enshwick::content::recipes::NewRecipe;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-const SAFE: Id = Id::new("safes:safe");
-const SAFE_RECIPE: Id = Id::new("safes:safe.recipe");
+const LOCKER: Id = Id::new("you.lockers:locker");
+const LOCKER_RECIPE: Id = Id::new("you.lockers:locker.recipe");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.add_recipe(NewRecipe {
-        id: SAFE_RECIPE,
+        id: LOCKER_RECIPE,
         like: CHEST,
-        output: SAFE.guid(),
+        output: LOCKER.guid(),
         output_count: 1,
         cost: 2,
         workshop: None,
@@ -39,7 +39,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 The new recipe is a copy of the first recipe that makes `like`: same
 workshop, unlock and duration. It makes `output_count` of `output`, and each
-of its ingredient counts is the copied recipe's times `cost`. Here the Safe
+of its ingredient counts is the copied recipe's times `cost`. Here the locker
 is crafted where the wooden chest is, for twice the chest's ingredients.
 
 | Field | Meaning |
@@ -157,8 +157,8 @@ module does the edit:
 
 The menu is shared like the registry: each mod's patch runs on the bundle as
 the mods before it left it. Each new recipe goes right after the one it
-copies, so of the Safe of one mod and the Vault of a mod loaded later, both
-copied from the wooden chest, the Vault shows first: chest, Vault, Safe. One group of
+copies, so of the locker of one mod and the Vault of a mod loaded later, both
+copied from the wooden chest, the Vault shows first: chest, Vault, locker. One group of
 the menu shows at most 512 recipes, all its sets together
 ([`GROUP_ENTRIES`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/menu.rs));
 the mod's log says when a recipe is left out because its group is full or

@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 #[derive(Debug, Clone)]
 pub(crate) struct Package {
     pub(crate) name: String,
+    /// The package's version.
+    pub(crate) version: String,
     /// Directory relative to the repository root, with `/` separators.
     pub(crate) dir: String,
     /// Workspace packages it depends on, in any dependency kind.
@@ -95,6 +97,7 @@ mod tests {
     fn package(name: &str, dir: &str, deps: &[&str]) -> Package {
         Package {
             name: name.to_owned(),
+            version: "0.0.0-dev".to_owned(),
             dir: dir.to_owned(),
             deps: deps.iter().map(|d| (*d).to_owned()).collect(),
             windows_tests: false,
@@ -106,9 +109,9 @@ mod tests {
             package("macros", "crates/enshwick-macros", &[]),
             package("enshwick", "crates/enshwick", &["macros"]),
             package("loader", "crates/internal/loader", &["enshwick"]),
-            package("safes", "mods/safes", &["enshwick"]),
-            package("safes-viewer", "mods/safes-viewer", &["safes"]),
-            package("probe", "mods/probe", &["enshwick"]),
+            package("trading-post", "mods/trading-post", &["enshwick"]),
+            package("haggling", "mods/haggling", &["trading-post"]),
+            package("my-mod", "mods/my-mod", &["enshwick"]),
         ]
     }
 
@@ -122,11 +125,11 @@ mod tests {
 
     #[test]
     fn a_mod_change_checks_the_mod_and_its_dependents_only() {
-        let scope = scope(&files(&["mods/safes/src/lib.rs"]), &workspace());
+        let scope = scope(&files(&["mods/trading-post/src/lib.rs"]), &workspace());
         assert_eq!(
             scope,
             Scope::Some {
-                code: names(&["safes", "safes-viewer"]),
+                code: names(&["trading-post", "haggling"]),
                 docs: names(&[]),
             }
         );
@@ -140,7 +143,7 @@ mod tests {
         };
         assert_eq!(
             code,
-            names(&["enshwick", "loader", "safes", "safes-viewer", "probe"])
+            names(&["enshwick", "loader", "trading-post", "haggling", "my-mod"])
         );
     }
 
@@ -185,13 +188,13 @@ mod tests {
     #[test]
     fn a_file_belongs_to_the_innermost_package_and_not_to_a_name_prefix() {
         let mut packages = workspace();
-        packages.push(package("nested", "mods/safes/nested", &[]));
+        packages.push(package("nested", "mods/trading-post/nested", &[]));
         let Scope::Some { code, .. } = scope(
-            &files(&["mods/safes/nested/src/lib.rs", "mods/safes-viewer/x.rs"]),
+            &files(&["mods/trading-post/nested/src/lib.rs", "mods/haggling/x.rs"]),
             &packages,
         ) else {
             panic!("not all");
         };
-        assert_eq!(code, names(&["nested", "safes-viewer"]));
+        assert_eq!(code, names(&["nested", "haggling"]));
     }
 }

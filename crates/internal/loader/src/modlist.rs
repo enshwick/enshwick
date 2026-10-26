@@ -30,9 +30,9 @@ pub const LIST_PATH: &str = "mods/enshwick/mods.toml";
 const LIST_HEADER: &str = "\
 # The mods Enshwick found in mods/. Set enabled = false to turn one off
 # without deleting its DLL; the loader then never loads that file. Mods found
-# later are added here, turned on. links_off = [\"safes:access\"] keeps a mod
-# on but its link on that extension point off. Changes take effect at the
-# next start.
+# later are added here, turned on. links_off = [\"you.trading-post:price\"]
+# keeps a mod on but its link on that extension point off. Changes take
+# effect at the next start.
 
 ";
 
@@ -322,12 +322,14 @@ mod tests {
     #[test]
     fn a_new_list_gets_every_mod_turned_on() {
         let mut list = ModList::default();
-        assert!(list.note("safes", "enshwick-safes.dll"));
-        assert!(list.note("area-loot", "enshwick-area-loot.dll"));
-        assert!(!list.note("safes", "enshwick-safes.dll"));
+        assert!(list.note("you.trading-post", "trading_post.dll"));
+        assert!(list.note("you.lockers", "lockers.dll"));
+        assert!(!list.note("you.trading-post", "trading_post.dll"));
         let text = list.render();
         assert!(text.starts_with("# The mods Enshwick found"));
-        assert!(text.contains("[safes]\nenabled = true\nfile = \"enshwick-safes.dll\"\n"));
+        assert!(
+            text.contains("[\"you.trading-post\"]\nenabled = true\nfile = \"trading_post.dll\"\n")
+        );
         assert!(list.off().is_empty());
         let read = ModList::parse(&text).unwrap();
         assert_eq!(read.render(), text);
@@ -335,44 +337,59 @@ mod tests {
 
     #[test]
     fn mods_turned_off_stay_off_with_the_players_comments() {
-        let text = "# my server\n\n[safes]\nenabled = false # broken for now\nfile = \"enshwick-safes.dll\"\n";
+        let text = "# my server\n\n[\"you.trading-post\"]\nenabled = false # broken for now\nfile = \"trading_post.dll\"\n";
         let mut list = ModList::parse(text).unwrap();
-        assert!(list.is_off("safes"));
-        assert!(list.is_file_off("ENSHWICK-SAFES.DLL"));
-        assert!(!list.is_file_off("enshwick-area-loot.dll"));
-        assert_eq!(list.off(), ["safes"]);
-        assert!(list.note("area-loot", "enshwick-area-loot.dll"));
-        assert!(list.note("safes", "safes-renamed.dll"));
+        assert!(list.is_off("you.trading-post"));
+        assert!(list.is_file_off("TRADING_POST.DLL"));
+        assert!(!list.is_file_off("lockers.dll"));
+        assert_eq!(list.off(), ["you.trading-post"]);
+        assert!(list.note("you.lockers", "lockers.dll"));
+        assert!(list.note("you.trading-post", "trading_post_renamed.dll"));
         let text = list.render();
         assert!(text.contains("# my server"));
         assert!(text.contains("enabled = false # broken for now"));
-        assert!(text.contains("file = \"safes-renamed.dll\""));
-        assert!(text.contains("[area-loot]\nenabled = true"));
+        assert!(text.contains("file = \"trading_post_renamed.dll\""));
+        assert!(text.contains("[\"you.lockers\"]\nenabled = true"));
+    }
+
+    #[test]
+    fn the_links_off_example_in_the_header_names_a_point_of_a_full_mod_id() {
+        let example = LIST_HEADER
+            .split_once("links_off = [\"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .unwrap()
+            .0;
+        let (owner, point) = example.split_once(':').unwrap();
+        assert!(enshwick::abi::is_valid_id(owner), "{example}");
+        assert!(!point.is_empty());
     }
 
     #[test]
     fn links_turned_off_are_read_per_mod() {
-        let text = "[safe-viewers]
+        let text = "[\"you.haggling\"]
 enabled = true
 file = \"a.dll\"
-links_off = [\"safes:access\"]
+links_off = [\"you.trading-post:price\"]
 
-[safes]
+[\"you.trading-post\"]
 enabled = true
 ";
         let list = ModList::parse(text).unwrap();
         assert_eq!(
             list.links_off(),
-            [("safe-viewers".to_owned(), "safes:access".to_owned())]
+            [(
+                "you.haggling".to_owned(),
+                "you.trading-post:price".to_owned()
+            )]
         );
-        assert!(!list.is_off("safe-viewers"));
+        assert!(!list.is_off("you.haggling"));
     }
 
     #[test]
     fn a_broken_list_says_why() {
-        assert!(ModList::parse("[safes\n").is_err());
+        assert!(ModList::parse("[\"you.trading-post\"\n").is_err());
         assert!(
-            ModList::parse("safes = true\n")
+            ModList::parse("\"you.trading-post\" = true\n")
                 .unwrap_err()
                 .contains("not a table")
         );
@@ -398,46 +415,52 @@ enabled = true
 
     #[test]
     fn replaced_mods_are_kept_apart_in_the_lock() {
-        let mut new = lock(&[("optimizer", "0.2.0", "01")]);
+        let mut new = lock(&[("you.market-stalls", "0.2.0", "01")]);
         new.replaced.push(Replaced {
-            id: "proton-optimizer".into(),
+            id: "you.stalls".into(),
             version: "0.1.0".into(),
-            file: "enshwick_proton_optimizer.dll".into(),
-            by: "optimizer".into(),
+            file: "stalls.dll".into(),
+            by: "you.market-stalls".into(),
         });
         let text = new.render();
         assert!(text.contains(
             "[[replaced]]
-id = \"proton-optimizer\""
+id = \"you.stalls\""
         ));
         assert_eq!(Lock::parse(&text), Some(new.clone()));
         assert!(!lock(&[]).render().contains("replaced"));
         assert_eq!(
             new.replaced[0].line(),
-            "proton-optimizer is replaced by optimizer; delete mods/enshwick_proton_optimizer.dll"
+            "you.stalls is replaced by you.market-stalls; delete mods/stalls.dll"
         );
     }
 
     #[test]
     fn the_lock_reads_back_and_names_what_changed() {
-        let old = lock(&[("safes", "0.3.0", "01"), ("gone", "1.0.0", "02")]);
+        let old = lock(&[("you.trading-post", "0.3.0", "01"), ("gone", "1.0.0", "02")]);
         let text = old.render();
         assert!(text.starts_with("# Written by Enshwick"));
-        assert!(text.contains("[[mod]]\nid = \"safes\""));
+        assert!(text.contains("[[mod]]\nid = \"you.trading-post\""));
         assert_eq!(Lock::parse(&text), Some(old.clone()));
-        let mut new = lock(&[("safes", "0.3.1", "03"), ("count", "0.2.0", "04")]);
+        let mut new = lock(&[
+            ("you.trading-post", "0.3.1", "03"),
+            ("count", "0.2.0", "04"),
+        ]);
         new.loader = "0.5.0".into();
         assert_eq!(
             new.changes(&old),
             [
                 "loader 0.4.0 -> 0.5.0",
-                "safes 0.3.0 -> 0.3.1",
+                "you.trading-post 0.3.0 -> 0.3.1",
                 "count 0.2.0 added",
                 "gone 1.0.0 gone"
             ]
         );
-        let rebuilt = lock(&[("safes", "0.3.0", "ff"), ("gone", "1.0.0", "02")]);
-        assert_eq!(rebuilt.changes(&old), ["safes 0.3.0: another build"]);
+        let rebuilt = lock(&[("you.trading-post", "0.3.0", "ff"), ("gone", "1.0.0", "02")]);
+        assert_eq!(
+            rebuilt.changes(&old),
+            ["you.trading-post 0.3.0: another build"]
+        );
         assert!(old.changes(&old).is_empty());
         assert_eq!(Lock::parse("not a lock"), None);
     }

@@ -20,6 +20,7 @@ mod bases;
 mod buffs;
 pub mod builds;
 pub mod carry;
+mod catalogue;
 pub mod chains;
 #[cfg(windows)]
 mod chat;

@@ -117,8 +117,8 @@ effect.
 ```rust
 use enshwick::ui::{Marker, MarkerColor, Ui};
 
-fn mark_safes(ui: Ui, safes: &[([f64; 3], String)]) {
-    let markers: Vec<Marker<'_>> = safes
+fn mark_lockers(ui: Ui, lockers: &[([f64; 3], String)]) {
+    let markers: Vec<Marker<'_>> = lockers
         .iter()
         .map(|(at, owner)| Marker::new(*at).label(owner).color(MarkerColor::Green))
         .collect();

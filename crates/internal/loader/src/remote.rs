@@ -319,7 +319,7 @@ pub fn without_secrets(schema: &Schema, text: &str) -> String {
         return String::new();
     };
     for field in schema.fields.iter().filter(|f| f.secret) {
-        doc.remove(&field.key);
+        crate::worlds::remove_at(doc.as_table_mut(), &field.key);
     }
     doc.to_string()
 }
@@ -653,7 +653,7 @@ mod tests {
     #[test]
     fn a_client_that_says_hello_gets_every_mod_s_join_values() {
         let values = std::collections::BTreeMap::from([
-            ("safes".to_owned(), "{cost = 5}".to_owned()),
+            ("you.trading-post".to_owned(), "{cost = 5}".to_owned()),
             ("zones".to_owned(), "{clusters = false}".to_owned()),
         ]);
         let messages = sync_messages(values);
@@ -665,7 +665,7 @@ mod tests {
             );
         }
         assert!(
-            matches!(&messages[0], Message::Sync { id, values } if id == "safes" && values == "{cost = 5}")
+            matches!(&messages[0], Message::Sync { id, values } if id == "you.trading-post" && values == "{cost = 5}")
         );
     }
     use enshwick::config::{Field, Stage};
@@ -688,15 +688,17 @@ mod tests {
                 id: "zones".into(),
                 values: "{ a = 1 }".into(),
             },
-            Message::Query { id: "safes".into() },
+            Message::Query {
+                id: "you.trading-post".into(),
+            },
             Message::Snapshot {
-                id: "safes".into(),
+                id: "you.trading-post".into(),
                 admin: true,
                 schema: schema().to_text(),
                 text: "limit = 4\n".into(),
             },
             Message::Edit {
-                id: "safes".into(),
+                id: "you.trading-post".into(),
                 key: "limit".into(),
                 value: "6".into(),
             },
@@ -718,12 +720,12 @@ mod tests {
             Message::ActionsSheet {
                 first: true,
                 last: false,
-                id: "safes".into(),
-                label: "Safes".into(),
-                text: "A\taccess\t5\tWho\t\tYour Safe\n".into(),
+                id: "you.trading-post".into(),
+                label: "Trading Post".into(),
+                text: "A\taccess\t5\tWho\t\tYour stall\n".into(),
             },
             Message::ActionRun {
-                id: "safes".into(),
+                id: "you.trading-post".into(),
                 action: "access".into(),
                 args: "p0000000000000007\tb1".into(),
             },
@@ -732,7 +734,7 @@ mod tests {
                 text: "Ann may use it".into(),
             },
             Message::ActionHints {
-                text: "safes\taccess\tWho\tYour Safe\n".into(),
+                text: "you.trading-post\taccess\tWho\tYour stall\n".into(),
             },
         ] {
             assert_eq!(
