@@ -34,7 +34,6 @@ enshwick-loader-builds = { path = "crates/internal/builds", version = "0.0.0-dev
 enshwick-loader-reflect = { path = "crates/internal/reflect", version = "0.0.0-dev" } # x-release-please-version
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }
-minisign-verify = { version = "0.3.0", default-features = false }
 memchr = { version = "2.8.3", default-features = false, features = ["std"] }
 bcdec_rs = { version = "0.2.0", default-features = false }
 zune-png = { version = "0.5.2", default-features = false, features = ["std"] }

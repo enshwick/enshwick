@@ -106,13 +106,12 @@ assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 On a client,
 [`i18n::language()`](https://github.com/themaiby/enshwick/blob/main/crates/enshwick-loader-api/src/i18n.rs)
 is the language the player reads the game in, for the mod's own dialogs and
-windows; [`enshwick-updater`](https://github.com/themaiby/enshwick/tree/main/mods/enshwick-updater)
-words its dialogs with it:
+windows:
 
 ```rust
 use enshwick_loader_api::i18n::{Texts, language};
 
-let texts = Texts::parse("[en]\nfound = \"{count} updates\"\n[uk]\nfound = \"Оновлень: {count}\"\n").unwrap();
+let texts = Texts::parse("[en]\nfound = \"{count} safes\"\n[uk]\nfound = \"Сейфів: {count}\"\n").unwrap();
 let line = texts.fill("found", language(), &[("count", "3")]);
 assert!(line.contains('3'));
 ```

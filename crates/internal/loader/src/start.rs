@@ -224,8 +224,7 @@ pub(crate) fn start(
             game_dir,
             host::join_mods,
             crate::advertise::Lines {
-                sources: sources(loader),
-                keys: keys(loader),
+                pages: pages(loader),
                 names: names(loader),
             },
             host::join_values,
@@ -234,7 +233,7 @@ pub(crate) fn start(
     crate::admission::start(
         loader,
         names(loader).into_iter().collect(),
-        sources(loader).into_iter().collect(),
+        pages(loader).into_iter().collect(),
     );
 }
 
@@ -325,8 +324,6 @@ fn records(
             id: candidates[i].id.clone(),
             version: candidates[i].version.to_string(),
             file: format!("mods/{}", libraries[i].file),
-            updates: updates_of(&libraries[i]),
-            signed_by: signed_by_of(&libraries[i]),
             manifest: libraries[i].manifest,
             // SAFETY: the manifest is static data inside its loaded DLL.
             meta: unsafe { crate::manifest::meta(libraries[i].manifest) },
@@ -534,32 +531,13 @@ fn verified_join(
     Ok((join, code))
 }
 
-/// The update sources of the running join mods, `(id, source line)`.
-fn sources(loader: &Loader) -> Vec<(String, String)> {
+/// The homepages of the running join mods that declare one, `(id, page)`.
+fn pages(loader: &Loader) -> Vec<(String, String)> {
     loader
         .mods
         .iter()
-        .filter(|m| m.joins())
-        .filter_map(|m| {
-            // SAFETY: the loader keeps every source's strings for the process.
-            let updates = unsafe { enshwick_loader_api::mods::Updates::from_abi(&m.updates) }?;
-            Some((m.id.clone(), updates.to_line()))
-        })
-        .collect()
-}
-
-/// The author keys of the running join mods that declare any, `(id, keys
-/// line)`.
-fn keys(loader: &Loader) -> Vec<(String, String)> {
-    loader
-        .mods
-        .iter()
-        .filter(|m| m.joins())
-        .filter_map(|m| {
-            // SAFETY: the loader keeps every key's string for the process.
-            let keys = unsafe { enshwick_loader_api::mods::keys_from_abi(&m.signed_by) };
-            (!keys.is_empty()).then(|| (m.id.clone(), enshwick_loader_api::mods::keys_line(&keys)))
-        })
+        .filter(|m| m.joins() && !m.meta.homepage.is_empty())
+        .map(|m| (m.id.clone(), m.meta.homepage.clone()))
         .collect()
 }
 
@@ -832,25 +810,6 @@ fn write_lock(loader: &'static Loader, files: Vec<(String, String)>) {
     if let Err(e) = spawned {
         crate::log!(WARN, "{} not written: {e}", modlist::LOCK_FILE);
     }
-}
-
-/// The update source a library declares; none, logged, when it is malformed.
-fn updates_of(library: &Library) -> enshwick_loader_api::abi::UpdateSource {
-    // SAFETY: the manifest is static data inside its loaded DLL.
-    unsafe { crate::manifest::updates(library.manifest) }.unwrap_or_else(|reason| {
-        crate::log!(WARN, "{}: no update source: {reason}", library.file);
-        enshwick_loader_api::abi::UpdateSource::NONE
-    })
-}
-
-/// The author keys a library declares; a malformed one is left out, logged.
-fn signed_by_of(library: &Library) -> [enshwick_loader_api::abi::Str; 2] {
-    // SAFETY: the manifest is static data inside its loaded DLL.
-    let (keys, refused) = unsafe { crate::manifest::signed_by(library.manifest) };
-    for reason in refused {
-        crate::log!(WARN, "{}: key ignored: {reason}", library.file);
-    }
-    keys
 }
 
 /// Calls every mod's `init` in load order.

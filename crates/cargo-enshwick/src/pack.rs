@@ -31,7 +31,7 @@ pub(crate) enum Command {
         out: PathBuf,
     },
     /// Zips a pack folder for a release, its files under `mods/<id>/`, as
-    /// the updater installs them; sign the archive with minisign.
+    /// players unpack them into the game's folder.
     Zip {
         /// The pack folder, holding `pack.toml`.
         dir: PathBuf,
@@ -172,15 +172,7 @@ fn zip(dir: &Path, out: Option<&Path>) -> Result<String, String> {
     archive
         .finish()
         .map_err(|e| format!("{}: {e}", out.display()))?;
-    let archive = out
-        .file_name()
-        .map_or_else(String::new, |f| f.to_string_lossy().into_owned());
-    Ok(format!(
-        "{summary}\nwrote {}; sign it: minisign -S -m {} -t \"<component>-v{} {archive}\"",
-        out.display(),
-        out.display(),
-        manifest.version,
-    ))
+    Ok(format!("{summary}\nwrote {}", out.display()))
 }
 
 #[cfg(test)]

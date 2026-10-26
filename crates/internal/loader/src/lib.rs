@@ -126,7 +126,6 @@ mod texts;
 mod textures;
 #[cfg(windows)]
 mod ui;
-mod updates;
 #[cfg(windows)]
 mod vetoes;
 #[cfg(windows)]

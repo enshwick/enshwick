@@ -11,10 +11,10 @@ use core::sync::atomic::{AtomicU32, AtomicUsize};
 
 /// The major version of this interface. A loader refuses a mod built for
 /// another major.
-pub const ABI_MAJOR: u16 = 1;
+pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 66;
+pub const ABI_MINOR: u16 = 67;
 
 /// Whether `id` is a valid mod id: 1 to 64 characters of `[a-z0-9-]`.
 ///
@@ -507,9 +507,8 @@ impl Event {
     /// The join check kept this client out of a server that runs join mods
     /// the client lacks or runs in another version; no data.
     /// [`HostApi::join_missing`] lists those mods with the versions the
-    /// server runs and where they come from. Raised on the game thread once
-    /// the player closed the loader's note: a handler leaves downloads to a
-    /// thread of its own. Client only. Since minor 10.
+    /// server runs and their pages. Raised on the game thread once the player
+    /// closed the loader's dialog. Client only. Since minor 10.
     pub const JOIN_REFUSED: Self = Self(11);
     /// The Flame Altars of the server's world changed: one was placed or
     /// removed, moved, raised a level or had its zone built anew; no data.
@@ -1396,115 +1395,6 @@ impl ManifestFlags {
     }
 }
 
-/// Where an [`UpdateSource`] looks for new releases.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader_api::abi::UpdateKind;
-///
-/// assert_ne!(UpdateKind::GITHUB, UpdateKind::URL);
-/// ```
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct UpdateKind(pub u32);
-
-impl UpdateKind {
-    /// No source: the mod is updated by hand.
-    pub const NONE: Self = Self(0);
-    /// GitHub releases of `location`, an `owner/name` repository, whose tags
-    /// name `component`'s version, such as `<component>-v1.2.0` as
-    /// release-please writes them for a workspace.
-    pub const GITHUB: Self = Self(1);
-    /// A JSON document at `location`, an `https://` URL, that lists the mod's
-    /// versions; `component` is empty. The updater documents the format.
-    pub const URL: Self = Self(2);
-}
-
-/// Where a mod's new releases come from, declared in its [`Manifest`] with
-/// `updates:` in [`manifest!`](crate::manifest).
-///
-/// The loader only checks and lists it; an updater mod reads it from
-/// [`HostApi::mods`] and fetches, compares and stages files itself.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick_loader_api::abi::{Header, Str, UpdateKind, UpdateSource};
-///
-/// let safes = UpdateSource {
-///     header: Header::of::<UpdateSource>(),
-///     kind: UpdateKind::GITHUB,
-///     location: Str::new("themaiby/enshwick"),
-///     component: Str::new("enshwick-safes"),
-/// };
-/// assert_eq!(safes.kind, UpdateKind::GITHUB);
-/// ```
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct UpdateSource {
-    /// Size and version of this struct.
-    pub header: Header,
-    /// What `location` and `component` mean.
-    pub kind: UpdateKind,
-    /// The repository, `owner/name`, for [`UpdateKind::GITHUB`]; the URL for
-    /// [`UpdateKind::URL`].
-    pub location: Str,
-    /// The tag prefix before `-v<semver>` for [`UpdateKind::GITHUB`]; empty
-    /// otherwise.
-    pub component: Str,
-}
-
-impl UpdateSource {
-    /// No source.
-    pub const NONE: Self = Self {
-        header: Header::of::<Self>(),
-        kind: UpdateKind::NONE,
-        location: Str::EMPTY,
-        component: Str::EMPTY,
-    };
-
-    /// GitHub releases of `repository` whose tags name `component`'s
-    /// version, such as `<component>-v1.2.0`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick_loader_api::abi::{UpdateKind, UpdateSource};
-    ///
-    /// let source = UpdateSource::github("themaiby/enshwick", "enshwick-safes");
-    /// assert_eq!(source.kind, UpdateKind::GITHUB);
-    /// ```
-    #[must_use]
-    pub const fn github(repository: &'static str, component: &'static str) -> Self {
-        Self {
-            kind: UpdateKind::GITHUB,
-            location: Str::new(repository),
-            component: Str::new(component),
-            ..Self::NONE
-        }
-    }
-
-    /// The JSON document at `url` that lists the mod's versions.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick_loader_api::abi::{UpdateKind, UpdateSource};
-    ///
-    /// let source = UpdateSource::url("https://example.com/my-mod/latest.json");
-    /// assert_eq!(source.kind, UpdateKind::URL);
-    /// ```
-    #[must_use]
-    pub const fn url(url: &'static str) -> Self {
-        Self {
-            kind: UpdateKind::URL,
-            location: Str::new(url),
-            ..Self::NONE
-        }
-    }
-}
-
 /// What a mod is, read by the loader before it runs any of the mod's code.
 ///
 /// It is static data returned by `enshwick_mod_query`.
@@ -1524,8 +1414,6 @@ impl UpdateSource {
 ///     dependency_count: 0,
 ///     builds: core::ptr::null(),
 ///     build_count: 0,
-///     updates: core::ptr::null(),
-///     signed_by: [Str::EMPTY; 2],
 ///     name: Str::new("Flame Altar Count"),
 ///     description: Str::EMPTY,
 ///     authors: core::ptr::null(),
@@ -1556,13 +1444,6 @@ pub struct Manifest {
     pub builds: *const BuildRow,
     /// How many rows `builds` points at.
     pub build_count: usize,
-    /// Where new releases come from; null for none. Since minor 5.
-    pub updates: *const UpdateSource,
-    /// The minisign public keys the author signs releases with, each the
-    /// base64 line of a `.pub` file (`RW...`); empty strings for none. An
-    /// updater installs a new release of the mod only when one of them
-    /// signed it. Two, so an author can rotate keys. Since minor 14.
-    pub signed_by: [Str; 2],
     /// The name players read, such as `Survivors per Altar`; empty for the
     /// id. Since minor 36.
     pub name: Str,
@@ -1733,7 +1614,7 @@ impl CallerFrame {
 /// # Examples
 ///
 /// ```
-/// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str, UpdateSource};
+/// use enshwick_loader_api::abi::{Header, ManifestFlags, ModInfo, Side, Str};
 ///
 /// let safes = ModInfo {
 ///     header: Header::of::<ModInfo>(),
@@ -1743,8 +1624,6 @@ impl CallerFrame {
 ///     flags: ManifestFlags::JOIN,
 ///     off: 0,
 ///     file: Str::new("mods/enshwick_safes.dll"),
-///     updates: UpdateSource::github("themaiby/enshwick", "enshwick-safes"),
-///     signed_by: [Str::new("RWTjqgtfpy3lSOLC4uaUXuvvKSLQKOFf6nUnEytoiFjSzxMEhLnoAdJF"), Str::EMPTY],
 ///     name: Str::new("Safes"),
 ///     description: Str::EMPTY,
 ///     authors: core::ptr::null(),
@@ -1772,17 +1651,11 @@ pub struct ModInfo {
     /// 1 when the mod is off: refused at init or faulted since.
     pub off: u8,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/enshwick_safes.dll`; the path a staged update goes to.
+    /// such as `mods/enshwick_safes.dll`.
     pub file: Str,
-    /// Where new releases come from; [`UpdateKind::NONE`] for none.
-    pub updates: UpdateSource,
-    /// The author's minisign public keys from the manifest, checked; empty
-    /// strings for none. In [`HostApi::join_missing`], the keys the server
-    /// advertises for the mod. Since minor 14.
-    pub signed_by: [Str; 2],
     /// The manifest's human metadata, as in [`Manifest`]; in
-    /// [`HostApi::join_missing`], the name the server advertises and empty
-    /// strings for the rest. Since minor 36.
+    /// [`HostApi::join_missing`], the name and homepage the server advertises
+    /// and empty strings for the rest. Since minor 36.
     pub name: Str,
     /// One sentence on what the mod does. Since minor 36.
     pub description: Str,
@@ -1818,8 +1691,6 @@ impl ModInfo {
         flags: ManifestFlags::NONE,
         off: 0,
         file: Str::EMPTY,
-        updates: UpdateSource::NONE,
-        signed_by: [Str::EMPTY; 2],
         name: Str::EMPTY,
         description: Str::EMPTY,
         authors: core::ptr::null(),
@@ -4032,7 +3903,7 @@ impl UiMarker {
 /// let dialog = UiDialog {
 ///     header: Header::of::<UiDialog>(),
 ///     title: Str::new("Enshwick"),
-///     message: Str::new("Download the update?"),
+///     message: Str::new("Open every safe in the world?"),
 ///     detail: Str::EMPTY,
 ///     buttons: 1 << UiDialog::OK | 1 << UiDialog::CANCEL,
 ///     flags: 0,
@@ -4091,12 +3962,6 @@ impl UiDialog {
 /// thread of the loader's when the dialog shows as a system window. It must
 /// not unwind.
 pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
-
-/// A mod's answer to the player pressing Update under mod `id` on the Mods
-/// screen ([`HostApi::updates_set`]), with the pointer given at
-/// registration. It runs on the thread that draws the interface, must
-/// return at once and must not unwind.
-pub type UpdatePickFn = unsafe extern "system" fn(id: Str, user: *mut c_void);
 
 /// A mod's check of a new text of its settings file, before the loader
 /// writes it: [`Status::OK`] to accept it; else the reason, written to
@@ -4296,9 +4161,9 @@ pub struct HostApi {
     /// found missing on this client or in another version, and how many
     /// there are; laid out as [`HostApi::mods`] lays out its entries. Each
     /// entry has the server's version, [`ManifestFlags::JOIN`], `off` 1, the
-    /// client's DLL path when it has the mod (empty otherwise) and the
-    /// source the server advertises, else the client's own source for the
-    /// mod. The strings stay valid for the process. Empty before a refused
+    /// client's DLL path when it has the mod (empty otherwise), and the name
+    /// and homepage the server advertises. The strings stay valid for the
+    /// process. Empty before a refused
     /// join; see [`Event::JOIN_REFUSED`]. Since minor 10.
     pub join_missing: extern "system" fn(
         me: ModHandle,
@@ -5002,16 +4867,6 @@ pub struct HostApi {
     /// the values it loaded with. On the server's game thread only. Since
     /// minor 57.
     pub forget_game_settings: extern "system" fn(me: ModHandle) -> Status,
-    /// Replaces the updates of installed mods the mod shows on the Mods
-    /// screen with `toml`, as [`crate::updates::to_toml`] writes them, each
-    /// with a button when it is ready. [`Status::BAD_ARGS`] for text that is
-    /// no such list; [`Status::MISSING`] on a server. Any thread. Since
-    /// minor 58.
-    pub updates_set: extern "system" fn(me: ModHandle, toml: Str) -> Status,
-    /// Makes `callback` with `user` the mod's answer to the player picking
-    /// one of its updates; [`Status::REFUSED`] for a second callback. Allowed during `enshwick_mod_init` only. Since minor 58.
-    pub update_pick:
-        extern "system" fn(me: ModHandle, callback: UpdatePickFn, user: *mut c_void) -> Status,
     /// Takes knowledge `id`, of `kind`, back from the player whose character
     /// is `entity`, or from the world for 0 or an id of the world's, and has
     /// the clients sent it again: a [`KnowledgeInfo::BOOL`] cleared, `value`
@@ -5690,13 +5545,12 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 143 * 8);
-    assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 137 * 8);
-    assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 138 * 8);
-    assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 136 * 8);
-    assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 135 * 8);
-    assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 133 * 8);
-    assert!(core::mem::offset_of!(HostApi, update_pick) == 24 + 131 * 8);
+    assert!(size_of::<HostApi>() == 24 + 141 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 135 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 136 * 8);
+    assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 134 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 133 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 131 * 8);
     assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
     assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
     assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);
@@ -5709,7 +5563,7 @@ const _: () = {
     assert!(size_of::<Migration>() == 16 + 8 + 8);
     assert!(size_of::<MigrationSet>() == 8 + 8 + 8 + 8 + 8);
     assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
-    assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 139 * 8);
+    assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 137 * 8);
     assert!(size_of::<PointSpec>() == 8 + 16 + 4 + 4 + 16 + 16);
     assert!(size_of::<PointLink>() == 8 + 3 * 8 + 3 * 4 + 4);
     assert!(size_of::<PointHandle>() == 8 + 8 + 8);
@@ -5761,7 +5615,7 @@ const _: () = {
     assert!(size_of::<MidHookSpec>() == 32);
     assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
     assert!(core::mem::offset_of!(HostApi, run_command) == 24 + 40 * 8);
-    assert!(core::mem::offset_of!(HostApi, actions) == 24 + 142 * 8);
+    assert!(core::mem::offset_of!(HostApi, actions) == 24 + 140 * 8);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
     assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
@@ -5807,10 +5661,8 @@ const _: () = {
     assert!(size_of::<AltarInfo>() == 16 + 17 * 48 + 24);
     assert!(size_of::<AltarZoneSize>() == 24);
     assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
-    assert!(core::mem::offset_of!(Manifest, updates) == 80);
-    assert!(core::mem::offset_of!(Manifest, name) == 120);
-    assert!(size_of::<Manifest>() == 120 + 16 * 4 + 16);
-    assert!(size_of::<UpdateSource>() == 48);
+    assert!(core::mem::offset_of!(Manifest, name) == 80);
+    assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16);
     assert!(size_of::<ResourceKey>() == 24);
 };
 

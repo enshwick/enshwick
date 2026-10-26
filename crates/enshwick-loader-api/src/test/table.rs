@@ -13,8 +13,8 @@ use crate::abi::{
     ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, RenameCallFn, ResourceKey,
     ResourcePatchFn, ServiceFound, ServiceSpec, Side, SkillCheckFn, SpawnRequest, Status, StatusFn,
     Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, UpdatePickFn,
-    WeatherFront, ZoneCheckFn,
+    TerrainMaterialInfo, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, WeatherFront,
+    ZoneCheckFn,
 };
 
 use super::{FakeHost, LinkedHook, ServedResource, SubmittedRequest};
@@ -138,10 +138,7 @@ pub(crate) struct State {
     pub(crate) config_check: Option<(ConfigCheckFn, usize)>,
     /// The texts the mod handed the loader last, as TOML.
     pub(crate) published_texts: Option<String>,
-    /// The updates the mod published last, as TOML.
-    pub(crate) published_updates: Option<String>,
     /// The mod's answer to an update pick.
-    pub(crate) update_pick: Option<(UpdatePickFn, usize)>,
     /// The frame drawing now: its token, whether a window is open and what
     /// was drawn.
     pub(crate) frame: Option<(u64, bool, Vec<super::Drawn>)>,
@@ -266,8 +263,6 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         markers: Vec::new(),
         config_check: None,
         published_texts: None,
-        published_updates: None,
-        update_pick: None,
         frame: None,
         inputs: Vec::new(),
         dialogs: Vec::new(),
@@ -2378,31 +2373,6 @@ extern "system" fn language(_me: ModHandle) -> u32 {
     with(0, |s| s.host.language)
 }
 
-extern "system" fn updates_set(_me: ModHandle, toml: Str) -> Status {
-    let toml = text(toml);
-    if crate::updates::from_toml(&toml).is_err() {
-        return Status::BAD_ARGS;
-    }
-    with(Status::MISSING, |s| {
-        s.published_updates = Some(toml);
-        Status::OK
-    })
-}
-
-extern "system" fn update_pick(
-    _me: ModHandle,
-    callback: UpdatePickFn,
-    user: *mut c_void,
-) -> Status {
-    with(Status::MISSING, |s| {
-        if s.update_pick.is_some() {
-            return Status::REFUSED;
-        }
-        s.update_pick = Some((callback, user.expose_provenance()));
-        Status::OK
-    })
-}
-
 pub(crate) static TABLE: HostApi = HostApi {
     header: Header::of::<HostApi>(),
     host_version: Str::new("0.0.0-test"),
@@ -2536,8 +2506,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     language,
     keep_game_settings,
     forget_game_settings,
-    updates_set,
-    update_pick,
     revoke_knowledge,
     account_knowledge,
     resource_read,
