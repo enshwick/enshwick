@@ -19,7 +19,8 @@ lints the workspace for Windows through
 [cargo-xwin](https://github.com/rust-cross/cargo-xwin). The loader, research
 and optimizer crates build only for Windows: off Windows, `cargo xtask check
 --windows` runs their tests under Wine in Docker, in an image built from
-[tools/wine/Dockerfile](tools/wine/Dockerfile) on first use. On Apple silicon
+[tools/wine/Dockerfile](tools/wine/Dockerfile) on first use, or under Wine
+directly on an amd64 Linux host that has it. On Apple silicon
 the container runs through Rosetta, which cannot run the tests of crashes,
 detours, patches and threads, so those are skipped there. `cargo xtask check
 --all` runs the whole suite, the Wine tests included when Docker runs. The
