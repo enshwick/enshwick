@@ -33,6 +33,8 @@ toml.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 insta.workspace = true
+libloading = "0.9.0"
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -44,6 +46,10 @@ schema = ["dep:schemars", "dep:serde_json"]
 [[test]]
 name = "pack_schemas"
 required-features = ["schema"]
+
+[[test]]
+name = "old_mods"
+required-features = ["test"]
 
 [[test]]
 name = "actions"

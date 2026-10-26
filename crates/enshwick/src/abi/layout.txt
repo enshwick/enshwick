@@ -1,0 +1,745 @@
+abi 2.71
+ActionCall size 144 align 8
+    header at 0 size 8
+    kind at 8 size 4
+    language at 12 size 4
+    player at 16 size 96
+    action at 112 size 16
+    args at 128 size 16
+ActiveBuff size 40 align 8
+    header at 0 size 8
+    id at 8 size 4
+    entity at 12 size 4
+    slot at 16 size 4
+    level at 20 size 4
+    duration at 24 size 8
+    remaining at 32 size 8
+AffixDefData size 64 align 8
+    header at 0 size 8
+    text at 8 size 16
+    group at 24 size 16
+    modifiers at 40 size 8
+    modifier_count at 48 size 4
+    weight at 52 size 4
+    categories at 56 size 4
+    rarity at 60 size 1
+    reserved at 61 size 3
+AffixModifierData size 20 align 4
+    stat at 0 size 4
+    op at 4 size 1
+    reserved at 5 size 3
+    min at 8 size 4
+    max at 12 size 4
+    step at 16 size 4
+AffixRoll size 32 align 8
+    header at 0 size 8
+    pide at 8 size 4
+    item at 12 size 4
+    min at 16 size 1
+    max at 17 size 1
+    max_rarity at 18 size 1
+    flags at 19 size 1
+    seed at 24 size 8
+AltarInfo size 856 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    level at 12 size 1
+    tilted at 13 size 1
+    level_count at 14 size 1
+    reserved at 15 size 1
+    zone at 16 size 48
+    levels at 64 size 768
+    position at 832 size 24
+AltarZoneSize size 24 align 8
+    altar at 0 size 4
+    level at 4 size 1
+    reserved at 5 size 3
+    grow at 8 size 8
+    height at 16 size 8
+BedCheck size 72 align 8
+    header at 0 size 8
+    survivor at 8 size 4
+    entity at 12 size 4
+    bed at 16 size 4
+    home at 24 size 24
+    bed_at at 48 size 24
+Bounds size 48 align 8
+    min at 0 size 24
+    max at 24 size 24
+BuffRequest size 32 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    id at 12 size 4
+    level at 16 size 4
+    reserved at 20 size 4
+    duration at 24 size 8
+BuffTypeInfo size 32 align 8
+    header at 0 size 8
+    id at 8 size 4
+    slot at 12 size 2
+    flags at 14 size 2
+    name at 16 size 4
+    duration at 24 size 8
+BuildCheck size 40 align 8
+    header at 0 size 8
+    player at 8 size 4
+    item at 12 size 4
+    position at 16 size 24
+BuildInfo size 48 align 8
+    header at 0 size 8
+    side at 8 size 1
+    base at 16 size 8
+    fingerprint at 24 size 20
+    table at 44 size 1
+BuildRow size 56 align 8
+    side at 0 size 1
+    fingerprint at 4 size 20
+    symbols at 24 size 8
+    symbol_count at 32 size 8
+    constants at 40 size 8
+    constant_count at 48 size 8
+BuildTable size 1 align 1
+    0 at 0 size 1
+BuildingData size 52 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    player at 12 size 4
+    item at 16 size 4
+    kind at 20 size 1
+    replay at 21 size 1
+    template at 22 size 16
+    position at 40 size 12
+CallerFrame size 72 align 8
+    rsp at 0 size 8
+    rbx at 8 size 8
+    rbp at 16 size 8
+    rdi at 24 size 8
+    rsi at 32 size 8
+    r12 at 40 size 8
+    r13 at 48 size 8
+    r14 at 56 size 8
+    r15 at 64 size 8
+ChunkData size 24 align 4
+    header at 0 size 8
+    index at 8 size 4
+    x at 12 size 4
+    z at 16 size 4
+    size at 20 size 4
+Comfort size 28 align 4
+    header at 0 size 8
+    category at 8 size 4
+    value at 12 size 4
+    position at 16 size 12
+CraftCheck size 24 align 4
+    header at 0 size 8
+    player at 8 size 4
+    station at 12 size 4
+    recipe at 16 size 4
+    amount at 20 size 4
+DamageCheck size 80 align 4
+    header at 0 size 8
+    cause at 8 size 4
+    target at 12 size 4
+    source at 16 size 4
+    attacker at 20 size 4
+    amounts at 24 size 52
+    total at 76 size 4
+DaytimeInfo size 56 align 8
+    header at 0 size 8
+    time at 8 size 8
+    day_start at 16 size 8
+    day_end at 24 size 8
+    day_length at 32 size 8
+    night_length at 40 size 8
+    speed at 48 size 4
+    flags at 52 size 4
+Dependency size 40 align 8
+    id at 0 size 16
+    range at 16 size 16
+    relation at 32 size 1
+EntityDataFlags size 4 align 4
+    0 at 0 size 4
+EntityPlace size 32 align 8
+    entity at 0 size 4
+    reserved at 4 size 4
+    position at 8 size 24
+Event size 4 align 4
+    0 at 0 size 4
+EventSpec size 40 align 8
+    header at 0 size 8
+    name at 8 size 16
+    layout at 24 size 16
+ExperiencePass size 48 align 8
+    header at 0 size 8
+    rows at 8 size 8
+    row_count at 16 size 8
+    level_cap at 24 size 4
+    need_for at 32 size 8
+    token at 40 size 8
+ExperienceRow size 20 align 4
+    entity at 0 size 4
+    level at 4 size 4
+    progress at 8 size 4
+    need at 12 size 4
+    gained at 16 size 4
+Fingerprint size 20 align 4
+    guid at 0 size 16
+    age at 16 size 4
+GameEventData size 24 align 8
+    header at 0 size 8
+    type_hash at 8 size 4
+    size at 12 size 4
+    data at 16 size 8
+Header size 8 align 4
+    size at 0 size 4
+    abi_major at 4 size 2
+    abi_minor at 6 size 2
+HookFlags size 4 align 4
+    0 at 0 size 4
+HookSpec size 32 align 8
+    target at 0 size 8
+    detour at 8 size 8
+    next at 16 size 8
+    priority at 24 size 4
+    flags at 28 size 4
+HostApi size 1152 align 8
+    header at 0 size 8
+    host_version at 8 size 16
+    build at 24 size 8
+    symbol at 32 size 8
+    system at 40 size 8
+    field_offset at 48 size 8
+    type_size at 56 size 8
+    hook at 64 size 8
+    caller_frame at 72 size 8
+    fault at 80 size 8
+    log at 88 size 8
+    settings at 96 size 8
+    publish at 104 size 8
+    service at 112 size 8
+    constant at 120 size 8
+    data_dir at 128 size 8
+    log_level at 136 size 8
+    subscribe at 144 size 8
+    type_hash at 152 size 8
+    component at 160 size 8
+    entity_template at 168 size 8
+    player at 176 size 8
+    players at 184 size 8
+    serve_resource at 192 size 8
+    add_text at 200 size 8
+    mods at 208 size 8
+    sync at 216 size 8
+    code_range at 224 size 8
+    patch_code at 232 size 8
+    workshop_recipes at 240 size 8
+    hosting at 248 size 8
+    server_world at 256 size 8
+    retired_command at 264 size 8
+    chat at 272 size 8
+    set_label at 280 size 8
+    rename_filter at 288 size 8
+    join_missing at 296 size 8
+    hook_at at 304 size 8
+    inventory_open at 312 size 8
+    item_info at 320 size 8
+    inventory_submit at 328 size 8
+    status at 336 size 8
+    run_console at 344 size 8
+    altars_open at 352 size 8
+    altars at 360 size 8
+    altar_zones_control at 368 size 8
+    set_altar_zones at 376 size 8
+    zone_check_filter at 384 size 8
+    survivor_lookup at 392 size 8
+    survivor_bed_check at 400 size 8
+    summon_filter at 408 size 8
+    summon_item at 416 size 8
+    survivor_status at 424 size 8
+    interaction_filter at 432 size 8
+    skill_override at 440 size 8
+    comfort_filter at 448 size 8
+    experience_filter at 456 size 8
+    altar_limit at 464 size 8
+    raise_base_limit at 472 size 8
+    base_zones at 480 size 8
+    game_event at 488 size 8
+    entities at 496 size 8
+    destroy at 504 size 8
+    save_world at 512 size 8
+    world_key at 520 size 8
+    component_write at 528 size 8
+    emit at 536 size 8
+    teleport at 544 size 8
+    spawn at 552 size 8
+    craft_filter at 560 size 8
+    build_filter at 568 size 8
+    net_channel at 576 size 8
+    net_send at 584 size 8
+    net_ready at 592 size 8
+    notify at 600 size 8
+    time_of_day at 608 size 8
+    set_time_of_day at 616 size 8
+    time_speed_control at 624 size 8
+    set_time_speed at 632 size 8
+    game_settings at 640 size 8
+    set_game_settings at 648 size 8
+    damage_filter at 656 size 8
+    buff_types at 664 size 8
+    buffs at 672 size 8
+    apply_buff at 680 size 8
+    remove_buff at 688 size 8
+    knowledge at 696 size 8
+    grant_knowledge at 704 size 8
+    quests at 712 size 8
+    weather_at at 720 size 8
+    weather_fronts at 728 size 8
+    set_weather at 736 size 8
+    terrain_materials at 744 size 8
+    terrain_edit at 752 size 8
+    config_schema at 760 size 8
+    summoned at 768 size 8
+    item_data_open at 776 size 8
+    item_data_get at 784 size 8
+    item_data_set at 792 size 8
+    ui_frame at 800 size 8
+    ui_widget at 808 size 8
+    ui_dialog at 816 size 8
+    ui_hud at 824 size 8
+    ui_markers at 832 size 8
+    config_check at 840 size 8
+    texts at 848 size 8
+    content_serve at 856 size 8
+    content_read at 864 size 8
+    icons_ready at 872 size 8
+    stat_open at 880 size 8
+    stat_info at 888 size 8
+    stat_value at 896 size 8
+    stat_modify at 904 size 8
+    stat_buff at 912 size 8
+    stats_changed at 920 size 8
+    stat_sources at 928 size 8
+    stat_watch at 936 size 8
+    define_event at 944 size 8
+    subscribe_event at 952 size 8
+    send_event at 960 size 8
+    affix_open at 968 size 8
+    affix_roll at 976 size 8
+    item_lines at 984 size 8
+    affix_info at 992 size 8
+    migrate at 1000 size 8
+    declare_content at 1008 size 8
+    entity_data_open at 1016 size 8
+    replaced at 1024 size 8
+    knowledge_input_filter at 1032 size 8
+    language at 1040 size 8
+    keep_game_settings at 1048 size 8
+    forget_game_settings at 1056 size 8
+    revoke_knowledge at 1064 size 8
+    account_knowledge at 1072 size 8
+    resource_read at 1080 size 8
+    game_text at 1088 size 8
+    rebuild_resource at 1096 size 8
+    recipe_rule at 1104 size 8
+    recipe_disabled at 1112 size 8
+    define_point at 1120 size 8
+    attach_point at 1128 size 8
+    run_point at 1136 size 8
+    actions at 1144 size 8
+Interaction size 56 align 8
+    header at 0 size 8
+    kind at 8 size 4
+    player at 12 size 4
+    target at 16 size 4
+    item at 20 size 4
+    known at 24 size 1
+    reserved at 25 size 3
+    position at 32 size 24
+InventoryOp size 32 align 8
+    kind at 0 size 4
+    flags at 4 size 4
+    target at 8 size 8
+    other at 16 size 8
+    item at 24 size 4
+    count at 28 size 4
+InventoryOpResult size 8 align 4
+    error at 0 size 4
+    remaining at 4 size 4
+InventoryRequest size 32 align 8
+    header at 0 size 8
+    flags at 8 size 4
+    actor at 12 size 4
+    ops at 16 size 8
+    op_count at 24 size 4
+    reserved at 28 size 4
+InventoryResult size 24 align 8
+    header at 0 size 8
+    outcome at 8 size 4
+    op_count at 12 size 4
+    ops at 16 size 8
+ItemData size 20 align 4
+    header at 0 size 8
+    id at 8 size 4
+    max_stack at 12 size 2
+    category at 14 size 1
+    rarity at 15 size 1
+    flags at 16 size 4
+ItemLine size 16 align 4
+    modifier at 0 size 12
+    affix at 12 size 4
+KnowledgeData size 20 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    id at 12 size 4
+    value at 16 size 4
+KnowledgeInfo size 24 align 4
+    header at 0 size 8
+    id at 8 size 4
+    kind at 12 size 1
+    scope at 13 size 1
+    reserved at 14 size 2
+    value at 16 size 4
+    flags at 20 size 4
+KnowledgeInput size 32 align 4
+    header at 0 size 8
+    player at 8 size 4
+    id at 12 size 4
+    kind at 16 size 1
+    scope at 17 size 1
+    reserved at 18 size 2
+    value at 20 size 4
+    refusal at 24 size 4
+    allowed at 28 size 4
+Layout size 16 align 8
+    fields at 0 size 8
+    count at 8 size 4
+    size at 12 size 4
+LayoutField size 24 align 8
+    name at 0 size 16
+    hash at 16 size 8
+Level size 1 align 1
+    0 at 0 size 1
+Manifest size 176 align 8
+    header at 0 size 8
+    id at 8 size 16
+    version at 24 size 16
+    side at 40 size 1
+    flags at 44 size 4
+    dependencies at 48 size 8
+    dependency_count at 56 size 8
+    builds at 64 size 8
+    build_count at 72 size 8
+    name at 80 size 16
+    description at 96 size 16
+    authors at 112 size 8
+    author_count at 120 size 8
+    license at 128 size 16
+    homepage at 144 size 16
+    points at 160 size 16
+ManifestFlags size 4 align 4
+    0 at 0 size 4
+MidHookSpec size 32 align 8
+    address at 0 size 8
+    handler at 8 size 8
+    user at 16 size 8
+    priority at 24 size 4
+    flags at 28 size 4
+Migration size 32 align 8
+    id at 0 size 16
+    steps at 16 size 8
+    count at 24 size 4
+MigrationSet size 40 align 8
+    header at 0 size 8
+    migrations at 8 size 8
+    count at 16 size 4
+    map at 24 size 8
+    user at 32 size 8
+MigrationStep size 72 align 8
+    kind at 0 size 4
+    from at 8 size 16
+    to at 24 size 16
+    from_guid at 40 size 16
+    to_guid at 56 size 16
+ModHandle size 8 align 8
+    0 at 0 size 8
+ModInfo size 168 align 8
+    header at 0 size 8
+    id at 8 size 16
+    version at 24 size 16
+    side at 40 size 1
+    flags at 44 size 4
+    off at 48 size 1
+    file at 56 size 16
+    name at 72 size 16
+    description at 88 size 16
+    authors at 104 size 8
+    author_count at 112 size 8
+    license at 120 size 16
+    homepage at 136 size 16
+    replaced_by at 152 size 16
+NetMessage size 40 align 8
+    header at 0 size 8
+    channel at 8 size 4
+    reserved at 12 size 4
+    peer at 16 size 8
+    data at 24 size 8
+    size at 32 size 4
+    reserved_tail at 36 size 4
+PlayerData size 24 align 8
+    header at 0 size 8
+    slot at 8 size 4
+    entity at 12 size 4
+    key at 16 size 8
+PlayerDeathData size 64 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    cause at 12 size 4
+    key at 16 size 8
+    position at 24 size 12
+    killer at 36 size 16
+    deadly_shroud at 52 size 1
+    drowned at 53 size 1
+    reserved at 54 size 2
+    killer_entity at 56 size 4
+    reserved_tail at 60 size 4
+PlayerInfo size 96 align 8
+    header at 0 size 8
+    slot at 8 size 4
+    entity at 12 size 4
+    key at 16 size 8
+    permissions at 24 size 1
+    name_len at 25 size 1
+    name at 26 size 64
+PointFlags size 4 align 4
+    0 at 0 size 4
+PointHandle size 24 align 8
+    header at 0 size 8
+    id at 8 size 4
+    live at 16 size 8
+PointLink size 48 align 8
+    header at 0 size 8
+    point at 8 size 8
+    before at 16 size 8
+    after at 24 size 8
+    before_count at 32 size 4
+    after_count at 36 size 4
+    priority at 40 size 4
+PointMode size 4 align 4
+    0 at 0 size 4
+PointSpec size 64 align 8
+    header at 0 size 8
+    name at 8 size 16
+    mode at 24 size 4
+    flags at 28 size 4
+    input at 32 size 16
+    output at 48 size 16
+PointVerdict size 4 align 4
+    0 at 0 size 4
+QuestData size 16 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    quest at 12 size 4
+RecipeRuleKind size 4 align 4
+    0 at 0 size 4
+Registers size 136 align 8
+    rax at 0 size 8
+    rcx at 8 size 8
+    rdx at 16 size 8
+    rbx at 24 size 8
+    rsp at 32 size 8
+    rbp at 40 size 8
+    rsi at 48 size 8
+    rdi at 56 size 8
+    r8 at 64 size 8
+    r9 at 72 size 8
+    r10 at 80 size 8
+    r11 at 88 size 8
+    r12 at 96 size 8
+    r13 at 104 size 8
+    r14 at 112 size 8
+    r15 at 120 size 8
+    rflags at 128 size 8
+Relation size 1 align 1
+    0 at 0 size 1
+RenameCall size 128 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    known at 12 size 1
+    player at 16 size 96
+    text at 112 size 16
+ResourceKey size 24 align 4
+    guid at 0 size 16
+    type_hash at 16 size 4
+    part at 20 size 4
+ServiceFound size 72 align 8
+    header at 0 size 8
+    table at 8 size 8
+    fields at 16 size 4
+    owner at 24 size 16
+    owner_version at 40 size 16
+    reason at 56 size 16
+ServiceSpec size 56 align 8
+    header at 0 size 8
+    name at 8 size 16
+    major at 24 size 4
+    layout at 32 size 16
+    table at 48 size 8
+Side size 1 align 1
+    0 at 0 size 1
+SkillCheck size 20 align 4
+    header at 0 size 8
+    node at 8 size 4
+    gate at 12 size 4
+    unlocked at 16 size 1
+    reserved at 17 size 3
+SpawnRequest size 80 align 8
+    header at 0 size 8
+    template at 8 size 16
+    position at 24 size 24
+    orientation at 48 size 16
+    level at 64 size 4
+    reserved at 68 size 4
+    lifetime_ns at 72 size 8
+StatChange size 32 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    stat at 12 size 8
+    old at 20 size 4
+    new at 24 size 4
+    reserved at 28 size 4
+StatDefData size 40 align 8
+    header at 0 size 8
+    ty at 8 size 1
+    format at 9 size 1
+    reserved at 10 size 2
+    default at 12 size 4
+    min at 16 size 4
+    max at 20 size 4
+    text at 24 size 16
+StatModifierData size 12 align 4
+    stat at 0 size 4
+    op at 4 size 1
+    reserved at 5 size 3
+    value at 8 size 4
+StatModify size 40 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    key at 12 size 4
+    modifier at 16 size 12
+    flags at 28 size 4
+    duration_ms at 32 size 8
+StatRef size 8 align 4
+    index at 0 size 4
+    key at 4 size 4
+StatSource size 20 align 4
+    kind at 0 size 1
+    op at 1 size 1
+    reserved at 2 size 2
+    stat at 4 size 4
+    value at 8 size 4
+    id at 12 size 4
+    owner at 16 size 4
+Status size 4 align 4
+    0 at 0 size 4
+Str size 16 align 8
+    ptr at 0 size 8
+    len at 8 size 8
+Summon size 80 align 8
+    header at 0 size 8
+    item at 8 size 4
+    ammo at 12 size 4
+    template at 16 size 16
+    target at 32 size 24
+    slot at 56 size 8
+    pide at 64 size 4
+    meter at 68 size 4
+    consumed at 72 size 1
+    reserved at 73 size 3
+SurvivorLookup size 64 align 8
+    header at 0 size 8
+    survivor at 8 size 4
+    vanilla at 12 size 4
+    purpose at 16 size 4
+    entity at 20 size 4
+    cell at 24 size 24
+    bed_of at 48 size 8
+    token at 56 size 8
+Symbol size 24 align 8
+    name at 0 size 16
+    rva at 16 size 8
+TeleportRequest size 56 align 8
+    header at 0 size 8
+    entity at 8 size 4
+    flags at 12 size 4
+    position at 16 size 24
+    orientation at 40 size 16
+TerrainEdit size 60 align 4
+    header at 0 size 8
+    kind at 8 size 4
+    shape at 12 size 4
+    flags at 16 size 4
+    material at 20 size 4
+    position at 24 size 12
+    radius at 36 size 4
+    height at 40 size 4
+    protect at 44 size 16
+TerrainMaterialInfo size 20 align 4
+    header at 0 size 8
+    id at 8 size 1
+    flags at 9 size 1
+    hardness at 10 size 1
+    reserved at 11 size 1
+    item at 12 size 4
+    health at 16 size 4
+TickData size 16 align 8
+    header at 0 size 8
+    step at 8 size 8
+UiDialog size 64 align 8
+    header at 0 size 8
+    title at 8 size 16
+    message at 24 size 16
+    detail at 40 size 16
+    buttons at 56 size 4
+    flags at 60 size 4
+UiFrame size 24 align 8
+    header at 0 size 8
+    token at 8 size 8
+    screen at 16 size 4
+    reserved at 20 size 4
+UiMarker size 56 align 8
+    header at 0 size 8
+    position at 8 size 24
+    label at 32 size 16
+    color at 48 size 4
+    reserved at 52 size 4
+UiWidget size 96 align 8
+    header at 0 size 8
+    kind at 8 size 4
+    flags at 12 size 4
+    style at 16 size 4
+    steps at 20 size 4
+    text at 24 size 16
+    detail at 40 size 16
+    options at 56 size 8
+    option_count at 64 size 4
+    index at 68 size 4
+    value at 72 size 4
+    min at 76 size 4
+    max at 80 size 4
+    result at 84 size 4
+    anchor at 88 size 4
+    reserved at 92 size 4
+WeatherFront size 56 align 8
+    header at 0 size 8
+    layer at 8 size 4
+    effect at 12 size 4
+    position at 16 size 24
+    radius at 40 size 4
+    reserved at 44 size 4
+    remaining at 48 size 8
+ZoneCheck size 80 align 8
+    header at 0 size 8
+    zones at 8 size 8
+    zone_count at 16 size 8
+    object at 24 size 48
+    margin at 72 size 8
