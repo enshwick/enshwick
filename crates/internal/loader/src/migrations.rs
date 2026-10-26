@@ -336,9 +336,12 @@ pub fn apply_settings(
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
             MigrationStep::TAKE_SETTING => take(&mut doc, &step.from, &step.to, source)?,
+            MigrationStep::RENAME_SETTING if step.from.contains('.') || step.to.contains('.') => {
+                move_key(doc.as_table_mut(), &step.from, &step.to);
+            }
             MigrationStep::RENAME_SETTING => rename_key(doc.as_table_mut(), &step.from, &step.to),
             MigrationStep::REMOVE_SETTING => {
-                let _gone = doc.remove(&step.from);
+                crate::worlds::remove_at(doc.as_table_mut(), &step.from);
             }
             MigrationStep::MAP_SETTING => {
                 let Some(value) = doc
@@ -424,6 +427,20 @@ fn take(
         }
     }
     Ok(())
+}
+
+/// Moves the setting at the dotted key `from` to the dotted key `to`, into
+/// or out of a table; nothing when `from` is missing or `to` is taken.
+fn move_key(table: &mut toml_edit::Table, from: &str, to: &str) {
+    if crate::worlds::value_at(table, to).is_some() {
+        return;
+    }
+    let Some(value) = crate::worlds::value_at(table, from).cloned() else {
+        return;
+    };
+    if crate::worlds::set_at(table, to, value.decorated(" ", "")) {
+        crate::worlds::remove_at(table, from);
+    }
 }
 
 /// Renames the key `from` of `table` to `to` in its place, comments kept;
@@ -1564,5 +1581,39 @@ mod tests {
         assert_eq!(record.settings["new"], ["2"]);
         assert_eq!(record.worlds["w-1"]["new"], ["3", "2"]);
         assert_eq!(record.carried["new"], ["old"]);
+    }
+
+    #[test]
+    fn a_setting_renamed_into_or_out_of_a_table_moves_there() {
+        let m = migration(
+            "2",
+            vec![
+                step(
+                    MigrationStep::RENAME_SETTING,
+                    "per_level",
+                    "count.per_level",
+                ),
+                step(MigrationStep::RENAME_SETTING, "old.radius", "radius"),
+                step(MigrationStep::REMOVE_SETTING, "old.legacy", ""),
+            ],
+        );
+        let text = "per_level = [2, 4]\n\n[old]\nradius = 3\nlegacy = true\n";
+        let new = apply_settings(text, 0, &m, &double, &none).unwrap();
+        let table: toml::Table = new.parse().unwrap();
+        assert_eq!(
+            enshwick::config::value_at(&table, "count.per_level")
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("[2, 4]")
+        );
+        assert_eq!(
+            enshwick::config::value_at(&table, "radius")
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("3")
+        );
+        assert!(enshwick::config::value_at(&table, "per_level").is_none());
+        assert!(enshwick::config::value_at(&table, "old.legacy").is_none());
+        assert!(!new.contains("\"count.per_level\""), "{new}");
     }
 }
