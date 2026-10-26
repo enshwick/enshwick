@@ -6,6 +6,16 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.5] - 2026-10-26
+
+### Added
+
+- Reads the constants of reflected enums by name, and the base type of a
+  reflected struct, so the loader resolves recipe kinds, event types, damage
+  types and game settings values without numbers in code (#461, #469, #494).
+- Catalogue facts for game events, recipe kinds, world, inventory, loot,
+  stats and game settings (#461, #465, #469, #494).
+
 ## [1.0.0-alpha.4] - 2026-10-26
 
 ### Added
