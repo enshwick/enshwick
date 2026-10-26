@@ -436,6 +436,19 @@ id = \"you.stalls\""
     }
 
     #[test]
+    fn the_list_and_the_lock_read_as_their_snapshots() {
+        let mut list = ModList::default();
+        list.note("you.trading-post", "trading_post.dll");
+        list.note("you.lockers", "lockers.dll");
+        insta::assert_snapshot!("mod_list", list.render());
+        let lock = lock(&[
+            ("you.trading-post", "0.3.0", "01"),
+            ("you.lockers", "1.0.0", "02"),
+        ]);
+        insta::assert_snapshot!("lock", lock.render());
+    }
+
+    #[test]
     fn the_lock_reads_back_and_names_what_changed() {
         let old = lock(&[("you.trading-post", "0.3.0", "01"), ("gone", "1.0.0", "02")]);
         let text = old.render();

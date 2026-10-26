@@ -707,6 +707,12 @@ conflicts:
     }
 
     #[test]
+    fn the_status_report_reads_as_its_snapshot() {
+        insta::assert_snapshot!("status", summary().render());
+        insta::assert_snapshot!("status_short", summary().short());
+    }
+
+    #[test]
     fn the_chat_summary_is_short() {
         let short = summary().short();
         assert_eq!(short.lines().count(), 5);
