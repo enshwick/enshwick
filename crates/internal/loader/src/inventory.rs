@@ -18,10 +18,11 @@
 //! the hook skips contexts of any other world, and requests are refused
 //! while the client hosts nothing.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use enshwick::abi::{
@@ -29,8 +30,8 @@ use enshwick::abi::{
     InventoryResultFn, ItemData, Registers, Side, Status,
 };
 
-use crate::chains::LOADER;
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::memory::{read, read_ptr, write};
 use crate::mid::MidLink;
 
@@ -218,7 +219,7 @@ struct Executor {
 /// A queued request.
 #[derive(Debug)]
 struct Request {
-    owner: usize,
+    owner: ModIndex,
     flags: u32,
     actor: u32,
     ops: Vec<InventoryOp>,
@@ -230,7 +231,7 @@ struct Request {
 /// A request's result, waiting for the game thread.
 #[derive(Debug)]
 struct Finished {
-    owner: usize,
+    owner: ModIndex,
     done: InventoryResultFn,
     user: usize,
     outcome: u32,
@@ -266,7 +267,7 @@ impl Queue {
     }
 
     fn push(&self, request: Request) {
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         requests.push_back(request);
         self.pending.store(true, Ordering::Release);
     }
@@ -277,7 +278,7 @@ impl Queue {
         if !self.pending.load(Ordering::Acquire) {
             return None;
         }
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         let request = requests.pop_front();
         self.pending.store(!requests.is_empty(), Ordering::Release);
         request
@@ -288,7 +289,7 @@ impl Queue {
         if !self.pending.load(Ordering::Acquire) {
             return Vec::new();
         }
-        let mut requests = self.requests.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut requests = self.requests.relock();
         let mut gone = Vec::new();
         requests.retain_mut(|r| {
             let late = expired(r);
@@ -529,16 +530,13 @@ pub(crate) fn link(loader: &Loader) {
         return;
     };
     let link = MidLink {
-        owner: LOADER,
+        owner: ModIndex::LOADER,
         handler: row,
         user: 0,
         priority: i32::MIN,
         flags: HookFlags::NONE,
     };
-    let status = loader
-        .mids
-        .lock()
-        .map_or(Status::REFUSED, |mut mids| mids.add(executor.site, link));
+    let status = loader.mids.relock().add(executor.site, link);
     if !status.is_ok() {
         crate::log!(
             WARN,
@@ -579,16 +577,13 @@ pub(crate) fn forget() {
 }
 
 fn finish(results: impl IntoIterator<Item = Finished>) {
-    FINISHED
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .extend(results);
+    FINISHED.relock().extend(results);
 }
 
 /// Queues a request of the mod `owner`.
 pub(crate) fn submit(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     request: &InventoryRequest,
     done: InventoryResultFn,
     user: *mut c_void,
@@ -723,7 +718,7 @@ pub(crate) fn deliver() {
         );
     }
     let finished = {
-        let mut finished = FINISHED.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut finished = FINISHED.relock();
         if finished.is_empty() {
             return;
         }
@@ -1178,7 +1173,7 @@ mod tests {
 
     fn request(user: usize) -> Request {
         Request {
-            owner: 0,
+            owner: ModIndex::new(0),
             flags: 0,
             actor: 0,
             ops: Vec::new(),

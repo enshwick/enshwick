@@ -47,12 +47,14 @@
 //! }
 //! ```
 
+use crate::locks::RelockRw;
+
 pub mod sheet;
 
 use core::ffi::c_void;
 use core::ops::RangeInclusive;
 use std::cell::RefCell;
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crate::abi::{ActionCall, Str, read_headed};
 use crate::i18n::{Language, Texts};
@@ -665,11 +667,7 @@ impl Actions {
         if action.hint && action.at.is_none() {
             return Err(Off::new(format!("action {id}: a hint needs a subject")));
         }
-        let mut declared = self
-            .registry
-            .declared
-            .write()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut declared = self.registry.declared.relock_write();
         if declared.iter().any(|d| d.action.id == id) {
             return Err(Off::new(format!("action {id}: the id is taken")));
         }
@@ -732,7 +730,7 @@ impl Registry {
     }
 
     fn help(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
+        let declared = self.declared.relock_read();
         let mut lines = vec![self.say("actions.usage", language, &[])];
         for d in declared.iter().filter(|d| Self::allowed(d, player)) {
             lines.push(self.usage(&d.action, language));
@@ -755,7 +753,7 @@ impl Registry {
         if word == "help" {
             return Outcome::done(self.help(player, language));
         }
-        let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
+        let declared = self.declared.relock_read();
         let Some(d) = declared.iter().find(|d| d.action.id == word) else {
             return Outcome::refused(self.say("actions.unknown", language, &[("word", &word)]));
         };
@@ -929,7 +927,7 @@ impl Registry {
 
     /// The sheet of `player`: every action they may use, in `language`.
     fn sheet(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
+        let declared = self.declared.relock_read();
         let online = self.online();
         let others: Vec<(u64, String)> = online
             .iter()
@@ -1013,7 +1011,7 @@ impl Registry {
         args: &str,
         language: Language,
     ) -> String {
-        let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
+        let declared = self.declared.relock_read();
         let outcome = match declared.iter().find(|d| d.action.id == id) {
             None => Outcome::refused(self.say("actions.unknown", language, &[("word", id)])),
             Some(d) => match sheet::decode_args(args) {
@@ -1071,7 +1069,7 @@ impl Registry {
 
     /// The actions with a hint that `player` has at hand.
     fn hints(&self, player: &Player, language: Language) -> String {
-        let declared = self.declared.read().unwrap_or_else(PoisonError::into_inner);
+        let declared = self.declared.relock_read();
         let mut out = String::new();
         for d in declared
             .iter()

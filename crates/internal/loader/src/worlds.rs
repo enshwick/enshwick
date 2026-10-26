@@ -13,10 +13,12 @@
 //! and go into the next world that loads.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::Mutex;
 
 use enshwick::config::{Schema, Scope, Stage};
 use toml_edit::DocumentMut;
+
+use crate::locks::Relock;
 
 /// The key of the world this process runs, while one runs.
 static CURRENT: Mutex<Option<String>> = Mutex::new(None);
@@ -24,15 +26,12 @@ static CURRENT: Mutex<Option<String>> = Mutex::new(None);
 /// The key of the world this process runs, while one runs.
 #[must_use]
 pub fn current() -> Option<String> {
-    CURRENT
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
+    CURRENT.relock().clone()
 }
 
 /// Sets the world this process runs, or none.
 pub fn set_current(key: Option<String>) {
-    *CURRENT.lock().unwrap_or_else(PoisonError::into_inner) = key;
+    *CURRENT.relock() = key;
 }
 
 /// Where a world's settings of mod `id` live.
@@ -226,9 +225,10 @@ mod live {
 
     use super::{Destination, compose, current, next_file, prepare, set_current, world_file};
     use crate::host::{Loader, ModRecord};
+    use crate::locks::Relock;
 
     fn schema(record: &ModRecord) -> Option<Schema> {
-        record.schema.lock().ok().and_then(|s| s.clone())
+        record.schema.relock().clone()
     }
 
     fn global_path(loader: &Loader, record: &ModRecord) -> PathBuf {

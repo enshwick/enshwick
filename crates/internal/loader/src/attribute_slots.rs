@@ -1,10 +1,11 @@
-//! The slots of attributes in their sets, read from the game's data. The
-//! game's attribute container lists every set's attributes in slot order,
-//! with their names, and the game looks slots up there at run time, so no
-//! code holds them (game build 1269579). The build tables name each slot
-//! they pin by its attribute; the loader reads the slot at start, so the
-//! slots hold on a build without a table; a pinned value that differs is
-//! logged, and the game's data holds.
+//! The slots of attributes in their sets, read from the game's data.
+//!
+//! The game's attribute container lists every set's attributes in slot order,
+//! with their names, and the game looks slots up there at run time, so no code
+//! holds them (game build 1269579). The build tables name each slot they pin by
+//! its attribute; the loader reads the slot at start, so the slots hold on a
+//! build without a table; a pinned value that differs is logged, and the game's
+//! data holds.
 
 use rustc_hash::FxHashMap;
 
@@ -78,7 +79,7 @@ pub(crate) fn slots<'a>(
 /// the archive holds no single container that reads.
 pub fn read(
     archive: &crate::archive::Archive,
-    reflection: &enshwick_reflect::Reflection<'_>,
+    reflection: &enshwick_gamedata::reflect::Reflection<'_>,
 ) -> Result<FxHashMap<String, usize>, &'static str> {
     let field = |ty: &str, name: &str| {
         let offset = reflection.field_offset(ty, name).ok()?;
@@ -94,7 +95,7 @@ pub fn read(
         })
     })()
     .ok_or("the game does not reflect its attribute container")?;
-    let keys = archive.keys_of(enshwick_reflect::fnv1a32(CONTAINER.as_bytes()));
+    let keys = archive.keys_of(enshwick_gamedata::reflect::fnv1a32(CONTAINER.as_bytes()));
     let resource = match keys.as_slice() {
         [key] => archive.resource(key),
         _ => None,
@@ -117,7 +118,7 @@ pub fn read(
 #[cfg(windows)]
 pub(crate) fn supply(
     build: &mut crate::builds::KnownBuild,
-    reflection: &enshwick_reflect::Reflection<'_>,
+    reflection: &enshwick_gamedata::reflect::Reflection<'_>,
     dir: &std::path::Path,
     side: enshwick::abi::Side,
 ) {
@@ -233,7 +234,7 @@ mod tests {
         };
         let archive =
             crate::archive::Archive::open(std::path::Path::new(&dir), "enshrouded").unwrap();
-        let keys = archive.keys_of(enshwick_reflect::fnv1a32(
+        let keys = archive.keys_of(enshwick_gamedata::reflect::fnv1a32(
             b"keen::AttributeContainerResource",
         ));
         assert_eq!(keys.len(), 1);

@@ -8,14 +8,16 @@
 //! rename, so the loader links the string swap and asks the mods' rename
 //! filters first when the call comes from the rename message.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::sync::atomic::Ordering;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -71,7 +73,7 @@ struct Layout {
 /// A mod's rename filter.
 #[derive(Debug, Clone, Copy)]
 struct Filter {
-    owner: usize,
+    owner: ModIndex,
     callback: RenameCallFn,
     user: usize,
 }
@@ -129,24 +131,21 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 }
 
 /// Registers mod `owner`'s rename filter.
-pub(crate) fn register(owner: usize, callback: RenameCallFn, user: *mut c_void) -> Status {
+pub(crate) fn register(owner: ModIndex, callback: RenameCallFn, user: *mut c_void) -> Status {
     if SEALED.get().is_some() {
         return Status::TOO_LATE;
     }
-    FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Filter {
-            owner,
-            callback,
-            user: user.expose_provenance(),
-        });
+    FILTERS.relock().push(Filter {
+        owner,
+        callback,
+        user: user.expose_provenance(),
+    });
     Status::OK
 }
 
 /// Links the rename check when a mod filters renames.
 pub(crate) fn link(loader: &'static Loader) {
-    let filters = std::mem::take(&mut *FILTERS.lock().unwrap_or_else(PoisonError::into_inner));
+    let filters = std::mem::take(&mut *FILTERS.relock());
     let wanted = !filters.is_empty();
     let _first = SEALED.set(filters.into_boxed_slice());
     let _first = LOADED.set(loader);
@@ -343,7 +342,7 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
         .filter(|f| {
             loader
                 .mods
-                .get(f.owner)
+                .get(f.owner.get())
                 .is_some_and(|m| !m.off.load(Ordering::Acquire))
         })
         .any(|f| {

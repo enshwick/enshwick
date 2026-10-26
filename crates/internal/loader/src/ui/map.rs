@@ -11,18 +11,21 @@
 //! The layouts below are pinned for that build alone and no pattern finds
 //! them on another, so map markers stay off on a build without its own table.
 
+use crate::mod_index::ModIndex;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
-use super::engine::{Buf, UiText};
 use crate::builds::Kind;
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
+
+use super::engine::{Buf, UiText};
 
 /// The most markers one mod shows.
 const MAX_MARKERS: usize = 256;
@@ -60,7 +63,7 @@ const STATE_PLAY_DATA: usize = 0x38;
 
 /// One marker, owned by the loader.
 struct Owned {
-    owner: usize,
+    owner: ModIndex,
     position: [i64; 3],
     label: Box<[u8]>,
     color: u8,
@@ -99,7 +102,7 @@ fn snapshot() -> &'static ArcSwap<Sets> {
 }
 
 /// Replaces mod `owner`'s markers with `markers`.
-pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
+pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
     if given.len() > MAX_MARKERS {
         return Status::BAD_ARGS;
     }
@@ -114,15 +117,15 @@ pub(crate) fn set(owner: usize, given: &[UiMarker]) -> Status {
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
         })
         .collect();
-    let mut sets = SETS.lock().unwrap_or_else(PoisonError::into_inner);
-    sets.retain(|(o, _)| *o != owner);
+    let mut sets = SETS.relock();
+    sets.retain(|(o, _)| *o != owner.get());
     if !copied.is_empty() {
-        sets.push((owner, copied.into()));
+        sets.push((owner.get(), copied.into()));
     }
     let next: Sets = sets.iter().map(|(_, list)| Arc::clone(list)).collect();
     drop(sets);
     let old = snapshot().swap(Arc::new(next));
-    let mut retired = RETIRED_SETS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut retired = RETIRED_SETS.relock();
     retired.push_back((FRAME.load(Ordering::Acquire), old));
     retire(&mut retired, FRAME.load(Ordering::Acquire));
     Status::OK
@@ -190,7 +193,7 @@ pub(crate) fn link(loader: &Loader) {
         .reflection
         .system("replicate_map_markers_for_ui")
         .ok()
-        .map(enshwick_reflect::System::entry);
+        .map(enshwick_gamedata::reflect::System::entry);
     loader.link_feature(
         "map markers",
         target,

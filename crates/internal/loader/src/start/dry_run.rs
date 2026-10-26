@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 use crate::chains::Chains;
 use crate::host::{self, Loader};
@@ -13,8 +13,8 @@ use crate::{builds, log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, libraries};
-use super::pe;
 use super::{initialise, read_frame, records};
+use crate::pe;
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]
@@ -39,7 +39,7 @@ pub enum DryRunError {
     Unmapped(u64),
     /// The executable does not read as a PE image.
     #[error(transparent)]
-    Image(#[from] enshwick_reflect::ImageError),
+    Image(#[from] enshwick_gamedata::reflect::ImageError),
     /// The executable has no fingerprint to pick a build table by.
     #[error("the executable has no fingerprint")]
     NoFingerprint,
@@ -82,12 +82,14 @@ pub struct DryMod {
     pub reason: String,
 }
 
-/// Starts the loader on the game executable `exe` without running the game:
-/// the executable's image is mapped at its preferred base, the build table
-/// taken as the loader takes it (only by patterns with `patterns`), and
-/// every mod in `game_dir/mods/` resolved and initialised as at a start.
-/// Nothing is hooked or patched, and no mod's `ready` runs. Once per
-/// process: the loader keeps its state for the process.
+/// Starts the loader on the game executable `exe` without running the game.
+///
+/// The executable's image is mapped at its preferred base, the build table
+/// taken as the loader takes it (only by patterns with `patterns`), and every
+/// mod in `game_dir/mods/` resolved and initialised as at a start.
+///
+/// Nothing is hooked or patched, and no mod's `ready` runs. Once per process:
+/// the loader keeps its state for the process.
 ///
 /// # Errors
 ///

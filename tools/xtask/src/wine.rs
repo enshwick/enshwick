@@ -38,7 +38,7 @@ pub(crate) fn run(packages: &[&str], required: bool) -> bool {
         return true;
     }
     if cfg!(windows) {
-        say("on Windows the Windows-only crates run with the host tests");
+        say("on Windows the Windows tests run with the host tests");
         return true;
     }
     if native_wine() {

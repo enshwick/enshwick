@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader-stub"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "Internal, not for mods: the POWRPROF.dll proxy that starts the Enshwick Loader inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "proxy"]
 categories = ["game-development"]
@@ -27,6 +27,11 @@ windows-sys = { workspace = true, features = [
     "Win32_System_SystemServices",
     "Win32_System_Threading",
 ] }
+
+[package.metadata.enshwick]
+# Builds only for Windows: off Windows, `cargo xtask check` lints it through
+# cargo xwin and skips its tests.
+windows-only = true
 
 [lints]
 workspace = true

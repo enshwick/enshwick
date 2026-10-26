@@ -13,12 +13,15 @@
 //! account in `mod-data/enshwick/worlds/<key>/stats.bin` and come back when
 //! the player joins.
 
+use crate::locks::Relock;
+use crate::mod_index::ModIndex;
+
 mod equipment;
 mod vitals;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
@@ -30,7 +33,6 @@ use enshwick::affixes::{AffixDef, AffixKey, Candidate, Rarity, RollRules, lines_
 use enshwick::stats::{ItemStats, Op, Stat, StatDef, aggregate, builtin, key_of};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::chains::LOADER;
 use crate::host::{Loader, Registered};
 use crate::ids::Space;
 use crate::settings::LOADER_ID;
@@ -99,7 +101,7 @@ struct Pending {
 /// A modifier a mod keeps on an entity.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Held {
-    owner: usize,
+    owner: ModIndex,
     key: u32,
     stat: u32,
     op: u8,
@@ -182,7 +184,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
     if SEALED.get().is_some() {
         return Err(Status::TOO_LATE);
     }
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     let pending = pending.get_or_insert_with(|| {
         let mut fresh = Pending::default();
         for (id, def) in builtin::ALL {
@@ -190,7 +192,7 @@ fn pending<R>(f: impl FnOnce(&mut Pending) -> R) -> Result<R, Status> {
             let text = def.text.clone().into_boxed_str();
             fresh.kinds.push(Kind {
                 id: id.into(),
-                def: Some((def, text, LOADER)),
+                def: Some((def, text, (ModIndex::LOADER).get())),
             });
         }
         fresh
@@ -208,10 +210,12 @@ fn is_part(part: &str) -> bool {
 }
 
 /// The full id of `id` asked for by the mod named `names` (its id first,
-/// then its former ids), and whether the namespace is the mod's own.
+/// then its former ids), and whether the namespace is the mod's own. A bare
+/// name takes the namespace where the mod's data lives: its first former
+/// id, or else its id.
 fn full_id(names: &[&str], id: &str) -> Option<(String, bool)> {
-    let mod_id = names.first()?;
-    let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
+    let home = names.get(1).or_else(|| names.first())?;
+    let (namespace, name) = id.split_once(':').unwrap_or((home, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
         .then(|| (format!("{namespace}:{name}"), names.contains(&namespace)))
 }
@@ -228,12 +232,12 @@ fn index_of(kinds: &mut Vec<Kind>, id: &str) -> usize {
 
 /// Records `full` in its space; a name whose key another has turns mod
 /// `owner` off with both named.
-fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<(), Status> {
+fn declare(loader: &Loader, owner: ModIndex, space: Space, full: &str) -> Result<(), Status> {
     if SEALED.get().is_some() {
         return Err(Status::TOO_LATE);
     }
     let key = key_of(full).0;
-    let by = loader.mods.get(owner).map_or("?", |m| m.id.as_str());
+    let by = loader.mods.get(owner.get()).map_or("?", |m| m.id.as_str());
     let declared = crate::ids::with(|ids| {
         if space == Space::Stat {
             for (id, _) in builtin::ALL {
@@ -251,11 +255,11 @@ fn declare(loader: &Loader, owner: usize, space: Space, full: &str) -> Result<()
 /// Defines or opens kind `id` for mod `owner`. During init only.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     def: Option<StatDef>,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     declare(loader, owner, Space::Stat, &full)?;
     pending(|p| {
@@ -266,7 +270,7 @@ pub(crate) fn open(
                 return Err(Status::REFUSED);
             }
             let text = def.text.clone().into_boxed_str();
-            kind.def = Some((def, text, owner));
+            kind.def = Some((def, text, owner.get()));
         }
         Ok(StatRef {
             index: u32::try_from(index).map_err(|_| Status::REFUSED)?,
@@ -286,11 +290,11 @@ pub(crate) fn buff(buff: u32, modifiers: &[StatModifierData]) -> Result<(), Stat
 /// Defines mod `owner`'s affix `id`. During init only.
 pub(crate) fn open_affix(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     id: &str,
     data: &AffixDefData,
 ) -> Result<StatRef, Status> {
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     let (full, own) = full_id(&record.names(), id).ok_or(Status::BAD_ARGS)?;
     if !own {
         return Err(Status::REFUSED);
@@ -380,7 +384,7 @@ pub(crate) fn affix_info(affix: u32) -> Result<(Str, u8), Status> {
 
 /// Registers mod `owner`'s handler of changes. During init only.
 pub(crate) fn on_changed(
-    owner: usize,
+    owner: ModIndex,
     callback: StatChangeFn,
     user: *mut core::ffi::c_void,
 ) -> Result<(), Status> {
@@ -396,8 +400,7 @@ pub(crate) fn wanted() -> bool {
 /// keep item stats as item data of their own.
 pub(crate) fn seal() {
     let pending = PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .take()
         .filter(|p| p.used)
         .unwrap_or_default();
@@ -501,12 +504,12 @@ fn serves() -> bool {
 }
 
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = STATE.relock();
     f(state.get_or_insert_with(State::default))
 }
 
 /// Sets or removes mod `owner`'s modifier.
-pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Result<(), Status> {
+pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> Result<(), Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let stat = request.modifier.stat;
     if request.entity == 0 || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
@@ -556,7 +559,7 @@ pub(crate) fn modify(loader: &Loader, owner: usize, request: &StatModify) -> Res
         if (saved || was_saved)
             && let Some(player) = player
         {
-            let record = loader.mods.get(owner);
+            let record = loader.mods.get(owner.get());
             let mod_id = record.map(|m| m.id.clone()).unwrap_or_default();
             let stat_id = sealed.kinds[stat as usize].id.to_string();
             state.saved.retain(|s| {
@@ -624,7 +627,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
                 restored.push(Held {
-                    owner,
+                    owner: ModIndex::new(owner),
                     key: saved.key,
                     stat,
                     op: saved.op,
@@ -693,7 +696,7 @@ fn gather(loader: &Loader, sealed: &Sealed, entity: u32, held: &[Held]) -> (Vec<
             h.stat,
             h.value,
             h.key,
-            u32::try_from(h.owner).unwrap_or(u32::MAX),
+            u32::try_from(h.owner.get()).unwrap_or(u32::MAX),
         ));
     }
     (out, core::hash::Hasher::finish(&hash))
@@ -1002,7 +1005,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 .and_then(|bytes| postcard::from_bytes(&bytes).ok())
                 .unwrap_or_default();
             crate::log!(INFO, "stats: {} saved modifiers", saved.len());
-            *STATE.lock().unwrap_or_else(PoisonError::into_inner) = Some(State {
+            *STATE.relock() = Some(State {
                 saved,
                 world: key,
                 ..State::default()
@@ -1020,7 +1023,7 @@ pub(crate) fn forget() {
     if let Some(loader) = crate::host::loader() {
         save(loader);
     }
-    *STATE.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *STATE.relock() = None;
     snapshot().store(Arc::new(Snapshot::default()));
 }
 
@@ -1064,12 +1067,7 @@ mod tests {
         values.values.insert(7, Box::new([2.0]));
         snapshot().store(Arc::new(values));
         forget();
-        assert!(
-            STATE
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .is_none()
-        );
+        assert!(STATE.relock().is_none());
         assert!(snapshot().load().values.is_empty());
     }
 
@@ -1128,6 +1126,15 @@ mod tests {
     #[test]
     fn ids_take_the_mod_s_namespace_and_say_whose_they_are() {
         assert_eq!(full_id(&["rpg"], "crit"), Some(("rpg:crit".into(), true)));
+        assert_eq!(
+            full_id(&["me.rpg", "rpg"], "crit"),
+            Some(("rpg:crit".into(), true)),
+            "a renamed mod's bare names stay where its data lives"
+        );
+        assert_eq!(
+            full_id(&["me.rpg", "rpg"], "me.rpg:luck"),
+            Some(("me.rpg:luck".into(), true))
+        );
         assert_eq!(
             full_id(&["rpg"], "rpg:crit"),
             Some(("rpg:crit".into(), true))

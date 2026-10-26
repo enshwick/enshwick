@@ -11,11 +11,12 @@
 //! gets the text in chat instead.
 
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::Status;
 
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -122,7 +123,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 pub(crate) fn text(id: u32) -> Option<&'static str> {
     let slot = TAGS
         .iter()
-        .position(|tag| enshwick_reflect::fnv1a32(tag) == id)?;
+        .position(|tag| enshwick_gamedata::reflect::fnv1a32(tag) == id)?;
     let text = SLOT_TEXTS[slot].load(Ordering::Acquire);
     // SAFETY: a non-null slot holds a pointer `take_slot` made from an
     // `intern` reference, leaked for the process and never written again.
@@ -131,7 +132,7 @@ pub(crate) fn text(id: u32) -> Option<&'static str> {
 
 /// `text`, kept for the process: the same address for the same text.
 fn intern(text: &str) -> &'static &'static str {
-    let mut interned = INTERNED.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut interned = INTERNED.relock();
     let interned = interned.get_or_insert_with(rustc_hash::FxHashMap::default);
     if let Some(&kept) = interned.get(text) {
         return kept;
@@ -144,7 +145,7 @@ fn intern(text: &str) -> &'static &'static str {
 
 /// Queues a notice the server sent for the client's next step.
 pub(crate) fn queue(entity: u32, text: &str) {
-    let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut waiting = WAITING.relock();
     if waiting.len() < MAX_WAITING {
         waiting.push((entity, text.to_owned()));
     }
@@ -177,7 +178,7 @@ fn take_slot(text: &str) -> [u8; 16] {
 ///   event streams, so no system pushes into them during the call.
 pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
     let waiting = {
-        let mut waiting = WAITING.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut waiting = WAITING.relock();
         if waiting.is_empty() {
             return;
         }
@@ -262,28 +263,30 @@ mod tests {
     fn a_slot_takes_a_text_cut_at_a_character_and_its_tag_finds_it() {
         let long = "ж".repeat(200);
         let tag = take_slot(&long);
-        let id = enshwick_reflect::fnv1a32(&tag);
+        let id = enshwick_gamedata::reflect::fnv1a32(&tag);
         let text = text(id).unwrap();
         assert!(text.len() <= MAX_TEXT && text.chars().all(|c| c == 'ж'));
         let tag = take_slot("Low fuel");
         assert_eq!(
-            super::text(enshwick_reflect::fnv1a32(&tag)),
+            super::text(enshwick_gamedata::reflect::fnv1a32(&tag)),
             Some("Low fuel")
         );
         assert_eq!(super::text(1), None);
-        let ids: std::collections::HashSet<u32> =
-            TAGS.iter().map(|t| enshwick_reflect::fnv1a32(t)).collect();
+        let ids: std::collections::HashSet<u32> = TAGS
+            .iter()
+            .map(|t| enshwick_gamedata::reflect::fnv1a32(t))
+            .collect();
         assert_eq!(ids.len(), SLOTS);
     }
 
     #[test]
     fn a_text_once_shown_keeps_its_address_while_its_slot_moves_on() {
-        let first = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let first = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         for n in 0..SLOTS * 3 {
             take_slot(&format!("other {n}"));
         }
         assert_eq!(first, "Kept text");
-        let again = text(enshwick_reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
+        let again = text(enshwick_gamedata::reflect::fnv1a32(&take_slot("Kept text"))).unwrap();
         assert_eq!(again.as_ptr(), first.as_ptr());
     }
 }

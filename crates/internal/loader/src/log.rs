@@ -13,12 +13,13 @@ use std::io::Write as _;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::Level;
 
+use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
 
 /// Lines waiting for the writer at most.
@@ -98,8 +99,8 @@ pub fn open(dir: &Path) {
             let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
                 return;
             };
-            let mut files: std::collections::HashMap<String, Option<std::fs::File>> =
-                std::collections::HashMap::new();
+            let mut files: rustc_hash::FxHashMap<String, Option<std::fs::File>> =
+                rustc_hash::FxHashMap::default();
             for (level, source, line) in receive {
                 let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
                 if dropped > 0 {
@@ -213,7 +214,9 @@ fn keep_tail(from: &Path, to: &Path, bytes: u64) -> std::io::Result<()> {
 
 /// Whether lines go to [`CAPTURED`] instead of the files.
 static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-/// Lines kept in memory instead of written, for a dry run.
+/// Lines kept in memory instead of written, for a dry run. Its lock stays
+/// off the loader's poison policy: recovering it would log, and logging takes
+/// this lock, so a poisoned capture drops lines instead.
 static CAPTURED: Mutex<Option<Vec<(Level, String, String)>>> = Mutex::new(None);
 
 /// Keeps every line from now on in memory, for [`captured`].
@@ -283,7 +286,7 @@ pub fn settle(longest: Duration) -> bool {
 
 /// Keeps `line` among the latest lines.
 fn keep(line: Line) {
-    let mut recent = RECENT_LINES.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut recent = RECENT_LINES.relock();
     if recent.len() == RECENT {
         recent.pop_front();
     }
@@ -294,7 +297,7 @@ fn keep(line: Line) {
 /// `level` or more severe, oldest first, without their line ends.
 #[must_use]
 pub fn recent(source: Option<&str>, level: Level, count: usize) -> Vec<String> {
-    let recent = RECENT_LINES.lock().unwrap_or_else(PoisonError::into_inner);
+    let recent = RECENT_LINES.relock();
     let mut found: Vec<String> = recent
         .iter()
         .rev()
@@ -348,13 +351,7 @@ mod tests {
             let source = if i % 3 == 0 { "a" } else { "b" };
             keep((level, source.to_owned(), format!("line {i}\n")));
         }
-        assert_eq!(
-            RECENT_LINES
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .len(),
-            RECENT
-        );
+        assert_eq!(RECENT_LINES.relock().len(), RECENT);
         let last = RECENT + 9;
         assert_eq!(
             recent(None, Level::DEBUG, 2),
@@ -371,7 +368,7 @@ mod tests {
 
     #[test]
     fn a_line_written_before_settling_is_among_the_latest() {
-        let dir = std::env::temp_dir().join(format!("enshwick-log-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("enshwick-settle-{}", std::process::id()));
         open(&dir);
         write(Level::ERROR, LOADER_ID, "the line a report needs");
         assert!(settle(Duration::from_secs(10)));

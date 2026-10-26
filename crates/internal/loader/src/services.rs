@@ -3,10 +3,13 @@
 //! field; once every mod is initialised it seals the events, and a sent
 //! event goes straight to its subscribers on the sending thread.
 
-use std::sync::{Mutex, OnceLock, PoisonError};
+use crate::mod_index::ModIndex;
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{ModEventFn, Status};
 use enshwick::services::{LayoutError, compare};
+
+use crate::locks::Relock;
 
 /// A layout as `(field name, hash)` per field.
 pub(crate) type Fields = Vec<(String, u64)>;
@@ -22,7 +25,7 @@ pub(crate) trait Names {
 /// A published service.
 #[derive(Debug)]
 struct Published {
-    owner: usize,
+    owner: ModIndex,
     name: String,
     major: u32,
     fields: Fields,
@@ -32,7 +35,7 @@ struct Published {
 /// A defined mod event.
 #[derive(Debug)]
 struct Definition {
-    owner: usize,
+    owner: ModIndex,
     name: String,
     fields: Fields,
 }
@@ -40,7 +43,7 @@ struct Definition {
 /// A subscription waiting for the seal.
 #[derive(Debug)]
 struct Pending {
-    owner: usize,
+    owner: ModIndex,
     name: String,
     fields: Fields,
     callback: ModEventFn,
@@ -51,7 +54,7 @@ struct Pending {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Found {
     /// The publishing mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The table, as an address.
     pub(crate) table: usize,
     /// How many fields the published table has.
@@ -70,7 +73,7 @@ pub(crate) struct Registry {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Subscriber {
     /// The subscribing mod's index.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The handler, inside the mod's DLL, which stays loaded.
     pub(crate) callback: ModEventFn,
     /// The mod's pointer for the handler, as an address.
@@ -81,7 +84,7 @@ pub(crate) struct Subscriber {
 #[derive(Debug)]
 pub(crate) struct Slot {
     /// The defining mod's index, the one mod that sends it.
-    pub(crate) owner: usize,
+    pub(crate) owner: ModIndex,
     /// The event's name.
     pub(crate) name: String,
     /// Its subscribers, in load order.
@@ -96,7 +99,7 @@ impl Registry {
     /// Why it is refused: the name and major are published already.
     pub(crate) fn publish(
         &mut self,
-        owner: usize,
+        owner: ModIndex,
         name: &str,
         major: u32,
         fields: Fields,
@@ -108,7 +111,7 @@ impl Registry {
             .iter()
             .find(|p| p.name == name && p.major == major)
         {
-            let (id, version) = names.name(held.owner);
+            let (id, version) = names.name(held.owner.get());
             return Err(if held.owner == owner {
                 format!("service {name} v{major}: published twice")
             } else {
@@ -142,9 +145,9 @@ impl Registry {
         let same_name = || self.published.iter().filter(|p| p.name == name);
         let Some(published) = same_name().find(|p| p.major == major) else {
             let others: Vec<String> = same_name()
-                .filter(|p| !names.off(p.owner))
+                .filter(|p| !names.off(p.owner.get()))
                 .map(|p| {
-                    let (id, version) = names.name(p.owner);
+                    let (id, version) = names.name(p.owner.get());
                     format!("v{} from {id} {version}", p.major)
                 })
                 .collect();
@@ -160,8 +163,8 @@ impl Registry {
                 )
             });
         };
-        let (id, version) = names.name(published.owner);
-        if names.off(published.owner) {
+        let (id, version) = names.name(published.owner.get());
+        if names.off(published.owner.get()) {
             return Err((
                 Status::MISSING,
                 format!("{id} {version} publishes it, but is off"),
@@ -193,7 +196,7 @@ impl Registry {
     /// twice.
     pub(crate) fn define(
         &mut self,
-        owner: usize,
+        owner: ModIndex,
         names: &[&str],
         name: &str,
         fields: Fields,
@@ -219,7 +222,7 @@ impl Registry {
     /// Keeps a subscription for the seal.
     pub(crate) fn subscribe(
         &mut self,
-        owner: usize,
+        owner: ModIndex,
         name: &str,
         fields: Fields,
         callback: ModEventFn,
@@ -236,8 +239,8 @@ impl Registry {
 
     /// Matches every subscription with its definition: the sealed events by
     /// id, and why each subscription left out stays idle, by subscriber.
-    pub(crate) fn seal(&mut self, names: &impl Names) -> (Box<[Slot]>, Vec<(usize, String)>) {
-        let mut slots: Vec<(usize, String, Vec<Subscriber>)> = self
+    pub(crate) fn seal(&mut self, names: &impl Names) -> (Box<[Slot]>, Vec<(ModIndex, String)>) {
+        let mut slots: Vec<(ModIndex, String, Vec<Subscriber>)> = self
             .defined
             .iter()
             .map(|d| (d.owner, d.name.clone(), Vec::new()))
@@ -256,8 +259,8 @@ impl Registry {
                 ));
                 continue;
             };
-            let (owner_id, version) = names.name(definition.owner);
-            if names.off(definition.owner) {
+            let (owner_id, version) = names.name(definition.owner.get());
+            if names.off(definition.owner.get()) {
                 idle.push((
                     pending.owner,
                     format!(
@@ -314,7 +317,7 @@ static SEALED: OnceLock<Box<[Slot]>> = OnceLock::new();
 
 /// The registry, for the entry points.
 pub(crate) fn registry() -> std::sync::MutexGuard<'static, Registry> {
-    REGISTRY.lock().unwrap_or_else(PoisonError::into_inner)
+    REGISTRY.relock()
 }
 
 /// Whether the events are sealed: subscribing and defining are over.
@@ -326,7 +329,7 @@ pub(crate) fn sealed() -> bool {
 pub(crate) fn seal(names: &impl Names) {
     let (slots, idle) = registry().seal(names);
     for (owner, reason) in idle {
-        let (id, _) = names.name(owner);
+        let (id, _) = names.name(owner.get());
         crate::log::write(enshwick::abi::Level::WARN, id, &reason);
     }
     let count = slots.len();
@@ -341,8 +344,12 @@ pub(crate) fn lines(names: &impl Names) -> Vec<String> {
         .published
         .iter()
         .map(|p| {
-            let (id, version) = names.name(p.owner);
-            let off = if names.off(p.owner) { ", off" } else { "" };
+            let (id, version) = names.name(p.owner.get());
+            let off = if names.off(p.owner.get()) {
+                ", off"
+            } else {
+                ""
+            };
             format!(
                 "service {} v{} from {id} {version}, {} fields{off}",
                 p.name,
@@ -352,11 +359,11 @@ pub(crate) fn lines(names: &impl Names) -> Vec<String> {
         })
         .collect();
     for slot in SEALED.get().map_or(&[][..], |slots| slots) {
-        let (id, version) = names.name(slot.owner);
+        let (id, version) = names.name(slot.owner.get());
         let subscribers: Vec<&str> = slot
             .subscribers
             .iter()
-            .map(|s| names.name(s.owner).0)
+            .map(|s| names.name(s.owner.get()).0)
             .collect();
         lines.push(format!(
             "event {} from {id} {version} to {}",
@@ -380,7 +387,7 @@ pub(crate) fn send(sender: usize, id: u32, data: *const core::ffi::c_void) -> St
     let Some(slot) = slots.get(id as usize) else {
         return Status::BAD_ARGS;
     };
-    if slot.owner != sender {
+    if slot.owner != ModIndex::new(sender) {
         return Status::REFUSED;
     }
     for subscriber in &slot.subscribers {
@@ -409,6 +416,7 @@ mod tests {
     use enshwick::abi::Status;
 
     use super::{Names, Registry};
+    use crate::mod_index::ModIndex;
 
     struct Mods(Vec<(&'static str, &'static str, bool)>);
 
@@ -443,7 +451,7 @@ mod tests {
         let mut registry = Registry::default();
         assert_eq!(
             registry.publish(
-                0,
+                ModIndex::new(0),
                 "trading-post:prices",
                 1,
                 fields(&["a", "b"]),
@@ -461,7 +469,14 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(
+                    ModIndex::new(0),
+                    "trading-post:prices",
+                    1,
+                    fields(&["a"]),
+                    0x10,
+                    &mods()
+                )
                 .is_ok()
         );
         let Err((status, reason)) =
@@ -480,7 +495,14 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post:prices", 2, fields(&["a"]), 0x10, &mods())
+                .publish(
+                    ModIndex::new(0),
+                    "trading-post:prices",
+                    2,
+                    fields(&["a"]),
+                    0x10,
+                    &mods()
+                )
                 .is_ok()
         );
         let Err((status, reason)) =
@@ -504,7 +526,14 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(
+                    ModIndex::new(0),
+                    "trading-post:prices",
+                    1,
+                    fields(&["a"]),
+                    0x10,
+                    &mods()
+                )
                 .is_ok()
         );
         let mut off = mods();
@@ -518,17 +547,38 @@ mod tests {
         let mut registry = Registry::default();
         assert!(
             registry
-                .publish(0, "trading-post:prices", 1, fields(&["a"]), 0x10, &mods())
+                .publish(
+                    ModIndex::new(0),
+                    "trading-post:prices",
+                    1,
+                    fields(&["a"]),
+                    0x10,
+                    &mods()
+                )
                 .is_ok()
         );
         assert!(
             registry
-                .publish(1, "trading-post:prices", 1, fields(&["a"]), 0x20, &mods())
+                .publish(
+                    ModIndex::new(1),
+                    "trading-post:prices",
+                    1,
+                    fields(&["a"]),
+                    0x20,
+                    &mods()
+                )
                 .is_err()
         );
         assert!(
             registry
-                .publish(0, "trading-post:prices", 2, fields(&["a"]), 0x20, &mods())
+                .publish(
+                    ModIndex::new(0),
+                    "trading-post:prices",
+                    2,
+                    fields(&["a"]),
+                    0x20,
+                    &mods()
+                )
                 .is_ok()
         );
     }
@@ -537,22 +587,42 @@ mod tests {
     fn events_are_named_after_their_definer() {
         let mut registry = Registry::default();
         assert_eq!(
-            registry.define(0, &["trading-post"], "trading-post:sold", fields(&["a"])),
+            registry.define(
+                ModIndex::new(0),
+                &["trading-post"],
+                "trading-post:sold",
+                fields(&["a"])
+            ),
             Ok(0)
         );
         assert!(
             registry
-                .define(0, &["trading-post"], "trading-postx:sold", fields(&["a"]))
+                .define(
+                    ModIndex::new(0),
+                    &["trading-post"],
+                    "trading-postx:sold",
+                    fields(&["a"])
+                )
                 .is_err()
         );
         assert!(
             registry
-                .define(0, &["trading-post"], "trading-post:", fields(&["a"]))
+                .define(
+                    ModIndex::new(0),
+                    &["trading-post"],
+                    "trading-post:",
+                    fields(&["a"])
+                )
                 .is_err()
         );
         assert!(
             registry
-                .define(0, &["trading-post"], "trading-post:sold", fields(&["a"]))
+                .define(
+                    ModIndex::new(0),
+                    &["trading-post"],
+                    "trading-post:sold",
+                    fields(&["a"])
+                )
                 .is_err()
         );
     }
@@ -563,16 +633,34 @@ mod tests {
         assert!(
             registry
                 .define(
-                    0,
+                    ModIndex::new(0),
                     &["trading-post"],
                     "trading-post:sold",
                     fields(&["a", "b"])
                 )
                 .is_ok()
         );
-        registry.subscribe(1, "trading-post:sold", fields(&["a"]), idle, 1);
-        registry.subscribe(1, "trading-post:sold", fields(&["a", "b", "c"]), idle, 2);
-        registry.subscribe(1, "trading-post:bought", fields(&["a"]), idle, 3);
+        registry.subscribe(
+            ModIndex::new(1),
+            "trading-post:sold",
+            fields(&["a"]),
+            idle,
+            1,
+        );
+        registry.subscribe(
+            ModIndex::new(1),
+            "trading-post:sold",
+            fields(&["a", "b", "c"]),
+            idle,
+            2,
+        );
+        registry.subscribe(
+            ModIndex::new(1),
+            "trading-post:bought",
+            fields(&["a"]),
+            idle,
+            3,
+        );
         let (slots, idle) = registry.seal(&mods());
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].subscribers.len(), 1);

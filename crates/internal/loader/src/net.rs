@@ -22,17 +22,18 @@
 //! [`MAX_PARTS`] frames. Each side keeps a rate per peer and drops what is
 //! over it, counting the drops for the status summary.
 
+use crate::mod_index::ModIndex;
 use core::ffi::c_void;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
-
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 
 mod frame;
 mod peer;
@@ -120,7 +121,7 @@ static SERVER_RUNS_ENSHWICK: AtomicBool = AtomicBool::new(false);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
 fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
-    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = STATE.relock();
     f(guard.get_or_insert_with(State::default))
 }
 
@@ -137,7 +138,7 @@ fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 
 /// The id of mod `id`'s channel `name`.
 fn channel_id(id: &str, name: &str) -> u32 {
-    let id = enshwick_reflect::fnv1a32(format!("{id}/{name}").as_bytes());
+    let id = enshwick_gamedata::reflect::fnv1a32(format!("{id}/{name}").as_bytes());
     // Zero is the protocol's own.
     id.max(1)
 }
@@ -145,7 +146,7 @@ fn channel_id(id: &str, name: &str) -> u32 {
 /// Opens mod `owner`'s channel `name`; its id.
 pub(crate) fn open(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     name: &str,
     callback: NetMessageFn,
     user: *mut c_void,
@@ -153,7 +154,7 @@ pub(crate) fn open(
     if CHANNELS.get().is_some() {
         return Err(Status::TOO_LATE);
     }
-    let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
+    let record = loader.mods.get(owner.get()).ok_or(Status::BAD_ARGS)?;
     if !record
         .manifest
         .flags
@@ -165,7 +166,7 @@ pub(crate) fn open(
         return Err(Status::BAD_ARGS);
     }
     let id = channel_id(&record.id, name);
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     if pending.iter().any(|c| c.id == id) {
         return Err(Status::REFUSED);
     }
@@ -628,7 +629,7 @@ pub(crate) fn joining(runs_enshwick: bool) {
 /// Forgets every peer, when the client changes servers or a hosted game
 /// ends.
 pub(crate) fn forget() {
-    let mut guard = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut guard = STATE.relock();
     *guard = None;
     WAITING.store(false, Ordering::Release);
     crate::item_data::forget_client();
@@ -665,7 +666,7 @@ pub(crate) fn clients() -> Vec<u64> {
 /// key `peer`, or to every client that said hello for 0.
 pub(crate) fn send(
     loader: &Loader,
-    owner: usize,
+    owner: ModIndex,
     channel: u32,
     peer: u64,
     data: &[u8],

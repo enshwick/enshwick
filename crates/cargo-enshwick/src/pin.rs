@@ -27,7 +27,7 @@ use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-use enshwick_reflect::Fingerprint;
+use enshwick_gamedata::reflect::Fingerprint;
 
 use self::exe::Exe;
 use self::rows::{Row, guid_hex};
@@ -503,7 +503,7 @@ mod tests {
     /// on, function table included: every symbol in code must follow.
     ///
     /// `ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release
-    /// -p cargo-enshwick -- --ignored`
+    /// -p cargo-enshwick -- --ignored`.
     #[test]
     #[ignore = "needs a game executable in ENSHWICK_PIN_EXE"]
     fn moved_code_is_followed() {
@@ -562,7 +562,7 @@ mod tests {
     /// offset, and the patterns alone find it too.
     ///
     /// `ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release
-    /// -p cargo-enshwick -- --ignored`
+    /// -p cargo-enshwick -- --ignored`.
     #[test]
     #[ignore = "needs a game executable in ENSHWICK_PIN_EXE"]
     fn a_moved_field_is_read_on_the_new_build() {
@@ -615,7 +615,7 @@ mod tests {
     /// map to itself, and no constant may be flagged or change.
     ///
     /// `ENSHWICK_PIN_EXE=path/to/enshrouded_server.exe cargo test --release
-    /// -p cargo-enshwick -- --ignored`
+    /// -p cargo-enshwick -- --ignored`.
     #[test]
     #[ignore = "needs a game executable in ENSHWICK_PIN_EXE"]
     fn a_build_ports_to_itself() {

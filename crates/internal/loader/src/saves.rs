@@ -14,13 +14,14 @@
 //! hosted game started to initialise, and none once that game ends.
 
 use std::path::Path;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick_reflect::fnv1a32;
+use enshwick_gamedata::reflect::fnv1a32;
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -228,9 +229,7 @@ fn remember(path: &str, side: Side) {
         return;
     };
     let key = intern(&key, path);
-    KEYS.lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .note(side, key);
+    KEYS.relock().note(side, key);
 }
 
 /// Every world key seen, kept once for the process: a menu that builds the
@@ -239,7 +238,7 @@ static SEEN: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
 
 /// `key`, kept for the process; logged the first time, from `path`.
 fn intern(key: &str, path: &str) -> &'static str {
-    let mut seen = SEEN.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut seen = SEEN.relock();
     if let Some(&known) = seen.iter().find(|&&k| k == key) {
         return known;
     }
@@ -252,12 +251,12 @@ fn intern(key: &str, path: &str) -> &'static str {
 /// A hosted game starts to initialise, before it reads its save: the world
 /// paths built from now on are its world's, the menu's before are not.
 pub(crate) fn hosting_begins() {
-    *KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Keys::OPEN;
+    *KEYS.relock() = Keys::OPEN;
 }
 
 /// Forgets the key, when a hosted game ends.
 pub(crate) fn forget() {
-    *KEYS.lock().unwrap_or_else(PoisonError::into_inner) = Keys::CLOSED;
+    *KEYS.relock() = Keys::CLOSED;
 }
 
 /// The world key of a save file path: the file's stem and a hash of its
@@ -285,10 +284,7 @@ fn key_of(path: &str) -> Option<String> {
 
 /// The key of the world the server runs, once the engine has built its path.
 pub(crate) fn world_key(loader: &Loader) -> Option<&'static str> {
-    let key = KEYS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .pick(loader.side);
+    let key = KEYS.relock().pick(loader.side);
     if let Some(key) = key {
         crate::log!(DEBUG, "world key {key}");
     }

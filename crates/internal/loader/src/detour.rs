@@ -23,15 +23,13 @@ use iced_x86::{
 };
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Diagnostics::Debug::{
-    CONTEXT, CONTEXT_CONTROL_AMD64, FlushInstructionCache, GetThreadContext, SetThreadContext,
+    CONTEXT, CONTEXT_CONTROL_AMD64, GetThreadContext, SetThreadContext,
 };
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
 };
 use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEM_FREE, MEM_RESERVE, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ,
-    PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY,
-    PAGE_READWRITE, PAGE_WRITECOPY, VirtualAlloc, VirtualProtect, VirtualQuery,
+    MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_READWRITE, VirtualAlloc,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId, GetThreadId, OpenThread,
@@ -39,6 +37,8 @@ use windows_sys::Win32::System::Threading::{
     THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
 };
 
+use crate::locks::Relock;
+use crate::pages;
 use crate::settings::LOADER_ID;
 
 /// The jump written over a target: `jmp rel32`.
@@ -89,24 +89,58 @@ pub(crate) struct Pending {
 /// Blocks of near memory, each written once and then sealed.
 static BLOCKS: Mutex<Vec<(usize, usize)>> = Mutex::new(Vec::new());
 
+/// Why a target is left alone instead of hooked.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum PrepareError {
+    /// The relay pages could not be made executable.
+    #[error("relay pages not executable")]
+    RelayNotExecutable,
+    /// The target address is not in mapped code.
+    #[error("its address is not mapped code")]
+    NotMappedCode,
+    /// The target's first instructions do not decode.
+    #[error("its first instructions do not decode")]
+    Undecodable,
+    /// The function ends before the jump would.
+    #[error("the function is shorter than the jump")]
+    TooShort,
+    /// A branch leaves from inside the bytes the jump replaces.
+    #[error("control leaves within the bytes of the jump")]
+    ControlLeaves,
+    /// The first instructions cannot be re-encoded at the trampoline.
+    #[error("its first instructions cannot move: {0}")]
+    CannotMove(String),
+    /// The moved instructions do not fit the trampoline.
+    #[error("its first instructions grow too long to move")]
+    GrowsTooLong,
+    /// No relay lies within a 32-bit jump of the target.
+    #[error("no relay within reach")]
+    NoRelayInReach,
+    /// No free memory lies within a 32-bit jump of the target.
+    #[error("no free memory within reach of the target")]
+    NoMemoryInReach,
+    /// The jump would overwrite bytes another hook's jump takes.
+    #[error("its bytes overlap another hook's jump")]
+    OverlapsAnotherHook,
+}
+
 /// Prepares every request: relays and trampolines written and sealed, the
 /// targets untouched. Each result carries the trampoline that calls the
 /// original function, or why the target is left alone.
-pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, String>> {
+pub(crate) fn prepare(requests: &[Request]) -> Vec<Result<Pending, PrepareError>> {
     let mut fresh: Vec<usize> = Vec::new();
-    let prepared: Vec<Result<Pending, String>> = requests
+    let prepared: Vec<Result<Pending, PrepareError>> = requests
         .iter()
         .map(|request| prepare_one(*request, &mut fresh))
         .collect();
     for &block in &fresh {
-        let mut old = 0;
-        // SAFETY: a block this module allocated, fully written.
-        let sealed =
-            unsafe { VirtualProtect(block as *const _, BLOCK, PAGE_EXECUTE_READ, &raw mut old) };
-        if sealed == 0 {
+        // SAFETY: `block` is a block `allocate_near` reserved for this batch,
+        // fully written above and not yet run by any thread.
+        let sealed = unsafe { pages::seal(block, BLOCK) };
+        if !sealed {
             return requests
                 .iter()
-                .map(|_| Err("relay pages not executable".to_owned()))
+                .map(|_| Err(PrepareError::RelayNotExecutable))
                 .collect();
         }
     }
@@ -135,72 +169,32 @@ pub(crate) fn commit(pending: &[&Pending], code: &[Bytes<'_>]) -> bool {
     write_all(pending, code)
 }
 
-/// Protections of code that runs and reads.
-const EXECUTABLE: u32 = PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-/// Protections whose pages read without a fault.
-const READABLE: u32 = PAGE_READONLY
-    | PAGE_READWRITE
-    | PAGE_WRITECOPY
-    | PAGE_EXECUTE_READ
-    | PAGE_EXECUTE_READWRITE
-    | PAGE_EXECUTE_WRITECOPY;
-
-/// The protection and end of the committed region `address` lies in.
-fn region(address: usize) -> Option<(u32, usize)> {
-    let mut info = MEMORY_BASIC_INFORMATION {
-        BaseAddress: core::ptr::null_mut(),
-        AllocationBase: core::ptr::null_mut(),
-        AllocationProtect: 0,
-        PartitionId: 0,
-        RegionSize: 0,
-        State: 0,
-        Protect: 0,
-        Type: 0,
-    };
-    // SAFETY: querying any address is allowed; the struct is writable.
-    let known = unsafe {
-        VirtualQuery(
-            core::ptr::with_exposed_provenance(address),
-            &raw mut info,
-            size_of::<MEMORY_BASIC_INFORMATION>(),
-        )
-    };
-    if known == 0 || info.State != MEM_COMMIT || info.Protect & (PAGE_GUARD | PAGE_NOACCESS) != 0 {
-        return None;
-    }
-    Some((
-        info.Protect,
-        info.BaseAddress.addr().checked_add(info.RegionSize)?,
-    ))
-}
-
 /// Whether `address` is mapped code followed by `len` bytes that read: a
 /// wrong address from a mod or a table must refuse its hook, not fault.
 fn hookable(address: usize, len: usize) -> bool {
     let Some(end) = address.checked_add(len) else {
         return false;
     };
-    let Some((protect, mut reached)) = region(address) else {
+    let Some(first) = pages::query(address).filter(pages::Region::runs) else {
         return false;
     };
-    if protect & EXECUTABLE == 0 {
-        return false;
-    }
+    let mut reached = first.end;
     while reached < end {
-        match region(reached) {
-            Some((protect, next)) if protect & READABLE != 0 && next > reached => reached = next,
+        match pages::query(reached) {
+            Some(next) if next.reads() && next.end > reached => reached = next.end,
             _ => return false,
         }
     }
     true
 }
 
-fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, String> {
+fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, PrepareError> {
     if !hookable(request.target, READ) {
-        return Err("its address is not mapped code".into());
+        return Err(PrepareError::NotMappedCode);
     }
-    // SAFETY: an instruction start the build table, reflection or a mod
-    // vouches for, in mapped code followed by `READ` readable bytes.
+    // SAFETY: `hookable` checked that `READ` bytes from the target lie in
+    // committed, readable pages, the first of them code; the slice lives for
+    // this function only, while no patch writes the target.
     let code = unsafe { core::slice::from_raw_parts(request.target as *const u8, READ) };
     let mut decoder = Decoder::with_ip(64, code, request.target as u64, DecoderOptions::NONE);
     let mut instructions: Vec<Instruction> = Vec::new();
@@ -208,7 +202,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
     while stolen < PATCH {
         let instruction = decoder.decode();
         if instruction.is_invalid() {
-            return Err("its first instructions do not decode".into());
+            return Err(PrepareError::Undecodable);
         }
         // Bytes after a return or a jump away belong to other code, which
         // the jump must not overwrite.
@@ -216,7 +210,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
             FlowControl::Return | FlowControl::Interrupt | FlowControl::Exception
                 if !request.inside && stolen + instruction.len() < PATCH =>
             {
-                return Err("the function is shorter than the jump".into());
+                return Err(PrepareError::TooShort);
             }
             FlowControl::Return
             | FlowControl::Interrupt
@@ -225,7 +219,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
             | FlowControl::IndirectBranch
                 if stolen + instruction.len() < PATCH =>
             {
-                return Err("control leaves within the bytes of the jump".into());
+                return Err(PrepareError::ControlLeaves);
             }
             _ => {}
         }
@@ -240,10 +234,10 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         block,
         BlockEncoderOptions::RETURN_NEW_INSTRUCTION_OFFSETS,
     )
-    .map_err(|e| format!("its first instructions cannot move: {e}"))?;
+    .map_err(|e| PrepareError::CannotMove(e.to_string()))?;
     let back = request.target + stolen;
     if FAR_JUMP + encoded.code_buffer.len() + FAR_JUMP > ENTRY {
-        return Err("its first instructions grow too long to move".into());
+        return Err(PrepareError::GrowsTooLong);
     }
     let mut bytes = Vec::with_capacity(ENTRY);
     bytes.extend_from_slice(&far_jump(request.detour));
@@ -262,7 +256,7 @@ fn prepare_one(request: Request, fresh: &mut Vec<usize>) -> Result<Pending, Stri
         })
         .collect();
     let distance = i32::try_from(relay.wrapping_sub(request.target + PATCH).cast_signed())
-        .map_err(|_| "no relay within reach".to_owned())?;
+        .map_err(|_| PrepareError::NoRelayInReach)?;
     let mut patch = [0xe9, 0, 0, 0, 0];
     patch[1..].copy_from_slice(&distance.to_le_bytes());
     Ok(Pending {
@@ -284,10 +278,8 @@ fn far_jump(destination: usize) -> [u8; FAR_JUMP] {
 
 /// `ENTRY` bytes within `rel32` reach of `target`, from a block allocated in
 /// this batch.
-fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, String> {
-    let mut blocks = BLOCKS
-        .lock()
-        .map_err(|_| "the relay allocator is poisoned".to_owned())?;
+fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, PrepareError> {
+    let mut blocks = BLOCKS.relock();
     let reaches = |base: usize| base.abs_diff(target) < REACH;
     if let Some((base, used)) = blocks
         .iter_mut()
@@ -297,7 +289,7 @@ fn near(target: usize, fresh: &mut Vec<usize>) -> Result<usize, String> {
         *used += ENTRY;
         return Ok(entry);
     }
-    let base = allocate_near(target).ok_or("no free memory within reach of the target")?;
+    let base = allocate_near(target).ok_or(PrepareError::NoMemoryInReach)?;
     fresh.push(base);
     blocks.push((base, ENTRY));
     Ok(base)
@@ -314,28 +306,12 @@ fn allocate_near(target: usize) -> Option<usize> {
         .zip(above)
         .flat_map(|(a, b)| [a, b])
         .find_map(|address| {
-            let mut info: MEMORY_BASIC_INFORMATION = MEMORY_BASIC_INFORMATION {
-                BaseAddress: core::ptr::null_mut(),
-                AllocationBase: core::ptr::null_mut(),
-                AllocationProtect: 0,
-                PartitionId: 0,
-                RegionSize: 0,
-                State: 0,
-                Protect: 0,
-                Type: 0,
-            };
-            // SAFETY: querying any address is allowed; the struct is writable.
-            let known = unsafe {
-                VirtualQuery(
-                    address as *const _,
-                    &raw mut info,
-                    size_of::<MEMORY_BASIC_INFORMATION>(),
-                )
-            };
-            if known == 0 || info.State != MEM_FREE {
+            if !pages::query(address).is_some_and(|found| found.is_free()) {
                 return None;
             }
-            // SAFETY: a free region; null when it was taken meanwhile.
+            // SAFETY: `VirtualAlloc` at a region `query` found free reserves
+            // fresh pages or returns null when another thread took it
+            // meanwhile; it touches no existing memory.
             let block = unsafe {
                 VirtualAlloc(
                     address as *const _,
@@ -385,7 +361,10 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
         let busy = !patched.is_empty()
             && threads
                 .iter()
-                .any(|thread| in_flight(thread, &patched, &returns));
+                // SAFETY: `suspend` just suspended every other thread of the
+                // process, `iter` yields each of them, and they stay suspended
+                // until `resume`.
+                .any(|thread| unsafe { in_flight(thread, &patched, &returns) });
         if !busy || tries == SETTLE_TRIES {
             break busy;
         }
@@ -395,18 +374,12 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
     };
     let mut writable = true;
     for &(address, bytes) in &writes {
-        let mut old = 0;
-        // SAFETY: the target's code pages; restored below.
-        let ok = unsafe {
-            VirtualProtect(
-                address as *const _,
-                bytes.len(),
-                PAGE_EXECUTE_READWRITE,
-                &raw mut old,
-            )
-        };
-        writable &= ok != 0;
-        protections.push((address, bytes.len(), old, ok != 0));
+        // SAFETY: the target's code pages, with every other thread of the
+        // process suspended; the old protection is restored below before any
+        // of them resumes.
+        let old = unsafe { pages::protect(address, bytes.len(), PAGE_EXECUTE_READWRITE) };
+        writable &= old.is_some();
+        protections.push((address, bytes.len(), old));
     }
     if writable {
         for &(address, bytes) in &writes {
@@ -416,20 +389,20 @@ fn write_all(prepared: &[&Pending], code: &[Bytes<'_>]) -> bool {
             unsafe { (address as *mut u8).copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
         }
         for thread in threads.iter() {
-            relocate(thread, &moved);
+            // SAFETY: every other thread of the process stays suspended from
+            // `suspend` until `resume`, `iter` yields each of them, and
+            // `moved` pairs each moved instruction with its trampoline copy.
+            unsafe { relocate(thread, &moved) };
         }
     }
-    // SAFETY: no preconditions.
-    let process = unsafe { GetCurrentProcess() };
     // Backwards: two writes on one page saw the first one's protection, so
     // the first one's `old` is the page's own and must come last.
-    for (address, len, old, changed) in protections.into_iter().rev() {
-        if changed {
-            let mut ignored = 0;
-            // SAFETY: restores what was there before.
-            unsafe { VirtualProtect(address as *const _, len, old, &raw mut ignored) };
-            // SAFETY: our own process's code.
-            unsafe { FlushInstructionCache(process, address as *const _, len) };
+    for (address, len, old) in protections.into_iter().rev() {
+        if let Some(old) = old {
+            // SAFETY: the target's code pages, every other thread still
+            // suspended, back to the protection they had before the write.
+            let _restored = unsafe { pages::protect(address, len, old) };
+            pages::flush(address, len);
         }
     }
     threads.resume();
@@ -503,46 +476,88 @@ fn follows_call(start: usize, at: usize) -> bool {
 fn control(thread: HANDLE) -> Option<CONTEXT> {
     let mut context: CONTEXT = unsafe_zeroed_context();
     context.ContextFlags = CONTEXT_CONTROL_AMD64;
-    // SAFETY: a suspended thread opened with context rights.
+    // SAFETY: `GetThreadContext` writes at most one `CONTEXT` into
+    // `context`, a local with `ContextFlags` set; a handle without context
+    // rights fails the call.
     (unsafe { GetThreadContext(thread, &raw mut context) } != 0).then_some(context)
 }
 
-/// The words on a suspended thread's stack from `rsp` up to its base.
-fn stack(rsp: u64) -> Option<&'static mut [usize]> {
-    let rsp = usize::try_from(rsp)
-        .ok()?
-        .next_multiple_of(size_of::<usize>());
-    let mut info = MEMORY_BASIC_INFORMATION {
-        BaseAddress: core::ptr::null_mut(),
-        AllocationBase: core::ptr::null_mut(),
-        AllocationProtect: 0,
-        PartitionId: 0,
-        RegionSize: 0,
-        State: 0,
-        Protect: 0,
-        Type: 0,
-    };
-    // SAFETY: querying any address is allowed; the struct is writable.
-    let known = unsafe {
-        VirtualQuery(
-            rsp as *const _,
-            &raw mut info,
-            size_of::<MEMORY_BASIC_INFORMATION>(),
-        )
-    };
-    if known == 0 || info.State != MEM_COMMIT || info.Protect != PAGE_READWRITE {
-        return None;
+/// The words on a suspended thread's stack, from its stack pointer up to
+/// the stack's base, walked by address: no reference into another thread's
+/// stack is made, and a walk lasts only for the call that takes it.
+#[derive(Clone, Copy, Debug)]
+struct Stack {
+    /// The first word's address, aligned to a word.
+    first: usize,
+    /// The words up to the end of the stack's region.
+    words: usize,
+}
+
+impl Stack {
+    /// The stack that `rsp` points into: the committed read-write region
+    /// from `rsp`, rounded up to a word, to the region's end.
+    fn at(rsp: u64) -> Option<Self> {
+        let first = usize::try_from(rsp)
+            .ok()?
+            .next_multiple_of(size_of::<usize>());
+        let region = pages::query(first).filter(pages::Region::is_read_write)?;
+        let words = region.end.checked_sub(first)? / size_of::<usize>();
+        Some(Self { first, words })
     }
-    let end = info.BaseAddress.addr() + info.RegionSize;
-    let words = end.checked_sub(rsp)? / size_of::<usize>();
-    // SAFETY: committed read-write pages of a thread that stands still, from
-    // its stack pointer to the end of the region, the stack's base.
-    Some(unsafe { core::slice::from_raw_parts_mut(rsp as *mut usize, words) })
+
+    fn address(self, word: usize) -> usize {
+        self.first + word * size_of::<usize>()
+    }
+
+    /// Whether any word satisfies `test`.
+    ///
+    /// # Safety
+    ///
+    /// - Every thread of the process but the caller stays suspended for the
+    ///   call, as `Threads::suspend` leaves them, so the stack's region stays
+    ///   committed and no other thread writes it.
+    unsafe fn any(self, mut test: impl FnMut(usize) -> bool) -> bool {
+        (0..self.words).any(|word| {
+            // SAFETY: `word` is below `words`, so its eight bytes lie in the
+            // committed read-write region `at` found, which stays committed
+            // and unwritten while every other thread stays suspended.
+            test(unsafe { crate::memory::read(self.address(word), 0) })
+        })
+    }
+
+    /// Replaces each word for which `new` gives a value.
+    ///
+    /// # Safety
+    ///
+    /// - Every thread of the process but the caller stays suspended for the
+    ///   call, as `Threads::suspend` leaves them, so the stack's region stays
+    ///   committed and no other thread reads or writes it.
+    /// - Every value `new` gives is one the thread may find in that word.
+    unsafe fn rewrite(self, mut new: impl FnMut(usize) -> Option<usize>) {
+        for word in 0..self.words {
+            let at = self.address(word);
+            // SAFETY: `word` is below `words`, so its eight bytes lie in the
+            // committed read-write region `at` found, unwritten while every
+            // other thread stays suspended.
+            let old: usize = unsafe { crate::memory::read(at, 0) };
+            if let Some(value) = new(old) {
+                // SAFETY: the same eight bytes, writable and touched by no
+                // other thread while every other thread stays suspended; the
+                // caller vouches for `value`.
+                unsafe { crate::memory::write(at, 0, value) };
+            }
+        }
+    }
 }
 
 /// Whether a suspended thread stands inside a patched range or holds a
 /// return address into one on its stack.
-fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
+///
+/// # Safety
+///
+/// - Every thread of the process but the caller, `thread` among them, stays
+///   suspended for the call, as `Threads::suspend` leaves them.
+unsafe fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> bool {
     let Some(context) = control(thread) else {
         return false;
     };
@@ -553,16 +568,25 @@ fn in_flight(thread: HANDLE, patched: &[(usize, usize)], returns: &[usize]) -> b
     let (Some(&low), Some(&high)) = (returns.first(), returns.last()) else {
         return false;
     };
-    stack(context.Rsp).is_some_and(|words| {
-        words
-            .iter()
-            .any(|&word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
+    Stack::at(context.Rsp).is_some_and(|stack| {
+        // SAFETY: the caller keeps every other thread, the stack's owner
+        // among them, suspended for the call.
+        unsafe {
+            stack.any(|word| (low..=high).contains(&word) && returns.binary_search(&word).is_ok())
+        }
     })
 }
 
 /// Moves a suspended thread standing in replaced bytes into the trampoline,
 /// and the return addresses into them on its stack.
-fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
+///
+/// # Safety
+///
+/// - Every thread of the process but the caller, `thread` among them, stays
+///   suspended for the call, as `Threads::suspend` leaves them.
+/// - Each moved address maps to the trampoline's copy of the same
+///   instruction.
+unsafe fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
     let (Some(&(low, _)), Some(&(high, _))) = (moved.first(), moved.last()) else {
         return;
     };
@@ -578,17 +602,18 @@ fn relocate(thread: HANDLE, moved: &[(usize, usize)]) {
     };
     if let Some(new) = find(usize::try_from(context.Rip).unwrap_or(0)) {
         context.Rip = new as u64;
-        // SAFETY: as in `control`; the trampoline holds the same instruction.
+        // SAFETY: the caller keeps `thread` suspended, `context` is the one
+        // `control` read from it with only `Rip` changed, and the moved
+        // address holds the same instruction in the trampoline.
         unsafe { SetThreadContext(thread, &raw const context) };
     }
-    if let Some(words) = stack(context.Rsp) {
-        for word in words {
-            if let Some(new) = find(*word) {
-                // A return address, or a stale copy of one: either way the
-                // trampoline's instruction is the same one.
-                *word = new;
-            }
-        }
+    if let Some(stack) = Stack::at(context.Rsp) {
+        // SAFETY: the caller keeps every other thread, the stack's owner
+        // among them, suspended for the call and vouches for the moved
+        // addresses. A word equal to a moved address is a return address, or
+        // a stale copy of one: either way the trampoline holds the same
+        // instruction.
+        unsafe { stack.rewrite(find) };
     }
 }
 
@@ -626,9 +651,11 @@ impl Threads {
     /// Suspends every other thread, including those started meanwhile;
     /// false when there are more than [`MAX_THREADS`] or none can be listed.
     fn suspend(&mut self) -> bool {
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+        // the calling thread's id.
         let me = unsafe { GetCurrentThreadId() };
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+        // pseudo-handle that needs no closing.
         let process = unsafe { GetCurrentProcess() };
         let access = THREAD_SUSPEND_RESUME
             | THREAD_GET_CONTEXT
@@ -639,13 +666,15 @@ impl Threads {
             let mut cursor: HANDLE = core::ptr::null_mut();
             loop {
                 let mut next: HANDLE = core::ptr::null_mut();
-                // SAFETY: our own process; `cursor` is null or a handle from
-                // the previous call.
+                // SAFETY: `process` is this process's pseudo-handle, `cursor`
+                // is null or the handle the previous call returned and is still
+                // open, and `next` is a local the call writes.
                 let status =
                     unsafe { NtGetNextThread(process, cursor, access, 0, 0, &raw mut next) };
                 let kept = self.held.iter().any(|&(h, _)| h == cursor);
                 if !cursor.is_null() && !kept {
-                    // SAFETY: a handle from the previous call, not kept.
+                    // SAFETY: `cursor` is an open handle the previous call
+                    // returned, which `held` does not keep, closed once here.
                     unsafe { CloseHandle(cursor) };
                 }
                 if status < 0 {
@@ -656,17 +685,20 @@ impl Threads {
                     break;
                 }
                 cursor = next;
-                // SAFETY: a thread handle opened with query rights.
+                // SAFETY: `next` is an open thread handle `NtGetNextThread`
+                // returned with `THREAD_QUERY_LIMITED_INFORMATION`.
                 let id = unsafe { GetThreadId(next) };
                 if id == me || self.held.iter().any(|&(_, known)| known == id) {
                     continue;
                 }
                 if self.held.len() == self.held.capacity() {
-                    // SAFETY: as above; the cursor is not kept.
+                    // SAFETY: `next` is an open handle `NtGetNextThread`
+                    // returned, which `held` does not keep, closed once here.
                     unsafe { CloseHandle(next) };
                     return false;
                 }
-                // SAFETY: a thread of our own process, opened with suspend rights.
+                // SAFETY: `next` is an open handle to another thread of this
+                // process, opened with `THREAD_SUSPEND_RESUME`.
                 if unsafe { SuspendThread(next) } != u32::MAX {
                     // A suspension only takes hold once the thread's context
                     // is read.
@@ -684,9 +716,11 @@ impl Threads {
     /// Suspends the other threads a snapshot lists, once: a thread started
     /// meanwhile stays running.
     fn suspend_listed(&mut self, me: u32, access: u32) -> bool {
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentProcessId` takes no arguments and only reads the
+        // calling process's id.
         let process = unsafe { GetCurrentProcessId() };
-        // SAFETY: a thread snapshot of the system.
+        // SAFETY: `TH32CS_SNAPTHREAD` with process 0 asks for every thread of
+        // the system and reads no memory of the caller's.
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return false;
@@ -700,12 +734,15 @@ impl Threads {
             tpDeltaPri: 0,
             dwFlags: 0,
         };
-        // SAFETY: a valid snapshot and entry.
+        // SAFETY: `snapshot` is the open snapshot checked against
+        // `INVALID_HANDLE_VALUE`, and `entry` is a local whose `dwSize` holds
+        // its size, as `Thread32First` requires.
         let mut more = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
         while more && self.held.len() < self.held.capacity() {
             let id = entry.th32ThreadID;
             if entry.th32OwnerProcessID == process && id != me {
-                // SAFETY: opening a thread of our own process.
+                // SAFETY: `OpenThread` takes any thread id and returns null
+                // for one it cannot open; `id` belongs to this process.
                 let thread = unsafe { OpenThread(access, 0, id) };
                 // SAFETY: a thread of our own process, opened with suspend
                 // rights; a null handle fails the call.
@@ -713,14 +750,17 @@ impl Threads {
                     let _settled = control(thread);
                     self.held.push((thread, id));
                 } else if !thread.is_null() {
-                    // SAFETY: opened above, not kept.
+                    // SAFETY: `thread` is the non-null handle `OpenThread`
+                    // returned in this iteration, which `held` does not keep.
                     unsafe { CloseHandle(thread) };
                 }
             }
-            // SAFETY: as above.
+            // SAFETY: `snapshot` is still the open snapshot, and `entry` is
+            // the local whose `dwSize` holds its size.
             more = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
         }
-        // SAFETY: the snapshot is ours.
+        // SAFETY: `snapshot` is the open snapshot this function created, closed
+        // once here.
         unsafe { CloseHandle(snapshot) };
         !more
     }
@@ -733,9 +773,12 @@ impl Threads {
     /// Resumes and lets go of every thread.
     fn resume(&mut self) {
         for (thread, _) in self.held.drain(..) {
-            // SAFETY: suspended in `suspend`.
+            // SAFETY: every handle in `held` is open, with
+            // `THREAD_SUSPEND_RESUME`, and was suspended once by `suspend` or
+            // `suspend_listed`.
             unsafe { ResumeThread(thread) };
-            // SAFETY: opened in `suspend`.
+            // SAFETY: `drain` hands each open handle of `held` out once, and
+            // nothing keeps it after this.
             unsafe { CloseHandle(thread) };
         }
     }
@@ -765,7 +808,7 @@ mod tests {
                 },
                 &mut Vec::new()
             ),
-            Err(why) if why.contains("not mapped")
+            Err(PrepareError::NotMappedCode)
         ));
     }
 
@@ -801,7 +844,7 @@ mod tests {
     }
 
     /// Hooks `target` to `plus_hundred`; the trampoline or why not.
-    fn hook(target: usize) -> Result<usize, String> {
+    fn hook(target: usize) -> Result<usize, PrepareError> {
         let pending = prepare(&[Request {
             target,
             detour: (plus_hundred as Unary as *const ()).addr(),
@@ -1017,7 +1060,8 @@ mod tests {
     #[test]
     fn a_snapshot_suspends_the_other_threads_where_the_system_has_no_thread_walk() {
         assert!(stops_and_goes(|threads| {
-            // SAFETY: no preconditions.
+            // SAFETY: `GetCurrentThreadId` takes no arguments and only reads
+            // the calling thread's id.
             let me = unsafe { GetCurrentThreadId() };
             threads.suspend_listed(me, THREAD_SUSPEND_RESUME)
         }));

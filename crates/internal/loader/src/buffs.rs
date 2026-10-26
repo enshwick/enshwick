@@ -313,7 +313,7 @@ fn type_info(layout: &Layout, ty: usize) -> BuffTypeInfo {
         // `keen::BuffType` places its `slot` byte at `type_slot`.
         slot: u16::from(unsafe { read::<u8>(ty, layout.type_slot) }),
         flags,
-        name: enshwick_reflect::fnv1a32(&name),
+        name: enshwick_gamedata::reflect::fnv1a32(&name),
         // SAFETY: `ty` is a live `BuffType` of the registry, from `find_type`
         // or the registry's collection on the game thread; the reflected
         // `keen::BuffType` places its `i64` `defaultLifeTime` at

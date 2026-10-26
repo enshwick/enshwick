@@ -1,0 +1,16 @@
+# A mod built against the last published API, which the current host must
+# still load; built and loaded by `tests/old_mods.rs`.
+[package]
+name = "old-mod"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+enshwick = "=1.0.0-alpha.2"
+
+# Its own workspace, so the platform's workspace and patches stay out.
+[workspace]

@@ -4,8 +4,10 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 /// The report's file name in `logs/enshwick/`.
+#[cfg(windows)]
 pub(crate) const FILE: &str = "report.md";
 /// The latest warning and error lines the report keeps.
+#[cfg(windows)]
 pub(crate) const WARNINGS: usize = 200;
 /// How long a report waits for the log to take the lines before it.
 #[cfg(windows)]

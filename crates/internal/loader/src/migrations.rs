@@ -1,11 +1,13 @@
-//! Mod migrations: what a new version of a mod changes in what older
-//! versions left behind. The settings steps run on a mod's settings file
-//! when it registers its migrations; every step runs on a world's files when
-//! the world loads, before the mod reads the world's settings or opens its
-//! stores. `mod-data/enshwick/migrations.toml` records what ran, for the
-//! settings file and per world, so nothing runs twice; a world or settings
-//! file the mod has never seen starts current. Before changing anything the
-//! loader logs what it will do; in a dry run it only logs.
+//! Mod migrations: what a new version of a mod changes in what older versions
+//! left behind.
+//!
+//! The settings steps run on a mod's settings file when it registers its
+//! migrations; every step runs on a world's files when the world loads, before
+//! the mod reads the world's settings or opens its stores. `mod-
+//! data/enshwick/migrations.toml` records what ran, for the settings file and
+//! per world, so nothing runs twice; a world or settings file the mod has never
+//! seen starts current. Before changing anything the loader logs what it will
+//! do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -607,17 +609,19 @@ pub(crate) use live::{register, renamed, settings_written, world_loaded};
 
 #[cfg(windows)]
 mod live {
-    use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+    use crate::locks::Relock;
+    use std::sync::{Arc, Mutex, OnceLock};
 
     use enshwick::abi::{Level, MigrateFn, MigrationSet, MigrationStep, Status, Str};
     use rustc_hash::FxHashMap;
 
     use super::{Migration, Record, Step, Target, dry_run, follow_renames, run};
     use crate::host::Loader;
+    use crate::mod_index::ModIndex;
 
     /// A mod's migrations and its map.
     struct Registered {
-        owner: usize,
+        owner: ModIndex,
         list: Vec<Migration>,
         map: MigrateFn,
         user: usize,
@@ -756,7 +760,7 @@ mod live {
         static REPORTED: std::sync::Once = std::sync::Once::new();
         let mut part = Record::default();
         {
-            let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut held = RECORD.relock();
             if held.is_none() {
                 match Record::read(&loader.data_dir) {
                     Ok(read) => *held = Some(read),
@@ -776,7 +780,7 @@ mod live {
             part.ran(world, id).clone_from(full.ran(world, id));
         }
         let result = f(&mut part);
-        let mut held = RECORD.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut held = RECORD.relock();
         let full = held.as_mut()?;
         *full.ran(world, id) = std::mem::take(part.ran(world, id));
         if !dry_run()
@@ -810,9 +814,9 @@ mod live {
             return Status::BAD_ARGS;
         }
         let taken = |registered: &[Arc<Registered>]| {
-            registered.iter().any(|r| r.owner == index) || RENAMES.get().is_some()
+            registered.iter().any(|r| r.owner == ModIndex::new(index)) || RENAMES.get().is_some()
         };
-        if taken(&REGISTERED.lock().unwrap_or_else(PoisonError::into_inner)) {
+        if taken(&REGISTERED.relock()) {
             return Status::REFUSED;
         }
         let Some(map) = set.map else {
@@ -825,19 +829,16 @@ mod live {
             return Status::BAD_ARGS;
         };
         let reg = Registered {
-            owner: index,
+            owner: ModIndex::new(index),
             list,
             map,
             user: set.user.expose_provenance(),
         };
-        let born = BORN
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .contains(&index);
+        let born = BORN.relock().contains(&index);
         if !run_settings(loader, &reg, born) {
             return Status::REFUSED;
         }
-        let mut registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut registered = REGISTERED.relock();
         if taken(&registered) {
             return Status::REFUSED;
         }
@@ -848,7 +849,7 @@ mod live {
     /// Runs `reg`'s pending migrations on its mod's settings file; whether
     /// they ran without a failure.
     fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
-        let Some(record) = loader.mods.get(reg.owner) else {
+        let Some(record) = loader.mods.get(reg.owner.get()) else {
             return false;
         };
         let path = loader.configs_dir.join(format!("{}.toml", record.id));
@@ -876,19 +877,15 @@ mod live {
     /// and the mod reads its defaults.
     pub(crate) fn settings_written(loader: &Loader, index: usize) {
         let reg = REGISTERED
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+            .relock()
             .iter()
-            .find(|r| r.owner == index)
+            .find(|r| r.owner == ModIndex::new(index))
             .cloned();
         match reg {
             Some(reg) => {
                 let _logged = run_settings(loader, &reg, true);
             }
-            None => BORN
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(index),
+            None => BORN.relock().push(index),
         }
     }
 
@@ -896,12 +893,9 @@ mod live {
     /// before the mods read its settings or open its stores. A mod whose
     /// migration fails is turned off.
     pub(crate) fn world_loaded(loader: &Loader, key: &str) {
-        let registered = REGISTERED
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
+        let registered = REGISTERED.relock().clone();
         for reg in &registered {
-            let Some(record) = loader.mods.get(reg.owner) else {
+            let Some(record) = loader.mods.get(reg.owner.get()) else {
                 continue;
             };
             if record.off.load(std::sync::atomic::Ordering::Acquire) {
@@ -933,13 +927,13 @@ mod live {
     /// first call, after every mod is initialised.
     pub(crate) fn renamed(loader: &Loader) -> &'static FxHashMap<[u8; 16], [u8; 16]> {
         RENAMES.get_or_init(|| {
-            let registered = REGISTERED.lock().unwrap_or_else(PoisonError::into_inner);
+            let registered = REGISTERED.relock();
             let direct: FxHashMap<[u8; 16], [u8; 16]> = registered
                 .iter()
                 .filter(|r| {
                     loader
                         .mods
-                        .get(r.owner)
+                        .get(r.owner.get())
                         .is_some_and(|m| !m.off.load(std::sync::atomic::Ordering::Acquire))
                 })
                 .flat_map(|r| &r.list)
