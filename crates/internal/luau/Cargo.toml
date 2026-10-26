@@ -1,0 +1,25 @@
+[package]
+name = "enshwick-luau"
+version = "1.0.0-alpha.5"
+description = "Internal, not for mods: runs Luau mods in a sandboxed VM each, over the API's script descriptions"
+keywords = ["enshrouded", "modding", "luau", "scripting"]
+categories = ["game-development"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+enshwick.workspace = true
+mlua.workspace = true
+
+[dev-dependencies]
+enshwick = { workspace = true, features = ["test"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "scripts"
