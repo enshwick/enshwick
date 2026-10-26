@@ -41,20 +41,22 @@ mod tests {
         };
         // SAFETY: the old mod's initialisers only set up its statics.
         let library = unsafe { libloading::Library::new(&path) }.unwrap();
-        // SAFETY: each export has the C signature `abi::exports` documents
-        // for its name, which the ABI keeps across minors.
-        let (abi, query, init, ready) = unsafe {
-            (
-                *library
-                    .get::<extern "system" fn() -> u32>(b"enshwick_mod_abi")
-                    .unwrap(),
-                *library
-                    .get::<extern "system" fn() -> *const Manifest>(b"enshwick_mod_query")
-                    .unwrap(),
-                *library.get::<InitFn>(b"enshwick_mod_init").unwrap(),
-                *library.get::<ReadyFn>(b"enshwick_mod_ready").unwrap(),
-            )
-        };
+        // SAFETY: `enshwick_mod_abi` has the signature `abi::exports::ABI`
+        // documents, which the ABI keeps across minors.
+        let abi =
+            *unsafe { library.get::<extern "system" fn() -> u32>(b"enshwick_mod_abi") }.unwrap();
+        // SAFETY: `enshwick_mod_query` has the signature `abi::exports::QUERY`
+        // documents, which the ABI keeps across minors.
+        let query = *unsafe {
+            library.get::<extern "system" fn() -> *const Manifest>(b"enshwick_mod_query")
+        }
+        .unwrap();
+        // SAFETY: `enshwick_mod_init` has the signature `abi::exports::INIT`
+        // documents, which the ABI keeps across minors.
+        let init = *unsafe { library.get::<InitFn>(b"enshwick_mod_init") }.unwrap();
+        // SAFETY: `enshwick_mod_ready` has the signature `abi::exports::READY`
+        // documents, which the ABI keeps across minors.
+        let ready = *unsafe { library.get::<ReadyFn>(b"enshwick_mod_ready") }.unwrap();
         assert_eq!(abi(), u32::from(ABI_MAJOR));
 
         // SAFETY: the old mod's static manifest, readable for the size its
