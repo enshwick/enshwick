@@ -56,10 +56,13 @@ fn exports(bytes: &[u8], name: &str) -> Option<bool> {
     let names = read_u32(directory + NAMES)?;
     for i in 0..count {
         let at = read_u32(names + i * 4)?;
-        let found = (1..=LONGEST_NAME).find_map(|len| {
-            let text = image.read(at, len)?;
-            (text.last() == Some(&0)).then(|| &text[..text.len() - 1])
-        });
+        // A name near its section's end is read with fewer bytes.
+        let text = (1..=LONGEST_NAME)
+            .rev()
+            .step_by(16)
+            .find_map(|len| image.read(at, len))
+            .unwrap_or_default();
+        let found = text.iter().position(|&b| b == 0).map(|end| &text[..end]);
         if found == Some(name.as_bytes()) {
             return Some(true);
         }
