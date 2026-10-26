@@ -58,7 +58,7 @@ pub(crate) fn run(command: &Command) -> anyhow::Result<String> {
 /// executable's reflection, the data from its archive.
 fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
     use enshwick_gamedata::catalogue::Reflected;
-    use enshwick_reflect::{Image, Layout, Reflection};
+    use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
     let (exe, name) = ["enshrouded", "enshrouded_server"]
         .into_iter()

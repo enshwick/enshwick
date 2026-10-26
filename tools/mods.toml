@@ -32,8 +32,8 @@ package = "enshwick-optimizer"
 repository = "enshwick/mod-optimizer"
 
 [[mod]]
-package = "enshwick-safes"
-repository = "enshwick/mod-safes"
+package = "enshwick-personal-safes"
+repository = "enshwick/mod-personal-safes"
 
 [[mod]]
 package = "enshwick-shared-experience"

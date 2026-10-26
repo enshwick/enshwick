@@ -36,12 +36,6 @@ use windows_sys::Win32::System::Diagnostics::Debug::{
     LPTOP_LEVEL_EXCEPTION_FILTER, RtlLookupFunctionEntry, RtlVirtualUnwind,
     SetUnhandledExceptionFilter, UNW_FLAG_NHANDLER,
 };
-use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
-use windows_sys::Win32::System::Memory::{
-    MEM_COMMIT, MEMORY_BASIC_INFORMATION, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE,
-    PAGE_EXECUTE_WRITECOPY, PAGE_GUARD, PAGE_NOACCESS, PAGE_READONLY, PAGE_READWRITE,
-    PAGE_WRITECOPY, VirtualQuery,
-};
 use windows_sys::Win32::System::ProcessStatus::{GetModuleInformation, MODULEINFO};
 use windows_sys::Win32::System::SystemInformation::GetSystemTime;
 use windows_sys::Win32::System::Threading::{
@@ -500,17 +494,8 @@ unsafe extern "system" fn dump(
 /// Links the report on the game's crash dumps: `MiniDumpWriteDump` of
 /// `dbghelp.dll`, loaded now if the game has not yet.
 pub(crate) fn link(loader: &Loader) {
-    let name: Vec<u16> = "dbghelp.dll".encode_utf16().chain(Some(0)).collect();
-    // SAFETY: `name` is a NUL-terminated UTF-16 string alive for the call;
-    // the module stays loaded for the process.
-    let module = unsafe { LoadLibraryW(name.as_ptr()) };
-    let found = if module.is_null() {
-        None
-    } else {
-        // SAFETY: `module` is a non-null loaded module handle and the export
-        // name a NUL-terminated C string.
-        unsafe { GetProcAddress(module, c"MiniDumpWriteDump".as_ptr().cast()) }
-    };
+    let found =
+        crate::module::Module::load("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));
     let target = found.map(|f| f as *const () as u64);
     if let Some(address) = target {
         crate::diag::name(address, "dbghelp.MiniDumpWriteDump");
@@ -644,57 +629,10 @@ pub(crate) fn reassert() {
     }
 }
 
-/// The protections whose pages read without a fault.
-const READABLE: u32 = PAGE_READONLY
-    | PAGE_READWRITE
-    | PAGE_WRITECOPY
-    | PAGE_EXECUTE_READ
-    | PAGE_EXECUTE_READWRITE
-    | PAGE_EXECUTE_WRITECOPY;
-
-/// The end of the readable run `address` lies in, from the region
-/// `VirtualQuery` reports for it; `None` when its page does not read.
-fn readable_end(
-    base: usize,
-    size: usize,
-    state: u32,
-    protect: u32,
-    address: usize,
-) -> Option<usize> {
-    let end = base.checked_add(size)?;
-    (state == MEM_COMMIT
-        && protect & READABLE != 0
-        && protect & (PAGE_GUARD | PAGE_NOACCESS) == 0
-        && (base..end).contains(&address))
-    .then_some(end)
-}
-
 /// The first byte and the end of the readable region `address` lies in.
 fn readable(address: usize) -> Option<(usize, usize)> {
-    let mut info = MEMORY_BASIC_INFORMATION {
-        BaseAddress: core::ptr::null_mut(),
-        AllocationBase: core::ptr::null_mut(),
-        AllocationProtect: 0,
-        PartitionId: 0,
-        RegionSize: 0,
-        State: 0,
-        Protect: 0,
-        Type: 0,
-    };
-    // SAFETY: `VirtualQuery` takes any address, and `info` is a writable
-    // `MEMORY_BASIC_INFORMATION` of the size passed.
-    let known = unsafe {
-        VirtualQuery(
-            core::ptr::with_exposed_provenance(address),
-            &raw mut info,
-            size_of::<MEMORY_BASIC_INFORMATION>(),
-        )
-    };
-    if known == 0 {
-        return None;
-    }
-    let base = info.BaseAddress.addr();
-    readable_end(base, info.RegionSize, info.State, info.Protect, address).map(|end| (base, end))
+    let region = crate::pages::query(address).filter(crate::pages::Region::reads)?;
+    Some((region.base, region.end))
 }
 
 /// The word at `address`, `None` unless all its bytes read without a fault.
@@ -1113,6 +1051,8 @@ unsafe fn record(state: &State, pointers: &EXCEPTION_POINTERS, thread: u32, line
 
 #[cfg(test)]
 mod tests {
+    use windows_sys::Win32::System::Memory::PAGE_READWRITE;
+
     use super::*;
 
     #[test]
@@ -1212,33 +1152,6 @@ mod tests {
         }
         // SAFETY: a null pointer, which `fault_code` takes.
         assert_eq!(unsafe { fault_code(core::ptr::null()) }, None);
-    }
-
-    #[test]
-    fn a_region_reads_only_where_committed_and_readable() {
-        let end = readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_READWRITE, 0x1800);
-        assert_eq!(end, Some(0x3000));
-        assert_eq!(
-            readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_READWRITE, 0x3000),
-            None
-        );
-        assert_eq!(
-            readable_end(0x1000, 0x2000, 0x2000, PAGE_READWRITE, 0x1800),
-            None
-        );
-        assert_eq!(
-            readable_end(0x1000, 0x2000, MEM_COMMIT, PAGE_NOACCESS, 0x1800),
-            None
-        );
-        let guarded = PAGE_READWRITE | PAGE_GUARD;
-        assert_eq!(
-            readable_end(0x1000, 0x2000, MEM_COMMIT, guarded, 0x1800),
-            None
-        );
-        assert_eq!(
-            readable_end(usize::MAX, 2, MEM_COMMIT, PAGE_READONLY, usize::MAX),
-            None
-        );
     }
 
     #[test]

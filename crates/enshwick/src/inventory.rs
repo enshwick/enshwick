@@ -17,13 +17,14 @@
 //! their own, the item's PIDE.
 
 use core::ffi::c_void;
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use crate::abi::{
     Header, InventoryOp, InventoryOpResult, InventoryRequest, InventoryResult, ItemData,
 };
 use crate::ecs::{Components, Entity};
 use crate::engine_ids as ids;
+use crate::locks::Relock;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
 use crate::world::{ComponentType, World};
@@ -898,10 +899,7 @@ impl Ticket {
     /// See [`Ticket`].
     #[must_use]
     pub fn outcome(&self) -> Option<Outcome> {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+        self.0.relock().clone()
     }
 
     /// Whether the request is done.
@@ -913,10 +911,7 @@ impl Ticket {
     /// ```
     #[must_use]
     pub fn is_done(&self) -> bool {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .is_some()
+        self.0.relock().is_some()
     }
 }
 
@@ -930,7 +925,7 @@ struct Pending {
 
 impl Pending {
     fn complete(self, outcome: &Outcome) {
-        *self.ticket.0.lock().unwrap_or_else(PoisonError::into_inner) = Some(outcome.clone());
+        *self.ticket.0.relock() = Some(outcome.clone());
         (self.done)(outcome);
     }
 }

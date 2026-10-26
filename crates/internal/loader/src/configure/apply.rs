@@ -8,10 +8,12 @@
 use enshwick::abi::Event;
 use enshwick::config::Stage;
 
-use super::{Change, refused};
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::texts;
 use crate::worlds::Destination;
+
+use super::{Change, refused};
 
 /// Sets mod `index`'s setting `key` to `value`, TOML or for a text setting
 /// the words as typed; `who` names the player for the log.
@@ -34,9 +36,8 @@ pub(crate) fn apply(
     let id = record.id.as_str();
     let schema = record
         .schema
-        .lock()
-        .ok()
-        .and_then(|s| s.clone())
+        .relock()
+        .clone()
         .ok_or_else(|| texts::fill("config.no-schema", &[("id", id)]))?;
     let field = schema.field(super::element(key).0);
     if loader.side == enshwick::abi::Side::SERVER && field.is_some_and(|f| f.stage == Stage::Client)

@@ -4,9 +4,11 @@ use std::sync::atomic::Ordering;
 
 use enshwick::abi::{Header, PlayerInfo, Status};
 
-use super::{Line, Tool, log_query, parse};
 use crate::host::Loader;
+use crate::locks::Relock;
 use crate::texts;
+
+use super::{Line, Tool, log_query, parse};
 
 /// The server's console as a player: an administrator with no character.
 pub(crate) fn the_console() -> PlayerInfo {
@@ -185,7 +187,7 @@ fn config(loader: &Loader, args: &str) -> String {
             let with: Vec<&str> = loader
                 .mods
                 .iter()
-                .filter(|m| m.schema.lock().is_ok_and(|s| s.is_some()))
+                .filter(|m| m.schema.relock().is_some())
                 .map(|m| m.id.as_str())
                 .collect();
             return if with.is_empty() {
@@ -196,10 +198,11 @@ fn config(loader: &Loader, args: &str) -> String {
         }
         Request::List(id) | Request::Get(id, _) | Request::Set(id, _, _) => id,
     };
-    let Some((index, record)) = loader.mods.iter().enumerate().find(|(_, m)| m.id == id) else {
+    let Some((index, record)) = loader.find_mod(id) else {
         return texts::fill("config.unknown", &[("id", id)]);
     };
-    let Some(schema) = record.schema.lock().ok().and_then(|s| s.clone()) else {
+    let id = record.id.as_str();
+    let Some(schema) = record.schema.relock().clone() else {
         return texts::fill("config.no-schema", &[("id", id)]);
     };
     let path = loader.configs_dir.join(format!("{id}.toml"));

@@ -52,6 +52,8 @@ struct FieldConfig {
     synced: bool,
     /// `group`: the field is a `Config` of its own, a table of the file.
     group: bool,
+    /// `first = n`: the number of a list's first element on the Mods screen.
+    first: Option<syn::LitInt>,
 }
 
 /// The stages a field may name, as `enshwick::config::Stage` variants.
@@ -124,6 +126,9 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 }
                 config.text = Some(text_key(&meta)?);
                 Ok(())
+            } else if meta.path.is_ident("first") {
+                config.first = Some(meta.value()?.parse()?);
+                Ok(())
             } else if meta.path.is_ident("group") {
                 config.group = true;
                 Ok(())
@@ -135,7 +140,7 @@ fn field_config(attrs: &[Attribute]) -> syn::Result<FieldConfig> {
                 Ok(())
             } else {
                 Err(meta.error(
-                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"`, `secret` or `group`",
+                    "expected `startup`, `runtime`, `client`, `sync`, `restart`, `range = a..=b`, `choices = [..]`, `text = \"key\"`, `secret`, `first = n` or `group`",
                 ))
             }
         })?;
@@ -418,6 +423,7 @@ fn described_field(
     let label = config.text.map(|t| t.value()).unwrap_or_default();
     let secret = config.secret;
     let synced = config.synced;
+    let first = config.first.map(|n| quote!(.with_first(#n)));
     quote! {
         ::enshwick::config::Field::new(
             #key,
@@ -429,6 +435,7 @@ fn described_field(
         .with_doc(#plain, #label)
         .with_secret(#secret)
         .with_synced(#synced)
+        #first
     }
 }
 
@@ -892,7 +899,7 @@ fn point_schema(
         toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
         mode.to_string().to_lowercase(),
         toml_string(&input),
-        toml_string(&doc_text(&item.attrs)),
+        toml_string(&schema_doc(&item.attrs)),
     );
     let mut parts = vec![
         quote!(#head, <#output as #shape>::SCHEMA_NAME, "\"\noutput_layout = \"", <#ident as #point>::OUTPUT[0].hash, "\"\nlayout = ["),
@@ -919,7 +926,7 @@ fn point_schema(
         let entry = format!(
             "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
             toml_string(&label),
-            toml_string(&doc_text(&field.attrs))
+            toml_string(&schema_doc(&field.attrs))
         );
         fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
         nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
@@ -927,7 +934,7 @@ fn point_schema(
     let table = format!(
         "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
         toml_string(&input),
-        toml_string(&doc_text(&item.attrs))
+        toml_string(&schema_doc(&item.attrs))
     );
     quote! {
         const SCHEMA: &'static str = {
@@ -1143,7 +1150,7 @@ fn shape_schema(
     let head = format!(
         "[[type]]\nname = {}\ndoc = {}\n",
         toml_string(name),
-        toml_string(&doc_text(&input.attrs))
+        toml_string(&schema_doc(&input.attrs))
     );
     let mut parts = vec![quote!(#head)];
     let mut nested = Vec::new();
@@ -1174,7 +1181,7 @@ fn shape_schema(
                     let entry = format!(
                         "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
                         toml_string(&label),
-                        toml_string(&doc_text(&field.attrs))
+                        toml_string(&schema_doc(&field.attrs))
                     );
                     parts.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
                     nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
@@ -1195,7 +1202,7 @@ fn shape_schema(
                 let entry = format!(
                     "[[type.variant]]\nname = {}\ndoc = {}\nvalue = ",
                     toml_string(&v.unraw().to_string()),
-                    toml_string(&doc_text(&variant.attrs))
+                    toml_string(&schema_doc(&variant.attrs))
                 );
                 parts.push(quote!(#entry, #ident::#v as #repr, "\n"));
             }
@@ -1337,6 +1344,18 @@ fn next_type(arg: &FnArg) -> Option<&Type> {
         GenericArgument::Type(ty) => Some(ty),
         _ => None,
     }
+}
+
+/// The doc comment of `attrs` for a point schema: its prose before the
+/// first heading, such as `# Examples`, whose code would not compile in the
+/// mods that read the schema; lines joined by spaces.
+fn schema_doc(attrs: &[Attribute]) -> String {
+    doc_lines(attrs)
+        .take_while(|line| !line.trim_start().starts_with('#'))
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The doc comment of `attrs` as plain text, lines joined by spaces.

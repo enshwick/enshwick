@@ -1,13 +1,14 @@
 //! Arming the hook chains, mid-function hooks and code patches.
 
 use crate::host::{self, Loader};
+use crate::locks::Relock;
 use crate::patch::{self, FrameSlot};
 
 /// Arms every chain and mid-function hook past the mods that are off; an
 /// address that fails turns off the mods hooked on it.
 pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
-    let mut chains = host::relock(&loader.chains, "the hook chains");
-    let mut mids = host::relock(&loader.mids, "the mid-function hooks");
+    let mut chains = loader.chains.relock();
+    let mut mids = loader.mids.relock();
     chains.seal();
     mids.seal();
     let patches = crate::code::seal();

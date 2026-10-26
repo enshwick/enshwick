@@ -9,6 +9,8 @@
 //! shows. Texts a mod hands in are copied into a per-frame arena, kept for a
 //! few frames, since the game may read them after the call.
 
+use crate::locks::Relock;
+
 mod actions;
 mod demo;
 mod dialog;
@@ -18,7 +20,7 @@ mod mods;
 
 use core::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 
@@ -333,10 +335,7 @@ pub(crate) fn register_frame(
         add_late(&LATE_FRAMES, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Frame::new(owner, callback, user));
+    PENDING.relock().push(Frame::new(owner, callback, user));
     Status::OK
 }
 
@@ -357,10 +356,7 @@ pub(crate) fn register_hud(
         add_late(&LATE_HUDS, Frame::new(owner, callback, user));
         return Status::OK;
     }
-    PENDING_HUD
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .push(Frame::new(owner, callback, user));
+    PENDING_HUD.relock().push(Frame::new(owner, callback, user));
     Status::OK
 }
 

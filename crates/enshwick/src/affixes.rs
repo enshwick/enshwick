@@ -35,7 +35,7 @@
 //! ```
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::abi::{
@@ -46,6 +46,7 @@ use crate::ecs::Entity;
 use crate::game_events::CraftRequested;
 use crate::inventory::Slot;
 use crate::item_data::ItemInstance;
+use crate::locks::Relock;
 use crate::loot::Source;
 use crate::stats::{ItemStats, Op, Stat, StatKey};
 use crate::{Host, Load, Off};
@@ -1086,8 +1087,7 @@ impl Load<'_> {
         let rolled = crate::loot::watch_rolls(self)?;
         let scheduler = self.scheduler()?;
         scheduler.every(SWEEP, move || {
-            let containers: Vec<_> =
-                core::mem::take(&mut *rolled.lock().unwrap_or_else(PoisonError::into_inner));
+            let containers: Vec<_> = core::mem::take(&mut *rolled.relock());
             for roll in containers.iter().filter(|r| rule.from.matches(r)) {
                 let Some(container) = roll.entity else {
                     continue;
@@ -1135,14 +1135,13 @@ impl Load<'_> {
             let held: HashSet<ItemInstance> =
                 instances(&inventories.read().slots(craft.player)).collect();
             requests
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
+                .relock()
                 .entry(craft.player)
                 .or_insert((Instant::now(), held));
         })?;
         scheduler.every(SWEEP, move || {
             let due: Vec<(Entity, HashSet<ItemInstance>)> = {
-                let mut pending = pending.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut pending = pending.relock();
                 let now = Instant::now();
                 let ready: Vec<Entity> = pending
                     .iter()

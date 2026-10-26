@@ -23,7 +23,6 @@ mod game;
 mod join_check;
 mod library;
 mod lock;
-mod pe;
 
 pub use dry_run::{DryMod, DryRun, DryRunError, dry_run};
 pub(crate) use join_check::TABLE_IDS;
@@ -234,7 +233,12 @@ fn skip(libraries: &[Library], candidates: &[Candidate], plan: &resolve::Plan) {
         if reason == resolve::OTHER_SIDE {
             crate::log!(INFO, "{} skipped: {reason}", libraries[*index].file);
         } else {
-            crate::log!(WARN, "{} skipped: {reason}", libraries[*index].file);
+            crate::log!(
+                WARN,
+                "{} skipped: {reason} ({})",
+                libraries[*index].file,
+                crate::errors::UNMET_RELATIONS
+            );
         }
     }
     let replaced = plan

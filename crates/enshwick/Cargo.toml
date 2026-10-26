@@ -1,6 +1,6 @@
 [package]
 name = "enshwick"
-version = "1.0.0-alpha.2"
+version = "1.0.0-alpha.3"
 description = "The Enshwick Loader's modding API for Enshrouded: the one crate mods are written against"
 keywords = ["enshrouded", "modding", "game", "ffi", "hooks"]
 categories = ["game-development", "api-bindings"]
@@ -12,7 +12,7 @@ repository.workspace = true
 publish = true
 
 [dependencies]
-enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.2" }
+enshwick-macros = { path = "../enshwick-macros", version = "1.0.0-alpha.3" }
 bcdec_rs.workspace = true
 bytemuck.workspace = true
 const-sha1.workspace = true
@@ -22,6 +22,7 @@ zune-png.workspace = true
 fastrand.workspace = true
 memchr.workspace = true
 postcard.workspace = true
+rustc-hash.workspace = true
 schemars = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 serde.workspace = true
@@ -32,6 +33,8 @@ toml.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 insta.workspace = true
+libloading = "0.9.0"
+syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -43,6 +46,14 @@ schema = ["dep:schemars", "dep:serde_json"]
 [[test]]
 name = "pack_schemas"
 required-features = ["schema"]
+
+[[test]]
+name = "fake_second_install"
+required-features = ["test"]
+
+[[test]]
+name = "old_mods"
+required-features = ["test"]
 
 [[test]]
 name = "actions"

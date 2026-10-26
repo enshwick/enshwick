@@ -20,13 +20,14 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &["ecs.destroy_request"];
@@ -127,8 +128,9 @@ fn is_part(part: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
-/// The full id of `id` asked for by mod `mod_id`: `name` names the mod's
-/// own kind, `mod:name` any mod's.
+/// The full id of `id` asked for by a mod whose bare names take the
+/// namespace `mod_id` (its first former id after a rename): `name` names the
+/// mod's own kind, `mod:name` any mod's.
 fn full_id(mod_id: &str, id: &str) -> Option<String> {
     let (namespace, name) = id.split_once(':').unwrap_or((mod_id, id));
     (enshwick::abi::is_valid_former_id(namespace) && is_part(name))
@@ -163,8 +165,8 @@ fn open_kind(
         return Err(Status::TOO_LATE);
     }
     let record = loader.mods.get(owner).ok_or(Status::BAD_ARGS)?;
-    let full = full_id(&record.id, id).ok_or(Status::BAD_ARGS)?;
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let full = full_id(record.home(), id).ok_or(Status::BAD_ARGS)?;
+    let mut pending = PENDING.relock();
     let index = if let Some(index) = pending.iter().position(|k| k.id == full) {
         let kind = &mut pending[index];
         if kind.scope != scope {
@@ -191,7 +193,7 @@ fn open_kind(
 /// Opens the loader's own item kind `id` for a platform feature, before the
 /// kinds are sealed.
 pub(crate) fn open_platform(id: &str) {
-    let mut pending = PENDING.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut pending = PENDING.relock();
     if !pending.iter().any(|k| k.id == id) {
         pending.push(Kind {
             id: id.to_owned(),
@@ -221,7 +223,7 @@ pub(crate) fn get_platform(pide: u32, item: u32) -> Option<Box<[u8]>> {
 
 /// Seals the kinds; the store runs only when a mod opened one.
 pub(crate) fn seal() {
-    let kinds = std::mem::take(&mut *PENDING.lock().unwrap_or_else(PoisonError::into_inner));
+    let kinds = std::mem::take(&mut *PENDING.relock());
     if !kinds.is_empty() {
         let names: Vec<String> = kinds
             .iter()
@@ -326,7 +328,7 @@ pub(crate) fn after_step() {
     }
     let destroyed = take_destroyed();
     let gone = {
-        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut server = SERVER.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
@@ -387,7 +389,7 @@ fn serves() -> bool {
 pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> {
     let scope = self::kind(kind).ok_or(Status::BAD_ARGS)?.scope;
     if serves() {
-        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut server = SERVER.relock();
         let server = server.as_mut().ok_or(Status::MISSING)?;
         let record = server.values.get(&(kind, pide)).ok_or(Status::MISSING)?;
         let wanted = match scope {
@@ -408,7 +410,7 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
         }
         return Err(Status::MISSING);
     }
-    let client = CLIENT.lock().unwrap_or_else(PoisonError::into_inner);
+    let client = CLIENT.relock();
     client
         .as_ref()
         .and_then(|v| v.get(&(kind, pide)).cloned())
@@ -442,7 +444,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         }
     };
     {
-        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut server = SERVER.relock();
         let server = server.as_mut().ok_or(Status::MISSING)?;
         if value.is_empty() {
             server.values.remove(&(kind, pide));
@@ -507,7 +509,7 @@ fn decode(mut bytes: &[u8]) -> Vec<(&str, u32, u32, &[u8])> {
 /// The messages that give a client every value, each at most
 /// [`MESSAGE_BYTES`] long.
 fn snapshot() -> Vec<Vec<u8>> {
-    let server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+    let server = SERVER.relock();
     let mut messages = Vec::new();
     let mut message = Vec::new();
     for (&(kind, pide), record) in server.iter().flat_map(|s| &s.values) {
@@ -541,7 +543,7 @@ pub(crate) fn received(bytes: &[u8]) {
     if !wanted() {
         return;
     }
-    let mut client = CLIENT.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut client = CLIENT.relock();
     let values = client.get_or_insert_with(Values::default);
     if !keep(values, bytes) && !CLIENT_FULL.swap(true, Ordering::Relaxed) {
         crate::log!(
@@ -580,7 +582,7 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
 
 /// Forgets what the client got, when it changes servers.
 pub(crate) fn forget_client() {
-    *CLIENT.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    *CLIENT.relock() = None;
     CLIENT_FULL.store(false, Ordering::Relaxed);
 }
 
@@ -679,7 +681,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             );
             KEPT.store(!values.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
-            *SERVER.lock().unwrap_or_else(PoisonError::into_inner) = Some(Server {
+            *SERVER.relock() = Some(Server {
                 key,
                 values,
                 unknown,
@@ -695,7 +697,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
 /// drops the records whose entity now holds another item or template.
 fn save(loader: &Loader, prune: bool) {
     let (key, bytes) = {
-        let mut server = SERVER.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut server = SERVER.relock();
         let Some(server) = server.as_mut() else {
             return;
         };

@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::atomic::Ordering;
 use std::sync::{Mutex, OnceLock};
 
-use enshwick_reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Image, Layout, Reflection};
 
 use crate::chains::Chains;
 use crate::host::{self, Loader};
@@ -13,8 +13,8 @@ use crate::{builds, log};
 
 use super::game::GAME_DIRS;
 use super::library::{Library, libraries};
-use super::pe;
 use super::{initialise, read_frame, records};
+use crate::pe;
 
 /// Why a dry run could not start the loader.
 #[derive(Debug, thiserror::Error)]
@@ -39,7 +39,7 @@ pub enum DryRunError {
     Unmapped(u64),
     /// The executable does not read as a PE image.
     #[error(transparent)]
-    Image(#[from] enshwick_reflect::ImageError),
+    Image(#[from] enshwick_gamedata::reflect::ImageError),
     /// The executable has no fingerprint to pick a build table by.
     #[error("the executable has no fingerprint")]
     NoFingerprint,

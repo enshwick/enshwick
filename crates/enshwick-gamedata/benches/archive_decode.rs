@@ -27,7 +27,7 @@ fn read(c: &mut Criterion) {
         .and_then(|exe| Path::new(&exe).parent().map(Path::to_path_buf))
         .and_then(|dir| Archive::open(&dir, "enshrouded"));
     if let Some(archive) = archive {
-        let keys = archive.keys_of(enshwick_reflect::fnv1a32(CONTAINER.as_bytes()));
+        let keys = archive.keys_of(enshwick_gamedata::reflect::fnv1a32(CONTAINER.as_bytes()));
         let bytes: usize = keys
             .iter()
             .filter_map(|key| archive.resource(key))

@@ -5,7 +5,7 @@
 
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -14,6 +14,7 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered, take};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -165,8 +166,7 @@ pub(crate) fn register(
         return Status::MISSING;
     }
     FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -187,7 +187,7 @@ pub(crate) fn link(loader: &'static Loader) {
         .reflection
         .system("inventory_actions")
         .ok()
-        .map(enshwick_reflect::System::entry);
+        .map(enshwick_gamedata::reflect::System::entry);
     let stock_flags = if layout.stock_ui_return == 0 {
         HookFlags::NONE
     } else {

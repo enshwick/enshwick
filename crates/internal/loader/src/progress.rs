@@ -4,18 +4,18 @@
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
-
-use crate::chains::Next;
-use crate::host::{Registered, take};
+use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{
     Comfort, ComfortFn, ExperiencePass, ExperiencePassFn, ExperienceRow, Header, HookFlags, Side,
     SkillCheck, SkillCheckFn, Status,
 };
 
+use crate::chains::Next;
 use crate::ecs::Engine;
 use crate::host::Loader;
+use crate::host::{Registered, take};
+use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -153,8 +153,7 @@ pub(crate) fn register_skill(
         return Status::MISSING;
     }
     SKILLS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push((node, Registered::new(owner, callback, user)));
     Status::OK
 }
@@ -172,8 +171,7 @@ pub(crate) fn register_comfort(
         return Status::MISSING;
     }
     COMFORT
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -191,8 +189,7 @@ pub(crate) fn register_experience(
         return Status::MISSING;
     }
     EXPERIENCE_FILTERS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .relock()
         .push(Registered::new(owner, callback, user));
     Status::OK
 }
@@ -218,7 +215,7 @@ pub(crate) fn link(loader: &'static Loader) {
         Ok(()) => loader
             .reflection
             .system("player_level")
-            .map_or(0, enshwick_reflect::System::entry),
+            .map_or(0, enshwick_gamedata::reflect::System::entry),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");

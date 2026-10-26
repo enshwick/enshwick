@@ -18,15 +18,15 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{Manifest, ManifestFlags, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
-use windows_sys::Win32::System::LibraryLoader::GetProcAddress;
 
 use crate::host::{self, Loader, Subscription};
+use crate::locks::Relock;
 
 /// The folder under `mods/enshwick/` that holds the copies mods run from.
 pub(crate) const COPIES_DIR: &str = "reload";
@@ -97,17 +97,14 @@ static HELD: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 /// Keeps mod `id` off across reloads: the server it joined does not run it.
 pub(crate) fn hold(id: &str) {
-    let mut held = HELD.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut held = HELD.relock();
     if !held.iter().any(|h| h == id) {
         held.push(id.to_owned());
     }
 }
 
 fn held(id: &str) -> bool {
-    HELD.lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .iter()
-        .any(|h| h == id)
+    HELD.relock().iter().any(|h| h == id)
 }
 
 /// The mod whose `init` runs now, whose calls are recorded.
@@ -147,7 +144,7 @@ unsafe impl Send for Watched {}
 /// Readies the per-mod state for `mods` mods.
 pub(crate) fn prepare(mods: usize) {
     let _first = GENERATIONS.set((0..mods).map(|_| AtomicU32::new(0)).collect());
-    *CALLS.lock().unwrap_or_else(PoisonError::into_inner) = vec![Vec::new(); mods];
+    *CALLS.relock() = vec![Vec::new(); mods];
 }
 
 /// Runs `init` of mod `index` with its table calls recorded.
@@ -169,7 +166,7 @@ pub(crate) fn note(name: &'static str) {
 
 #[cold]
 fn note_cold(index: usize, name: &'static str) {
-    let mut calls = CALLS.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut calls = CALLS.relock();
     if let Some(calls) = calls.get_mut(index)
         && !calls.contains(&name)
     {
@@ -328,12 +325,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     if held(&record.id) {
         return Err("the server's join turned it off; restart the game".into());
     }
-    let calls = CALLS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get(index)
-        .cloned()
-        .unwrap_or_default();
+    let calls = CALLS.relock().get(index).cloned().unwrap_or_default();
     let held: Vec<&str> = calls
         .iter()
         .copied()
@@ -373,16 +365,8 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
     }
     unlink(loader, index);
     shutdown(mod_.module);
-    loader
-        .chains
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .remove_owner(index);
-    if let Some(calls) = CALLS
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .get_mut(index)
-    {
+    loader.chains.relock().remove_owner(index);
+    if let Some(calls) = CALLS.relock().get_mut(index) {
         calls.clear();
     }
     // The old copy stays loaded: a call still in flight in it, or a thread
@@ -400,11 +384,7 @@ fn reload(loader: &'static Loader, mod_: &mut Watched) -> Result<String, String>
         unsafe { (new.init)(&raw const host::API, host::handle(index)) }
     });
     REINIT.store(NONE, Ordering::Release);
-    loader
-        .chains
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .rewire(host::is_off);
+    loader.chains.relock().rewire(host::is_off);
     if !status.is_ok() {
         loader.turn_off(index, &format!("reload: init returned {}", status.0));
         return Err(format!("its init returned {}", status.0));
@@ -434,11 +414,7 @@ fn unlink(loader: &Loader, index: usize) {
         generation.fetch_add(1, Ordering::AcqRel);
     }
     loader.mods[index].off.store(true, Ordering::Release);
-    loader
-        .chains
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .rewire(host::is_off);
+    loader.chains.relock().rewire(host::is_off);
     if loader.side == enshwick::abi::Side::CLIENT {
         // The new copy sets its own markers; the old copy's go.
         let _cleared = crate::ui::set_markers(index, &[]);
@@ -448,17 +424,16 @@ fn unlink(loader: &Loader, index: usize) {
 
 /// Runs the `shutdown` export of `module`, when it has one.
 fn shutdown(module: HMODULE) {
-    let name = format!("{}\0", exports::SHUTDOWN);
-    // SAFETY: `module` is the copy the watcher loaded and never frees, and
-    // `name` ends in the NUL pushed by the `format!` above.
-    let Some(found) = (unsafe { GetProcAddress(module, name.as_ptr()) }) else {
+    // SAFETY: `module` is the non-null handle of the copy the watcher loaded
+    // and never frees.
+    let module = unsafe { crate::module::Module::from_handle(module) };
+    let Some(found) = module.export(exports::SHUTDOWN) else {
         return;
     };
     // SAFETY: `enshwick::abi::exports::SHUTDOWN` documents the export as an
     // `extern "system" fn()`, which aborts rather than unwinds.
-    let shutdown = unsafe {
-        core::mem::transmute::<unsafe extern "system" fn() -> isize, extern "system" fn()>(found)
-    };
+    let shutdown =
+        unsafe { core::mem::transmute::<crate::module::Export, extern "system" fn()>(found) };
     shutdown();
 }
 
