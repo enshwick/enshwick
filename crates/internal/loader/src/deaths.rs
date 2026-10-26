@@ -10,6 +10,8 @@
 //! Deaths no system records, such as freezing or an administrator's kill,
 //! raise nothing here.
 
+use crate::pinned;
+use enshwick::ecs::Entity;
 use std::sync::{Mutex, OnceLock};
 
 use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
@@ -19,7 +21,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
-pub(crate) const TABLE_IDS: &[&str] = &["player.death_sink"];
+pub(crate) const TABLE_IDS: &[&str] = &[pinned::player::DEATH_SINK.id()];
 
 /// The most deaths kept between two steps.
 const MOST: usize = 64;
@@ -89,7 +91,7 @@ impl History {
     }
 
     /// The attacker of the last hit `entity` took; 0 for none.
-    fn killer(&self, loader: &Loader, entity: u32) -> u32 {
+    fn killer(&self, loader: &Loader, entity: Entity) -> u32 {
         let Ok(history) = crate::world::component(loader, entity, self.hash) else {
             return 0;
         };
@@ -160,7 +162,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     loader.link_feature(
         "player deaths",
-        loader.address("player.death_sink"),
+        loader.address(pinned::player::DEATH_SINK),
         &SINK_NEXT,
         sink,
         HookFlags::NONE,
@@ -250,7 +252,7 @@ pub(crate) fn after_step(loader: &Loader) {
             && death.entity != 0
             && let Some(history) = history
         {
-            death.killer_entity = history.killer(loader, death.entity);
+            death.killer_entity = history.killer(loader, Entity(death.entity));
         }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }

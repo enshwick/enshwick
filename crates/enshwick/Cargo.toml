@@ -34,8 +34,8 @@ toml.workspace = true
 proptest.workspace = true
 criterion.workspace = true
 insta.workspace = true
-libloading = "0.9.0"
-syn = { version = "3.0.9", default-features = false, features = ["full", "parsing"] }
+libloading = "=0.9.0"
+syn = { version = "=3.0.9", default-features = false, features = ["full", "parsing"] }
 serde = { workspace = true, features = ["derive"] }
 
 [features]
@@ -190,6 +190,10 @@ required-features = ["test"]
 
 [[test]]
 name = "recipe_rules"
+required-features = ["test"]
+
+[[test]]
+name = "resource_types"
 required-features = ["test"]
 
 [[test]]

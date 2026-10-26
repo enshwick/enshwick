@@ -14,6 +14,8 @@
 //! them, and puts its own frames into its chat queue before the game sends
 //! it.
 
+use crate::pinned;
+use crate::pinned::{Constant, Symbol};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -25,22 +27,22 @@ use crate::locks::Relock;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
-    "chat.client_queue",
-    "chat.client_send",
-    "chat.client_store",
-    "chat.mark_delivered",
-    "chat.max_text",
-    "chat.node_delivered",
-    "chat.post",
-    "chat.post_return",
-    "chat.receive_return_a",
-    "chat.receive_return_b",
-    "chat.reply_type",
-    "chat.store_slot_count",
-    "chat.store_slot_size",
-    "chat.store_slots",
-    "chat.store_tail",
-    "server.chat_store",
+    pinned::chat::CLIENT_QUEUE.id(),
+    pinned::chat::CLIENT_SEND.id(),
+    pinned::chat::CLIENT_STORE.id(),
+    pinned::chat::MARK_DELIVERED.id(),
+    pinned::chat::MAX_TEXT.id(),
+    pinned::chat::NODE_DELIVERED.id(),
+    pinned::chat::POST.id(),
+    pinned::chat::POST_RETURN.id(),
+    pinned::chat::RECEIVE_RETURN_A.id(),
+    pinned::chat::RECEIVE_RETURN_B.id(),
+    pinned::chat::REPLY_TYPE.id(),
+    pinned::chat::STORE_SLOT_COUNT.id(),
+    pinned::chat::STORE_SLOT_SIZE.id(),
+    pinned::chat::STORE_SLOTS.id(),
+    pinned::chat::STORE_TAIL.id(),
+    pinned::server::CHAT_STORE.id(),
 ];
 
 /// Lines posted per drain: the game's chat pool drops undelivered lines
@@ -193,35 +195,35 @@ fn replied(text: &str) -> impl Iterator<Item = &str> {
 /// Links the chat post on the server; without it mods' chat lines and the
 /// messages clients send stay off and the log says so.
 pub(crate) fn link(loader: &'static Loader) {
-    let symbol = |name: &str| loader.build.symbol(name).map(|rva| loader.base + rva);
-    let constant = |name: &str| {
+    let symbol = |name: Symbol| loader.build.symbol(name.id()).map(|rva| loader.base + rva);
+    let constant = |name: Constant| {
         loader
             .build
-            .constant(name)
+            .constant(name.id())
             .and_then(|v| usize::try_from(v).ok())
     };
     let layout = (|| {
-        let mark = usize::try_from(symbol("chat.mark_delivered")?).ok()?;
+        let mark = usize::try_from(symbol(pinned::chat::MARK_DELIVERED)?).ok()?;
         Some(Layout {
-            post_return: symbol("chat.post_return")?,
+            post_return: symbol(pinned::chat::POST_RETURN)?,
             receive_returns: [
-                symbol("chat.receive_return_a").unwrap_or(0),
-                symbol("chat.receive_return_b").unwrap_or(0),
+                symbol(pinned::chat::RECEIVE_RETURN_A).unwrap_or(0),
+                symbol(pinned::chat::RECEIVE_RETURN_B).unwrap_or(0),
             ],
             // SAFETY: `mark` is the build table's `chat.mark_delivered` in
             // the loaded executable, the game function `MarkFn` types.
             mark: unsafe { core::mem::transmute::<usize, MarkFn>(mark) },
-            store: constant("server.chat_store")?,
-            slots: constant("chat.store_slots")?,
-            slot_size: constant("chat.store_slot_size")?,
-            slot_count: constant("chat.store_slot_count")?.min(32),
-            tail: constant("chat.store_tail")?,
-            delivered: constant("chat.node_delivered")?,
-            max_text: constant("chat.max_text")?,
-            reply_type: u8::try_from(constant("chat.reply_type")?).ok()?,
+            store: constant(pinned::server::CHAT_STORE)?,
+            slots: constant(pinned::chat::STORE_SLOTS)?,
+            slot_size: constant(pinned::chat::STORE_SLOT_SIZE)?,
+            slot_count: constant(pinned::chat::STORE_SLOT_COUNT)?.min(32),
+            tail: constant(pinned::chat::STORE_TAIL)?,
+            delivered: constant(pinned::chat::NODE_DELIVERED)?,
+            max_text: constant(pinned::chat::MAX_TEXT)?,
+            reply_type: u8::try_from(constant(pinned::chat::REPLY_TYPE)?).ok()?,
         })
     })();
-    let (Some(layout), Some(target)) = (layout, symbol("chat.post")) else {
+    let (Some(layout), Some(target)) = (layout, symbol(pinned::chat::POST)) else {
         crate::log!(WARN, "chat lines off: this build has no chat layout");
         return;
     };
@@ -234,15 +236,15 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     crate::log!(INFO, "chat lines and mod messages on");
-    link_client(loader, symbol("chat.client_send"));
+    link_client(loader, symbol(pinned::chat::CLIENT_SEND));
 }
 
 /// Links the client's chat send, so its own frames go with what it sends.
 fn link_client(loader: &'static Loader, target: Option<u64>) {
     let (Some(target), Some(queue), Some(store)) = (
         target,
-        loader.address("chat.client_queue"),
-        loader.offset("chat.client_store"),
+        loader.address(pinned::chat::CLIENT_QUEUE),
+        loader.offset(pinned::chat::CLIENT_STORE),
     ) else {
         return;
     };

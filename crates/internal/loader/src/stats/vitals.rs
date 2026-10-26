@@ -4,6 +4,9 @@
 //! of perks, buffs and gear change the adder by their own deltas, so the
 //! loader adds and takes back only its own.
 
+use crate::pinned;
+use crate::pinned::Constant;
+use enshwick::ecs::Entity;
 use std::sync::OnceLock;
 
 use enshwick::raw::{read_at, write_at};
@@ -45,26 +48,47 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let constant = |name: &str| loader.build.constant(name);
-            let slot = |name: &str| constant(name).and_then(|v| usize::try_from(v).ok());
-            let set = |ty: &str, pool: &str| {
+            let constant = |name: Constant| loader.build.constant(name.id());
+            let slot = |name: Constant| constant(name).and_then(|v| usize::try_from(v).ok());
+            let set = |ty: &str, [root, max, adder]: [Constant; 3]| {
                 let info = loader.reflection.type_info(ty).ok()?;
                 Some(Set {
                     ty: crate::world::type_hash(info.va())?,
-                    root: u32::try_from(constant(&format!("attribute.{pool}"))?).ok()?,
-                    max: slot(&format!("attribute.{pool}_max_slot"))?,
-                    adder: slot(&format!("attribute.{pool}_adder_slot"))?,
+                    root: u32::try_from(constant(root)?).ok()?,
+                    max: slot(max)?,
+                    adder: slot(adder)?,
                 })
             };
             let layout = (|| {
                 Some(Layout {
-                    data_offset: slot("ecs.level_data_offset")?,
-                    flags: slot("ecs.level_flags")?,
-                    count: slot("ecs.attribute_count")?,
+                    data_offset: slot(pinned::ecs::LEVEL_DATA_OFFSET)?,
+                    flags: slot(pinned::ecs::LEVEL_FLAGS)?,
+                    count: slot(pinned::ecs::ATTRIBUTE_COUNT)?,
                     sets: [
-                        set("keen::ecs::Health", "health")?,
-                        set("keen::ecs::Stamina", "stamina")?,
-                        set("keen::ecs::Mana", "mana")?,
+                        set(
+                            "keen::ecs::Health",
+                            [
+                                pinned::attribute::HEALTH,
+                                pinned::attribute::HEALTH_MAX_SLOT,
+                                pinned::attribute::HEALTH_ADDER_SLOT,
+                            ],
+                        )?,
+                        set(
+                            "keen::ecs::Stamina",
+                            [
+                                pinned::attribute::STAMINA,
+                                pinned::attribute::STAMINA_MAX_SLOT,
+                                pinned::attribute::STAMINA_ADDER_SLOT,
+                            ],
+                        )?,
+                        set(
+                            "keen::ecs::Mana",
+                            [
+                                pinned::attribute::MANA,
+                                pinned::attribute::MANA_MAX_SLOT,
+                                pinned::attribute::MANA_ADDER_SLOT,
+                            ],
+                        )?,
                     ],
                 })
             })();
@@ -82,12 +106,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 /// Adds `delta` to `entity`'s maximum of `pool`, through its adder; false
 /// when the entity has no such set or the build lacks the layout. On the
 /// game thread, between steps.
-pub(super) fn add_max(loader: &Loader, entity: u32, pool: Pool, delta: i32) -> bool {
+pub(super) fn add_max(loader: &Loader, entity: Entity, pool: Pool, delta: i32) -> bool {
     let Some(layout) = layout(loader) else {
         return false;
     };
     let set = layout.sets[pool as usize];
-    let Ok(data) = crate::writes::component_mut(loader, entity, set.ty) else {
+    let Ok(data) = crate::writes::component_mut(loader, entity.0, set.ty) else {
         return false;
     };
     let data = data.cast::<u8>();
