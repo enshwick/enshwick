@@ -1149,6 +1149,128 @@ pub const FACTS: &[(&str, Fact)] = &[
         "inventory_error.out_of_memory",
         enum_constant(INVENTORY_ERROR, "OutOfMemory"),
     ),
+    (
+        "game_settings_preset.default",
+        enum_constant(GAME_SETTINGS_PRESET, "Default"),
+    ),
+    (
+        "game_settings_preset.relaxed",
+        enum_constant(GAME_SETTINGS_PRESET, "Relaxed"),
+    ),
+    (
+        "game_settings_preset.hard",
+        enum_constant(GAME_SETTINGS_PRESET, "Hard"),
+    ),
+    (
+        "game_settings_preset.survival",
+        enum_constant(GAME_SETTINGS_PRESET, "Survival"),
+    ),
+    (
+        "game_settings_preset.custom",
+        enum_constant(GAME_SETTINGS_PRESET, "Custom"),
+    ),
+    (
+        "tombstone_mode.add_backpack_materials",
+        enum_constant(TOMBSTONE_MODE, "AddBackpackMaterials"),
+    ),
+    (
+        "tombstone_mode.everything",
+        enum_constant(TOMBSTONE_MODE, "Everything"),
+    ),
+    (
+        "tombstone_mode.no_tombstone",
+        enum_constant(TOMBSTONE_MODE, "NoTombstone"),
+    ),
+    (
+        "weather_frequency.disabled",
+        enum_constant(WEATHER_FREQUENCY, "Disabled"),
+    ),
+    (
+        "weather_frequency.rare",
+        enum_constant(WEATHER_FREQUENCY, "Rare"),
+    ),
+    (
+        "weather_frequency.normal",
+        enum_constant(WEATHER_FREQUENCY, "Normal"),
+    ),
+    (
+        "weather_frequency.often",
+        enum_constant(WEATHER_FREQUENCY, "Often"),
+    ),
+    (
+        "generic_difficulty.very_easy",
+        enum_constant(GENERIC_DIFFICULTY, "VeryEasy"),
+    ),
+    (
+        "generic_difficulty.easy",
+        enum_constant(GENERIC_DIFFICULTY, "Easy"),
+    ),
+    (
+        "generic_difficulty.normal",
+        enum_constant(GENERIC_DIFFICULTY, "Normal"),
+    ),
+    (
+        "generic_difficulty.hard",
+        enum_constant(GENERIC_DIFFICULTY, "Hard"),
+    ),
+    (
+        "generic_difficulty.very_hard",
+        enum_constant(GENERIC_DIFFICULTY, "VeryHard"),
+    ),
+    (
+        "random_spawner_amount.few",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Few"),
+    ),
+    (
+        "random_spawner_amount.normal",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Normal"),
+    ),
+    (
+        "random_spawner_amount.many",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Many"),
+    ),
+    (
+        "random_spawner_amount.extreme",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Extreme"),
+    ),
+    (
+        "random_spawner_amount.automatic",
+        enum_constant(RANDOM_SPAWNER_AMOUNT, "Automatic"),
+    ),
+    (
+        "aggro_pool_amount.few",
+        enum_constant(AGGRO_POOL_AMOUNT, "Few"),
+    ),
+    (
+        "aggro_pool_amount.normal",
+        enum_constant(AGGRO_POOL_AMOUNT, "Normal"),
+    ),
+    (
+        "aggro_pool_amount.many",
+        enum_constant(AGGRO_POOL_AMOUNT, "Many"),
+    ),
+    (
+        "aggro_pool_amount.extreme",
+        enum_constant(AGGRO_POOL_AMOUNT, "Extreme"),
+    ),
+    (
+        "taming_startle_repercussion.keep_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "KeepProgress"),
+    ),
+    (
+        "taming_startle_repercussion.lose_some_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "LoseSomeProgress"),
+    ),
+    (
+        "taming_startle_repercussion.lose_all_progress",
+        enum_constant(TAMING_STARTLE_REPERCUSSION, "LoseAllProgress"),
+    ),
+    ("curse_modifier.easy", enum_constant(CURSE_MODIFIER, "Easy")),
+    (
+        "curse_modifier.normal",
+        enum_constant(CURSE_MODIFIER, "Normal"),
+    ),
+    ("curse_modifier.hard", enum_constant(CURSE_MODIFIER, "Hard")),
 ];
 
 /// The server's game settings, one reflected struct.
@@ -1171,3 +1293,27 @@ const EQUIPMENT_SLOT: &str = "keen::EquipmentSlot";
 
 /// The error an inventory operation ends with.
 const INVENTORY_ERROR: &str = "keen::ErrorId";
+
+/// The preset a server's game settings came from.
+const GAME_SETTINGS_PRESET: &str = "keen::ecs::GameSettingsPreset";
+
+/// What a dead character leaves behind.
+const TOMBSTONE_MODE: &str = "keen::ecs::TombstoneMode";
+
+/// How often rain and storms come.
+const WEATHER_FREQUENCY: &str = "keen::ecs::WeatherFrequency";
+
+/// A difficulty from very easy to very hard.
+const GENERIC_DIFFICULTY: &str = "keen::ecs::GenericDifficulty";
+
+/// How many enemies random spawners bring.
+const RANDOM_SPAWNER_AMOUNT: &str = "keen::ecs::RandomSpawnerAmount";
+
+/// How many enemies attack at once.
+const AGGRO_POOL_AMOUNT: &str = "keen::ecs::AggroPoolAmount";
+
+/// What startling a tamed animal costs.
+const TAMING_STARTLE_REPERCUSSION: &str = "keen::ecs::TamingStartleRepercussion";
+
+/// How hard the shroud's curse hits.
+const CURSE_MODIFIER: &str = "keen::ecs::CurseModifier";

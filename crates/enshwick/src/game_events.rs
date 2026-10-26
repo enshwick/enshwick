@@ -26,7 +26,9 @@ pub use kinds::{
     AltarUsed, Block, Built, CraftRequested, Crafted, Died, EquipmentChanged, ExperienceGained,
     Hit, Interacted, Kind, LevelGained, LootOpened, PickedUp, Revived, TornDown,
 };
-pub use values::{AltarAction, AttackCategories, DamageTypes, EquipmentSlot, ExperienceSource};
+pub use values::{
+    AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
+};
 
 mod sealed {
     pub trait Sealed {}
