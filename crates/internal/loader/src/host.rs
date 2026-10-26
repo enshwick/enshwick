@@ -155,6 +155,8 @@ pub(crate) struct Loader {
     pub(crate) data_dir: PathBuf,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
+    /// The DLLs that run beside the mods without the API.
+    pub(crate) others: Vec<crate::others::OtherDll>,
     /// Every hook chain.
     pub(crate) chains: Mutex<Chains>,
     /// Every mid-function hook.

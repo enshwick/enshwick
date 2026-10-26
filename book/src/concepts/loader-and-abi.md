@@ -23,8 +23,9 @@ Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
 loader loads each and keeps it when it exports the four required functions of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
 and was built for the loader's ABI major. The fifth, `enshwick_mod_shutdown`,
-is optional. Other DLLs are logged as "not an
-Enshwick mod" and unloaded. The file name is free; the id in the manifest
+is optional. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
+and runs on its own, and the status summary and the Mods screen list it. One
+with only part of the interface is logged and unloaded. The file name is free; the id in the manifest
 names the mod. Every folder in `mods/` with a `pack.toml` is a
 [content pack](../content/packs.md), which the loader runs as a mod of its
 own; its entry's file is `<id>/pack.toml`.

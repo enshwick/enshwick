@@ -85,6 +85,7 @@ pub mod modlist;
 mod net;
 #[cfg(windows)]
 mod notices;
+pub mod others;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]

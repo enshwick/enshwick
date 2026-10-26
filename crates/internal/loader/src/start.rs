@@ -42,6 +42,17 @@ const CLIENT_ARM_DELAY: Duration = Duration::from_secs(15);
 static FRAME: OnceLock<Option<FrameSlot>> = OnceLock::new();
 static STARTED: AtomicBool = AtomicBool::new(false);
 
+/// Stops the game when a mod that holds a world is not running.
+fn enforce_holds(loader: &Loader) {
+    let running: Vec<&str> = loader
+        .mods
+        .iter()
+        .filter(|m| !m.off.load(Ordering::Acquire))
+        .map(|m| m.id.as_str())
+        .collect();
+    crate::holds::enforce(&loader.data_dir, &running, false);
+}
+
 /// Runs once, on the stub's thread.
 /// Seals what mods asked for and links the loader's own features; the
 /// client links the server's too, for the games it hosts.
@@ -88,7 +99,7 @@ pub(crate) fn start(
     let Some(game) = game(&data_dir) else {
         return;
     };
-    let (libraries, candidates) = libraries(&mods_dir);
+    let (libraries, candidates, others) = libraries(&mods_dir);
     let lock_files: Vec<(String, String)> = libraries
         .iter()
         .zip(&candidates)
@@ -109,6 +120,7 @@ pub(crate) fn start(
         data_dir,
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
+        others,
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
         caller_frame: read_frame,
@@ -148,13 +160,7 @@ pub(crate) fn start(
     arm(loader, frame);
     release_server(release, began);
     crate::ui::armed(loader);
-    let running: Vec<&str> = loader
-        .mods
-        .iter()
-        .filter(|m| !m.off.load(Ordering::Acquire))
-        .map(|m| m.id.as_str())
-        .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false);
+    enforce_holds(loader);
     ready(loader, &order);
     watch_copies(loader, &order);
     write_lock(loader, lock_files);

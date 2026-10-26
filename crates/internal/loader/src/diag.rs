@@ -230,6 +230,8 @@ pub struct Summary {
     pub mods: Vec<ModStatus>,
     /// Mods turned off in the mod list, by id.
     pub disabled: Vec<String>,
+    /// The DLLs that run beside the mods without the API, a line per folder.
+    pub others: Vec<String>,
     /// Mods that present mods replace, never started, a line each.
     pub replaced: Vec<String>,
     /// Mods turned off, oldest first.
@@ -310,6 +312,9 @@ impl Summary {
         }
         for line in &self.replaced {
             let _w = writeln!(out, "  not started: {line}");
+        }
+        for line in &self.others {
+            let _w = writeln!(out, "  {line}");
         }
         if !self.turned_off.is_empty() {
             let _w = writeln!(out, "\nturned off:");
@@ -518,6 +523,7 @@ mod tests {
                 },
             ],
             disabled: vec!["you.my-mod".into()],
+            others: vec!["native mods in mods/, without Enshwick's API: fps-unlock.dll".into()],
             replaced: vec![
                 "you.stalls is replaced by you.market-stalls; delete mods/stalls.dll".into(),
             ],
@@ -585,7 +591,8 @@ mod tests {
             "  you.trading-post 0.1.1 (off)\n  off in mods/enshwick/mods.toml: you.my-mod\n"
         ));
         assert!(text.contains(
-            "  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll\n"
+            "  not started: you.stalls is replaced by you.market-stalls; delete mods/stalls.dll\n  \
+             native mods in mods/, without Enshwick's API: fps-unlock.dll\n"
         ));
         assert!(text.contains("12:13:20Z you.trading-post: panic in an action"));
         assert!(text.contains(

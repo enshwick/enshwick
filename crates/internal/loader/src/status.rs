@@ -161,6 +161,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         at: crate::diag::now(),
         mods,
         disabled: crate::modlist::disabled().to_vec(),
+        others: crate::others::lines(&loader.others),
         replaced: crate::modlist::replaced()
             .iter()
             .map(crate::modlist::Replaced::line)

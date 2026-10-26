@@ -133,7 +133,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
     let data_dir = game_dir.join("mod-data");
-    let (libraries, candidates) = libraries(&mods_dir);
+    let (libraries, candidates, others) = libraries(&mods_dir);
     let plan = resolve::resolve(&candidates, side);
     let loader = Loader {
         side,
@@ -145,6 +145,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         data_dir,
         mods_dir,
         mods: records(&libraries, &candidates, &plan),
+        others,
         chains: Mutex::new(Chains::default()),
         mids: Mutex::default(),
         caller_frame: read_frame,

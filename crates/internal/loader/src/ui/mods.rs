@@ -31,6 +31,7 @@ use super::engine::{Engine, Window};
 use super::{ENGINE, Painter, copy};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
+use crate::others::Origin;
 use crate::texts;
 
 /// Mods a list page shows.
@@ -620,6 +621,16 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         } else if !world {
             let note = texts::fill("mods.settings.file", &[("id", &record.id)]);
             paint.label(note.as_bytes(), UiWidget::STYLE_SECONDARY, false, false);
+        }
+    }
+    for (origin, key) in [
+        (Origin::Mods, "mods.others.native"),
+        (Origin::Chain, "mods.others.chain"),
+    ] {
+        let files = crate::others::loaded(&loader.others, origin);
+        if !files.is_empty() {
+            let line = texts::fill(key, &[("files", &files.join(", "))]);
+            paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
     }
     pages(paint, first, mods.len(), MODS_PER_PAGE);
