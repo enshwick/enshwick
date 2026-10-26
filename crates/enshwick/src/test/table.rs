@@ -55,7 +55,7 @@ pub(crate) struct State {
     /// The names of the mod events the mod sent, in order.
     pub(crate) sent_events: Vec<String>,
     /// The migrations the mod declared.
-    pub(crate) migrations: Option<super::migrations::FakeMigrations>,
+    pub(crate) migrations: Option<super::FakeMigrations>,
     /// Content ids the mod declared, in order.
     pub(crate) content_ids: Vec<String>,
     pub(crate) defaults: Vec<String>,
@@ -614,7 +614,7 @@ extern "system" fn migrate(_me: ModHandle, set: *const MigrationSet) -> Status {
         if s.migrations.is_some() {
             return Status::REFUSED;
         }
-        s.migrations = Some(super::migrations::FakeMigrations {
+        s.migrations = Some(super::FakeMigrations {
             list: migrations,
             map: set.map,
             user: set.user.expose_provenance(),

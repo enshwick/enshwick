@@ -307,7 +307,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
-[`enshwick-flame-altar-count`](https://github.com/enshwick/mod-flame-altar-count/blob/main/src/lib.rs)
+[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars/blob/main/src/lib.rs)
 does with its altar table.
 
 ## Join values
@@ -374,6 +374,6 @@ is, once its `on_config_change` handler has run, and pushed at the same moment
 to every joined player whose client runs Enshwick: their mod's
 `on_config_change` runs with the new values, without joining again.
 
-[`enshwick-flame-altar-count`](https://github.com/enshwick/mod-flame-altar-count)
+[`enshwick-more-altars`](https://github.com/enshwick/mod-more-altars)
 keeps its altar table as a join value: the client's building interface asks
 the same function as the server's check.
