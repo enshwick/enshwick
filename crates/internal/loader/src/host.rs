@@ -124,9 +124,29 @@ impl ModRecord {
         self.id == namespace || self.former.iter().any(|f| f == namespace)
     }
 
-    /// The name players read, or the id when the manifest names none.
+    /// The name players read, from the mod's texts in their language, else
+    /// from its manifest; empty when neither names it.
+    pub(crate) fn name(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.name_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
+    }
+
+    /// The name players read, or the id when nothing names the mod.
     pub(crate) fn label(&self) -> String {
-        self.meta.label(&self.id)
+        enshwick::mods::label(&self.name(), &self.id)
+    }
+
+    /// What the mod does, from its texts in the player's language, else
+    /// from its manifest.
+    pub(crate) fn description(&self) -> String {
+        let texts = self.texts.lock().ok();
+        self.meta.description_in(
+            texts.as_ref().and_then(|t| t.as_ref()),
+            crate::content::language(),
+        )
     }
 
     /// Whether it takes part in the join check while it runs.
