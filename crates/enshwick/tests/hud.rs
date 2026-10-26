@@ -18,7 +18,7 @@ mod tests {
 
     impl Mod for Raid {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "raid", side: CLIENT)
+            enshwick::manifest!(id: "you.raid", side: CLIENT)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {

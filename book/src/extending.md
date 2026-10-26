@@ -99,7 +99,7 @@ Declare the owner in the manifest, with a version range:
 
 ```rust
 let manifest = enshwick::manifest!(
-    id: "safe-viewers",
+    id: "you.safe-viewers",
     side: BOTH,
     recommends: ["safes" => ">=0.0.0-dev, <1.0"],
 );
@@ -143,7 +143,7 @@ A player keeps a mod but turns off one of its links in
 `mods/enshwick/mods.toml`, under the linking mod's entry:
 
 ```toml
-[safe-viewers]
+[you.safe-viewers]
 enabled = true
 file = "enshwick-example-safe-viewers.dll"
 links_off = ["safes:access"]
