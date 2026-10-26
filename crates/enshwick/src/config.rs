@@ -29,7 +29,11 @@ use serde::{Deserialize, Serialize};
 ///   before the console or the Mods screen writes a value;
 /// - `text = "key"`, the text key of the field's translated label in the
 ///   mod's texts, `config.<field>` by default; its description is the key
-///   with `.doc` appended.
+///   with `.doc` appended;
+/// - `#[config(group)]` on a field whose type is a `Config` of its own: its
+///   settings are a table of the file, `[<field>]`, with dotted keys such as
+///   `<field>.<key>`, and the Mods screen shows them together. A group's
+///   fields take their own stages, ranges and texts.
 ///
 /// `#[config(validate = path)]` on the struct adds a check of its own, and
 /// `#[config(text = "key")]` names the text key of the whole set, `config`
@@ -116,6 +120,15 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// The commented file written when the mod's settings are missing.
     fn template() -> String;
 
+    /// The template's entries without its heading, its tables under
+    /// `path`, for a group of another `Config`.
+    #[doc(hidden)]
+    #[must_use]
+    fn __template_body(path: &str) -> String {
+        let _ = path;
+        Self::template()
+    }
+
     /// What every field is, for the loader, the console and a settings menu.
     ///
     /// # Examples
@@ -123,10 +136,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup, range = 1..=16)]
     ///     limit: u32,
     /// }
@@ -151,10 +164,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     ///     /// The language of replies.
@@ -183,10 +196,10 @@ pub trait Config: serde::de::DeserializeOwned + Default {
     /// ```
     /// use enshwick::config::{Config, Stage};
     ///
-    /// /// Safe settings.
+    /// /// Locker settings.
     /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     /// struct Settings {
-    ///     /// How many Safes one player may own.
+    ///     /// How many lockers one player may own.
     ///     #[config(startup)]
     ///     limit: u32,
     /// }
@@ -591,6 +604,19 @@ impl Field {
         }
     }
 
+    /// The field inside the group `group`: its key and its default text key
+    /// prefixed with the group's.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, group: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{group}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+
     /// The field accepting numbers from `min` to `max`, each `None` for no
     /// bound.
     ///
@@ -633,8 +659,8 @@ impl Field {
     /// ```
     /// use enshwick::config::{Field, Stage};
     ///
-    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "safes.limit");
-    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "safes.limit"));
+    /// let field = Field::new("limit", Stage::Startup, &4).with_doc("How many.", "lockers.limit");
+    /// assert_eq!((field.doc.as_str(), field.text.as_str()), ("How many.", "lockers.limit"));
     /// ```
     #[must_use]
     pub fn with_doc(mut self, doc: &str, text: &str) -> Self {
@@ -694,7 +720,8 @@ impl Field {
         self.stage == Stage::Sync || self.synced
     }
 
-    /// Checks `value` against the field's type, range and choices.
+    /// Checks `value` against the field's type, range and choices; the range
+    /// applies to every element of a list.
     ///
     /// # Errors
     ///
@@ -710,6 +737,55 @@ impl Field {
         {
             return Err(self.refused(format!("takes {}", kind_name(kind))));
         }
+        if let toml::Value::Array(items) = value {
+            let element = self.element_kind();
+            for item in items {
+                if element.is_some_and(|kind| !kind.accepts(Kind::of(item))) {
+                    return Err(self.refused(format!(
+                        "takes a list of {}",
+                        element.map_or("values", kind_name)
+                    )));
+                }
+                self.check_bounds(item)?;
+            }
+        }
+        let number = self.check_bounds(value)?;
+        let chosen = |choice: &String| {
+            *choice == value.to_string()
+                || number.is_some_and(|n| {
+                    choice
+                        .parse::<f64>()
+                        .is_ok_and(|c| c.to_bits() == n.to_bits())
+                })
+        };
+        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
+            return Err(self.refused(format!("is {}", self.accepts())));
+        }
+        Ok(())
+    }
+
+    /// The kind of each element of a list setting, from its default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Kind, Stage};
+    ///
+    /// let per_level = Field::new("per_level", Stage::Startup, &[2, 4, 8]);
+    /// assert_eq!(per_level.element_kind(), Some(Kind::Integer));
+    /// ```
+    #[must_use]
+    pub fn element_kind(&self) -> Option<Kind> {
+        let table: toml::Table = toml::from_str(&format!("v = {}", self.default)).ok()?;
+        match table.get("v")? {
+            toml::Value::Array(items) => items.first().map(Kind::of),
+            _ => None,
+        }
+    }
+
+    /// Checks a number against the range; the number, `None` for a value
+    /// that is none.
+    fn check_bounds(&self, value: &toml::Value) -> Result<Option<f64>, ConfigError> {
         #[expect(
             clippy::cast_precision_loss,
             reason = "bounds are compared as f64; a setting near 2^53 is no setting"
@@ -724,18 +800,7 @@ impl Field {
         {
             return Err(self.refused(format!("is {}", self.accepts())));
         }
-        let chosen = |choice: &String| {
-            *choice == value.to_string()
-                || number.is_some_and(|n| {
-                    choice
-                        .parse::<f64>()
-                        .is_ok_and(|c| c.to_bits() == n.to_bits())
-                })
-        };
-        if !self.choices.is_empty() && !self.choices.iter().any(chosen) {
-            return Err(self.refused(format!("is {}", self.accepts())));
-        }
-        Ok(())
+        Ok(number)
     }
 
     fn refused(&self, need: String) -> ConfigError {
@@ -791,7 +856,7 @@ const fn kind_name(kind: Kind) -> &'static str {
 /// ```
 /// use enshwick::config::{Field, Schema, Stage};
 ///
-/// let schema = Schema::new("Safe settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
+/// let schema = Schema::new("Locker settings.", "config", vec![Field::new("limit", Stage::Startup, &4)]);
 /// assert_eq!(Schema::parse(&schema.to_text())?, schema);
 /// # Ok::<(), enshwick::config::ConfigError>(())
 /// ```
@@ -802,9 +867,85 @@ pub struct Schema {
     pub doc: String,
     /// The key of the set's translated title in the mod's texts.
     pub text: String,
-    /// Every field, in file order.
+    /// Every field, in file order; a field of a group has a dotted key,
+    /// `<group>.<key>`.
     #[serde(default, rename = "field")]
     pub fields: Vec<Field>,
+    /// The groups, each a table in the settings file, in file order.
+    #[serde(default, rename = "group", skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
+}
+
+/// A group of settings: a table of the settings file, such as `[comfort]`,
+/// which the Mods screen shows together.
+///
+/// # Examples
+///
+/// See [`Config`].
+#[non_exhaustive]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Group {
+    /// The table's key; a dotted path for a group inside a group.
+    pub key: String,
+    /// Its documentation, in English: the field's doc comment.
+    pub doc: String,
+    /// The key of its translated title in the mod's texts.
+    pub text: String,
+}
+
+impl Group {
+    /// The group `key`, documented by `doc`, translated under
+    /// `config.<key>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let group = enshwick::config::Group::new("comfort", "Comfort rules.");
+    /// assert_eq!(group.text, "config.comfort");
+    /// ```
+    #[must_use]
+    pub fn new(key: &str, doc: &str) -> Self {
+        Self {
+            key: key.to_owned(),
+            doc: doc.trim().to_owned(),
+            text: format!("config.{key}"),
+        }
+    }
+
+    /// The group inside the group `outer`.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn __in_group(mut self, outer: &str) -> Self {
+        let inner = format!("config.{}", self.key);
+        self.key = format!("{outer}.{}", self.key);
+        if self.text == inner {
+            self.text = format!("config.{}", self.key);
+        }
+        self
+    }
+}
+
+/// The value at `key` of `settings`, a dotted key reaching into tables:
+/// `comfort.multiplier` is `multiplier` in `[comfort]`.
+///
+/// # Examples
+///
+/// ```
+/// let settings: toml::Table = toml::from_str("limit = 4\n[comfort]\nmultiplier = 2.0\n")?;
+/// let at = |key| enshwick::config::value_at(&settings, key).cloned();
+/// assert_eq!(at("comfort.multiplier"), Some(toml::Value::Float(2.0)));
+/// assert_eq!(at("limit"), Some(toml::Value::Integer(4)));
+/// assert_eq!(at("comfort.missing"), None);
+/// # Ok::<(), toml::de::Error>(())
+/// ```
+#[must_use]
+pub fn value_at<'a>(settings: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+    let mut parts = key.split('.');
+    let mut value = settings.get(parts.next()?)?;
+    for part in parts {
+        value = value.as_table()?.get(part)?;
+    }
+    Some(value)
 }
 
 impl Schema {
@@ -819,7 +960,44 @@ impl Schema {
             doc: doc.trim().to_owned(),
             text: text.to_owned(),
             fields,
+            groups: Vec::new(),
         }
+    }
+
+    /// The schema with `groups`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Field, Group, Schema, Stage};
+    ///
+    /// let multiplier = Field::new("comfort.multiplier", Stage::Runtime, &1.0);
+    /// let schema = Schema::new("", "config", vec![multiplier])
+    ///     .with_groups(vec![Group::new("comfort", "Comfort rules.")]);
+    /// assert_eq!(schema.groups[0].key, "comfort");
+    /// ```
+    #[must_use]
+    pub fn with_groups(mut self, groups: Vec<Group>) -> Self {
+        self.groups = groups;
+        self
+    }
+
+    /// The group a field with key `key` belongs to, if any.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::{Group, Schema};
+    ///
+    /// let schema = Schema::new("", "config", vec![])
+    ///     .with_groups(vec![Group::new("comfort", "")]);
+    /// assert_eq!(schema.group_of("comfort.multiplier").map(|g| g.key.as_str()), Some("comfort"));
+    /// assert!(schema.group_of("limit").is_none());
+    /// ```
+    #[must_use]
+    pub fn group_of(&self, key: &str) -> Option<&Group> {
+        let (group, _) = key.rsplit_once('.')?;
+        self.groups.iter().find(|g| g.key == group)
     }
 
     /// The field with key `key`.
@@ -875,9 +1053,7 @@ impl Schema {
     /// ```
     pub fn check(&self, settings: &toml::Table) -> Result<(), ConfigError> {
         self.fields.iter().try_for_each(|field| {
-            settings
-                .get(&field.key)
-                .map_or(Ok(()), |value| field.check(value))
+            value_at(settings, &field.key).map_or(Ok(()), |value| field.check(value))
         })
     }
 }
@@ -950,6 +1126,28 @@ impl __Values {
         if let Ok(value) = toml::Value::try_from(value) {
             self.0.insert(key.to_owned(), value);
         }
+    }
+
+    /// Adds the values `text` of the group `key`, an inline table as
+    /// [`finish`](Self::finish) writes it.
+    ///
+    /// # Errors
+    ///
+    /// [`ConfigError::Parse`] when `text` is not one.
+    pub fn put_group(&mut self, key: &str, text: &str) -> Result<(), ConfigError> {
+        let group = Self::parse(text)?;
+        self.0.insert(key.to_owned(), toml::Value::Table(group.0));
+        Ok(())
+    }
+
+    /// The values of the group `key` as an inline table, `None` when it is
+    /// absent.
+    #[must_use]
+    pub fn group(&self, key: &str) -> Option<String> {
+        self.0
+            .get(key)
+            .and_then(toml::Value::as_table)
+            .map(|table| toml::Value::Table(table.clone()).to_string())
     }
 
     /// The values as an inline table, keys sorted.
@@ -1088,7 +1286,7 @@ mod tests {
 
     /// Staged settings.
     #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]
-    #[config(text = "safes.config")]
+    #[config(text = "lockers.config")]
     struct Staged {
         /// How many, read when the world loads.
         #[config(startup, range = 1..=16)]
@@ -1097,7 +1295,7 @@ mod tests {
         #[config(restart)]
         workers: u8,
         /// The mode.
-        #[config(choices = ["auto", "on"], text = "safes.mode")]
+        #[config(choices = ["auto", "on"], text = "lockers.mode")]
         mode: String,
         /// This player's own.
         #[config(client, range = 0.0..)]
@@ -1164,7 +1362,7 @@ mod tests {
 
         let schema = Staged::schema();
         assert_eq!(schema.doc, "Staged settings.");
-        assert_eq!(schema.text, "safes.config");
+        assert_eq!(schema.text, "lockers.config");
         let limit = schema.field("limit").unwrap();
         assert_eq!(
             (limit.stage, limit.kind, limit.min, limit.max),
@@ -1178,7 +1376,7 @@ mod tests {
         let mode = schema.field("mode").unwrap();
         assert_eq!(mode.stage, Stage::Runtime);
         assert_eq!(mode.choices, ["\"auto\"", "\"on\""]);
-        assert_eq!(mode.text, "safes.mode");
+        assert_eq!(mode.text, "lockers.mode");
         let volume = schema.field("volume").unwrap();
         assert_eq!(
             (volume.stage, volume.min, volume.max),

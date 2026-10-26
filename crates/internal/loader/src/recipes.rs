@@ -37,7 +37,8 @@ pub const TEMPLATE: &str = r#"# Recipes nobody crafts in this game. They leave e
 # applies over this file. Changes apply within a second.
 #
 # recipes names a recipe by its debug name (Tool_Torch01_T0_PK), a mod's
-# recipe by its content id (safes:safe.recipe), any recipe by its GUID.
+# recipe by its content id (you.lanterns:lantern.recipe), any recipe by its
+# GUID.
 # outputs disables every recipe that makes an item, named the same ways.
 # workshops disables every recipe made at a workshop: "hand", or the debug
 # name of the station's or the survivor's item (Craftingstation_Workbench,
@@ -723,6 +724,18 @@ mod tests {
     }
 
     #[test]
+    fn the_content_id_example_in_the_template_names_a_full_mod_id() {
+        let example = TEMPLATE
+            .split_once("content id (")
+            .and_then(|(_, rest)| rest.split_once(')'))
+            .unwrap()
+            .0;
+        let (owner, name) = example.split_once(':').unwrap();
+        assert!(enshwick::abi::is_valid_id(owner), "{example}");
+        assert!(!name.is_empty());
+    }
+
+    #[test]
     fn rules_name_recipes_by_name_guid_output_and_workshop() {
         let (index, names) = (index(), names());
         let ids = |kind: Kind, name: &str| resolve(&rule(kind, name), &index, &names);
@@ -804,19 +817,19 @@ mod tests {
 
     #[test]
     fn a_mods_copy_goes_by_its_content_id_and_leaves_the_vanilla_name_alone() {
-        let safe = Guid::named("safes:safe");
-        let copy = Guid::named("safes:safe.recipe");
+        let lantern = Guid::named("you.lanterns:lantern");
+        let copy = Guid::named("you.lanterns:lantern.recipe");
         let mut recipes = index().recipes;
         recipes.push(Recipe {
             guid: copy,
             id: copy.id(),
             name: "Block_Wood".to_owned(),
-            outputs: vec![safe.id()],
+            outputs: vec![lantern.id()],
             workshop: BENCH,
         });
         let content: HashMap<u32, String> = [
-            (copy.id(), "safes:safe.recipe".to_owned()),
-            (safe.id(), "safes:safe".to_owned()),
+            (copy.id(), "you.lanterns:lantern.recipe".to_owned()),
+            (lantern.id(), "you.lanterns:lantern".to_owned()),
         ]
         .into();
         let index = Index::new(recipes).with_content(&content);
@@ -826,14 +839,20 @@ mod tests {
             Ok(vec![3])
         );
         assert_eq!(
-            resolve(&rule(Kind::Recipe, "safes:safe.recipe"), &index, &names),
+            resolve(
+                &rule(Kind::Recipe, "you.lanterns:lantern.recipe"),
+                &index,
+                &names
+            ),
             Ok(vec![copy.id()])
         );
-        let found = find(&index, &names, "safe");
+        let found = find(&index, &names, "lantern");
         assert_eq!(found.len(), 1);
         assert_eq!(
             describe(found[0], &names),
-            format!("safes:safe.recipe ({copy}) at Craftingstation_Workbench, makes safes:safe")
+            format!(
+                "you.lanterns:lantern.recipe ({copy}) at Craftingstation_Workbench, makes you.lanterns:lantern"
+            )
         );
     }
 

@@ -28,7 +28,7 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = BONUS.set(load.item_data("bonus")?);
-            let _first = SHARED.set(load.item_data("survivors-per-altar:charges")?);
+            let _first = SHARED.set(load.item_data("you.lanterns:oil")?);
             Ok(Self)
         }
     }
@@ -38,7 +38,7 @@ mod tests {
     #[test]
     fn values_stay_with_their_item() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Rings)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (bonus, shared) = (BONUS.get().unwrap(), SHARED.get().unwrap());
@@ -61,7 +61,7 @@ mod tests {
         shared.set(ring, &3).unwrap();
         assert_eq!(shared.get(ring), Some(3));
         let kinds: Vec<String> = loader.item_data().into_iter().map(|v| v.0).collect();
-        assert_eq!(kinds, ["test.fake:bonus", "survivors-per-altar:charges"]);
+        assert_eq!(kinds, ["test.fake:bonus", "you.lanterns:oil"]);
         let long = Bonus {
             fire: 0,
             by: "x".repeat(600),

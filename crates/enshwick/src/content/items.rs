@@ -74,10 +74,10 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// use enshwick::content::items::NewItem;
 ///
 /// let item = NewItem::new(
-///     Id::new("safes:safe"),
+///     Id::new("you.lockers:locker"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
 /// );
-/// assert_eq!(item.debug_name, "safes:safe");
+/// assert_eq!(item.debug_name, "you.lockers:locker");
 /// assert!(item.meter.is_none() && item.stats.is_empty());
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -397,7 +397,7 @@ const VARIANT: usize = 12;
 ///     ui_values: 0x88, icon_image: 0x58, ui_value: [0x28, 0, 4, 8, 0x24], refs: 0, names: 0x38,
 /// };
 /// let item = NewItem::new(
-///     Id::new("safes:safe"),
+///     Id::new("you.lockers:locker"),
 ///     Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
 /// );
 /// let vanilla = [0u8; 0x90];
@@ -621,7 +621,7 @@ impl Load<'_> {
     ///     load.add_item(NewItem {
     ///         meter: Some(Meter { template: Id::new("my-mod:charges"), max: 3, start: 3 }),
     ///         ..NewItem::new(
-    ///             Id::new("my-mod:charged-safe"),
+    ///             Id::new("my-mod:charged-locker"),
     ///             Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"),
     ///         )
     ///     })

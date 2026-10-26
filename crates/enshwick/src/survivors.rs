@@ -2,9 +2,9 @@
 //! survivor", their beds, summoning staffs and the client's survivor menu.
 //!
 //! The game keeps one entity per survivor and asks for it from many systems.
-//! A mod that keeps several entities of a survivor, such as one per base,
-//! answers each asker with the one that suits it; the platform tells the
-//! askers apart and reads what they work on. Cells are whole 0.5 m cells, as
+//! A mod that keeps several entities of a survivor answers each asker with
+//! the one that suits it; the platform tells the askers apart and reads what
+//! they work on. Cells are whole 0.5 m cells, as
 //! in [`altars`](crate::altars).
 //!
 //! # Examples
@@ -140,12 +140,12 @@ impl Lookup {
     /// use enshwick::ecs::Entity;
     /// use enshwick::survivors::{Answer, Lookup, Purpose};
     ///
-    /// fn previous(lookup: &Lookup, copies: &[Entity]) -> Answer {
+    /// fn previous(lookup: &Lookup, entities: &[Entity]) -> Answer {
     ///     match lookup.purpose {
-    ///         Purpose::PreviousOccupant { bed, .. } => copies
+    ///         Purpose::PreviousOccupant { bed, .. } => entities
     ///             .iter()
-    ///             .find(|&&copy| lookup.bed_of(copy) == Some(bed))
-    ///             .map_or(Answer::Nobody, |&copy| Answer::Entity(copy)),
+    ///             .find(|&&entity| lookup.bed_of(entity) == Some(bed))
+    ///             .map_or(Answer::Nobody, |&entity| Answer::Entity(entity)),
     ///         _ => Answer::Vanilla,
     ///     }
     /// }
@@ -326,10 +326,14 @@ where
 ///
 /// # Safety
 ///
-/// `summon` is null or valid for the call.
+/// - `summon` is null, or points at a summon the loader wrote, readable for
+///   the size its header states.
+/// - No other thread writes that summon during the call.
 unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
-    // SAFETY: forwarded from the caller; the fields up to the target are
-    // there since minor 16.
+    // SAFETY: `read_headed` needs `summon` null or readable for its header's
+    // size with no concurrent writer, which this function's `# Safety`
+    // bullets guarantee; the fields up to the target are there since minor
+    // 16.
     let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
     Some(Summon::from_raw(&raw))
 }

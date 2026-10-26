@@ -51,8 +51,9 @@ impl Installed {
     ///
     /// # Safety
     ///
-    /// `data` is what the loader passes with `event`: null or the event's
-    /// data struct, valid for the call.
+    /// - `data` is null when the loader passes no data with `event`, and
+    ///   otherwise points at the data struct the loader passes with it.
+    /// - That struct is readable, aligned and unchanged for the call.
     ///
     /// # Examples
     ///
@@ -74,8 +75,9 @@ impl Installed {
                 .collect()
         });
         for &(callback, user) in &handlers {
-            // SAFETY: `data` is valid as the caller guarantees, and `user` is
-            // the pointer the mod subscribed with.
+            // SAFETY: the caller guarantees `data` is null or the event's data
+            // struct, readable for the call; `user` is the pointer the mod
+            // subscribed `callback` with.
             unsafe { callback(event, data, core::ptr::with_exposed_provenance_mut(user)) };
         }
         handlers.len()

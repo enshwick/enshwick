@@ -47,7 +47,7 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 /// use enshwick::mods::LOADER_FILES;
 ///
 /// let taken = |file: &str| LOADER_FILES.contains(&file);
-/// assert!(taken("powrprof.dll") && !taken("mods/enshwick-safes.dll"));
+/// assert!(taken("powrprof.dll") && !taken("mods/trading_post.dll"));
 /// ```
 pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 
@@ -73,7 +73,7 @@ pub struct ModEntry {
     /// Whether the mod runs: not refused at init and not faulted since.
     pub running: bool,
     /// The DLL's path relative to the game's folder, with `/` separators,
-    /// such as `mods/enshwick_safes.dll`. Empty in [`join_missing`] for a
+    /// such as `mods/trading_post.dll`. Empty in [`join_missing`] for a
     /// mod this client does not have.
     pub file: String,
     /// The name players read; empty when the manifest names none. In
@@ -101,8 +101,8 @@ impl Default for ModEntry {
     /// ```
     /// use enshwick::mods::ModEntry;
     ///
-    /// let safes = ModEntry { id: "safes".into(), ..ModEntry::default() };
-    /// assert_eq!(safes.label(), "safes");
+    /// let post = ModEntry { id: "you.trading-post".into(), ..ModEntry::default() };
+    /// assert_eq!(post.label(), "you.trading-post");
     /// ```
     fn default() -> Self {
         Self {
@@ -149,8 +149,8 @@ impl ModEntry {
 /// ```
 /// use enshwick::mods::label;
 ///
-/// assert_eq!(label("Safes", "safes"), "Safes");
-/// assert_eq!(label("", "safes"), "safes");
+/// assert_eq!(label("Trading Post", "you.trading-post"), "Trading Post");
+/// assert_eq!(label("", "you.trading-post"), "you.trading-post");
 /// ```
 #[must_use]
 pub fn label(name: &str, id: &str) -> String {
@@ -295,7 +295,9 @@ impl Host {
         infos.truncate(count as usize);
         infos
             .iter()
-            // SAFETY: the loader keeps every string it lists for the process.
+            // SAFETY: `list` filled `count` entries, and the loader keeps every
+            // string and author array it lists alive and unchanged for the
+            // process, past this call.
             .filter_map(|info| unsafe { entry(info) })
             .collect()
     }
@@ -310,22 +312,34 @@ type Listing = extern "system" fn(
     count: *mut u32,
 ) -> crate::abi::Status;
 
+/// An owned copy of one listed mod; `None` when its id, version or file is
+/// not UTF-8.
+///
 /// # Safety
 ///
-/// The info's strings are valid for the call.
+/// - Every [`Str`] in `info` is null or points at `len` bytes that stay alive
+///   and unchanged for the call.
+/// - `info.authors` is null or points at `author_count` initialised [`Str`]s,
+///   each meeting the bullet above, alive for the call.
 unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller keeps the id's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let id = unsafe { info.id.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: the caller keeps the version's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let version = unsafe { info.version.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: the caller keeps the file's bytes alive and unchanged for the
+    // call, and the text is copied before it returns.
     let file = unsafe { info.file.as_str() }?;
-    // SAFETY: as above.
+    // SAFETY: every `Str` this closure is given is one of `info`'s or one of
+    // its authors, whose bytes the caller keeps alive and unchanged for the
+    // call; the text is copied at once.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().to_owned();
     let authors = if info.authors.is_null() {
         &[][..]
     } else {
-        // SAFETY: the loader points at `author_count` strings it keeps.
+        // SAFETY: the caller guarantees a non-null `authors` points at
+        // `author_count` initialised `Str`s alive for the call.
         unsafe { core::slice::from_raw_parts(info.authors, info.author_count) }
     };
     let (name, description, authors, license, homepage) = (
@@ -361,13 +375,13 @@ mod tests {
     fn entries_read_back() {
         let info = ModInfo {
             header: Header::of::<ModInfo>(),
-            id: Str::new("safes"),
+            id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::BOTH,
             flags: ManifestFlags::JOIN,
             off: 1,
-            file: Str::new("mods/enshwick_safes.dll"),
-            name: Str::new("Safes"),
+            file: Str::new("mods/trading_post.dll"),
+            name: Str::new("Trading Post"),
             description: Str::new("A chest only its owner opens"),
             authors: AUTHORS.as_ptr(),
             author_count: AUTHORS.len(),
@@ -375,12 +389,13 @@ mod tests {
             homepage: Str::EMPTY,
             replaced_by: Str::EMPTY,
         };
-        // SAFETY: static strings.
+        // SAFETY: every `Str` in `info` and `AUTHORS` points at a static
+        // string, alive and unchanged for the process.
         let entry = unsafe { entry(&info) }.unwrap();
         assert!(entry.join);
         assert!(!entry.running);
-        assert_eq!(entry.file, "mods/enshwick_safes.dll");
-        assert_eq!(entry.label(), "Safes");
+        assert_eq!(entry.file, "mods/trading_post.dll");
+        assert_eq!(entry.label(), "Trading Post");
         assert_eq!(entry.authors, ["themaiby", "someone"]);
         assert_eq!(entry.license, "MIT");
     }

@@ -19,8 +19,11 @@ const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
 ///
 /// # Safety
 ///
-/// `raw` is null or points at the mod's manifest, readable for the size its
-/// header says.
+/// - `raw` is null or points at the mod's manifest, readable for the size its
+///   header says; no alignment is needed.
+/// - Every string and list the manifest points at is readable and unchanged
+///   for the call.
+/// - No other thread writes the manifest during the call.
 ///
 /// # Errors
 ///
@@ -29,9 +32,12 @@ pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, String> {
     if raw.is_null() {
         return Err("the manifest is missing".into());
     }
-    // SAFETY: forwarded from the caller; an all-zero manifest is valid.
+    // SAFETY: `raw` is non-null, checked just before, and the caller
+    // guarantees it readable for the size its header says, with no
+    // concurrent writer.
     let manifest = unsafe { read_headed(raw, REQUIRED) }.ok_or("the manifest is truncated")?;
-    // SAFETY: the manifest's pointers are valid as the caller says.
+    // SAFETY: `manifest` copies the mod's pointers, and the caller guarantees
+    // every string and list they point at readable and unchanged for the call.
     Ok(Box::leak(Box::new(unsafe { own(manifest) })))
 }
 
@@ -42,10 +48,14 @@ pub unsafe fn read(raw: *const Manifest) -> Result<&'static Manifest, String> {
 ///
 /// # Safety
 ///
-/// Every pointer and string in `manifest` is valid for the call.
+/// - Every string in `manifest`, its dependencies, build rows and authors
+///   is readable for its length and unchanged for the call.
+/// - Every list pointer in them is null or points at its count of aligned
+///   entries, readable and unchanged for the call.
 unsafe fn own(mut manifest: Manifest) -> Manifest {
     fn text(s: Str) -> Str {
-        // SAFETY: the caller keeps the string valid for the call.
+        // SAFETY: `text` runs only inside `own`, on strings of its manifest,
+        // which `own`'s caller guarantees readable and unchanged for the call.
         match unsafe { s.as_str() } {
             Some(text) => Str::new(Box::leak(text.to_owned().into_boxed_str())),
             None => s,
@@ -55,7 +65,10 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
         if ptr.is_null() || count == 0 {
             return ptr;
         }
-        // SAFETY: the caller keeps `count` entries at `ptr` valid for the call.
+        // SAFETY: `ptr` is non-null and `count` nonzero, checked just before;
+        // `list` runs only inside `own`, on lists of its manifest, which `own`'s
+        // caller guarantees hold `count` aligned entries, readable and
+        // unchanged for the call.
         let items = unsafe { core::slice::from_raw_parts(ptr, count) };
         let owned: Vec<T> = items.iter().map(|&item| each(item)).collect();
         Box::leak(owned.into_boxed_slice()).as_ptr()
@@ -93,7 +106,10 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
 ///
 /// # Safety
 ///
-/// `manifest` and every pointer and string in it are valid for the call.
+/// - Every string in `manifest` and its dependencies is readable for its
+///   length and unchanged for the call.
+/// - `dependencies` is null or points at `dependency_count` aligned
+///   entries, readable and unchanged for the call.
 ///
 /// # Errors
 ///
@@ -117,7 +133,8 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     if !manifest.header.covers(REQUIRED) {
         return Err("the manifest is truncated".into());
     }
-    // SAFETY: the caller keeps the manifest's strings alive for the call.
+    // SAFETY: the caller guarantees the manifest's strings readable and
+    // unchanged for the call.
     let id = unsafe { manifest.id.as_str() }.ok_or("the id is not UTF-8")?;
     if id == crate::settings::LOADER_ID {
         return Err(format!("the id {id:?} is the loader's own"));
@@ -129,7 +146,8 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
             "the id {id:?} is not <author>.<name>, each of [a-z0-9-]"
         ));
     }
-    // SAFETY: as above.
+    // SAFETY: the caller guarantees the manifest's strings readable and
+    // unchanged for the call.
     let version = unsafe { manifest.version.as_str() }.ok_or("the version is not UTF-8")?;
     let version: Version = version
         .parse()
@@ -140,12 +158,15 @@ pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, String> {
     let raw = if manifest.dependencies.is_null() || manifest.dependency_count == 0 {
         &[][..]
     } else {
-        // SAFETY: the manifest points at `dependency_count` entries.
+        // SAFETY: `dependencies` is non-null and the count nonzero, checked
+        // just before; the caller guarantees `dependency_count` aligned entries
+        // there, readable and unchanged for the call.
         unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
     };
     let dependencies = raw
         .iter()
-        // SAFETY: as above, for every dependency's strings.
+        // SAFETY: the caller guarantees every dependency's strings readable
+        // and unchanged for the call.
         .map(|d| unsafe { dependency(d) })
         .collect::<Result<_, _>>()?;
     Ok(Candidate {
@@ -202,19 +223,24 @@ impl Meta {
 ///
 /// # Safety
 ///
-/// `manifest` and every pointer and string in it are valid for the call.
+/// - Every string in `manifest` is readable for its length and unchanged
+///   for the call.
+/// - `authors` is null or points at `author_count` aligned strings, readable
+///   and unchanged for the call.
 #[must_use]
 pub unsafe fn meta(manifest: &Manifest) -> Meta {
     let end = core::mem::offset_of!(Manifest, homepage) + size_of::<Str>();
     if !manifest.header.covers(end) {
         return Meta::default();
     }
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the closure reads only the manifest's own strings and its
+    // authors, which the caller guarantees readable and unchanged for the call.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().trim().to_owned();
     let authors = if manifest.authors.is_null() {
         &[][..]
     } else {
-        // SAFETY: the manifest points at `author_count` names.
+        // SAFETY: `authors` is non-null, checked just before; the caller
+        // guarantees `author_count` aligned strings there for the call.
         unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
     };
     let homepage = text(&manifest.homepage);
@@ -237,11 +263,13 @@ pub unsafe fn meta(manifest: &Manifest) -> Meta {
 
 /// # Safety
 ///
-/// The dependency's strings are valid for the call.
+/// - The dependency's `id` and `range` are readable for their lengths and
+///   unchanged for the call.
 unsafe fn dependency(raw: &Dependency) -> Result<resolve::Dependency, String> {
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `id` readable and unchanged for the call.
     let id = unsafe { raw.id.as_str() }.ok_or("a dependency id is not UTF-8")?;
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees `range` readable and unchanged for the
+    // call.
     let range = unsafe { raw.range.as_str() }.ok_or("a version range is not UTF-8")?;
     let range = if range.is_empty() {
         None
@@ -282,7 +310,7 @@ mod tests {
     use super::*;
 
     static DEPENDENCIES: [Dependency; 1] = [Dependency {
-        id: Str::new("flame-altar-zones"),
+        id: Str::new("you.lockers"),
         range: Str::new("^0.1"),
         relation: Relation::REQUIRES,
     }];
@@ -312,22 +340,24 @@ mod tests {
 
     #[test]
     fn metadata_is_read_and_cleaned() {
-        let mut m = manifest("you.safes", "0.1.0");
-        m.name = Str::new("Safes");
+        let mut m = manifest("you.trading-post", "0.1.0");
+        m.name = Str::new("Trading Post");
         m.description = Str::new(" A chest only its owner opens ");
         m.authors = AUTHORS.as_ptr();
         m.author_count = AUTHORS.len();
         m.license = Str::new("MIT");
         m.homepage = Str::new("github.com/enshwick/enshwick");
-        // SAFETY: static data.
+        // SAFETY: every string and list in `m` points at `'static` literals
+        // and statics, readable and never written.
         let meta = unsafe { meta(&m) };
-        assert_eq!(meta.label("safes"), "Safes");
+        assert_eq!(meta.label("you.trading-post"), "Trading Post");
         assert_eq!(meta.description, "A chest only its owner opens");
         assert_eq!(meta.authors, ["themaiby"]);
         assert!(meta.homepage.is_empty());
         assert_eq!(meta.credits(), "by themaiby; MIT");
         m.header.size = u32::try_from(core::mem::offset_of!(Manifest, name)).unwrap();
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         assert_eq!(unsafe { super::meta(&m) }, Meta::default());
     }
 
@@ -369,7 +399,7 @@ mod tests {
     fn a_manifest_of_an_older_minor_loads_with_defaults() {
         let old = Minor4 {
             header: header_of::<Minor4>(),
-            id: Str::new("safes"),
+            id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::BOTH,
             flags: ManifestFlags::JOIN,
@@ -378,12 +408,14 @@ mod tests {
             builds: core::ptr::null(),
             build_count: 0,
         };
-        // SAFETY: a valid manifest as long as its header says.
+        // SAFETY: `old` is a local manifest readable for the size its header
+        // says, its strings and lists pointing at `'static` data.
         let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
         assert!(manifest.name.is_empty());
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let candidate = unsafe { parse(manifest) }.unwrap();
-        assert_eq!(candidate.id, "safes");
+        assert_eq!(candidate.id, "you.trading-post");
         assert_eq!(candidate.dependencies.len(), 1);
     }
 
@@ -391,18 +423,20 @@ mod tests {
     fn a_manifest_without_builds_loads_with_none() {
         let old = Oldest {
             header: header_of::<Oldest>(),
-            id: Str::new("safes"),
+            id: Str::new("you.trading-post"),
             version: Str::new("0.1.0"),
             side: Side::SERVER,
             flags: ManifestFlags::NONE,
             dependencies: core::ptr::null(),
             dependency_count: 0,
         };
-        // SAFETY: a valid manifest as long as its header says.
+        // SAFETY: `old` is a local manifest readable for the size its header
+        // says, its strings and lists pointing at `'static` data.
         let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
         assert!(manifest.builds.is_null());
         assert_eq!(manifest.build_count, 0);
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let candidate = unsafe { parse(manifest) }.unwrap();
         assert_eq!(candidate.side, Side::SERVER);
         assert!(candidate.dependencies.is_empty());
@@ -410,13 +444,14 @@ mod tests {
 
     #[test]
     fn a_manifest_shorter_than_every_minor_is_refused() {
-        let mut short = manifest("you.safes", "0.1.0");
+        let mut short = manifest("you.trading-post", "0.1.0");
         short.header.size =
             u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
-        // SAFETY: a valid manifest.
+        // SAFETY: `short` is a whole local manifest, its strings and lists
+        // pointing at `'static` data.
         let reason = unsafe { read(&raw const short) }.unwrap_err();
         assert!(reason.contains("truncated"), "{reason}");
-        // SAFETY: null is refused.
+        // SAFETY: `read` returns an error for a null pointer before it reads.
         assert!(unsafe { read(core::ptr::null()) }.is_err());
     }
 
@@ -428,22 +463,25 @@ mod tests {
             appended: u64,
         }
         let mut newer = Newer {
-            manifest: manifest("you.safes", "0.1.0"),
+            manifest: manifest("you.trading-post", "0.1.0"),
             appended: 1,
         };
         newer.manifest.header.size = u32::try_from(size_of::<Newer>()).unwrap();
-        // SAFETY: a valid manifest as long as its header says.
+        // SAFETY: `newer` is a local manifest readable for the size its header
+        // says, its strings and lists pointing at `'static` data.
         let manifest = unsafe { read((&raw const newer).cast()) }.unwrap();
-        // SAFETY: static data.
-        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "you.safes");
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        assert_eq!(unsafe { parse(manifest) }.unwrap().id, "you.trading-post");
         assert_eq!(newer.appended, 1);
     }
 
     #[test]
     fn a_good_manifest_parses() {
-        // SAFETY: static data.
-        let candidate = unsafe { parse(&manifest("you.survivors-per-altar", "0.1.2")) }.unwrap();
-        assert_eq!(candidate.id, "you.survivors-per-altar");
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
+        let candidate = unsafe { parse(&manifest("you.market-stalls", "0.1.2")) }.unwrap();
+        assert_eq!(candidate.id, "you.market-stalls");
         assert_eq!(candidate.version, Version::new(0, 1, 2));
         assert_eq!(
             candidate.dependencies[0].range,
@@ -453,18 +491,22 @@ mod tests {
 
     #[test]
     fn bad_manifests_say_why() {
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let id = unsafe { parse(&manifest("Bad Id", "0.1.0")) }.unwrap_err();
         assert!(id.contains("not <author>.<name>"), "{id}");
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let version = unsafe { parse(&manifest("you.ok", "one")) }.unwrap_err();
         assert!(version.starts_with("version"), "{version}");
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let loader = unsafe { parse(&manifest("enshwick", "0.1.0")) }.unwrap_err();
         assert!(loader.contains("loader's own"), "{loader}");
         let mut other = manifest("you.ok", "0.1.0");
         other.header.abi_major = ABI_MAJOR + 1;
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let major = unsafe { parse(&other) }.unwrap_err();
         assert!(major.contains(&format!("ABI {}", ABI_MAJOR + 1)), "{major}");
     }
@@ -472,7 +514,7 @@ mod tests {
     #[test]
     fn a_former_id_parses_and_the_loader_s_own_id_is_never_taken_over() {
         static FORMER: [Dependency; 1] = [Dependency {
-            id: Str::new("survivors"),
+            id: Str::new("market-stalls"),
             range: Str::EMPTY,
             relation: Relation::WAS,
         }];
@@ -481,13 +523,15 @@ mod tests {
             range: Str::EMPTY,
             relation: Relation::REPLACES,
         }];
-        let mut renamed = manifest("you.survivors-per-altar", "0.2.0");
+        let mut renamed = manifest("you.market-stalls", "0.2.0");
         renamed.dependencies = FORMER.as_ptr();
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let candidate = unsafe { parse(&renamed) }.unwrap();
         assert_eq!(candidate.dependencies[0].relation, Relation::WAS);
         renamed.dependencies = LOADER.as_ptr();
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let why = unsafe { parse(&renamed) }.unwrap_err();
         assert!(why.contains("loader's own"), "{why}");
     }
@@ -496,10 +540,12 @@ mod tests {
     fn an_id_without_an_author_loads_only_from_an_older_minor() {
         let mut old = manifest("lanterns", "0.1.0");
         old.header.abi_minor = AUTHOR_IDS - 1;
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         assert_eq!(unsafe { parse(&old) }.unwrap().id, "lanterns");
         old.header.abi_minor = AUTHOR_IDS;
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let why = unsafe { parse(&old) }.unwrap_err();
         assert!(why.contains("not <author>.<name>"), "{why}");
     }
@@ -508,12 +554,14 @@ mod tests {
     fn a_mod_of_a_newer_minor_is_refused_and_an_older_one_loads() {
         let mut newer = manifest("you.ok", "0.1.0");
         newer.header.abi_minor = ABI_MINOR + 1;
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         let why = unsafe { parse(&newer) }.unwrap_err();
         assert!(why.contains("update Enshwick"), "{why}");
         let mut older = manifest("you.ok", "0.1.0");
         older.header.abi_minor = ABI_MINOR - 1;
-        // SAFETY: static data.
+        // SAFETY: every string and list in the manifest points at `'static`
+        // literals and statics, readable and never written.
         assert!(unsafe { parse(&older) }.is_ok());
     }
 }

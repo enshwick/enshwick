@@ -17,6 +17,8 @@ use enshwick::abi::{
 };
 use enshwick::altars::cell_of_fixed;
 
+use enshwick::raw::{read_at, read_ptr_at, write_at};
+
 use crate::chains::Next;
 use crate::ecs::Engine;
 use crate::host::{Loader, Registered, take};
@@ -94,41 +96,41 @@ const UI_PLAY_DATA: usize = 5;
 
 #[derive(Debug, Clone, Copy)]
 struct Callers {
-    spawn: u64,
-    unique: [u64; 2],
-    bed: u64,
-    bed_init: u64,
-    cursor: [u64; 2],
+    spawn: usize,
+    unique: [usize; 2],
+    bed: usize,
+    bed_init: usize,
+    cursor: [usize; 2],
     /// The cursor site a client alone asks about; 0 on the server.
-    client_cursor: u64,
-    assign: [u64; 2],
-    roaming: u64,
+    client_cursor: usize,
+    assign: [usize; 2],
+    roaming: usize,
 }
 
 /// Offsets in the callers' frames, the behaviour context and the requests.
 #[derive(Debug, Clone, Copy)]
 struct Offsets {
-    unique_context: u64,
-    unique_saved_state: u64,
-    unique_transform: u64,
-    bed_transform: u64,
-    npc_common_bed: u64,
-    assign_context: u64,
-    assign_targets: u64,
-    assign_bed: u64,
-    roaming_context: u64,
-    spawn_target: u64,
-    move_survivor: u64,
-    npc_transform: u64,
-    npc_saved_state: u64,
-    npc_common: u64,
-    npc_state: u64,
-    spawn_template: u64,
-    spawn_used_slot: u64,
-    spawn_used_item: u64,
-    spawn_used_pide: u64,
-    spawn_ammo_item: u64,
-    spawn_consume: u64,
+    unique_context: usize,
+    unique_saved_state: usize,
+    unique_transform: usize,
+    bed_transform: usize,
+    npc_common_bed: usize,
+    assign_context: usize,
+    assign_targets: usize,
+    assign_bed: usize,
+    roaming_context: usize,
+    spawn_target: usize,
+    move_survivor: usize,
+    npc_transform: usize,
+    npc_saved_state: usize,
+    npc_common: usize,
+    npc_state: usize,
+    spawn_template: usize,
+    spawn_used_slot: usize,
+    spawn_used_item: usize,
+    spawn_used_pide: usize,
+    spawn_ammo_item: usize,
+    spawn_consume: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -196,7 +198,7 @@ static TYPE_HASHES: OnceLock<Option<[u32; 2]>> = OnceLock::new();
 static MOVING: Mutex<Option<(u32, u32, Instant)>> = Mutex::new(None);
 static MOVE_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-/// Each copy's survivor id, row order and status, and one survivor's statuses.
+/// Each entity's survivor id, row order and status, and one survivor's statuses.
 type StatusRows = (Vec<(u32, u32, u8)>, Vec<u8>);
 
 thread_local! {
@@ -208,21 +210,37 @@ thread_local! {
     static STATUS_ROWS: RefCell<StatusRows> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `LookupFn` is the exact signature of the game function at the
+// table's `npc.lookup`, and the slot is used only as the `next` of the
+// `lookup_link` link on it.
 static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `LookupFn` is the exact signature of the game function at the
+// table's `npc.lookup_cursor`, and the slot is used only as the `next` of the
+// `cursor_link` link on it.
 static CURSOR_NEXT: Next<LookupFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `MoveFn` is the exact signature of the game function at the
+// table's `npc.move`, and the slot is used only as the `next` of the
+// `move_link` link on it.
 static MOVE_NEXT: Next<MoveFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `UpdateFn` is the exact signature of the game function at the
+// table's `npc.update`, and the slot is used only as the `next` of the
+// `update_link` link on it.
 static UPDATE_NEXT: Next<UpdateFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `BedCheckGameFn` is the exact signature of the game function at the
+// table's `npc.bed_check`, and the slot is used only as the `next` of the
+// `bed_check_link` link on it.
 static BED_CHECK_NEXT: Next<BedCheckGameFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `SpawnFn` is the exact signature of the game function at the
+// table's `survivors.spawn`, and the slot is used only as the `next` of the
+// `spawn_link` link on it.
 static SPAWN_NEXT: Next<SpawnFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `RegistryLoadFn` is the exact signature of the game function at the
+// table's `survivors.registry_load`, and the slot is used only as the `next`
+// of the `registry_link` link on it.
 static REGISTRY_NEXT: Next<RegistryLoadFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `SystemFn` is the exact signature of the reflected ECS system
+// `ui_npc_status`, and the slot is used only as the `next` of the
+// `menu_link` link on its entry.
 static MENU_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
 type LookupFn = unsafe extern "system" fn(bases: *mut u8, npc: *const u32) -> u32;
@@ -239,25 +257,22 @@ fn symbol(loader: &Loader, name: &str) -> Option<u64> {
     loader.address(name)
 }
 
-fn constant(loader: &Loader, name: &str) -> Option<u64> {
-    loader.build.constant(name)
+fn address(loader: &Loader, name: &str) -> Option<usize> {
+    symbol(loader, name).and_then(|v| usize::try_from(v).ok())
 }
 
 fn size(loader: &Loader, name: &str) -> Option<usize> {
-    constant(loader, name).and_then(|v| usize::try_from(v).ok())
-}
-
-unsafe fn function<F: Copy>(address: u64) -> F {
-    let address = usize::try_from(address).unwrap_or(0);
-    // SAFETY: forwarded from the caller; `F` is a function pointer.
-    unsafe { core::mem::transmute_copy(&address) }
+    loader
+        .build
+        .constant(name)
+        .and_then(|v| usize::try_from(v).ok())
 }
 
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
-            let s = |name: &str| symbol(loader, &format!("survivors.{name}"));
-            let c = |name: &str| constant(loader, &format!("survivors.{name}"));
+            let s = |name: &str| address(loader, &format!("survivors.{name}"));
+            let c = |name: &str| size(loader, &format!("survivors.{name}"));
             let client = loader.side == Side::CLIENT;
             Some(Layout {
                 callers: Callers {
@@ -302,9 +317,12 @@ fn item_map(loader: &Loader) -> Option<&'static ItemMap> {
     ITEM_MAP
         .get_or_init(|| {
             let z = |name: &str| size(loader, &format!("survivors.{name}"));
+            let find_slot = address(loader, "survivors.map_find_slot")?;
             Some(ItemMap {
-                // SAFETY: the table pins this id to the map's find-or-free-slot.
-                find_slot: unsafe { function(symbol(loader, "survivors.map_find_slot")?) },
+                // SAFETY: the build table's `survivors.map_find_slot` is the
+                // address of the game function with the `FindSlotFn`
+                // signature on this build.
+                find_slot: unsafe { core::mem::transmute::<usize, FindSlotFn>(find_slot) },
                 loaded: z("registry_loaded")?,
                 at: z("registry_item_map")?,
                 bits: z("map_bits")?,
@@ -320,9 +338,12 @@ fn item_map(loader: &Loader) -> Option<&'static ItemMap> {
 fn menu(loader: &Loader) -> Option<&'static Menu> {
     MENU.get_or_init(|| {
         let z = |name: &str| size(loader, &format!("survivors.{name}"));
+        let template = address(loader, "ecs.template_guid")?;
         Some(Menu {
-            // SAFETY: the table pins this id to the row template lookup.
-            template: unsafe { function(symbol(loader, "ecs.template_guid")?) },
+            // SAFETY: the build table's `ecs.template_guid` is the address of
+            // the game function with the `TemplateFn` signature on this
+            // build.
+            template: unsafe { core::mem::transmute::<usize, TemplateFn>(template) },
             state_status: z("state_status")?,
             map_bits: z("ui_map_bits")?,
             map_capacity: z("ui_map_capacity")?,
@@ -592,8 +613,10 @@ fn learn_types(loader: &Loader) {
     };
     let index = |hash: u32| {
         let (_, index) = crate::world::type_index(loader, hash).ok()?;
-        // SAFETY: the registry's index entry for the type, on the game thread.
-        Some(unsafe { index.read_unaligned() })
+        // SAFETY: `world::type_index` returned the non-null `u16` index entry
+        // of the type in the live registry, read on the game thread after a
+        // step, where nothing writes it.
+        Some(unsafe { read_at::<u16>(index.cast(), 0) })
     };
     let (Some(transform), Some(common)) = (index(hashes[0]), index(hashes[1])) else {
         return;
@@ -613,11 +636,6 @@ pub(crate) fn forget() {
     MOVE_ACTIVE.store(false, Ordering::Release);
 }
 
-unsafe fn read_at<T: Copy>(base: u64, offset: u64) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { (base.wrapping_add(offset) as *const T).read_unaligned() }
-}
-
 /// Asks the registered lookup; `None` for the game's own answer.
 fn ask(call: &SurvivorLookup) -> Option<u32> {
     let registered = SEALED.get()?.lookup?;
@@ -626,8 +644,9 @@ fn ask(call: &SurvivorLookup) -> Option<u32> {
     }
     let mut out = 0u32;
     let user = core::ptr::with_exposed_provenance_mut(registered.user);
-    // SAFETY: the callback lives in the mod's DLL, which stays loaded, and
-    // takes the pointer it registered; the call and `out` are valid for it.
+    // SAFETY: the registered `SurvivorLookupFn` lives in the mod's DLL, which
+    // stays loaded for the process, and takes the `user` word it registered;
+    // `call` and `out` outlive the call.
     let answered = crate::profile::call(
         registered.owner,
         crate::profile::Feature::Survivors,
@@ -653,26 +672,34 @@ fn call(survivor: u32, vanilla: u32, purpose: u32, entity: u32, cell: [i64; 3]) 
 static SURVIVORS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("survivor features");
 
 unsafe extern "system" fn lookup_link(bases: *mut u8, npc: *const u32) -> u32 {
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's own arguments to `npc.lookup`, passed with the rest
+    // of its chain, at the chain's entry on the game's calling thread.
     unsafe { lookup(LOOKUP_NEXT.get(), bases, npc) }
 }
 
 unsafe extern "system" fn cursor_link(bases: *mut u8, npc: *const u32) -> u32 {
-    // SAFETY: as above.
+    // SAFETY: the game's own arguments to `npc.lookup_cursor`, passed with the
+    // rest of its chain, at the chain's entry on the game's calling thread.
     unsafe { lookup(CURSOR_NEXT.get(), bases, npc) }
 }
 
 /// # Safety
 ///
-/// Called from a lookup link with the game's arguments.
+/// - `next` is the rest of the chain of the hooked lookup, and `bases` and
+///   `npc` are the arguments the game passed it.
+/// - `npc` is null or readable for a `u32` survivor id for the call.
+/// - The call runs at the chain's entry, on the thread the game called the
+///   lookup on, so the loader's caller frame is the lookup's.
 unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> u32 {
     let Some(loader) = LOADED.get() else {
-        // SAFETY: the game's arguments.
+        // SAFETY: the caller's contract makes `next` the rest of the chain
+        // and `bases` and `npc` the game's own arguments to it.
         return unsafe { next(bases, npc) };
     };
     // Read the frame before the chain runs: a deeper hook takes its own.
     let frame = (loader.caller_frame)();
-    // SAFETY: the game's arguments.
+    // SAFETY: the caller's contract makes `next` the rest of the chain and
+    // `bases` and `npc` the game's own arguments to it.
     let found = unsafe { next(bases, npc) };
     if npc.is_null() || frame.rsp == 0 {
         return found;
@@ -680,12 +707,18 @@ unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> u32 {
     let (Some(layout), Some(engine)) = (layout(loader), crate::ecs::resolved()) else {
         return found;
     };
-    // SAFETY: the frame was taken at entry of this chain.
-    let caller = unsafe { frame.return_address() };
-    // SAFETY: `npc` points at the survivor id the caller looks up.
-    let survivor = unsafe { npc.read() };
+    // SAFETY: by the caller's contract the frame was taken at this chain's
+    // entry on this thread, so its non-zero `rsp` (checked earlier) points at
+    // the lookup's return address on the live stack.
+    let Ok(caller) = usize::try_from(unsafe { frame.return_address() }) else {
+        return found;
+    };
+    // SAFETY: the caller's contract makes the non-null `npc` (checked earlier)
+    // readable for the `u32` survivor id the game looks up.
+    let survivor: u32 = unsafe { read_at(npc.cast(), 0) };
     let answered = SURVIVORS_FUSE.run("a survivor lookup", || {
-        // SAFETY: the caller's frame, as the loader recorded it.
+        // SAFETY: `frame` is the caller frame of the running lookup, taken at
+        // its chain's entry on this thread, and `caller` its return address.
         unsafe { resolve(loader, layout, engine, found, survivor, caller, &frame) }
     });
     answered.flatten().unwrap_or(found)
@@ -693,7 +726,10 @@ unsafe fn lookup(next: LookupFn, bases: *mut u8, npc: *const u32) -> u32 {
 
 /// # Safety
 ///
-/// `frame` is the caller frame of the running lookup.
+/// - `frame` is the caller frame of the running lookup, taken at its chain's
+///   entry on this thread, and `caller` is its return address.
+/// - The lookup is still running, so the caller's stack and the registers in
+///   `frame` hold what the caller at `caller` keeps there.
 #[expect(clippy::too_many_lines, reason = "one arm per caller")]
 unsafe fn resolve(
     loader: &Loader,
@@ -701,7 +737,7 @@ unsafe fn resolve(
     engine: &Engine,
     found: u32,
     survivor: u32,
-    caller: u64,
+    caller: usize,
     frame: &enshwick::abi::CallerFrame,
 ) -> Option<u32> {
     let c = &layout.callers;
@@ -718,20 +754,30 @@ unsafe fn resolve(
     if !hosting {
         return None;
     }
-    let stack = frame.stack();
+    let stack = usize::try_from(frame.stack()).ok()?;
     if c.unique.contains(&caller) {
-        // SAFETY: the uniqueness pass keeps its context here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.unique_context) };
-        // SAFETY: a live query context.
+        // SAFETY: the caller is the uniqueness pass (return address matched
+        // earlier), running while the lookup runs; it keeps its query context
+        // pointer at the table's `survivors.unique_context` in its stack.
+        let ctx = unsafe { crate::memory::read_ptr::<u64>(stack, o.unique_context) };
+        // SAFETY: `ctx` is null or the uniqueness pass's live query context,
+        // used on its system's thread while the pass runs.
         let me = unsafe { engine.entity(ctx) };
         if me == 0 {
             return None;
         }
-        // SAFETY: the pass keeps its saved state and transform pointers here.
-        let saved: u64 = unsafe { read_at(stack, o.unique_saved_state) };
-        // SAFETY: as above.
-        let transform: u64 = unsafe { read_at(stack, o.unique_transform) };
-        // SAFETY: the entity's components.
+        // SAFETY: the caller is the uniqueness pass, running while the lookup
+        // runs; it keeps the entity's saved state pointer at the table's
+        // `survivors.unique_saved_state` in its stack.
+        let saved =
+            unsafe { crate::memory::read_ptr::<u8>(stack, o.unique_saved_state) }.cast_const();
+        // SAFETY: the caller is the uniqueness pass, running while the lookup
+        // runs; it keeps the entity's transform pointer at the table's
+        // `survivors.unique_transform` in its stack.
+        let transform =
+            unsafe { crate::memory::read_ptr::<u8>(stack, o.unique_transform) }.cast_const();
+        // SAFETY: `saved` and `transform` are null or the entity's live
+        // components, which the uniqueness pass holds while it runs.
         let home = unsafe { home(saved, transform) };
         SKIP_UPDATE.with(|skip| skip.set(None));
         let answer = ask(&call(survivor, found, SurvivorLookup::UNIQUENESS, me, home))?;
@@ -740,9 +786,12 @@ unsafe fn resolve(
         return Some(answer);
     }
     if caller == c.spawn {
-        // SAFETY: the spawn request lies in the caller's `r14`, its target
-        // transform at this offset.
-        let target: [i64; 3] = unsafe { read_at(frame.r14, o.spawn_target) };
+        let request = usize::try_from(frame.r14).ok()?;
+        // SAFETY: the caller is the staff spawn (return address matched
+        // earlier), which holds its live spawn request in `r14` while the
+        // lookup runs; the request keeps its target position at the table's
+        // `survivors.spawn_target`.
+        let target: [i64; 3] = unsafe { crate::memory::read(request, o.spawn_target) };
         let answer = ask(&call(
             survivor,
             found,
@@ -758,12 +807,16 @@ unsafe fn resolve(
         return Some(answer);
     }
     if caller == c.bed {
-        // SAFETY: the bed binding keeps the bed's transform here.
-        let transform: u64 = unsafe { read_at(stack, o.bed_transform) };
-        if transform == 0 {
+        // SAFETY: the caller is the bed binding (return address matched
+        // earlier), running while the lookup runs; it keeps the bed's transform
+        // pointer at the table's `survivors.bed_transform` in its stack.
+        let transform =
+            unsafe { crate::memory::read_ptr::<u8>(stack, o.bed_transform) }.cast_const();
+        if transform.is_null() {
             return None;
         }
-        // SAFETY: the bed's position, 32.32 fixed point.
+        // SAFETY: `transform` is the bed's non-null live transform (checked
+        // earlier), which starts with its 32.32 fixed-point position.
         let position: [i64; 3] = unsafe { read_at(transform, 0) };
         return ask(&call(
             survivor,
@@ -787,22 +840,33 @@ unsafe fn resolve(
         return None;
     }
     let (ctx, entity) = if roaming {
-        // SAFETY: the idle behaviour keeps its context here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.roaming_context) };
-        // SAFETY: a live query context.
+        // SAFETY: the caller is the idle behaviour (return address matched
+        // earlier), running while the lookup runs; it keeps its query context
+        // pointer at the table's `survivors.roaming_context` in its stack.
+        let ctx = unsafe { crate::memory::read_ptr::<u64>(stack, o.roaming_context) };
+        // SAFETY: `ctx` is null or the idle behaviour's live query context,
+        // used on its system's thread while it runs.
         (ctx, unsafe { engine.entity(ctx) })
     } else {
-        // SAFETY: the assignment keeps its context and targets here.
-        let ctx: *mut u64 = unsafe { read_at(stack, o.assign_context) };
-        // SAFETY: as above.
-        let targets: u64 = unsafe { read_at(stack, o.assign_targets) };
-        if targets == 0 {
+        // SAFETY: the caller is a bed assignment (return address matched
+        // earlier), running while the lookup runs; it keeps its query context
+        // pointer at the table's `survivors.assign_context` in its stack.
+        let ctx = unsafe { crate::memory::read_ptr::<u64>(stack, o.assign_context) };
+        // SAFETY: the caller is a bed assignment, running while the lookup
+        // runs; it keeps its targets pointer at the table's
+        // `survivors.assign_targets` in its stack.
+        let targets =
+            unsafe { crate::memory::read_ptr::<u8>(stack, o.assign_targets) }.cast_const();
+        if targets.is_null() {
             return None;
         }
-        // SAFETY: the selected target, the bed, at this offset.
+        // SAFETY: `targets` is the assignment's non-null live targets record
+        // (checked earlier), which keeps the selected bed's `u32` entity at the
+        // table's `survivors.assign_bed`.
         (ctx, unsafe { read_at::<u32>(targets, o.assign_bed) })
     };
-    // SAFETY: a live context and an entity of it.
+    // SAFETY: `ctx` is null or the caller's live query context, used on its
+    // system's thread while it runs.
     let cell = unsafe { position_of(engine, ctx, entity) }?;
     let purpose = if roaming {
         SurvivorLookup::ROAMING
@@ -825,7 +889,7 @@ unsafe fn resolve(
 struct BedToken<'e> {
     engine: &'e Engine,
     ctx: *mut u64,
-    offset: u64,
+    offset: usize,
 }
 
 /// The bed `entity` sleeps in: its `NpcCommon.bedId`.
@@ -834,55 +898,67 @@ unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> u32 {
     if token.is_null() || kind == u16::MAX || entity == 0 {
         return 0;
     }
-    // SAFETY: the token of the running lookup.
+    // SAFETY: the non-null `token` (checked earlier) is the `BedToken` that
+    // `resolve` handed the mod with this function, alive on its stack until
+    // the mod's lookup returns, which is the only time the mod may call this.
     let token = unsafe { &*token.cast::<BedToken<'_>>() };
-    // SAFETY: a component of an entity in the live context.
+    // SAFETY: `token.ctx` is null or the running caller's live query context,
+    // used on its system's thread while the lookup runs.
     let common = unsafe { token.engine.component(token.ctx, kind, entity) };
     if common.is_null() {
         return 0;
     }
-    // SAFETY: `NpcCommon.bedId` at this offset.
-    unsafe { read_at(common.addr() as u64, token.offset) }
+    // SAFETY: `common` is the entity's non-null live `NpcCommon` (checked
+    // earlier), which keeps its `u32` bed id at the table's
+    // `survivors.npc_common_bed`.
+    unsafe { read_at(common, token.offset) }
 }
 
 /// Where an entity stands, in whole cells, once the transform type is known.
 ///
 /// # Safety
 ///
-/// `ctx` is a live query context.
+/// - `ctx` is null or a live query context, used on its system's thread
+///   while the system runs.
 unsafe fn position_of(engine: &Engine, ctx: *mut u64, entity: u32) -> Option<[i64; 3]> {
     let kind = TRANSFORM_TYPE.load(Ordering::Acquire);
     if kind == u16::MAX || ctx.is_null() || entity == 0 {
         return None;
     }
-    // SAFETY: reading a component of an entity in the live context.
+    // SAFETY: the caller's contract makes the non-null `ctx` (checked earlier)
+    // a live query context on its system's thread.
     let transform = unsafe { engine.component(ctx, kind, entity) };
     if transform.is_null() {
         return None;
     }
-    // SAFETY: a transform starts with its position.
-    Some(cell_of_fixed(unsafe {
-        read_at(transform.addr() as u64, 0)
-    }))
+    // SAFETY: `transform` is the entity's non-null live `CurrentTransform`
+    // (checked earlier), which starts with its 32.32 fixed-point position.
+    Some(cell_of_fixed(unsafe { read_at(transform, 0) }))
 }
 
 /// A survivor's home: its saved spawn position, or where it stands.
 ///
 /// # Safety
 ///
-/// Non-zero addresses are the survivor's saved state and transform.
-unsafe fn home(saved: u64, transform: u64) -> [i64; 3] {
-    if saved != 0 {
-        // SAFETY: the saved state starts with the spawn position in metres.
+/// - `saved` is null or the survivor's live saved state, readable for its
+///   three `f32` spawn coordinates at offset 0.
+/// - `transform` is null or the survivor's live transform, readable for its
+///   three `i64` position words at offset 0.
+/// - Nothing writes either during the call.
+unsafe fn home(saved: *const u8, transform: *const u8) -> [i64; 3] {
+    if !saved.is_null() {
+        // SAFETY: the caller's contract makes the non-null `saved` (checked
+        // earlier) readable for its spawn position in metres at offset 0.
         let spawn: [f32; 3] = unsafe { read_at(saved, 0) };
         if spawn.iter().any(|&v| v.to_bits() != 0) {
             return enshwick::altars::cell_of_metres(spawn.map(f64::from));
         }
     }
-    if transform == 0 {
+    if transform.is_null() {
         return [i64::MIN; 3];
     }
-    // SAFETY: a transform starts with its position.
+    // SAFETY: the caller's contract makes the non-null `transform` (checked
+    // earlier) readable for its 32.32 fixed-point position at offset 0.
     cell_of_fixed(unsafe { read_at(transform, 0) })
 }
 
@@ -893,11 +969,13 @@ unsafe extern "system" fn update_link(
     flag: usize,
 ) -> usize {
     let skip = SKIP_UPDATE.with(Cell::take);
-    // SAFETY: `npc` points at the survivor id the game updates.
-    if skip.is_some() && !npc.is_null() && skip == Some(unsafe { npc.read() }) {
+    // SAFETY: the game passes the update a non-null (checked first) pointer
+    // to the `u32` survivor id it updates, readable for the call.
+    if skip.is_some() && !npc.is_null() && skip == Some(unsafe { read_at(npc.cast(), 0) }) {
         return 0;
     }
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the update's signature.
     unsafe { UPDATE_NEXT.get()(bases, npc, state, flag) }
 }
 
@@ -906,14 +984,17 @@ unsafe extern "system" fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: u
         && !ctx.is_null()
         && SURVIVORS_FUSE
             .run("a survivor move", || {
-                // SAFETY: the behaviour context of the moving survivor.
+                // SAFETY: the game passes the move the non-null (checked
+                // earlier) behaviour context of the survivor it moves, on the
+                // system's thread while it runs.
                 unsafe { skip_move(ctx) }
             })
             .unwrap_or(false);
     if skip {
         return 0;
     }
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the move's signature.
     unsafe { MOVE_NEXT.get()(ctx, b, c, d) }
 }
 
@@ -921,7 +1002,10 @@ unsafe extern "system" fn move_link(ctx: *mut *mut u64, b: usize, c: usize, d: u
 ///
 /// # Safety
 ///
-/// `ctx` is a survivor's behaviour context.
+/// - `ctx` is a survivor's live behaviour context: its first word is the ECS
+///   query context, and it keeps the `ActiveNpcState` pointer at the table's
+///   `survivors.move_survivor`.
+/// - The call runs on the behaviour system's thread while it runs.
 unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
     let (Some(loader), Some(engine)) = (LOADED.get(), crate::ecs::resolved()) else {
         return false;
@@ -938,33 +1022,42 @@ unsafe fn skip_move(ctx: *mut *mut u64) -> bool {
         MOVE_ACTIVE.store(false, Ordering::Release);
         return false;
     }
-    // SAFETY: the first word is the ECS query context.
-    let query: *mut u64 = unsafe { ctx.read() };
-    // SAFETY: a live query context.
+    let ctx = ctx.cast_const().cast::<u8>();
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context
+    // whose first word is the ECS query context.
+    let query = unsafe { read_ptr_at::<u64>(ctx, 0) };
+    // SAFETY: `query` is null or the behaviour's live query context, used on
+    // its system's thread by the caller's contract.
     let me = unsafe { engine.entity(query) };
     if me == target {
         *moving = None;
         MOVE_ACTIVE.store(false, Ordering::Release);
         return false;
     }
-    // SAFETY: the context points at the survivor's `ActiveNpcState` here.
-    let state: u64 = unsafe { read_at(ctx.addr() as u64, layout.offsets.move_survivor) };
-    if state == 0 {
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context
+    // that keeps the survivor's `ActiveNpcState` pointer at the table's
+    // `survivors.move_survivor`.
+    let state = unsafe { read_ptr_at::<u8>(ctx, layout.offsets.move_survivor) }.cast_const();
+    if state.is_null() {
         return false;
     }
-    // SAFETY: the state starts with the survivor id.
+    // SAFETY: `state` is the survivor's non-null live `ActiveNpcState`
+    // (checked earlier), which starts with its `u32` survivor id.
     let id: u32 = unsafe { read_at(state, 0) };
     id == survivor
 }
 
 unsafe extern "system" fn bed_check_link(ctx: *mut u8) -> u8 {
-    // SAFETY: the rest of the chain takes the argument the game passed.
+    // SAFETY: the game's own argument, passed on unchanged to the rest of the
+    // chain, which has the bed check's signature.
     let valid = unsafe { BED_CHECK_NEXT.get()(ctx) };
     if valid == 0 || ctx.is_null() {
         return valid;
     }
-    // SAFETY: the survivor's behaviour context.
-    let keep = SURVIVORS_FUSE.run("a bed check", || unsafe { bed_kept(ctx.addr() as u64) });
+    // SAFETY: the game passes the bed check the non-null (checked earlier)
+    // behaviour context of the survivor it checks, on the system's thread
+    // while it runs.
+    let keep = SURVIVORS_FUSE.run("a bed check", || unsafe { bed_kept(ctx.cast_const()) });
     if keep.unwrap_or(true) { valid } else { 0 }
 }
 
@@ -972,8 +1065,11 @@ unsafe extern "system" fn bed_check_link(ctx: *mut u8) -> u8 {
 ///
 /// # Safety
 ///
-/// `ctx` is a survivor's behaviour context.
-unsafe fn bed_kept(ctx: u64) -> bool {
+/// - `ctx` is a survivor's live behaviour context: its first word is the ECS
+///   query context, and it keeps its component pointers at the table's
+///   `survivors.npc_*` offsets.
+/// - The call runs on the behaviour system's thread while it runs.
+unsafe fn bed_kept(ctx: *const u8) -> bool {
     let (Some(loader), Some(engine), Some(sealed)) =
         (LOADED.get(), crate::ecs::resolved(), SEALED.get())
     else {
@@ -983,35 +1079,47 @@ unsafe fn bed_kept(ctx: u64) -> bool {
         return true;
     };
     let o = &layout.offsets;
-    // SAFETY: the behaviour context holds these component pointers.
-    let common: u64 = unsafe { read_at(ctx, o.npc_common) };
-    // SAFETY: as above.
-    let state: u64 = unsafe { read_at(ctx, o.npc_state) };
-    // SAFETY: as above.
-    let saved: u64 = unsafe { read_at(ctx, o.npc_saved_state) };
-    // SAFETY: as above.
-    let transform: u64 = unsafe { read_at(ctx, o.npc_transform) };
-    if common == 0 || state == 0 {
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context that
+    // keeps the `NpcCommon` pointer at the table's `survivors.npc_common`.
+    let common = unsafe { read_ptr_at::<u8>(ctx, o.npc_common) }.cast_const();
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context that
+    // keeps the `ActiveNpcState` pointer at the table's `survivors.npc_state`.
+    let state = unsafe { read_ptr_at::<u8>(ctx, o.npc_state) }.cast_const();
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context that
+    // keeps the saved state pointer at the table's
+    // `survivors.npc_saved_state`.
+    let saved = unsafe { read_ptr_at::<u8>(ctx, o.npc_saved_state) }.cast_const();
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context that
+    // keeps the transform pointer at the table's `survivors.npc_transform`.
+    let transform = unsafe { read_ptr_at::<u8>(ctx, o.npc_transform) }.cast_const();
+    if common.is_null() || state.is_null() {
         return true;
     }
-    // SAFETY: `NpcCommon.bedId`.
+    // SAFETY: `common` is the survivor's non-null live `NpcCommon` (checked
+    // earlier), which keeps its `u32` bed id at the table's
+    // `survivors.npc_common_bed`.
     let bed: u32 = unsafe { read_at(common, o.npc_common_bed) };
-    // SAFETY: the state starts with the survivor id.
+    // SAFETY: `state` is the survivor's non-null live `ActiveNpcState`
+    // (checked earlier), which starts with its `u32` survivor id.
     let survivor: u32 = unsafe { read_at(state, 0) };
-    // SAFETY: the first word of the behaviour context is the ECS context.
-    let ecs: *mut u64 = unsafe { read_at(ctx, 0) };
-    // SAFETY: a live context.
+    // SAFETY: the caller's contract makes `ctx` a live behaviour context
+    // whose first word is the ECS query context.
+    let ecs = unsafe { read_ptr_at::<u64>(ctx, 0) };
+    // SAFETY: `ecs` is null or the behaviour's live query context, used on
+    // its system's thread by the caller's contract.
     let Some(bed_at) = (unsafe { position_of(engine, ecs, bed) }) else {
         return true;
     };
-    // SAFETY: as above.
+    // SAFETY: `ecs` is null or the behaviour's live query context, used on
+    // its system's thread by the caller's contract.
     let entity = unsafe { engine.entity(ecs) };
     let check = BedCheck {
         header: Header::of::<BedCheck>(),
         survivor,
         entity,
         bed,
-        // SAFETY: the survivor's components.
+        // SAFETY: `saved` and `transform` are null or the survivor's live
+        // components, which the behaviour context holds while it runs.
         home: unsafe { home(saved, transform) },
         bed_at,
     };
@@ -1021,8 +1129,9 @@ unsafe fn bed_kept(ctx: u64) -> bool {
         .filter(|r| !crate::host::is_off(r.owner))
         .all(|r| {
             let user = core::ptr::with_exposed_provenance_mut(r.user);
-            // SAFETY: the callback lives in the mod's DLL and takes the
-            // pointer it registered; the check is valid for the call.
+            // SAFETY: the registered `BedCheckFn` lives in the mod's DLL,
+            // which stays loaded for the process, and takes the `user` word
+            // it registered; `check` outlives the call.
             crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
                 (r.callback)(&raw const check, user) != 0
             })
@@ -1030,7 +1139,8 @@ unsafe fn bed_kept(ctx: u64) -> bool {
 }
 
 unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
-    // SAFETY: the game's spawn request, before the spawn reads it.
+    // SAFETY: the game passes the spawn its non-null (checked first) live
+    // request, which the spawn reads only after this link returns.
     let asked = (!request.is_null())
         .then(|| SURVIVORS_FUSE.run("a summon", || unsafe { summon(request) }))
         .flatten()
@@ -1042,7 +1152,8 @@ unsafe extern "system" fn spawn_link(ctx: *mut u64, request: *mut u8) -> u8 {
         Some(Asked::Use(call)) => Some(call),
         None => None,
     };
-    // SAFETY: the rest of the chain takes the arguments the game passed.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the spawn's signature.
     let done = unsafe { SPAWN_NEXT.get()(ctx, request) };
     if done != 0
         && let Some(call) = call
@@ -1072,9 +1183,14 @@ fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
     let Some(data) = ty.and_then(|ty| crate::world::component(loader, pide, ty).ok()) else {
         return [0; 2];
     };
-    // SAFETY: a live NetworkFuel, two u16 read as one aligned word, which
-    // only its network system writes.
-    let both: u32 = unsafe { data.cast::<u32>().read() };
+    // SAFETY: `world::component` returned the item's live `NetworkFuel`, two
+    // `u16` that make one four-byte word. Its one writer, the `fuel_network`
+    // system, may run on another task worker during this spawn (server 399)
+    // and writes the word whole, so the atomic load gives the meter from
+    // before or after that write.
+    let Some(both) = (unsafe { enshwick::raw::read_u32_atomic_at(data.cast(), 0) }) else {
+        return [0; 2];
+    };
     let [a, b, c, d] = both.to_le_bytes();
     [u16::from_le_bytes([a, b]), u16::from_le_bytes([c, d])]
 }
@@ -1085,26 +1201,37 @@ fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
 ///
 /// # Safety
 ///
-/// `request` is the live spawn request.
+/// - `request` is the game's live spawn request, with its fields at the
+///   table's `survivors.spawn_*` offsets.
+/// - The call runs before the spawn reads the request, on its thread, so
+///   nothing else reads or writes it during the call.
 unsafe fn summon(request: *mut u8) -> Option<Asked> {
     let (Some(loader), Some(sealed)) = (LOADED.get(), SEALED.get()) else {
         return None;
     };
     let layout = layout(loader)?;
     let o = &layout.offsets;
-    let base = request.addr() as u64;
-    // SAFETY: the request holds these fields at these offsets.
-    let item = unsafe { read_at(base, o.spawn_used_item) };
-    // SAFETY: as above.
-    let ammo = unsafe { read_at(base, o.spawn_ammo_item) };
-    // SAFETY: as above.
-    let template = unsafe { read_at(base, o.spawn_template) };
-    // SAFETY: as above.
-    let target = cell_of_fixed(unsafe { read_at(base, o.spawn_target) });
-    // SAFETY: as above: the used item's `ItemInstanceInfo`.
-    let slot = unsafe { read_at(base, o.spawn_used_slot) };
-    // SAFETY: as above.
-    let pide: u32 = unsafe { read_at(base, o.spawn_used_pide) };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps the used item at the table's `survivors.spawn_used_item`.
+    let item = unsafe { read_at(request, o.spawn_used_item) };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps the ammo item at the table's `survivors.spawn_ammo_item`.
+    let ammo = unsafe { read_at(request, o.spawn_ammo_item) };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps the template at the table's `survivors.spawn_template`.
+    let template = unsafe { read_at(request, o.spawn_template) };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps its 32.32 fixed-point target at the table's
+    // `survivors.spawn_target`.
+    let target = cell_of_fixed(unsafe { read_at(request, o.spawn_target) });
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps the used item's `ItemInstanceInfo` at the table's
+    // `survivors.spawn_used_slot`.
+    let slot = unsafe { read_at(request, o.spawn_used_slot) };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps the used item's `u32` entity at the table's
+    // `survivors.spawn_used_pide`.
+    let pide: u32 = unsafe { read_at(request, o.spawn_used_pide) };
     let mut call = Summon {
         header: Header::of::<Summon>(),
         item,
@@ -1128,8 +1255,9 @@ unsafe fn summon(request: *mut u8) -> Option<Asked> {
         .filter(|r| !crate::host::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
-        // SAFETY: the callback lives in the mod's DLL and takes the pointer
-        // it registered; the summon is valid for the call.
+        // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+        // stays loaded for the process, and takes the `user` word it
+        // registered; `call` outlives the call.
         match crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
             (r.callback)(&raw const call, user)
         }) {
@@ -1138,13 +1266,16 @@ unsafe fn summon(request: *mut u8) -> Option<Asked> {
             _ => consume = true,
         }
     }
-    let at = usize::try_from(o.spawn_consume).unwrap_or(0);
     if consume {
-        // SAFETY: the request's consume flag, which the spawn reads next.
-        unsafe { request.wrapping_add(at).write(1) };
+        // SAFETY: the caller's contract makes `request` the live spawn
+        // request, untouched by others during the call, which keeps its
+        // one-byte consume flag at the table's `survivors.spawn_consume`.
+        unsafe { write_at(request, o.spawn_consume, 1u8) };
     }
-    // SAFETY: as above; a filter of the game's may have set it too.
-    call.consumed = unsafe { request.wrapping_add(at).read() };
+    // SAFETY: the caller's contract makes `request` the live spawn request,
+    // which keeps its one-byte consume flag at the table's
+    // `survivors.spawn_consume`; a filter of the game's may have set it too.
+    call.consumed = unsafe { read_at(request, o.spawn_consume) };
     Some(Asked::Use(call))
 }
 
@@ -1159,8 +1290,9 @@ fn summoned(call: Summon) {
         .filter(|r| !crate::host::is_off(r.owner))
     {
         let user = core::ptr::with_exposed_provenance_mut(r.user);
-        // SAFETY: the callback lives in the mod's DLL and takes the pointer
-        // it registered; the summon is valid for the call.
+        // SAFETY: the registered `SummonFn` lives in the mod's DLL, which
+        // stays loaded for the process, and takes the `user` word it
+        // registered; `call` outlives the call.
         crate::profile::call(r.owner, crate::profile::Feature::Survivors, || unsafe {
             (r.callback)(&raw const call, user)
         });
@@ -1175,11 +1307,13 @@ unsafe extern "system" fn registry_link(registry: *mut u8) {
         .filter(|_| !registry.is_null());
     // The game calls this often and builds only once: a registry that holds
     // its collection already is left as it is.
-    // SAFETY: the registry's collection pointer, null until it is built.
-    let built = ready.is_some_and(
-        |(m, _)| unsafe { read_at::<usize>(registry.addr() as u64, m.loaded as u64) } != 0,
-    );
-    // SAFETY: the rest of the chain takes the registry the game passed.
+    // SAFETY: `ready` holds only for the non-null registry the game passes
+    // its load, live for the call, which keeps its collection pointer, null
+    // until it is built, at the table's `survivors.registry_loaded`.
+    let built =
+        ready.is_some_and(|(m, _)| !unsafe { read_ptr_at::<u8>(registry, m.loaded) }.is_null());
+    // SAFETY: the game's own argument, passed on unchanged to the rest of the
+    // chain, which has the registry load's signature.
     unsafe { REGISTRY_NEXT.get()(registry) };
     let Some((map, sealed)) = ready.filter(|_| !built) else {
         return;
@@ -1187,7 +1321,9 @@ unsafe extern "system" fn registry_link(registry: *mut u8) {
     let _filed = SURVIVORS_FUSE.run("the staff item filing", || {
         let mut filed = 0;
         for &(item, survivor) in &sealed.items {
-            // SAFETY: the registry is built; its item map lies at `map.at`.
+            // SAFETY: the game's load just built the non-null registry, whose
+            // staff item map lies at the table's `survivors.registry_item_map`;
+            // the load's thread alone uses it during the call.
             if unsafe { file(map, registry.wrapping_add(map.at), item, survivor) } {
                 filed += 1;
             }
@@ -1205,58 +1341,69 @@ unsafe extern "system" fn registry_link(registry: *mut u8) {
 ///
 /// # Safety
 ///
-/// `table` is the live staff item map, not used by another thread.
+/// - `table` is the live staff item map, laid out at `map`'s offsets: a
+///   `u64` capacity, an occupancy bitset of a bit per slot, and `u32` keys
+///   and values of `capacity` slots each.
+/// - `map.find_slot` is the game's find-or-free-slot for that map.
+/// - No other thread uses the map during the call.
 unsafe fn file(map: &ItemMap, table: *mut u8, item: u32, survivor: u32) -> bool {
-    let base = table.addr() as u64;
-    // SAFETY: the game's own slot search on its map.
+    // SAFETY: the caller's contract makes `map.find_slot` the game's own slot
+    // search for the live `table`, used by no other thread.
     let slot = unsafe { (map.find_slot)(table, &raw const item) };
-    // SAFETY: the map's header fields, read again after a possible growth.
-    let capacity: u64 = unsafe { read_at(base, map.capacity as u64) };
+    // SAFETY: the caller's contract makes `table` the live map, holding its
+    // `u64` capacity at `map.capacity`; read after the search, which may grow
+    // the map.
+    let capacity: u64 = unsafe { read_at(table, map.capacity) };
     if slot >= capacity {
         return false;
     }
     let Ok(slot) = usize::try_from(slot) else {
         return false;
     };
-    // SAFETY: as above.
-    let bits: *mut u64 = unsafe { read_at(base, map.bits as u64) };
-    // SAFETY: as above.
-    let keys: *mut u32 = unsafe { read_at(base, map.keys as u64) };
-    // SAFETY: as above.
-    let values: *mut u32 = unsafe { read_at(base, map.values as u64) };
-    let word = bits.wrapping_add(slot >> 6);
+    // SAFETY: the caller's contract makes `table` the live map, holding its
+    // bitset pointer at `map.bits`; read after a possible growth.
+    let bits = unsafe { read_ptr_at::<u8>(table, map.bits) };
+    // SAFETY: the caller's contract makes `table` the live map, holding its
+    // keys pointer at `map.keys`; read after a possible growth.
+    let keys = unsafe { read_ptr_at::<u8>(table, map.keys) };
+    // SAFETY: the caller's contract makes `table` the live map, holding its
+    // values pointer at `map.values`; read after a possible growth.
+    let values = unsafe { read_ptr_at::<u8>(table, map.values) };
+    let word = (slot >> 6) * size_of::<u64>();
     let bit = 1u64 << (slot & 63);
-    // SAFETY: the slot is below the capacity, so its bit word exists.
-    let used = unsafe { word.read() } & bit != 0;
-    if !used {
-        // SAFETY: as above.
-        let marked = unsafe { word.read() } | bit;
-        // SAFETY: as above.
-        unsafe { word.write(marked) };
-        // SAFETY: the map's entry count.
-        let count: u32 = unsafe { read_at(base, map.count as u64) };
-        // SAFETY: as above.
-        unsafe {
-            table
-                .wrapping_add(map.count)
-                .cast::<[u8; 4]>()
-                .write((count + 1).to_le_bytes());
-        }
-        // SAFETY: the slot's key.
-        unsafe { keys.wrapping_add(slot).write(item) };
+    // SAFETY: `slot` is below the capacity (checked earlier), so its `u64`
+    // word lies in the map's bitset of a bit per slot.
+    let marks: u64 = unsafe { read_at(bits, word) };
+    if marks & bit == 0 {
+        // SAFETY: `slot` is below the capacity (checked earlier), so its `u64`
+        // word lies in the map's bitset, which no other thread uses.
+        unsafe { write_at(bits, word, marks | bit) };
+        // SAFETY: the caller's contract makes `table` the live map, holding
+        // its `u32` entry count at `map.count`.
+        let count: u32 = unsafe { read_at(table, map.count) };
+        // SAFETY: the caller's contract makes `table` the live map, holding
+        // its `u32` entry count at `map.count`, which no other thread uses.
+        unsafe { write_at(table, map.count, count + 1) };
+        // SAFETY: `slot` is below the capacity (checked earlier), so its `u32`
+        // key lies in the map's keys, which no other thread uses.
+        unsafe { write_at(keys, slot * size_of::<u32>(), item) };
     }
-    // SAFETY: the slot's value.
-    unsafe { values.wrapping_add(slot).write(survivor) };
+    // SAFETY: `slot` is below the capacity (checked earlier), so its `u32`
+    // value lies in the map's values, which no other thread uses.
+    unsafe { write_at(values, slot * size_of::<u32>(), survivor) };
     true
 }
 
 unsafe extern "system" fn menu_link(ctx: *mut u64) {
-    // SAFETY: the original system takes its own context.
+    // SAFETY: the game's own argument, passed on unchanged to the rest of the
+    // chain, which has the system's signature.
     unsafe { MENU_NEXT.get()(ctx) };
     if ctx.is_null() {
         return;
     }
-    // SAFETY: the system's live context, after vanilla's pass.
+    // SAFETY: the game passes `ui_npc_status` its non-null (checked earlier)
+    // live context, used here on the system's thread after vanilla's pass,
+    // while the system still runs.
     let _done = SURVIVORS_FUSE.run("the status merge", || unsafe { merge_statuses(ctx) });
 }
 
@@ -1265,7 +1412,9 @@ unsafe extern "system" fn menu_link(ctx: *mut u64) {
 ///
 /// # Safety
 ///
-/// `ctx` is `ui_npc_status`'s live context.
+/// - `ctx` is `ui_npc_status`'s live context, whose query iterator is
+///   [`UI_WORDS`] words over [`UI_READS`].
+/// - The call runs on the system's thread while the system runs.
 unsafe fn merge_statuses(ctx: *mut u64) {
     let (Some(loader), Some(engine), Some(sealed)) =
         (LOADED.get(), crate::ecs::resolved(), SEALED.get())
@@ -1280,27 +1429,37 @@ unsafe fn merge_statuses(ctx: *mut u64) {
     }
     STATUS_ROWS.with_borrow_mut(|(rows, bits)| {
         rows.clear();
-        let mut play_data = 0u64;
+        let mut play_data = 0usize;
         // Vanilla left the row counter at the end: walk again from the start
         // and restore it, as the altars' walks do.
-        // SAFETY: the system's live context.
+        // SAFETY: the caller's contract makes `ctx` the system's live context
+        // on its thread.
         let saved = unsafe { engine.row(ctx) };
-        // SAFETY: as above.
+        // SAFETY: the caller's contract makes `ctx` the system's live context
+        // on its thread, which alone writes it while the system runs.
         unsafe { engine.set_row(ctx, 0) };
-        // SAFETY: the system's live context and its iterator size.
+        // SAFETY: the caller's contract makes `ctx` the system's live context
+        // on its thread with an iterator of `UI_WORDS` words; the query is
+        // dropped at the end of this closure, inside the system's run.
         let mut query = unsafe { engine.query::<UI_WORDS>(ctx) };
         while let Some(words) = query.next() {
-            let state = words[UI_STATE];
-            // SAFETY: the current row's template.
+            let Ok(state) = usize::try_from(words[UI_STATE]) else {
+                continue;
+            };
+            // SAFETY: the caller's contract makes `ctx` the system's live
+            // context, on the row the query just moved to.
             let guid = unsafe { (menu.template)(ctx) };
             if state == 0 || guid.is_null() {
                 continue;
             }
-            play_data = words[UI_PLAY_DATA];
-            // SAFETY: the row's `ClientActiveNpcState` status bits.
-            let status: u8 = unsafe { read_at(state, menu.state_status as u64) };
-            // SAFETY: a template GUID is 16 bytes.
-            let guid = unsafe { guid.read() };
+            play_data = usize::try_from(words[UI_PLAY_DATA]).unwrap_or(0);
+            // SAFETY: `state` is the row's non-zero live
+            // `ClientActiveNpcState` (checked earlier), which keeps its status
+            // bits at the table's `survivors.state_status`.
+            let status: u8 = unsafe { crate::memory::read(state, menu.state_status) };
+            // SAFETY: the template lookup returned a non-null (checked earlier)
+            // pointer to the row's 16-byte template GUID.
+            let guid: [u8; 16] = unsafe { read_at(guid.cast(), 0) };
             if guid.iter().all(|&b| b == 0) {
                 continue;
             }
@@ -1319,8 +1478,9 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             let id = group[0].0;
             bits.clear();
             bits.extend(group.iter().map(|&(_, _, status)| status));
-            // SAFETY: the callback lives in the mod's DLL and takes the
-            // pointer it registered; the statuses are valid for the call.
+            // SAFETY: the registered `SurvivorStatusFn` lives in the mod's
+            // DLL, which stays loaded for the process, and takes the `user`
+            // word it registered; `bits` outlives the call.
             let answer =
                 crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
                     (merge.callback)(id, bits.as_ptr(), bits.len(), user)
@@ -1328,13 +1488,15 @@ unsafe fn merge_statuses(ctx: *mut u64) {
             if answer & enshwick::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;
             }
-            // SAFETY: the play data's survivor record map.
+            // SAFETY: `play_data` is the client's non-zero (checked earlier)
+            // live `UiPlayData` from the system's own query words, used on
+            // its thread while it runs.
             if let Some(record) = unsafe { record(menu, play_data, id) } {
-                // SAFETY: the record's status byte, which the menu reads.
-                unsafe {
-                    (record.wrapping_add(menu.record_status as u64) as *mut u8)
-                        .write(answer.to_le_bytes()[0]);
-                };
+                // SAFETY: `record` is a live menu record of the play data's
+                // map, which keeps the status byte the menu reads at the
+                // table's `survivors.ui_record_status`, on the system's
+                // thread.
+                unsafe { write_at(record, menu.record_status, answer.to_le_bytes()[0]) };
             }
         }
     });
@@ -1344,31 +1506,51 @@ unsafe fn merge_statuses(ctx: *mut u64) {
 ///
 /// # Safety
 ///
-/// `play_data` is the client's `UiPlayData`.
-unsafe fn record(menu: &Menu, play_data: u64, id: u32) -> Option<u64> {
-    // SAFETY: the map's capacity.
-    let capacity: u64 = unsafe { read_at(play_data, menu.map_capacity as u64) };
-    // SAFETY: its entry count.
-    let count: u32 = unsafe { read_at(play_data, menu.map_count as u64) };
-    // SAFETY: its occupancy bitset.
-    let bits: u64 = unsafe { read_at(play_data, menu.map_bits as u64) };
-    // SAFETY: its keys.
-    let keys: u64 = unsafe { read_at(play_data, menu.map_keys as u64) };
-    // SAFETY: its values.
-    let values: u64 = unsafe { read_at(play_data, menu.map_values as u64) };
-    if count == 0 || capacity == 0 || bits == 0 || keys == 0 || values == 0 {
+/// - `play_data` is the address of the client's live `UiPlayData`, whose
+///   survivor record map lies at `menu`'s offsets: a power-of-two
+///   capacity, an occupancy bitset of a bit per slot, and `u32` keys and
+///   records of `capacity` slots each.
+/// - Nothing writes the map during the call.
+unsafe fn record(menu: &Menu, play_data: usize, id: u32) -> Option<*mut u8> {
+    // SAFETY: the caller's contract makes `play_data` the live play data,
+    // which keeps the map's `u64` capacity at the table's
+    // `survivors.ui_map_capacity`.
+    let capacity: u64 = unsafe { crate::memory::read(play_data, menu.map_capacity) };
+    // SAFETY: the caller's contract makes `play_data` the live play data,
+    // which keeps the map's `u32` entry count at the table's
+    // `survivors.ui_map_count`.
+    let count: u32 = unsafe { crate::memory::read(play_data, menu.map_count) };
+    // SAFETY: the caller's contract makes `play_data` the live play data,
+    // which keeps the map's bitset pointer at the table's
+    // `survivors.ui_map_bits`.
+    let bits = unsafe { crate::memory::read_ptr::<u8>(play_data, menu.map_bits) }.cast_const();
+    // SAFETY: the caller's contract makes `play_data` the live play data,
+    // which keeps the map's keys pointer at the table's
+    // `survivors.ui_map_keys`.
+    let keys = unsafe { crate::memory::read_ptr::<u8>(play_data, menu.map_keys) }.cast_const();
+    // SAFETY: the caller's contract makes `play_data` the live play data,
+    // which keeps the map's records pointer at the table's
+    // `survivors.ui_map_values`.
+    let values = unsafe { crate::memory::read_ptr::<u8>(play_data, menu.map_values) };
+    if count == 0 || capacity == 0 || bits.is_null() || keys.is_null() || values.is_null() {
         return None;
     }
-    // SAFETY: the occupancy bitset has a bit per slot.
-    let used = |i: u64| unsafe { read_at::<u64>(bits, (i >> 6) * 8) } >> (i & 63) & 1 != 0;
-    let mut i = (capacity - 1) & u64::from(id);
+    let capacity = usize::try_from(capacity).ok()?;
+    let used = |i: usize| {
+        // SAFETY: `i` is below the non-zero capacity, and the caller's
+        // contract gives the non-null bitset (checked earlier) a bit per slot.
+        let marks: u64 = unsafe { read_at(bits, (i >> 6) * size_of::<u64>()) };
+        marks >> (i & 63) & 1 != 0
+    };
+    let mut i = (capacity - 1) & usize::try_from(id).ok()?;
     for _ in 0..capacity {
         if !used(i) {
             return None;
         }
-        // SAFETY: an occupied slot's key.
-        if unsafe { read_at::<u32>(keys, i * 4) } == id {
-            return Some(values + i * menu.record_size as u64);
+        // SAFETY: `i` is below the capacity, and the caller's contract gives
+        // the non-null keys (checked earlier) a `u32` per slot.
+        if unsafe { read_at::<u32>(keys, i * size_of::<u32>()) } == id {
+            return Some(values.wrapping_add(i * menu.record_size));
         }
         i = if i + 1 < capacity { i + 1 } else { 0 };
     }
@@ -1382,7 +1564,7 @@ mod tests {
     #[test]
     fn filing_marks_a_free_slot_and_overwrites_a_used_one() {
         unsafe extern "system" fn find(_map: *mut u8, key: *const u32) -> u64 {
-            // SAFETY: the test passes a live key.
+            // SAFETY: `file` passes a pointer to its own `u32` item.
             u64::from(unsafe { key.read() } & 127)
         }
         let mut bits = [0u64; 2];
@@ -1403,9 +1585,13 @@ mod tests {
             values: 0x40,
             count: 0x54,
         };
-        // SAFETY: a table laid out as the game's, owned by the test.
+        // SAFETY: `table` is laid out at `map`'s offsets over the test's own
+        // 128-slot bitset, keys and values, `find` is its slot search, and
+        // only this thread uses them.
         assert!(unsafe { file(&map, table.as_mut_ptr(), 70, 5) });
-        // SAFETY: as above.
+        // SAFETY: `table` is laid out at `map`'s offsets over the test's own
+        // 128-slot bitset, keys and values, `find` is its slot search, and
+        // only this thread uses them.
         assert!(unsafe { file(&map, table.as_mut_ptr(), 70, 6) });
         assert_eq!(bits[1], 1 << 6);
         assert_eq!((keys[70], values[70]), (70, 6));

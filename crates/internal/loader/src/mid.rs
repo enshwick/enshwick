@@ -118,7 +118,8 @@ impl Vectors {
         if __cpuid(1).ecx & OSXSAVE == 0 {
             return Self::Sse;
         }
-        // SAFETY: the system has turned `xgetbv` on (OSXSAVE, checked above).
+        // SAFETY: CPUID's OSXSAVE bit, checked by the guard before it, says the
+        // system turned `xgetbv` on, so the instruction does not fault.
         let enabled = unsafe { _xgetbv(0) };
         if enabled & u64::from(AVX_STATE) == 0 {
             return Self::Sse;
@@ -249,16 +250,30 @@ impl Mids {
 }
 
 /// Calls every handler at `site` whose mod is on; what each stub calls.
-pub(crate) extern "system" fn dispatch(registers: *mut Registers, site: *const Site) {
-    // SAFETY: the stub passes the leaked site it was written for.
+///
+/// # Safety
+///
+/// - `registers` points at the registers the calling stub saved, valid and
+///   unaliased for the call.
+/// - `site` is null or a `&'static Site` from [`Mids::sites`] whose
+///   provenance was exposed, as [`Stubs::dispatching`] does.
+pub(crate) unsafe extern "system" fn dispatch(registers: *mut Registers, site: *const Site) {
+    // The stub's machine code passes the address `Stubs::dispatching`
+    // exposed; the pointer takes back that provenance.
+    let site = core::ptr::with_exposed_provenance::<Site>(site.addr());
+    // SAFETY: `site` is null or a `&'static Site` with its exposed provenance
+    // by this function's `# Safety`; `as_ref` maps null to `None`.
     let Some(site) = (unsafe { site.as_ref() }) else {
         return;
     };
     for link in &site.links {
         if !(site.off)(link.owner) {
             let user = core::ptr::with_exposed_provenance_mut::<c_void>(link.user);
-            // SAFETY: the mod registered the handler with this pointer; it
-            // takes the saved registers and catches its own panics.
+            // SAFETY: `site.off` says the mod is on, so its DLL and the
+            // handler in it are loaded; the handler gets the pointer its mod
+            // registered and the stub's saved registers, valid by this
+            // function's `# Safety`; an `extern "system"` function aborts
+            // rather than unwinds.
             unsafe { (link.handler)(registers, user) };
         }
     }
@@ -276,7 +291,8 @@ impl Stubs {
     /// keeping the vector state as `vectors` says; `None` without memory.
     pub(crate) fn write(sites: &[(usize, usize)], vectors: Vectors) -> Option<Self> {
         let len = sites.len().max(1) * STUB;
-        // SAFETY: a fresh reservation; null on failure.
+        // SAFETY: `VirtualAlloc` with a null address reserves fresh pages and
+        // touches no memory of ours; null on failure, checked below.
         let base = unsafe {
             VirtualAlloc(
                 core::ptr::null(),
@@ -291,9 +307,12 @@ impl Stubs {
         }
         for (i, &(callback, context)) in sites.iter().enumerate() {
             let code = stub(callback, context, vectors);
-            // SAFETY: stub `i` lies inside the `len` writable bytes at `base`.
+            // SAFETY: `i < sites.len()` and `len` is `sites.len() * STUB` at
+            // least, so `i * STUB` stays inside the allocation at `base`.
             let at = unsafe { base.add(i * STUB) };
-            // SAFETY: as above, `STUB` bytes from `at`.
+            // SAFETY: `at` starts stub `i`, whose `STUB` bytes lie inside the
+            // `len` read-write bytes at `base`; `code` is a fresh `STUB`-byte
+            // array, so the ranges do not overlap.
             unsafe { at.copy_from_nonoverlapping(code.as_ptr(), STUB) };
         }
         Some(Self { base, len })
@@ -305,10 +324,10 @@ impl Stubs {
         if sites.is_empty() {
             return None;
         }
-        let callback = (dispatch as *const ()).addr();
+        let callback = (dispatch as *const ()).expose_provenance();
         let pairs: Vec<(usize, usize)> = sites
             .iter()
-            .map(|&site| (callback, core::ptr::from_ref(site).addr()))
+            .map(|&site| (callback, core::ptr::from_ref(site).expose_provenance()))
             .collect();
         Self::write(&pairs, Vectors::current())
     }
@@ -324,9 +343,13 @@ impl Stubs {
             return;
         }
         let bytes = (continuation as u64).to_le_bytes();
-        // SAFETY: inside stub `i`, checked above.
+        // SAFETY: `(i + 1) * STUB <= self.len`, checked by the guard before it,
+        // and `CONTINUATION` lies inside a stub, so the offset stays inside the
+        // allocation at `self.base`.
         let at = unsafe { self.base.add(i * STUB + CONTINUATION) };
-        // SAFETY: the stub's last 8 code bytes, writable until `seal`.
+        // SAFETY: `at` is stub `i`'s last 8 code bytes, inside the allocation,
+        // read-write until `seal`, and no thread runs the stub before
+        // `commit` jumps to it.
         unsafe { at.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
     }
 
@@ -334,12 +357,15 @@ impl Stubs {
     /// could not be.
     pub(crate) fn seal(&self) -> bool {
         let mut old = 0;
-        // SAFETY: the stub pages belong to this batch.
+        // SAFETY: `self.base` and `self.len` are the pages `write` allocated
+        // for this batch, and `old` is a live `u32` the call writes.
         let sealed =
             unsafe { VirtualProtect(self.base.cast(), self.len, PAGE_EXECUTE_READ, &raw mut old) };
-        // SAFETY: no preconditions.
+        // SAFETY: `GetCurrentProcess` takes no arguments and returns a
+        // pseudo-handle that needs no closing.
         let process = unsafe { GetCurrentProcess() };
-        // SAFETY: flushing our own process's freshly written code.
+        // SAFETY: `process` is this process's pseudo-handle and the range is
+        // the batch's own allocation; the call only flushes the cache.
         unsafe { FlushInstructionCache(process, self.base.cast(), self.len) };
         sealed != 0
     }
@@ -814,7 +840,8 @@ mod tests {
 
     /// Writes `code` to fresh executable memory and returns its address.
     fn function(code: &[u8]) -> usize {
-        // SAFETY: a fresh allocation, written before it is executed.
+        // SAFETY: `VirtualAlloc` with a null address reserves a fresh page
+        // and touches no memory of ours; null on failure, asserted below.
         let page = unsafe {
             VirtualAlloc(
                 core::ptr::null(),
@@ -824,7 +851,9 @@ mod tests {
             )
         };
         assert!(!page.is_null());
-        // SAFETY: 4096 writable bytes.
+        // SAFETY: `page` is non-null, asserted after the allocation, and holds
+        // 4096 writable bytes; every test's `code` is shorter, and the fresh
+        // page does not overlap it.
         unsafe {
             page.cast::<u8>()
                 .copy_from_nonoverlapping(code.as_ptr(), code.len());
@@ -833,7 +862,8 @@ mod tests {
     }
 
     fn callable(address: usize) -> Unary {
-        // SAFETY: every test function takes a u32 in ecx and returns one in eax.
+        // SAFETY: every test passes the address of code it wrote with
+        // `function`, which takes a u32 in ecx and returns one in eax.
         unsafe { core::mem::transmute::<usize, Unary>(address) }
     }
 
@@ -872,7 +902,8 @@ mod tests {
     static SEEN: AtomicU64 = AtomicU64::new(0);
 
     extern "system" fn tenfold(registers: *mut Registers, _context: usize) {
-        // SAFETY: the stub passes its saved registers.
+        // SAFETY: the stub passes a pointer to the registers it saved on its
+        // stack, valid and unaliased until the handler returns.
         let registers = unsafe { &mut *registers };
         SEEN.store(registers.rax, Ordering::Relaxed);
         registers.rax *= 10;
@@ -891,7 +922,8 @@ mod tests {
     static RSP_MATCHES: AtomicBool = AtomicBool::new(false);
 
     extern "system" fn compare_stack(registers: *mut Registers, _context: usize) {
-        // SAFETY: the stub passes its saved registers.
+        // SAFETY: the stub passes a pointer to the registers it saved on its
+        // stack, valid and unaliased until the handler returns.
         let registers = unsafe { &mut *registers };
         RSP_MATCHES.store(registers.rax == registers.rsp, Ordering::Relaxed);
         registers.rsp = 0;
@@ -912,7 +944,8 @@ mod tests {
     }
 
     extern "system" fn clobber_vectors(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers only volatile registers, declared to the compiler.
+        // SAFETY: the assembly writes only `xmm0`, `xmm5` and `eax`, all
+        // declared as outputs, and touches no memory.
         unsafe {
             core::arch::asm!(
                 "xorps xmm0, xmm0",
@@ -952,8 +985,9 @@ mod tests {
     /// own address, so that each stub hooks a function of its own.
     fn copy(function: Unary) -> usize {
         let start = (function as *const ()).addr();
-        // SAFETY: each copied function is followed by 64 bytes of `int3`
-        // and is shorter than `BODY - 64` bytes.
+        // SAFETY: every `function` passed here is a naked test function of
+        // this module, shorter than `BODY - 64` bytes and followed by 64
+        // bytes of `int3`, so `BODY` bytes of mapped code start at `start`.
         let code = unsafe { core::slice::from_raw_parts(start as *const u8, BODY) };
         self::function(code)
     }
@@ -962,7 +996,8 @@ mod tests {
     /// returns the copy.
     fn hook_mark(function: Unary, handler: usize, vectors: Vectors) -> Unary {
         let target = copy(function);
-        // SAFETY: the copy holds `BODY` bytes of code.
+        // SAFETY: `copy` wrote `BODY` bytes into a fresh page of 4096 at
+        // `target`, which no thread writes now.
         let code = unsafe { core::slice::from_raw_parts(target as *const u8, BODY) };
         let at = code.windows(MARK.len()).position(|w| w == MARK).unwrap();
         install_with(target + at, handler, 0, vectors).unwrap();
@@ -1023,8 +1058,9 @@ mod tests {
 
     /// What AVX code in a handler leaves behind: every upper half cleared.
     extern "system" fn clear_upper_halves(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers `xmm4`, declared, and the upper halves of the
-        // vector registers, which no code of this crate keeps live.
+        // SAFETY: the assembly writes `xmm4`, declared as an output, and the
+        // upper halves of the vector registers, which no code of this crate
+        // keeps live; it touches no memory.
         unsafe {
             core::arch::asm!("vxorps ymm4, ymm4, ymm4", "vzeroupper", out("xmm4") _);
         }
@@ -1055,8 +1091,9 @@ mod tests {
     }
 
     extern "system" fn fill_upper_halves(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers `xmm4`, declared, and its upper half, which no
-        // code of this crate keeps live.
+        // SAFETY: the assembly writes `xmm4`, declared as an output, and its
+        // upper half, which no code of this crate keeps live; it touches no
+        // memory.
         unsafe {
             core::arch::asm!("vcmptrueps ymm4, ymm4, ymm4", out("xmm4") _);
         }
@@ -1124,7 +1161,8 @@ mod tests {
     }
 
     extern "system" fn clear_zmm31(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers `zmm31`, which no code of this crate keeps live.
+        // SAFETY: the assembly writes only `zmm31`, which no code of this
+        // crate keeps live, and touches no memory.
         unsafe {
             core::arch::asm!("vpxord zmm31, zmm31, zmm31");
         }
@@ -1144,8 +1182,9 @@ mod tests {
     }
 
     extern "system" fn clear_wide_registers(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers `xmm1`, declared, `zmm16`, `k1` and the upper
-        // halves, which no code of this crate keeps live.
+        // SAFETY: the assembly writes `xmm1`, declared as an output, and
+        // `zmm16`, `k1` and the upper halves, which no code of this crate
+        // keeps live; it touches no memory.
         unsafe {
             core::arch::asm!(
                 "vpxord zmm16, zmm16, zmm16",
@@ -1198,8 +1237,8 @@ mod tests {
     }
 
     extern "system" fn fill_wide_registers(_registers: *mut Registers, _context: usize) {
-        // SAFETY: clobbers `zmm16` and `k2`, which no code of this crate
-        // keeps live.
+        // SAFETY: the assembly writes only `zmm16` and `k2`, which no code
+        // of this crate keeps live, and touches no memory.
         unsafe {
             core::arch::asm!("vpternlogd zmm16, zmm16, zmm16, 0xff", "kxnorw k2, k2, k2");
         }
@@ -1295,7 +1334,9 @@ mod tests {
         code.emit(&words.bytes[16 * 6..16 * 6 + 4]);
         code.emit(&[0xcc]);
         let start = (encodings as *const ()).addr();
-        // SAFETY: the assembled function is as long as the written code.
+        // SAFETY: `encodings` is a naked function of this module whose code
+        // is the instructions `code` encodes, so `code.bytes.len()` bytes of
+        // mapped code start at `start`.
         let assembled =
             unsafe { core::slice::from_raw_parts(start as *const u8, code.bytes.len()) };
         assert_eq!(&assembled[..zero], &code.bytes[..zero]);
@@ -1401,8 +1442,14 @@ mod tests {
     static FAULTED: AtomicBool = AtomicBool::new(false);
 
     /// What the API's wrapper does: work on a copy, fault on a panic.
+    ///
+    /// # Safety
+    ///
+    /// - `registers` points at the stub's saved registers, valid and
+    ///   unaliased for the call.
     unsafe extern "system" fn panicking(registers: *mut Registers, _user: *mut c_void) {
-        // SAFETY: the dispatcher passes the stub's saved registers.
+        // SAFETY: `registers` is valid and unaliased for the call by this
+        // function's `# Safety`, which `dispatch` keeps.
         let registers = unsafe { &mut *registers };
         let mut copy = *registers;
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1416,8 +1463,15 @@ mod tests {
         }
     }
 
+    /// Adds 100 to `rax`.
+    ///
+    /// # Safety
+    ///
+    /// - `registers` points at the stub's saved registers, valid and
+    ///   unaliased for the call.
     unsafe extern "system" fn add_hundred(registers: *mut Registers, _user: *mut c_void) {
-        // SAFETY: the dispatcher passes the stub's saved registers.
+        // SAFETY: `registers` is valid and unaliased for the call by this
+        // function's `# Safety`, which `dispatch` keeps.
         unsafe { (*registers).rax += 100 };
     }
 
@@ -1441,8 +1495,8 @@ mod tests {
         let target = function(&SUM);
         install(
             target + 2,
-            (dispatch as *const ()).addr(),
-            core::ptr::from_ref(site).addr(),
+            (dispatch as *const ()).expose_provenance(),
+            core::ptr::from_ref(site).expose_provenance(),
         )
         .unwrap();
         assert_eq!(callable(target)(1), 107);

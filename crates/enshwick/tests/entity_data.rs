@@ -29,7 +29,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = OWNERS.set(load.entity_data("owner", Replication::Server)?);
             let _first = NICKNAMES
-                .set(load.entity_data("survivors-per-altar:nickname", Replication::Clients)?);
+                .set(load.entity_data("you.market-stalls:nickname", Replication::Clients)?);
             Ok(Self)
         }
     }
@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn values_stay_with_their_entity() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         let (owners, nicknames) = (OWNERS.get().unwrap(), NICKNAMES.get().unwrap());
@@ -55,7 +55,7 @@ mod tests {
         nicknames.set(Entity(77), &"Old Tom".to_owned()).unwrap();
         assert_eq!(nicknames.get(Entity(77)).as_deref(), Some("Old Tom"));
         let kinds: Vec<String> = loader.item_data().into_iter().map(|v| v.0).collect();
-        assert_eq!(kinds, ["test.fake:owner", "survivors-per-altar:nickname"]);
+        assert_eq!(kinds, ["test.fake:owner", "you.market-stalls:nickname"]);
         let long = "x".repeat(600);
         assert_eq!(
             nicknames.set(Entity(77), &long),

@@ -88,11 +88,14 @@ pub(crate) struct FakePoints {
 fn declared(spec: *const PointSpec) -> Option<Declared> {
     // SAFETY: the safe layer passes a valid spec.
     let spec = unsafe { spec.as_ref() }?;
-    // SAFETY: strings and layouts are borrowed for the call.
+    // SAFETY: the safe layer passes the spec's name borrowed and unchanged
+    // for the call.
     let name = unsafe { spec.name.as_str() }?.to_owned();
-    // SAFETY: as above.
+    // SAFETY: the safe layer passes the input layout of a declared type, its
+    // fields and their names borrowed and unchanged for the call.
     let input = unsafe { crate::services::read_layout(&spec.input) }?;
-    // SAFETY: as above.
+    // SAFETY: the safe layer passes the output layout of a declared type, its
+    // fields and their names borrowed and unchanged for the call.
     let output = unsafe { crate::services::read_layout(&spec.output) }?;
     Some(Declared {
         name,
@@ -111,7 +114,8 @@ fn ids(raw: *const Str, count: u32) -> Vec<String> {
     // SAFETY: the safe layer passes `count` strings, borrowed for the call.
     let ids = unsafe { core::slice::from_raw_parts(raw, count as usize) };
     ids.iter()
-        // SAFETY: as above.
+        // SAFETY: each id is one of the `count` strings the safe layer passes
+        // borrowed and unchanged for the call.
         .filter_map(|id| unsafe { id.as_str() }.map(str::to_owned))
         .collect()
 }
@@ -275,7 +279,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Verdict;
     ///
-    /// #[enshwick::point(name = "probe:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,
@@ -309,7 +313,9 @@ impl Installed {
             true
         });
         if !attached {
-            // SAFETY: refused, so nothing keeps the pointer.
+            // SAFETY: `user` came from `Box::into_raw` just before, and the
+            // closure returned `false` before pushing a link, so no link holds
+            // it and this is its only release.
             drop(unsafe { Box::from_raw(user) });
         }
         attached
@@ -362,7 +368,7 @@ impl Installed {
     /// ```
     /// use enshwick::points::Decision;
     ///
-    /// #[enshwick::point(name = "probe:limit", mode = Override, output = u32)]
+    /// #[enshwick::point(name = "you.my-mod:limit", mode = Override, output = u32)]
     /// #[derive(Clone, Copy, Debug)]
     /// pub struct Limit {
     ///     pub level: u32,

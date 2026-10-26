@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn raises_rare_prices_and_counts_sales() {
         let loader = enshwick::test::FakeHost::new().service(&PRICES).install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this crate's `declare_mod!(MarketStalls)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert!(PRICE.load(Ordering::Relaxed) > 10);
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn without_trading_post_it_turns_off() {
         let loader = enshwick::test::FakeHost::new().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this crate's `declare_mod!(MarketStalls)`.
         let status = unsafe { loader.start(super::enshwick_mod_init, super::enshwick_mod_ready) };
         assert_ne!(status, Status::OK);
     }

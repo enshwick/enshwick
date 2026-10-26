@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn a_window_draws_each_frame_takes_inputs_and_closes() {
         let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Panel)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
@@ -130,7 +130,7 @@ mod tests {
 
         let ui = UI.get().unwrap();
         let ask = Dialog::new("Updates", "Download them now?")
-            .detail("safes 0.1.0 \u{2192} 0.2.0")
+            .detail("you.trading-post 0.1.0 \u{2192} 0.2.0")
             .buttons(&[Response::Ok, Response::Cancel]);
         ui.dialog(&ask, |answer| ANSWERS.lock().unwrap().push(answer))
             .unwrap();
@@ -140,7 +140,7 @@ mod tests {
         .unwrap();
         let waiting = loader.dialogs();
         assert_eq!(waiting.len(), 2);
-        assert_eq!(waiting[0].detail, "safes 0.1.0 \u{2192} 0.2.0");
+        assert_eq!(waiting[0].detail, "you.trading-post 0.1.0 \u{2192} 0.2.0");
         assert_eq!(
             waiting[0].buttons,
             1 << UiDialog::OK | 1 << UiDialog::CANCEL

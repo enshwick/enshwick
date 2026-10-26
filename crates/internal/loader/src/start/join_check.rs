@@ -57,7 +57,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
         let address = usize::try_from(va).ok()?;
         // SAFETY: `verify` reads only eight bytes inside the game's code
         // section, which stays mapped for the life of the process.
-        Some(unsafe { crate::world::read::<u64>(address, 0) })
+        Some(unsafe { crate::memory::read::<u64>(address, 0) })
     };
     let start = interaction::verify(
         loader.address(START_ID),
@@ -114,8 +114,9 @@ fn verified_join(
     let code = crate::code::text(base)
         .and_then(|(start, len)| range(u64::try_from(start).ok()?, len))
         .ok_or(Error::NoCode)?;
-    // SAFETY: `image` is the game's executable image, mapped for the life of
-    // the process.
+    // SAFETY: `image` is the game's executable image, mapped by Windows at
+    // `base` for the life of the process, and the code words it reads are
+    // never written.
     let join = unsafe { verify_mapped(&pins, image, code.clone()) }?;
     Ok((join, code))
 }

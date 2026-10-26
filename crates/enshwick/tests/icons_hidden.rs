@@ -79,7 +79,7 @@ mod tests {
     #[test]
     fn without_icons_the_item_keeps_the_vanilla_one() {
         let loader = host().install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Staffs)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert!(

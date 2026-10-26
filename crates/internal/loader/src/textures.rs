@@ -20,8 +20,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use arc_swap::ArcSwapOption;
-
 use enshwick::abi::{HookFlags, Side, Status};
+use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
 use crate::catalogue::types::UI_IMAGE;
@@ -77,11 +77,15 @@ static COMBINED: OnceLock<Combined> = OnceLock::new();
 type Combined = ((usize, usize), &'static [[u8; KEY]]);
 static LOADED: OnceLock<&'static Loader> = OnceLock::new();
 
-// SAFETY: each slot joins the chain of the function its type names.
+// SAFETY: `RequestFn` is the signature of the build table's
+// `textures.request`, and `link` uses this slot only as that function's next.
 static REQUEST_NEXT: Next<RequestFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `KeysFn` is the signature of the build table's `textures.keys`,
+// and `link` uses this slot only as that function's next.
 static KEYS_NEXT: Next<KeysFn> = unsafe { Next::new() };
-// SAFETY: as above.
+// SAFETY: `FillFn` is the signature of the build table's
+// `textures.registry_fill`, and `link` uses this slot only as that
+// function's next.
 static FILL_NEXT: Next<FillFn> = unsafe { Next::new() };
 
 type RequestFn = unsafe extern "system" fn(requester: *mut u8, requests: *mut Requests);
@@ -140,8 +144,10 @@ fn code_matches(loader: &Loader, symbol: &str) -> bool {
     let Ok(address) = usize::try_from(address) else {
         return false;
     };
-    // SAFETY: an address inside the game's image, which stays mapped.
-    let found = unsafe { core::ptr::with_exposed_provenance::<u64>(address).read_unaligned() };
+    // SAFETY: `address` is the build table's `symbol`, the start of a
+    // function in the game's image, which stays mapped and readable for the
+    // life of the process.
+    let found: u64 = unsafe { crate::memory::read(address, 0) };
     found == expected
 }
 
@@ -168,8 +174,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let o = |name: &str| loader.offset(&format!("textures.{name}"));
             let signal = usize::try_from(loader.address("textures.signal")?).ok()?;
             Some(Layout {
-                // SAFETY: the symbol is the game's event signal on this build,
-                // its code checked above.
+                // SAFETY: the build table's `textures.signal` is the game's
+                // event signal with the `SignalFn` signature on this build,
+                // and its code matched the table's bytes in `code_matches`.
                 signal: unsafe { core::mem::transmute::<usize, SignalFn>(signal) },
                 request_size: o("request_size")?,
                 request_hash: o("request_hash")?,
@@ -270,26 +277,6 @@ pub(crate) fn link(loader: &'static Loader) {
     }
 }
 
-/// Reads a `T` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a readable `T`.
-unsafe fn read<T: Copy>(base: *const u8, offset: usize) -> T {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().read_unaligned() }
-}
-
-/// Writes `value` at `base + offset`.
-///
-/// # Safety
-///
-/// The address holds a writable `T`.
-unsafe fn write<T: Copy>(base: *mut u8, offset: usize, value: T) {
-    // SAFETY: forwarded from the caller.
-    unsafe { base.wrapping_add(offset).cast::<T>().write_unaligned(value) };
-}
-
 /// The switch of the mod textures.
 static TEXTURES_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("mod textures");
 
@@ -301,42 +288,71 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         .as_ref()
         .filter(|m| !m.is_empty() && !TEXTURES_FUSE.is_off())
     else {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `textures.request` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
     };
     if requests.is_null() || requester.is_null() {
-        // SAFETY: as above.
+        // SAFETY: this detour runs only as the `textures.request` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
     }
     let Some(layout) = layout else {
-        // SAFETY: as above.
+        // SAFETY: this detour runs only as the `textures.request` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
     };
-    // SAFETY: the game's slice of requests, valid for the call.
-    let slice = unsafe { requests.read() };
+    // SAFETY: `requests` is non-null by the check before it and is the hooked
+    // function's slice argument, a `Requests` live for the call.
+    let data: *mut u8 = unsafe {
+        read_ptr_at(
+            requests.cast_const().cast(),
+            core::mem::offset_of!(Requests, data),
+        )
+    };
+    // SAFETY: `requests` is non-null by the check before it and is the hooked
+    // function's slice argument, a `Requests` live for the call.
+    let count: usize = unsafe {
+        read_at(
+            requests.cast_const().cast(),
+            core::mem::offset_of!(Requests, count),
+        )
+    };
     let size = layout.request_size;
     let mut kept: Vec<u8> = Vec::new();
     let mut ours = 0usize;
-    for index in 0..slice.count {
-        let at = slice.data.wrapping_add(index * size);
-        // SAFETY: one request of the slice.
-        let hash: ContentHash = unsafe { read(at, layout.request_hash) };
+    for index in 0..count {
+        let at = data.wrapping_add(index * size).cast_const();
+        // SAFETY: `at` is request `index` of the game's `count` requests,
+        // each `textures.request_size` bytes long, live for the call; its
+        // content hash sits at the build table's `textures.request_hash`
+        // offset.
+        let hash: ContentHash = unsafe { read_at(at, layout.request_hash) };
         let answered = served(content, &hash).and_then(|data| {
             TEXTURES_FUSE.run("the request", || {
-                // SAFETY: a live request and its requester, on the thread
-                // the game asks on.
+                // SAFETY: `at` is a live request of `requester`'s, both
+                // non-null hooked function's arguments, and this runs on the
+                // thread the game asks on.
                 unsafe { answer(&layout, requester, at, data) }
             })
         });
         if answered.is_some() {
             ours += 1;
         } else {
-            // SAFETY: as above, `size` bytes.
-            kept.extend_from_slice(unsafe { core::slice::from_raw_parts(at, size) });
+            let start = kept.len();
+            kept.resize(start + size, 0);
+            // SAFETY: `at` is request `index` of the game's requests, with
+            // `textures.request_size` readable bytes live for the call.
+            unsafe { read_bytes_at(at, 0, &mut kept[start..]) };
         }
     }
     if ours == 0 {
-        // SAFETY: forwarded unchanged.
+        // SAFETY: this detour runs only as the `textures.request` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
         return unsafe { REQUEST_NEXT.get()(requester, requests) };
     }
     if kept.is_empty() {
@@ -346,8 +362,10 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
         data: kept.as_mut_ptr(),
         count: kept.len() / size,
     };
-    // SAFETY: the game's content request with the requests it did not get
-    // answered here, laid out as it laid them out.
+    // SAFETY: this detour runs only as the `textures.request` link, so the
+    // slot holds the next function of that signature; `rest` holds the
+    // requests answered nowhere here, byte for byte as the game laid them
+    // out, and lives until the call returns.
     unsafe { REQUEST_NEXT.get()(requester, &raw mut rest) };
 }
 
@@ -356,29 +374,39 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
 ///
 /// # Safety
 ///
-/// `request` is a live request of `requester`'s, on the requesting thread.
+/// - `request` points at a live request of `requester`'s, readable for the
+///   build table's `textures.request_size` bytes.
+/// - `requester` is the live, non-null requester that asked.
+/// - Called on the requesting thread, inside the content request.
 unsafe fn answer(layout: &Layout, requester: *mut u8, request: *const u8, data: &[u8]) {
-    // SAFETY: the request starts with its buffer and the bytes it asks for.
-    let buffer: *mut u8 = unsafe { read(request, 0) };
-    // SAFETY: as above.
-    let wanted: u64 = unsafe { read(request, 8) };
-    // SAFETY: the request's offset into the content.
-    let offset: u32 = unsafe { read(request, layout.request_offset) };
-    // SAFETY: the request's completion context.
-    let context: [u8; 16] = unsafe { read(request, layout.request_context) };
+    // SAFETY: the caller guarantees a live request; a request starts with
+    // the pointer to its buffer.
+    let buffer = unsafe { read_ptr_at::<u8>(request, 0) };
+    // SAFETY: the caller guarantees a live request; its second word is the
+    // u64 count of bytes it asks for.
+    let wanted: u64 = unsafe { read_at(request, 8) };
+    // SAFETY: the caller guarantees a live request; its u32 offset into the
+    // content sits at the build table's `textures.request_offset` offset.
+    let offset: u32 = unsafe { read_at(request, layout.request_offset) };
+    // SAFETY: the caller guarantees a live request; its 16-byte completion
+    // context sits at the build table's `textures.request_context` offset.
+    let context: [u8; 16] = unsafe { read_at(request, layout.request_context) };
     let range = usize::try_from(offset)
         .ok()
         .zip(usize::try_from(wanted).ok())
         .and_then(|(start, len)| data.get(start..start.checked_add(len)?));
     let code = match range {
         Some(bytes) if !buffer.is_null() => {
-            // SAFETY: the game's buffer of `wanted` bytes for this request.
+            // SAFETY: `buffer` is non-null by the guard and is the request's
+            // buffer of `wanted` bytes; `bytes` is the `wanted` bytes taken
+            // from `data`, which the game's buffer cannot overlap.
             unsafe { buffer.copy_from_nonoverlapping(bytes.as_ptr(), bytes.len()) };
             0u8
         }
         _ => 0x1f,
     };
-    // SAFETY: forwarded from the caller.
+    // SAFETY: the caller guarantees a live requester and the requesting
+    // thread, all `post` asks for.
     unsafe { post(layout, requester, code, context) };
 }
 
@@ -387,37 +415,54 @@ unsafe fn answer(layout: &Layout, requester: *mut u8, request: *const u8, data: 
 ///
 /// # Safety
 ///
-/// `requester` is the live requester, on the requesting thread.
+/// - `requester` is the live, non-null requester whose ring takes the
+///   record.
+/// - Called on the requesting thread, inside the content request, so no
+///   other thread posts to that ring meanwhile.
 unsafe fn post(layout: &Layout, requester: *mut u8, code: u8, context: [u8; 16]) {
-    // SAFETY: the requester's ring fields at the build's offsets.
-    let head: u32 = unsafe { read(requester, layout.ring_head) };
-    // SAFETY: as above.
-    let last: u32 = unsafe { read(requester, layout.ring_last) };
+    // SAFETY: the caller guarantees a live requester; its u32 ring head sits
+    // at the build table's `textures.ring_head` offset.
+    let head: u32 = unsafe { read_at(requester, layout.ring_head) };
+    // SAFETY: the caller guarantees a live requester; its u32 last ring index
+    // sits at the build table's `textures.ring_last` offset.
+    let last: u32 = unsafe { read_at(requester, layout.ring_last) };
     let next = if head == last { 0 } else { head + 1 };
-    // SAFETY: as above.
-    let tail: u32 = unsafe { read(requester, layout.ring_tail) };
+    // SAFETY: the caller guarantees a live requester; its u32 ring tail sits
+    // at the build table's `textures.ring_tail` offset.
+    let tail: u32 = unsafe { read_at(requester, layout.ring_tail) };
     let room = next != tail || {
-        // SAFETY: as above.
-        let fresh: u32 = unsafe { read(requester, layout.ring_tail_next) };
-        // SAFETY: as above.
-        unsafe { write(requester, layout.ring_tail, fresh) };
+        // SAFETY: the caller guarantees a live requester; its u32 next tail
+        // sits at the build table's `textures.ring_tail_next` offset.
+        let fresh: u32 = unsafe { read_at(requester, layout.ring_tail_next) };
+        // SAFETY: the caller guarantees a live requester on the requesting
+        // thread; its u32 ring tail sits at the build table's
+        // `textures.ring_tail` offset.
+        unsafe { write_at(requester, layout.ring_tail, fresh) };
         next != fresh
     };
     if room {
-        // SAFETY: as above.
-        let records: *mut u8 = unsafe { read(requester, layout.ring_records) };
+        // SAFETY: the caller guarantees a live requester; its ring records
+        // pointer sits at the build table's `textures.ring_records` offset.
+        let records = unsafe { read_ptr_at::<u8>(requester, layout.ring_records) };
         let mut record = [0u8; 24];
         record[0] = code;
         record[8..].copy_from_slice(&context);
-        // SAFETY: the ring's record at `head`, 24 bytes.
-        unsafe { write(records, head as usize * 24, record) };
-        // SAFETY: as above.
-        unsafe { write(requester, layout.ring_head, next) };
+        // SAFETY: `records` is the live requester's ring of 24-byte records
+        // and `head` its current head, the record the game's own post writes
+        // next; the caller's requesting thread is the ring's only writer now.
+        unsafe { write_at(records, head as usize * 24, record) };
+        // SAFETY: the caller guarantees a live requester on the requesting
+        // thread; its u32 ring head sits at the build table's
+        // `textures.ring_head` offset.
+        unsafe { write_at(requester, layout.ring_head, next) };
     }
-    // SAFETY: as above.
-    let event: *mut u8 = unsafe { read(requester, layout.ring_event) };
+    // SAFETY: the caller guarantees a live requester; its event pointer sits
+    // at the build table's `textures.ring_event` offset.
+    let event = unsafe { read_ptr_at::<u8>(requester, layout.ring_event) };
     if !event.is_null() {
-        // SAFETY: the game's signal of the requester's event.
+        // SAFETY: `event` is non-null by the check before it and is the
+        // requester's event; `textures.signal` is the game's signal for it,
+        // its code checked in `layout`.
         unsafe { (layout.signal)(event) };
     }
 }
@@ -428,34 +473,68 @@ unsafe extern "system" fn keys(
     type_hash: u32,
     found: *mut u32,
 ) -> *mut KeysOut {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `textures.keys` link, so the slot
+    // holds the next function of that signature; the game's arguments pass
+    // unchanged.
     let result = unsafe { KEYS_NEXT.get()(out, database, type_hash, found) };
     if type_hash != UI_IMAGE || out.is_null() {
         return result;
     }
     let _done = TEXTURES_FUSE.run("the keys", || {
-        // SAFETY: the game's result, written by the listing.
+        // SAFETY: `out` is non-null by the check before it and is the hooked
+        // listing's result, which the listing has just written.
         unsafe { append(out) };
     });
     result
+}
+
+/// Points the listing's result at `keys` and marks it a success.
+///
+/// # Safety
+///
+/// - `out` is a live, writable `KeysOut` that nothing else touches during
+///   the call.
+unsafe fn hand_back(out: *mut KeysOut, keys: &'static [[u8; KEY]]) {
+    let out = out.cast::<u8>();
+    let (list, count) = (keys.as_ptr().cast_mut(), keys.len() as u64);
+    // SAFETY: the caller guarantees a writable `KeysOut`, whose `keys`
+    // pointer field sits at its `offset_of!`.
+    unsafe { write_ptr_at(out, core::mem::offset_of!(KeysOut, keys), list) };
+    // SAFETY: the caller guarantees a writable `KeysOut`, whose u64 `count`
+    // field sits at its `offset_of!`.
+    unsafe { write_at(out, core::mem::offset_of!(KeysOut, count), count) };
+    // SAFETY: the caller guarantees a writable `KeysOut`, whose u8 `status`
+    // field sits at its `offset_of!`.
+    unsafe { write_at(out, core::mem::offset_of!(KeysOut, status), 0u8) };
 }
 
 /// Hands back the listing with the served UI images after the game's own.
 ///
 /// # Safety
 ///
-/// `out` is the listing's result.
+/// - `out` is the non-null result the game's key listing has just written,
+///   live and writable for the call.
+/// - Its keys, when not null, are `count` readable keys of [`KEY`] bytes
+///   that stay alive, as the game never frees the listing.
+/// - Called on the listing's thread, which alone touches `out` meanwhile.
 unsafe fn append(out: *mut KeysOut) {
-    // SAFETY: the game's result.
-    let listed = unsafe { &mut *out };
-    let count = usize::try_from(listed.count).unwrap_or(0);
-    let original = (listed.keys.addr(), count);
+    let result = out.cast_const().cast::<u8>();
+    // SAFETY: the caller guarantees a live `KeysOut`, whose `keys` pointer
+    // field sits at its `offset_of!`.
+    let listed: *const [u8; KEY] =
+        unsafe { read_ptr_at::<[u8; KEY]>(result, core::mem::offset_of!(KeysOut, keys)) }
+            .cast_const();
+    // SAFETY: the caller guarantees a live `KeysOut`, whose u64 `count` field
+    // sits at its `offset_of!`.
+    let count: u64 = unsafe { read_at(result, core::mem::offset_of!(KeysOut, count)) };
+    let count = usize::try_from(count).unwrap_or(0);
+    let original = (listed.addr(), count);
     if let Some(&(from, keys)) = COMBINED.get()
         && from == original
     {
-        listed.keys = keys.as_ptr();
-        listed.count = keys.len() as u64;
-        listed.status = 0;
+        // SAFETY: the caller guarantees `out` is live and writable, and
+        // nothing else touches it during the call.
+        unsafe { hand_back(out, keys) };
         LISTED.store(true, Ordering::Release);
         return;
     }
@@ -464,9 +543,13 @@ unsafe fn append(out: *mut KeysOut) {
         return;
     }
     let mut keys: Vec<[u8; KEY]> = Vec::with_capacity(count + extra.len());
-    if !listed.keys.is_null() {
-        // SAFETY: the game's array of `count` keys, which no caller frees.
-        keys.extend_from_slice(unsafe { core::slice::from_raw_parts(listed.keys, count) });
+    if !listed.is_null() {
+        keys.extend((0..count).map(|index| {
+            // SAFETY: `listed` is non-null by the check before it, and the caller
+            // guarantees it holds `count` readable keys of `KEY` bytes;
+            // `index` is below `count`.
+            unsafe { read_at::<[u8; KEY]>(listed.cast(), index * KEY) }
+        }));
     }
     for key in &extra {
         let mut entry = [0u8; KEY];
@@ -479,9 +562,9 @@ unsafe fn append(out: *mut KeysOut) {
     }
     let keys: &'static [[u8; KEY]] = Box::leak(keys.into_boxed_slice());
     let _first = COMBINED.set((original, keys));
-    listed.count = keys.len() as u64;
-    listed.keys = keys.as_ptr();
-    listed.status = 0;
+    // SAFETY: the caller guarantees `out` is live and writable, and nothing
+    // else touches it during the call.
+    unsafe { hand_back(out, keys) };
     LISTED.store(true, Ordering::Release);
 }
 
@@ -492,13 +575,19 @@ unsafe extern "system" fn fill(registry: *mut u8) {
     {
         // The registry listed before the loader armed: list once more, so
         // the served UI images join; the game skips keys it has.
-        // SAFETY: the registry's "listed" byte, which only this function
-        // reads, on the UI thread.
-        unsafe { write(registry, layout.registry_listed, 0u8) };
-        // SAFETY: the rest of the chain takes the registry the game passed.
+        // SAFETY: `registry` is non-null by the check before it and is the hooked
+        // fill's argument, used on the UI thread the game calls it on; its
+        // "listed" byte sits at the build table's `textures.registry_listed`
+        // offset, and only the fill reads it.
+        unsafe { write_at(registry, layout.registry_listed, 0u8) };
+        // SAFETY: this detour runs only as the `textures.registry_fill` link,
+        // so the slot holds the next function of that signature; the game's
+        // registry passes unchanged.
         unsafe { FILL_NEXT.get()(registry) };
-        // SAFETY: as above.
-        let listed: u8 = unsafe { read(registry, layout.registry_listed) };
+        // SAFETY: `registry` is non-null by the check before it and is the hooked
+        // fill's argument, live for the call; its "listed" byte sits at the
+        // build table's `textures.registry_listed` offset.
+        let listed: u8 = unsafe { read_at(registry, layout.registry_listed) };
         if listed == 1 {
             RELISTED.store(true, Ordering::Release);
             crate::log!(
@@ -509,7 +598,9 @@ unsafe extern "system" fn fill(registry: *mut u8) {
         }
         return;
     }
-    // SAFETY: forwarded unchanged.
+    // SAFETY: this detour runs only as the `textures.registry_fill` link, so
+    // the slot holds the next function of that signature; the game's
+    // registry passes unchanged.
     unsafe { FILL_NEXT.get()(registry) };
 }
 

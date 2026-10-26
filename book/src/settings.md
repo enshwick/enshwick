@@ -74,10 +74,11 @@ settings menu names it:
 | `client`         | Each player's own: never sent to or taken from a server; the console of a dedicated server leaves it alone                       |
 | `sync`           | The server's value: a joined client runs with it ([Join values](#join-values))                                                   |
 | `startup, sync`  | Read when a world loads, as `startup`; a joined client runs with the server's value, the same while the world runs               |
-| `range = a..=b`  | Numbers from `a` to `b`; `a..` and `..=b` leave one end open. Constants work, as in `0.0..=MAX`                                  |
+| `range = a..=b`  | Numbers from `a` to `b`, each element of a list of numbers too; `a..` and `..=b` leave one end open. Constants work              |
 | `choices = [..]` | One of these values; any type serde writes, such as an enum's variants                                                           |
 | `text = "key"`   | The key of the field's label in the mod's [texts](content/texts.md), `config.<field>` by default; its description is `<key>.doc` |
 | `secret`         | A value such as a password: never sent to a client, and changed in the file only; never with `sync`                              |
+| `group`          | On a field that is a `Config` of its own: a table of the file; see [Groups](#groups)                                             |
 
 A field takes one stage, or the pair `startup, sync`; any other two fail the
 build. On the struct,
@@ -88,13 +89,13 @@ translation exists.
 ```rust
 use enshwick::config::{Config, Stage};
 
-/// Safe settings.
+/// Locker settings.
 #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
 struct Settings {
-    /// The Safe costs the wooden chest's ingredients times this.
+    /// The locker costs the wooden chest's ingredients times this.
     #[config(startup, range = 1..=100)]
     cost_multiplier: u32,
-    /// When the safe opens for administrators.
+    /// When the locker opens for administrators.
     #[config(choices = ["never", "always"])]
     admins: String,
 }
@@ -112,6 +113,47 @@ assert_eq!(cost.accepts(), "1 to 100");
 assert!(Settings::template().contains("# Takes effect when the world loads."));
 # Ok::<(), &str>(())
 ```
+
+## Groups
+
+A field marked `group` holds settings of their own, written as a table of the
+file and shown together on the Mods screen, each row's label after the
+group's title. Its fields keep their own stages, ranges and texts; the
+console and the Mods screen name them by dotted keys, such as
+`comfort.multiplier`, and their text keys are `config.comfort.multiplier`
+by default. The group's own title is `config.comfort`.
+
+```rust
+use enshwick::config::Config;
+
+/// Comfort rules.
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[serde(default)]
+struct Comfort {
+    /// Comfort per piece of furniture, times this factor.
+    #[config(range = 0.0..=10.0)]
+    multiplier: f32,
+}
+
+/// Rates of the game.
+#[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[serde(default)]
+struct Rates {
+    /// Recipes cost this many times their price.
+    #[config(startup, range = 1..=5)]
+    cost: u32,
+    /// How furniture adds comfort.
+    #[config(group)]
+    comfort: Comfort,
+}
+
+assert!(Rates::template().contains("# How furniture adds comfort.\n[comfort]\n"));
+assert!(Rates::schema().field("comfort.multiplier").is_some());
+```
+
+A mod that used to keep a setting at the top of the file moves it into a
+group with a [migration](migrations.md#settings-from-another-mod):
+`take_setting` takes a flat key of another mod into a dotted one.
 
 ## Settings per world
 
@@ -159,7 +201,7 @@ for the process; it is the description the loader's screens build on, and
 what the loader checks values against before it writes them.
 
 Players and administrators change settings on the Mods screen. The server's
-[console](chat.md#the-console), such as admin-tools' command file, reads and
+[console](chat.md#the-console), such as a mod's command file, reads and
 changes them too:
 
 | Line                                  | Answer                                                                           |
@@ -170,15 +212,18 @@ changes them too:
 | `enshwick config <mod> <key> <value>` | checks the value and writes it to the running world's settings, comments kept    |
 
 On a dedicated server, `enshwick config` edits the world it runs; before its
-world loads, the change waits for it.
+world loads, the change waits for it. A key names one element of a list with
+its index, `per_level[2]`, and a grouped setting with its dotted key,
+`comfort.multiplier`.
 
 The world settings, when a player creates or starts a world and in the pause
 menu's world settings, are where a world's settings are edited: under their
 last tab, every mod's world settings show as the game's own rows, built from
 the schema: a toggle for `bool`, a slider for a number with a range (in stops
-for whole numbers up to 32 values), a dropdown for `choices`, and the value
-with the file's name for the rest (text, lists, tables, numbers without a
-range). They are read-only where the game makes its own rows read-only, for a
+for whole numbers up to 32 values), a slider per element for a list of up to
+16 numbers with a range, a dropdown for `choices`, and the value with the
+file's name for the rest (text, longer lists, tables, numbers without a
+range). A list's length changes in the file. They are read-only where the game makes its own rows read-only, for a
 player who is no host; joined to another's game, the rows show the server's
 `sync` values only.
 

@@ -112,8 +112,9 @@ static DESTROYED_COUNT: AtomicU64 = AtomicU64::new(1 << 32);
 /// entity's destroy for the playback after the next step; nonzero when
 /// queued.
 type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, entity: u32) -> u8;
-// SAFETY: the slot joins the chain of `ecs.destroy_request`, whose type
-// `DestroyFn` names.
+// SAFETY: `DestroyFn` is the exact signature of the game function at the
+// table's `ecs.destroy_request`, and the slot is used only as the `next` of
+// the `destroy` link on that function.
 static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 /// `ecs::ItemState`'s type hash and the offset of its `itemId`.
 static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
@@ -250,7 +251,8 @@ pub(crate) fn link(loader: &Loader) {
 }
 
 unsafe extern "system" fn destroy(buffer: *mut u8, requester: u32, entity: u32) -> u8 {
-    // SAFETY: forwarded unchanged.
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the destroy request's signature.
     let queued = unsafe { DESTROY_NEXT.get()(buffer, requester, entity) };
     if queued != 0 && entity != 0 && KEPT.load(Ordering::Relaxed) {
         note_destroyed(entity);
@@ -649,14 +651,10 @@ fn held(loader: &Loader, pide: u32) -> Option<u32> {
         Some((ty, usize::try_from(offset).ok()?))
     }))?;
     let data = crate::world::component(loader, pide, ty).ok()?;
-    // SAFETY: a live ItemState holds its item id at the reflected offset,
-    // read on the game thread.
-    Some(unsafe {
-        data.cast::<u8>()
-            .wrapping_add(offset)
-            .cast::<u32>()
-            .read_unaligned()
-    })
+    // SAFETY: `world::component` returned the entity's live `ItemState`, read
+    // on the game thread that owns it; it holds its `u32` item id at the
+    // reflected `itemId` offset.
+    Some(unsafe { enshwick::raw::read_at(data.cast(), offset) })
 }
 
 /// Follows the server's world: reads the world's values once it has
@@ -746,16 +744,16 @@ mod tests {
     #[test]
     fn ids_take_the_mod_s_namespace_unless_they_name_one() {
         assert_eq!(
-            full_id("survivors", "charges").as_deref(),
-            Some("survivors:charges")
+            full_id("you.lanterns", "oil").as_deref(),
+            Some("you.lanterns:oil")
         );
         assert_eq!(
-            full_id("probe", "other:fire_damage").as_deref(),
+            full_id("you.lanterns", "other:fire_damage").as_deref(),
             Some("other:fire_damage")
         );
-        assert_eq!(full_id("probe", "Charges"), None);
-        assert_eq!(full_id("probe", "a:b:c"), None);
-        assert_eq!(full_id("probe", ":x"), None);
+        assert_eq!(full_id("you.lanterns", "Charges"), None);
+        assert_eq!(full_id("you.lanterns", "a:b:c"), None);
+        assert_eq!(full_id("you.lanterns", ":x"), None);
     }
 
     #[test]

@@ -278,8 +278,13 @@ impl Installed {
         cell: [i64; 3],
         beds: &[(u32, u32)],
     ) -> Option<u32> {
+        /// # Safety
+        ///
+        /// - `token` points at the `beds` slice of a running
+        ///   `survivor_lookup`, alive and unchanged for the call.
         unsafe extern "system" fn bed_of(token: *mut core::ffi::c_void, entity: u32) -> u32 {
-            // SAFETY: the token is the `beds` slice of the running call.
+            // SAFETY: the caller guarantees `token` points at the `beds` slice
+            // of the running call, an aligned `&[(u32, u32)]` alive for it.
             let beds = unsafe { &*token.cast::<&[(u32, u32)]>() };
             beds.iter()
                 .find(|(e, _)| *e == entity)
@@ -580,8 +585,13 @@ impl Installed {
         cap: u32,
         need: fn(u32) -> u32,
     ) {
+        /// # Safety
+        ///
+        /// - `token` points at the `need` function of a running
+        ///   `experience`, alive and unchanged for the call.
         unsafe extern "system" fn need_for(token: *mut core::ffi::c_void, level: u32) -> u32 {
-            // SAFETY: the token is the `need` function of the running call.
+            // SAFETY: the caller guarantees `token` points at the `need`
+            // function of the running call, an aligned `fn(u32) -> u32`.
             let need = unsafe { *token.cast::<fn(u32) -> u32>() };
             need(level)
         }

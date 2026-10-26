@@ -4,7 +4,7 @@
 //!
 //! A line is `enshwick ...` for the loader's own tools (`enshwick help`
 //! lists them), or a mod's id followed by the text form of one of its
-//! [actions](crate::actions), such as `safes access Ann on`. Players never
+//! [actions](crate::actions), such as `you.lockers access Ann on`. Players never
 //! type these: they use the game's interface.
 
 use crate::abi::{Status, Str};
@@ -40,7 +40,7 @@ pub enum RunError {
 }
 
 /// Runs the console line `line`, such as `enshwick status` or
-/// `admin-tools world`, as the server's console, and returns its answer.
+/// `you.my-mod world`, as the server's console, and returns its answer.
 ///
 /// Call it on the server's game thread, from a scheduled task or a game
 /// event, where action handlers expect to run.

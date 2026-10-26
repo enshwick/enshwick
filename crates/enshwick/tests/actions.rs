@@ -12,26 +12,26 @@ mod tests {
     use enshwick::i18n::{Language, Texts};
     use enshwick::{Load, Mod, Off};
 
-    /// The players each Safe lets in: owner key, then the allowed.
+    /// The players each locker lets in: owner key, then the allowed.
     static ALLOWED: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
     static RUNS: Mutex<Vec<(String, Via)>> = Mutex::new(Vec::new());
 
     const TEXTS: &str = r#"
 [en]
 "access" = "Who may use it"
-"access.help" = "Let players open the Safe"
-"safe" = "Your Safe"
-"none" = "No Safe of yours here"
+"access.help" = "Let players open the locker"
+"locker" = "Your locker"
+"none" = "No locker of yours here"
 [uk]
 "access" = "Хто може користуватися"
-"safe" = "Твій сейф"
+"locker" = "Твоя шафка"
 "#;
 
-    struct Safes;
+    struct Lockers;
 
-    impl Mod for Safes {
+    impl Mod for Lockers {
         fn manifest() -> &'static enshwick::abi::Manifest {
-            enshwick::manifest!(id: "you.safes", side: SERVER)
+            enshwick::manifest!(id: "you.lockers", side: SERVER)
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
@@ -46,7 +46,7 @@ mod tests {
                     if ask.player.entity.0 == 0 {
                         Err(ask.say("none", &[]))
                     } else {
-                        Ok(Subject::new(42, ask.say("safe", &[])))
+                        Ok(Subject::new(42, ask.say("locker", &[])))
                     }
                 })
                 .hint(),
@@ -93,7 +93,7 @@ mod tests {
         }
     }
 
-    enshwick::declare_mod!(Safes);
+    enshwick::declare_mod!(Lockers);
 
     fn player(entity: u32, key: u64, name: &str, admin: bool) -> PlayerInfo {
         let mut info = PlayerInfo {
@@ -123,7 +123,7 @@ mod tests {
             .player(ann)
             .player(admin)
             .install();
-        // SAFETY: the exports of `declare_mod!` above.
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Safes)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
@@ -136,9 +136,9 @@ mod tests {
         assert_eq!(sheet.len(), 1, "{text}");
         let access = &sheet[0];
         assert_eq!(access.label, "Хто може користуватися");
-        assert_eq!(access.help, "Let players open the Safe");
+        assert_eq!(access.help, "Let players open the locker");
         assert!(access.per_player && access.hint && access.offered);
-        assert_eq!(access.subject, "Твій сейф");
+        assert_eq!(access.subject, "Твоя шафка");
         let names: Vec<&str> = access.players.iter().map(|p| p.1.as_str()).collect();
         assert_eq!(names, ["Ann", "Root"]);
 
@@ -160,26 +160,30 @@ mod tests {
         );
         assert!(sheet[0].players.iter().any(|p| p.0 == 7 && p.2));
 
-        // The console form: the console has no character, so no Safe is at
+        // The console form: the console has no character, so no locker is at
         // hand; help lists every action; an unknown id is named.
         assert_eq!(
-            console::run("safes access Ann on").as_deref(),
-            Ok("No Safe of yours here")
+            console::run("you.lockers access Ann on").as_deref(),
+            Ok("No locker of yours here")
         );
-        let help = console::run("safes help").unwrap();
+        let help = console::run("you.lockers help").unwrap();
         assert!(
             help.contains("access <player> <on|off>: Who may use it"),
             "{help}"
         );
         assert!(help.contains("wipe <all|half> <1-10>: Wipe"), "{help}");
         assert!(
-            console::run("safes fly")
+            console::run("you.lockers fly")
                 .unwrap()
                 .starts_with("No action fly")
         );
         assert_eq!(
             loader.console(),
-            ["safes access Ann on", "safes help", "safes fly"]
+            [
+                "you.lockers access Ann on",
+                "you.lockers help",
+                "you.lockers fly"
+            ]
         );
 
         // An administrator's action with typed arguments, refused to others.
@@ -192,7 +196,7 @@ mod tests {
         assert_eq!(args[0].kind, ArgView::CHOICE);
         assert_eq!(args[0].choices, ["Everything", "Half"]);
         assert_eq!(
-            console::run("safes wipe half 3").as_deref(),
+            console::run("you.lockers wipe half 3").as_deref(),
             Ok("wipe 1 in 3")
         );
         assert_eq!(
@@ -200,7 +204,7 @@ mod tests {
             ("wipe".to_owned(), Via::Console)
         );
         assert_eq!(
-            console::run("safes wipe half 30").as_deref(),
+            console::run("you.lockers wipe half 30").as_deref(),
             Ok("Write it so: wipe <all|half> <1-10>: Wipe")
         );
         assert_eq!(
@@ -227,7 +231,7 @@ mod tests {
             loader
                 .ask_actions(ActionCall::HINTS, &owner, 0, "", "")
                 .as_deref(),
-            Some("access\tWho may use it\tYour Safe\n")
+            Some("access\tWho may use it\tYour locker\n")
         );
         let ghost = player(0, 5, "Ghost", false);
         assert_eq!(
@@ -240,7 +244,7 @@ mod tests {
                     "p0000000000000007\tb1"
                 )
                 .as_deref(),
-            Some("0No Safe of yours here")
+            Some("0No locker of yours here")
         );
     }
 }

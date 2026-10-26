@@ -2,6 +2,7 @@
 //! it, writes the JSON Schemas of its files for editors, and zips it for a
 //! release.
 
+use anyhow::Context as _;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -42,7 +43,7 @@ pub(crate) enum Command {
 }
 
 /// Runs `command`; what it did, or why it failed.
-pub(crate) fn run(command: &Command) -> Result<String, String> {
+pub(crate) fn run(command: &Command) -> anyhow::Result<String> {
     match command {
         Command::Check { dir, game } => {
             let vanilla = game.as_deref().map(vanilla).transpose()?;
@@ -55,7 +56,7 @@ pub(crate) fn run(command: &Command) -> Result<String, String> {
 
 /// The vanilla content of the game in `game`: the layouts from its
 /// executable's reflection, the data from its archive.
-fn vanilla(game: &Path) -> Result<Vanilla, String> {
+fn vanilla(game: &Path) -> anyhow::Result<Vanilla> {
     use enshwick_gamedata::catalogue::Reflected;
     use enshwick_reflect::{Image, Layout, Reflection};
 
@@ -63,19 +64,20 @@ fn vanilla(game: &Path) -> Result<Vanilla, String> {
         .into_iter()
         .map(|name| (game.join(format!("{name}.exe")), name))
         .find(|(exe, _)| exe.is_file())
-        .ok_or_else(|| {
+        .with_context(|| {
             format!(
                 "{}: no enshrouded.exe or enshrouded_server.exe",
                 game.display()
             )
         })?;
-    let bytes = std::fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?;
-    let image = Image::parse(&bytes, Layout::File, None).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
+    let image = Image::parse(&bytes, Layout::File, None)?;
     let reflection = Reflection::scan(&image);
     let archive = enshwick_gamedata::archive::Archive::open(game, name)
-        .ok_or_else(|| format!("{}: {name}.kfc does not read", game.display()))?;
-    Vanilla::new(&Reflected(&reflection), move |key| archive.resource(&key))
-        .map_err(|off| off.to_string())
+        .with_context(|| format!("{}: {name}.kfc does not read", game.display()))?;
+    Ok(Vanilla::new(&Reflected(&reflection), move |key| {
+        archive.resource(&key)
+    })?)
 }
 
 /// Reads and checks the pack in `dir`, with the game's vanilla names when
@@ -83,16 +85,15 @@ fn vanilla(game: &Path) -> Result<Vanilla, String> {
 fn check(
     dir: &Path,
     vanilla: Option<&Vanilla>,
-) -> Result<(String, PackManifest, PackFiles), String> {
+) -> anyhow::Result<(String, PackManifest, PackFiles)> {
     let manifest_path = dir.join(MANIFEST_FILE);
     let text = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
-    let manifest = PackManifest::parse(&text).map_err(|e| e.to_string())?;
+        .with_context(|| manifest_path.display().to_string())?;
+    let manifest = PackManifest::parse(&text)?;
     semver::Version::parse(&manifest.version)
-        .map_err(|e| format!("{MANIFEST_FILE}: version {:?}: {e}", manifest.version))?;
-    let files = PackFiles::read_dir(dir).map_err(|e| e.to_string())?;
-    let pack =
-        Pack::parse_with(&manifest.id, &files, vanilla).map_err(|errors| errors.to_string())?;
+        .with_context(|| format!("{MANIFEST_FILE}: version {:?}", manifest.version))?;
+    let files = PackFiles::read_dir(dir)?;
+    let pack = Pack::parse_with(&manifest.id, &files, vanilla)?;
     let summary = format!(
         "{} {}: {} content ids, {} loot drops; join hash {:08x}",
         manifest.id,
@@ -104,13 +105,13 @@ fn check(
     Ok((summary, manifest, files))
 }
 
-fn schema(out: &Path) -> Result<String, String> {
-    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+fn schema(out: &Path) -> anyhow::Result<String> {
+    std::fs::create_dir_all(out).with_context(|| out.display().to_string())?;
     let mut written = Vec::new();
     for (file, schema) in enshwick::packs::schemas() {
         let name = file.replace(".toml", ".schema.json");
         let path = out.join(&name);
-        std::fs::write(&path, schema).map_err(|e| format!("{}: {e}", path.display()))?;
+        std::fs::write(&path, schema).with_context(|| path.display().to_string())?;
         written.push(name);
     }
     Ok(format!(
@@ -121,13 +122,13 @@ fn schema(out: &Path) -> Result<String, String> {
     ))
 }
 
-fn zip(dir: &Path, out: Option<&Path>) -> Result<String, String> {
+fn zip(dir: &Path, out: Option<&Path>) -> anyhow::Result<String> {
     let (summary, manifest, files) = check(dir, None)?;
     let out = out.map_or_else(
         || PathBuf::from(format!("{}.zip", manifest.id)),
         Path::to_path_buf,
     );
-    let file = std::fs::File::create(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let file = std::fs::File::create(&out).with_context(|| out.display().to_string())?;
     let mut archive = ::zip::ZipWriter::new(file);
     let options = ::zip::write::SimpleFileOptions::default()
         .compression_method(::zip::CompressionMethod::Deflated);
@@ -140,11 +141,11 @@ fn zip(dir: &Path, out: Option<&Path>) -> Result<String, String> {
                     .write_all(files.get(name).unwrap_or_default())
                     .map_err(Into::into)
             })
-            .map_err(|e| format!("{entry}: {e}"))?;
+            .with_context(|| entry.clone())?;
     }
     archive
         .finish()
-        .map_err(|e| format!("{}: {e}", out.display()))?;
+        .with_context(|| out.display().to_string())?;
     Ok(format!("{summary}\nwrote {}", out.display()))
 }
 
@@ -197,7 +198,7 @@ mod tests {
     #[test]
     fn a_bad_pack_names_the_line() {
         let dir = pack("bad", "[[item]]\nid = \"lantern\"\nlike = \"torch\"\n");
-        let why = check(&dir, None).unwrap_err();
+        let why = format!("{:#}", check(&dir, None).unwrap_err());
         assert!(
             why.starts_with("items.toml:1:1: no item \"torch\""),
             "{why}"
@@ -230,7 +231,7 @@ mod tests {
             "[[item]]\nid = \"bench\"\nlike = \"Craftingstation_Workbenhc\"\n",
         )
         .unwrap();
-        let why = check(&dir, Some(&vanilla)).unwrap_err();
+        let why = format!("{:#}", check(&dir, Some(&vanilla)).unwrap_err());
         assert!(why.contains("near: Craftingstation_Workbench"), "{why}");
         let _gone = std::fs::remove_dir_all(&dir);
     }

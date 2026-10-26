@@ -1,0 +1,88 @@
+---
+source: crates/enshwick/tests/pack_schemas.rs
+expression: shape
+---
+{
+  "$defs": {
+    "DropEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "chance": {
+          "format": "double",
+          "type": "number"
+        },
+        "count": {
+          "items": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "from": {
+          "$ref": "#/$defs/FromEntry"
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "meter": {
+          "items": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "chance",
+        "from"
+      ],
+      "type": "object"
+    },
+    "FromEntry": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "drop": {
+      "items": {
+        "$ref": "#/$defs/DropEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  },
+  "title": "Loot",
+  "type": "object"
+}

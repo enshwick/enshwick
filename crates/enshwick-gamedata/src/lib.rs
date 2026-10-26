@@ -17,6 +17,9 @@ use enshwick::code::Pattern;
 
 pub mod archive;
 pub mod catalogue;
+mod parts;
+
+pub use parts::{Part, PartState};
 
 pub use enshwick_reflect::Fingerprint;
 

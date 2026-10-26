@@ -1,20 +1,14 @@
-# Asks Steam once a week for the public build of the dedicated server (app
-# 2278520). When the loader has no server build table for it, a Windows job
-# downloads that server (never committed), runs `enshwick-compat` on it
-# with the latest released mods and opens an issue with the report, so a
-# maintainer writes the table with `cargo enshwick pin` (crates/cargo-enshwick).
-# It runs on its schedule or by hand, never on pull requests. Off until the
-# repository variable GAME_BUILD_WATCH is "true".
+# Every hour, on the organization runners: the public Steam builds of the
+# dedicated server and the client, and an issue for each build that no table
+# in crates/enshwick-gamedata/tables names. Never on pull requests.
 name: game-build-watch
 
 on:
   schedule:
-    - cron: '23 6 * * 1'
+    - cron: "11 * * * *"
   workflow_dispatch:
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 concurrency:
   group: game-build-watch
@@ -22,110 +16,8 @@ concurrency:
 
 jobs:
   watch:
-    if: vars.GAME_BUILD_WATCH == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      build: ${{ steps.steam.outputs.build }}
-      report: ${{ steps.table.outputs.report }}
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Public build of the dedicated server
-        id: steam
-        run: |
-          dir="$RUNNER_TEMP/steamcmd"
-          mkdir -p "$dir"
-          curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C "$dir"
-          "$dir/steamcmd.sh" +login anonymous +app_info_update 1 +app_info_print 2278520 +quit > "$RUNNER_TEMP/info.vdf"
-          build=$(awk '/"branches"/ { b = 1 } b && /"public"/ { p = 1 } p && /"buildid"/ { gsub(/"/, "", $2); print $2; exit }' "$RUNNER_TEMP/info.vdf")
-          case "$build" in
-            '' | *[!0-9]*) echo "steamcmd printed no public build id"; exit 1 ;;
-          esac
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-
-      - name: A table for the build, or an open issue
-        id: table
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ steps.steam.outputs.build }}
-        run: |
-          if grep -qx "steam_build = $BUILD" crates/enshwick-gamedata/tables/server-*.toml; then
-            echo "build $BUILD has a table"
-            exit 0
-          fi
-          title="Dedicated server build $BUILD has no build table"
-          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq length)
-          if [ "$open" != "0" ]; then
-            echo "an issue for build $BUILD is open"
-            exit 0
-          fi
-          echo "report=true" >> "$GITHUB_OUTPUT"
-
-  report:
-    needs: watch
-    if: needs.watch.outputs.report == 'true'
-    runs-on: windows-latest
-    timeout-minutes: 90
-    defaults:
-      run:
-        shell: bash
-    steps:
-      # v7.0.1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: The new dedicated server
-        run: |
-          dir="$RUNNER_TEMP/steamcmd"
-          mkdir -p "$dir"
-          curl -fsSL -o "$RUNNER_TEMP/steamcmd.zip" https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip
-          7z x -o"$dir" "$RUNNER_TEMP/steamcmd.zip" > /dev/null
-          # steamcmd exits with 7 after updating itself on its first run.
-          "$dir/steamcmd.exe" +force_install_dir "$(cygpath -w "$RUNNER_TEMP/server")" \
-            +login anonymous +app_update 2278520 validate +quit || true
-          test -f "$RUNNER_TEMP/server/enshrouded_server.exe"
-
-      - name: The latest released mods
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Until 1.0.0 the only build is the dev prerelease.
-          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
-            --jq '[.[] | select(.tagName | startswith("enshwick-loader-v"))][0].tagName // "dev"' | tr -d '\r')
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern enshwick.zip --dir "$RUNNER_TEMP"
-          7z x -o"$RUNNER_TEMP/released" "$RUNNER_TEMP/enshwick.zip" > /dev/null
-          echo "RELEASED=$tag" >> "$GITHUB_ENV"
-
-      - name: Report
-        run: |
-          cargo build --release --locked -p enshwick-compat
-          # 2 means something does not work, which is what the report is for.
-          target/release/enshwick-compat "$RUNNER_TEMP/server/enshrouded_server.exe" \
-            --mods "$RUNNER_TEMP/released/mods" --report "$RUNNER_TEMP/report.md" || [ $? -eq 2 ]
-
-      - name: Open an issue
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.watch.outputs.build }}
-        run: |
-          {
-            echo "Steam's public branch of the dedicated server (app 2278520) is at build"
-            echo "$BUILD, and the loader has no build table for it. Until it has, the loader"
-            echo "runs that build on the code patterns of the newest table, and what the"
-            echo "patterns miss stays off. The report below is \`enshwick-compat\` on"
-            echo "the new server with the mods of $RELEASED."
-            echo
-            echo "Write the table with \`cargo enshwick pin\`, following"
-            echo "[its README](https://github.com/${GITHUB_REPOSITORY}/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin),"
-            echo "and open a pull request with it. Once merged, the next loader build embeds"
-            echo "it. Never commit game files."
-            echo
-            head -c 60000 "$RUNNER_TEMP/report.md"
-          } > "$RUNNER_TEMP/body.md"
-          gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "Dedicated server build $BUILD has no build table" --body-file "$RUNNER_TEMP/body.md"
+    permissions:
+      contents: read
+      issues: write
+    # main: the organization runners run only workflows from main.
+    uses: enshwick/.github/.github/workflows/game-build-watch.yml@main # zizmor: ignore[unpinned-uses]

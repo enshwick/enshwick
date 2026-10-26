@@ -188,11 +188,11 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// use enshwick::state::{Hold, holds};
 ///
 /// let data = std::env::temp_dir().join("enshwick-hold-doc");
-/// let hold = Hold::new(&data.join("flame-altar-count"));
-/// hold.set("the world has 20 altar zones")?;
+/// let hold = Hold::new(&data.join("you.lanterns"));
+/// hold.set("the world has 20 lit lanterns")?;
 /// assert_eq!(
 ///     holds(&data),
-///     vec![("flame-altar-count".to_owned(), "the world has 20 altar zones".to_owned())]
+///     vec![("you.lanterns".to_owned(), "the world has 20 lit lanterns".to_owned())]
 /// );
 /// hold.clear()?;
 /// assert!(holds(&data).is_empty());

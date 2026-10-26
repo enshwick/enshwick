@@ -169,8 +169,8 @@ impl Guid {
     /// ```
     /// use enshwick::content::Guid;
     ///
-    /// const SAFE: Guid = Guid::named("safes:safe");
-    /// assert_eq!(SAFE.to_string(), "f7eb124c-c132-5cf1-9c6c-e9e49ed3c896");
+    /// const LOCKER: Guid = Guid::named("you.lockers:locker");
+    /// assert_eq!(LOCKER.to_string(), "67842cb8-d551-542b-8765-fe1af9c28aca");
     /// ```
     #[must_use]
     pub const fn named(id: &str) -> Self {
@@ -185,8 +185,8 @@ impl Guid {
     /// ```
     /// use enshwick::content::Guid;
     ///
-    /// assert_eq!(Guid::try_named("safes:safe"), Some(Guid::named("safes:safe")));
-    /// assert_eq!(Guid::try_named("Safe"), None);
+    /// assert_eq!(Guid::try_named("you.lockers:locker"), Some(Guid::named("you.lockers:locker")));
+    /// assert_eq!(Guid::try_named("Locker"), None);
     /// ```
     #[must_use]
     pub const fn try_named(id: &str) -> Option<Self> {
@@ -247,11 +247,11 @@ const NAMESPACE_BYTES: [u8; 16] = [
 /// ```
 /// use enshwick::content::is_id;
 ///
-/// assert!(is_id("safes:safe"));
-/// assert!(is_id("survivors-per-altar:staff/blacksmith.name"));
-/// assert!(!is_id("safe"));
-/// assert!(!is_id("Safes:safe"));
-/// assert!(!is_id("safes:safe:2"));
+/// assert!(is_id("you.lockers:locker"));
+/// assert!(is_id("you.market-stalls:stall/blacksmith.name"));
+/// assert!(!is_id("locker"));
+/// assert!(!is_id("Lockers:locker"));
+/// assert!(!is_id("you.lockers:locker:2"));
 /// ```
 #[must_use]
 pub const fn is_id(id: &str) -> bool {
@@ -297,10 +297,10 @@ pub const fn is_id(id: &str) -> bool {
 /// ```
 /// use enshwick::content::{Guid, Id};
 ///
-/// const SAFE: Id = Id::new("safes:safe");
-/// assert_eq!(SAFE.name(), "safes:safe");
-/// assert_eq!(SAFE.guid(), Guid::named("safes:safe"));
-/// assert_eq!(Guid::from(SAFE).id(), SAFE.id());
+/// const LOCKER: Id = Id::new("you.lockers:locker");
+/// assert_eq!(LOCKER.name(), "you.lockers:locker");
+/// assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
+/// assert_eq!(Guid::from(LOCKER).id(), LOCKER.id());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id {
@@ -360,7 +360,7 @@ impl Id {
     /// # Examples
     ///
     /// ```
-    /// assert_eq!(enshwick::content::Id::new("safes:safe").namespace(), "safes");
+    /// assert_eq!(enshwick::content::Id::new("you.lockers:locker").namespace(), "you.lockers");
     /// ```
     #[must_use]
     pub fn namespace(self) -> &'static str {
@@ -401,8 +401,8 @@ impl Id {
     /// use enshwick::content::{Id, types};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let key = Id::new("my-mod:safe").key(types::ITEM_INFO)?;
-    ///     assert_eq!(key.guid, Id::new("my-mod:safe").guid().0);
+    ///     let key = Id::new("you.lockers:locker").key(types::ITEM_INFO)?;
+    ///     assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
     ///     Ok(())
     /// }
     /// ```
@@ -417,8 +417,8 @@ impl Id {
     /// ```
     /// use enshwick::content::Id;
     ///
-    /// let key = Id::new("my-mod:safe").key_by_hash(7);
-    /// assert_eq!(key.guid, Id::new("my-mod:safe").guid().0);
+    /// let key = Id::new("you.lockers:locker").key_by_hash(7);
+    /// assert_eq!(key.guid, Id::new("you.lockers:locker").guid().0);
     /// ```
     #[must_use]
     pub const fn key_by_hash(self, type_hash: u32) -> ResourceKey {
@@ -888,6 +888,15 @@ impl Blob {
 /// A served resource's builder, kept for the life of the process.
 type Builder = Box<dyn Fn(&[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
+/// Builds a served resource from its base for the loader.
+///
+/// # Safety
+///
+/// - `base` is null or readable for `base_len` bytes that stay unchanged for
+///   the call.
+/// - `user` is null or the `Box<Builder>` that [`Load::serve`] handed over,
+///   which the loader keeps for the process.
+/// - `out` and `out_len` are null or writable for one value each.
 unsafe extern "system" fn build(
     base: *const u8,
     base_len: usize,
@@ -898,12 +907,15 @@ unsafe extern "system" fn build(
     if user.is_null() || out.is_null() || out_len.is_null() {
         return Status::BAD_ARGS;
     }
-    // SAFETY: `user` is the leaked builder this function was registered with.
+    // SAFETY: `user` is not null, as the early return ensures, and the caller
+    // guarantees it is the boxed `Builder` that `serve` leaked for the process,
+    // so it is aligned, alive and only read through shared references.
     let builder = unsafe { &*user.cast::<Builder>() };
     let base = if base.is_null() || base_len == 0 {
         &[][..]
     } else {
-        // SAFETY: the loader passes the base's bytes for the call.
+        // SAFETY: `base` is not null in this branch, and the caller guarantees
+        // `base_len` readable bytes there, unchanged for the call.
         unsafe { core::slice::from_raw_parts(base, base_len) }
     };
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder(base)));
@@ -915,11 +927,13 @@ unsafe extern "system" fn build(
     // again.
     let len = bytes.len();
     let bytes: *mut [u8] = Box::into_raw(bytes.into_boxed_slice());
-    // SAFETY: the loader's out pointers.
+    // SAFETY: `out` is not null, as the early return ensures, and the caller
+    // guarantees it is writable for one pointer.
     unsafe {
         out.write(bytes.cast::<u8>().cast_const());
     }
-    // SAFETY: as above.
+    // SAFETY: `out_len` is not null, as the early return ensures, and the
+    // caller guarantees it is writable for one `usize`.
     unsafe {
         out_len.write(len);
     }
@@ -981,11 +995,11 @@ impl Load<'_> {
     /// ```
     /// use enshwick::content::{Guid, Id};
     ///
-    /// const LANTERN: Id = Id::new("my-mod:lantern");
+    /// const LOCKER: Id = Id::new("my-mod:locker");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let guid = load.declare(LANTERN)?;
-    ///     assert_eq!(guid, Guid::named("my-mod:lantern"));
+    ///     let guid = load.declare(LOCKER)?;
+    ///     assert_eq!(guid, Guid::named("my-mod:locker"));
     ///     Ok(())
     /// }
     /// ```
@@ -1010,11 +1024,11 @@ impl Load<'_> {
     /// use enshwick::content::Guid;
     /// use enshwick::i18n::Language;
     ///
-    /// const SAFE_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
+    /// const LOCKER_NAME: Guid = Guid::parse("b7c1d2e3-4f50-4a61-8b72-c3d4e5f60718");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_text(SAFE_NAME, Language::FALLBACK, "Safe")?;
-    ///     load.add_text(SAFE_NAME, Language::UK_UA, "Сейф")
+    ///     load.add_text(LOCKER_NAME, Language::FALLBACK, "Locker")?;
+    ///     load.add_text(LOCKER_NAME, Language::UK_UA, "Шафка")
     /// }
     /// ```
     pub fn add_text(
@@ -1043,13 +1057,13 @@ impl Load<'_> {
     /// use enshwick::content::{Blob, Guid, types};
     ///
     /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-    /// const SAFE: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
+    /// const LOCKER: Guid = Guid::parse("5afe5afe-0000-4000-8000-000000000001");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.serve(SAFE.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
+    ///     load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
     ///         let mut item = Blob::new(chest);
-    ///         item.write(0, &SAFE.id().to_le_bytes());
-    ///         item.write(4, &SAFE.0);
+    ///         item.write(0, &LOCKER.id().to_le_bytes());
+    ///         item.write(4, &LOCKER.0);
     ///         Some(item.into_bytes())
     ///     })
     /// }
@@ -1072,7 +1086,8 @@ impl Load<'_> {
             user.cast(),
         );
         if !status.is_ok() {
-            // SAFETY: refused, so the loader keeps no copy of the pointer.
+            // SAFETY: `user` came from this function's `Box::into_raw`, and the loader
+            // refused it, so it keeps no copy and this is the only owner.
             drop(unsafe { Box::from_raw(user) });
         }
         crate::load::ok(status, (), || "serve resource".to_owned())
@@ -1117,12 +1132,15 @@ mod tests {
         let builder: Builder = Box::new(|base: &[u8]| Some(vec![u8::from(base.is_empty())]));
         let user = core::ptr::from_ref(&builder).cast_mut().cast();
         let (mut out, mut out_len) = (core::ptr::null::<u8>(), 0usize);
-        // SAFETY: a null base, the builder as user and writable out pointers.
+        // SAFETY: a null base, `user` points at the `Builder` alive in this
+        // frame, and both out pointers are writable locals.
         let status = unsafe { build(core::ptr::null(), 0, user, &raw mut out, &raw mut out_len) };
         assert_eq!(status, Status::OK);
-        // SAFETY: the leaked bytes the builder made.
+        // SAFETY: `build` returned OK and set `out` to the `out_len` bytes it
+        // leaked, which are never freed.
         assert_eq!(unsafe { core::slice::from_raw_parts(out, out_len) }, [1]);
-        // SAFETY: null out pointers are refused before anything is written.
+        // SAFETY: `user` points at the `Builder` alive in this frame, and
+        // `build` refuses a null `out` before it writes anything.
         let refused = unsafe {
             build(
                 core::ptr::null(),

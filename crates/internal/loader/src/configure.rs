@@ -51,7 +51,7 @@ fn current(text: &str, field: &Field) -> String {
     }
     text.parse::<toml::Table>()
         .ok()
-        .and_then(|table| table.get(&field.key).map(ToString::to_string))
+        .and_then(|table| enshwick::config::value_at(&table, &field.key).map(ToString::to_string))
         .unwrap_or_else(|| field.default.clone())
 }
 
@@ -168,8 +168,18 @@ pub fn get(id: &str, schema: &Schema, text: &str, key: &str) -> Result<String, S
     Ok(lines.join("\n"))
 }
 
+/// The setting a key names and the element of a list it names, if any:
+/// `per_level[2]` is element 2 of `per_level`.
+#[must_use]
+pub fn element(key: &str) -> (&str, Option<usize>) {
+    key.strip_suffix(']')
+        .and_then(|rest| rest.rsplit_once('['))
+        .and_then(|(base, index)| Some((base, Some(index.parse().ok()?))))
+        .unwrap_or((key, None))
+}
+
 fn field<'a>(id: &str, schema: &'a Schema, key: &str) -> Result<&'a Field, String> {
-    schema.field(key).ok_or_else(|| {
+    schema.field(element(key).0).ok_or_else(|| {
         let keys: Vec<&str> = schema.fields.iter().map(|f| f.key.as_str()).collect();
         texts::fill(
             "config.no-key",
@@ -250,24 +260,20 @@ pub fn set(
     if field.secret {
         return Err(texts::fill("remote.secret", &[("key", key)]));
     }
-    let mut new = typed(field, value)?;
     let mut doc: DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
         texts::fill("refused.toml", &[("id", id), ("error", e.message())])
     })?;
-    match doc.get_mut(key).and_then(toml_edit::Item::as_value_mut) {
-        Some(old) => {
-            *new.decor_mut() = old.decor().clone();
-            *old = new;
+    let value = if let (base, Some(index)) = element(key) {
+        set_element(&mut doc, field, base, index, value)?
+    } else {
+        let new = typed(field, value)?;
+        if !crate::worlds::set_at(doc.as_table_mut(), key, new) {
+            return Err(texts::fill("refused.toml", &[("id", id), ("error", key)]));
         }
-        None => {
-            doc.insert(key, toml_edit::Item::Value(new));
-        }
-    }
-    let value = doc
-        .get(key)
-        .and_then(toml_edit::Item::as_value)
-        .map(|v| v.clone().decorated("", "").to_string())
-        .unwrap_or_default();
+        crate::worlds::value_at(doc.as_table(), key)
+            .map(|v| v.clone().decorated("", "").to_string())
+            .unwrap_or_default()
+    };
     Ok(Change {
         text: doc.to_string(),
         stage: field.stage,
@@ -275,6 +281,44 @@ pub fn set(
         value,
         destination: crate::worlds::Destination::Global,
     })
+}
+
+/// Sets element `index` of the list `base` in `doc` to `value`, checked as
+/// an element of `field`; the element as written.
+fn set_element(
+    doc: &mut DocumentMut,
+    field: &Field,
+    base: &str,
+    index: usize,
+    value: &str,
+) -> Result<String, String> {
+    let mut element = field.clone();
+    element.kind = field.element_kind();
+    let mut new = typed(&element, value)?;
+    let current = crate::worlds::value_at(doc.as_table(), base)
+        .cloned()
+        .or_else(|| field.default.parse::<toml_edit::Value>().ok());
+    let Some(toml_edit::Value::Array(mut items)) = current else {
+        return Err(no_element(field, index));
+    };
+    let Some(old) = items.get_mut(index) else {
+        return Err(no_element(field, index));
+    };
+    *new.decor_mut() = old.decor().clone();
+    *old = new;
+    let written = old.clone().decorated("", "").to_string();
+    if !crate::worlds::set_at(doc.as_table_mut(), base, toml_edit::Value::Array(items)) {
+        return Err(no_element(field, index));
+    }
+    Ok(written)
+}
+
+/// The reply when a list has no element `index`.
+fn no_element(field: &Field, index: usize) -> String {
+    texts::fill(
+        "config.no-element",
+        &[("key", &field.key), ("index", &index.to_string())],
+    )
 }
 
 /// The reply to a change of `id`'s `key`, on a game server or not.
@@ -304,7 +348,7 @@ mod tests {
             vec![
                 Field::new("limit", Stage::Startup, &4)
                     .with_range(Some(1.0), Some(16.0))
-                    .with_doc("How many Safes a player may own.", ""),
+                    .with_doc("How many stalls a player may own.", ""),
                 Field::new("radius", Stage::Runtime, &8.5),
                 Field::new("language", Stage::Runtime, "en").with_choices(&["en", "uk"]),
                 Field::new("note", Stage::Client, "hi"),
@@ -320,17 +364,23 @@ mod tests {
     #[test]
     fn arguments_read_as_requests() {
         assert_eq!(parse(""), Request::Mods);
-        assert_eq!(parse(" safes "), Request::List("safes"));
-        assert_eq!(parse("safes limit"), Request::Get("safes", "limit"));
         assert_eq!(
-            parse("safes note hello there"),
-            Request::Set("safes", "note", "hello there")
+            parse(" you.trading-post "),
+            Request::List("you.trading-post")
+        );
+        assert_eq!(
+            parse("you.trading-post limit"),
+            Request::Get("you.trading-post", "limit")
+        );
+        assert_eq!(
+            parse("you.trading-post note hello there"),
+            Request::Set("you.trading-post", "note", "hello there")
         );
     }
 
     #[test]
     fn lists_and_gets_show_values_ranges_and_stages() {
-        let text = list("safes", &schema(), FILE);
+        let text = list("you.trading-post", &schema(), FILE);
         assert!(
             text.contains("limit = 4 (1 to 16; when the world loads)"),
             "{text}"
@@ -339,10 +389,10 @@ mod tests {
             text.contains("language = \"en\" (one of \"en\", \"uk\"; the world's, applied live)")
         );
         assert!(text.contains("note = \"hi\" (text in quotes; each player's own)"));
-        let one = get("safes", &schema(), FILE, "limit").unwrap();
-        assert!(one.starts_with("safes limit = 4 (default 4)\nHow many Safes"));
+        let one = get("you.trading-post", &schema(), FILE, "limit").unwrap();
+        assert!(one.starts_with("you.trading-post limit = 4 (default 4)\nHow many stalls"));
         assert!(
-            get("safes", &schema(), FILE, "nope")
+            get("you.trading-post", &schema(), FILE, "nope")
                 .unwrap_err()
                 .contains("it has limit")
         );
@@ -376,8 +426,8 @@ mod tests {
     #[test]
     fn a_secret_is_never_shown_or_changed_by_a_reply() {
         let file = format!("{FILE}token = \"hunter2\"\n");
-        let all = list("safes", &schema(), &file);
-        let one = get("safes", &schema(), &file, "token").unwrap();
+        let all = list("you.trading-post", &schema(), &file);
+        let one = get("you.trading-post", &schema(), &file, "token").unwrap();
         assert!(
             !all.contains("hunter2") && all.contains("token = (secret)"),
             "{all}"
@@ -386,17 +436,17 @@ mod tests {
             !one.contains("hunter2") && one.contains("(secret)"),
             "{one}"
         );
-        let shared = get("safes", &schema(), &file, "shared").unwrap();
+        let shared = get("you.trading-post", &schema(), &file, "shared").unwrap();
         assert!(!shared.contains("letmein"), "{shared}");
         assert_eq!(
-            set("safes", &schema(), &file, "token", "\"x\"").unwrap_err(),
+            set("you.trading-post", &schema(), &file, "token", "\"x\"").unwrap_err(),
             "token is changed in the server's file only."
         );
     }
 
     #[test]
     fn a_change_is_checked_and_keeps_the_comments() {
-        let change = set("safes", &schema(), FILE, "limit", "6").unwrap();
+        let change = set("you.trading-post", &schema(), FILE, "limit", "6").unwrap();
         assert_eq!(change.stage, Stage::Startup);
         assert!(
             change.text.contains("# How many.\nlimit = 6 # four\n"),
@@ -404,37 +454,80 @@ mod tests {
             change.text
         );
         assert_eq!(
-            changed("safes", "limit", &change),
-            "safes limit = 6: saved for this world; it takes effect when the world loads again."
+            changed("you.trading-post", "limit", &change),
+            "you.trading-post limit = 6: saved for this world; it takes effect when the world loads again."
         );
         assert!(
-            set("safes", &schema(), FILE, "limit", "40")
+            set("you.trading-post", &schema(), FILE, "limit", "40")
                 .unwrap_err()
                 .contains("1 to 16")
         );
-        assert!(set("safes", &schema(), FILE, "limit", "many").is_err());
+        assert!(set("you.trading-post", &schema(), FILE, "limit", "many").is_err());
         assert!(
-            set("safes", &schema(), FILE, "language", "de")
+            set("you.trading-post", &schema(), FILE, "language", "de")
                 .unwrap_err()
                 .contains("one of")
         );
-        let radius = set("safes", &schema(), FILE, "radius", "10").unwrap();
+        let radius = set("you.trading-post", &schema(), FILE, "radius", "10").unwrap();
         assert!(radius.text.contains("radius = 10.0"));
-        let words = set("safes", &schema(), FILE, "note", "hello there").unwrap();
+        let words = set("you.trading-post", &schema(), FILE, "note", "hello there").unwrap();
         assert!(
             words.text.ends_with("note = \"hello there\"\n"),
             "{}",
             words.text
         );
-        let broken = set("safes", &schema(), "limit = ", "limit", "2").unwrap_err();
+        let broken = set("you.trading-post", &schema(), "limit = ", "limit", "2").unwrap_err();
         assert!(
-            broken.starts_with("Not changed: mod-configs/safes.toml is not valid TOML: ")
+            broken
+                .starts_with("Not changed: mod-configs/you.trading-post.toml is not valid TOML: ")
                 && broken.len() > 55,
             "{broken}"
         );
         assert_eq!(
-            set("safes", &schema(), FILE, "limit", "40").unwrap_err(),
+            set("you.trading-post", &schema(), FILE, "limit", "40").unwrap_err(),
             "Not changed: limit takes 1 to 16."
         );
+    }
+
+    #[test]
+    fn a_grouped_setting_is_set_in_its_table() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![Field::new("comfort.multiplier", Stage::Runtime, &1.0)],
+        );
+        let change = set(
+            "you.rates",
+            &schema,
+            "limit = 4\n",
+            "comfort.multiplier",
+            "2.5",
+        )
+        .unwrap();
+        assert_eq!(change.text, "limit = 4\n\n[comfort]\nmultiplier = 2.5\n");
+        assert_eq!(change.value, "2.5");
+    }
+
+    #[test]
+    fn an_element_of_a_list_is_set_in_place_and_checked_by_the_range() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("per_level", Stage::Startup, &[2, 4, 8])
+                    .with_range(Some(1.0), Some(32.0)),
+            ],
+        );
+        let file = "# Altars.\nper_level = [2, 4, 8]\n";
+        let change = set("you.altars", &schema, file, "per_level[1]", "12").unwrap();
+        assert_eq!(change.text, "# Altars.\nper_level = [2, 12, 8]\n");
+        assert_eq!(change.value, "12");
+        assert!(set("you.altars", &schema, file, "per_level[1]", "40").is_err());
+        assert!(set("you.altars", &schema, file, "per_level[3]", "4").is_err());
+        let fresh = set("you.altars", &schema, "", "per_level[0]", "3").unwrap();
+        assert_eq!(fresh.text, "per_level = [3, 4, 8]\n");
+        assert_eq!(element("per_level[2]"), ("per_level", Some(2)));
+        assert_eq!(element("per_level"), ("per_level", None));
+        assert_eq!(element("odd[x]"), ("odd[x]", None));
     }
 }

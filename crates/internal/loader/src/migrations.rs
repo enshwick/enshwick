@@ -646,8 +646,10 @@ mod live {
             return Err("too many steps".to_owned());
         };
         let mut out = Str::EMPTY;
-        // SAFETY: the map lives in the mod's DLL, which stays loaded; the
-        // input is valid for the call and the safe layer catches panics.
+        // SAFETY: `reg.map` is the mod's migration function in its DLL, which
+        // stays loaded for the process, called with the `user` pointer it was
+        // registered with; `input` and `out` are locals alive for the call, and
+        // the safe layer catches the map's panics.
         let status =
             crate::profile::call(reg.owner, crate::profile::Feature::Migrations, || unsafe {
                 (reg.map)(
@@ -658,7 +660,9 @@ mod live {
                     &raw mut out,
                 )
             });
-        // SAFETY: the text stays valid until the mod's next map call.
+        // SAFETY: `out` is `Str::EMPTY` or the text the map wrote, which the ABI
+        // keeps valid and unchanged until the mod's next map call; it is copied
+        // here.
         let Some(text) = (unsafe { out.as_str() }).map(str::to_owned) else {
             return Err("the result is not UTF-8".to_owned());
         };
@@ -675,27 +679,37 @@ mod live {
     ///
     /// # Safety
     ///
-    /// `set` is the mod's valid set, its strings and arrays valid for the
-    /// call.
+    /// - `set.migrations` is null or points at `set.count` aligned
+    ///   migrations, and each migration's `steps` at its `count` aligned
+    ///   steps, all readable and unchanged for the call.
+    /// - Every migration id and step text is readable for its length and
+    ///   unchanged for the call.
     unsafe fn copy(set: &MigrationSet) -> Option<Vec<Migration>> {
-        // SAFETY: forwarded from the caller.
+        // SAFETY: the caller guarantees `set.migrations` null or pointing at
+        // `set.count` aligned migrations, readable and unchanged for the call.
         let migrations = unsafe { slice(set.migrations, set.count) }?;
         migrations
             .iter()
             .map(|m| {
-                // SAFETY: as above.
+                // SAFETY: the caller guarantees each migration's `steps` null or
+                // pointing at its `count` aligned steps, readable and unchanged.
                 let steps = unsafe { slice(m.steps, m.count) }?;
                 Some(Migration {
-                    // SAFETY: as above.
+                    // SAFETY: the caller guarantees every migration id readable
+                    // and unchanged for the call; it is copied here.
                     id: unsafe { m.id.as_str() }?.to_owned(),
                     steps: steps
                         .iter()
                         .map(|s| {
                             Some(Step {
                                 kind: s.kind,
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 from: unsafe { s.from.as_str() }?.to_owned(),
-                                // SAFETY: as above.
+                                // SAFETY: the caller guarantees every step text
+                                // readable and unchanged for the call; it is
+                                // copied here.
                                 to: unsafe { s.to.as_str() }?.to_owned(),
                                 from_guid: s.from_guid,
                                 to_guid: s.to_guid,
@@ -711,7 +725,10 @@ mod live {
     ///
     /// # Safety
     ///
-    /// A non-null `ptr` points at `count` valid items.
+    /// - A non-null `ptr` with a nonzero `count` points at `count`
+    ///   initialised, aligned items.
+    /// - Those items stay alive and unchanged for the lifetime `'a` the
+    ///   caller picks.
     unsafe fn slice<'a, T>(ptr: *const T, count: u32) -> Option<&'a [T]> {
         if count == 0 {
             return Some(&[]);
@@ -719,7 +736,9 @@ mod live {
         if ptr.is_null() {
             return None;
         }
-        // SAFETY: forwarded from the caller.
+        // SAFETY: `ptr` is non-null and `count` nonzero, checked just before;
+        // the caller guarantees `count` aligned items there, alive and
+        // unchanged for `'a`.
         Some(unsafe { core::slice::from_raw_parts(ptr, count as usize) })
     }
 
@@ -796,14 +815,19 @@ mod live {
         if taken(&REGISTERED.lock().unwrap_or_else(PoisonError::into_inner)) {
             return Status::REFUSED;
         }
-        // SAFETY: the safe layer passes its valid set for the call.
+        let Some(map) = set.map else {
+            return Status::BAD_ARGS;
+        };
+        // SAFETY: the only caller, the `migrate` entry of the host table, passes
+        // the set a mod handed over in that call, whose arrays and texts the ABI
+        // has the mod keep readable and unchanged for the call.
         let Some(list) = (unsafe { copy(set) }) else {
             return Status::BAD_ARGS;
         };
         let reg = Registered {
             owner: index,
             list,
-            map: set.map,
+            map,
             user: set.user.expose_provenance(),
         };
         let born = BORN
@@ -1050,16 +1074,19 @@ mod tests {
         ];
         let pending = pending(&all, &["2".to_owned()]);
         assert_eq!(
-            plan("safes", &pending, false),
-            "safes 3: rename store x to y"
+            plan("you.trading-post", &pending, false),
+            "you.trading-post 3: rename store x to y"
         );
-        assert_eq!(plan("safes", &pending, true), "safes 3: nothing here");
+        assert_eq!(
+            plan("you.trading-post", &pending, true),
+            "you.trading-post 3: nothing here"
+        );
     }
 
     #[test]
     fn a_world_runs_its_pending_migrations_once() {
         let dir = scratch("world");
-        let world = dir.join("safes/worlds/w1");
+        let world = dir.join("you.trading-post/worlds/w1");
         std::fs::create_dir_all(&world).unwrap();
         std::fs::write(world.join("settings.toml"), "limit = 2\n").unwrap();
         std::fs::write(world.join("owners.toml"), "count = 1\n").unwrap();
@@ -1085,11 +1112,11 @@ mod tests {
             key: "w1",
             dir: &world,
         };
-        let line = run(&mut record, target, "safes", &all, &map, false).unwrap();
+        let line = run(&mut record, target, "you.trading-post", &all, &map, false).unwrap();
         assert_eq!(
             line.as_deref(),
             Some(
-                "safes 2: change setting limit; safes 3: rename store owners to keepers, change store keepers"
+                "you.trading-post 2: change setting limit; you.trading-post 3: rename store owners to keepers, change store keepers"
             )
         );
         assert_eq!(
@@ -1100,9 +1127,9 @@ mod tests {
             std::fs::read_to_string(world.join("keepers.toml")).unwrap(),
             "count = 5\n"
         );
-        assert_eq!(record.worlds["w1"]["safes"], ["2", "3"]);
+        assert_eq!(record.worlds["w1"]["you.trading-post"], ["2", "3"]);
         assert_eq!(
-            run(&mut record, target, "safes", &all, &map, false).unwrap(),
+            run(&mut record, target, "you.trading-post", &all, &map, false).unwrap(),
             None
         );
         assert_eq!(
@@ -1123,7 +1150,7 @@ mod tests {
     #[test]
     fn a_migration_that_fails_midway_changes_nothing() {
         let dir = scratch("midway");
-        let world = dir.join("safes/worlds/w1");
+        let world = dir.join("you.trading-post/worlds/w1");
         std::fs::create_dir_all(&world).unwrap();
         std::fs::write(
             world.join("settings.toml"),
@@ -1157,9 +1184,17 @@ mod tests {
             }
         };
         let mut record = Record::default();
-        let (_, reason) = run(&mut record, target, "safes", &all, &refuse, false).unwrap_err();
+        let (_, reason) = run(
+            &mut record,
+            target,
+            "you.trading-post",
+            &all,
+            &refuse,
+            false,
+        )
+        .unwrap_err();
         assert!(reason.contains("refused"), "{reason}");
-        assert!(record.worlds["w1"]["safes"].is_empty());
+        assert!(record.worlds["w1"]["you.trading-post"].is_empty());
         assert_eq!(
             std::fs::read_to_string(world.join("settings.toml")).unwrap(),
             "limit = 2
@@ -1174,7 +1209,7 @@ mod tests {
                 double(0, 0, input)
             }
         };
-        assert!(run(&mut record, target, "safes", &all, &take, false).is_ok());
+        assert!(run(&mut record, target, "you.trading-post", &all, &take, false).is_ok());
         assert_eq!(
             std::fs::read_to_string(world.join("settings.toml")).unwrap(),
             "limit = 4
@@ -1192,7 +1227,7 @@ mod tests {
     #[test]
     fn a_world_the_mod_never_saw_starts_current() {
         let dir = scratch("fresh");
-        let world = dir.join("safes/worlds/new");
+        let world = dir.join("you.trading-post/worlds/new");
         let all = [migration(
             "2",
             vec![step(MigrationStep::MAP_SETTING, "limit", "")],
@@ -1203,17 +1238,24 @@ mod tests {
             dir: &world,
         };
         assert_eq!(
-            run(&mut record, target, "safes", &all, &double, false),
+            run(
+                &mut record,
+                target,
+                "you.trading-post",
+                &all,
+                &double,
+                false
+            ),
             Ok(None)
         );
-        assert_eq!(record.worlds["new"]["safes"], ["2"]);
+        assert_eq!(record.worlds["new"]["you.trading-post"], ["2"]);
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_dry_run_changes_and_records_nothing() {
         let dir = scratch("dry");
-        let file = dir.join("safes.toml");
+        let file = dir.join("you.trading-post.toml");
         std::fs::write(&file, "limit = 2\n").unwrap();
         let all = [migration(
             "2",
@@ -1226,22 +1268,25 @@ mod tests {
                 path: &file,
                 born: false,
             },
-            "safes",
+            "you.trading-post",
             &all,
             &double,
             true,
         )
         .unwrap();
-        assert_eq!(line.as_deref(), Some("safes 2: change setting limit"));
+        assert_eq!(
+            line.as_deref(),
+            Some("you.trading-post 2: change setting limit")
+        );
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "limit = 2\n");
-        assert!(record.settings["safes"].is_empty());
+        assert!(record.settings["you.trading-post"].is_empty());
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_failure_records_the_migrations_before_it() {
         let dir = scratch("fail");
-        let file = dir.join("safes.toml");
+        let file = dir.join("you.trading-post.toml");
         std::fs::write(&file, "a = 1\nlimit = \"x\"\n").unwrap();
         let all = [
             migration("2", vec![step(MigrationStep::RENAME_SETTING, "a", "b")]),
@@ -1254,14 +1299,14 @@ mod tests {
                 path: &file,
                 born: false,
             },
-            "safes",
+            "you.trading-post",
             &all,
             &double,
             false,
         )
         .unwrap_err();
         assert!(reason.starts_with("migration 3: setting limit"), "{reason}");
-        assert_eq!(record.settings["safes"], ["2"]);
+        assert_eq!(record.settings["you.trading-post"], ["2"]);
         assert_eq!(
             std::fs::read_to_string(&file).unwrap(),
             "b = 1\nlimit = \"x\"\n"
