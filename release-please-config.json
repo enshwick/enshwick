@@ -99,10 +99,6 @@
       "package-name": "enshwick-loader-stub",
       "component": "enshwick-loader-stub"
     },
-    "mods/enshwick-flame-altar-count": {
-      "package-name": "enshwick-flame-altar-count",
-      "component": "enshwick-flame-altar-count"
-    },
     "mods/enshwick-flame-altar-zones": {
       "package-name": "enshwick-flame-altar-zones",
       "component": "enshwick-flame-altar-zones"
