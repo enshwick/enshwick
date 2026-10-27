@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.9] - 2026-10-27
+
+### Changed
+
+- Released beside `enshwick` 1.0.0-alpha.9, which pins it exactly; no
+  changes of its own.
+
 ## [1.0.0-alpha.8] - 2026-10-27
 
 ### Changed

@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.9] - 2026-10-27
+
 ### Added
 
 - `code::find_each_unique` finds many patterns in one pass over the code,
@@ -75,7 +77,7 @@ Each entry names the pull request that made the change.
 - `mods::join_missing` leaves out an entry with new text once the loader
   keeps 64 KiB of text servers advertised (#596).
 - `declare_mod!` exports the five functions under their C names only
-  outside test builds, so one test binary can declare several mods.
+  outside test builds, so one test binary can declare several mods (#591).
 
 ### Fixed
 

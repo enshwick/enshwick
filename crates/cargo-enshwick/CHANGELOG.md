@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.9] - 2026-10-27
+
 ### Added
 
 - `cargo enshwick pin` ports a constant in a `cell` with the value read
