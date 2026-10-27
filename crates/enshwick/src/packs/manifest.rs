@@ -48,7 +48,7 @@ pub enum PackSide {
 /// assert_eq!(manifest.requires["you.trading-post"], ">=0.5, <1.0");
 /// # Ok::<(), enshwick::packs::PackError>(())
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 #[non_exhaustive]
@@ -84,6 +84,71 @@ pub struct PackManifest {
     /// requirement (empty for any).
     #[serde(default)]
     pub requires: BTreeMap<String, String>,
+    /// The pack's settings, in the order the Mods screen shows them; a Luau
+    /// mod reads them, as a Rust mod reads its `Config`.
+    #[serde(default)]
+    pub setting: Vec<PackSetting>,
+}
+
+/// One setting of a pack, a `[[setting]]` table of `pack.toml`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::config::Stage;
+/// use enshwick::packs::PackManifest;
+///
+/// let manifest = PackManifest::parse(r#"
+/// id = "you.greeter"
+/// version = "1.0.0"
+///
+/// [[setting]]
+/// key = "greeting"
+/// default = "Welcome"
+/// doc = "What a player who joins reads."
+///
+/// [[setting]]
+/// key = "every"
+/// default = 30
+/// min = 1
+/// stage = "startup"
+/// "#)?;
+/// let schema = manifest.settings_schema().ok_or("no settings")?;
+/// assert_eq!(schema.fields[1].stage, Stage::Startup);
+/// assert_eq!(schema.fields[1].min, Some(1.0));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct PackSetting {
+    /// The key in the settings file, of `[a-z0-9_]`.
+    pub key: String,
+    /// The value on first start; its type is the setting's.
+    #[cfg_attr(feature = "schema", schemars(with = "serde_json::Value"))]
+    pub default: toml::Value,
+    /// What it does, for the file's comments and the Mods screen.
+    #[serde(default)]
+    pub doc: String,
+    /// When a change takes effect: `runtime` unless said.
+    #[serde(default)]
+    pub stage: crate::config::Stage,
+    /// A `startup` setting a joined client takes from the server.
+    #[serde(default)]
+    pub synced: bool,
+    /// The smallest number it accepts.
+    pub min: Option<f64>,
+    /// The largest number it accepts.
+    pub max: Option<f64>,
+    /// The values it accepts; empty for any.
+    #[serde(default)]
+    #[cfg_attr(feature = "schema", schemars(with = "Vec<serde_json::Value>"))]
+    pub choices: Vec<toml::Value>,
+    /// The key of its translated label in the pack's `texts.toml`;
+    /// `config.<key>` unless said.
+    #[serde(default)]
+    pub text: String,
 }
 
 pub(super) const fn yes() -> bool {
@@ -111,7 +176,67 @@ impl PackManifest {
                 "id is <author>.<name>, each of [a-z0-9-]",
             ));
         }
+        manifest.check_settings(text)?;
         Ok(manifest)
+    }
+
+    /// The schema of the pack's settings; `None` without any.
+    ///
+    /// # Examples
+    ///
+    /// See [`PackSetting`].
+    #[must_use]
+    pub fn settings_schema(&self) -> Option<crate::config::Schema> {
+        if self.setting.is_empty() {
+            return None;
+        }
+        let fields = self.setting.iter().map(PackSetting::field).collect();
+        Some(crate::config::Schema::new(
+            &self.description,
+            "config",
+            fields,
+        ))
+    }
+
+    /// Refuses a key that is not `[a-z0-9_]` or given twice, a default
+    /// outside its own range or choices, and `synced` off `startup`.
+    fn check_settings(&self, text: &str) -> Result<(), PackError> {
+        let mut seen = std::collections::BTreeSet::new();
+        for setting in &self.setting {
+            let at = find(text, &format!("key = \"{}\"", setting.key));
+            let problem = |why: String| Err(PackError::at(MANIFEST_FILE, text, at, &why));
+            let key = &setting.key;
+            let bare = !key.is_empty()
+                && key
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+            if !bare {
+                return problem(format!("setting {key:?}: a key is of [a-z0-9_]"));
+            }
+            if !seen.insert(key.as_str()) {
+                return problem(format!("setting {key:?} is given twice"));
+            }
+            if setting.synced && setting.stage != crate::config::Stage::Startup {
+                return problem(format!(
+                    "setting {key:?}: synced goes with stage = \"startup\"; a sync stage follows the server already"
+                ));
+            }
+            if let Err(why) = setting.field().check(&setting.default) {
+                return problem(format!("setting {key:?}: the default is refused: {why}"));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PackSetting {
+    /// The setting as a field of a settings schema.
+    fn field(&self) -> crate::config::Field {
+        crate::config::Field::new(&self.key, self.stage, &self.default)
+            .with_range(self.min, self.max)
+            .with_choices(&self.choices)
+            .with_doc(&self.doc, &self.text)
+            .with_synced(self.synced)
     }
 }
 
