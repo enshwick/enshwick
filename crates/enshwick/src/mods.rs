@@ -176,7 +176,8 @@ pub fn all() -> Vec<ModEntry> {
 ///
 /// Read it on [`JoinRefused`](crate::events::JoinRefused).
 ///
-/// Empty before a refused join.
+/// Empty before a refused join. Once the loader keeps 64 KiB of text servers
+/// advertised, an entry with new text is left out.
 ///
 /// # Examples
 ///
