@@ -27,6 +27,7 @@
 - [Weather and chunks](weather.md)
 - [Terrain](terrain.md)
 - [Altars and bases](altars.md)
+- [The map](map.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
 - [Crafting and building vetoes](vetoes.md)

@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.map()` returns the `Map` of the game server: `Map::markers` and
+  `Map::markers_in` list the world's map markers, each a `MapMarker` with
+  its position, its `MapMarkerTypeId` (the key of the game's marker type
+  registry) and its label's text tag; `Map::waypoint` reads the waypoint a
+  player set (#PR).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the

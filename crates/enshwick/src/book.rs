@@ -35,6 +35,7 @@ chapters! {
     Weather => "weather.md",
     Terrain => "terrain.md",
     Altars => "altars.md",
+    Map => "map.md",
     Survivors => "survivors.md",
     Interactions => "interactions.md",
     Vetoes => "vetoes.md",

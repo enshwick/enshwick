@@ -429,4 +429,10 @@ ids! {
     BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL = "building_terraforming_config.building_material";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     BUILDING_TERRAFORMING_CONFIG_HARDNESS = "building_terraforming_config.hardness";
+    MAP_MARKER = "map_marker";
+    MAP_MARKER_LABEL = "map_marker.marker_id";
+    MAP_MARKER_TYPE = "map_marker.marker_type";
+    PLAYER_WAYPOINT = "player_waypoint";
+    PLAYER_WAYPOINT_ENABLED = "player_waypoint.enabled";
+    PLAYER_WAYPOINT_POSITION = "player_waypoint.waypoint_position";
 }

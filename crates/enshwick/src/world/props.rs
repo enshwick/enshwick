@@ -140,7 +140,7 @@ impl World {
 
     /// Every entity with a component of type `hash` and a place in the
     /// world, as the loader answers.
-    pub(super) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
+    pub(crate) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
         let entities = self.0.host.api().entities;
         let mut capacity = 1024u32;
         loop {
