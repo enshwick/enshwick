@@ -564,8 +564,12 @@ pub(crate) fn open(loader: &Loader) -> Status {
     Status::OK
 }
 
-/// Links the row hook when a mod asked for inventories.
+/// Links the row hook when a mod asked for inventories, and always on a
+/// dedicated server, whose console gives items.
 pub(crate) fn link(loader: &Loader) {
+    if loader.side == Side::SERVER {
+        WANTED.store(true, Ordering::Release);
+    }
     if !WANTED.load(Ordering::Acquire) {
         return;
     }
