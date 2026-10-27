@@ -346,27 +346,12 @@ pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
     Ok(out)
 }
 
-/// The `shape` a call's input field of the type `name` carries when it is
-/// a value type or an enum: what the runtime hashes to check it.
-fn named_shape(schema: &Schema, name: &str) -> Option<String> {
-    let ty = schema.types.iter().find(|t| t.name == name)?;
-    let kind = match ty.kind {
-        Kind::Values => "values",
-        Kind::Enum => "enum",
-        Kind::Struct | Kind::Newtype => return None,
-    };
-    let values: Vec<String> = ty
-        .value
-        .iter()
-        .chain(&ty.variant)
-        .map(|v| format!("{{ name = {:?}, value = {} }}", v.name, v.value))
-        .collect();
-    Some(format!(
-        "{{ name = {:?}, kind = {kind:?}, repr = {:?}, values = {{ {} }} }}",
-        ty.name,
-        ty.repr,
-        values.join(", ")
-    ))
+/// Whether a call's input field of the type `ty` may be filled by a
+/// script: its hash comes from the field alone and every value a script can
+/// write is valid. A value type's or an enum's hash would come from the
+/// module's own text, which a script can forge.
+fn is_script_input(ty: &str) -> bool {
+    super::PRIMITIVES.contains(&ty) || super::BUILT_IN.contains(&ty)
 }
 
 /// The Luau definition of the call `name` of `schema`: a module that exports
@@ -375,8 +360,9 @@ fn named_shape(schema: &Schema, name: &str) -> Option<String> {
 ///
 /// # Errors
 ///
-/// [`Error`] when the schema lacks the call or a type it names, or its
-/// input is no struct of its layout's fields.
+/// [`Error`] when the schema lacks the call or a type it names, its input
+/// is no struct of its layout's fields, or an input field is of a type
+/// other than a number, a bool, an entity or a GUID.
 ///
 /// # Examples
 ///
@@ -400,6 +386,13 @@ pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
     let input = find(schema, name, &call.input)?;
     if input.kind != Kind::Struct || input.field.len() != call.layout.len() {
         return Err(Error::BadInput(name.to_owned()));
+    }
+    if let Some(field) = input.field.iter().find(|f| !is_script_input(&f.ty)) {
+        return Err(Error::ScriptInput {
+            call: name.to_owned(),
+            field: field.name.clone(),
+            ty: field.ty.clone(),
+        });
     }
     let writer = Writer {
         schema,
@@ -425,13 +418,7 @@ pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
         .output_layout
         .parse()
         .map_err(|_| Error::BadHash(name.to_owned()))?;
-    let mut fields = writer.fields(input, Some(&call.layout), 1)?;
-    for (text, field) in fields.iter_mut().zip(&input.field) {
-        if let Some(shape) = named_shape(schema, &field.ty) {
-            let end = text.len() - " }".len();
-            text.insert_str(end, &format!(", shape = {shape}"));
-        }
-    }
+    let fields = writer.fields(input, Some(&call.layout), 1)?;
     out.push('\n');
     comment(&mut out, "", &call.doc);
     let _ = writeln!(

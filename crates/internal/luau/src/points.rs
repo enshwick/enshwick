@@ -37,7 +37,7 @@ pub(crate) enum Primitive {
 }
 
 impl Primitive {
-    pub(crate) fn parse(name: &str) -> Option<Self> {
+    fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "u8" => Self::U8,
             "i8" => Self::I8,
@@ -433,21 +433,6 @@ impl Primitive {
             Self::Guid => enshwick::content::Guid::SHAPE,
             Self::Entity => enshwick::ecs::Entity::SHAPE,
         }
-    }
-
-    /// Whether the type is an integer, which a value type or enum wraps.
-    pub(crate) const fn is_integer(self) -> bool {
-        matches!(
-            self,
-            Self::U8
-                | Self::I8
-                | Self::U16
-                | Self::I16
-                | Self::U32
-                | Self::I32
-                | Self::U64
-                | Self::I64
-        )
     }
 
     /// The type's alignment.

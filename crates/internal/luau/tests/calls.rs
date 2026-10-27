@@ -12,29 +12,18 @@ mod tests {
     use enshwick::{Load, Mod, Off};
     use enshwick_luau::{Limits, Runtime, Scripts};
 
-    /// What a player does at a stall, as the server declares it.
-    #[repr(transparent)]
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, enshwick::Shape)]
-    #[shape(values(BUY, SELL))]
-    pub(crate) struct Deal(pub(crate) u32);
-
-    impl Deal {
-        pub(crate) const BUY: Self = Self(0);
-        pub(crate) const SELL: Self = Self(1);
-    }
-
     /// The server's call, the one the fixture module describes.
-    #[enshwick::call(name = "you.stalls:rent", output = u64, version = 2)]
+    #[enshwick::call(name = "you.stalls:fee", output = u64, version = 1)]
     #[derive(Clone, Copy, Debug)]
-    pub(crate) struct Rent {
+    pub(crate) struct Fee {
         pub(crate) character: Entity,
-        pub(crate) deal: Deal,
-        pub(crate) own: bool,
-        pub(crate) stall: Stall,
+        pub(crate) days: u32,
         pub(crate) place: u16,
+        pub(crate) own: bool,
+        pub(crate) row: u8,
     }
 
-    const RENT: &str = include_str!("../../../cargo-enshwick/tests/fixtures/stalls_rent.luau");
+    const FEE: &str = include_str!("../../../cargo-enshwick/tests/fixtures/stalls_fee.luau");
 
     static CASE: Mutex<Option<Scripts>> = Mutex::new(None);
     static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
@@ -56,10 +45,10 @@ mod tests {
 
     enshwick::declare_mod!(Luau);
 
-    fn run(main: &str, rent: &str) -> (Installed, Status) {
+    fn run(main: &str, fee: &str) -> (Installed, Status) {
         let scripts = Scripts::new()
             .with("main.luau", main)
-            .with("calls/rent.luau", rent);
+            .with("calls/fee.luau", fee);
         *CASE.lock().unwrap() = Some(scripts);
         let loader = FakeHost::new().install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Luau)`.
@@ -75,63 +64,103 @@ mod tests {
         let _handled = loader.raise::<WorldSaved>(&());
     }
 
-    const CALLING: &str = r#"local rent = enshwick.caller(require("./calls/rent"))
-        local early, why = rent({ character = 1, deal = 0, own = false, stall = 1, place = 0 })
+    /// Starts `main` with a module edited by `edit` and asserts the start
+    /// fails with `why` in the log.
+    fn refused(edit: impl FnOnce(&str) -> String, why: &str) {
+        let (loader, status) = run(CALLING, &edit(FEE));
+        assert_ne!(status, Status::OK);
+        assert!(logged(&loader, why), "{:?}", loader.logs());
+    }
+
+    const CALLING: &str = r#"local fee = enshwick.caller(require("./calls/fee"))
+        local early, why = fee({ character = 1, days = 0, place = 0, own = false, row = 0 })
         print(`early {early} {why}`)
         enshwick.on("WorldSaved", function()
-            local coins, err = rent({ character = 5, deal = 1, own = true, stall = 2, place = 3 })
-            print(`rent {coins} {err}`)
+            local coins, err = fee({ character = 5, days = 4, place = 3, own = true, row = 2 })
+            print(`fee {coins} {err}`)
         end)"#;
 
     #[test]
-    fn a_script_calls_a_rust_server_with_a_value_type_in_its_input() {
-        let (loader, status) = run(CALLING, RENT);
+    fn a_script_calls_a_rust_server() {
+        let (loader, status) = run(CALLING, FEE);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert!(logged(&loader, "early nil unmatched"));
-        loader.serve_call(|rent: &Rent| {
-            let base = u64::from(rent.character.0) * 100;
-            let place = if rent.stall == Stall::Tools { 20 } else { 10 } + u64::from(rent.place);
-            if rent.deal == Deal::SELL && rent.own {
-                base + place
-            } else {
-                base
-            }
+        loader.serve_call(|fee: &Fee| {
+            let days = u64::from(fee.days) * 100;
+            let place = u64::from(fee.row) * 10 + u64::from(fee.place);
+            u64::from(fee.character.0) * 1000 + days + place + u64::from(fee.own)
         });
         saved(&loader);
-        assert!(logged(&loader, "rent 523 nil"), "{:?}", loader.logs());
+        assert!(logged(&loader, "fee 5424 nil"), "{:?}", loader.logs());
     }
 
     #[test]
     fn an_unmatched_call_answers_nil_and_why() {
-        let (loader, status) = run(CALLING, RENT);
+        let (loader, status) = run(CALLING, FEE);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         saved(&loader);
-        assert!(logged(&loader, "rent nil unmatched"), "{:?}", loader.logs());
+        assert!(logged(&loader, "fee nil unmatched"), "{:?}", loader.logs());
     }
 
     #[test]
     fn a_description_claiming_another_hash_is_refused() {
-        let tampered = RENT.replacen("read = \"u32\", hash = \"", "read = \"u32\", hash = \"1", 1);
-        let (loader, status) = run(CALLING, &tampered);
-        assert_ne!(status, Status::OK);
-        assert!(
-            logged(&loader, "its hash is not the one"),
-            "{:?}",
-            loader.logs()
+        refused(
+            |fee| fee.replacen("read = \"u32\", hash = \"", "read = \"u32\", hash = \"1", 1),
+            "days: its hash is not the one its read and offset give",
         );
     }
 
     #[test]
-    fn a_value_type_with_other_values_is_refused() {
-        let tampered = RENT.replacen(
-            "name = \"SELL\", value = 1",
-            "name = \"SELL\", value = 2",
-            1,
+    fn a_value_type_in_the_input_is_refused() {
+        refused(
+            |fee| {
+                fee.replacen(
+                    "read = \"u32\", hash = \"5981015992674252258\"",
+                    "read = \"u32\", hash = \"5981015992674252258\", shape = { name = \"Days\", kind = \"values\", repr = \"u32\", values = {} }",
+                    1,
+                )
+            },
+            "days: a script calls only with numbers, booleans, entities and GUIDs",
         );
-        let (loader, status) = run(CALLING, &tampered);
-        assert_ne!(status, Status::OK);
+    }
+
+    #[test]
+    fn an_enum_in_the_input_is_refused() {
+        refused(
+            |fee| {
+                fee.replacen(
+                    "read = \"u8\"",
+                    "read = { repr = \"u8\", variants = { 1, 2 } }",
+                    1,
+                )
+            },
+            "row: a script calls only with numbers, booleans, entities and GUIDs",
+        );
+    }
+
+    #[test]
+    fn a_field_past_the_input_s_size_is_refused() {
+        refused(
+            |fee| fee.replacen("size = 12", "size = 11", 1),
+            "row lies past the input's size",
+        );
+    }
+
+    #[test]
+    fn a_call_asked_for_after_the_start_raises_an_error() {
+        let main = r#"enshwick.on("WorldSaved", function()
+                local ok, err = pcall(enshwick.caller, require("./calls/fee"))
+                print(`late {ok} {err}`)
+            end)"#;
+        let (loader, status) = run(main, FEE);
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        saved(&loader);
         assert!(
-            logged(&loader, "its hash is not the one"),
+            logged(&loader, "late false")
+                && logged(
+                    &loader,
+                    "you.stalls:fee v1 is asked for from the next start"
+                ),
             "{:?}",
             loader.logs()
         );
@@ -139,46 +168,31 @@ mod tests {
 
     #[test]
     fn a_reload_cannot_change_an_asked_call() {
-        let (loader, status) = run(CALLING, RENT);
+        let (loader, status) = run(CALLING, FEE);
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         let runtime = RUNTIME.lock().unwrap().clone().unwrap();
-        let changed = RENT.replacen("read = \"u64\"", "read = \"i64\"", 1);
-        let failed = runtime.reload(
-            Scripts::new()
-                .with("main.luau", CALLING)
-                .with("calls/rent.luau", changed),
+        let changed = FEE.replacen("read = \"u64\"", "read = \"i64\"", 1);
+        let failed = runtime
+            .reload(
+                Scripts::new()
+                    .with("main.luau", CALLING)
+                    .with("calls/fee.luau", changed),
+            )
+            .unwrap_err();
+        assert!(
+            failed
+                .to_string()
+                .contains("you.stalls:fee v1 is described differently than at the start"),
+            "{failed}"
         );
-        assert!(failed.is_err());
         assert!(
             runtime
                 .reload(
                     Scripts::new()
                         .with("main.luau", CALLING)
-                        .with("calls/rent.luau", RENT)
+                        .with("calls/fee.luau", FEE)
                 )
                 .is_ok()
         );
-    }
-
-    /// What a stall sells, an enum the server's call takes.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, enshwick::Shape)]
-    #[repr(u8)]
-    pub(crate) enum Stall {
-        Food = 1,
-        Tools = 2,
-    }
-
-    #[test]
-    fn an_enum_field_takes_only_its_variants() {
-        let main = r#"local rent = enshwick.caller(require("./calls/rent"))
-            enshwick.on("WorldSaved", function()
-                local ok = pcall(rent, { character = 5, deal = 1, own = true, stall = 3, place = 3 })
-                print(`stray {ok}`)
-            end)"#;
-        let (loader, status) = run(main, RENT);
-        assert_eq!(status, Status::OK, "{:?}", loader.logs());
-        loader.serve_call(|_: &Rent| 1);
-        saved(&loader);
-        assert!(logged(&loader, "stray false"), "{:?}", loader.logs());
     }
 }

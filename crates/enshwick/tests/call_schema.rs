@@ -41,6 +41,22 @@ pub struct Rent {
     pub place: u16,
 }
 
+/// The fee for holding a stall, in coins.
+#[enshwick::call(name = "you.stalls:fee", output = u64, version = 1)]
+#[derive(Clone, Copy, Debug)]
+pub struct Fee {
+    /// The player's character.
+    pub character: Entity,
+    /// How many days the stall is held.
+    pub days: u32,
+    /// The stall's place in its row.
+    pub place: u16,
+    /// Whether the stall is the player's own.
+    pub own: bool,
+    /// The stall's row.
+    pub row: u8,
+}
+
 /// The declaration `cargo enshwick call` writes from that schema.
 #[path = "../../cargo-enshwick/tests/fixtures/stalls_rent.rs"]
 pub mod generated;
@@ -49,12 +65,11 @@ pub mod generated;
 mod tests {
     use enshwick::services::Call;
 
-    use super::{Deal, Rent, Stall, generated};
+    use super::{Deal, Fee, Rent, Stall, generated};
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
-        let manifest =
-            enshwick::manifest!(id: "you.stalls", side: SERVER, version: "1.2.0", calls: [Rent]);
+        let manifest = enshwick::manifest!(id: "you.stalls", side: SERVER, version: "1.2.0", calls: [Rent, Fee]);
         // SAFETY: the manifest's static text.
         let text = unsafe { manifest.points.as_str() }.unwrap_or_default();
         assert_eq!(

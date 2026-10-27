@@ -220,10 +220,13 @@ is, and `failed` when its handler failed. A call asked for after the start
 raises an error, and so does a reload that describes an asked call differently:
 either change takes the next start.
 
-The input's fields are numbers, booleans, entities, value types and enums. The
-runtime works out each field's layout hash from the module's description and
-refuses a module whose hashes do not match. A module edited by hand no longer
-reaches the server, and an enum field takes only its listed variants.
+The input's fields are numbers, booleans, entities and GUIDs. The runtime works
+out each field's layout hash from its name, type and offset and refuses a
+module whose hashes do not match, so a module edited by hand no longer reaches
+the server. A call whose input holds a value type or an enum is for Rust mods
+only: `cargo enshwick call --luau` refuses it, since a script could forge such a
+field's description and send the server a value its type forbids. The answer
+may be of any type.
 
 ## Settings
 

@@ -71,6 +71,19 @@ pub enum Error {
     /// The point's input is no struct of its layout's fields.
     #[error("the schema of {0} describes its input wrongly")]
     BadInput(String),
+    /// A call's input field is of a type a script cannot be trusted to
+    /// fill: only a type every bit pattern of which is valid may be.
+    #[error(
+        "the call {call} takes {field} as {ty}; a Luau mod calls only with numbers, booleans, entities and GUIDs in the input"
+    )]
+    ScriptInput {
+        /// The call.
+        call: String,
+        /// The field.
+        field: String,
+        /// The field's type in the schema.
+        ty: String,
+    },
     /// The point's mode is none this tool knows.
     #[error("the point {point} has the unknown mode {mode:?}")]
     UnknownMode {

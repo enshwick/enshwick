@@ -8,7 +8,7 @@ use enshwick::points::DescribedField;
 use enshwick::services::{CallError, DescribedCall, DescribedCaller};
 use mlua::{Lua, Table, Value as LuaValue};
 
-use crate::points::{Primitive, Read, decode, encode, read_of, size_of_read};
+use crate::points::{Read, decode, encode, read_of, size_of_read};
 
 /// Why a call's description does not read.
 fn bad(why: impl core::fmt::Display) -> mlua::Error {
@@ -30,11 +30,12 @@ impl CallDesc {
     /// The description `cargo enshwick call --luau` writes, read from the
     /// table a script passes.
     ///
-    /// Every input field reads a primitive, or a value type or an enum over
-    /// one that its `shape` describes, and its hash is the one worked out
-    /// here from its name, shape and offset, so a script cannot claim the
-    /// hash of another type and send bytes that type forbids. The answer is
-    /// only read, so it may be of any type the description reads.
+    /// Every input field reads a primitive and its hash is the one worked
+    /// out here from its name, primitive and offset, so a script cannot
+    /// claim the hash of another type and send bytes that type forbids. A
+    /// value type or an enum is refused: its hash would come from the
+    /// script's own text. The answer is only read, so it may be of any type
+    /// the description reads.
     pub(crate) fn parse(table: &Table) -> mlua::Result<Self> {
         let name: String = table.get("name")?;
         let major: u32 = table.get("major")?;
@@ -48,18 +49,14 @@ impl CallDesc {
             let field_name: String = field.get("name")?;
             let offset: usize = field.get("offset")?;
             let read = read_of(&field.get("read")?, 0)?;
-            let named: Option<Table> = field.get("shape")?;
-            let (p, shape) = match (&read, named) {
-                (Read::Primitive(p), None) => (*p, p.shape()),
-                (Read::Primitive(p) | Read::Enum(p, _), Some(named)) => {
-                    (*p, named_shape(&field_name, &named, &read)?)
-                }
-                _ => {
-                    return Err(bad(format!(
-                        "{field_name}: a script calls with input fields of primitives, value types and enums"
-                    )));
-                }
+            let shaped = field.contains_key("shape")?;
+            let (Read::Primitive(p), false) = (&read, shaped) else {
+                return Err(bad(format!(
+                    "{field_name}: a script calls only with numbers, booleans, entities and GUIDs in the input"
+                )));
             };
+            let p = *p;
+            let shape = p.shape();
             let given: String = field.get("hash")?;
             let hash =
                 enshwick::services::layout_hash(&field_name, shape, p.size(), p.align(), offset);
@@ -124,51 +121,6 @@ impl CallDesc {
             }
         })
     }
-}
-
-/// The shape hash of the value type or enum `named` describes, as
-/// `#[derive(Shape)]` gives it in Rust, for the field `field` read as
-/// `read`.
-fn named_shape(field: &str, named: &Table, read: &Read) -> mlua::Result<u64> {
-    use enshwick::shape::ShapeHasher;
-    let name: String = named.get("name")?;
-    let kind: String = named.get("kind")?;
-    let repr: String = named.get("repr")?;
-    let mut values = Vec::new();
-    for value in named.get::<Table>("values")?.sequence_values::<Table>() {
-        let value = value?;
-        values.push((value.get::<String>("name")?, value.get::<i64>("value")?));
-    }
-    let (Read::Primitive(p) | Read::Enum(p, _)) = read else {
-        return Err(bad(format!("{field}: a value type reads as its integer")));
-    };
-    if Primitive::parse(&repr) != Some(*p) || !p.is_integer() {
-        return Err(bad(format!(
-            "{field}: it reads as another integer than its repr"
-        )));
-    }
-    let size = p.size() as u64;
-    let align = p.align() as u64;
-    let mut hasher = ShapeHasher::new(&name).number(size).number(align);
-    match (kind.as_str(), read) {
-        ("values", Read::Primitive(_)) => {
-            hasher = hasher.text("struct").text("0").number(p.shape()).offset(0);
-        }
-        ("enum", Read::Enum(_, variants)) => {
-            let listed: Vec<i64> = values.iter().map(|(_, v)| *v).collect();
-            if *variants != listed {
-                return Err(bad(format!(
-                    "{field}: its variants differ from its shape's"
-                )));
-            }
-            hasher = hasher.text("enum").text(&repr);
-        }
-        _ => return Err(bad(format!("{field}: no value type or enum"))),
-    }
-    for (value_name, value) in &values {
-        hasher = hasher.text(value_name).value(i128::from(*value));
-    }
-    Ok(hasher.finish())
 }
 
 /// A call's error, as a script reads it.

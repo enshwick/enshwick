@@ -59,3 +59,37 @@ value = 1
 name = "Tools"
 doc = "Tools."
 value = 2
+[[call]]
+name = "you.stalls:fee"
+input = "Fee"
+doc = "The fee for holding a stall, in coins."
+major = 1
+output = "u64"
+output_layout = "5081719993871294428"
+input_size = 12
+output_size = 8
+layout = ["13059086432849901944", "5981015992674252258", "7716891694140350527", "17590301545955930516", "18388852194699020531"]
+[[type]]
+name = "Fee"
+doc = "The fee for holding a stall, in coins."
+kind = "struct"
+[[type.field]]
+name = "character"
+doc = "The player's character."
+type = "enshwick.entity"
+[[type.field]]
+name = "days"
+doc = "How many days the stall is held."
+type = "u32"
+[[type.field]]
+name = "place"
+doc = "The stall's place in its row."
+type = "u16"
+[[type.field]]
+name = "own"
+doc = "Whether the stall is the player's own."
+type = "bool"
+[[type.field]]
+name = "row"
+doc = "The stall's row."
+type = "u8"

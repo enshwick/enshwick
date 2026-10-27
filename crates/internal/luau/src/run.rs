@@ -459,15 +459,16 @@ pub fn start(
         .map(|a| (a.desc.call.clone(), Arc::clone(&a.caller)))
         .collect();
     for (call, caller) in asked {
-        // SAFETY: `CallDesc::parse` accepts only input fields whose hashes it
-        // worked out itself: a primitive's from its name, read and offset, a
-        // value type's or enum's by recomputing `#[derive(Shape)]`'s hash
-        // from the shape the description gives. `encode` writes a
-        // primitive's valid bytes, a bool as 0 or 1 and an enum only as a
-        // listed variant, and the loader's match on fields and size with
-        // `#[call]`'s padding check leaves no other byte. Every call goes
-        // through the function `caller` made for this description, which a
-        // reload cannot change.
+        // SAFETY: `CallDesc::parse` accepts only primitive input fields, a
+        // number, bool, entity or GUID, and works out each field's hash
+        // itself from its name, primitive and offset, so the loader's match
+        // pairs a field only with a server field of that same primitive.
+        // `encode` writes each primitive's valid bytes, a bool as 0 or 1, and
+        // every other primitive is valid for any bytes; the input buffer
+        // starts zeroed and the match on fields and size with `#[call]`'s
+        // padding check leaves no other byte. Every call goes through the
+        // function `caller` made for this description, which a reload cannot
+        // change.
         let _first = caller.set(unsafe { load.described_caller(&call) }?);
     }
     inner.started.store(true, Ordering::Release);
