@@ -205,7 +205,7 @@ impl Table {
             .symbols
             .into_iter()
             .map(|(id, value)| {
-                if id.ends_with(".bytes") {
+                if id.strip_suffix(".bytes").is_some() {
                     return Err(TableError::Toml(format!(
                         "{id}: pinned bytes are a constant, not a symbol"
                     )));
