@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-macros"
-version = "1.0.0-alpha.8"
+version = "1.0.0-alpha.9"
 description = "Internal, not for mods: the macros enshwick re-exports"
 keywords = ["enshrouded", "modding", "derive", "hooks"]
 categories = ["game-development"]
