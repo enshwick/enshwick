@@ -13,7 +13,7 @@ Each entry names the pull request that made the change.
   `move_slot` and `move_all`, the done function getting the `Outcome` as a
   table with `Done` and `OpError` by name. `Inventories::slots` and
   `Inventories::count` read an inventory on the server's game thread
-  without a `Reader`.
+  without a `Reader` (#581).
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread
