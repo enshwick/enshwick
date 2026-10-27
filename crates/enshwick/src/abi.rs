@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 97;
+pub const ABI_MINOR: u16 = 98;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -698,8 +698,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 171 * 8);
+    assert!(size_of::<HostApi>() == 24 + 172 * 8);
     assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 170 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 171 * 8);
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 163 * 8);
     assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 164 * 8);
@@ -709,6 +710,7 @@ const _: () = {
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 168 * 8);
     assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 169 * 8);
+    assert!(size_of::<AccountActionType>() == 1);
     assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<PropRemove>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);

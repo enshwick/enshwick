@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::account_action` asks the game to kick, ban or unban an account
+  (`AccountAction`); a ban of an account that is not online goes straight
+  onto the server's ban list (`HostApi::account_action`,
+  `AccountActionType`, ABI minor 98). The fake keeps a ban list
+  (`Installed::banned`, `removed`) (#586).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 
