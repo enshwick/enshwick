@@ -541,3 +541,105 @@ mod tests {
         assert!(PointDesc::parse(&description(&lua, "observe", "u8", 7)).is_ok());
     }
 }
+
+/// A mod event as a script subscribes to or defines it, with how its data
+/// reads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct EventDesc {
+    pub(crate) event: enshwick::services::DescribedEvent,
+    pub(crate) fields: Vec<(String, usize, Read)>,
+}
+
+impl EventDesc {
+    /// The description `cargo enshwick event` writes, or one a script writes
+    /// for its own event: fields without `offset` and `hash` are laid out
+    /// as `repr(C)` and hashed as Rust does for primitives.
+    ///
+    /// For an event the script defines, every field reads a primitive and
+    /// its hash is the one worked out here, so a script cannot claim the
+    /// hash of another type and send bytes that type forbids.
+    pub(crate) fn parse_definition(table: &Table) -> mlua::Result<Self> {
+        let desc = Self::parse(table)?;
+        for ((name, offset, read), field) in desc.fields.iter().zip(&desc.event.fields) {
+            let Read::Primitive(p) = read else {
+                return Err(bad(format!(
+                    "{name}: an event a script defines has primitive fields"
+                )));
+            };
+            let hash =
+                enshwick::services::layout_hash(name, p.shape(), p.size(), p.align(), *offset);
+            if hash != field.hash {
+                return Err(bad(format!(
+                    "{name}: its hash is not the one its read and offset give"
+                )));
+            }
+        }
+        Ok(desc)
+    }
+
+    /// The description `cargo enshwick event` writes, or one a script writes
+    /// for its own event, read as [`EventDesc::parse_definition`] says.
+    pub(crate) fn parse(table: &Table) -> mlua::Result<Self> {
+        let name: String = table.get("name")?;
+        let list: Table = table.get("fields")?;
+        let mut described = Vec::new();
+        let mut fields = Vec::new();
+        let mut end = 0usize;
+        let mut align = 1usize;
+        let mut by_hand = None;
+        for field in list.sequence_values::<Table>() {
+            let field = field?;
+            let field_name: String = field.get("name")?;
+            let read = read_of(&field.get("read")?, 0)?;
+            let offset: Option<usize> = field.get("offset")?;
+            let hash: Option<String> = field.get("hash")?;
+            let explicit = offset.is_some() || hash.is_some();
+            if *by_hand.get_or_insert(explicit) != explicit {
+                return Err(bad(
+                    "give every field an offset and a hash, or none of them",
+                ));
+            }
+            let (offset, hash) = match (offset, hash, &read) {
+                (Some(offset), Some(hash), _) => {
+                    let hash = hash
+                        .parse()
+                        .map_err(|_| bad("a layout hash is no number"))?;
+                    (offset, hash)
+                }
+                (None, None, Read::Primitive(p)) => {
+                    let offset = end.div_ceil(p.align()) * p.align();
+                    align = align.max(p.align());
+                    let hash = enshwick::services::layout_hash(
+                        &field_name,
+                        p.shape(),
+                        p.size(),
+                        p.align(),
+                        offset,
+                    );
+                    (offset, hash)
+                }
+                _ => {
+                    return Err(bad(format!(
+                        "{field_name}: give offset and hash together, or neither for a primitive"
+                    )));
+                }
+            };
+            end = end.max(offset.saturating_add(size_of_read(&read)));
+            described.push(DescribedField::new(&field_name, hash));
+            fields.push((field_name, offset, read));
+        }
+        let size: Option<u32> = table.get("size")?;
+        let size = match size {
+            Some(size) => size,
+            None => u32::try_from(end.div_ceil(align) * align)
+                .map_err(|_| bad("the data is too large"))?,
+        };
+        if end > usize::try_from(size).unwrap_or(0) {
+            return Err(bad("a field lies past the data's size"));
+        }
+        Ok(Self {
+            event: enshwick::services::DescribedEvent::new(&name, described, size),
+            fields,
+        })
+    }
+}

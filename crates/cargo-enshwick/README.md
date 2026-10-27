@@ -42,6 +42,10 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   running it. `--from` is the owner's DLL, a folder with it in it or in its
   `mods/` (such as the game's), or a schema file the owner published.
   With `--luau` it writes the point's Luau module for a Luau mod instead.
+- `call <mod>:<call> --from <path> [--out <file>]` writes the declaration of
+  another mod's call, which the server lists in `manifest!(calls: [..])`.
+- `event <mod>:<event> --from <path> [--out <file>]` writes the Luau module
+  of another mod's event, which the owner lists in `manifest!(events: [..])`.
 - `types [<name>...] --from <game> [--rust <file>] [--luau <file>]` writes
   the [game's own types](https://github.com/enshwick/enshwick/blob/main/book/src/game-types.md)
   as Rust and Luau from the reflection data of the game executable `--from`

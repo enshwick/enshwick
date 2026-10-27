@@ -85,6 +85,11 @@ chapters! {
 struct Testing;
 
 #[cfg(feature = "test")]
+#[doc = include_str!("../../../book/src/calls.md")]
+#[expect(dead_code, reason = "the doc comment carries the chapter")]
+struct Calls;
+
+#[cfg(feature = "test")]
 #[doc = include_str!("../../../book/src/extending.md")]
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Extending;

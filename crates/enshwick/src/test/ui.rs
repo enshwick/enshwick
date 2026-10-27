@@ -2,8 +2,8 @@
 
 use crate::abi::Header;
 
-use super::Installed;
 use super::table;
+use super::{FakeHost, Installed};
 
 #[expect(
     clippy::unused_self,
@@ -281,4 +281,62 @@ pub struct ShownDialog {
     pub detail: String,
     /// The buttons, bit `i` for answer `i`.
     pub buttons: u32,
+}
+
+impl FakeHost {
+    /// The client's fog of war as the loader keeps it: `info` and its
+    /// `info.width` × `info.height` pixels, row by row.
+    ///
+    /// # Panics
+    ///
+    /// When `pixels` does not hold the image `info` describes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{FogInfo, Side};
+    ///
+    /// let info = FogInfo { width: 2, height: 2, metres_per_pixel: 8.0, size_z: 16.0, ..FogInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .side(Side::CLIENT)
+    ///     .fog(info, vec![0, 255, 0, 0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn fog(mut self, info: crate::abi::FogInfo, pixels: Vec<u8>) -> Self {
+        assert_eq!(
+            pixels.len(),
+            info.width as usize * info.height as usize,
+            "the pixels of the image the info describes"
+        );
+        self.fog = Some((info, pixels));
+        self
+    }
+}
+
+#[expect(
+    clippy::unused_self,
+    reason = "the fake's state is process-wide; `self` proves it is installed"
+)]
+impl Installed {
+    /// Replaces the fog of war, as the loader does after a reveal.
+    ///
+    /// # Panics
+    ///
+    /// As [`FakeHost::fog`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::{FogInfo, Side};
+    ///
+    /// let info = FogInfo { width: 1, height: 1, ..FogInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new().side(Side::CLIENT).install();
+    /// loader.set_fog(info, vec![255]);
+    /// ```
+    pub fn set_fog(&self, info: crate::abi::FogInfo, pixels: Vec<u8>) {
+        assert_eq!(pixels.len(), info.width as usize * info.height as usize);
+        table::with((), |s| s.host.fog = Some((info, pixels)));
+    }
 }

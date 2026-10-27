@@ -15,10 +15,8 @@ publish.workspace = true
 [package.metadata.enshwick]
 windows-tests = true
 
-[dev-dependencies]
-enshwick = { workspace = true, features = ["test"] }
-
 [target.'cfg(windows)'.dev-dependencies]
+enshwick = { workspace = true, features = ["test"] }
 windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
 
 [lints]

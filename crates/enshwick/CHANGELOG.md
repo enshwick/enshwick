@@ -8,6 +8,26 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Calls, described services: `#[call]` declares one function from a
+  `repr(C)` input to an answer, `Load::serve_call` serves it and
+  `Load::caller` gives a `Caller` that runs it from any thread
+  (`services::Call`, `CallError`); `manifest!(calls: [..])` puts its schema
+  into the manifest. `DescribedCall`, `Load::described_caller` and
+  `Load::serve_described_call` do the same with bytes, for a runtime that
+  knows a call from its schema. The loader matches callers by name, major,
+  fields and sizes once every mod is initialised (`HostApi::serve_call`,
+  `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
+  them (`Installed::serve_call`, `call`, `served_calls`). A call's input
+  and answer have no padding, which `Shape::PADDING_FREE` reports.
+- `Load::on_described_mod_event` and `Load::define_described_event`
+  (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
+  event described at run time, its data as bytes in the definer's layout;
+  `manifest!(events: [..])` puts the schema of each listed `#[event]` into
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
+- `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
+  copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
+  read what the player has uncovered, as a `FogState` and `FogImage`; the
+  `fog_open` and `fog_read` entries and `FogInfo` (ABI 2.94) (#564).
 - `Change::in_table` changes an item's count, chance or weight in one fill
   table alone, after its changes of every table; `Vanilla::loot_table`
   finds the table a container template rolls, with how many containers
@@ -122,12 +142,12 @@ Each entry names the pull request that made the change.
   logic wiring, a logic trigger) is never
   removed or taken away by an undo unless the mod opts in:
   `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
-  records and `transaction_entities` are ABI minor 95 (#552).
+  records and `transaction_entities` are ABI minor 96 (#552).
 - `World::persists` tells whether a save keeps changes in a box: the
   game saves a world only inside its bases' zones, so props, blocks and
   terrain changed elsewhere are gone after a restart, a mod's as a
-  player's. `HostApi::world_persists` is ABI minor 95 (#552).
-- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 95): creatures
+  player's. `HostApi::world_persists` is ABI minor 96 (#552).
+- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 96): creatures
   placed from items (animals, pets, survivors) and flame altars are no
   props; prop removal refuses them in either mode (#552).
 
@@ -153,6 +173,10 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The loader's profile names the survivors feature `survivors`; it showed a
+  mod id.
+- The loader and the fake leave a mod event subscription idle when it
+  reads more bytes than the definer sends.
 - `World::component` and `World::get` read the static half of a component
   type, such as `FuelSetup`, as the template's set-up values; they gave the
   data of its dynamic half, `DynamicFuelSetup`, before (#568).

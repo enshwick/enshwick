@@ -743,4 +743,154 @@ mod tests {
             loader.faults()
         );
     }
+
+    #[enshwick::event(name = "you.trading-post:sold")]
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct Sold {
+        pub(crate) item: u32,
+        pub(crate) player: u64,
+        pub(crate) cheap: bool,
+    }
+
+    /// A description a script writes for itself: no offsets and no hashes,
+    /// which the runtime works out as Rust lays the struct out.
+    const SOLD: &str = r#"{ name = "you.trading-post:sold", fields = {
+        { name = "item", read = "u32" },
+        { name = "player", read = "u64" },
+        { name = "cheap", read = "bool" },
+    } }"#;
+
+    #[test]
+    fn a_script_hears_another_mod_s_event_by_a_description_of_its_own() {
+        let (loader, status) = run_full(
+            &format!(
+                r"enshwick.on_mod_event({SOLD}, function(sold)
+                    enshwick.log.info(`sold {{sold.item}} to {{sold.player}} cheap {{sold.cheap}}`)
+                end)"
+            ),
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            loader.send_mod_event(&Sold {
+                item: 7,
+                player: u64::MAX,
+                cheap: true
+            }),
+            1
+        );
+        assert!(
+            logged(&loader, &format!("sold 7 to {} cheap true", u64::MAX)),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_script_defines_and_sends_its_own_event() {
+        let (loader, status) = run_full(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = {
+                { name = "player", read = "entity" },
+                { name = "times", read = "u16" },
+            } })
+            enshwick.on("WorldSaved", function()
+                greeted.send({ player = 7, times = 2 })
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert_eq!(loader.sent_events(), ["you.luau:greeted"]);
+        assert_eq!(loader.sent_event_data()[0], [7, 0, 0, 0, 2, 0, 0, 0]);
+    }
+
+    #[test]
+    fn a_reload_keeps_a_defined_event_and_a_new_one_waits() {
+        let (loader, status) = run_full(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        runtime()
+            .reload(main(
+                r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })
+                greeted.send({ n = 4 })
+                local ok = pcall(enshwick.define_event, { name = "you.luau:waved", fields = {} })
+                print(`waved {ok}`)"#,
+            ))
+            .unwrap();
+        assert_eq!(loader.sent_event_data(), [vec![4, 0, 0, 0]]);
+        assert!(logged(&loader, "waved false"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_reload_cannot_change_a_defined_event_s_fields() {
+        let (loader, status) = run_full(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let failed = runtime().reload(main(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "f32" } } })
+            greeted.send({ n = 4 })"#,
+        ));
+        assert!(failed.is_err());
+        assert!(loader.sent_event_data().is_empty());
+    }
+
+    #[test]
+    fn a_definition_takes_no_hash_but_its_own() {
+        let (loader, status) = run_full(
+            r#"local ok, err = pcall(enshwick.define_event, { name = "you.luau:greeted", fields = {
+                { name = "flag", read = "u8", offset = 0, hash = "12345" },
+            } })
+            print(`defined {ok} {err}`)
+            local ok2, err2 = pcall(enshwick.on_mod_event, { name = "you.luau:mixed", fields = {
+                { name = "a", read = "u8" },
+                { name = "b", read = "u64", offset = 8, hash = "1" },
+            } }, function() end)
+            print(`mixed {ok2} {err2}`)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "defined false"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "is not the one its read and offset give"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(logged(&loader, "mixed false"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn one_event_described_twice_differently_is_an_error() {
+        let (loader, status) = run_full(
+            &format!(
+                r#"enshwick.on_mod_event({SOLD}, function() end)
+                local ok = pcall(enshwick.on_mod_event, {{ name = "you.trading-post:sold", fields = {{ {{ name = "item", read = "u64" }} }} }}, function() end)
+                print(`twice {{ok}}`)"#
+            ),
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "twice false"), "{:?}", loader.logs());
+    }
 }

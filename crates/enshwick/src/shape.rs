@@ -23,6 +23,9 @@ use core::ptr::NonNull;
 /// - [`SHAPE`](Shape::SHAPE) changes whenever the type's layout or the
 ///   meaning of its values changes: every field with its offset, every
 ///   variant with its discriminant, every named value.
+/// - [`PADDING_FREE`](Shape::PADDING_FREE) is `true` only when every byte
+///   of every value is initialised, with no padding anywhere inside it,
+///   nested types included.
 ///
 /// # Examples
 ///
@@ -50,6 +53,11 @@ pub unsafe trait Shape {
     /// The `[[type]]` tables of a point schema for the type and every named
     /// type inside it; empty for a primitive or a type of this crate.
     const SCHEMA_TYPES: &'static str = "";
+
+    /// Whether every byte of a value is initialised, with no padding
+    /// anywhere inside it, so another language may read it as bytes; false
+    /// unless the type says so.
+    const PADDING_FREE: bool = false;
 }
 
 /// Builds a [`Shape`] hash, FNV-1a over the parts in order.
@@ -198,6 +206,7 @@ macro_rules! number {
         unsafe impl Shape for $ty {
             const SHAPE: u64 = ShapeHasher::new(stringify!($ty)).finish();
             const SCHEMA_NAME: &'static str = stringify!($ty);
+            const PADDING_FREE: bool = true;
         }
     )*};
 }
@@ -228,6 +237,7 @@ unsafe impl Shape for bool {
         .number(1)
         .finish();
     const SCHEMA_NAME: &'static str = "bool";
+    const PADDING_FREE: bool = true;
 }
 
 // SAFETY: an array is its element's shape repeated `N` times.
@@ -236,6 +246,7 @@ unsafe impl<T: Shape, const N: usize> Shape for [T; N] {
         .number(T::SHAPE)
         .number(N as u64)
         .finish();
+    const PADDING_FREE: bool = T::PADDING_FREE;
 }
 
 // SAFETY: a slice is its element's shape.

@@ -4,7 +4,9 @@
 
 use std::fmt::Write as _;
 
-use super::{Error, Kind, PointSchema, Schema, TypeSchema, find, is_named, prose, reached};
+use super::{
+    Error, Kind, PointSchema, Schema, TypeSchema, find, is_named, prose, reached, reached_from,
+};
 
 /// A type's size and alignment in a `repr(C)` layout.
 #[derive(Clone, Copy)]
@@ -225,38 +227,9 @@ pub fn luau(schema: &Schema, name: &str) -> Result<String, Error> {
         "--!strict\n-- The extension point `{name}` of {} {}.\n-- Written by `cargo enshwick point {name} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime links by the layout below.\n",
         schema.owner, schema.version, schema.owner
     );
-    for ty in reached(schema, point, input)?
-        .into_iter()
-        .chain([input])
-        .filter(|t| t.kind == Kind::Struct)
-    {
-        out.push('\n');
-        comment(&mut out, "", &ty.doc);
-        let _ = writeln!(out, "export type {} = {{", ty.name);
-        for field in &ty.field {
-            comment(&mut out, "\t", &field.doc);
-            let _ = writeln!(out, "\t{}: {},", field.name, luau_type(schema, &field.ty));
-        }
-        out.push_str("}\n");
-    }
-    let mut values = String::new();
-    for ty in reached(schema, point, input)? {
-        if !matches!(ty.kind, Kind::Values | Kind::Enum) {
-            continue;
-        }
-        let entries: Vec<String> = ty
-            .value
-            .iter()
-            .chain(&ty.variant)
-            .map(|v| format!("{} = {}", v.name, v.value))
-            .collect();
-        let _ = writeln!(
-            values,
-            "\t{} = table.freeze({{ {} }}),",
-            ty.name,
-            entries.join(", ")
-        );
-    }
+    let mut types = reached(schema, point, input)?;
+    types.push(input);
+    let values = types_and_values(schema, &types, &mut out);
     let input_shape = writer.shape(&point.input, 0)?;
     let output_shape = writer.shape(&point.output, 0)?;
     let output_hash: u64 = point
@@ -279,6 +252,100 @@ pub fn luau(schema: &Schema, name: &str) -> Result<String, Error> {
     Ok(out)
 }
 
+/// The `export type` of every struct in `types` and the `table.freeze` line
+/// of every named value set, for a module's head and its returned table.
+fn types_and_values(schema: &Schema, types: &[&TypeSchema], out: &mut String) -> String {
+    for ty in types.iter().filter(|t| t.kind == Kind::Struct) {
+        out.push('\n');
+        comment(out, "", &ty.doc);
+        let _ = writeln!(out, "export type {} = {{", ty.name);
+        for field in &ty.field {
+            comment(out, "\t", &field.doc);
+            let _ = writeln!(out, "\t{}: {},", field.name, luau_type(schema, &field.ty));
+        }
+        out.push_str("}\n");
+    }
+    let mut values = String::new();
+    for ty in types
+        .iter()
+        .filter(|t| matches!(t.kind, Kind::Values | Kind::Enum))
+    {
+        let entries: Vec<String> = ty
+            .value
+            .iter()
+            .chain(&ty.variant)
+            .map(|v| format!("{} = {}", v.name, v.value))
+            .collect();
+        let _ = writeln!(
+            values,
+            "\t{} = table.freeze({{ {} }}),",
+            ty.name,
+            entries.join(", ")
+        );
+    }
+    values
+}
+
+/// The Luau definition of the mod event `name` of `schema`: a module that
+/// exports the types its data reaches and the named values, and returns the
+/// description `enshwick.on_mod_event` subscribes with.
+///
+/// # Errors
+///
+/// [`Error`] when the schema lacks the event or a type it names, or its
+/// data is no struct of its layout's fields.
+///
+/// # Examples
+///
+/// ```
+/// use cargo_enshwick::points::{Schema, luau_event};
+///
+/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// assert!(luau_event(&schema, "you.stalls:sold").is_err());
+/// # Ok::<(), cargo_enshwick::points::Error>(())
+/// ```
+pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
+    let event = schema
+        .event
+        .iter()
+        .find(|e| e.name == name)
+        .ok_or_else(|| Error::NoPoint {
+            owner: schema.owner.clone(),
+            name: name.to_owned(),
+        })?;
+    let name = event.name.as_str();
+    let data = find(schema, name, &event.data)?;
+    if data.kind != Kind::Struct || data.field.len() != event.layout.len() {
+        return Err(Error::BadInput(name.to_owned()));
+    }
+    let writer = Writer {
+        schema,
+        point: name,
+    };
+    let mut out = format!(
+        "--!strict\n-- The mod event `{name}` of {} {}.\n-- Written by `cargo enshwick event {name}`. Write it again for a newer\n-- {} rather than edit it: the runtime subscribes by the layout below.\n",
+        schema.owner, schema.version, schema.owner
+    );
+    let mut types = reached_from(
+        schema,
+        name,
+        data.field.iter().map(|f| f.ty.as_str()).collect(),
+    )?;
+    types.push(data);
+    let values = types_and_values(schema, &types, &mut out);
+    let shape = writer.shape(&event.data, 0)?;
+    let fields = writer.fields(data, Some(&event.layout), 1)?;
+    out.push('\n');
+    comment(&mut out, "", &event.doc);
+    let _ = writeln!(
+        out,
+        "return table.freeze({{\n\tname = {name:?},\n\tsize = {},\n\tfields = {{\n\t\t{},\n\t}},\n{values}}})",
+        shape.size,
+        fields.join(",\n\t\t"),
+    );
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,6 +356,19 @@ mod tests {
             Schema::parse(include_str!("../../tests/fixtures/stalls.points.toml")).unwrap();
         let text = luau(&schema, "you.stalls:price").unwrap();
         assert_eq!(text, include_str!("../../tests/fixtures/stalls_price.luau"));
+    }
+
+    #[test]
+    fn an_event_becomes_a_luau_description_with_its_layout() {
+        let text = "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\", \"2\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"item\"\ndoc = \"The item.\"\ntype = \"u32\"\n[[type.field]]\nname = \"player\"\ndoc = \"The buyer.\"\ntype = \"u64\"\n";
+        let schema = Schema::parse(text).unwrap();
+        let module = luau_event(&schema, "you.post:sold").unwrap();
+        assert!(module.contains("export type Sold = {"), "{module}");
+        assert!(module.contains("size = 16,"), "{module}");
+        assert!(
+            module.contains("{ name = \"player\", offset = 8, read = \"u64\", hash = \"2\" }"),
+            "{module}"
+        );
     }
 
     #[test]

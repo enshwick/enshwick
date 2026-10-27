@@ -117,6 +117,7 @@ fn link_features(loader: &'static Loader) {
     crate::progress::link(loader);
     crate::bases::link(loader);
     crate::ui::link(loader);
+    crate::fog::link(loader);
 }
 
 pub(crate) fn start(
@@ -193,6 +194,7 @@ pub(crate) fn start(
     loader.seal_subscriptions();
     crate::services::seal(loader);
     crate::points::seal(loader);
+    crate::calls::seal(loader);
     crate::content::seal_and_link(loader);
     link_features(loader);
     if side == Side::CLIENT {

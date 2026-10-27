@@ -75,6 +75,7 @@
 //! # Ok::<(), &str>(())
 //! ```
 
+mod calls;
 mod content;
 mod events;
 mod gameplay;
@@ -219,6 +220,7 @@ pub struct FakeHost {
     console_answers: HashMap<String, String>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
+    fog: Option<(crate::abi::FogInfo, Vec<u8>)>,
     refused_writes: HashSet<u32>,
     static_halves: HashSet<u32>,
     net_peers: HashSet<u64>,
@@ -301,6 +303,7 @@ impl FakeHost {
             console_answers: HashMap::new(),
             placed: Vec::new(),
             world_key: None,
+            fog: None,
             refused_writes: HashSet::new(),
             static_halves: HashSet::new(),
             net_peers: HashSet::new(),

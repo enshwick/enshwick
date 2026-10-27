@@ -10,11 +10,19 @@
 //! user that needs a field the publisher lacks is refused with the field's
 //! name. A change to a field already published is a new major version.
 
+mod calls;
+mod described;
+
 use core::marker::PhantomData;
 
 use crate::Host;
 use crate::abi::{Layout, LayoutField, Str};
 use crate::shape::ShapeHasher;
+
+pub use calls::{Call, CallError, Caller, DescribedCall, DescribedCaller};
+#[cfg(feature = "test")]
+pub(crate) use calls::{Served, run_typed};
+pub use described::{DescribedEmitter, DescribedEvent};
 
 /// A table of functions a mod publishes for others.
 ///
@@ -80,6 +88,12 @@ pub unsafe trait ModEvent: Copy + 'static {
     const NAME: &'static str;
     /// The data's fields, in order.
     const LAYOUT: &'static [LayoutField];
+    /// Whether a schema describes every field's type, which listing the
+    /// event in `manifest!(events: [..])` needs.
+    const DESCRIBED: bool = false;
+    /// The event's `[[event]]` and `[[type]]` tables for its defining mod's
+    /// schema, which `manifest!(events: [..])` puts into the manifest.
+    const SCHEMA: &'static str = "";
 }
 
 /// The hash of one field for a layout: its name, the [`Shape`] of its type,

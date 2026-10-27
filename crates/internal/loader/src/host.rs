@@ -28,6 +28,7 @@ use entries::build::{
     build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,
     type_hash, type_size,
 };
+use entries::calls::{call, find_call, serve_call};
 use entries::content::{
     add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
     game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
@@ -60,7 +61,7 @@ use entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
     transaction_undo,
 };
-use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
+use entries::ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
     actions, build_rights, chat, component, component_write, destroy, emit, entities,
     entity_template, feature, forget_game_settings, game_event, game_settings, hosting,
@@ -780,6 +781,11 @@ pub(crate) static API: HostApi = HostApi {
     transaction_status,
     transaction_commit_for,
     world_quiet,
+    fog_open,
+    fog_read,
+    serve_call,
+    find_call,
+    call,
     transaction_entities,
     world_persists,
 };

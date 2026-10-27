@@ -368,5 +368,10 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
 | `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
-| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 95          |
-| `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 95          |
+| `fog_open`               | Has the loader copy the client's fog of war for the mod; client, init only                           | 94          |
+| `fog_read`               | Copies a box of the client's fog of war and its size and version; any thread                         | 94          |
+| `serve_call`             | Serves a call, a described service named after the mod, with its input and answer; init only         | 95          |
+| `find_call`              | Asks for another mod's call by name and major, matched field by field after init; init only          | 95          |
+| `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 95          |
+| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 96          |
+| `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 96          |

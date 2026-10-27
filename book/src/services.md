@@ -11,7 +11,8 @@ A service carries one mod's own logic to another. Game data, such as altars,
 their zones and bases, comes from the platform's API instead (see
 [Altars and bases](altars.md)), so mods need not depend on each other for it.
 To let other mods change one of your mod's rules, define an extension point
-instead (see [Extending other mods](extending.md)).
+instead (see [Extending other mods](extending.md)). A single function that
+mods in other languages call too is a [call](calls.md).
 
 The [examples](https://github.com/enshwick/enshwick/tree/main/examples)
 folder holds the two mods this chapter follows: `trading-post` publishes item
