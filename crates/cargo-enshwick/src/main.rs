@@ -81,8 +81,8 @@ enum Command {
     /// Checks, describes and packages data packs.
     #[command(subcommand)]
     Pack(pack::Command),
-    /// Writes the Rust definition of another mod's extension point, read
-    /// from the owner's DLL without running it.
+    /// Writes the Rust definition of another mod's extension point, or with
+    /// `--luau` its Luau module, read from the owner's DLL without running it.
     Point {
         /// The point, `<mod id>:<point>`.
         name: String,
@@ -93,6 +93,10 @@ enum Command {
         /// The file to write; the definition is printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Writes the definition as a Luau module for a Luau mod instead of
+        /// Rust.
+        #[arg(long)]
+        luau: bool,
     },
     /// Writes the Luau definitions of the API, which luau-lsp reads, for
     /// the loader this tool was built with.
@@ -196,7 +200,12 @@ fn main() -> ExitCode {
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
-        Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
+        Command::Point {
+            name,
+            from,
+            out,
+            luau,
+        } => point::run(&name, &from, out.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
         Command::Types {

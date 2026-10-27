@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick point --luau` writes a point's Luau module for a Luau mod
+  (`cargo_enshwick::points::luau`), with each field's place in the owner's
+  layout.
 - `cargo enshwick new --data` shows a selection of items by category in
   the commented `items.toml` (#558).
 - `cargo_enshwick::luau::definitions` writes the API's Luau definitions

@@ -36,6 +36,35 @@ mod sealed {
     pub trait Sealed {}
 }
 
+/// Every typed game event: the one list that seals [`Kind`] for each, so a
+/// type implements it only from here, and that scripts read.
+macro_rules! typed_kinds {
+    ($($kind:ident),* $(,)?) => {
+        $(impl kinds::sealed::Sealed for $kind {})*
+
+        /// Every typed game event, for script languages.
+        pub(crate) const SCRIPT_KINDS: &[crate::script::GameEventKind] =
+            &[$(crate::script::GameEventKind::of::<$kind>()),*];
+    };
+}
+
+typed_kinds!(
+    HitEvent,
+    EntityDiedEvent,
+    LevelUpEvent,
+    XpGainedEvent,
+    CraftRecipeEvent,
+    CraftRecipeSuccessEvent,
+    AcceptOfferedInteractionEvent,
+    BuildingPlaceEvent,
+    BuildingTearDownEvent,
+    BuildingPickUpEvent,
+    FlameAltarEvent,
+    LootInteractionEvent,
+    HandleEquipmentSlotChangedEvent,
+    RevivedPlayerEvent,
+);
+
 /// A reflected game event type, resolved once at init.
 ///
 /// # Examples

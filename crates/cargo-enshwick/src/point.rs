@@ -57,7 +57,12 @@ fn dlls(from: &Path) -> anyhow::Result<Vec<PathBuf>> {
 /// # Errors
 ///
 /// When no DLL there defines the point, or its schema does not read.
-pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> anyhow::Result<String> {
+pub(crate) fn run(
+    name: &str,
+    from: &Path,
+    out: Option<&Path>,
+    luau: bool,
+) -> anyhow::Result<String> {
     let (owner, _) = name
         .split_once(':')
         .with_context(|| format!("{name:?} is no point: <mod id>:<point>"))?;
@@ -65,7 +70,11 @@ pub(crate) fn run(name: &str, from: &Path, out: Option<&Path>) -> anyhow::Result
     for (dll, text) in schemas(from)? {
         let schema = Schema::parse(&text).with_context(|| dll.display().to_string())?;
         if schema.points().any(|p| p == name) {
-            let code = rust(&schema, name)?;
+            let code = if luau {
+                cargo_enshwick::points::luau(&schema, name)?
+            } else {
+                rust(&schema, name)?
+            };
             return match out {
                 Some(path) => {
                     std::fs::write(path, &code).with_context(|| path.display().to_string())?;
