@@ -399,36 +399,36 @@ mod tests {
     #[test]
     fn a_mod_s_reason_that_names_a_text_reads_in_the_reader_s_language() {
         let texts = enshwick::i18n::Texts::parse(
-            "[en]\n\"config.too-few\" = \"Too few stalls.\"\n[uk]\n\"config.too-few\" = \"Замало ятків.\"\n",
+            "[en]\n\"stalls.too-few\" = \"Too few stalls.\"\n[uk]\n\"stalls.too-few\" = \"Замало ятків.\"\n",
         )
         .unwrap();
         let uk = Some(enshwick::i18n::Language::UK_UA);
         assert_eq!(
-            mod_reason(Some(&texts), "config.too-few"),
+            mod_reason(Some(&texts), "stalls.too-few"),
             "Too few stalls."
         );
         assert_eq!(
-            texts::for_reader(uk, || mod_reason(Some(&texts), "config.too-few")),
+            texts::for_reader(uk, || mod_reason(Some(&texts), "stalls.too-few")),
             "Замало ятків."
         );
         assert_eq!(
             mod_reason(Some(&texts), "limit is 1 to 16"),
             "limit is 1 to 16"
         );
-        assert_eq!(mod_reason(None, "config.too-few"), "config.too-few");
+        assert_eq!(mod_reason(None, "stalls.too-few"), "stalls.too-few");
         let filled = enshwick::i18n::Texts::parse(
-            "[en]\n\"config.min\" = \"At least {min} stalls.\"\n[uk]\n\"config.min\" = \"Щонайменше {min} ятки.\"\n",
+            "[en]\n\"stalls.min\" = \"At least {min} stalls.\"\n[uk]\n\"stalls.min\" = \"Щонайменше {min} ятки.\"\n",
         )
         .unwrap();
-        let why = enshwick::config::ConfigError::text("config.min", &[("min", "2")]);
-        let sent = "config.min\tmin=2";
-        assert_eq!(why.to_string(), "config.min (min = 2)");
+        let why = enshwick::config::ConfigError::text("stalls.min", &[("min", "2")]);
+        let sent = "stalls.min\tmin=2";
+        assert_eq!(why.to_string(), "stalls.min (min = 2)");
         assert_eq!(mod_reason(Some(&filled), sent), "At least 2 stalls.");
         assert_eq!(
             texts::for_reader(uk, || mod_reason(Some(&filled), sent)),
             "Щонайменше 2 ятки."
         );
-        assert_eq!(mod_reason(None, sent), "config.min min=2");
+        assert_eq!(mod_reason(None, sent), "stalls.min min=2");
     }
 
     #[test]
