@@ -156,11 +156,87 @@ pub struct PlayerKey(pub u64);
 #[shape(api = "recipe_id")]
 pub struct RecipeId(pub u32);
 
-/// `new`, `get` and the `From` conversions both ways of an id newtype.
+/// A node of the game's skill tree by its id, as
+/// [`Skill::node`](crate::world::Skill::node) names the nodes a character
+/// unlocked and a skill check names the node it asks about.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::world::SkillNode;
+///
+/// let node = SkillNode::from(0x2a_u32);
+/// assert_eq!(node.get(), 0x2a);
+/// assert_eq!(u32::from(node), 0x2a);
+/// assert_eq!(node, SkillNode::new(0x2a));
+/// ```
+#[repr(transparent)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    bytemuck::Zeroable,
+    bytemuck::Pod,
+    crate::Script,
+)]
+#[serde(transparent)]
+pub struct SkillNode(pub u32);
+
+/// A knowledge value of the game by its id: a recipe's, a quest's, or any
+/// other bool, counter or flags the world or a player keeps.
+///
+/// A recipe's knowledge has the recipe's id, so a [`RecipeId`] converts.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::RecipeId;
+/// use enshwick::knowledge::KnowledgeId;
+///
+/// let quest = KnowledgeId::new(0x51);
+/// assert_eq!(quest.get(), 0x51);
+/// assert_eq!(KnowledgeId::from(RecipeId::new(0x1d)), KnowledgeId::new(0x1d));
+/// ```
+#[repr(transparent)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    bytemuck::Zeroable,
+    bytemuck::Pod,
+    crate::Script,
+)]
+#[serde(transparent)]
+pub struct KnowledgeId(pub u32);
+
+impl From<RecipeId> for KnowledgeId {
+    fn from(recipe: RecipeId) -> Self {
+        Self(recipe.0)
+    }
+}
+
+/// `new`, `get`, the `From` conversions both ways and the formatting traits
+/// of an id newtype over an integer, which print the bare number.
 macro_rules! id_conversions {
     ($($id:ident($int:ty)),* $(,)?) => {$(
         impl $id {
-            /// The id of the game's number `id`, in a `const` too.
+            /// The id numbered `id`, in a `const` too.
             ///
             /// # Examples
             ///
@@ -170,7 +246,7 @@ macro_rules! id_conversions {
                 Self(id)
             }
 
-            /// The game's number.
+            /// Its number.
             ///
             /// # Examples
             ///
@@ -193,6 +269,12 @@ macro_rules! id_conversions {
             }
         }
 
+        impl core::fmt::Display for $id {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::Display::fmt(&self.0, f)
+            }
+        }
+
         impl core::fmt::LowerHex for $id {
             fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 core::fmt::LowerHex::fmt(&self.0, f)
@@ -207,7 +289,46 @@ macro_rules! id_conversions {
     )*};
 }
 
-id_conversions!(Entity(u32), ItemId(u32), PlayerKey(u64), RecipeId(u32));
+pub(crate) use id_conversions;
+
+/// `from_guid` of an id the game numbers by the [`Guid::fnv1a`] of a
+/// resource's GUID.
+///
+/// [`Guid::fnv1a`]: crate::content::Guid::fnv1a
+macro_rules! guid_ids {
+    ($($id:ident),* $(,)?) => {$(
+        impl $id {
+            /// The id of the resource with GUID `guid`, as the game numbers
+            /// it, in a `const` too: for a mod's own content, its
+            /// [`Id::guid`](crate::content::Id::guid).
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use enshwick::content::Id;
+            ///
+            /// const LOCKER: Id = Id::new("you.lockers:locker");
+            #[doc = concat!("let id = enshwick::abi::", stringify!($id), "::from_guid(LOCKER.guid());")]
+            /// assert_eq!(id.get(), LOCKER.guid().fnv1a());
+            /// ```
+            #[must_use]
+            pub const fn from_guid(guid: crate::content::Guid) -> Self {
+                Self(guid.fnv1a())
+            }
+        }
+    )*};
+}
+
+id_conversions!(
+    Entity(u32),
+    ItemId(u32),
+    PlayerKey(u64),
+    RecipeId(u32),
+    SkillNode(u32),
+    KnowledgeId(u32),
+);
+
+guid_ids!(ItemId, RecipeId, KnowledgeId);
 
 const _: () = {
     assert!(size_of::<Entity>() == size_of::<u32>() && align_of::<Entity>() == align_of::<u32>());
@@ -217,6 +338,13 @@ const _: () = {
     );
     assert!(
         size_of::<RecipeId>() == size_of::<u32>() && align_of::<RecipeId>() == align_of::<u32>()
+    );
+    assert!(
+        size_of::<SkillNode>() == size_of::<u32>() && align_of::<SkillNode>() == align_of::<u32>()
+    );
+    assert!(
+        size_of::<KnowledgeId>() == size_of::<u32>()
+            && align_of::<KnowledgeId>() == align_of::<u32>()
     );
 };
 
@@ -253,6 +381,30 @@ mod tests {
         assert_eq!(format!("{:#x}", ItemId::new(0x5e01)), "0x5e01");
         assert_eq!(format!("{:016X}", PlayerKey::new(0xab)), "00000000000000AB");
         assert_eq!(format!("{:x}", RecipeId::new(255)), "ff");
+    }
+
+    #[test]
+    fn every_id_displays_as_its_number() {
+        assert_eq!(Entity(1210).to_string(), "1210");
+        assert_eq!(ItemId::new(1_042).to_string(), "1042");
+        assert_eq!(PlayerKey::new(u64::MAX).to_string(), u64::MAX.to_string());
+        assert_eq!(RecipeId::new(77).to_string(), "77");
+        assert_eq!(SkillNode::new(0x2a).to_string(), "42");
+        assert_eq!(KnowledgeId::new(29).to_string(), "29");
+        assert_eq!(format!("{:>6}", ItemId::new(7)), "     7");
+    }
+
+    #[test]
+    fn a_recipe_s_knowledge_is_its_recipe_id() {
+        assert_eq!(KnowledgeId::from(RecipeId::new(77)), KnowledgeId::new(77));
+    }
+
+    #[test]
+    fn an_id_from_a_guid_is_the_fnv_hash_of_its_bytes() {
+        let chest = crate::content::Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
+        assert_eq!(ItemId::from_guid(chest).get(), 1_302_084_846);
+        assert_eq!(RecipeId::from_guid(chest).get(), 1_302_084_846);
+        assert_eq!(KnowledgeId::from_guid(chest).get(), 1_302_084_846);
     }
 
     #[test]

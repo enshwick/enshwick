@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn the_name_has_its_texts_in_every_language() {
         let loader = start();
-        let tag = Guid::named("you.lanterns:text/lantern.name").id();
+        let tag = Guid::named("you.lanterns:text/lantern.name").fnv1a();
         let texts: Vec<String> = loader
             .texts()
             .into_iter()

@@ -298,8 +298,8 @@ mod tests {
             snapshot.markers,
             [MapPoint {
                 position: [100.0, 20.0, -50.0],
-                marker_type: Some(TOWN.id()),
-                label: Some(LABEL.id())
+                marker_type: Some(TOWN.fnv1a()),
+                label: Some(LABEL.fnv1a())
             }]
         );
         let bytes = snapshot.to_bytes().unwrap();

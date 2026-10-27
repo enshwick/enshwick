@@ -479,7 +479,7 @@ pub(crate) extern "system" fn interaction_filter(
 
 pub(crate) extern "system" fn skill_override(
     me: ModHandle,
-    node: u32,
+    node: enshwick::abi::SkillNode,
     callback: api_frame::SkillCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
@@ -488,7 +488,7 @@ pub(crate) extern "system" fn skill_override(
             "skill override",
             index,
             crate::conflicts::Mode::FirstAnswers,
-            crate::progress::register_skill(loader, index, node, callback, user),
+            crate::progress::register_skill(loader, index, node.get(), callback, user),
         ),
         Err(status) => status,
     })
@@ -744,11 +744,11 @@ pub(crate) extern "system" fn remove_buff(
 pub(crate) extern "system" fn knowledge(
     me: ModHandle,
     entity: Entity,
-    id: u32,
+    id: enshwick::abi::KnowledgeId,
     out: *mut enshwick::abi::KnowledgeInfo,
 ) -> Status {
     entry("knowledge", || {
-        match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
+        match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id.get())) {
             // SAFETY: `HostApi::knowledge` has the mod pass `out` null or
             // pointing at its version of `KnowledgeInfo`, writable for the size
             // its header states, that no other thread touches during the call.
@@ -761,14 +761,14 @@ pub(crate) extern "system" fn knowledge(
 pub(crate) extern "system" fn revoke_knowledge(
     me: ModHandle,
     entity: Entity,
-    id: u32,
+    id: enshwick::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
     entry("revoke_knowledge", || {
-        match caller(me)
-            .and_then(|loader| crate::knowledge::changes::revoke(loader, entity.0, id, kind, value))
-        {
+        match caller(me).and_then(|loader| {
+            crate::knowledge::changes::revoke(loader, entity.0, id.get(), kind, value)
+        }) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -778,14 +778,21 @@ pub(crate) extern "system" fn revoke_knowledge(
 pub(crate) extern "system" fn account_knowledge(
     me: ModHandle,
     key: enshwick::PlayerKey,
-    id: u32,
+    id: enshwick::abi::KnowledgeId,
     kind: u32,
     value: u32,
     revoke: u32,
 ) -> Status {
     entry("account_knowledge", || {
         match caller(me).and_then(|loader| {
-            crate::knowledge::changes::for_account(loader, key.get(), id, kind, value, revoke != 0)
+            crate::knowledge::changes::for_account(
+                loader,
+                key.get(),
+                id.get(),
+                kind,
+                value,
+                revoke != 0,
+            )
         }) {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -796,13 +803,13 @@ pub(crate) extern "system" fn account_knowledge(
 pub(crate) extern "system" fn grant_knowledge(
     me: ModHandle,
     entity: Entity,
-    id: u32,
+    id: enshwick::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
     entry("grant_knowledge", || {
         match caller(me)
-            .and_then(|loader| crate::knowledge::grant(loader, entity.0, id, kind, value))
+            .and_then(|loader| crate::knowledge::grant(loader, entity.0, id.get(), kind, value))
         {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -812,7 +819,7 @@ pub(crate) extern "system" fn grant_knowledge(
 
 pub(crate) extern "system" fn quests(
     me: ModHandle,
-    out: *mut u32,
+    out: *mut enshwick::abi::KnowledgeId,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -827,7 +834,7 @@ pub(crate) extern "system" fn quests(
                         let slot = unsafe { out.add(i) };
                         // SAFETY: `slot` is inside the `capacity` writable,
                         // aligned ids the ABI has the mod pass at `out`.
-                        unsafe { slot.write(*id) };
+                        unsafe { slot.write(enshwick::abi::KnowledgeId::new(*id)) };
                     }
                 }
                 // SAFETY: `HostApi::quests` has the mod pass `count` null or

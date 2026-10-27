@@ -11,6 +11,7 @@ use crate::abi::ExperiencePass;
 use crate::abi::ExperienceRow;
 use crate::abi::Header;
 use crate::abi::Interaction;
+use crate::abi::KnowledgeId;
 use crate::abi::SkillCheck;
 use crate::abi::Summon;
 use crate::abi::SurvivorLookup;
@@ -88,7 +89,7 @@ impl Installed {
     /// let quest = KnowledgeInput {
     ///     header: Header::of::<KnowledgeInput>(),
     ///     player: enshwick::Entity(2),
-    ///     id: 0x51,
+    ///     id: enshwick::knowledge::KnowledgeId::new(0x51),
     ///     kind: KnowledgeInfo::BOOL,
     ///     scope: KnowledgeInfo::PLAYER,
     ///     reserved: 0,
@@ -155,11 +156,15 @@ impl Installed {
     /// use enshwick::abi::{Header, KnowledgeInfo};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let flag = KnowledgeInfo { header: Header::of::<KnowledgeInfo>(), id: 9, kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 };
-    /// loader.set_knowledge(&[(0, flag)], &[]);
+    /// let flag = KnowledgeInfo { header: Header::of::<KnowledgeInfo>(), id: enshwick::knowledge::KnowledgeId::new(9), kind: KnowledgeInfo::BOOL, scope: KnowledgeInfo::WORLD, reserved: 0, value: 1, flags: 0 };
+    /// loader.set_knowledge(&[(None, flag)], &[]);
     /// assert!(loader.grants().is_empty());
     /// ```
-    pub fn set_knowledge(&self, values: &[(u32, crate::abi::KnowledgeInfo)], quests: &[u32]) {
+    pub fn set_knowledge(
+        &self,
+        values: &[(Option<Entity>, crate::abi::KnowledgeInfo)],
+        quests: &[KnowledgeId],
+    ) {
         table::with((), |s| {
             s.knowledge = values.to_vec();
             s.quests = quests.to_vec();
@@ -172,7 +177,7 @@ impl Installed {
     ///
     /// See [`Installed::set_knowledge`].
     #[must_use]
-    pub fn grants(&self) -> Vec<(u32, u32, u32, u32)> {
+    pub fn grants(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
         table::with(Vec::new(), |s| s.grants.clone())
     }
 
@@ -185,7 +190,7 @@ impl Installed {
     /// assert!(loader.revokes().is_empty());
     /// ```
     #[must_use]
-    pub fn revokes(&self) -> Vec<(u32, u32, u32, u32)> {
+    pub fn revokes(&self) -> Vec<(Option<Entity>, KnowledgeId, u32, u32)> {
         table::with(Vec::new(), |s| s.revokes.clone())
     }
 
@@ -199,7 +204,7 @@ impl Installed {
     /// assert!(loader.account_changes().is_empty());
     /// ```
     #[must_use]
-    pub fn account_changes(&self) -> Vec<(crate::PlayerKey, u32, u32, u32, bool)> {
+    pub fn account_changes(&self) -> Vec<(crate::PlayerKey, KnowledgeId, u32, u32, bool)> {
         table::with(Vec::new(), |s| s.account_changes.clone())
     }
 
@@ -294,27 +299,31 @@ impl Installed {
     /// Asks the mod's survivor lookup as the game would: survivor
     /// `survivor`, the game's answer `vanilla`, `purpose` one of the
     /// [`SurvivorLookup`] constants with its `entity` and `cell`; `beds`
-    /// answers [`Lookup::bed_of`](crate::survivors::Lookup::bed_of). `None`
-    /// for the game's own answer.
+    /// answers [`Lookup::bed_of`](crate::survivors::Lookup::bed_of). The
+    /// mod's answer, [`Answer::Vanilla`](crate::survivors::Answer::Vanilla)
+    /// without a lookup.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::abi::SurvivorLookup;
+    /// use enshwick::survivors::{Answer, SurvivorId};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.survivor_lookup(7, enshwick::Entity(4096), SurvivorLookup::SPAWN, enshwick::Entity(0), [0; 3], &[]), None);
+    /// let vanilla = Some(enshwick::Entity(4096));
+    /// let answer = loader.survivor_lookup(SurvivorId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
+    /// assert_eq!(answer, Answer::Vanilla);
     /// ```
     #[must_use]
     pub fn survivor_lookup(
         &self,
-        survivor: u32,
-        vanilla: Entity,
+        survivor: crate::survivors::SurvivorId,
+        vanilla: Option<Entity>,
         purpose: u32,
-        entity: Entity,
+        entity: Option<Entity>,
         cell: [i64; 3],
         beds: &[(Entity, Entity)],
-    ) -> Option<Entity> {
+    ) -> crate::survivors::Answer {
         /// # Safety
         ///
         /// - `token` points at the `beds` slice of a running
@@ -327,14 +336,17 @@ impl Installed {
                 .find(|(e, _)| *e == entity)
                 .map_or(Entity::NONE, |(_, bed)| *bed)
         }
-        let (answer, user) = table::with(None, |s| s.survivor_lookup)?;
+        use crate::survivors::Answer;
+        let Some((answer, user)) = table::with(None, |s| s.survivor_lookup) else {
+            return Answer::Vanilla;
+        };
         let mut beds = beds;
         let lookup = SurvivorLookup {
             header: Header::of::<SurvivorLookup>(),
-            survivor,
-            vanilla,
+            survivor: survivor.0,
+            vanilla: vanilla.unwrap_or(Entity::NONE),
             purpose,
-            entity,
+            entity: entity.unwrap_or(Entity::NONE),
             cell,
             bed_of: Some(bed_of),
             token: (&raw mut beds).cast(),
@@ -343,7 +355,11 @@ impl Installed {
         let user = core::ptr::with_exposed_provenance_mut(user);
         // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
         let answered = unsafe { answer(&raw const lookup, user, &raw mut out) };
-        (answered != 0).then_some(out)
+        match (answered != 0, Entity::from_raw(out.0)) {
+            (false, _) => Answer::Vanilla,
+            (true, Some(entity)) => Answer::Entity(entity),
+            (true, None) => Answer::Nobody,
+        }
     }
 
     /// Asks the mod's bed checks as the game would; whether every one keeps
@@ -559,7 +575,7 @@ impl Installed {
     /// use enshwick::abi::{Header, SkillCheck};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: 7, gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
+    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::world::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
     /// assert_eq!(loader.skill(&check), SkillCheck::VANILLA);
     /// ```
     #[must_use]

@@ -87,7 +87,7 @@ it is. Only a player's ids qualify.
 ```rust
 use enshwick::knowledge::Grant;
 
-fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, quest_reward: u32) {
+fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, quest_reward: enshwick::knowledge::KnowledgeId) {
     if let Err(why) = knowledge.grant_account(account, quest_reward, Grant::Set) {
         enshwick::warn!("no reward: {why}");
     }

@@ -169,7 +169,7 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             if guid.iter().all(|&b| b == 0) {
                 continue;
             }
-            let id = enshwick::content::Guid(guid).id();
+            let id = enshwick::content::Guid(guid).fnv1a();
             let order = u32::try_from(rows.len()).unwrap_or(u32::MAX);
             rows.push((id, order, status));
         }

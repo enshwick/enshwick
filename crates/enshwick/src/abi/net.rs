@@ -48,7 +48,9 @@ impl_headed!(NetMessage);
 
 impl NetMessage {
     /// The server, as a peer: what a client hears from and sends to.
-    pub const SERVER: PlayerKey = PlayerKey(u64::MAX);
+    // A literal rather than `u64::MAX`, which the C header generator cannot
+    // evaluate and would drop.
+    pub const SERVER: PlayerKey = PlayerKey(0xffff_ffff_ffff_ffff);
 }
 
 /// A mod's handler for messages on its channel: the message and the pointer

@@ -118,7 +118,7 @@ impl World {
                 {
                     return None;
                 }
-                let item = ItemId::new(self.used_item(entity)?);
+                let item = self.used_item(entity)?;
                 let placed = templates.placed_by(self, item)?;
                 if self.template(entity) != Some(placed) {
                     return None;

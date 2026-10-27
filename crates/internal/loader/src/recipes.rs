@@ -323,7 +323,7 @@ impl Names {
     ) -> Self {
         let mut names = Self::default();
         for (name, guid) in items {
-            names.item_labels.insert(guid.id(), name.clone());
+            names.item_labels.insert(guid.fnv1a(), name.clone());
             names.items.entry(name).or_default().push(guid);
         }
         for (workshop, item) in workshops {
@@ -447,7 +447,7 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
             Reference::Guid(guid) => index
                 .recipes
                 .iter()
-                .find(|r| r.guid == guid || r.id == guid.id())
+                .find(|r| r.guid == guid || r.id == guid.fnv1a())
                 .map(|r| vec![r.id])
                 .ok_or_else(|| format!("no recipe {name}")),
             Reference::Name(name) => match index.by_name.get(name).map(Vec::as_slice) {
@@ -474,7 +474,7 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
             let found: Vec<u32> = index
                 .recipes
                 .iter()
-                .filter(|r| r.outputs.contains(&item.id()))
+                .filter(|r| r.outputs.contains(&item.fnv1a()))
                 .map(|r| r.id)
                 .collect();
             if found.is_empty() {
@@ -488,12 +488,12 @@ pub fn resolve(rule: &Rule, index: &Index, names: &Names) -> Result<Vec<u32>, St
                 0
             } else {
                 match reference(name) {
-                    Reference::Guid(guid) => guid.id(),
+                    Reference::Guid(guid) => guid.fnv1a(),
                     Reference::Name(name) => {
                         let item = names.item(name)?;
                         *names
                             .workshops
-                            .get(&item.id())
+                            .get(&item.fnv1a())
                             .ok_or_else(|| format!("{name} has no workshop"))?
                     }
                 }
@@ -664,7 +664,7 @@ mod tests {
             guid: Guid::named(&format!("test:{}", name.to_ascii_lowercase())),
             id,
             name: name.to_owned(),
-            outputs: vec![output.id()],
+            outputs: vec![output.fnv1a()],
             workshop,
         }
     }
@@ -685,7 +685,7 @@ mod tests {
                 ("Tool_Torch01_T0".to_owned(), TORCH),
                 ("Craftingstation_Workbench".to_owned(), BENCH_ITEM),
             ],
-            [(BENCH, BENCH_ITEM.id())],
+            [(BENCH, BENCH_ITEM.fnv1a())],
         )
     }
 
@@ -825,14 +825,14 @@ mod tests {
         let mut recipes = index().recipes;
         recipes.push(Recipe {
             guid: copy,
-            id: copy.id(),
+            id: copy.fnv1a(),
             name: "Block_Wood".to_owned(),
-            outputs: vec![lantern.id()],
+            outputs: vec![lantern.fnv1a()],
             workshop: BENCH,
         });
         let content: FxHashMap<u32, String> = [
-            (copy.id(), "you.lanterns:lantern.recipe".to_owned()),
-            (lantern.id(), "you.lanterns:lantern".to_owned()),
+            (copy.fnv1a(), "you.lanterns:lantern.recipe".to_owned()),
+            (lantern.fnv1a(), "you.lanterns:lantern".to_owned()),
         ]
         .into_iter()
         .collect();
@@ -848,7 +848,7 @@ mod tests {
                 &index,
                 &names
             ),
-            Ok(vec![copy.id()])
+            Ok(vec![copy.fnv1a()])
         );
         let found = find(&index, &names, "lantern");
         assert_eq!(found.len(), 1);
@@ -925,7 +925,7 @@ mod tests {
         let at = blob.append(&entry, 8);
         assert!(blob.set_array(8, at, 1));
         let mut stack = vec![0u8; 24];
-        stack[0x10..0x14].copy_from_slice(&TORCH.id().to_le_bytes());
+        stack[0x10..0x14].copy_from_slice(&TORCH.fnv1a().to_le_bytes());
         let stack_at = blob.append(&stack, 8);
         assert!(blob.set_array(at + 0x30, stack_at, 1));
         let name = blob.append(b"Torch\0", 1);
@@ -937,7 +937,7 @@ mod tests {
                 guid: TORCH,
                 id: 7,
                 name: "Torch".to_owned(),
-                outputs: vec![TORCH.id()],
+                outputs: vec![TORCH.fnv1a()],
                 workshop: BENCH,
             }]
         );

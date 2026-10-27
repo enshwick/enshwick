@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId, PlayerKey};
+use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey};
 
 /// Something the loader tells subscribed mods about, with
 /// [`HostApi::subscribe`](super::HostApi::subscribe).
@@ -176,7 +176,7 @@ impl PlayerDeathData {
 /// ```
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
-/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: 0x1d, value: 3 };
+/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 };
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
@@ -187,7 +187,7 @@ pub struct KnowledgeData {
     /// The player's character, or 0 for the world's knowledge.
     pub entity: Entity,
     /// The knowledge id.
-    pub id: u32,
+    pub id: KnowledgeId,
     /// The value now.
     pub value: u32,
 }
@@ -201,7 +201,7 @@ impl_headed!(KnowledgeData);
 /// ```
 /// use enshwick::abi::{Header, QuestData};
 ///
-/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: 0x51 };
+/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
 /// assert_eq!(done.entity, enshwick::Entity(2));
 /// ```
 #[repr(C)]
@@ -212,7 +212,7 @@ pub struct QuestData {
     /// The player's character.
     pub entity: Entity,
     /// The quest's id, a player knowledge id.
-    pub quest: u32,
+    pub quest: KnowledgeId,
 }
 
 impl_headed!(QuestData);
@@ -229,7 +229,7 @@ impl_headed!(QuestData);
 /// let seen = KnowledgeInput {
 ///     header: Header::of::<KnowledgeInput>(),
 ///     player: enshwick::Entity(2),
-///     id: 0x1d,
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
 ///     reserved: 0,
@@ -247,7 +247,7 @@ pub struct KnowledgeInput {
     /// The asking player's character.
     pub player: Entity,
     /// The knowledge id.
-    pub id: u32,
+    pub id: KnowledgeId,
     /// The kind the client names: [`KnowledgeInfo::BOOL`](super::KnowledgeInfo::BOOL),
     /// [`KnowledgeInfo::COUNTER`](super::KnowledgeInfo::COUNTER) or [`KnowledgeInfo::FLAGS`](super::KnowledgeInfo::FLAGS).
     pub kind: u8,

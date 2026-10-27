@@ -153,7 +153,7 @@ pub(crate) extern "system" fn interaction_filter(
 
 pub(crate) extern "system" fn skill_override(
     _me: ModHandle,
-    node: u32,
+    node: crate::abi::SkillNode,
     callback: SkillCheckFn,
     user: *mut c_void,
 ) -> Status {
@@ -272,12 +272,13 @@ pub(crate) extern "system" fn build_filter(
 pub(crate) extern "system" fn revoke_knowledge(
     _me: ModHandle,
     entity: crate::Entity,
-    id: u32,
+    id: crate::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.revokes.push((entity.0, id, kind, value));
+        s.revokes
+            .push((crate::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
 }
@@ -285,7 +286,7 @@ pub(crate) extern "system" fn revoke_knowledge(
 pub(crate) extern "system" fn account_knowledge(
     _me: ModHandle,
     key: crate::PlayerKey,
-    id: u32,
+    id: crate::abi::KnowledgeId,
     kind: u32,
     value: u32,
     revoke: u32,
@@ -402,13 +403,13 @@ pub(crate) extern "system" fn remove_buff(
 pub(crate) extern "system" fn knowledge(
     _me: ModHandle,
     entity: crate::Entity,
-    id: u32,
+    id: crate::abi::KnowledgeId,
     out: *mut KnowledgeInfo,
 ) -> Status {
     let found = with(None, |s| {
         s.knowledge
             .iter()
-            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == entity.0))
+            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == Some(entity)))
             .map(|(_, k)| *k)
     });
     let Some(info) = found else {
@@ -425,7 +426,7 @@ pub(crate) extern "system" fn knowledge(
 pub(crate) extern "system" fn grant_knowledge(
     _me: ModHandle,
     entity: crate::Entity,
-    id: u32,
+    id: crate::abi::KnowledgeId,
     kind: u32,
     value: u32,
 ) -> Status {
@@ -441,14 +442,15 @@ pub(crate) extern "system" fn grant_knowledge(
         if u32::from(info.kind) != kind {
             return Status::BAD_ARGS;
         }
-        s.grants.push((entity.0, id, kind, value));
+        s.grants
+            .push((crate::Entity::from_raw(entity.0), id, kind, value));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn quests(
     _me: ModHandle,
-    out: *mut u32,
+    out: *mut crate::abi::KnowledgeId,
     capacity: u32,
     count: *mut u32,
 ) -> Status {

@@ -7,11 +7,17 @@ mod tests {
     use enshwick::Entity;
     use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
     use enshwick::events::KnowledgeChanged;
-    use enshwick::knowledge::{Grant, Knowledge, KnowledgeType, Scope};
+    use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, KnowledgeType, Scope};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     static KNOWLEDGE: OnceLock<Knowledge> = OnceLock::new();
+
+    const RECIPE: KnowledgeId = KnowledgeId::new(0x1d);
+    const QUEST: KnowledgeId = KnowledgeId::new(0x51);
+    const OPEN_QUEST: KnowledgeId = KnowledgeId::new(0x52);
+    const FOUND: KnowledgeId = KnowledgeId::new(0x77);
+    const UNKNOWN: KnowledgeId = KnowledgeId::new(0x99);
 
     struct Scholar;
 
@@ -23,12 +29,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = KNOWLEDGE.set(load.knowledge());
             load.on::<KnowledgeChanged>(|changed| {
-                enshwick::info!(
-                    "{} of {} is {}",
-                    changed.id,
-                    changed.entity.0,
-                    changed.value
-                );
+                enshwick::info!("{} of {} is {}", changed.id, changed.entity, changed.value);
             })?;
             Ok(Self)
         }
@@ -36,7 +37,7 @@ mod tests {
 
     enshwick::declare_mod!(Scholar);
 
-    fn info(id: u32, kind: u8, scope: u8, value: u32, flags: u32) -> KnowledgeInfo {
+    fn info(id: KnowledgeId, kind: u8, scope: u8, value: u32, flags: u32) -> KnowledgeInfo {
         KnowledgeInfo {
             header: Header::of::<KnowledgeInfo>(),
             id,
@@ -56,51 +57,55 @@ mod tests {
         assert_eq!(status, Status::OK);
         let knowledge = KNOWLEDGE.get().unwrap();
 
-        let recipe = info(0x1d, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER, 1, 3);
-        let quest = info(0x51, KnowledgeInfo::BOOL, KnowledgeInfo::PLAYER, 1, 0);
-        let found = info(0x77, KnowledgeInfo::COUNTER, KnowledgeInfo::WORLD, 4, 0);
-        loader.set_knowledge(&[(2, recipe), (2, quest), (0, found)], &[0x51, 0x52]);
+        let recipe = info(RECIPE, KnowledgeInfo::FLAGS, KnowledgeInfo::PLAYER, 1, 3);
+        let quest = info(QUEST, KnowledgeInfo::BOOL, KnowledgeInfo::PLAYER, 1, 0);
+        let found = info(FOUND, KnowledgeInfo::COUNTER, KnowledgeInfo::WORLD, 4, 0);
+        let player = Some(Entity(2));
+        loader.set_knowledge(
+            &[(player, recipe), (player, quest), (None, found)],
+            &[QUEST, OPEN_QUEST],
+        );
 
-        let known = knowledge.get(Entity(2), 0x1d).unwrap();
+        let known = knowledge.get(Entity(2), RECIPE).unwrap();
         assert_eq!(
             (known.r#type, known.scope),
             (KnowledgeType::Flags, Scope::Player)
         );
         assert!(known.has_flag(0) && !known.has_flag(1));
-        assert_eq!(knowledge.get(Entity(3), 0x1d), None, "another player's");
-        assert_eq!(knowledge.world(0x77).map(|k| k.value), Some(4));
+        assert_eq!(knowledge.get(Entity(3), RECIPE), None, "another player's");
+        assert_eq!(knowledge.world(FOUND).map(|k| k.value), Some(4));
         assert_eq!(
-            knowledge.get(Entity(3), 0x77).map(|k| k.value),
+            knowledge.get(Entity(3), FOUND).map(|k| k.value),
             Some(4),
             "the world's for anyone"
         );
 
-        knowledge.grant(Entity(2), 0x1d, Grant::Flag(1)).unwrap();
-        knowledge.grant_world(0x77, Grant::Add(2)).unwrap();
+        knowledge.grant(Entity(2), RECIPE, Grant::Flag(1)).unwrap();
+        knowledge.grant_world(FOUND, Grant::Add(2)).unwrap();
         assert_eq!(
-            knowledge.grant(Entity(2), 0x1d, Grant::Set),
+            knowledge.grant(Entity(2), RECIPE, Grant::Set),
             Err(WorldError::Refused)
         );
         assert_eq!(
-            knowledge.grant(Entity(2), 0x99, Grant::Set),
+            knowledge.grant(Entity(2), UNKNOWN, Grant::Set),
             Err(WorldError::Refused)
         );
         assert_eq!(
             loader.grants(),
             [
-                (2, 0x1d, u32::from(KnowledgeInfo::FLAGS), 1),
-                (0, 0x77, u32::from(KnowledgeInfo::COUNTER), 2)
+                (player, RECIPE, u32::from(KnowledgeInfo::FLAGS), 1),
+                (None, FOUND, u32::from(KnowledgeInfo::COUNTER), 2)
             ]
         );
 
-        assert_eq!(knowledge.quests(), [0x51, 0x52]);
-        assert!(knowledge.completed(Entity(2), 0x51));
-        assert!(!knowledge.completed(Entity(2), 0x52));
+        assert_eq!(knowledge.quests(), [QUEST, OPEN_QUEST]);
+        assert!(knowledge.completed(Entity(2), QUEST));
+        assert!(!knowledge.completed(Entity(2), OPEN_QUEST));
 
         let changed = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
             entity: Entity(2),
-            id: 0x1d,
+            id: RECIPE,
             value: 3,
         };
         assert_eq!(loader.raise::<KnowledgeChanged>(&changed), 1);

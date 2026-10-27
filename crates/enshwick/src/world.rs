@@ -25,7 +25,7 @@ use core::ffi::c_void;
 use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
-use crate::{Entity, PlayerKey};
+use crate::{Entity, ItemId, PlayerKey};
 use crate::{Host, Load, Off};
 
 pub use accounts::AccountAction;
@@ -709,11 +709,11 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
-    pub fn used_item(&self, entity: Entity) -> Option<u32> {
+    pub fn used_item(&self, entity: Entity) -> Option<ItemId> {
         let data = self.component(entity, self.0.used_item)?;
         // SAFETY: `component` returned the entity's live UsedItem, valid until
         // the game thread moves on; the component is the u32 item id alone.
-        Some(unsafe { crate::raw::read_at::<u32>(data.cast(), 0) })
+        Some(unsafe { crate::raw::read_at::<ItemId>(data.cast(), 0) })
     }
 
     /// Whether `entity` carries a name a player or [`World::set_label`] gave

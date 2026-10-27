@@ -375,7 +375,7 @@ fn kind_of(id: &str) -> Option<u32> {
 fn template_id(entity: Entity) -> Option<u32> {
     let loader = crate::host::loader()?;
     let template = crate::world::template(loader, entity).ok()?;
-    Some(enshwick::content::Guid(template).id())
+    Some(enshwick::content::Guid(template).fnv1a())
 }
 
 /// Whether this process runs the world the values belong to: the dedicated

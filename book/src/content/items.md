@@ -44,7 +44,7 @@ A real mod keeps the texts in a file and embeds it with
 
 | Field | Meaning |
 | --- | --- |
-| `id` | The new item's content id. Its game id is `id.id()`. |
+| `id` | The new item's content id. Its game id is `ItemId::from_guid(id.guid())`. |
 | `like` | The vanilla item it is cloned from: what it looks like and does. |
 | `name` | The tag of its name; `None` keeps the vanilla item's name. |
 | `description` | The tag of its description; `None` keeps the vanilla one. |
@@ -199,15 +199,15 @@ bytes in the order the game keeps them in memory. It is a `const fn`: in a
 constant, a malformed GUID fails the build.
 
 The game numbers items, recipes and workshops by a 32-bit id, which
-[`Guid::id`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
-computes from the GUID. The id is what an inventory slot holds and what the
+[`Guid::fnv1a`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content.rs)
+computes from the GUID; `ItemId::from_guid` and `RecipeId::from_guid` give it its type. The id is what an inventory slot holds and what the
 [inventory](../inventories.md) calls take:
 
 ```rust
 use enshwick::content::Guid;
 
 const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-assert_eq!(CHEST.id(), 1_302_084_846);
+assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
 assert_eq!(CHEST.to_string(), "6943053a-32c1-4718-ae22-e61427ddf54d");
 ```
 
