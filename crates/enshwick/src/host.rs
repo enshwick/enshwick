@@ -207,7 +207,10 @@ impl Host {
     pub(crate) fn config_schema(&self, schema: &str) {
         let status = (self.api.config_schema)(self.me, Str::new(schema));
         if !status.is_ok() {
-            crate::warn!("the loader refused the settings schema ({})", status.0);
+            match crate::config::Schema::parse(schema) {
+                Err(why) => crate::warn!("the loader refused the {why}"),
+                Ok(_) => crate::warn!("the loader refused the settings schema ({})", status.0),
+            }
         }
     }
 

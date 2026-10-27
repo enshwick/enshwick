@@ -853,4 +853,29 @@ workers = 2"
         );
         assert_eq!((names.table, names.slots, table, defaults), (7, 3, 0, 0));
     }
+
+    #[test]
+    fn a_key_with_an_empty_part_is_refused_by_name() {
+        use super::{Field, Group, Schema, Stage};
+
+        for key in ["", ".token", "token.", "auth..token"] {
+            let schema = Schema::new("", "config", vec![Field::new(key, Stage::Runtime, "x")]);
+            let error = Schema::parse(&schema.to_text()).unwrap_err().to_string();
+            assert!(error.contains(&format!("`{key}`")), "{error}");
+        }
+        let grouped = Schema::new(
+            "",
+            "config",
+            vec![Field::new("auth.token", Stage::Runtime, "x")],
+        )
+        .with_groups(vec![Group::new("auth..inner", "")]);
+        let error = Schema::parse(&grouped.to_text()).unwrap_err().to_string();
+        assert!(error.contains("`auth..inner`"), "{error}");
+        let fine = Schema::new(
+            "",
+            "config",
+            vec![Field::new("auth.token", Stage::Runtime, "x")],
+        );
+        assert_eq!(Schema::parse(&fine.to_text()).unwrap(), fine);
+    }
 }

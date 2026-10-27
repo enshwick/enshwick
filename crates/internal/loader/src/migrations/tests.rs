@@ -539,3 +539,86 @@ fn a_removed_setting_goes_from_an_inline_table_too() {
     assert_eq!(at("old.radius").as_deref(), Some("3"), "{new}");
     assert_eq!(at("old.inner.kept").as_deref(), Some("2"), "{new}");
 }
+
+/// The error's Display and Debug, checked to hold nothing of `secret`.
+fn shown_without(secret: &str, error: &MigrationError) -> String {
+    let text = format!("{error} {error:?}");
+    assert!(!text.contains(secret), "{text}");
+    text
+}
+
+#[test]
+fn a_broken_settings_line_is_named_without_its_value() {
+    let remove = migration("2", vec![step(MigrationStep::REMOVE_SETTING, "old", "")]);
+    for broken in [
+        "limit = 4\ntoken = \"hunter2\n",
+        "limit = 4\ntoken = hunter2\n",
+    ] {
+        let error = apply_settings(broken, 0, &remove, &double, &none).unwrap_err();
+        let text = shown_without("hunter2", &error);
+        assert!(
+            text.contains("line 2") && text.contains("key token"),
+            "{text}"
+        );
+    }
+    for inside_a_string in [
+        "token = \"\"\"\nmy secret hunter2 = x \\q\n\"\"\"\n",
+        "token = '''\nhunter2 = abc\u{1}\n'''\n",
+    ] {
+        let error = apply_settings(inside_a_string, 0, &remove, &double, &none).unwrap_err();
+        let text = shown_without("hunter2", &error);
+        assert!(
+            text.contains("line 2") && text.contains("key: None"),
+            "{text}"
+        );
+    }
+
+    let take = migration(
+        "2",
+        vec![step(MigrationStep::TAKE_SETTING, "vault:token", "token")],
+    );
+    let source = |_: &str| Some("# Vault.\ntoken = \"hunter2\n".to_owned());
+    let error = apply_settings("limit = 4\n", 0, &take, &double, &source).unwrap_err();
+    let text = shown_without("hunter2", &error);
+    assert!(text.contains("vault") && text.contains("line 2"), "{text}");
+
+    let map = migration("2", vec![step(MigrationStep::MAP_SETTING, "pin", "")]);
+    for (mapped, secret) in [
+        ("\"hunter2", "hunter2"),
+        ("aHVudGVyMg==", "aHVudGVyMg"),
+        ("hunter2 = x", "hunter2"),
+    ] {
+        let leaky = |_: usize, _: usize, _: &str| Ok(mapped.to_owned());
+        let error = apply_settings("pin = \"x\"\n", 0, &map, &leaky, &none).unwrap_err();
+        let text = shown_without(secret, &error);
+        assert!(
+            text.contains("setting pin") && text.contains("key: None"),
+            "{text}"
+        );
+    }
+}
+
+proptest::proptest! {
+    #[test]
+    fn no_secret_reaches_a_migration_error(secret in "zq[0-9]{6}", shape in 0usize..6) {
+        let broken = match shape {
+            0 => format!("token = \"{secret}\n"),
+            1 => format!("token = {secret}\n"),
+            2 => format!("token = \"\"\"\n{secret} = 1 \\q\n\"\"\"\n"),
+            3 => format!("token = '''\n{secret} = 1\u{1}\n'''\n"),
+            4 => format!("a = [\n{secret} = 1\n"),
+            _ => format!("a = {{\n{secret} = \"x\\q\" }}\n"),
+        };
+        let remove = migration("2", vec![step(MigrationStep::REMOVE_SETTING, "old", "")]);
+        let migrated = apply_settings(&broken, 0, &remove, &double, &none);
+        proptest::prop_assert!(migrated.is_err());
+        if let Err(error) = migrated {
+            shown_without(&secret, &error);
+        }
+        let map = migration("2", vec![step(MigrationStep::MAP_SETTING, "pin", "")]);
+        let leaky = |_: usize, _: usize, _: &str| Ok(broken.clone());
+        if let Err(error) = apply_settings("pin = 1\n", 0, &map, &leaky, &none) {
+            shown_without(&secret, &error);
+        }
+    }
+}

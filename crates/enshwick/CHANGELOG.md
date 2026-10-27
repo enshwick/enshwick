@@ -11,6 +11,12 @@ Each entry names the pull request that made the change.
 - `declare_mod!` exports the five functions under their C names only
   outside test builds, so one test binary can declare several mods.
 
+### Fixed
+
+- `Schema::parse` refuses a field or group key with an empty part, such as
+  `auth..token`, and `Load::table_config` a field with an empty key; the
+  loader refuses such a schema, and the mod's warning names the key (#593).
+
 ## [1.0.0-alpha.8] - 2026-10-27
 
 ### Added
