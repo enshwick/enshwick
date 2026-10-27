@@ -610,7 +610,9 @@ proptest::proptest! {
             _ => format!("a = {{\n{secret} = \"x\\q\" }}\n"),
         };
         let remove = migration("2", vec![step(MigrationStep::REMOVE_SETTING, "old", "")]);
-        if let Err(error) = apply_settings(&broken, 0, &remove, &double, &none) {
+        let migrated = apply_settings(&broken, 0, &remove, &double, &none);
+        proptest::prop_assert!(migrated.is_err());
+        if let Err(error) = migrated {
             shown_without(&secret, &error);
         }
         let map = migration("2", vec![step(MigrationStep::MAP_SETTING, "pin", "")]);
