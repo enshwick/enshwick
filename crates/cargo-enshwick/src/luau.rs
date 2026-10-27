@@ -244,6 +244,19 @@ mod tests {
     }
 
     #[test]
+    fn the_definitions_speak_no_rust() {
+        let rust = [
+            "::", "`None`", "`Some", "`Ok", "`Err", "Option<", "Result<", "Vec<",
+        ];
+        for line in definitions()
+            .lines()
+            .filter(|l| l.trim_start().starts_with("---"))
+        {
+            assert!(!rust.iter().any(|word| line.contains(word)), "{line}");
+        }
+    }
+
+    #[test]
     fn the_definitions_declare_every_namespace_function_and_event() {
         let text = definitions();
         for namespace in script::NAMESPACES {

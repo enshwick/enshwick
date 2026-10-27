@@ -29,6 +29,7 @@ arc-swap = { version = "1.9.3", default-features = false }
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 const-sha1 = { version = "0.3.0", default-features = false }
 const_format = { version = "0.2.37", default-features = false }
+document-features = "0.2.12"
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 aho-corasick = { version = "1.1.5", default-features = false, features = ["std", "perf-literal"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }

@@ -56,7 +56,13 @@ typedef struct EnshwickPlayerInfo {
   uint32_t entity;
   // The same number for the same account in every session.
   uint64_t key;
-  // The server's permission bits for the player, `PlayerInfo::CAN_*`.
+  // The server's permission bits for the player: 1
+  // kick and ban, 2
+  // open inventories, 4
+  // edit the base, 8
+  // edit the world, 16
+  // extend the base, 32
+  // receive experience.
   uint8_t permissions;
   // Bytes of `name` in use.
   uint8_t name_len;
@@ -481,7 +487,8 @@ typedef struct EnshwickBuildRow {
   size_t constant_count;
 } EnshwickBuildRow;
 
-// The data of `Event::BUILDING_PLACED` and `Event::BUILDING_REMOVED`.
+// The data of the `BuildingPlaced` and
+// `BuildingRemoved` events.
 typedef struct EnshwickBuildingData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -492,8 +499,8 @@ typedef struct EnshwickBuildingData {
   // The item placed, which the entity keeps as its `UsedItem`; 0 for a
   // removal.
   uint32_t item;
-  // `BuildingData::PLACED`, `BuildingData::PICKED_UP` or
-  // `BuildingData::TORN_DOWN`.
+  // What happened: 0 placed, 1
+  // picked up, 2 torn down.
   uint8_t kind;
   // 1 when undo or redo replayed the action.
   uint8_t replay;
@@ -585,7 +592,8 @@ typedef uint32_t EnshwickChangeOp;
 // takes it.
 #define EnshwickChangeOp_RESET 2
 
-// The data of `Event::CHUNK_LOADED` and `Event::CHUNK_UNLOADED`.
+// The data of the `ChunkLoaded` and
+// `ChunkUnloaded` events.
 typedef struct EnshwickChunkData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -3954,7 +3962,7 @@ typedef struct EnshwickHostApi {
                                    uint64_t account);
 } EnshwickHostApi;
 
-// The data of `Event::KNOWLEDGE_CHANGED`.
+// The data of the `KnowledgeChanged` event.
 typedef struct EnshwickKnowledgeData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4008,7 +4016,8 @@ typedef struct EnshwickManifest {
   struct EnshwickStr points;
 } EnshwickManifest;
 
-// The data of `Event::PLAYER_JOINED` and `Event::PLAYER_LEFT`.
+// The data of the `PlayerJoined` and
+// `PlayerLeft` events.
 typedef struct EnshwickPlayerData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4021,16 +4030,17 @@ typedef struct EnshwickPlayerData {
   uint64_t key;
 } EnshwickPlayerData;
 
-// The data of `Event::PLAYER_DIED`.
+// The data of the `PlayerDied` event.
 typedef struct EnshwickPlayerDeathData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character; 0 when the account left in the same step.
   uint32_t entity;
-  // `PlayerDeathData::HIT`, `PlayerDeathData::FALL`,
-  // `PlayerDeathData::SHROUD` or `PlayerDeathData::SUFFOCATED`.
+  // What killed the player: 0 a hit, 1
+  // a fall, 2 the shroud,
+  // 3 suffocation.
   uint32_t cause;
-  // The account, as `PlayerInfo::key`.
+  // The account, the same number in every session.
   uint64_t key;
   // Where, in metres.
   float position[3];
@@ -4044,7 +4054,7 @@ typedef struct EnshwickPlayerDeathData {
   // Zero.
   uint16_t reserved;
   // For a hit, the attacker of the last hit the player took, from its
-  // `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other
+  // `HitHistory`, as `EntityDiedEvent` reads it; 0 for other
   // causes, or when the history names none.
   uint32_t killer_entity;
   // Zero.
@@ -4087,7 +4097,7 @@ typedef struct EnshwickPropRemove {
 // `TransactionInfo::holds`); without it, such a prop is refused.
 #define EnshwickPropRemove_DISCARD_STATE 1
 
-// The data of `Event::QUEST_COMPLETED`.
+// The data of the `QuestCompleted` event.
 typedef struct EnshwickQuestData {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -4097,7 +4107,7 @@ typedef struct EnshwickQuestData {
   uint32_t quest;
 } EnshwickQuestData;
 
-// The data of `Event::TICKED`.
+// The data of the `Ticked` event.
 typedef struct EnshwickTickData {
   // Size and version of this struct.
   struct EnshwickHeader header;
