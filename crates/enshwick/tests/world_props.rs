@@ -114,6 +114,8 @@ mod tests {
             HeldState::NpcBed,
             HeldState::StoreAssociatedNpcIds,
             HeldState::CustomPlayerString,
+            HeldState::Fuel,
+            HeldState::LogicGraphNodeConnected,
         ] {
             let (loader, world) = started();
             loader.set_prop_state(OLD_CHEST, &[kind]);

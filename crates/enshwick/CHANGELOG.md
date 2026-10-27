@@ -48,7 +48,8 @@ Each entry names the pull request that made the change.
   `remove_prop_discarding_state` place and remove props inside a
   transaction, with undo; `World::transaction_entities` lists the props a
   transaction placed. A prop that holds state a player would lose (items,
-  growth, a production queue, assigned survivors, written text) is never
+  growth, a production queue, assigned survivors, written text, fuel,
+  logic wiring) is never
   removed or taken away by an undo unless the mod opts in:
   `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
   records and `transaction_entities` are ABI minor 90 (#552).

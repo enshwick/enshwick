@@ -468,4 +468,14 @@ ids! {
     ITEM_INFO_PLACEMENT_BOX_MAX = "item_info.placement_box_max";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_FLAG_IS_LOGIC_ENTITY = "item_flag.is_logic_entity";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    FUEL_CHARGES = "fuel_charges";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    FUEL_CHARGES_DATA_STORAGE = "fuel_charges.data_storage";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_GRAPH_NODE_CONNECTED = "logic_graph_node_connected";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_GRAPH_NODE_CONNECTED_WRITER_GRAPH_ID = "logic_graph_node_connected.writer_graph_id";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_GRAPH_NODE_CONNECTED_HAS_READER_GRAPHS = "logic_graph_node_connected.has_reader_graphs";
 }

@@ -274,14 +274,18 @@ what it has now:
 | `NpcBed` | a survivor assigned to a bed |
 | `StoreAssociatedNpcIds` | survivors assigned to a station |
 | `CustomPlayerString` | text a player wrote on a sign |
+| `Fuel` | more charges than a fresh one starts with: water in a well or a water store |
+| `LogicGraphNodeConnected` | a switch, plate or other logic prop wired to other logic |
 
-Fuel, a switch's setting and a container's Quick Stash setting do not
-count. `remove_prop` refuses a prop that holds state: the transaction
+A switch's on or off and a container's Quick Stash setting are settings a
+player sets again in a moment, and do not count. A logic prop's own
+settings, such as a trigger's area, are not told apart from its item's
+defaults, so an unwired logic prop counts as holding none. `remove_prop` refuses a prop that holds state: the transaction
 fails with `WorldError::HoldsState(state)`, naming the kinds, before it
 writes anything. Empty the chest first, with the inventory API, or use
 `remove_prop_discarding_state(entity)`, which removes it anyway and loses
 what it held for good: the items, the growth, the queue, the survivors'
-places and the text.
+places, the text, the fuel and the wiring.
 
 An undo keeps to the same rule. It takes a placed prop away only while it
 holds no state: once a chest it placed has items, a plant has grown or a

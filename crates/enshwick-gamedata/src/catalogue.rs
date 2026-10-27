@@ -198,6 +198,23 @@ pub const ITEM_PLACEMENT_BOX: [&str; 2] =
     ["item_info.placement_box_min", "item_info.placement_box_max"];
 /// The id of the bit of an item's flags that marks a logic prop.
 pub const ITEM_FLAG_IS_LOGIC_ENTITY: &str = "item_flag.is_logic_entity";
+/// The id of a prop's saved `Fuel`, whose values hold its charges now
+/// and most, two `i32`.
+pub const FUEL_CHARGES: &str = "fuel_charges";
+/// The id of a `Fuel`'s charges.
+pub const FUEL_CHARGES_DATA: &str = "fuel_charges.data_storage";
+/// The id of a prop's `FuelSetup`.
+pub const FUEL_SETUP: &str = "fuel_setup";
+/// The id of a `FuelSetup`'s most charges, an `i32`.
+pub const FUEL_SETUP_MAX: &str = "fuel_setup.max";
+/// The id of the share of its charges a fresh prop starts with, an `f32`.
+pub const FUEL_SETUP_INITIAL: &str = "fuel_setup.start";
+/// The id of a logic prop's wiring.
+pub const LOGIC_CONNECTED: &str = "logic_graph_node_connected";
+/// The id of the `u32` graph a logic prop writes to, 0 for none.
+pub const LOGIC_CONNECTED_WRITER: &str = "logic_graph_node_connected.writer_graph_id";
+/// The id of the byte that tells a logic prop has readers.
+pub const LOGIC_CONNECTED_READERS: &str = "logic_graph_node_connected.has_reader_graphs";
 /// The id of the component that names the item an entity was placed from.
 pub const USED_ITEM: &str = "used_item";
 /// The id of an entity's place in the world.

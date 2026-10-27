@@ -258,7 +258,58 @@ fn state(loader: &Loader, entity: u32) -> StateReads {
         bed_npc: read_u32(catalogue::NPC_BED, catalogue::NPC_BED_NPC).is_some_and(|npc| npc != 0),
         store_npcs,
         text,
+        fuel: fuel(loader, entity),
+        logic: wired(loader, entity),
     }
+}
+
+/// Whether `entity` holds more `Fuel` charges than a fresh prop of its
+/// kind starts with (server 399, client 426).
+fn fuel(loader: &Loader, entity: u32) -> bool {
+    let Some(data) = component(loader, entity, catalogue::FUEL_CHARGES) else {
+        return false;
+    };
+    let Ok(charges_at) = offset(loader, catalogue::FUEL_CHARGES_DATA) else {
+        // Unreadable on this build: the safe side is to keep it.
+        return true;
+    };
+    // SAFETY: `data` is the entity's live `Fuel`, whose charges now, an
+    // `i32`, start its values at the reflected offset.
+    let charges: i32 = unsafe { enshwick::raw::read_at(data, charges_at) };
+    let start = component(loader, entity, catalogue::FUEL_SETUP).and_then(|setup| {
+        let most_at = offset(loader, catalogue::FUEL_SETUP_MAX).ok()?;
+        let share_at = offset(loader, catalogue::FUEL_SETUP_INITIAL).ok()?;
+        // SAFETY: `setup` is the entity's live `FuelSetup`, with its most
+        // charges, an `i32`, at the reflected offset.
+        let most: i32 = unsafe { enshwick::raw::read_at(setup, most_at) };
+        // SAFETY: `setup` is the entity's live `FuelSetup`, with the share
+        // a fresh prop starts with, an `f32`, at the reflected offset.
+        let share: f32 = unsafe { enshwick::raw::read_at(setup, share_at) };
+        Some((most, share))
+    });
+    crate::transactions::props::fuel_above_start(charges, start)
+}
+
+/// Whether `entity` is a logic prop wired to other logic (server 399,
+/// client 426): its `LogicGraphNodeConnected` writes to a graph or is read.
+fn wired(loader: &Loader, entity: u32) -> bool {
+    let Some(data) = component(loader, entity, catalogue::LOGIC_CONNECTED) else {
+        return false;
+    };
+    let (Ok(writer_at), Ok(readers_at)) = (
+        offset(loader, catalogue::LOGIC_CONNECTED_WRITER),
+        offset(loader, catalogue::LOGIC_CONNECTED_READERS),
+    ) else {
+        // Unreadable on this build: the safe side is to keep it.
+        return true;
+    };
+    // SAFETY: `data` is the entity's live `LogicGraphNodeConnected`, with
+    // the `u32` graph it writes to at the reflected offset.
+    let writer: u32 = unsafe { enshwick::raw::read_at(data, writer_at) };
+    // SAFETY: `data` is the entity's live `LogicGraphNodeConnected`, with
+    // its readers byte at the reflected offset.
+    let readers: u8 = unsafe { enshwick::raw::read_at(data, readers_at) };
+    crate::transactions::props::wired(writer, readers)
 }
 
 /// Whether any slot of `root`'s inventory, its linked and virtual

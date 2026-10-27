@@ -25,6 +25,11 @@ pub enum HeldState {
     StoreAssociatedNpcIds,
     /// Text a player wrote on it: `CustomPlayerString`.
     CustomPlayerString,
+    /// More `Fuel` charges than a fresh one starts with: water in a well
+    /// or a water store.
+    Fuel,
+    /// Wiring to other logic: `LogicGraphNodeConnected`.
+    LogicGraphNodeConnected,
 }
 
 impl HeldState {
@@ -37,7 +42,7 @@ impl HeldState {
             .map_or(0, |&(_, bit)| bit)
     }
 
-    const ALL: [(Self, u32); 6] = [
+    const ALL: [(Self, u32); 8] = [
         (Self::Inventory, TransactionInfo::HOLDS_INVENTORY),
         (Self::Growth, TransactionInfo::HOLDS_GROWTH),
         (Self::FactoryStation, TransactionInfo::HOLDS_FACTORY_STATION),
@@ -50,6 +55,11 @@ impl HeldState {
             Self::CustomPlayerString,
             TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING,
         ),
+        (Self::Fuel, TransactionInfo::HOLDS_FUEL),
+        (
+            Self::LogicGraphNodeConnected,
+            TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED,
+        ),
     ];
 }
 
@@ -57,8 +67,9 @@ impl HeldState {
 /// a removal and an undo.
 ///
 /// [`Transaction::remove_prop`](super::Transaction::remove_prop) refuses a
-/// prop that holds any, and an undo will not take one away. Fuel, switches
-/// and a container's Quick Stash setting are settings, not state.
+/// prop that holds any, and an undo will not take one away. A switch's
+/// on or off and a container's Quick Stash setting are settings and do not
+/// count.
 ///
 /// # Examples
 ///

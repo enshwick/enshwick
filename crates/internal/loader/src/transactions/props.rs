@@ -10,6 +10,8 @@ const HOLDS_FACTORY_STATION: u32 = TransactionInfo::HOLDS_FACTORY_STATION;
 const HOLDS_NPC_BED: u32 = TransactionInfo::HOLDS_NPC_BED;
 const HOLDS_STORE_ASSOCIATED_NPC_IDS: u32 = TransactionInfo::HOLDS_STORE_ASSOCIATED_NPC_IDS;
 const HOLDS_CUSTOM_PLAYER_STRING: u32 = TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING;
+const HOLDS_FUEL: u32 = TransactionInfo::HOLDS_FUEL;
+const HOLDS_LOGIC_GRAPH_NODE_CONNECTED: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED;
 
 /// What a `FactoryStation` shows: its `FactoryStationState` (0 is
 /// `NoRecipe`), and whether a recipe runs or waits next.
@@ -41,11 +43,14 @@ pub(crate) struct StateReads {
     pub(crate) store_npcs: bool,
     /// Text a player wrote: its `CustomPlayerString`.
     pub(crate) text: bool,
+    /// More `Fuel` charges than a fresh one starts with.
+    pub(crate) fuel: bool,
+    /// Logic wired to other logic: its `LogicGraphNodeConnected`.
+    pub(crate) logic: bool,
 }
 
 impl StateReads {
     /// The kinds of state it holds, as `TransactionInfo::HOLDS_` bits.
-    /// Fuel, switches and the Quick Stash toggle are settings, not state.
     pub(crate) fn holds(self) -> u32 {
         let factory = self
             .factory
@@ -57,11 +62,33 @@ impl StateReads {
             (self.bed_npc, HOLDS_NPC_BED),
             (self.store_npcs, HOLDS_STORE_ASSOCIATED_NPC_IDS),
             (self.text, HOLDS_CUSTOM_PLAYER_STRING),
+            (self.fuel, HOLDS_FUEL),
+            (self.logic, HOLDS_LOGIC_GRAPH_NODE_CONNECTED),
         ]
         .into_iter()
         .filter(|&(held, _)| held)
         .fold(0, |bits, (_, bit)| bits | bit)
     }
+}
+
+/// Whether a prop's `Fuel` holds more charges than a fresh one starts
+/// with: `start` is its `FuelSetup`'s most charges and the share it starts
+/// with, `None` without one, when any charge counts.
+pub(crate) fn fuel_above_start(charges: i32, start: Option<(i32, f32)>) -> bool {
+    let fresh = start.map_or(0.0, |(most, share)| {
+        let share = if share.is_finite() {
+            share.clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        f64::from(most.max(0)) * f64::from(share)
+    });
+    f64::from(charges) > fresh
+}
+
+/// Whether a logic prop is wired: it writes to a graph, or a graph reads it.
+pub(crate) fn wired(writer_graph: u32, has_readers: u8) -> bool {
+    writer_graph != 0 || has_readers != 0
 }
 
 /// `vector` turned by the unit quaternion `rotation` (x, y, z, w).
@@ -255,6 +282,40 @@ mod tests {
             ..StateReads::default()
         };
         assert_eq!(sign.holds(), HOLDS_CUSTOM_PLAYER_STRING);
+    }
+
+    #[test]
+    fn fuel_left_and_a_wired_logic_prop_are_state() {
+        let fire = StateReads {
+            fuel: true,
+            ..StateReads::default()
+        };
+        assert_eq!(fire.holds(), HOLDS_FUEL);
+        let switch = StateReads {
+            logic: true,
+            ..StateReads::default()
+        };
+        assert_eq!(switch.holds(), HOLDS_LOGIC_GRAPH_NODE_CONNECTED);
+    }
+
+    #[test]
+    fn fuel_counts_only_above_what_a_fresh_prop_starts_with() {
+        let well = Some((8, 0.25));
+        assert!(!fuel_above_start(2, well), "a fresh well starts with 2");
+        assert!(fuel_above_start(3, well));
+        assert!(!fuel_above_start(0, None));
+        assert!(
+            fuel_above_start(1, None),
+            "without a setup any charge counts"
+        );
+        assert!(fuel_above_start(1, Some((8, f32::NAN))));
+    }
+
+    #[test]
+    fn a_logic_prop_is_wired_when_it_writes_or_is_read() {
+        assert!(!wired(0, 0));
+        assert!(wired(7, 0));
+        assert!(wired(0, 1));
     }
 
     #[test]

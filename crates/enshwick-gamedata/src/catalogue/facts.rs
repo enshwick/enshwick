@@ -1476,6 +1476,23 @@ pub const FACTS: &[(&str, Fact)] = &[
         "item_flag.is_logic_entity",
         enum_constant("keen::ItemFlag", "IsLogicEntity"),
     ),
+    ("fuel_charges", Fact::Type("keen::ecs::Fuel")),
+    (
+        "fuel_charges.data_storage",
+        offset("keen::ecs::Fuel", "dataStorage"),
+    ),
+    (
+        "logic_graph_node_connected",
+        Fact::Type("keen::ecs::LogicGraphNodeConnected"),
+    ),
+    (
+        "logic_graph_node_connected.writer_graph_id",
+        offset("keen::ecs::LogicGraphNodeConnected", "writerGraphId"),
+    ),
+    (
+        "logic_graph_node_connected.has_reader_graphs",
+        offset("keen::ecs::LogicGraphNodeConnected", "hasReaderGraphs"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.

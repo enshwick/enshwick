@@ -1120,3 +1120,50 @@ fn an_actor_is_asked_about_a_prop_s_box() {
     let (min, max) = world.asked[0];
     assert!(min.iter().all(|&m| m < 20.0) && max.iter().all(|&m| m > 20.0));
 }
+
+#[test]
+fn every_kind_of_state_stops_a_removal_and_an_undo() {
+    for kind in [
+        TransactionInfo::HOLDS_INVENTORY,
+        TransactionInfo::HOLDS_GROWTH,
+        TransactionInfo::HOLDS_FACTORY_STATION,
+        TransactionInfo::HOLDS_NPC_BED,
+        TransactionInfo::HOLDS_STORE_ASSOCIATED_NPC_IDS,
+        TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING,
+        TransactionInfo::HOLDS_FUEL,
+        TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED,
+    ] {
+        let mut world = World::new();
+        let mut ledger = Ledger::new(LIMITS);
+        world.props.insert(40, prop(20.0));
+        world.stateful.insert(40, kind);
+        let removal = ledger
+            .commit(
+                ME,
+                None,
+                vec![Change::RemoveProp {
+                    entity: 40,
+                    discard_state: false,
+                }],
+            )
+            .unwrap();
+        ledger.step(&mut world, 1000);
+        let info = ledger.info(ME, removal).unwrap();
+        assert_eq!((info.state, info.holds), (TransactionInfo::FAILED, kind));
+        assert_eq!(world.props.len(), 1, "{kind:#x}: the prop stays");
+
+        let placed = ledger
+            .commit(ME, None, vec![Change::PlaceProp(prop(30.0))])
+            .unwrap();
+        ledger.step(&mut world, 1000);
+        let entity = ledger.entities(ME, placed).unwrap()[0];
+        world.stateful.insert(entity, kind);
+        ledger.undo(ME, placed).unwrap();
+        ledger.step(&mut world, 1000);
+        let info = ledger.info(ME, placed).unwrap();
+        assert_eq!(
+            (info.state, info.holds),
+            (TransactionInfo::UNDO_REFUSED, kind)
+        );
+    }
+}
