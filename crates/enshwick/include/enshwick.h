@@ -692,6 +692,8 @@ typedef uint32_t EnshwickDataField;
 // The weight of an item in fill tables; the entry is the item. Since
 // minor 82.
 #define EnshwickDataField_LOOT_WEIGHT 16
+// The workshop a recipe is made at, by its game id. Since minor 93.
+#define EnshwickDataField_RECIPE_STATION 17
 
 // Which vanilla items a `DataChange` reaches.
 typedef uint32_t EnshwickDataSelect;

@@ -54,6 +54,12 @@ expression: shape
           },
           "type": "array"
         },
+        "station": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "time": {
           "anyOf": [
             {

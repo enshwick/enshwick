@@ -207,6 +207,9 @@ pub(super) struct RecipeChangeEntry {
     /// ingredient out, and one the recipe lacks is added.
     #[serde(default)]
     pub(super) ingredients: std::collections::BTreeMap<String, ValueEntry>,
+    /// The crafting station it is made at from the next start, named by the
+    /// station's item.
+    pub(super) station: Option<String>,
 }
 
 /// A change of the game's loot for some items.

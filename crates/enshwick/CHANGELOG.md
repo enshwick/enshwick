@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Field::Station` and `Change::station` move a vanilla recipe to another
+  workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
+  the recipe's workshop and lists it in the client's crafting menu at the
+  new station alone, from the next start; a data pack's `recipes.toml`
+  takes `station = "<station item>"`. `menu::move_recipes` and
+  `recipe_workshops` do the same for a mod's own patches (#567).
 - `Items::Backpacks` selects every backpack for a change of `Field::Slots`,
   which now reaches a backpack's own inventory too, for backpacks made
   after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
@@ -24,6 +30,9 @@ Each entry names the pull request that made the change.
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
   format (`MAP_SNAPSHOT_FORMAT`) (#560).
+- `script::game_events` lists every typed game event for script languages
+  (`GameEventKind`); the game event structs, masks and values convert for
+  scripts (a mask as its bit names, a value as its name).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type

@@ -49,7 +49,9 @@ impl Target {
     fn check(self, field: Field) -> Result<(), ValueError> {
         match self {
             Self::Items(_) if !field.selectable() => Err(ValueError::NotSelectable { field }),
-            _ if field == Field::Ingredient => Err(ValueError::NotLive { field }),
+            _ if matches!(field, Field::Ingredient | Field::Station) => {
+                Err(ValueError::NotLive { field })
+            }
             _ => Ok(()),
         }
     }

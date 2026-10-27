@@ -151,6 +151,8 @@ impl DataField {
     /// The weight of an item in fill tables; the entry is the item. Since
     /// minor 82.
     pub const LOOT_WEIGHT: Self = Self(16);
+    /// The workshop a recipe is made at, by its game id. Since minor 93.
+    pub const RECIPE_STATION: Self = Self(17);
 }
 
 /// How a [`DataChange`] changes its value.
