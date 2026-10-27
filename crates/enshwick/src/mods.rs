@@ -10,7 +10,7 @@ use crate::abi::{ManifestFlags, ModInfo, Side, Str};
 /// ```
 /// use enshwick::mods::LOADER_ID;
 ///
-/// let mods = enshwick::mods();
+/// let mods = enshwick::mods::all();
 /// let others = mods.iter().filter(|m| m.id != LOADER_ID);
 /// assert!(others.count() <= mods.len());
 /// ```
@@ -33,7 +33,7 @@ pub const STUB_FILE: &str = "powrprof.dll";
 /// ```
 /// use enshwick::mods::{LOADER_FILE, LOADER_ID};
 ///
-/// let loader = enshwick::mods().into_iter().find(|m| m.id == LOADER_ID);
+/// let loader = enshwick::mods::all().into_iter().find(|m| m.id == LOADER_ID);
 /// assert!(loader.is_none_or(|m| m.file == LOADER_FILE));
 /// ```
 pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
@@ -56,7 +56,7 @@ pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 /// # Examples
 ///
 /// ```
-/// for entry in enshwick::mods() {
+/// for entry in enshwick::mods::all() {
 ///     enshwick::info!("{} {} from {}", entry.id, entry.version, entry.file);
 /// }
 /// ```
@@ -129,8 +129,8 @@ impl ModEntry {
     /// # Examples
     ///
     /// ```
-    /// let shown: Vec<String> = enshwick::mods().iter().map(|entry| entry.label()).collect();
-    /// for entry in enshwick::mods() {
+    /// let shown: Vec<String> = enshwick::mods::all().iter().map(|entry| entry.label()).collect();
+    /// for entry in enshwick::mods::all() {
     ///     enshwick::info!("{} {}", entry.id, entry.version);
     /// }
     /// # drop(shown);
@@ -142,16 +142,9 @@ impl ModEntry {
 }
 
 /// How messages to players name mod `id` called `name`: by its name alone,
-/// or by the id when the name is empty. Logs name mods by id.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::mods::label;
-///
-/// assert_eq!(label("Trading Post", "you.trading-post"), "Trading Post");
-/// assert_eq!(label("", "you.trading-post"), "you.trading-post");
-/// ```
+/// or by the id when the name is empty, as [`ModEntry::label`] does; the
+/// loader's own messages use it.
+#[doc(hidden)]
 #[must_use]
 pub fn label(name: &str, id: &str) -> String {
     if name.is_empty() { id } else { name }.to_owned()
@@ -164,13 +157,15 @@ pub fn label(name: &str, id: &str) -> String {
 /// # Examples
 ///
 /// ```
-/// let mods = enshwick::mods();
+/// let mods = enshwick::mods::all();
 /// let joining = mods.iter().filter(|m| m.join).count();
 /// assert!(joining <= mods.len());
 /// ```
 #[must_use]
-pub fn mods() -> Vec<ModEntry> {
-    crate::host().map(|host| host.mods()).unwrap_or_default()
+pub fn all() -> Vec<ModEntry> {
+    crate::host()
+        .map(|host| host.listing(host.api().mods))
+        .unwrap_or_default()
 }
 
 /// The server's join mods that the last refused join found missing on this
@@ -199,7 +194,7 @@ pub fn mods() -> Vec<ModEntry> {
 #[must_use]
 pub fn join_missing() -> Vec<ModEntry> {
     crate::host()
-        .map(|host| host.join_missing())
+        .map(|host| host.listing(host.api().join_missing))
         .unwrap_or_default()
 }
 
@@ -219,56 +214,11 @@ pub fn join_missing() -> Vec<ModEntry> {
 #[must_use]
 pub fn replaced() -> Vec<ModEntry> {
     crate::host()
-        .map(|host| host.replaced())
+        .map(|host| host.listing(host.api().replaced))
         .unwrap_or_default()
 }
 
 impl Host {
-    /// The mods in `mods/` that a present mod replaces; see [`replaced`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// if let Some(host) = enshwick::host() {
-    ///     assert!(host.replaced().iter().all(|old| !old.replaced_by.is_empty()));
-    /// }
-    /// ```
-    #[must_use]
-    pub fn replaced(&self) -> Vec<ModEntry> {
-        self.listing(self.api().replaced)
-    }
-
-    /// The server's join mods the last refused join found missing; see
-    /// [`join_missing`].
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// if let Some(host) = enshwick::host() {
-    ///     assert!(host.join_missing().iter().all(|entry| !entry.running));
-    /// }
-    /// ```
-    #[must_use]
-    pub fn join_missing(&self) -> Vec<ModEntry> {
-        self.listing(self.api().join_missing)
-    }
-
-    /// Every loaded mod, the loader first, in load order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// if let Some(host) = enshwick::host() {
-    ///     for entry in host.mods() {
-    ///         let _ = (entry.id, entry.file);
-    ///     }
-    /// }
-    /// ```
-    #[must_use]
-    pub fn mods(&self) -> Vec<ModEntry> {
-        self.listing(self.api().mods)
-    }
-
     /// The entries a listing function of the table writes.
     fn listing(&self, list: Listing) -> Vec<ModEntry> {
         let entry_size = u32::try_from(size_of::<ModInfo>()).unwrap_or(u32::MAX);

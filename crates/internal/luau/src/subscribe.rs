@@ -194,7 +194,7 @@ impl RawReader {
                     spec.type_name
                 ))
             })?;
-        let ty = load.event_type(name)?;
+        let ty = load.game_event_type(name)?;
         let mut fields = Vec::new();
         for (field, kind) in &spec.fields {
             let resolved = match kind {

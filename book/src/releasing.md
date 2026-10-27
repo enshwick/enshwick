@@ -79,7 +79,7 @@ loader build.
 
 ## The list of loaded mods
 
-[`enshwick::mods()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
+[`enshwick::mods::all()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 lists every loaded mod, the loader first (id `enshwick`), in load order. Each
 [`ModEntry`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 has:
@@ -97,7 +97,7 @@ has:
 | `replaced_by`                                   | In `mods::replaced()`, the mod that replaces this one; empty elsewhere          |
 
 ```rust
-for entry in enshwick::mods() {
+for entry in enshwick::mods::all() {
     enshwick::info!("{} {} at {}", entry.id, entry.version, entry.file);
 }
 ```

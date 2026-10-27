@@ -16,10 +16,10 @@ enshwick::debug!("bed {} checked", 1210);
 
 For lines that may repeat:
 
-| Macro                                                   | Logs                                                                                           |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `info_once!`, `warn_once!`                              | the first time this call site runs, never again                                                |
-| `warn_every!(period, ...)`, `error_every!(period, ...)` | at most once per `period` from this call site, adding how many lines it skipped since the last |
+| Macro                                                                       | Logs                                                                                           |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `info_once!`, `warn_once!`, `error_once!`                                   | the first time this call site runs in the mod's life, never again                              |
+| `info_every!(period, ...)`, `warn_every!(period, ...)`, `error_every!(...)` | at most once per `period` from this call site, adding how many lines it skipped since the last |
 
 ```rust
 use std::time::Duration;

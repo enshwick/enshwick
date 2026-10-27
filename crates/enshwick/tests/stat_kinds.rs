@@ -46,7 +46,7 @@ mod tests {
                 load.define_stat("luck", &StatDef::additive("x")).is_err(),
                 "defined twice"
             );
-            load.buff_modifiers(BuffTypeId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;
+            load.add_buff_modifiers(BuffTypeId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;
             load.on_stats_changed(|change| {
                 CHANGES
                     .lock()
