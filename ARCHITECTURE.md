@@ -25,8 +25,8 @@ safe API.
 ```text
 stub ──starts──▶ loader ──C ABI──▶ mods (enshwick ▸ enshwick-macros)
                    │
-                   └──▶ enshwick-gamedata (tables, reflect, archive)
-enshwick-luau ──▶ enshwick (script descriptions)
+                   ├──▶ enshwick-gamedata (tables, reflect, archive)
+                   └──▶ enshwick-luau ──▶ enshwick (script descriptions)
 cargo-enshwick ──▶ enshwick, enshwick-gamedata
 ```
 

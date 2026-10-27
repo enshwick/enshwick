@@ -15,7 +15,9 @@ use mlua::chunk::ChunkMode;
 use mlua::{Function, Lua, LuaOptions, MultiValue, StdLib, Table, Value as LuaValue, VmState};
 
 use crate::bridge::{arguments, from_lua, to_lua};
-use crate::files::{MAIN, Requirer, Scripts};
+use enshwick::packs::SCRIPT_MAIN as MAIN;
+
+use crate::files::{Requirer, Scripts};
 
 /// How much a mod's scripts may take.
 ///
@@ -109,10 +111,11 @@ thread_local! {
 /// How many of Luau's interrupts pass between two reads of the clock.
 const TICKS_PER_CHECK: u32 = 64;
 
-/// One VM of a mod: the Luau state and the handlers its `main.luau`
-/// registered.
-struct Vm {
+/// One VM of a mod: the Luau state, the scripts it runs and the handlers
+/// its `main.luau` registered.
+pub(crate) struct Vm {
     lua: Lua,
+    scripts: Scripts,
     /// Whether `main.luau` is still running its top level.
     starting: AtomicBool,
     handlers: Mutex<Vec<(Event, Function)>>,
@@ -128,6 +131,8 @@ pub(crate) struct Inner {
     namespaces: Vec<(&'static script::Namespace, Opened)>,
     /// The VM; gone once the mod is off, which frees its memory.
     vm: ArcSwapOption<Vm>,
+    /// The events subscribed at start, the only ones a reload can serve.
+    subscribed: Mutex<Vec<Event>>,
     off: AtomicBool,
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
@@ -187,6 +192,140 @@ impl Runtime {
     pub fn is_off(&self) -> bool {
         self.0.off.load(Ordering::Acquire)
     }
+
+    /// Whether the mod runs exactly `scripts` now.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_luau::{Limits, Scripts};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let scripts = Scripts::new().with("main.luau", "");
+    ///     let runtime = enshwick_luau::start(load, "you.hello", scripts.clone(), Limits::default())?;
+    ///     assert!(runtime.runs(&scripts));
+    ///     Ok(())
+    /// }
+    /// ```
+    #[must_use]
+    pub fn runs(&self, scripts: &Scripts) -> bool {
+        self.0
+            .vm
+            .load()
+            .as_ref()
+            .is_some_and(|vm| vm.scripts == *scripts)
+    }
+
+    /// Runs `scripts` in place of the mod's scripts, for development: a new
+    /// VM runs `main.luau`, takes over the handlers of the events subscribed
+    /// at start, and the old VM's tasks stop at their next run.
+    ///
+    /// # Errors
+    ///
+    /// [`ReloadError`] when the mod is off, or with the file, line and
+    /// message when the new `main.luau` fails at its start; the old scripts
+    /// keep running.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_luau::{Limits, Scripts};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), Limits::default())?;
+    ///     let newer = Scripts::new().with("main.luau", "print('again')");
+    ///     runtime.reload(newer.clone()).map_err(|e| enshwick::Off::new(e.to_string()))?;
+    ///     assert!(runtime.runs(&newer));
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn reload(&self, scripts: Scripts) -> Result<(), ReloadError> {
+        let inner = &self.0;
+        if self.is_off() {
+            return Err(ReloadError::Off);
+        }
+        let vm = inner.run_main(scripts).map_err(ReloadError::Start)?;
+        let waiting: Vec<&str> = {
+            let subscribed = inner.subscribed.relock();
+            vm.events()
+                .into_iter()
+                .filter(|event| !subscribed.contains(event))
+                .filter_map(|event| script::events().find(|k| k.event() == event))
+                .map(EventKind::name)
+                .collect()
+        };
+        if !waiting.is_empty() {
+            inner.host.log(
+                Level::WARN,
+                &format!("handlers of {} run from the next start", waiting.join(", ")),
+            );
+        }
+        inner.vm.store(Some(vm));
+        if self.is_off() {
+            inner.vm.store(None);
+            return Err(ReloadError::Off);
+        }
+        Ok(())
+    }
+}
+
+/// Why [`Runtime::reload`] left the old scripts running.
+///
+/// # Examples
+///
+/// ```
+/// let error = enshwick_luau::ReloadError::Start("main.luau:1: boom".to_owned());
+/// assert_eq!(error.to_string(), "main.luau:1: boom");
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ReloadError {
+    /// A fault turned the mod off.
+    #[error("the mod is off")]
+    Off,
+    /// The new `main.luau` failed at its start: the file, line and message.
+    #[error("{0}")]
+    Start(String),
+}
+
+/// The mod and the VM a function or a callback belongs to.
+#[derive(Clone)]
+pub(crate) struct Scope {
+    inner: Weak<Inner>,
+    vm: Weak<Vm>,
+}
+
+impl Scope {
+    /// Calls the script's `function` from the API with `args`, as a
+    /// function of `signature`; an error once its VM was replaced.
+    pub(crate) fn call_function(
+        &self,
+        function: &Function,
+        args: Vec<Value>,
+        signature: &'static Signature,
+    ) -> Result<Value, script::Error> {
+        let stale = || script::Error::new("the scripts were reloaded or stopped");
+        let inner = self.inner.upgrade().ok_or_else(stale)?;
+        let vm = self.vm.upgrade().ok_or_else(stale)?;
+        let current = inner
+            .vm
+            .load()
+            .as_ref()
+            .is_some_and(|now| Arc::ptr_eq(now, &vm));
+        if !current {
+            return Err(stale());
+        }
+        let answer = inner.call(&vm, "a function passed to the API", |vm| {
+            let lua_args = args
+                .into_iter()
+                .zip(signature.params())
+                .map(|(value, param)| to_lua(&vm.lua, self, value, param.ty()))
+                .collect::<mlua::Result<MultiValue>>()?;
+            function.call::<LuaValue>(lua_args)
+        });
+        let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
+        from_lua(self, answer, signature.ret())
+    }
 }
 
 /// Starts the Luau mod `id` for the mod `load` initialises: builds its
@@ -227,6 +366,7 @@ pub fn start(
         limits,
         namespaces,
         vm: ArcSwapOption::empty(),
+        subscribed: Mutex::new(Vec::new()),
         off: AtomicBool::new(false),
         calls: AtomicU64::new(0),
         overruns: Arc::new(AtomicU64::new(0)),
@@ -235,6 +375,7 @@ pub fn start(
     let vm = inner.run_main(scripts).map_err(Off::new)?;
     let events = vm.events();
     inner.vm.store(Some(vm));
+    inner.subscribed.relock().clone_from(&events);
     for event in events {
         let kind = script::events()
             .find(|k| k.event() == event)
@@ -359,6 +500,7 @@ impl Inner {
             sandbox(self.limits, &self.overruns).map_err(|e| format!("the Luau sandbox: {e}"))?;
         let vm = Arc::new(Vm {
             lua,
+            scripts: scripts.clone(),
             starting: AtomicBool::new(true),
             handlers: Mutex::new(Vec::new()),
         });
@@ -389,22 +531,26 @@ impl Inner {
     /// Puts `enshwick`, `print` and `require` among the globals of `vm`.
     fn globals(&self, vm: &Arc<Vm>, scripts: Scripts) -> mlua::Result<Table> {
         let lua = &vm.lua;
+        let scope = Scope {
+            inner: Weak::clone(&self.me),
+            vm: Arc::downgrade(vm),
+        };
         let api = lua.create_table()?;
         for (namespace, opened) in &self.namespaces {
             let table = lua.create_table()?;
             for declared in namespace.functions() {
-                let weak = Weak::clone(&self.me);
+                let scope = scope.clone();
                 let opened = opened.clone();
                 let what = format!("enshwick.{}.{}", namespace.name(), declared.name());
                 let signature = declared.signature();
                 table.raw_set(
                     declared.name(),
                     lua.create_function(move |lua, args: MultiValue| {
-                        let values = arguments(lua, &weak, args, signature, &what)?;
+                        let values = arguments(lua, &scope, args, signature, &what)?;
                         let answer = opened
                             .call(&declared, values)
                             .map_err(|e| mlua::Error::runtime(format!("{what}: {e}")))?;
-                        to_lua(lua, &weak, answer, signature.ret())
+                        to_lua(lua, &scope, answer, signature.ret())
                     })?,
                 )?;
             }
@@ -463,14 +609,13 @@ impl Inner {
         result.map_err(|_| ())
     }
 
-    /// Runs `body` on the mod's VM as a call into the scripts after start;
-    /// on an error or a panic, turns the mod off with why.
-    fn call<R>(&self, what: &str, body: impl FnOnce(&Vm) -> mlua::Result<R>) -> Option<R> {
+    /// Runs `body` on `vm` as a call into the scripts after start; on an
+    /// error or a panic, turns the mod off with why.
+    fn call<R>(&self, vm: &Vm, what: &str, body: impl FnOnce(&Vm) -> mlua::Result<R>) -> Option<R> {
         if self.off.load(Ordering::Acquire) {
             return None;
         }
-        let vm = self.vm.load_full()?;
-        match self.enter(&vm.lua, self.limits.call, || body(&vm)) {
+        match self.enter(&vm.lua, self.limits.call, || body(vm)) {
             Ok(Ok(value)) => Some(value),
             Ok(Err(error)) => {
                 self.fail(&format!("{what}: {}", describe(&error)));
@@ -513,34 +658,18 @@ impl Inner {
             .filter(|(event, _)| *event == kind.event())
             .map(|(_, handler)| handler.clone())
             .collect();
+        let scope = Scope {
+            inner: Weak::clone(&self.me),
+            vm: Arc::downgrade(&vm),
+        };
         for handler in handlers {
-            let done = self.call(kind.name(), |vm| {
-                let arg = to_lua(&vm.lua, &self.me, data.clone(), kind.data())?;
+            let done = self.call(&vm, kind.name(), |vm| {
+                let arg = to_lua(&vm.lua, &scope, data.clone(), kind.data())?;
                 handler.call::<()>(arg)
             });
             if done.is_none() {
                 return;
             }
         }
-    }
-
-    /// Calls the script's `function` from the API with `args`, as a
-    /// function of `signature`.
-    pub(crate) fn call_function(
-        &self,
-        function: &Function,
-        args: Vec<Value>,
-        signature: &'static Signature,
-    ) -> Result<Value, script::Error> {
-        let answer = self.call("a function passed to the API", |vm| {
-            let lua_args = args
-                .into_iter()
-                .zip(signature.params())
-                .map(|(value, param)| to_lua(&vm.lua, &self.me, value, param.ty()))
-                .collect::<mlua::Result<MultiValue>>()?;
-            function.call::<LuaValue>(lua_args)
-        });
-        let answer = answer.ok_or_else(|| script::Error::new("the script failed"))?;
-        from_lua(&self.me, answer, signature.ret())
     }
 }

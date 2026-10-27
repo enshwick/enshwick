@@ -43,6 +43,10 @@
 - [Services between mods](services.md)
 - [Extending other mods](extending.md)
 
+# Writing a mod in Luau
+
+- [Luau mods](luau.md)
+
 # Reaching into the game
 
 - [Finding the game](finding-the-game.md)

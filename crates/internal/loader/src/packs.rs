@@ -2,10 +2,11 @@
 //! DLL. The loader gives each pack a record like a mod's, built from its
 //! manifest, so the mod list, the lock and the join check see
 //! it as they see a DLL, and runs it through the API's [`Load::add_pack`]
-//! during init. The dedicated server watches a pack's files and applies a
-//! changed `loot.toml` at once; with `dev_reload` on, the server and the
-//! client also take changed values at once; other changes wait for a
-//! restart.
+//! during init; a pack with a `main.luau` is a Luau mod, whose scripts run
+//! in a sandbox of their own (`enshwick-luau`). The dedicated server watches
+//! a pack's files and applies a changed `loot.toml` at once; with
+//! `dev_reload` on, the server and the client also take changed values and
+//! scripts at once; other changes wait for a restart.
 //!
 //! [`Load::add_pack`]: enshwick::Load::add_pack
 
@@ -31,12 +32,23 @@ pub(crate) struct Found {
     pub(crate) manifest: &'static Manifest,
 }
 
-/// A pack the loader runs: its folder, the hash of its files and, once it
-/// initialised, what it added.
+/// A pack the loader runs: its folder, the hash of its files, its scripts
+/// and, once it initialised, what it added and its running scripts.
 struct Loaded {
     dir: PathBuf,
     hash: u32,
+    scripts: Vec<String>,
     pack: Option<Pack>,
+    runtime: Option<enshwick_luau::Runtime>,
+}
+
+/// The scripts of `files`, when they hold a `main.luau`.
+fn scripts_of(files: &PackFiles) -> Option<enshwick_luau::Scripts> {
+    let mut scripts = enshwick_luau::Scripts::new();
+    for (name, bytes) in files.scripts() {
+        scripts = scripts.with(name, bytes);
+    }
+    scripts.has_main().then_some(scripts)
 }
 
 static PACKS: Mutex<Option<FxHashMap<String, Loaded>>> = Mutex::new(None);
@@ -159,7 +171,9 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
                 Loaded {
                     dir: dir.clone(),
                     hash: files.hash(),
+                    scripts: files.scripts().map(|(name, _)| name.to_owned()).collect(),
                     pack: None,
+                    runtime: None,
                 },
             );
         });
@@ -240,15 +254,41 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
         crate::log::write(Level::ERROR, &id, &problem.to_string());
         return Status::REFUSED;
     }
+    let scripts = scripts_of(&files);
+    with(|packs| {
+        if let Some(loaded) = packs.get_mut(&id) {
+            loaded.hash = files.hash();
+            loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
+        }
+    });
+    let mut runtime = None;
     // SAFETY: `api` is the loader's process-wide table, by this function's
     // `# Safety` contract, which is what `init_pack` asks for.
-    let status = unsafe { enshwick::__private::init_pack(api, me, |load| load.add_pack(&pack)) };
+    let status = unsafe {
+        enshwick::__private::init_pack(api, me, |load| {
+            load.add_pack(&pack)?;
+            if let Some(scripts) = scripts {
+                runtime = Some(enshwick_luau::start(
+                    load,
+                    &id,
+                    scripts,
+                    enshwick_luau::Limits::default(),
+                )?);
+            }
+            Ok(())
+        })
+    };
     if status.is_ok() {
+        let luau = if runtime.is_some() {
+            ", Luau scripts running"
+        } else {
+            ""
+        };
         crate::log::write(
             Level::INFO,
             &id,
             &format!(
-                "data pack: {} ids, {} loot drops, {} changes, {} selections",
+                "data pack: {} ids, {} loot drops, {} changes, {} selections{luau}",
                 pack.ids().len(),
                 pack.drops().len(),
                 pack.changes().len(),
@@ -258,6 +298,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
         with(|packs| {
             if let Some(loaded) = packs.get_mut(&id) {
                 loaded.pack = Some(pack);
+                loaded.runtime = runtime;
             }
         });
     }
@@ -283,19 +324,68 @@ pub(crate) fn watched(loader: &Loader) -> Vec<(usize, PathBuf)> {
         .iter()
         .enumerate()
         .filter_map(|(index, record)| {
-            let dir = with(|packs| packs.get(&record.id).map(|p| p.dir.clone()))?;
-            Some((index, dir))
+            with(|packs| {
+                packs
+                    .get(&record.id)
+                    .map(|p| (index, p.dir.clone(), p.scripts.clone()))
+            })
         })
-        .flat_map(|(index, dir)| {
+        .flat_map(|(index, dir, scripts)| {
             enshwick::packs::FILES
                 .iter()
+                .map(|file| (*file).to_owned())
+                .chain(scripts)
                 .map(move |file| (index, dir.join(file)))
         })
         .collect()
 }
 
-/// A pack's files changed: reads them again and applies a changed
-/// `loot.toml` at once; a problem or any other change is logged and waits.
+/// Runs the changed scripts of the Luau mod `id` at once with `dev`
+/// reload, or says they wait for the next start.
+fn scripts_changed(id: &str, files: &PackFiles, dev: bool) {
+    let Some(runtime) = with(|packs| packs.get(id).and_then(|p| p.runtime.clone())) else {
+        return;
+    };
+    let Some(scripts) = scripts_of(files) else {
+        crate::log::write(
+            Level::WARN,
+            id,
+            "main.luau is gone: the scripts stop at the next start",
+        );
+        return;
+    };
+    if runtime.runs(&scripts) {
+        return;
+    }
+    if !dev {
+        crate::log::write(
+            Level::WARN,
+            id,
+            "scripts changed: they run at the next start, or at once with dev_reload = true",
+        );
+        return;
+    }
+    match runtime.reload(scripts) {
+        Ok(()) => {
+            with(|packs| {
+                if let Some(loaded) = packs.get_mut(id) {
+                    loaded.hash = files.hash();
+                    loaded.scripts = files.scripts().map(|(name, _)| name.to_owned()).collect();
+                }
+            });
+            crate::log::write(Level::INFO, id, "scripts reloaded");
+        }
+        Err(why) => crate::log::write(
+            Level::WARN,
+            id,
+            &format!("scripts not reloaded, the old ones run on: {why}"),
+        ),
+    }
+}
+
+/// A pack's files changed: reads them again, runs changed scripts at once
+/// with `dev_reload`, and applies a changed `loot.toml` at once; a problem
+/// or any other change is logged and waits.
 pub(crate) fn changed(loader: &Loader, index: usize) {
     let Some(record) = loader.mods.get(index) else {
         return;
@@ -309,19 +399,23 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
     let Some(dir) = with(|packs| packs.get(id).map(|p| p.dir.clone())) else {
         return;
     };
-    let pack = match PackFiles::read_dir(&dir).map(|files| Pack::parse(id, &files)) {
-        Ok(Ok(pack)) => pack,
-        Ok(Err(errors)) => {
+    let files = match PackFiles::read_dir(&dir) {
+        Ok(files) => files,
+        Err(why) => {
+            crate::log::write(Level::WARN, id, &format!("data pack not reloaded: {why}"));
+            return;
+        }
+    };
+    scripts_changed(id, &files, dev);
+    let pack = match Pack::parse(id, &files) {
+        Ok(pack) => pack,
+        Err(errors) => {
             report(id, &errors);
             crate::log::write(
                 Level::WARN,
                 id,
                 "data pack not reloaded: fix the files above",
             );
-            return;
-        }
-        Err(why) => {
-            crate::log::write(Level::WARN, id, &format!("data pack not reloaded: {why}"));
             return;
         }
     };

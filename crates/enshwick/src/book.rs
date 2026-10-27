@@ -45,6 +45,7 @@ chapters! {
     Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
+    Luau => "luau.md",
     FindingTheGame => "finding-the-game.md",
     GameTypes => "game-types.md",
     Hooks => "hooks.md",

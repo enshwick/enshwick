@@ -27,7 +27,8 @@ content. A pack changes vanilla values only through
 item, recipe or table, never gives one another id, and never writes the
 game's files or saves.
 
-A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
+A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod). A pack
+with a `main.luau` is a [Luau mod](../luau.md).
 
 The repository's `examples/` folder holds three packs to start from:
 `you.material-stacks`, `you.recipe-cost-and-time` and `you.storage-slots`.

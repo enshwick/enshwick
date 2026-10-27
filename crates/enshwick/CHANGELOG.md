@@ -90,6 +90,18 @@ Each entry names the pull request that made the change.
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
   build it would leave vanilla (#544).
+- `script` describes the API for script languages beside the Rust items:
+  `#[derive(Script)]` for types, `#[script(<part>)]` for the methods a script
+  may call, a script entry for every loader event, and `NAMESPACES` (#543).
+- A data pack folder with a `main.luau` reads its scripts:
+  `PackFiles::scripts`, `SCRIPT_MAIN`, `SCRIPT_EXTENSION`,
+  `DEFINITIONS_SUFFIX`, `MAX_SCRIPTS`, `MAX_SCRIPT_DEPTH` and
+  `ReadPackError::TooManyScripts`; scripts count in the pack's hash (#545).
+
+### Fixed
+
+- Each mod handle has a scheduler queue of its own, so one copy of the API
+  can run tasks for several packs and scripts (#543).
 
 ### Changed
 
