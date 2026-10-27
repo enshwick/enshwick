@@ -62,6 +62,7 @@ end)
 | --- | --- |
 | `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md) or typed [game event](#game-events), with its data as a table; only at the top level of `main.luau` |
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
+| `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
@@ -126,6 +127,32 @@ end)
 
 Game events run on the server's game thread before the step's systems, as
 for a Rust mod; on a client, only while it hosts a game.
+
+## Extending another mod
+
+A Luau mod links into another mod's [extension point](extending.md) as a
+Rust mod does. `cargo enshwick point <owner>:<point> --from <owner's DLL>
+--luau --out points/<point>.luau` writes the point's module: the types it
+reaches, its named values, and the layout the owner's build wrote, which the
+loader checks before it links. The handler gets the input and the answer so
+far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
+refusable point:
+
+```luau
+local price = require("./points/price")
+
+enshwick.extend(price, function(input: price.Price, answer: number)
+    if input.deal == price.Deal.SELL then
+        return answer * 2
+    end
+    return nil
+end)
+```
+
+The handler runs on the thread that asks the point, under the same budget
+as an event handler. An error or an answer of the wrong type turns the mod
+off, and the answer stays as it was. A new owner version with another
+layout refuses the link until the module is written again.
 
 ## Settings
 

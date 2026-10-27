@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::extend_described_point` links into an extension point described at
+  run time (`points::DescribedPoint`, `DescribedField`), the input and the
+  answer as bytes in the owner's layout, as a script's schema gives them;
+  the loader checks the layout hashes as for a typed link.
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's

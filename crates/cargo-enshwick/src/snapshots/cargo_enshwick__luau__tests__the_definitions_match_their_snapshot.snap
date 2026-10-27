@@ -301,6 +301,10 @@ declare enshwick: {
 	on_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),
 	--- Every game event type of the running build, with its size in bytes, read from the game's reflection.
 	game_event_types: () -> { { name: string, size: number } },
+	--- Links `handler` into another mod's extension point, as `cargo enshwick point <point> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.
+	extend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),
+	--- What a point's handler returns to refuse, on a refusable point.
+	refuse: {},
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },
 	--- The mod's log file, one line per call.
