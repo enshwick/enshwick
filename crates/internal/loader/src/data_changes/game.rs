@@ -492,8 +492,8 @@ pub(crate) fn serve(
     patches
 }
 
-/// Takes `changes` as mod `owner`'s changes from now on, for a development
-/// reload: merges every change again, reports the overridden sets, and
+/// Takes `changes` and the changes of every item `selections` pick as mod
+/// `owner`'s changes from now on, for a development reload: merges every change again, reports the overridden sets, and
 /// builds each resource the loader patches again in place; how many it
 /// rebuilt.
 ///
@@ -502,26 +502,45 @@ pub(crate) fn serve(
 /// What takes a restart: a change of an entry the loader did not patch at
 /// start, or a rebuild that changes a resource's length, such as an
 /// ingredient taken out or added.
-pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<usize, String> {
+pub(crate) fn reload(
+    owner: ModIndex,
+    changes: Vec<(Change, String)>,
+    selections: Vec<(ItemsChange, String)>,
+) -> Result<usize, String> {
     let sealed = CHANGES
         .sealed
         .get()
         .ok_or_else(|| "no changes were in force at start".to_owned())?;
-    let patched = {
-        let mut declared = sealed.declared.relock();
-        let next = super::replace_owner(
-            &declared,
-            owner,
-            changes
+    let items = if selections.is_empty() {
+        Vec::new()
+    } else {
+        vanilla_items(sealed.loader)
+    };
+    let pending: Vec<Pending> = changes
+        .into_iter()
+        .map(|(change, source)| {
+            Pending::One(Declared {
+                owner,
+                change,
+                source,
+                live: None,
+            })
+        })
+        .chain(
+            selections
                 .into_iter()
-                .map(|(change, source)| Declared {
+                .map(|(change, source)| Pending::Each {
                     owner,
                     change,
                     source,
                     live: None,
-                })
-                .collect(),
-        );
+                }),
+        )
+        .collect();
+    let (mine, _) = expand(pending, &items);
+    let patched = {
+        let mut declared = sealed.declared.relock();
+        let next = super::replace_owner(&declared, owner, mine);
         apply(sealed, &mut declared, next)?
     };
     rebuild(&patched)

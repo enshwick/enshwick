@@ -504,3 +504,76 @@ fn a_loot_change_stays_on_the_server() {
         "loot.toml:1:1: change 1: spawn_probability 2 is not from 0 to 1"
     );
 }
+
+#[test]
+fn a_category_change_selects_its_items_where_the_loader_reads_them() {
+    use crate::content::categories::ItemCategoryMask;
+    use crate::content::changes::{Items, ItemsChange};
+    let items = "[[change]]\ncategory = [\"Materials\", \"Weapons\"]\nmax_stack = { times = 4 }\n";
+    let pack = Pack::parse("you.stacks", &files(items)).unwrap();
+    assert!(pack.changes().is_empty());
+    assert_eq!(
+        pack.selections(),
+        [(
+            ItemsChange::new(
+                Items::Category(ItemCategoryMask::MATERIALS | ItemCategoryMask::WEAPONS),
+                Field::MaxStackSize,
+                Value::Times(4.0)
+            ),
+            "items.toml:1 (category Materials, Weapons)".to_owned()
+        )]
+    );
+    assert!(pack.reaches_players());
+}
+
+#[test]
+fn stackable_items_and_containers_are_selected_by_a_word() {
+    use crate::content::changes::{Items, ItemsChange};
+    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n";
+    let pack = Pack::parse("you.stacks", &files(items)).unwrap();
+    assert_eq!(
+        pack.selections(),
+        [
+            (
+                ItemsChange::new(Items::Stackable, Field::MaxStackSize, Value::Set(100.0)),
+                "items.toml:1 (stackable)".to_owned()
+            ),
+            (
+                ItemsChange::new(Items::Containers, Field::Slots, Value::Times(2.0)),
+                "items.toml:5 (containers)".to_owned()
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
+    let cases = [
+        (
+            "[[change]]\ncategory = [\"Material\"]\nmax_stack = 50\n",
+            "items.toml:1:1: change 1: no item category \"Material\"; near: Materials",
+        ),
+        (
+            &*format!(
+                "[[change]]\nitems = [\"{CHEST}\"]\ncategory = [\"Materials\"]\nmax_stack = 50\n"
+            ),
+            "items.toml:1:1: change 1: give items or category, not both",
+        ),
+        (
+            "[[change]]\ncategory = [\"Weapons\"]\ndamage_mod = 2\n",
+            "items.toml:1:1: change 1: damage_mod is no field a selection of items changes",
+        ),
+        (
+            "[[change]]\nitems = \"chests\"\nslots = 48\n",
+            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\" or \"containers\"",
+        ),
+        (
+            "[[change]]\ncategory = []\nmax_stack = 50\n",
+            "items.toml:1:1: change 1: category names no item category",
+        ),
+    ];
+    for (items, error) in cases {
+        let errors = Pack::parse("you.stacks", &files(items)).unwrap_err();
+        assert_eq!(errors.to_string(), error, "{items}");
+    }
+}
