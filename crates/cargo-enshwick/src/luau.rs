@@ -172,7 +172,7 @@ pub fn definitions() -> String {
         }
     }
     out.push_str("\ndeclare enshwick: {\n");
-    out.push_str("\t--- Calls `handler` on every event named `event`, with its data; subscribe at the top level of main.luau.\n\ton: ");
+    out.push_str("\t--- Calls `handler` on every loader or typed game event named `event`, with its data; subscribe at the top level of main.luau. A game value the API does not name arrives as `Other(<number>)`, a name of ours.\n\ton: ");
     let handler = |data: &Ty| match data {
         Ty::Nil => "() -> ()".to_owned(),
         data => format!("(data: {}) -> ()", render(data)),

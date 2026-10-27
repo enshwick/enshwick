@@ -100,7 +100,8 @@ number`. `pcall` catches it.
 `enshwick.on` takes the name of a typed [game event](game-events.md) as
 well, such as `HitEvent` or `EntityDiedEvent`. The handler gets the event's
 fields as `game_events::HitEvent` has them, a mask as the list of its bit
-names, a game value as its name:
+names, a game value as its name. A value the API does not name arrives as
+`Other(<number>)`, a name of ours with the game's number in it:
 
 ```luau
 enshwick.on("HitEvent", function(hit)
@@ -142,7 +143,7 @@ key = "announce_minutes"
 default = 30
 min = 1
 max = 1440
-stage = "startup"
+stage = "restart"
 doc = "How often the log counts the players online, in minutes."
 ```
 

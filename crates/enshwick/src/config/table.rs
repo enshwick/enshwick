@@ -116,21 +116,32 @@ impl Load<'_> {
     /// against the schema and every missing one at its default. The loader
     /// gets the schema for the Mods screen and the console.
     ///
+    /// The fields are top-level keys: a schema with groups is refused.
+    ///
     /// # Errors
     ///
-    /// [`Off`] when the file does not parse or a value is refused.
+    /// [`Off`] for a schema with groups or dotted keys, a secret field a
+    /// server would send to its players, or `synced` off
+    /// [`Stage::Startup`]; and when the file does not parse or a value is
+    /// refused.
     ///
     /// # Examples
     ///
     /// See [`TableConfig`].
     pub fn table_config(&mut self, schema: Schema) -> Result<(TableConfig, toml::Table), Off> {
+        refuse_unsupported(&schema)?;
         let host = self.host();
         host.config_schema(&schema.to_text());
         let schema = Arc::new(schema);
         let user = Arc::into_raw(Arc::clone(&schema))
             .cast_mut()
             .cast::<c_void>();
-        let _checked = (host.api().config_check)(host.handle(), check_table, user);
+        let checked = (host.api().config_check)(host.handle(), check_table, user);
+        if !checked.is_ok() {
+            // SAFETY: the loader refused the check, so it keeps no copy of
+            // `user`, which `Arc::into_raw` made just above.
+            drop(unsafe { Arc::from_raw(user.cast_const().cast::<Schema>()) });
+        }
         let settings = TableConfig {
             host,
             schema,
@@ -309,6 +320,33 @@ impl TableConfig {
     }
 }
 
+/// Refuses what [`Load::table_config`] does not take: groups and dotted
+/// keys, a secret that follows the server, `synced` off `startup`.
+fn refuse_unsupported(schema: &Schema) -> Result<(), Off> {
+    if !schema.groups.is_empty() {
+        return Err(Off::new("settings: a schema read as a table has no groups"));
+    }
+    for field in &schema.fields {
+        let key = &field.key;
+        if key.contains('.') {
+            return Err(Off::new(format!(
+                "settings: {key} is a dotted key; a table has top-level keys"
+            )));
+        }
+        if field.secret && field.follows_server() {
+            return Err(Off::new(format!(
+                "settings: {key} is secret and would go to every player"
+            )));
+        }
+        if field.synced && field.stage != Stage::Startup {
+            return Err(Off::new(format!(
+                "settings: {key} is synced but not startup"
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Appends `doc` to `text` as comment lines.
 fn comment(text: &mut String, doc: &str) {
     for line in doc.lines() {
@@ -360,4 +398,37 @@ unsafe extern "system" fn check_table(text: Str, why: *mut Str, user: *mut c_voi
             Status::REFUSED
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Field, Group};
+
+    #[test]
+    fn groups_dotted_keys_and_secrets_that_follow_the_server_are_refused() {
+        let grouped = Schema::new("", "config", vec![Field::new("a", Stage::Runtime, &1)])
+            .with_groups(vec![Group::new("g", "")]);
+        assert!(refuse_unsupported(&grouped).is_err());
+        let dotted = Schema::new("", "config", vec![Field::new("g.a", Stage::Runtime, &1)]);
+        assert!(refuse_unsupported(&dotted).is_err());
+        let secret = Schema::new(
+            "",
+            "config",
+            vec![Field::new("p", Stage::Sync, "x").with_secret(true)],
+        );
+        assert!(refuse_unsupported(&secret).is_err());
+        let synced = Schema::new(
+            "",
+            "config",
+            vec![Field::new("r", Stage::Runtime, &true).with_synced(true)],
+        );
+        assert!(refuse_unsupported(&synced).is_err());
+        let fine = Schema::new(
+            "",
+            "config",
+            vec![Field::new("a", Stage::Startup, &1).with_synced(true)],
+        );
+        assert!(refuse_unsupported(&fine).is_ok());
+    }
 }

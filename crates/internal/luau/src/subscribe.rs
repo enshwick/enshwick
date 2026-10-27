@@ -160,7 +160,7 @@ enum Resolved {
 /// The fields of `spec` resolved for the running build, each read into a
 /// [`RawValue`] by `read`.
 pub(crate) struct RawReader {
-    fields: Vec<(String, Resolved)>,
+    fields: Vec<(std::sync::Arc<str>, Resolved)>,
 }
 
 impl core::fmt::Debug for RawReader {
@@ -172,12 +172,23 @@ impl core::fmt::Debug for RawReader {
 }
 
 impl RawReader {
-    /// Resolves `spec` with `load`; the type's name is kept for the process.
+    /// Resolves `spec` with `load`, the type found by name among `types`,
+    /// the build's game event types.
     pub(crate) fn resolve(
         load: &mut Load<'_>,
         spec: &RawSpec,
+        types: &[(&'static str, u32)],
     ) -> Result<(enshwick::game_events::EventType, Self), Off> {
-        let name: &'static str = Box::leak(spec.type_name.clone().into_boxed_str());
+        let name = types
+            .iter()
+            .map(|(name, _)| *name)
+            .find(|name| *name == spec.type_name)
+            .ok_or_else(|| {
+                Off::new(format!(
+                    "enshwick.on_game_type: no game event type {} on this build",
+                    spec.type_name
+                ))
+            })?;
         let ty = load.event_type(name)?;
         let mut fields = Vec::new();
         for (field, kind) in &spec.fields {
@@ -195,14 +206,14 @@ impl RawReader {
                 FieldKind::Bool => Resolved::Bool(ty.field(load, field)?),
                 FieldKind::Entity => Resolved::Entity(ty.field(load, field)?),
             };
-            fields.push((field.clone(), resolved));
+            fields.push((std::sync::Arc::from(field.as_str()), resolved));
         }
         Ok((ty, Self { fields }))
     }
 
     /// Every field of `event` this reader reads; a field the event lacks is
     /// left out.
-    pub(crate) fn read(&self, event: &RawGameEvent<'_>) -> Vec<(String, RawValue)> {
+    pub(crate) fn read(&self, event: &RawGameEvent<'_>) -> Vec<(std::sync::Arc<str>, RawValue)> {
         self.fields
             .iter()
             .filter_map(|(name, field)| {
@@ -220,7 +231,7 @@ impl RawReader {
                     Resolved::Bool(f) => RawValue::Bool(event.get(*f)?),
                     Resolved::Entity(f) => RawValue::Number(f64::from(event.get(*f)?.0)),
                 };
-                Some((name.clone(), value))
+                Some((std::sync::Arc::clone(name), value))
             })
             .collect()
     }
@@ -228,7 +239,10 @@ impl RawReader {
 
 /// `values` as a Luau table; 64-bit values as their decimal digits, as the
 /// API gives keys.
-pub(crate) fn raw_table(lua: &Lua, values: &[(String, RawValue)]) -> mlua::Result<LuaValue> {
+pub(crate) fn raw_table(
+    lua: &Lua,
+    values: &[(std::sync::Arc<str>, RawValue)],
+) -> mlua::Result<LuaValue> {
     let table = lua.create_table_with_capacity(0, values.len())?;
     for (name, value) in values {
         let value = match value {
@@ -237,7 +251,7 @@ pub(crate) fn raw_table(lua: &Lua, values: &[(String, RawValue)]) -> mlua::Resul
             RawValue::Signed(i) => LuaValue::String(lua.create_string(i.to_string())?),
             RawValue::Bool(b) => LuaValue::Boolean(*b),
         };
-        table.raw_set(name.as_str(), value)?;
+        table.raw_set(&**name, value)?;
     }
     Ok(LuaValue::Table(table))
 }

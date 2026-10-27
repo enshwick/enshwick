@@ -1002,8 +1002,11 @@ impl Bound for Log {
 }
 
 /// The function behind [`GameEventKind::subscribe`].
-type SubscribeGame =
-    fn(&mut crate::Load<'_>, Box<dyn Fn(Value) + Send + Sync>) -> Result<(), crate::Off>;
+type SubscribeGame = fn(&mut crate::Load<'_>, Box<GameHandler>) -> Result<(), crate::Off>;
+
+/// A handler of a typed game event: it gets the event's data as a function
+/// that converts it, so a handler with nothing to do converts nothing.
+type GameHandler = dyn Fn(&dyn Fn() -> Value) + Send + Sync;
 
 /// A typed game event a script subscribes to, from
 /// [`game_events`](crate::game_events): its data and how to subscribe.
@@ -1016,6 +1019,7 @@ type SubscribeGame =
 /// ```
 #[derive(Debug)]
 pub struct GameEventKind {
+    record: &'static Record,
     data: &'static Ty,
     subscribe: SubscribeGame,
 }
@@ -1025,7 +1029,16 @@ impl GameEventKind {
     where
         E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
     {
+        let record = match E::TY {
+            Ty::Record(record) => *record,
+            #[expect(
+                clippy::panic,
+                reason = "evaluated at compile time: a typed game event that is no record does not build"
+            )]
+            _ => panic!("a typed game event derives Script as a record"),
+        };
         Self {
+            record,
             data: E::TY,
             subscribe: subscribe_game::<E>,
         }
@@ -1038,11 +1051,8 @@ impl GameEventKind {
     ///
     /// See [`GameEventKind`].
     #[must_use]
-    pub fn name(&self) -> &'static str {
-        match self.data {
-            Ty::Record(record) => record.name(),
-            _ => "",
-        }
+    pub const fn name(&self) -> &'static str {
+        self.record.name()
     }
 
     /// The event's doc comment up to its first section.
@@ -1051,11 +1061,8 @@ impl GameEventKind {
     ///
     /// See [`GameEventKind`].
     #[must_use]
-    pub fn doc(&self) -> &'static str {
-        match self.data {
-            Ty::Record(record) => record.doc(),
-            _ => "",
-        }
+    pub const fn doc(&self) -> &'static str {
+        self.record.doc()
     }
 
     /// What a handler gets.
@@ -1083,13 +1090,13 @@ impl GameEventKind {
     ///     let died = enshwick::script::game_events()
     ///         .find(|e| e.name() == "EntityDiedEvent")
     ///         .ok_or(enshwick::Off::new("no such event"))?;
-    ///     died.subscribe(load, |data| enshwick::debug!("{data:?}"))
+    ///     died.subscribe(load, |data| enshwick::debug!("{:?}", data()))
     /// }
     /// ```
     pub fn subscribe(
         &self,
         load: &mut crate::Load<'_>,
-        handler: impl Fn(Value) + Send + Sync + 'static,
+        handler: impl Fn(&dyn Fn() -> Value) + Send + Sync + 'static,
     ) -> Result<(), crate::Off> {
         (self.subscribe)(load, Box::new(handler))
     }
@@ -1097,12 +1104,12 @@ impl GameEventKind {
 
 fn subscribe_game<E>(
     load: &mut crate::Load<'_>,
-    handler: Box<dyn Fn(Value) + Send + Sync>,
+    handler: Box<GameHandler>,
 ) -> Result<(), crate::Off>
 where
     E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
 {
-    load.on_game::<E>(move |event| handler(event.clone().into_value()))
+    load.on_game::<E>(move |event| handler(&|| event.clone().into_value()))
 }
 
 /// Every typed game event a script may subscribe to.
