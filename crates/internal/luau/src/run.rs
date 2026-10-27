@@ -459,10 +459,11 @@ fn subscribe(
                     .ok_or_else(|| Off::new(format!("point {name} has no description")))?;
                 let key = sub.clone();
                 let point = desc.point.clone();
-                // SAFETY: `run_point` sets only bytes `encode` wrote for the
-                // description's answer type, which the loader matched to the
-                // owner's by layout hash: a bool as 0 or 1, an enum as one
-                // of the variants the description lists.
+                // SAFETY: in a mode that changes the answer, `PointDesc::parse`
+                // accepts only a primitive answer whose layout hash, computed
+                // here from that primitive, equals the module's hash, which
+                // the loader matched to the owner's; `encode` writes that
+                // primitive's valid bytes, a bool as 0 or 1.
                 unsafe {
                     load.extend_described_point(&point, &Order::new(), move |input, answer| {
                         handled.run_point(&key, &desc, input, answer)
