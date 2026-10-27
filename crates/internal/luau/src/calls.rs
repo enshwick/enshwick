@@ -115,7 +115,7 @@ impl CallDesc {
             let mut bytes = vec![0u8; input_size];
             encode(&data, &input, &mut bytes, 0)?;
             let Some(caller) = slot.get() else {
-                return Ok((LuaValue::Nil, Some("the call is asked for at the start")));
+                return Ok((LuaValue::Nil, Some("unmatched")));
             };
             let mut answer = vec![0u8; output_size];
             match caller.call(&bytes, &mut answer) {

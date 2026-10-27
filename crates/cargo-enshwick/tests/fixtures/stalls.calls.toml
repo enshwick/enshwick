@@ -10,7 +10,7 @@ output = "u64"
 output_layout = "5081719993871294428"
 input_size = 12
 output_size = 8
-layout = ["13059086432849901944", "4757988806913211573", "3608188286181557718", "13924221380763841713", "3252260880205171709"]
+layout = ["13059086432849901944", "4757988806913211573", "3608188286181557718", "14669011859352139362", "3252260880205171709"]
 [[type]]
 name = "Rent"
 doc = "The rent of a stall, in coins."
@@ -28,9 +28,9 @@ name = "own"
 doc = "Whether the stall is the player's own."
 type = "bool"
 [[type.field]]
-name = "row"
-doc = "The stall's row."
-type = "u8"
+name = "stall"
+doc = "What the stall sells."
+type = "Stall"
 [[type.field]]
 name = "place"
 doc = "The stall's place in its row."
@@ -46,3 +46,16 @@ value = 0
 [[type.value]]
 name = "SELL"
 value = 1
+[[type]]
+name = "Stall"
+doc = "What a stall sells."
+kind = "enum"
+repr = "u8"
+[[type.variant]]
+name = "Food"
+doc = "Food."
+value = 1
+[[type.variant]]
+name = "Tools"
+doc = "Tools."
+value = 2

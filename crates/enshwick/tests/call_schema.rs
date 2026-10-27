@@ -15,6 +15,16 @@ impl Deal {
     pub const SELL: Self = Self(1);
 }
 
+/// What a stall sells.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, enshwick::Shape)]
+pub enum Stall {
+    /// Food.
+    Food = 1,
+    /// Tools.
+    Tools = 2,
+}
+
 /// The rent of a stall, in coins.
 #[enshwick::call(name = "you.stalls:rent", output = u64, version = 2)]
 #[derive(Clone, Copy, Debug)]
@@ -25,8 +35,8 @@ pub struct Rent {
     pub deal: Deal,
     /// Whether the stall is the player's own.
     pub own: bool,
-    /// The stall's row.
-    pub row: u8,
+    /// What the stall sells.
+    pub stall: Stall,
     /// The stall's place in its row.
     pub place: u16,
 }
@@ -39,7 +49,7 @@ pub mod generated;
 mod tests {
     use enshwick::services::Call;
 
-    use super::{Deal, Rent, generated};
+    use super::{Deal, Rent, Stall, generated};
 
     #[test]
     fn the_schema_is_the_one_cargo_enshwick_is_tested_with() {
@@ -65,5 +75,6 @@ mod tests {
             <Rent as Call>::OUTPUT[0].hash
         );
         assert_eq!(generated::Deal::SELL.0, Deal::SELL.0);
+        assert_eq!(generated::Stall::Tools as u8, Stall::Tools as u8);
     }
 }

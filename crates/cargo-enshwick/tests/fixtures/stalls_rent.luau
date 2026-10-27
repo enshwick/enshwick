@@ -11,8 +11,8 @@ export type Rent = {
 	deal: number,
 	--- Whether the stall is the player's own.
 	own: boolean,
-	--- The stall's row.
-	row: number,
+	--- What the stall sells.
+	stall: number,
 	--- The stall's place in its row.
 	place: number,
 }
@@ -25,9 +25,10 @@ return table.freeze({
 		{ name = "character", offset = 0, read = "entity", hash = "13059086432849901944" },
 		{ name = "deal", offset = 4, read = "u32", hash = "4757988806913211573", shape = { name = "Deal", kind = "values", repr = "u32", values = { { name = "BUY", value = 0 }, { name = "SELL", value = 1 } } } },
 		{ name = "own", offset = 8, read = "bool", hash = "3608188286181557718" },
-		{ name = "row", offset = 9, read = "u8", hash = "13924221380763841713" },
+		{ name = "stall", offset = 9, read = { repr = "u8", variants = { 1, 2 } }, hash = "14669011859352139362", shape = { name = "Stall", kind = "enum", repr = "u8", values = { { name = "Food", value = 1 }, { name = "Tools", value = 2 } } } },
 		{ name = "place", offset = 10, read = "u16", hash = "3252260880205171709" },
 	} },
 	output = { size = 8, hash = "5081719993871294428", read = "u64" },
 	Deal = table.freeze({ BUY = 0, SELL = 1 }),
+	Stall = table.freeze({ Food = 1, Tools = 2 }),
 })
