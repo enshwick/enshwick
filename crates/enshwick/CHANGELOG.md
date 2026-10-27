@@ -8,6 +8,17 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::change_recipes` changes the output count, cost or time of every
+  vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
+  makes, `Recipes::Workshop` by where it is made, read from the game's
+  data by the loader (`DataSelect::RECIPE_KIND`, `DataSelect::WORKSHOP`,
+  ABI minor 91); a data pack's `recipes.toml` takes `kind = [...]` and
+  `workshop = [...]` for the same, and `RecipeKind::name` gives the names
+  (#562).
+- `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
+  with their bases, and markers, plain data for a process outside the game;
+  `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
+  format (`MAP_SNAPSHOT_FORMAT`) (#560).
 - `script::game_events` lists every typed game event for script languages
   (`GameEventKind`); the game event structs, masks and values convert for
   scripts (a mask as its bit names, a value as its name).
@@ -61,6 +72,11 @@ Each entry names the pull request that made the change.
   player's rights for every change before it writes, and a refusal shows
   as `TransactionStatus::NotAllowed`; the op kinds, records and
   `transaction_commit_for` are ABI minor 89 (#551).
+- The conflict report lists code patches refused over another mod's
+  bytes, vanilla values one mod's set overrides with both values, and
+  components several mods write; the loader compares the game's code with
+  the executable on disk while it starts and names the DLL or mod that
+  changed it outside the API, after each load, `init` and `ready` (#555).
 - A data pack's `items.toml` changes the stack size or container slots of
   every vanilla item of some categories (`category = ["Materials"]`), every
   item that stacks (`items = "stackable"`) or every container

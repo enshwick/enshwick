@@ -22,12 +22,12 @@ mod select;
 
 #[cfg(windows)]
 pub(crate) use game::{
-    LiveTarget, declare, declare_change, declare_items, has_live, reachable, reload, serve,
-    set_change, wanted, world_event,
+    LiveTarget, declare, declare_change, declare_items, declare_recipes, has_live, reachable,
+    reload, serve, set_change, wanted, world_event,
 };
 pub use kept::{KEPT_FILE, Kept, hold_reason, served};
 pub use live::{UNSET, keeps_bases, set_live, set_pending};
-pub use select::{Pending, Picked, TraitOffsets, expand, grouped, traits_of};
+pub use select::{Pending, Picked, Selectable, TraitOffsets, expand, grouped, traits_of};
 
 /// A change one mod declared, with where it came from.
 #[derive(Clone, Debug, PartialEq)]

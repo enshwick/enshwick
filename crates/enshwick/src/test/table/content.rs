@@ -106,6 +106,12 @@ pub(crate) extern "system" fn change_data(
         .unwrap_or_default()
         .to_owned();
     if raw.select != crate::abi::DataSelect::ENTRY {
+        if let Ok(Some(change)) = crate::content::changes::RecipesChange::from_abi(&raw) {
+            return with(Status::MISSING, |s| {
+                s.changes.recipes.push((change, source));
+                Status::OK
+            });
+        }
         let Ok(Some(change)) = crate::content::changes::ItemsChange::from_abi(&raw) else {
             return Status::BAD_ARGS;
         };

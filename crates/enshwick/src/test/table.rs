@@ -320,6 +320,8 @@ pub(crate) struct DataChanges {
     pub(crate) one: Vec<(crate::content::changes::Change, String)>,
     /// Changes of every item a selection picks.
     pub(crate) items: Vec<(crate::content::changes::ItemsChange, String)>,
+    /// Changes of every recipe a selection picks.
+    pub(crate) recipes: Vec<(crate::content::changes::RecipesChange, String)>,
     /// Changes the mod sets later, numbered from 1 in this order, with
     /// the value in force.
     pub(crate) live: Vec<crate::test::content::LiveChange>,

@@ -113,6 +113,12 @@ pub(crate) extern "system" fn change_data(
             return Status::BAD_ARGS;
         };
         let source = text(raw.source).unwrap_or_default().to_owned();
+        if let Ok(Some(change)) = enshwick::content::changes::RecipesChange::from_abi(&raw) {
+            if !crate::data_changes::reachable(loader, change.field) {
+                return Status::MISSING;
+            }
+            return crate::data_changes::declare_recipes(index, change, source);
+        }
         if raw.select != api_frame::DataSelect::ENTRY {
             let Ok(Some(change)) = enshwick::content::changes::ItemsChange::from_abi(&raw) else {
                 return Status::BAD_ARGS;

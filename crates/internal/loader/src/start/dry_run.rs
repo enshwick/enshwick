@@ -135,7 +135,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         std::fs::create_dir_all(&dir).map_err(io(&dir))?;
     }
     let data_dir = game_dir.join("mod-data");
-    let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry);
+    let (libraries, candidates, others) = libraries(&mods_dir, Run::Dry, &mut |_| {});
     let plan = resolve::resolve(&candidates, side);
     let loader = Loader {
         side,
@@ -157,7 +157,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     };
     let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();
-    initialise(loader, &order);
+    initialise(loader, &order, None);
     let lines = log::captured();
     let mods = outcomes(loader, &order, &libraries, &candidates, &plan, &lines);
     Ok(DryRun {

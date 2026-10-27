@@ -189,6 +189,14 @@ pub(super) struct RecipeChangeEntry {
     /// Every vanilla recipe that makes one of these items.
     #[serde(default)]
     pub(super) output: Vec<String>,
+    /// Every vanilla recipe whose output is of these kinds:
+    /// `building-block`, `roof`, `overgrowth`, `terrain` or `other`.
+    #[serde(default)]
+    pub(super) kind: Vec<String>,
+    /// Every vanilla recipe made at these crafting stations, named by their
+    /// items.
+    #[serde(default)]
+    pub(super) workshop: Vec<String>,
     /// How many of each item the recipe makes, 1 to 65535.
     pub(super) output_count: Option<ValueEntry>,
     /// How many of each ingredient it takes, 1 to 65535.

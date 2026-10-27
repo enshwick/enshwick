@@ -23,9 +23,11 @@ use crate::{Load, Off};
 
 mod items;
 mod live;
+mod recipes;
 
 pub use items::{ItemTraits, Items, ItemsChange};
 pub use live::{ChangeHandle, SetChangeError, Target};
+pub use recipes::{RecipeTraits, Recipes, RecipesChange};
 
 /// The largest factor a [`Value::Times`] takes.
 pub const MAX_FACTOR: f64 = 100.0;
@@ -484,6 +486,13 @@ pub enum ValueError {
     /// A selection of items for a field it does not reach.
     #[error("{field} is no field a selection of items changes")]
     NotSelectable {
+        /// The field.
+        field: Field,
+    },
+    /// A selection of recipes for a field it does not reach: an item's,
+    /// a loot table's, or one ingredient's.
+    #[error("{field} is no field a selection of recipes changes")]
+    NotRecipeSelectable {
         /// The field.
         field: Field,
     },

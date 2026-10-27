@@ -23,6 +23,13 @@ expression: shape
           },
           "type": "object"
         },
+        "kind": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "output": {
           "default": [],
           "items": {
@@ -56,6 +63,13 @@ expression: shape
               "type": "null"
             }
           ]
+        },
+        "workshop": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"

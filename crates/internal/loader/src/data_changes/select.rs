@@ -4,7 +4,7 @@
 
 use enshwick::abi::ChangeId;
 use enshwick::content::Guid;
-use enshwick::content::changes::{Field, ItemTraits, ItemsChange};
+use enshwick::content::changes::{Field, ItemTraits, ItemsChange, RecipeTraits, RecipesChange};
 use rustc_hash::FxHashSet;
 
 use super::{Conflict, Declared};
@@ -28,6 +28,25 @@ pub enum Pending {
         /// was given at init.
         live: Option<ChangeId>,
     },
+    /// A change of every vanilla recipe a selection picks.
+    Recipes {
+        /// The mod.
+        owner: ModIndex,
+        /// The change.
+        change: RecipesChange,
+        /// Its source; may be empty.
+        source: String,
+    },
+}
+
+/// The vanilla items and recipes with what selections read of each, from
+/// the game's data.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Selectable {
+    /// Every item.
+    pub items: Vec<(Guid, ItemTraits)>,
+    /// Every recipe.
+    pub recipes: Vec<(Guid, RecipeTraits)>,
 }
 
 /// How many items one selection picked.
@@ -39,39 +58,43 @@ pub struct Picked {
     pub field: Field,
     /// Its source.
     pub source: String,
-    /// How many vanilla items it reached.
+    /// How many vanilla entries it reached.
     pub count: usize,
 }
 
 /// Every change of `pending` as changes of one entry each, in load order,
-/// with how many items each selection picked.
+/// with how many entries each selection picked.
 ///
-/// A selection becomes a change of each item of `items` it picks, in its
-/// own place, but for an item the same mod changes by name, which keeps
-/// that change alone.
+/// A selection becomes a change of each item or recipe of `vanilla` it
+/// picks, in its own place, but for an entry the same mod changes by name,
+/// which keeps that change of the field alone.
 #[must_use]
-pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Declared>, Vec<Picked>) {
+pub fn expand(pending: Vec<Pending>, vanilla: &Selectable) -> (Vec<Declared>, Vec<Picked>) {
     let named: FxHashSet<(ModIndex, Guid, Field)> = pending
         .iter()
         .filter_map(|p| match p {
             Pending::One(one) => Some((one.owner, one.change.entry, one.change.field)),
-            Pending::Each { .. } => None,
+            Pending::Each { .. } | Pending::Recipes { .. } => None,
         })
         .collect();
     let mut declared = Vec::new();
     let mut picked = Vec::new();
     for change in pending {
-        match change {
-            Pending::One(one) => declared.push(one),
+        let before = declared.len();
+        let (owner, field, source) = match change {
+            Pending::One(one) => {
+                declared.push(one);
+                continue;
+            }
             Pending::Each {
                 owner,
                 change,
                 source,
                 live,
             } => {
-                let before = declared.len();
                 declared.extend(
-                    items
+                    vanilla
+                        .items
                         .iter()
                         .filter(|(item, traits)| {
                             change.items.picks(change.field, traits)
@@ -84,14 +107,37 @@ pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Decla
                             live,
                         }),
                 );
-                picked.push(Picked {
-                    owner,
-                    field: change.field,
-                    source,
-                    count: declared.len() - before,
-                });
+                (owner, change.field, source)
             }
-        }
+            Pending::Recipes {
+                owner,
+                change,
+                source,
+            } => {
+                declared.extend(
+                    vanilla
+                        .recipes
+                        .iter()
+                        .filter(|(recipe, traits)| {
+                            change.recipes.picks(*traits)
+                                && !named.contains(&(owner, *recipe, change.field))
+                        })
+                        .map(|(recipe, _)| Declared {
+                            owner,
+                            change: change.of(*recipe),
+                            source: source.clone(),
+                            live: None,
+                        }),
+                );
+                (owner, change.field, source)
+            }
+        };
+        picked.push(Picked {
+            owner,
+            field,
+            source,
+            count: declared.len() - before,
+        });
     }
     (declared, picked)
 }
@@ -162,7 +208,9 @@ fn same_source(a: &Declared, b: &Declared) -> bool {
 mod tests {
     use enshwick::abi::ItemData;
     use enshwick::content::categories::ItemCategoryMask;
-    use enshwick::content::changes::{Change, Items, Value};
+    use enshwick::content::changes::{Change, Items, Recipes, Value};
+    use enshwick::content::recipes::RecipeKind;
+    use enshwick::content::workshops::WorkshopId;
 
     use super::*;
     use crate::data_changes::merge;
@@ -198,6 +246,71 @@ mod tests {
         ]
     }
 
+    fn selectable() -> Selectable {
+        Selectable {
+            items: items(),
+            recipes: vec![
+                (
+                    guid(10),
+                    RecipeTraits {
+                        kind: RecipeKind::Roof,
+                        workshop: 0,
+                    },
+                ),
+                (
+                    guid(11),
+                    RecipeTraits {
+                        kind: RecipeKind::Other,
+                        workshop: KILN.id(),
+                    },
+                ),
+                (
+                    guid(12),
+                    RecipeTraits {
+                        kind: RecipeKind::Roof,
+                        workshop: KILN.id(),
+                    },
+                ),
+            ],
+        }
+    }
+
+    const KILN: WorkshopId = WorkshopId::new(Guid([7; 16]));
+
+    fn recipes(owner: usize, recipes: Recipes, value: Value) -> Pending {
+        Pending::Recipes {
+            owner: ModIndex::new(owner),
+            change: RecipesChange::new(recipes, Field::Cost, value),
+            source: format!("mod {owner}"),
+        }
+    }
+
+    #[test]
+    fn a_recipe_selection_picks_by_kind_or_workshop_and_keeps_named_ones() {
+        let named = Pending::One(Declared {
+            owner: ModIndex::new(0),
+            change: Change::new(guid(12), Field::Cost, Value::Set(9.0)),
+            source: "recipes.toml:4".to_owned(),
+            live: None,
+        });
+        let pending = vec![
+            recipes(0, Recipes::Kind(RecipeKind::Roof), Value::Times(0.5)),
+            named,
+            recipes(1, Recipes::Workshop(KILN), Value::Times(2.0)),
+        ];
+        let (declared, picked) = expand(pending, &selectable());
+        let order: Vec<(usize, Guid)> = declared
+            .iter()
+            .map(|d| (d.owner.get(), d.change.entry))
+            .collect();
+        assert_eq!(
+            order,
+            vec![(0, guid(10)), (0, guid(12)), (1, guid(11)), (1, guid(12))]
+        );
+        assert_eq!(declared[1].change.value, Value::Set(9.0));
+        assert_eq!(picked.iter().map(|p| p.count).collect::<Vec<_>>(), [1, 2]);
+    }
+
     fn one(owner: usize, entry: Guid, value: Value) -> Pending {
         Pending::One(Declared {
             owner: ModIndex::new(owner),
@@ -223,7 +336,7 @@ mod tests {
             each(1, Items::Stackable, Field::MaxStackSize, Value::Times(2.0)),
             one(2, guid(2), Value::Set(10.0)),
         ];
-        let (declared, picked) = expand(pending, &items());
+        let (declared, picked) = expand(pending, &selectable());
         let order: Vec<(usize, Guid)> = declared
             .iter()
             .map(|d| (d.owner.get(), d.change.entry))
@@ -243,7 +356,7 @@ mod tests {
             one(0, guid(1), Value::Set(999.0)),
             one(1, guid(2), Value::Set(10.0)),
         ];
-        let (declared, picked) = expand(pending, &items());
+        let (declared, picked) = expand(pending, &selectable());
         let order: Vec<(usize, Guid, Value)> = declared
             .iter()
             .map(|d| (d.owner.get(), d.change.entry, d.change.value))
@@ -270,7 +383,7 @@ mod tests {
             ),
             each(1, Items::Containers, Field::Slots, Value::Set(48.0)),
         ];
-        let (declared, picked) = expand(pending, &items());
+        let (declared, picked) = expand(pending, &selectable());
         assert_eq!(declared.len(), 2);
         assert_eq!(declared[0].change.entry, guid(1));
         assert_eq!(declared[1].change.entry, guid(4));
@@ -285,7 +398,7 @@ mod tests {
             Field::MaxStackSize,
             Value::Set(999.0),
         )];
-        let (declared, picked) = expand(pending, &items());
+        let (declared, picked) = expand(pending, &selectable());
         assert!(declared.is_empty());
         assert_eq!(picked[0].count, 0);
     }
@@ -321,7 +434,7 @@ mod tests {
     #[test]
     fn overlapping_selections_report_one_line_per_pair_of_sources() {
         let counts = |pending: Vec<Pending>| {
-            let (declared, _) = expand(pending, &items());
+            let (declared, _) = expand(pending, &selectable());
             let (_, conflicts) = merge(&declared, |_, _| false);
             grouped(&conflicts)
                 .iter()
