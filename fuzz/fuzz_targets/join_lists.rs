@@ -27,6 +27,7 @@ fuzz_target!(|data: &[u8]| {
         mods: ours_mods.to_owned(),
         complete,
         nonce: 0,
+        language: None,
     };
     drop(needs(server_mods, Some(&hello)));
     drop(needs(server_mods, None));
