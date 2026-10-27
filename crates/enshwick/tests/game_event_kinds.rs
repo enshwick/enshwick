@@ -8,11 +8,12 @@ mod tests {
 
     use enshwick::abi::Status;
     use enshwick::ecs::Entity;
+    use enshwick::events::Kind;
     use enshwick::game_events::{
         AcceptOfferedInteractionEvent, AttackCategoryMask, BuildingPickUpEvent, BuildingPlaceEvent,
         BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, DamageTypeMask,
         EntityDiedEvent, EquipmentSlot, FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent,
-        Kind, LevelUpEvent, LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
+        LevelUpEvent, LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
     };
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
@@ -29,7 +30,7 @@ mod tests {
     static SUBSCRIBED: AtomicUsize = AtomicUsize::new(0);
 
     fn quietly<E: Kind>(load: &mut Load<'_>) -> Result<(), Off> {
-        load.on_game::<E>(|_| {})?;
+        load.on::<E>(|_| {})?;
         SUBSCRIBED.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
@@ -42,9 +43,9 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.on_game::<HitEvent>(|hit| HITS.lock().unwrap().push(*hit))?;
-            load.on_game::<EntityDiedEvent>(|died| DEATHS.lock().unwrap().push(*died))?;
-            load.on_game::<HandleEquipmentSlotChangedEvent>(|changed| {
+            load.on::<HitEvent>(|hit| HITS.lock().unwrap().push(*hit))?;
+            load.on::<EntityDiedEvent>(|died| DEATHS.lock().unwrap().push(*died))?;
+            load.on::<HandleEquipmentSlotChangedEvent>(|changed| {
                 EQUIPPED_SLOTS.lock().unwrap().push(changed.equipment_slot);
             })?;
             SUBSCRIBED.fetch_add(3, Ordering::Relaxed);

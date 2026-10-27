@@ -24,12 +24,12 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let listed = load.event_types()?;
+            let listed = load.game_event_types()?;
             *LISTED.lock().unwrap() = listed
                 .iter()
                 .map(|t| (t.name(), t.hash(), t.size()))
                 .collect();
-            let died = load.event_type("keen::ecs::EntityDiedEvent")?;
+            let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
             let dead = died.field::<Entity>(load, "deadEntityId")?;
             assert!(died.field::<u32>(load, "nope").is_err());
             assert!(died.field::<u64>(load, "late").is_err());
@@ -48,8 +48,8 @@ mod tests {
     #[test]
     fn handlers_get_their_type_and_every_handler_gets_all() {
         let loader = enshwick::test::FakeHost::new()
-            .event_type("keen::ecs::EntityDiedEvent", DIED, 16)
-            .event_type("keen::ecs::HitEvent", HIT, 248)
+            .game_event_type("keen::ecs::EntityDiedEvent", DIED, 16)
+            .game_event_type("keen::ecs::HitEvent", HIT, 248)
             .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
             .field_offset("keen::ecs::EntityDiedEvent", "late", 12)
             .install();

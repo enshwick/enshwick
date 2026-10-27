@@ -477,14 +477,14 @@ mod tests {
             .type_size("hit_event", 48)
             .type_hash("xp_gained_event", XP)
             .type_size("xp_gained_event", 24)
-            .event_type("keen::ecs::WideEvent", WIDE, 32)
+            .game_event_type("keen::ecs::WideEvent", WIDE, 32)
             .field_offset("keen::ecs::WideEvent", "account", 8)
             .field_offset("keen::ecs::WideEvent", "delta", 16)
             .type_hash("level_up_event", LEVEL_UP)
             .type_size("level_up_event", 16)
             .constant("level_up_event.player_entity_id", 8)
             .constant("level_up_event.level", 12)
-            .event_type("keen::ecs::EntityDiedEvent", DIED, 16)
+            .game_event_type("keen::ecs::EntityDiedEvent", DIED, 16)
             .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
     }
 

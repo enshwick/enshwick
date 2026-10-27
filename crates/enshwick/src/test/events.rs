@@ -2,26 +2,26 @@
 
 use crate::abi::Event;
 use crate::abi::Header;
-use crate::events::Kind;
+use crate::events::LoaderEvent;
 
 use super::table;
 use super::{FakeHost, Installed};
 
 impl FakeHost {
     /// A game event type of the fake build: listed by
-    /// [`Load::event_types`](crate::Load::event_types) and resolved by
-    /// [`Load::event_type`](crate::Load::event_type) under `name`.
+    /// [`Load::game_event_types`](crate::Load::game_event_types) and resolved by
+    /// [`Load::game_event_type`](crate::Load::game_event_type) under `name`.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .event_type("you::Rang", 0x0042, 16)
+    ///     .game_event_type("you::Rang", 0x0042, 16)
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn event_type(self, name: &str, hash: u32, size: u32) -> Self {
+    pub fn game_event_type(self, name: &str, hash: u32, size: u32) -> Self {
         let mut host = self.type_hash(name, hash).type_size(name, size);
         let name: &'static str = Box::leak(name.into());
         host.event_types.push((name, hash, size));
@@ -64,7 +64,7 @@ impl Installed {
     /// assert_eq!(loader.raise::<events::ShutdownStarted>(&()), 0);
     /// ```
     #[must_use = "the count says whether the mod handles the event"]
-    pub fn raise<E: Kind>(&self, data: &E::Data) -> usize {
+    pub fn raise<E: LoaderEvent>(&self, data: &E::Data) -> usize {
         // SAFETY: `data` is the event's data and lives for the call.
         unsafe { self.raise_raw(E::EVENT, core::ptr::from_ref(data).cast()) }
     }

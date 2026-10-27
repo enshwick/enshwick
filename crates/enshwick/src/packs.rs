@@ -77,6 +77,10 @@ pub const MAX_SCRIPTS: usize = 256;
 pub const MAX_SCRIPT_DEPTH: usize = 4;
 /// The largest file a pack may hold: 4 MiB.
 pub const MAX_FILE: u64 = 4 << 20;
+/// The most icons a pack may hold under `icons/`.
+pub const MAX_ICONS: usize = 1024;
+/// The largest icon a pack may hold: 1 MiB.
+pub const MAX_ICON_FILE: u64 = 1 << 20;
 
 impl Load<'_> {
     /// Adds what `pack` describes, on the server and the client alike:

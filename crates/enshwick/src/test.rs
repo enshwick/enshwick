@@ -23,8 +23,10 @@
 //! use enshwick::abi::{Level, Status};
 //! use enshwick::{Load, Mod, Next, Off, events, hook};
 //!
-//! #[derive(serde::Deserialize)]
+//! /// The bonus settings.
+//! #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 //! struct Settings {
+//!     /// What each reward gains.
 //!     bonus: u32,
 //! }
 //!
@@ -43,7 +45,7 @@
 //!     }
 //!
 //!     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-//!         let settings: Settings = load.settings("bonus = 1\n")?;
+//!         let settings: Settings = load.config()?;
 //!         let reward = load.symbol("quest.reward")?;
 //!         // SAFETY: the game's reward function has the type `REWARD` declares.
 //!         unsafe { load.hook(&REWARD, reward) }?;

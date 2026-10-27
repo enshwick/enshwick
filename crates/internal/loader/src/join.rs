@@ -23,6 +23,11 @@
 use std::collections::BTreeMap;
 
 pub mod interaction;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game lists missing mods")
+)]
+pub(crate) mod missing;
 mod plan;
 pub mod provider;
 pub mod refusal;

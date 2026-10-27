@@ -72,7 +72,7 @@ use entries::world::{
     world_key, world_persists, world_quiet,
 };
 pub(crate) use join::{
-    Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
+    apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
     report_join_missing, turn_off_mod,
 };
 pub(crate) use memory::{find, slice};

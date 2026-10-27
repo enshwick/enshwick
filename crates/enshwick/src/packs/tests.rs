@@ -754,6 +754,51 @@ fn scripts_deeper_than_the_bound_are_not_read_and_too_many_are_refused() {
 }
 
 #[test]
+fn a_script_in_the_icons_folder_keeps_the_file_bound() {
+    let folder = Folder::new("icon-script");
+    folder.write("main.luau", "return 1");
+    let script = "-".repeat(usize::try_from(MAX_ICON_FILE).unwrap() + 1);
+    folder.write("icons/large.luau", &script);
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    assert_eq!(
+        files.get("icons/large.luau").map(<[u8]>::len),
+        Some(script.len())
+    );
+}
+
+#[test]
+fn icons_past_the_bound_are_refused() {
+    let folder = Folder::new("icons");
+    for i in 0..MAX_ICONS {
+        folder.write(&format!("icons/i{i}.png"), "png");
+    }
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    assert_eq!(files.names().count(), MAX_ICONS);
+    folder.write("icons/one-more.png", "png");
+    let error = PackFiles::read_dir(&folder.0).unwrap_err();
+    assert!(
+        error.to_string().contains(&MAX_ICONS.to_string()),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_icon_larger_than_an_icon_may_be_is_refused() {
+    let folder = Folder::new("large-icon");
+    let large = "x".repeat(usize::try_from(MAX_ICON_FILE).unwrap() + 1);
+    folder.write("icons/large.png", &large);
+    let error = PackFiles::read_dir(&folder.0).unwrap_err();
+    assert!(
+        matches!(&error, ReadPackError::TooLarge { file, .. } if file == "icons/large.png"),
+        "{error}"
+    );
+    assert!(
+        error.to_string().contains(&MAX_ICON_FILE.to_string()),
+        "{error}"
+    );
+}
+
+#[test]
 fn scripts_of_a_pack_without_main_are_not_read() {
     let folder = Folder::new("no-main");
     folder.write("helper.luau", "return 1");

@@ -15,8 +15,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let node = load.skill_node(Skill::AirborneArchitect)?;
-            load.on_skill(node, |check| {
+            load.on_skill(Skill::AirborneArchitect, |check| {
                 (check.gate == SkillGate::FlyMode).then_some(true)
             })?;
             Ok(Self)

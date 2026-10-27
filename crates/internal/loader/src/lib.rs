@@ -94,6 +94,11 @@ mod inventory;
 mod item_data;
 pub mod item_kinds;
 pub mod join;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game hands mods kept text")
+)]
+mod kept_text;
 #[cfg(windows)]
 mod knowledge;
 #[cfg(windows)]
