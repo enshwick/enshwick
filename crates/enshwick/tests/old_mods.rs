@@ -1,6 +1,6 @@
 //! A mod built against the last published API, `tests/old-mod`, loads in
-//! the current host: its ABI major matches, its manifest reads past the
-//! fields every version has, and it starts against the current host table.
+//! the current host: its ABI major matches, its manifest holds every field
+//! of that major, and it starts against the current host table.
 
 #[cfg(test)]
 mod tests {
@@ -10,8 +10,9 @@ mod tests {
     use enshwick::abi::{ABI_MAJOR, Manifest, Status, read_headed};
     use enshwick::test::{FakeHost, InitFn, ReadyFn};
 
-    /// Where the fields every manifest has end, as the loader reads them.
-    const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
+    /// Where the fields every manifest of this major has end, as the loader
+    /// reads them.
+    const REQUIRED: usize = size_of::<Manifest>();
 
     /// Builds the old mod and returns its library, or `None` where this
     /// process cannot run cargo, as under Wine.

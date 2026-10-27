@@ -575,7 +575,10 @@ impl Loader {
         let manifest = self.mods.get(index).map(|record| record.manifest);
         let rows: &'static [enshwick::abi::BuildRow] = match manifest {
             Some(m) if !m.builds.is_null() => {
-                // SAFETY: the manifest points at `build_count` static rows.
+                // SAFETY: `manifest::read` refused every manifest shorter
+                // than `Manifest`, so `builds` and `build_count` were read
+                // from the mod, and `manifest::own` copied the rows into
+                // leaked loader memory: `build_count` rows, `'static`.
                 unsafe { core::slice::from_raw_parts(m.builds, m.build_count) }
             }
             _ => &[],

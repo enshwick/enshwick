@@ -45,26 +45,23 @@ unsafe fn describe(manifest: &Manifest) -> String {
         format!("id: {}", text(&manifest.id)),
         format!("version: {}", text(&manifest.version)),
     ];
-    let meta_end = core::mem::offset_of!(Manifest, homepage) + size_of::<Str>();
-    if manifest.header.covers(meta_end) {
-        let authors = if manifest.authors.is_null() {
-            &[][..]
-        } else {
-            // SAFETY: `authors` is non-null, checked just before; the caller
-            // guarantees `author_count` aligned names there for the call.
-            unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
-        };
-        let authors: Vec<String> = authors.iter().map(text).collect();
-        for (key, value) in [
-            ("name", text(&manifest.name)),
-            ("description", text(&manifest.description)),
-            ("authors", authors.join(", ")),
-            ("license", text(&manifest.license)),
-            ("homepage", text(&manifest.homepage)),
-        ] {
-            if !value.is_empty() {
-                lines.push(format!("{key}: {value}"));
-            }
+    let authors = if manifest.authors.is_null() {
+        &[][..]
+    } else {
+        // SAFETY: `authors` is non-null, checked just before; the caller
+        // guarantees `author_count` aligned names there for the call.
+        unsafe { core::slice::from_raw_parts(manifest.authors, manifest.author_count) }
+    };
+    let authors: Vec<String> = authors.iter().map(text).collect();
+    for (key, value) in [
+        ("name", text(&manifest.name)),
+        ("description", text(&manifest.description)),
+        ("authors", authors.join(", ")),
+        ("license", text(&manifest.license)),
+        ("homepage", text(&manifest.homepage)),
+    ] {
+        if !value.is_empty() {
+            lines.push(format!("{key}: {value}"));
         }
     }
     lines.extend([
@@ -105,8 +102,8 @@ unsafe fn describe(manifest: &Manifest) -> String {
     lines.join("\n")
 }
 
-/// Copies the manifest `raw` points at, which may come from an older or a
-/// newer minor: the fields the mod's minor lacks stay empty.
+/// Copies the manifest `raw` points at, which may come from a newer minor
+/// whose appended fields are left out.
 ///
 /// # Safety
 ///
@@ -116,8 +113,7 @@ unsafe fn describe(manifest: &Manifest) -> String {
 /// - Its strings and lists stay readable for the rest of the process.
 #[cfg(any(windows, test))]
 unsafe fn copy(raw: *const Manifest) -> Result<Manifest, String> {
-    // Every minor has the fields before `builds`.
-    const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
+    const REQUIRED: usize = size_of::<Manifest>();
     // SAFETY: the caller's contract is the one `read_headed` needs: null or
     // readable for the size its header states, no concurrent writer.
     let manifest = unsafe { enshwick::abi::read_headed(raw, REQUIRED) }
