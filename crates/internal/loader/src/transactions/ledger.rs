@@ -41,6 +41,10 @@ pub(crate) trait Voxels {
     /// The prop `entity` is, and the kinds of state it holds that a
     /// respawn would lose, as bits; [`Status::MISSING`] when it is no prop.
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status>;
+    /// The bytes of the logic trigger settings of the prop `entity`, `None`
+    /// for a prop with none; [`Status::MISSING`] while it is not in the
+    /// world.
+    fn trigger_settings(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status>;
     /// Whether a prop like `prop` stands where it stood.
     fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status>;
     /// Removes the prop `entity` for `actor` (0 for none), as the game tears
@@ -146,10 +150,27 @@ impl Op {
 enum Done {
     /// The earlier voxels of each brick it wrote.
     Bricks(Vec<(Brick, Image)>),
-    /// A prop it placed, as `entity`.
-    Placed { entity: u32, prop: Prop },
+    /// A prop it placed, as `entity`, and its logic trigger settings when
+    /// it first stood in the world.
+    Placed {
+        entity: u32,
+        prop: Prop,
+        settings: Settings,
+    },
     /// A prop it removed, and the kinds of state the prop held then.
     Removed { prop: Prop, holds: u32 },
+}
+
+/// The logic trigger settings of a prop a transaction placed, as they were
+/// the first step the prop stood in the world, before a player could
+/// change them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Settings {
+    /// Not read: the prop did not stand in the world within the wait limit,
+    /// or the read failed; an undo cannot tell a player's settings.
+    Unread,
+    /// Read: the bytes, `None` for a prop that is no trigger.
+    Read(Option<Vec<u8>>),
 }
 
 impl Done {
@@ -716,6 +737,7 @@ impl Task {
                     Ok(entity) => work.done.push(Done::Placed {
                         entity,
                         prop: *prop,
+                        settings: Settings::Unread,
                     }),
                     Err(reason) => return failed(reason),
                 },
@@ -792,7 +814,7 @@ impl Task {
             }
             pass.spent += cost;
         }
-        Outcome::Done(TransactionInfo::APPLIED, Status::OK)
+        work.read_settings(world, pass)
     }
 
     fn take_back(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
@@ -839,8 +861,13 @@ impl Task {
                         Err(reason) => return work.refuse_undo(reason, 0),
                     }
                 }
-                &mut Done::Placed { entity, prop } => {
-                    if let Err((reason, holds)) = still_placed(world, entity, &prop) {
+                Done::Placed {
+                    entity,
+                    prop,
+                    settings,
+                } => {
+                    let entity = *entity;
+                    if let Err((reason, holds)) = still_placed(world, entity, prop, settings) {
                         return work.refuse_undo(reason, holds);
                     }
                     if let Err(reason) = world.remove_prop(entity, work.actor.unwrap_or(0)) {
@@ -877,14 +904,41 @@ fn not_a_prop(reason: Status) -> Status {
 }
 
 /// `Ok` while the prop the transaction placed as `entity` is still there
-/// as it placed it and holds no state; the reason and the kinds of state
-/// otherwise.
-fn still_placed(world: &mut impl Voxels, entity: u32, prop: &Prop) -> Result<(), (Status, u32)> {
+/// as it placed it and holds no state, its trigger settings as they first
+/// were; the reason and the kinds of state otherwise.
+fn still_placed(
+    world: &mut impl Voxels,
+    entity: u32,
+    prop: &Prop,
+    settings: &Settings,
+) -> Result<(), (Status, u32)> {
+    const TRIGGER: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER;
     match world.read_prop(entity) {
-        Ok((now, 0)) if now.same_place(prop) => Ok(()),
-        Ok((now, holds)) if now.same_place(prop) => Err((Status::REFUSED, holds)),
+        Ok((now, holds)) if now.same_place(prop) => {
+            let holds = if holds & TRIGGER != 0 && settings_kept(world, entity, settings) {
+                holds & !TRIGGER
+            } else {
+                holds
+            };
+            if holds == 0 {
+                Ok(())
+            } else {
+                Err((Status::REFUSED, holds))
+            }
+        }
         Ok(_) | Err(Status::MISSING) => Err((Status::REFUSED, 0)),
         Err(reason) => Err((reason, 0)),
+    }
+}
+
+/// Whether the trigger settings of `entity` are still the ones read the
+/// first step it stood in the world.
+fn settings_kept(world: &mut impl Voxels, entity: u32, settings: &Settings) -> bool {
+    match settings {
+        Settings::Read(Some(first)) => {
+            matches!(world.trigger_settings(entity), Ok(Some(now)) if now == *first)
+        }
+        Settings::Read(None) | Settings::Unread => false,
     }
 }
 
@@ -981,11 +1035,44 @@ impl Work {
         for done in &self.done {
             match done {
                 Done::Bricks(_) => {}
-                Done::Placed { entity, prop } => still_placed(world, *entity, prop)?,
+                Done::Placed {
+                    entity,
+                    prop,
+                    settings,
+                } => still_placed(world, *entity, prop, settings)?,
                 Done::Removed { prop, holds } => still_removed(world, prop, *holds)?,
             }
         }
         Ok(())
+    }
+
+    /// Reads the trigger settings of every prop it placed once the prop
+    /// stands in the world, waiting a step at a time up to the wait limit;
+    /// applied once read, or at the limit, with those unread kept unread.
+    fn read_settings(&mut self, world: &mut impl Voxels, pass: &Pass) -> Outcome {
+        let mut waiting = false;
+        for done in &mut self.done {
+            if let Done::Placed {
+                entity,
+                settings: settings @ Settings::Unread,
+                ..
+            } = done
+            {
+                match world.trigger_settings(*entity) {
+                    Ok(bytes) => *settings = Settings::Read(bytes),
+                    Err(Status::MISSING) => waiting = true,
+                    Err(_) => {}
+                }
+            }
+        }
+        if waiting {
+            self.waits += 1;
+            if self.waits < pass.waits {
+                return Outcome::Later;
+            }
+        }
+        self.waits = 0;
+        Outcome::Done(TransactionInfo::APPLIED, Status::OK)
     }
 
     /// Stops an undo for `reason`, with the kinds of state `holds` that

@@ -123,6 +123,10 @@ impl Voxels for Game<'_> {
         props::read(self.loader, entity)
     }
 
+    fn trigger_settings(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+        props::trigger_settings(self.loader, entity)
+    }
+
     fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
         props::stands(self.loader, prop)
     }

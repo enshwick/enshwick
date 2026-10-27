@@ -276,12 +276,15 @@ what it has now:
 | `CustomPlayerString` | text a player wrote on a sign |
 | `Fuel` | more charges than a fresh one starts with: water in a well or a water store |
 | `LogicGraphNodeConnected` | a switch, plate or other logic prop wired to other logic |
-| `LogicGraphTrigger` | a logic trigger, such as a pressure plate, always: the loader cannot tell a player's settings from its item's |
+| `LogicGraphTrigger` | a logic trigger, such as a pressure plate: always when the transaction did not place it, as the loader cannot tell a player's settings from its item's; one it placed only once its settings changed |
 
 A switch's on or off and a container's Quick Stash setting are settings a
-player sets again in a moment, and do not count. Because every logic
-trigger holds state, an undo never takes away a trigger it placed; remove
-it with `remove_prop_discarding_state` in a new transaction. `remove_prop` refuses a prop that holds state: the transaction
+player sets again in a moment, and do not count. A transaction that
+places props waits until they stand in the world, usually a step, before
+it is `Applied`, and notes each trigger's settings then, before a player
+can reach it. Its undo takes a trigger away while those settings are
+unchanged, and stops with `UndoRefused(HoldsState(…))` once a player has
+changed them. `remove_prop` refuses a prop that holds state: the transaction
 fails with `WorldError::HoldsState(state)`, naming the kinds, before it
 writes anything. Empty the chest first, with the inventory API, or use
 `remove_prop_discarding_state(entity)`, which removes it anyway and loses

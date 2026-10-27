@@ -21,6 +21,9 @@ pub(crate) struct FakeProp {
     pub(crate) at: [f64; 3],
     /// The kinds of state it holds, as `TransactionInfo::HOLDS_` bits.
     pub(crate) holds: u32,
+    /// Whether a player changed its logic trigger settings since it was
+    /// placed.
+    pub(crate) settings_changed: bool,
 }
 
 impl FakeHost {
@@ -44,7 +47,27 @@ impl FakeHost {
             item: item.get(),
             at,
             holds: 0,
+            settings_changed: false,
         });
+        self
+    }
+
+    /// Makes the props of item `item` logic triggers, such as a pressure
+    /// plate: removing one is refused, and an undo takes one it placed
+    /// away only while its settings are unchanged
+    /// ([`Installed::change_trigger_settings`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ItemId;
+    /// use enshwick::ecs::Entity;
+    ///
+    /// let _loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// ```
+    #[must_use]
+    pub fn item_triggers(mut self, item: u32) -> Self {
+        self.trigger_items.push(item);
         self
     }
 }
@@ -71,6 +94,26 @@ impl Installed {
         })
     }
 
+    /// Changes the logic trigger settings of the prop `entity`, as a player
+    /// does.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ItemId;
+    /// use enshwick::ecs::Entity;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// loader.change_trigger_settings(Entity(40));
+    /// ```
+    pub fn change_trigger_settings(&self, entity: Entity) {
+        table::with((), |s| {
+            if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity.0) {
+                prop.settings_changed = true;
+            }
+        });
+    }
+
     /// Makes the prop `entity` hold `kinds` of state a player would lose,
     /// none for an empty slice: a chest given items, a plant grown, a bed
     /// given a survivor.
@@ -92,6 +135,18 @@ impl Installed {
                 prop.holds = holds;
             }
         });
+    }
+}
+
+/// The trigger bit of `prop`, as the loader counts it: for any logic
+/// trigger when `unknown` (one the transaction did not place), else for
+/// one whose settings changed since it was placed.
+fn trigger(host: &FakeHost, prop: &FakeProp, unknown: bool) -> u32 {
+    let is_trigger = host.trigger_items.contains(&prop.item);
+    if is_trigger && (unknown || prop.settings_changed) {
+        crate::abi::TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
+    } else {
+        0
     }
 }
 
@@ -117,8 +172,9 @@ pub(crate) fn apply(
                 .iter()
                 .find(|prop| prop.entity == remove.entity)
                 .ok_or((Status::BAD_ARGS, 0))?;
-            if prop.holds != 0 && remove.flags & PropRemove::DISCARD_STATE == 0 {
-                return Err((Status::REFUSED, prop.holds));
+            let holds = prop.holds | trigger(host, prop, true);
+            if holds != 0 && remove.flags & PropRemove::DISCARD_STATE == 0 {
+                return Err((Status::REFUSED, holds));
             }
         }
     }
@@ -137,6 +193,7 @@ pub(crate) fn apply(
                     item: place.item,
                     at: place.position,
                     holds: 0,
+                    settings_changed: false,
                 });
                 transaction.created.push(entity);
             }
@@ -146,7 +203,9 @@ pub(crate) fn apply(
                     .iter()
                     .position(|prop| prop.entity == remove.entity)
                 {
-                    transaction.removed.push(host.props.remove(index));
+                    let mut prop = host.props.remove(index);
+                    prop.holds |= trigger(host, &prop, true);
+                    transaction.removed.push(prop);
                 }
             }
             _ => {}
@@ -168,8 +227,9 @@ pub(crate) fn undo(
             .iter()
             .find(|prop| prop.entity == *entity)
             .ok_or((Status::REFUSED, 0))?;
-        if prop.holds != 0 {
-            return Err((Status::REFUSED, prop.holds));
+        let holds = prop.holds | trigger(host, prop, false);
+        if holds != 0 {
+            return Err((Status::REFUSED, holds));
         }
     }
     if let Some(held) = transaction.removed.iter().find(|prop| prop.holds != 0) {

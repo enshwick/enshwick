@@ -1498,6 +1498,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::LogicGraphTrigger"),
     ),
     (
+        "logic_graph_trigger.trigger_config",
+        offset("keen::ecs::LogicGraphTrigger", "triggerConfig"),
+    ),
+    (
         "logic_trigger_shape",
         Fact::Type("keen::ecs::LogicTriggerShape"),
     ),

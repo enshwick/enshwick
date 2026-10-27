@@ -31,7 +31,17 @@ mod tests {
     const OLD_CHEST: Entity = Entity(40);
 
     fn started() -> (enshwick::test::Installed, World) {
-        let loader = enshwick::test::FakeHost::new()
+        started_with(&[])
+    }
+
+    /// The fake started, its props of `triggers` logic triggers.
+    fn started_with(triggers: &[ItemId]) -> (enshwick::test::Installed, World) {
+        let host = triggers
+            .iter()
+            .fold(enshwick::test::FakeHost::new(), |host, item| {
+                host.item_triggers(item.get())
+            });
+        let loader = host
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
             .item(CHEST.get(), 1, 0)
@@ -235,5 +245,50 @@ mod tests {
             world.transaction_status(id),
             Some(TransactionStatus::Failed(WorldError::Refused))
         );
+    }
+
+    #[test]
+    fn a_placed_trigger_left_as_it_was_is_undone_and_a_changed_one_stays() {
+        let (loader, world) = started_with(&[CHEST]);
+        let untouched = world
+            .transaction()
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        let changed = world
+            .transaction()
+            .place_prop(CHEST, WorldTransform::at([200.0, 40.0, 200.0]))
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        loader.change_trigger_settings(world.transaction_entities(changed)[0]);
+
+        world.undo(untouched).unwrap();
+        world.undo(changed).unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(untouched),
+            Some(TransactionStatus::Undone)
+        );
+        match world.transaction_status(changed) {
+            Some(TransactionStatus::UndoRefused(WorldError::HoldsState(state))) => {
+                assert!(state.holds(HeldState::LogicGraphTrigger));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_trigger_placed_before_is_not_removed() {
+        let (loader, world) = started_with(&[CHEST]);
+        let id = world.transaction().remove_prop(OLD_CHEST).commit().unwrap();
+        loader.run_transactions();
+        match world.transaction_status(id) {
+            Some(TransactionStatus::Failed(WorldError::HoldsState(state))) => {
+                assert!(state.holds(HeldState::LogicGraphTrigger));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(loader.props().len(), 1);
     }
 }

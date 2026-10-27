@@ -481,5 +481,7 @@ ids! {
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_GRAPH_TRIGGER = "logic_graph_trigger";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_GRAPH_TRIGGER_TRIGGER_CONFIG = "logic_graph_trigger.trigger_config";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_TRIGGER_SHAPE = "logic_trigger_shape";
 }

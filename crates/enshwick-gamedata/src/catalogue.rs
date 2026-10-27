@@ -217,6 +217,9 @@ pub const LOGIC_CONNECTED_WRITER: &str = "logic_graph_node_connected.writer_grap
 pub const LOGIC_CONNECTED_READERS: &str = "logic_graph_node_connected.has_reader_graphs";
 /// The id of a logic trigger's settings.
 pub const LOGIC_TRIGGER: &str = "logic_graph_trigger";
+/// The id of the `u32` settings a logic trigger uses, which a player's
+/// change of them replaces.
+pub const LOGIC_TRIGGER_CONFIG: &str = "logic_graph_trigger.trigger_config";
 /// The id of a logic trigger's area.
 pub const LOGIC_TRIGGER_SHAPE: &str = "logic_trigger_shape";
 /// The id of the component that names the item an entity was placed from.

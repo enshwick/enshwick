@@ -31,8 +31,9 @@ pub enum HeldState {
     /// Wiring to other logic: `LogicGraphNodeConnected`.
     LogicGraphNodeConnected,
     /// A logic trigger's settings, such as its area: `LogicGraphTrigger`.
-    /// Every trigger counts, set or not, as the loader cannot tell a
-    /// player's settings from its item's.
+    /// A trigger the transaction did not place always counts, as the loader
+    /// cannot tell a player's settings from its item's; one it placed
+    /// counts once its settings differ from those it first stood with.
     LogicGraphTrigger,
 }
 

@@ -265,6 +265,37 @@ fn state(loader: &Loader, entity: u32) -> StateReads {
     }
 }
 
+/// The settings of the logic trigger `entity`, as bytes to compare: the
+/// settings its `LogicGraphTrigger` uses and its `LogicTriggerShape`
+/// whole, leaving out what the game changes on its own (its query and its
+/// new-settings flag); `None` for a prop that is no trigger,
+/// [`Status::MISSING`] while it is not in the world. On the game thread.
+pub(super) fn trigger_settings(loader: &Loader, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+    crate::world::template(loader, Entity(entity)).map_err(|_| Status::MISSING)?;
+    let trigger = component(loader, entity, catalogue::LOGIC_TRIGGER);
+    let shape = component(loader, entity, catalogue::LOGIC_TRIGGER_SHAPE);
+    if trigger.is_none() && shape.is_none() {
+        return Ok(None);
+    }
+    let mut bytes = Vec::new();
+    if let Some(data) = trigger {
+        let at = offset(loader, catalogue::LOGIC_TRIGGER_CONFIG)?;
+        // SAFETY: `data` is the entity's live `LogicGraphTrigger`, with its
+        // `u32` settings id at the reflected offset.
+        let config: u32 = unsafe { enshwick::raw::read_at(data, at) };
+        bytes.extend_from_slice(&config.to_le_bytes());
+    }
+    if let Some(data) = shape {
+        let size = type_size(loader, catalogue::LOGIC_TRIGGER_SHAPE)?;
+        // SAFETY: `data` is the entity's live `LogicTriggerShape`, which
+        // reflection sizes at `size` bytes; read on the game thread, which
+        // alone writes it, and copied before the call returns.
+        let shape = unsafe { core::slice::from_raw_parts(data, size) };
+        bytes.extend_from_slice(shape);
+    }
+    Ok(Some(bytes))
+}
+
 /// Whether `entity` holds more `Fuel` charges than a fresh prop of its
 /// kind starts with (server 399, client 426).
 fn fuel(loader: &Loader, entity: u32) -> bool {

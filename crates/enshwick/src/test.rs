@@ -233,6 +233,8 @@ pub struct FakeHost {
     extent: Option<[u32; 3]>,
     blueprints: HashMap<u32, [u32; 3]>,
     props: Vec<props::FakeProp>,
+    /// The items whose props are logic triggers.
+    trigger_items: Vec<u32>,
     building_materials: HashMap<u32, u8>,
 }
 
@@ -304,6 +306,7 @@ impl FakeHost {
             extent: None,
             blueprints: HashMap::new(),
             props: Vec::new(),
+            trigger_items: Vec::new(),
             building_materials: HashMap::new(),
         }
     }

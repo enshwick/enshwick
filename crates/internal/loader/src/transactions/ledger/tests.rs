@@ -43,6 +43,15 @@ struct World {
     stateful: FxHashMap<u32, u32>,
     /// The last entity id handed out.
     last_entity: u32,
+    /// The bytes of each logic trigger's settings, by entity.
+    triggers: FxHashMap<u32, Vec<u8>>,
+    /// The items whose props are logic triggers.
+    trigger_items: FxHashSet<u32>,
+    /// Whether a spawned prop lands only at [`World::land`], as the
+    /// game's appear the step after their spawn.
+    spawns_wait: bool,
+    /// Props spawned and not landed yet.
+    landing: FxHashSet<u32>,
 }
 
 impl World {
@@ -52,6 +61,11 @@ impl World {
             pages: 40,
             ..Self::default()
         }
+    }
+
+    /// The props spawned since the last call stand in the world.
+    fn land(&mut self) {
+        self.landing.clear();
     }
 
     fn brick(&self, brick: Brick) -> [u16; BRICK_VOXELS] {
@@ -82,13 +96,37 @@ impl Voxels for World {
     fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
         self.last_entity += 1;
         self.props.insert(self.last_entity, *prop);
+        if self.trigger_items.contains(&prop.item) {
+            self.triggers.insert(self.last_entity, vec![1, 2, 3]);
+        }
+        if self.spawns_wait {
+            self.landing.insert(self.last_entity);
+        }
         self.announced.push(("prop placed", actor));
         Ok(self.last_entity)
     }
 
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
+        if self.landing.contains(&entity) {
+            return Err(Status::MISSING);
+        }
         let prop = self.props.get(&entity).copied().ok_or(Status::MISSING)?;
-        Ok((prop, self.stateful.get(&entity).copied().unwrap_or(0)))
+        let trigger = if self.triggers.contains_key(&entity) {
+            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
+        } else {
+            0
+        };
+        Ok((
+            prop,
+            self.stateful.get(&entity).copied().unwrap_or(0) | trigger,
+        ))
+    }
+
+    fn trigger_settings(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+        if self.landing.contains(&entity) || !self.props.contains_key(&entity) {
+            return Err(Status::MISSING);
+        }
+        Ok(self.triggers.get(&entity).cloned())
     }
 
     fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
@@ -1167,4 +1205,119 @@ fn every_kind_of_state_stops_a_removal_and_an_undo() {
             (TransactionInfo::UNDO_REFUSED, kind)
         );
     }
+}
+
+/// A world whose props of item 77 are logic triggers, landing a step
+/// after their spawn.
+fn trigger_world() -> World {
+    let mut world = World::new();
+    world.trigger_items.insert(77);
+    world.spawns_wait = true;
+    world
+}
+
+#[test]
+fn a_placed_trigger_left_as_it_was_is_taken_away_by_undo() {
+    let mut world = trigger_world();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id).0,
+        TransactionInfo::PENDING,
+        "it waits for the prop to stand"
+    );
+    world.land();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+    assert!(world.props.is_empty());
+}
+
+#[test]
+fn a_placed_trigger_whose_settings_changed_stays() {
+    let mut world = trigger_world();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    world.land();
+    ledger.step(&mut world, 1000);
+    let entity = ledger.entities(ME, id).unwrap()[0];
+    world.triggers.insert(entity, vec![9, 9, 9]);
+
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.holds),
+        (
+            TransactionInfo::UNDO_REFUSED,
+            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
+        )
+    );
+    assert_eq!(world.props.len(), 1);
+}
+
+#[test]
+fn a_placed_trigger_never_read_is_kept_by_undo() {
+    let mut world = trigger_world();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    for _ in 0..LIMITS.waits {
+        ledger.step(&mut world, 1000);
+    }
+    assert_eq!(
+        state(&ledger, id).0,
+        TransactionInfo::APPLIED,
+        "it stops waiting at the limit"
+    );
+    world.land();
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.holds),
+        (
+            TransactionInfo::UNDO_REFUSED,
+            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
+        ),
+        "without its first settings, it cannot tell a player's"
+    );
+}
+
+#[test]
+fn a_trigger_the_transaction_did_not_place_is_not_removed() {
+    let mut world = trigger_world();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    world.triggers.insert(40, vec![1, 2, 3]);
+    let id = ledger
+        .commit(
+            ME,
+            None,
+            vec![Change::RemoveProp {
+                entity: 40,
+                discard_state: false,
+            }],
+        )
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.holds),
+        (
+            TransactionInfo::FAILED,
+            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
+        )
+    );
+    assert_eq!(world.props.len(), 1);
 }
