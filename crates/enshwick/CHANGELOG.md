@@ -123,7 +123,7 @@ Each entry names the pull request that made the change.
 
 - `Map::markers` reads the markers the scene places from the game's data
   through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.95), once
-  per scene; `MapMarker` no longer names an entity (#PR).
+  per scene; `MapMarker` no longer names an entity (#573).
 - An item a mod or pack changes by name keeps that change over its own
   selection of the same field, so a selection can leave out exceptions
   (#558).
@@ -141,7 +141,7 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - `Map::markers` listed no marker on a dedicated server, whose marker
-  entities the entity walk does not find (#PR).
+  entities the entity walk does not find (#573).
 - `World::component` and `World::get` read the static half of a component
   type, such as `FuelSetup`, as the template's set-up values; they gave the
   data of its dynamic half, `DynamicFuelSetup`, before (#568).
