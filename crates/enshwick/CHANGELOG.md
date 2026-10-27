@@ -14,7 +14,7 @@ Each entry names the pull request that made the change.
 ### Changed
 
 - Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
-  rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3.
+  rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
   `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
   `load.on_game`. `events::Kind` is the one trait `on` takes; the loader
@@ -50,7 +50,7 @@ Each entry names the pull request that made the change.
 - Breaking: the retired `HostApi` entries `retired_command`,
   `altar_zones_control`, `set_altar_zones` and `altar_limit`, with
   `AltarZoneSize` and `AltarLimitFn`; every later entry moves up. The ABI
-  docs no longer say in which minor of ABI 2 a field came.
+  docs no longer say in which minor of ABI 2 a field came (#599).
 - Breaking: `Load::settings`, which read the settings file into any
   `Deserialize` type past the stages, `sync` and `secret` checks: derive
   `Config` and call `Load::config` (#597).
