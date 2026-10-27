@@ -47,21 +47,53 @@ fn expected(message: &str) -> String {
         "invalid length ",
         "unknown variant `",
     ];
-    const NAMED_A_KEY: [&str; 3] = ["missing field `", "unknown field `", "duplicate field `"];
     if FOUND_A_VALUE.iter().any(|start| message.starts_with(start))
         && let Some((_, wanted)) = message.rsplit_once(", expected ")
     {
         return format!("expected {}", wanted.trim_end());
     }
-    if NAMED_A_KEY.iter().any(|start| message.starts_with(start)) {
+    if names_a_field(message.trim_end()) {
         return message.trim_end().to_owned();
     }
     "the value does not fit its type".to_owned()
 }
 
+/// Whether `message` is one of serde's messages that name only fields:
+/// `missing field`, `duplicate field` and `unknown field` as serde writes them.
+fn names_a_field(message: &str) -> bool {
+    after_field(message, "missing field ") == Some("")
+        || after_field(message, "duplicate field ") == Some("")
+        || after_field(message, "unknown field ").is_some_and(|after| {
+            after == ", there are no fields"
+                || after.strip_prefix(", expected ").is_some_and(only_names)
+        })
+}
+
+/// The text after the quoted field that follows `start` in `message`.
+fn after_field<'a>(message: &'a str, start: &str) -> Option<&'a str> {
+    let (name, after) = message
+        .strip_prefix(start)?
+        .strip_prefix('`')?
+        .split_once('`')?;
+    (!name.contains('\n')).then_some(after)
+}
+
+/// Whether `list` is serde's list of quoted names: `` `a` ``, `` `a` or `b` ``
+/// or `` one of `a`, `b` ``.
+fn only_names(list: &str) -> bool {
+    let list = list.strip_prefix("one of ").unwrap_or(list);
+    list.split(", ")
+        .flat_map(|part| part.split(" or "))
+        .all(|name| {
+            name.strip_prefix('`')
+                .and_then(|name| name.strip_suffix('`'))
+                .is_some_and(|name| !name.contains('`'))
+        })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::reason;
+    use super::{expected, reason};
 
     #[derive(Debug, serde::Deserialize)]
     #[expect(dead_code, reason = "only read to fail")]
@@ -109,5 +141,25 @@ mod tests {
             told.ends_with("expected u32") && !told.contains("hunter2"),
             "{told}"
         );
+    }
+
+    #[test]
+    fn only_serdes_own_shapes_keep_their_message() {
+        for kept in [
+            "missing field `pin`",
+            "duplicate field `pin`",
+            "unknown field `lid`, expected `pin` or `mode`",
+            "unknown field `lid`, there are no fields",
+        ] {
+            assert_eq!(expected(kept), kept);
+        }
+        for custom in [
+            "missing field `pin` near hunter2",
+            "duplicate field `pin`: hunter2",
+            "unknown field `lid` in hunter2",
+            "unknown field `lid`, expected digits, got hunter2",
+        ] {
+            assert_eq!(expected(custom), "the value does not fit its type");
+        }
     }
 }

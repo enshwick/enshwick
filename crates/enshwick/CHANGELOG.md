@@ -13,10 +13,11 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
-- Settings errors name the line, the key and the expected type, never the
-  value: the settings check's reason, the settings read at start, table
-  settings, join values, and `ConfigError` and `MigrationError` made from a
-  TOML error; a value held to its range is no longer logged (#594).
+- Settings errors name the key and the expected type, and the line where
+  the text is at hand, never the value: the settings check's reason, the
+  settings read at start, table settings, join values, migrations, and
+  `ConfigError` and `MigrationError` made from a TOML error. The warning for
+  a value held to its range no longer shows the old value (#594).
 - `Schema::parse` refuses a field or group key with an empty part, such as
   `auth..token`, and `Load::table_config` a field with an empty key; the
   loader refuses such a schema, and the mod's warning names the key (#593).
