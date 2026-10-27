@@ -3,8 +3,11 @@
 use super::{Constant, Symbol};
 
 pub(crate) const ACCOUNT_ACTION: Symbol = Symbol::new("server.account_action");
+pub(crate) const BAN_ADD: Symbol = Symbol::new("server.ban_add");
+pub(crate) const BAN_LIST_CHANGED: Constant = Constant::new("server.ban_list_changed");
 pub(crate) const BUILD_ZONE_SYSTEM: Constant = Constant::new("server.build_zone_system");
 pub(crate) const CHAT_STORE: Constant = Constant::new("server.chat_store");
+pub(crate) const CONFIG: Constant = Constant::new("server.config");
 pub(crate) const CUSTOM_STRINGS: Constant = Constant::new("server.custom_strings");
 pub(crate) const ENTRY_STATE: Constant = Constant::new("server.entry_state");
 pub(crate) const GAME_SETTINGS: Constant = Constant::new("server.game_settings");

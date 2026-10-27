@@ -256,6 +256,24 @@ has:
 the console finds a player a line names. Since names repeat, code that wants
 one player refuses when it gets several.
 
+### Kicking and banning
+
+`account_action(action, key)` asks the game for one of its account
+actions, as its administrators do; the mod decides who may ask:
+
+- `AccountAction::Kick` removes a player online;
+- `AccountAction::Ban` puts the account on the ban list and removes its
+  player when online. An account that is not online goes straight onto the
+  list; until the server restarts, the loader removes and bans it when it
+  joins, since the game reads its list for joins only at start;
+- `AccountAction::UnBan` takes the account off the list.
+
+A dedicated server keeps the list in `bannedAccounts` of
+`enshrouded_server.json`; a game a client hosts keeps it until the game
+ends. The game never removes an administrator online, so a kick or a ban of
+one, and a kick of an account not online, return `WorldError::Refused`.
+Call it on the server's game thread between steps.
+
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit
