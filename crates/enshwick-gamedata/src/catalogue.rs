@@ -227,6 +227,9 @@ pub const LOGIC_TRIGGER_SHAPE: &str = "logic_trigger_shape";
 pub const ANIMAL_SAVED: &str = "animal_saved";
 /// The id of the component that marks a flame altar, which owns a base.
 pub const BASE_ID: &str = "base_id_component";
+/// The id of the byte of an item that takes an altar slot: the flame
+/// altar's item, which founds a base.
+pub const ITEM_REQUIRES_ALTAR_SLOT: &str = "item_info.requires_altar_slot";
 /// The id of a survivor's saved state, which marks a creature placed from
 /// an item.
 pub const ACTIVE_NPC_STATE_SAVED: &str = "active_npc_state_saved";

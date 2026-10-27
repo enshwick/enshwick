@@ -487,6 +487,8 @@ ids! {
     LOGIC_TRIGGER_SHAPE = "logic_trigger_shape";
     ANIMAL_SAVED = "animal_saved";
     BASE_ID_COMPONENT = "base_id_component";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_REQUIRES_ALTAR_SLOT = "item_info.requires_altar_slot";
     ACTIVE_NPC_STATE_SAVED = "active_npc_state_saved";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_FLAG_IS_NPC = "item_flag.is_npc";

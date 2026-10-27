@@ -38,9 +38,10 @@ type ItemProp = ([u8; 16], Option<LocalBox>, bool);
 /// What an item places as a prop: its template, its placement box and
 /// whether it is a logic prop; [`Status::BAD_ARGS`] for an item the game
 /// does not have or that places nothing, [`Status::NOT_A_PROP`] for one
-/// that places an animal or a survivor (its `IsAnimal` or `IsNpc` flag),
+/// that places an animal or a survivor (its `IsAnimal` or `IsNpc` flag) or
+/// a flame altar, which founds a base (its `requiresAltarSlot`),
 /// [`Status::MISSING`] while the loader knows no item registry or this
-/// build lacks those flags.
+/// build lacks those reads.
 fn item_prop(loader: &Loader, item: u32) -> Result<ItemProp, Status> {
     let info = crate::inventory::item_info_at(loader, item)?.ok_or(Status::BAD_ARGS)?;
     let flags_at = offset(loader, catalogue::ITEM_FLAGS)?;
@@ -54,7 +55,11 @@ fn item_prop(loader: &Loader, item: u32) -> Result<ItemProp, Status> {
             .ok_or(Status::MISSING)
     };
     let creature = bit(catalogue::ITEM_FLAG_IS_NPC)? | bit(catalogue::ITEM_FLAG_IS_ANIMAL)?;
-    if flags & creature != 0 {
+    let altar_at = offset(loader, catalogue::ITEM_REQUIRES_ALTAR_SLOT)?;
+    // SAFETY: `info` is the item's live `ItemInfo`, with its equipment's
+    // `requiresAltarSlot` bool at the reflected path.
+    let altar: u8 = unsafe { enshwick::raw::read_at(info, altar_at) };
+    if flags & creature != 0 || altar != 0 {
         return Err(Status::NOT_A_PROP);
     }
     let template_at = offset(loader, catalogue::ITEM_PLACED_ENTITY)?;
@@ -97,7 +102,7 @@ fn fixed(metres: f64) -> i64 {
 /// The prop `request` asks to place, checked: its item's template, box
 /// and logic flag. [`Status::BAD_ARGS`] for a position or orientation out
 /// of range or an item that places nothing, [`Status::NOT_A_PROP`] for one
-/// that places a creature. Any thread: it reads only the
+/// that places a creature or a flame altar. Any thread: it reads only the
 /// item registry, which the world sets at its start.
 pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Status> {
     let position_ok = request.position.iter().all(|axis| {

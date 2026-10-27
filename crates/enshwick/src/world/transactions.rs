@@ -358,7 +358,8 @@ impl Transaction {
     /// and the transaction is applied once it stands there;
     /// [`World::transaction_entities`] lists it. [`Transaction::commit`]
     /// refuses an item that places nothing, and one that places a creature
-    /// with [`WorldError::NotAProp`].
+    /// or a flame altar, which founds a base, with
+    /// [`WorldError::NotAProp`].
     ///
     /// # Examples
     ///

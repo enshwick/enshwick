@@ -1511,6 +1511,13 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::BaseIdComponent"),
     ),
     (
+        "item_info.requires_altar_slot",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "requiresAltarSlot"),
+        ]),
+    ),
+    (
         "active_npc_state_saved",
         Fact::Type("keen::ecs::ActiveNpcStateSaved"),
     ),

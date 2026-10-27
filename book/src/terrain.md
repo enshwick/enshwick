@@ -317,7 +317,8 @@ where another like it now stands.
 
 Creatures placed from items, animals, pets and survivors, and flame
 altars, which own a base, are no props. `props_in` and `capture` leave
-them out, `place_prop` refuses an item that places a creature, and
+them out, `place_prop` refuses an item that places a creature or an
+altar, since placing an altar founds a base, and
 `remove_prop`, in either mode, fails with `WorldError::NotAProp`. The
 entity calls reach them.
 

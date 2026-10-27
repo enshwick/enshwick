@@ -456,4 +456,20 @@ mod tests {
             "turned, its box reaches the zone"
         );
     }
+
+    #[test]
+    fn placing_a_flame_altar_founds_a_base_and_is_refused() {
+        const ALTAR: ItemId = ItemId::new(34);
+        let (loader, world) = started_from(
+            enshwick::test::FakeHost::new()
+                .item(ALTAR.get(), 1, 0)
+                .item_places(ALTAR.get(), [0xa1; 16])
+                .item_not_a_prop(ALTAR.get()),
+        );
+        assert_eq!(
+            world.transaction().place_prop(ALTAR, here()).commit(),
+            Err(WorldError::NotAProp)
+        );
+        assert!(loader.transactions().is_empty(), "nothing is queued");
+    }
 }
