@@ -18,7 +18,7 @@ struct Bonus {
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     // `<this mod>:bonus`; another mod opens it as "<this mod>:bonus".
     let bonus = load.item_data::<Bonus>("bonus")?;
-    let ring = ItemInstance { pide: Entity(900), item: 0x5e01 };
+    let ring = ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) };
     if bonus.get(ring).is_none() {
         let _set = bonus.set(ring, &Bonus { fire: 12 });
     }

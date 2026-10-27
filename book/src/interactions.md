@@ -10,7 +10,7 @@ stands, when the platform could read them. Returning `false` refuses it.
 use enshwick::interactions::Kind;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    const LOCKED_CHEST: u32 = 0x5e01;
+    const LOCKED_CHEST: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
     load.on_interaction(|i| !(i.item == Some(LOCKED_CHEST) && matches!(i.kind, Kind::Open | Kind::Move | Kind::Sort)))
 }
 ```

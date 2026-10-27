@@ -137,8 +137,8 @@ every operation succeeds, or nothing changes.
 use enshwick::Entity;
 use enshwick::inventory::{Batch, Inventories, Op};
 
-const COIN: u32 = 0x0c01;
-const SWORD: u32 = 0x5e01;
+const COIN: enshwick::ItemId = enshwick::ItemId::new(0x0c01);
+const SWORD: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
 
 fn trade(inventories: &Inventories, player: Entity) {
     // 5 coins out, a sword in, or neither.

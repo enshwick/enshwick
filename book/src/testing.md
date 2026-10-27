@@ -256,7 +256,7 @@ callback runs inside the call, as on the game thread:
 ```rust
 use enshwick::abi::{InventoryOpResult, InventoryResult};
 
-let loader = enshwick::test::FakeHost::new().item(0x5e01, 20, 0).install();
+let loader = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 20, 0).install();
 assert!(loader.inventory_requests().is_empty());
 let done = [InventoryOpResult { error: 0, remaining: 0 }];
 assert!(!loader.finish_inventory(InventoryResult::COMMITTED, &done));

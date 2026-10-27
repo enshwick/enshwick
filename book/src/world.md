@@ -14,7 +14,7 @@ use enshwick::events::PlayerJoined;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        if let Some(player) = world.player(Entity(joined.entity)) {
+        if let Some(player) = world.player(joined.entity) {
             enshwick::info!("{} joined, admin: {}", player.name, player.is_admin());
         }
     })
@@ -59,7 +59,7 @@ use enshwick::events::BuildingPlaced;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
-        let entity = Entity(placed.entity);
+        let entity = placed.entity;
         if let (Some(at), Some(item)) = (world.position(entity), world.used_item(entity)) {
             enshwick::debug!("item {item} placed at {at:?}");
         }
@@ -81,7 +81,7 @@ use enshwick::events::PlayerJoined;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        let entity = enshwick::Entity(joined.entity);
+        let entity = joined.entity;
         if let (Some(vitals), Some(progress)) = (world.vitals(entity), world.progress(entity)) {
             enshwick::info!("level {} with {} health", progress.level, vitals.health.current);
         }
@@ -296,7 +296,7 @@ use enshwick::world::BuildRefusal;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<enshwick::events::PlayerJoined>(move |joined| {
-        let Some(player) = world.player(Entity(joined.entity)) else {
+        let Some(player) = world.player(joined.entity) else {
             return;
         };
         let Some([x, y, z]) = world.position(player.entity) else {
@@ -330,9 +330,9 @@ use enshwick::events::BuildingPlaced;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
-        if let Some(player) = world.player(Entity(placed.player)) {
+        if let Some(player) = world.player(placed.player) {
             let label = format!("Built by {}", player.name);
-            let _labelled = world.set_label(Entity(placed.entity), &label);
+            let _labelled = world.set_label(placed.entity, &label);
         }
     })
 }

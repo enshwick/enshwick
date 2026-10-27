@@ -15,7 +15,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let knowledge = load.knowledge();
     let world = load.world()?;
     load.on::<QuestCompleted>(move |done| {
-        let entity = enshwick::Entity(done.entity);
+        let entity = done.entity;
         let total = knowledge.quests().into_iter().filter(|&q| knowledge.completed(entity, q)).count();
         if let Some(player) = world.player(entity) {
             world.broadcast(&format!("{} completed a quest ({total} so far)", player.name));
@@ -87,7 +87,7 @@ it is. Only a player's ids qualify.
 ```rust
 use enshwick::knowledge::Grant;
 
-fn reward(knowledge: &enshwick::knowledge::Knowledge, account: u64, quest_reward: u32) {
+fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, quest_reward: u32) {
     if let Err(why) = knowledge.grant_account(account, quest_reward, Grant::Set) {
         enshwick::warn!("no reward: {why}");
     }
