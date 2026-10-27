@@ -22,8 +22,10 @@
 //! # Examples
 //!
 //! ```rust,standalone_crate
-//! #[derive(serde::Deserialize)]
+//! /// Hello's settings.
+//! #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
 //! struct Settings {
+//!     /// Whether the hook goes in.
 //!     enabled: bool,
 //! }
 //!
@@ -46,7 +48,7 @@
 //!     }
 //!
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-//!         let settings: Settings = load.settings("enabled = true\n")?;
+//!         let settings: Settings = load.config()?;
 //!         if settings.enabled {
 //!             let target = load.system("upgrade_building_range")?;
 //!             // SAFETY: the system takes the building context, as `UPGRADE` does.
@@ -344,7 +346,6 @@ pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use item_id::ItemId;
 pub use load::{Load, Mod, Off};
-pub use mods::mods;
 pub use shape::Shape;
 
 #[doc(hidden)]
@@ -520,9 +521,9 @@ pub mod __private {
         }
     }
 
-    /// A call site that logs its first time only.
+    /// A call site that logs its first time in each mod life: holds the
+    /// life it logged in.
     #[derive(Debug)]
-    /// A line logged once per mod life: holds the life it was logged in.
     pub struct Once(AtomicU64);
 
     impl Once {
