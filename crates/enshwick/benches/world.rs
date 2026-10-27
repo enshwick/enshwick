@@ -33,7 +33,7 @@ const PROPS: u32 = 4096;
 
 /// Takes the world by value, as a mod's helper function would.
 #[inline(never)]
-fn item_of(world: World, entity: Entity) -> Option<u32> {
+fn item_of(world: World, entity: Entity) -> Option<enshwick::ItemId> {
     world.used_item(entity)
 }
 

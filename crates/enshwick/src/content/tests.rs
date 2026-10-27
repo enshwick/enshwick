@@ -30,7 +30,7 @@ fn a_builder_reads_a_null_base_as_empty() {
 fn a_guid_parses_to_memory_order_and_its_game_id() {
     let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     assert_eq!(&chest.0[..4], &[0x3a, 0x05, 0x43, 0x69]);
-    assert_eq!(chest.id(), 1_302_084_846);
+    assert_eq!(chest.fnv1a(), 1_302_084_846);
 }
 
 #[test]

@@ -20,7 +20,7 @@ use crate::abi::{
     TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
     WeatherFront, ZoneCheckFn,
 };
-use crate::abi::{Entity, ItemId, PlayerKey, RecipeId};
+use crate::abi::{Entity, ItemId, KnowledgeId, PlayerKey, RecipeId};
 
 /// The table of services the loader offers a mod.
 ///
@@ -313,7 +313,7 @@ pub struct HostApi {
     /// `enshwick_mod_init` only.
     pub skill_override: extern "system" fn(
         me: ModHandle,
-        node: u32,
+        node: crate::abi::SkillNode,
         callback: SkillCheckFn,
         user: *mut c_void,
     ) -> Status,
@@ -538,7 +538,7 @@ pub struct HostApi {
     pub knowledge: extern "system" fn(
         me: ModHandle,
         entity: Entity,
-        id: u32,
+        id: KnowledgeId,
         out: *mut KnowledgeInfo,
     ) -> Status,
     /// Grants knowledge `id`, of `kind`, to the player whose character is
@@ -550,12 +550,21 @@ pub struct HostApi {
     /// a kind that is not the id's or a bit the game does not expect,
     /// [`Status::REFUSED`] for a player not in the
     /// game or a full queue. On the server's game thread only.
-    pub grant_knowledge:
-        extern "system" fn(me: ModHandle, entity: Entity, id: u32, kind: u32, value: u32) -> Status,
+    pub grant_knowledge: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: KnowledgeId,
+        kind: u32,
+        value: u32,
+    ) -> Status,
     /// Up to `capacity` quest ids of the running game, and how many there
     /// are. On the server's game thread only.
-    pub quests:
-        extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
+    pub quests: extern "system" fn(
+        me: ModHandle,
+        out: *mut KnowledgeId,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
     /// Writes how clear, rainy, snowy and stormy it is at `position`, in
     /// 32.32 fixed-point metres, as weights that add up to 1, as the game's
     /// systems weigh it. On the server's game thread only.
@@ -890,8 +899,13 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for an unknown id, a kind that is not the id's or
     /// a bit past 31, [`Status::REFUSED`] for a player not in the game or
     /// whose save has not loaded yet. On the server's game thread only.
-    pub revoke_knowledge:
-        extern "system" fn(me: ModHandle, entity: Entity, id: u32, kind: u32, value: u32) -> Status,
+    pub revoke_knowledge: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: KnowledgeId,
+        kind: u32,
+        value: u32,
+    ) -> Status,
     /// Grants knowledge `id` of a player's, as [`HostApi::grant_knowledge`]
     /// does, or takes it back as [`HostApi::revoke_knowledge`] does when
     /// `revoke` is 1, for the account whose [`PlayerInfo::key`] is `key`:
@@ -903,7 +917,7 @@ pub struct HostApi {
     pub account_knowledge: extern "system" fn(
         me: ModHandle,
         key: PlayerKey,
-        id: u32,
+        id: KnowledgeId,
         kind: u32,
         value: u32,
         revoke: u32,
@@ -1403,7 +1417,7 @@ pub struct HostApi {
     /// off; a panic in it turns the mod off. It may call
     /// [`HostApi::set_tick_every`] on itself. [`Status::REFUSED`] once the
     /// loader holds `u32::MAX` handlers, and when the loader panics.
-    /// Since minor 2.
+    /// Since minor 3.
     pub subscribe_tick: extern "system" fn(
         me: ModHandle,
         every_nanos: u64,
@@ -1418,7 +1432,7 @@ pub struct HostApi {
     /// [`Status::MISSING`] for a handle the loader never gave out or one of
     /// the mod's copy before a reload. Any thread, the handler itself
     /// included. A panic in the loader returns [`Status::REFUSED`]. Since
-    /// minor 2.
+    /// minor 3.
     pub set_tick_every:
         extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
 }

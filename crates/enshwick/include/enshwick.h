@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 2
+#define ENSHWICK_ABI_MINOR 3
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -1644,13 +1644,18 @@ typedef struct EnshwickInteraction {
 // refusal, so nothing moves and nothing is lost.
 typedef uint8_t (*EnshwickInteractionFn)(const struct EnshwickInteraction *call, void *user);
 
+// A node of the game's skill tree by its id, as
+// `Skill::node` names the nodes a character
+// unlocked and a skill check names the node it asks about.
+typedef uint32_t EnshwickSkillNode;
+
 // The game asking whether a character unlocked a skill node, as
 // `HostApi::skill_override` hands it on.
 typedef struct EnshwickSkillCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The skill node.
-  uint32_t node;
+  EnshwickSkillNode node;
   // The gate that asks, one of the constants on this type.
   uint32_t gate;
   // 1 when the character unlocked it.
@@ -1764,12 +1769,18 @@ typedef void (*EnshwickNetMessageFn)(const struct EnshwickNetMessage *message, v
 // given at registration. It runs on the game's worker threads.
 typedef void (*EnshwickDamageFilterFn)(struct EnshwickDamageCheck *check, void *user);
 
+// A knowledge value of the game by its id: a recipe's, a quest's, or any
+// other bool, counter or flags the world or a player keeps.
+//
+// A recipe's knowledge has the recipe's id, so a `RecipeId` converts.
+typedef uint32_t EnshwickKnowledgeId;
+
 // A knowledge value, written by `HostApi::knowledge`.
 typedef struct EnshwickKnowledgeInfo {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The knowledge id.
-  uint32_t id;
+  EnshwickKnowledgeId id;
   // `KnowledgeInfo::BOOL`, `KnowledgeInfo::COUNTER` or
   // `KnowledgeInfo::FLAGS`.
   uint8_t kind;
@@ -2328,7 +2339,7 @@ typedef struct EnshwickKnowledgeInput {
   // The asking player's character.
   EnshwickEntity player;
   // The knowledge id.
-  uint32_t id;
+  EnshwickKnowledgeId id;
   // The kind the client names: `KnowledgeInfo::BOOL`,
   // `KnowledgeInfo::COUNTER` or `KnowledgeInfo::FLAGS`.
   uint8_t kind;
@@ -2716,7 +2727,7 @@ typedef struct EnshwickMapMarkerInfo {
 
 // A periodic tick handler a mod subscribed with
 // `HostApi::subscribe_tick`, for
-// `HostApi::set_tick_every`. Since minor 2.
+// `HostApi::set_tick_every`. Since minor 3.
 //
 // Valid for the mod that subscribed it until that mod reloads, after which
 // the loader answers `Status::MISSING`.
@@ -2997,7 +3008,7 @@ typedef struct EnshwickHostApi {
   // Runs on both sides, on the asking thread. Allowed during
   // `enshwick_mod_init` only.
   EnshwickStatus (*skill_override)(EnshwickModHandle me,
-                                   uint32_t node,
+                                   EnshwickSkillNode node,
                                    EnshwickSkillCheckFn callback,
                                    void *user);
   // Calls `callback` with `user` when a comfort provider registers its
@@ -3210,7 +3221,7 @@ typedef struct EnshwickHostApi {
   // game thread only.
   EnshwickStatus (*knowledge)(EnshwickModHandle me,
                               EnshwickEntity entity,
-                              uint32_t id,
+                              EnshwickKnowledgeId id,
                               struct EnshwickKnowledgeInfo *out);
   // Grants knowledge `id`, of `kind`, to the player whose character is
   // `entity`, or to the world for 0, as the game grants it: the next
@@ -3223,12 +3234,15 @@ typedef struct EnshwickHostApi {
   // game or a full queue. On the server's game thread only.
   EnshwickStatus (*grant_knowledge)(EnshwickModHandle me,
                                     EnshwickEntity entity,
-                                    uint32_t id,
+                                    EnshwickKnowledgeId id,
                                     uint32_t kind,
                                     uint32_t value);
   // Up to `capacity` quest ids of the running game, and how many there
   // are. On the server's game thread only.
-  EnshwickStatus (*quests)(EnshwickModHandle me, uint32_t *out, uint32_t capacity, uint32_t *count);
+  EnshwickStatus (*quests)(EnshwickModHandle me,
+                           EnshwickKnowledgeId *out,
+                           uint32_t capacity,
+                           uint32_t *count);
   // Writes how clear, rainy, snowy and stormy it is at `position`, in
   // 32.32 fixed-point metres, as weights that add up to 1, as the game's
   // systems weigh it. On the server's game thread only.
@@ -3551,7 +3565,7 @@ typedef struct EnshwickHostApi {
   // whose save has not loaded yet. On the server's game thread only.
   EnshwickStatus (*revoke_knowledge)(EnshwickModHandle me,
                                      EnshwickEntity entity,
-                                     uint32_t id,
+                                     EnshwickKnowledgeId id,
                                      uint32_t kind,
                                      uint32_t value);
   // Grants knowledge `id` of a player's, as `HostApi::grant_knowledge`
@@ -3564,7 +3578,7 @@ typedef struct EnshwickHostApi {
   // runs. On the server's game thread only.
   EnshwickStatus (*account_knowledge)(EnshwickModHandle me,
                                       EnshwickPlayerKey key,
-                                      uint32_t id,
+                                      EnshwickKnowledgeId id,
                                       uint32_t kind,
                                       uint32_t value,
                                       uint32_t revoke);
@@ -4033,7 +4047,7 @@ typedef struct EnshwickHostApi {
   // off; a panic in it turns the mod off. It may call
   // `HostApi::set_tick_every` on itself. `Status::REFUSED` once the
   // loader holds `u32::MAX` handlers, and when the loader panics.
-  // Since minor 2.
+  // Since minor 3.
   EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
                                    uint64_t every_nanos,
                                    EnshwickEventFn callback,
@@ -4046,7 +4060,7 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` for a handle the loader never gave out or one of
   // the mod's copy before a reload. Any thread, the handler itself
   // included. A panic in the loader returns `Status::REFUSED`. Since
-  // minor 2.
+  // minor 3.
   EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
                                    EnshwickTickHandle handle,
                                    uint64_t every_nanos);
@@ -4059,7 +4073,7 @@ typedef struct EnshwickKnowledgeData {
   // The player's character, or 0 for the world's knowledge.
   EnshwickEntity entity;
   // The knowledge id.
-  uint32_t id;
+  EnshwickKnowledgeId id;
   // The value now.
   uint32_t value;
 } EnshwickKnowledgeData;
@@ -4194,7 +4208,7 @@ typedef struct EnshwickQuestData {
   // The player's character.
   EnshwickEntity entity;
   // The quest's id, a player knowledge id.
-  uint32_t quest;
+  EnshwickKnowledgeId quest;
 } EnshwickQuestData;
 
 // The data of the `Ticked` event.
@@ -4208,20 +4222,20 @@ typedef struct EnshwickTickData {
   // Steps since the loader started counting, from 1.
   uint64_t step;
   // Server steps since this handler's last call: 1 for an every-step
-  // handler and for a handler's first call. Since minor 2.
+  // handler and for a handler's first call. Since minor 3.
   uint64_t elapsed_steps;
   // Wall time since this handler's last call in nanoseconds; for its
   // first call, and for an every-step handler, the time since the step
-  // before. 0 on the loader's first step. Since minor 2.
+  // before. 0 on the loader's first step. Since minor 3.
   uint64_t elapsed_nanos;
   // The average time between server steps in nanoseconds, over about the
-  // last 16 steps; 0 until a step has been measured. Since minor 2.
+  // last 16 steps; 0 until a step has been measured. Since minor 3.
   uint64_t step_nanos;
   // What one call of this mod's event handlers cost on average since
   // this handler's last call, in nanoseconds; 0 for an every-step
   // handler, unless the loader's diagnostics time callbacks, and for
   // about a second after they start, while the loader measures its
-  // clock. Since minor 2.
+  // clock. Since minor 3.
   uint64_t cost_nanos;
 } EnshwickTickData;
 

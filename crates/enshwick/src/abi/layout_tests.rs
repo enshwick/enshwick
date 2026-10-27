@@ -71,6 +71,8 @@ shapes! {
         ItemId { 0 },
         PlayerKey { 0 },
         RecipeId { 0 },
+        SkillNode { 0 },
+        KnowledgeId { 0 },
         PlayerDeathData { header, entity, cause, key, position, killer, deadly_shroud, drowned, reserved, killer_entity, reserved_tail },
         KnowledgeData { header, entity, id, value },
         QuestData { header, entity, quest },

@@ -168,7 +168,7 @@ sees it in their language as the game spells it.
 [`i18n::game_text(id)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
 is the text of a tag in the language the player reads the game in, and
 `game_text_in(id, language)` in any language; `id` is the tag's game id,
-`Guid::id` of the tag a resource names. A text missing in a language comes
+`Guid::fnv1a` of the tag a resource names. A text missing in a language comes
 in English, as the game shows it.
 
 ```rust

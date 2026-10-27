@@ -297,13 +297,13 @@ export type Slot = {
 export type TickData = {
 	--- Steps since the loader started counting, from 1.
 	step: string,
-	--- Server steps since this handler's last call: 1 for an every-step handler and for a handler's first call. Since minor 2.
+	--- Server steps since this handler's last call: 1 for an every-step handler and for a handler's first call. Since minor 3.
 	elapsed_steps: string,
-	--- Wall time since this handler's last call in nanoseconds; for its first call, and for an every-step handler, the time since the step before. 0 on the loader's first step. Since minor 2.
+	--- Wall time since this handler's last call in nanoseconds; for its first call, and for an every-step handler, the time since the step before. 0 on the loader's first step. Since minor 3.
 	elapsed_nanos: string,
-	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured. Since minor 2.
+	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured. Since minor 3.
 	step_nanos: string,
-	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock. Since minor 2.
+	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock. Since minor 3.
 	cost_nanos: string,
 }
 

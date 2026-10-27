@@ -20,7 +20,7 @@ use std::cell::RefCell;
 
 use crate::abi::{self, MigrationStep, Status, Str};
 use crate::content::Guid;
-use crate::{Load, Off};
+use crate::{ItemId, Load, Off};
 
 /// Why a migration's map cannot change a value; the loader logs it and
 /// leaves the world's files as they were.
@@ -461,6 +461,7 @@ fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
 ///
 /// ```
 /// use enshwick::content::{Guid, Id};
+/// use enshwick::ItemId;
 /// use enshwick::migrations::{Migrations, current_id};
 ///
 /// const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
@@ -468,23 +469,26 @@ fn renames(list: &[Migration]) -> impl Iterator<Item = (Guid, Guid)> + '_ {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.migrate(Migrations::new().add("2", |m| m.rename_content(OLD_LOCKER, LOCKER.guid())))?;
-///     assert_eq!(current_id(OLD_LOCKER.id()), LOCKER.id());
-///     assert_eq!(current_id(LOCKER.id()), LOCKER.id());
+///     let locker = ItemId::from_guid(LOCKER.guid());
+///     assert_eq!(current_id(ItemId::from_guid(OLD_LOCKER)), locker);
+///     assert_eq!(current_id(locker), locker);
 ///     Ok(())
 /// }
 /// ```
 #[must_use]
-pub fn current_id(id: u32) -> u32 {
+pub fn current_id(id: ItemId) -> ItemId {
     KEPT.get().map_or(id, |kept| renamed_from(&kept.list, id))
 }
 
 /// The id at the end of the chain of renames in `list` that starts at
 /// `id`: as many hops as there are renames, so a cycle ends.
-fn renamed_from(list: &[Migration], id: u32) -> u32 {
+fn renamed_from(list: &[Migration], id: ItemId) -> ItemId {
     let mut current = id;
     for _ in renames(list) {
-        match renames(list).find(|(from, _)| from.id() == current) {
-            Some((_, to)) if to.id() != current && to.id() != id => current = to.id(),
+        match renames(list).find(|(from, _)| ItemId::from_guid(*from) == current) {
+            Some((_, to)) if ItemId::from_guid(to) != current && ItemId::from_guid(to) != id => {
+                current = ItemId::from_guid(to);
+            }
             _ => break,
         }
     }
@@ -614,6 +618,7 @@ mod tests {
     use super::{
         KEPT, Kept, Migrations, parse_value, renamed_from, renamed_to, run_map, write_value,
     };
+    use crate::ItemId;
     use crate::abi::{Status, Str};
     use crate::content::Guid;
 
@@ -673,15 +678,27 @@ mod tests {
             .add("2", |m| m.rename_content(a, b))
             .add("3", |m| m.rename_content(b, c))
             .list;
-        assert_eq!(renamed_from(&list, a.id()), c.id());
-        assert_eq!(renamed_from(&list, b.id()), c.id());
-        assert_eq!(renamed_from(&list, c.id()), c.id());
+        assert_eq!(
+            renamed_from(&list, ItemId::from_guid(a)),
+            ItemId::from_guid(c)
+        );
+        assert_eq!(
+            renamed_from(&list, ItemId::from_guid(b)),
+            ItemId::from_guid(c)
+        );
+        assert_eq!(
+            renamed_from(&list, ItemId::from_guid(c)),
+            ItemId::from_guid(c)
+        );
         assert_eq!(renamed_to(&list, c), [b, a]);
         let cycle = Migrations::new()
             .add("2", |m| m.rename_content(a, b))
             .add("3", |m| m.rename_content(b, a))
             .list;
-        assert_eq!(renamed_from(&cycle, a.id()), b.id());
+        assert_eq!(
+            renamed_from(&cycle, ItemId::from_guid(a)),
+            ItemId::from_guid(b)
+        );
         assert_eq!(renamed_to(&cycle, a), [b]);
     }
 

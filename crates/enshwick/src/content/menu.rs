@@ -154,7 +154,7 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
             .get(start..start + usize::try_from(count).ok()? * 4)?
             .to_vec();
         let at = after.map_or(ids.len(), |index| (index + 1) * 4);
-        ids.splice(at..at, entry.recipe.id().to_le_bytes());
+        ids.splice(at..at, entry.recipe.fnv1a().to_le_bytes());
         let moved = blob.append(&ids, 4);
         if !blob.set_array(field, moved, count + 1) {
             return None;
@@ -209,7 +209,7 @@ pub fn move_recipes(
     let (workshops, _) = blob.array(layout.collection + layout.workshops)?;
     let mut entries = Vec::new();
     for &(recipe, workshop) in moves {
-        let id = recipe.id();
+        let id = recipe.fnv1a();
         let mut listed = false;
         for tree in 0..tree_count(layout, &blob)? {
             let home = blob.read_u32(workshops + tree * 4)? == workshop.id();
@@ -273,7 +273,7 @@ fn find_place(layout: &MenuLayout, blob: &Blob, entry: &MenuEntry) -> Option<Pla
         },
         None => (0..tree_count).collect(),
     };
-    if let Some(after) = entry.after.map(Guid::id) {
+    if let Some(after) = entry.after.map(Guid::fnv1a) {
         for &tree in &trees {
             for group in groups(layout, blob, tree)? {
                 for set in elements(blob, group + layout.sets, layout.set)? {
@@ -548,7 +548,7 @@ mod tests {
     fn a_moved_recipe_leaves_every_other_menu_and_joins_its_station_s() {
         let kiln = bench().id();
         let base = bundle(&[
-            (7, &[&[&[1, CHEST.id(), 2]], &[&[CHEST.id()]]]),
+            (7, &[&[&[1, CHEST.fnv1a(), 2]], &[&[CHEST.fnv1a()]]]),
             (kiln, &[&[&[3]]]),
             (9, &[&[&[4]]]),
         ]);
@@ -557,7 +557,7 @@ mod tests {
             read(&built),
             [
                 (7, vec![vec![vec![1, 2]], vec![vec![]]]),
-                (kiln, vec![vec![vec![3, CHEST.id()]]]),
+                (kiln, vec![vec![vec![3, CHEST.fnv1a()]]]),
                 (9, vec![vec![vec![4]]]),
             ]
         );
@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn a_new_recipe_goes_right_after_the_one_it_copies() {
-        let base = bundle(&[(7, &[&[&[1, 2]]]), (9, &[&[&[3], &[4, CHEST.id(), 5]]])]);
+        let base = bundle(&[(7, &[&[&[1, 2]]]), (9, &[&[&[3], &[4, CHEST.fnv1a(), 5]]])]);
         let entry = MenuEntry {
             recipe: LOCKER,
             after: Some(CHEST),
@@ -578,14 +578,17 @@ mod tests {
             read(&built),
             [
                 (7, vec![vec![vec![1, 2]]]),
-                (9, vec![vec![vec![3], vec![4, CHEST.id(), LOCKER.id(), 5]]]),
+                (
+                    9,
+                    vec![vec![vec![3], vec![4, CHEST.fnv1a(), LOCKER.fnv1a(), 5]]]
+                ),
             ]
         );
     }
 
     #[test]
     fn recipes_of_several_mods_compose_in_order() {
-        let base = bundle(&[(9, &[&[&[CHEST.id(), 5]]])]);
+        let base = bundle(&[(9, &[&[&[CHEST.fnv1a(), 5]]])]);
         let locker = MenuEntry {
             recipe: LOCKER,
             after: Some(CHEST),
@@ -600,13 +603,16 @@ mod tests {
         let second = list_recipes(&LAYOUT, &first, &[vault]).unwrap();
         assert_eq!(
             read(&second),
-            [(9, vec![vec![vec![CHEST.id(), LOCKER.id(), VAULT.id(), 5]]])]
+            [(
+                9,
+                vec![vec![vec![CHEST.fnv1a(), LOCKER.fnv1a(), VAULT.fnv1a(), 5]]]
+            )]
         );
     }
 
     #[test]
     fn of_two_mods_copying_one_recipe_the_later_one_comes_first() {
-        let base = bundle(&[(9, &[&[&[CHEST.id(), 5]]])]);
+        let base = bundle(&[(9, &[&[&[CHEST.fnv1a(), 5]]])]);
         let after_chest = |recipe| MenuEntry {
             recipe,
             after: Some(CHEST),
@@ -616,14 +622,17 @@ mod tests {
         let second = list_recipes(&LAYOUT, &first, &[after_chest(VAULT)]).unwrap();
         assert_eq!(
             read(&second),
-            [(9, vec![vec![vec![CHEST.id(), VAULT.id(), LOCKER.id(), 5]]])]
+            [(
+                9,
+                vec![vec![vec![CHEST.fnv1a(), VAULT.fnv1a(), LOCKER.fnv1a(), 5]]]
+            )]
         );
     }
 
     #[test]
     fn a_recipe_moved_to_a_workshop_goes_last_in_its_first_set() {
         let base = bundle(&[
-            (9, &[&[&[CHEST.id()]]]),
+            (9, &[&[&[CHEST.fnv1a()]]]),
             (bench().id(), &[&[&[1, 2], &[3]], &[&[4]]]),
         ]);
         let entry = MenuEntry {
@@ -636,10 +645,10 @@ mod tests {
             read(&built)[1],
             (
                 bench().id(),
-                vec![vec![vec![1, 2, LOCKER.id()], vec![3]], vec![vec![4]]]
+                vec![vec![vec![1, 2, LOCKER.fnv1a()], vec![3]], vec![vec![4]]]
             )
         );
-        assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.id()]]]));
+        assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.fnv1a()]]]));
     }
 
     #[test]
@@ -676,17 +685,17 @@ mod tests {
         let room = bundle(&[(bench().id(), &[&[left, &right[1..]]])]);
         let built = list_recipes(&LAYOUT, &room, &[entry]).unwrap();
         assert_eq!(read(&built)[0].1[0][0].len(), 301);
-        assert_eq!(read(&built)[0].1[0][0][300], LOCKER.id());
+        assert_eq!(read(&built)[0].1[0][0][300], LOCKER.fnv1a());
     }
 
     #[test]
     fn a_new_workshop_gets_a_menu_its_recipes_go_to() {
-        let base = bundle(&[(9, &[&[&[CHEST.id()]]])]);
+        let base = bundle(&[(9, &[&[&[CHEST.fnv1a()]]])]);
         let built = list_workshop(&LAYOUT, &base, bench()).unwrap();
         assert_eq!(
             read(&built),
             [
-                (9, vec![vec![vec![CHEST.id()]]]),
+                (9, vec![vec![vec![CHEST.fnv1a()]]]),
                 (bench().id(), vec![vec![vec![]]])
             ]
         );
@@ -703,9 +712,9 @@ mod tests {
         let built = list_recipes(&LAYOUT, &built, &[entry]).unwrap();
         assert_eq!(
             read(&built)[1],
-            (bench().id(), vec![vec![vec![LOCKER.id()]]])
+            (bench().id(), vec![vec![vec![LOCKER.fnv1a()]]])
         );
-        assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.id()]]]));
+        assert_eq!(read(&built)[0], (9, vec![vec![vec![CHEST.fnv1a()]]]));
     }
 
     #[test]
@@ -731,7 +740,7 @@ mod tests {
         assert!(list_recipes(&LAYOUT, &[0; 8], &[entry]).is_none());
         assert!(list_workshop(&LAYOUT, &[0; 8], bench()).is_none());
 
-        let mut uneven = Blob::new(&bundle(&[(9, &[&[&[CHEST.id()]]])]));
+        let mut uneven = Blob::new(&bundle(&[(9, &[&[&[CHEST.fnv1a()]]])]));
         let (workshops, _) = uneven.array(0x40).unwrap();
         assert!(uneven.set_array(0x40, workshops, 2));
         assert!(list_recipes(&LAYOUT, uneven.bytes(), &[entry]).is_none());

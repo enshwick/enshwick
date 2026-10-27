@@ -26,7 +26,7 @@ impl Load<'_> {
     /// use enshwick::game_events::EntityDiedEvent;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity.0))?;
+    ///     load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity))?;
     ///     load.on::<WorldSaved>(|()| enshwick::info!("saved"))?;
     ///     load.on::<EntityDiedEvent>(|died| enshwick::debug!("{:?} died", died.dead_entity_id))
     /// }

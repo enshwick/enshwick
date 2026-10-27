@@ -212,9 +212,9 @@ impl Source {
 ///
 /// const STAFF: Id = Id::new("my-mod:staff");
 ///
-/// let drop = Drop::new(enshwick::ItemId::new(STAFF.id()), 0.1, Source::bosses()).count(1, 2);
+/// let drop = Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.1, Source::bosses()).count(1, 2);
 /// assert_eq!(drop.count, [1, 2]);
-/// let one_of = Drop::one_of(&[ItemId::new(STAFF.id()), ItemId::new(7)], 0.1, Source::bosses());
+/// let one_of = Drop::one_of(&[ItemId::from_guid(STAFF.guid()), ItemId::new(7)], 0.1, Source::bosses());
 /// assert_eq!(one_of.items.len(), 2);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
@@ -818,9 +818,9 @@ impl Load<'_> {
     /// const STAFF: Id = Id::new("my-mod:staff");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses()))?;
-    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.02, Source::locked_chests()))?;
-    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
+    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses()))?;
+    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.02, Source::locked_chests()))?;
+    ///     load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
     /// }
     /// ```
     pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
@@ -880,7 +880,7 @@ impl Load<'_> {
 ///
 /// fn set(on: bool) -> Result<(), enshwick::Off> {
 ///     let drops = if on {
-///         vec![Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses())]
+///         vec![Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses())]
 ///     } else {
 ///         Vec::new()
 ///     };

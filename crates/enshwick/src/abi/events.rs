@@ -4,7 +4,7 @@ use core::ffi::c_void;
 use core::mem::offset_of;
 use core::time::Duration;
 
-use crate::abi::{Entity, Header, ItemId, PlayerKey};
+use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey};
 
 /// Something the loader tells subscribed mods about, with
 /// [`HostApi::subscribe`](super::HostApi::subscribe).
@@ -178,7 +178,7 @@ impl PlayerDeathData {
 /// ```
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
-/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: 0x1d, value: 3 };
+/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: enshwick::knowledge::KnowledgeId::new(0x1d), value: 3 };
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
@@ -189,7 +189,7 @@ pub struct KnowledgeData {
     /// The player's character, or 0 for the world's knowledge.
     pub entity: Entity,
     /// The knowledge id.
-    pub id: u32,
+    pub id: KnowledgeId,
     /// The value now.
     pub value: u32,
 }
@@ -203,7 +203,7 @@ impl_headed!(KnowledgeData);
 /// ```
 /// use enshwick::abi::{Header, QuestData};
 ///
-/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: 0x51 };
+/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: enshwick::knowledge::KnowledgeId::new(0x51) };
 /// assert_eq!(done.entity, enshwick::Entity(2));
 /// ```
 #[repr(C)]
@@ -214,7 +214,7 @@ pub struct QuestData {
     /// The player's character.
     pub entity: Entity,
     /// The quest's id, a player knowledge id.
-    pub quest: u32,
+    pub quest: KnowledgeId,
 }
 
 impl_headed!(QuestData);
@@ -231,7 +231,7 @@ impl_headed!(QuestData);
 /// let seen = KnowledgeInput {
 ///     header: Header::of::<KnowledgeInput>(),
 ///     player: enshwick::Entity(2),
-///     id: 0x1d,
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
 ///     reserved: 0,
@@ -249,7 +249,7 @@ pub struct KnowledgeInput {
     /// The asking player's character.
     pub player: Entity,
     /// The knowledge id.
-    pub id: u32,
+    pub id: KnowledgeId,
     /// The kind the client names: [`KnowledgeInfo::BOOL`](super::KnowledgeInfo::BOOL),
     /// [`KnowledgeInfo::COUNTER`](super::KnowledgeInfo::COUNTER) or [`KnowledgeInfo::FLAGS`](super::KnowledgeInfo::FLAGS).
     pub kind: u8,
@@ -476,20 +476,20 @@ pub struct TickData {
     /// Steps since the loader started counting, from 1.
     pub step: u64,
     /// Server steps since this handler's last call: 1 for an every-step
-    /// handler and for a handler's first call. Since minor 2.
+    /// handler and for a handler's first call. Since minor 3.
     pub elapsed_steps: u64,
     /// Wall time since this handler's last call in nanoseconds; for its
     /// first call, and for an every-step handler, the time since the step
-    /// before. 0 on the loader's first step. Since minor 2.
+    /// before. 0 on the loader's first step. Since minor 3.
     pub elapsed_nanos: u64,
     /// The average time between server steps in nanoseconds, over about the
-    /// last 16 steps; 0 until a step has been measured. Since minor 2.
+    /// last 16 steps; 0 until a step has been measured. Since minor 3.
     pub step_nanos: u64,
     /// What one call of this mod's event handlers cost on average since
     /// this handler's last call, in nanoseconds; 0 for an every-step
     /// handler, unless the loader's diagnostics time callbacks, and for
     /// about a second after they start, while the loader measures its
-    /// clock. Since minor 2.
+    /// clock. Since minor 3.
     pub cost_nanos: u64,
 }
 
@@ -535,7 +535,7 @@ impl TickData {
     }
 
     /// Server steps since the handler's last call; 1 from a loader older
-    /// than minor 2.
+    /// than minor 3.
     ///
     /// # Examples
     ///
@@ -550,7 +550,7 @@ impl TickData {
     }
 
     /// Wall time since the handler's last call; zero from a loader older
-    /// than minor 2.
+    /// than minor 3.
     ///
     /// # Examples
     ///
@@ -614,7 +614,7 @@ const fn end_of(offset: usize) -> usize {
 
 /// A periodic tick handler a mod subscribed with
 /// [`HostApi::subscribe_tick`](super::HostApi::subscribe_tick), for
-/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every). Since minor 2.
+/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every). Since minor 3.
 ///
 /// Valid for the mod that subscribed it until that mod reloads, after which
 /// the loader answers [`Status::MISSING`](super::Status::MISSING).

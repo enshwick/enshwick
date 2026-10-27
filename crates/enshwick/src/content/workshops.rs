@@ -90,7 +90,7 @@ impl WorkshopId {
     /// See [`WorkshopId`].
     #[must_use]
     pub const fn id(self) -> u32 {
-        self.0.id()
+        self.0.fnv1a()
     }
 }
 
@@ -264,7 +264,7 @@ const REFERENCE: usize = 16;
 pub fn clone_template(layout: &WorkshopLayout, template: &[u8], workshop: Guid) -> Option<Vec<u8>> {
     let mut blob = Blob::new(template);
     let (start, count) = blob.array(layout.components)?;
-    let id = workshop.id().to_le_bytes();
+    let id = workshop.fnv1a().to_le_bytes();
     let mut patched = [false; 3];
     for variant in (0..usize::try_from(count).ok()?).map(|i| start + i * VARIANT) {
         let hash = blob.read_u32(variant)?;
@@ -397,7 +397,7 @@ pub fn list_workshop(
 ) -> Option<Vec<u8>> {
     let mut blob = Blob::new(registry);
     let (start, count) = blob.array(layout.workshops)?;
-    let like = new.like.item.id();
+    let like = new.like.item.fnv1a();
     let vanilla = (0..usize::try_from(count).ok()?)
         .map(|i| start + i * layout.entry)
         .find(|&at| blob.read_u32(at + layout.entry_item) == Some(like))?;
@@ -408,11 +408,16 @@ pub fn list_workshop(
             .map(|target| target.copy_from_slice(bytes))
     };
     put(layout.entry_guid, &new.workshop.guid().0)?;
-    put(layout.entry_id, &new.workshop.id().to_le_bytes())?;
-    put(layout.entry_item, &new.item.id().to_le_bytes())?;
+    put(layout.entry_id, &new.workshop.guid().fnv1a().to_le_bytes())?;
+    put(
+        layout.entry_item,
+        &crate::ItemId::from_guid(new.item.guid())
+            .get()
+            .to_le_bytes(),
+    )?;
     put(layout.entry_item_ref, &new.item.guid().0)?;
     if let Some(name) = new.name {
-        put(layout.entry_name, &name.id().to_le_bytes())?;
+        put(layout.entry_name, &name.fnv1a().to_le_bytes())?;
     }
     blob.grow_array(layout.workshops, layout.entry, 4, &[], &[(entry, None)])?;
     Some(blob.into_bytes())
@@ -615,7 +620,7 @@ pub(crate) mod tests {
             (CLIENT, 16),
         ]);
         let clone = clone_template(&LAYOUT, blob.bytes(), WORKSHOP).unwrap();
-        let id = WORKSHOP.id();
+        let id = WORKSHOP.fnv1a();
         assert_eq!(&clone[data[0]..data[0] + 16], &OLD.0, "others stay");
         assert_eq!(&clone[data[1]..data[1] + 16], &WORKSHOP.0);
         assert_eq!(u32_at(&clone, data[1] + 16), id);
@@ -643,7 +648,7 @@ pub(crate) mod tests {
         let mut bench = vec![0u8; 0x400];
         bench[0x3c0..0x3d0].copy_from_slice(&stations::WORKBENCH.template.0);
         let clone = clone_station(&ITEMS, &LAYOUT, &bench, &new()).unwrap();
-        assert_eq!(&clone[..4], &ITEM.id().to_le_bytes());
+        assert_eq!(&clone[..4], &ITEM.fnv1a().to_le_bytes());
         assert_eq!(&clone[0x3c0..0x3d0], &TEMPLATE.0);
         assert_eq!(&clone[0x48..0x58], &NAME.0);
         // An item placing something else is not the station named.
@@ -656,9 +661,9 @@ pub(crate) mod tests {
         let mut blob = Blob::new(&[0u8; 24]);
         let mut entry = vec![0u8; 56];
         entry[4..20].copy_from_slice(&OLD.0);
-        entry[20..24].copy_from_slice(&OLD.id().to_le_bytes());
+        entry[20..24].copy_from_slice(&OLD.fnv1a().to_le_bytes());
         entry[24..28].copy_from_slice(&7u32.to_le_bytes());
-        entry[28..32].copy_from_slice(&stations::WORKBENCH.item.id().to_le_bytes());
+        entry[28..32].copy_from_slice(&stations::WORKBENCH.item.fnv1a().to_le_bytes());
         entry[48..52].copy_from_slice(&3u32.to_le_bytes());
         let at = blob.append(&entry, 4);
         assert!(blob.set_array(8, at, 1));
@@ -667,9 +672,9 @@ pub(crate) mod tests {
         assert_eq!(count, 2);
         let added = &built.bytes()[start + 56..start + 112];
         assert_eq!(&added[4..20], &WORKSHOP.0);
-        assert_eq!(u32_at(added, 20), WORKSHOP.id());
-        assert_eq!(u32_at(added, 24), NAME.id());
-        assert_eq!(u32_at(added, 28), ITEM.id());
+        assert_eq!(u32_at(added, 20), WORKSHOP.fnv1a());
+        assert_eq!(u32_at(added, 24), NAME.fnv1a());
+        assert_eq!(u32_at(added, 28), ITEM.fnv1a());
         assert_eq!(&added[32..48], &ITEM.0);
         assert_eq!(u32_at(added, 48), 3, "upgrade masks stay");
         assert_eq!(&built.bytes()[start + 4..start + 20], &OLD.0);

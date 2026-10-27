@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId, RecipeId, Status, Str};
+use crate::abi::{Entity, Header, ItemId, KnowledgeId, RecipeId, Status, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -379,7 +379,7 @@ pub type DamageFilterFn = unsafe extern "system" fn(check: *mut DamageCheck, use
 ///
 /// let recipe = KnowledgeInfo {
 ///     header: Header::of::<KnowledgeInfo>(),
-///     id: 0x1d,
+///     id: enshwick::knowledge::KnowledgeId::new(0x1d),
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
 ///     reserved: 0,
@@ -394,7 +394,7 @@ pub struct KnowledgeInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The knowledge id.
-    pub id: u32,
+    pub id: KnowledgeId,
     /// [`KnowledgeInfo::BOOL`], [`KnowledgeInfo::COUNTER`] or
     /// [`KnowledgeInfo::FLAGS`].
     pub kind: u8,
