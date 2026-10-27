@@ -111,7 +111,7 @@ The keys of `mod-configs/enshwick.toml`:
 | `join_hello_seconds` | `30`      | seconds a joining player's game has to name its join mods; read at start                                                |
 | `join_note_seconds`  | `10`      | seconds between the chat line and the disconnect; read at start                                                         |
 | `allowlist`          | `false`   | on a dedicated server, let in only the [allowlist](world.md#the-allowlist)'s accounts and administrators; read at start |
-| `language`           | `""`      | language code of the loader's texts where no player's game names its own, such as the console; empty for the game's     |
+| `language`           | `""`      | on a dedicated server, language code of the console's and other texts no player's game names; empty for English         |
 
 The file rejects unknown keys. A file that does not parse at start is logged
 and the loader runs with the defaults; a change that does not parse is logged

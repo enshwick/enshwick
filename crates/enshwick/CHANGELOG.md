@@ -35,11 +35,12 @@ Each entry names the pull request that made the change.
   loader's answers, join notes and mod names to that player follow it, and
   on a server `i18n::language()` is that player's language while the loader
   asks a mod about the player. The loader's setting `language` sets the
-  language of its console. The join message protocol moved to version 2.
+  language of its console. The join message protocol moved to version 2
+  (#620).
 - `ConfigError::text(key, args)` refuses settings with a text of the mod's
   texts, which each player reads in their own language; the `validate` of
   the `Config` derive takes any error that converts into `ConfigError`
-  (`String`, `&str` or a `ConfigError`).
+  (`String`, `&str` or a `ConfigError`) (#620).
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

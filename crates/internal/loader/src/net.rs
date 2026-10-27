@@ -82,9 +82,6 @@ struct State {
     /// On the server: the hellos on their way in from clients that are no
     /// peers yet, by key.
     greeting: FxHashMap<u64, Peer>,
-    /// On the server: the language each client's player reads the game in,
-    /// by key, as its hello said.
-    languages: FxHashMap<u64, Language>,
 }
 
 static CHANNELS: Registry<Channel> = Registry::new();
@@ -403,12 +400,12 @@ pub(crate) fn server_received(key: u64, args: &str) {
         return;
     };
     if channel != CONTROL {
-        deliver(channel, key, &data);
+        crate::texts::for_player(key, || deliver(channel, key, &data));
         return;
     }
     if let Some(hello) = read_hello(&data) {
         if let Some(language) = hello.language {
-            state(|s| s.languages.insert(key, language));
+            state(|s| remember_language(s, key, language));
         }
         said_hello(key, &hello);
         return;
@@ -539,14 +536,32 @@ pub(crate) fn forget_peer(key: u64) {
         s.peers.remove(&key);
         s.sending.remove(&key);
         s.greeting.remove(&key);
-        s.languages.remove(&key);
     });
 }
 
 /// The language the player of client `key` reads the game in, as its hello
 /// said; `None` before a hello or for a game without Enshwick.
 pub(crate) fn language_of(key: u64) -> Option<Language> {
-    state(|s| s.languages.get(&key).copied())
+    state(|s| language_in(s, key))
+}
+
+/// Keeps the `language` client `key`'s hello named on its peer, or on its
+/// hello on the way in, so it goes when they go.
+fn remember_language(state: &mut State, key: u64, language: Language) {
+    if let Some(peer) = state.peers.get_mut(&key) {
+        peer.language = Some(language);
+    } else if let Some(peer) = state.greeting.get_mut(&key) {
+        peer.language = Some(language);
+    }
+}
+
+/// [`language_of`] in `state`: a peer's, or a hello still on its way in.
+fn language_in(state: &State, key: u64) -> Option<Language> {
+    state
+        .peers
+        .get(&key)
+        .or_else(|| state.greeting.get(&key))
+        .and_then(|peer| peer.language)
 }
 
 /// Whether `peer` takes messages: on the server, a player's client that said
@@ -672,7 +687,8 @@ pub(crate) fn client_lines() -> Vec<String> {
                 0
             };
             lines.extend(
-                control_frames(&hello(&mods, nonce, crate::texts::language())).unwrap_or_default(),
+                control_frames(&hello(&mods, nonce, crate::content::language()))
+                    .unwrap_or_default(),
             );
         }
         if WAITING.swap(false, Ordering::AcqRel) {
@@ -785,6 +801,25 @@ mod tests {
         let mut kept: Vec<u64> = state.greeting.keys().copied().collect();
         kept.sort_unstable();
         assert_eq!(kept, [3, 4]);
+    }
+
+    #[test]
+    fn a_hello_s_language_stays_with_its_client_and_goes_with_it() {
+        let mut state = State::default();
+        let lines = control_frames(&hello("", 0, Language::UK_UA)).unwrap();
+        let _taken = take_frame(&mut state, 7, parsed(&lines).remove(0));
+        remember_language(&mut state, 7, Language::UK_UA);
+        remember_language(&mut state, 8, Language::DE_DE);
+        assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
+        assert_eq!(language_in(&state, 8), None, "no frame, no peer to keep it");
+        assert!(greet(&mut state, 7));
+        assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
+        state.peers.remove(&7);
+        assert_eq!(language_in(&state, 7), None);
+        let _again = take_frame(&mut state, 9, parsed(&lines).remove(0));
+        remember_language(&mut state, 9, Language::DE_DE);
+        keep_greeting_in(&mut state, &[]);
+        assert_eq!(language_in(&state, 9), None);
     }
 
     #[test]

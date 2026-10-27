@@ -40,13 +40,18 @@ thread_local! {
 /// [`configure`] read it.
 static OWN: OnceLock<Language> = OnceLock::new();
 
-/// Takes the loader's setting `language`: the code of the language texts
-/// are in where no player's game says its own, empty for the game's.
+/// Takes the loader's setting `language` on a dedicated `server`, which has
+/// no game language of its own: the code of the language texts are in where
+/// no player's game says its own, empty for English. A client's texts follow
+/// its game.
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "the setting is read only in the game")
 )]
-pub(crate) fn configure(code: &str) {
+pub(crate) fn configure(code: &str, server: bool) {
+    if !server {
+        return;
+    }
     match own_language(code) {
         Ok(Some(language)) => {
             let _first = OWN.set(language);
@@ -80,17 +85,31 @@ fn own_language(code: &str) -> Result<Option<Language>, &str> {
     expect(dead_code, reason = "players are answered only in the game")
 )]
 pub(crate) fn for_reader<R>(language: Option<Language>, f: impl FnOnce() -> R) -> R {
-    /// Puts the language before back, also when `f` panics.
+    scoped(language.or(READER.get()), f)
+}
+
+/// Runs `f` with the reader `reader`, then puts the one before back, also
+/// when `f` panics.
+fn scoped<R>(reader: Option<Language>, f: impl FnOnce() -> R) -> R {
+    /// Puts the reader before back.
     struct Restore(Option<Language>);
     impl Drop for Restore {
         fn drop(&mut self) {
             READER.set(self.0);
         }
     }
-    let before = READER.get();
-    let _restore = Restore(before);
-    READER.set(language.or(before));
+    let _restore = Restore(READER.replace(reader));
     f()
+}
+
+/// Runs `f` for no player in particular, such as an event every mod hears,
+/// inside an answer to one player: texts take the loader's own language.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "players are answered only in the game")
+)]
+pub(crate) fn for_nobody<R>(f: impl FnOnce() -> R) -> R {
+    scoped(None, f)
 }
 
 /// Runs `f` with every text it fills in the language the game of player
@@ -258,6 +277,13 @@ mod tests {
             (fill("mods.back", &[]), nested)
         });
         assert_eq!(inside, ("Назад".to_owned(), "Назад".to_owned()));
+        let everyone = for_reader(Some(Language::UK_UA), || {
+            (
+                for_nobody(|| fill("mods.back", &[])),
+                fill("mods.back", &[]),
+            )
+        });
+        assert_eq!(everyone, ("Back".to_owned(), "Назад".to_owned()));
         assert_eq!(fill("mods.back", &[]), "Back");
         let panicked = std::panic::catch_unwind(|| {
             for_reader(Some(Language::UK_UA), || panic!("in an answer"));

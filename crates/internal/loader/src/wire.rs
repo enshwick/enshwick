@@ -135,7 +135,10 @@ pub fn read_hello(data: &[u8]) -> Option<Hello> {
     };
     let (nonce, rest) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
     let (language, mods) = match rest.split_first_chunk::<4>() {
-        Some((language, mods)) => (Some(Language(u32::from_le_bytes(*language))), mods),
+        Some((language, mods)) => {
+            let language = Language(u32::from_le_bytes(*language));
+            (Language::ALL.contains(&language).then_some(language), mods)
+        }
         None => (None, rest),
     };
     Some(Hello {
@@ -236,6 +239,8 @@ mod tests {
         assert!(said.complete);
         assert_eq!(said.nonce, 9);
         assert_eq!(said.language, Some(Language::UK_UA));
+        let unknown = read_hello(&hello("", 0, Language(99))).unwrap();
+        assert_eq!((unknown.language, unknown.mods.as_str()), (None, ""));
         let bare = read_hello(&control(HELLO)).unwrap();
         assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
         assert_eq!(bare.language, None);
