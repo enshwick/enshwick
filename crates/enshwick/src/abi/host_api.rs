@@ -1277,4 +1277,10 @@ pub struct HostApi {
         count: u32,
         id: *mut u64,
     ) -> Status,
+    /// [`Status::OK`] on the server's game thread at a quiet moment while a
+    /// world runs, where a mod may read live components that no system
+    /// writes meanwhile; [`Status::WRONG_THREAD`] on another thread or
+    /// inside a step, [`Status::MISSING`] while no world runs. Since
+    /// minor 90.
+    pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
 }

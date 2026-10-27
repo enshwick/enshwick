@@ -260,15 +260,17 @@ impl Map {
             )
             .map(|found| {
                 let (entity, position, data) = found?;
-                // SAFETY: `data` is the entity's live MapMarker, which the
-                // loader hands out only on the game thread outside a step,
-                // so no system writes it during this read; `resolve` checked
-                // that 16 bytes from `label_at` lie inside the type's size.
+                // SAFETY: `data` is the entity's live MapMarker, read in the
+                // same call as `placed_with`, whose entities entry answered
+                // only on the game thread at a quiet moment, so no system
+                // writes it now; `resolve` checked that 16 bytes from
+                // `label_at` lie inside the type's size.
                 let label = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.label_at) };
-                // SAFETY: `data` is the entity's live MapMarker, handed out
-                // only on the game thread outside a step, so nothing writes
-                // it now; `resolve` checked that 16 bytes from `type_at` lie
-                // inside the type's size.
+                // SAFETY: `data` is the entity's live MapMarker, read in the
+                // same call as `placed_with`, whose entities entry answered
+                // only on the game thread at a quiet moment, so no system
+                // writes it now; `resolve` checked that 16 bytes from
+                // `type_at` lie inside the type's size.
                 let reference = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.type_at) };
                 Ok(MapMarker {
                     entity,
@@ -297,21 +299,25 @@ impl Map {
     /// See the [module](self).
     pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
         let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Missing)?;
+        let host = self.0.host;
+        WorldError::from_status((host.api().world_quiet)(host.handle()))?;
         let Some(data) = self.live(player, waypoint.ty)? else {
             return Ok(None);
         };
-        // SAFETY: `data` is the player's live PlayerWaypoint, handed out only
-        // on the game thread outside a step, so nothing writes it now;
-        // `resolve` checked that the byte at `enabled_at` lies inside the
-        // type's size. It is read as a byte, never as a bool.
+        // SAFETY: `data` is the player's live PlayerWaypoint, read right
+        // after `world_quiet` answered that this is the game thread at a
+        // quiet moment, so no system writes it now; `resolve` checked that
+        // the byte at `enabled_at` lies inside the type's size. It is read as
+        // a byte, never as a bool.
         let enabled = unsafe { crate::raw::read_at::<u8>(data, waypoint.enabled_at) };
         if enabled == 0 {
             return Ok(None);
         }
-        // SAFETY: `data` is the player's live PlayerWaypoint, handed out only
-        // on the game thread outside a step, so nothing writes it now;
-        // `resolve` checked that 24 bytes from `position_at`, the three i64
-        // of `waypointPosition` in 32.32 fixed point, lie inside the type.
+        // SAFETY: `data` is the player's live PlayerWaypoint, read right
+        // after `world_quiet` answered that this is the game thread at a
+        // quiet moment, so no system writes it now; `resolve` checked that
+        // 24 bytes from `position_at`, the three i64 of `waypointPosition`
+        // in 32.32 fixed point, lie inside the type.
         let fixed = unsafe { crate::raw::read_at::<[i64; 3]>(data, waypoint.position_at) };
         Ok(Some(crate::ecs::metres(fixed)))
     }

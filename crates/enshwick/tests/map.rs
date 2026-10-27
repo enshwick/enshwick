@@ -164,6 +164,27 @@ mod tests {
     }
 
     #[test]
+    fn a_waypoint_fails_while_no_world_runs() {
+        let fake = waypoint(fake(), 40, 1, [12.5, 3.0, -7.25]);
+        let (loader, map) = start(fake);
+        loader.stop_world();
+
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
+        assert_eq!(map.markers(), Err(WorldError::Missing));
+    }
+
+    #[test]
+    fn a_waypoint_fails_off_the_game_thread() {
+        let fake = waypoint(fake(), 40, 1, [12.5, 3.0, -7.25]);
+        let (_loader, map) = start(fake);
+
+        let elsewhere = std::thread::spawn(move || map.waypoint(Entity(40)))
+            .join()
+            .unwrap();
+        assert_eq!(elsewhere, Err(WorldError::WrongThread));
+    }
+
+    #[test]
     fn a_build_without_waypoints_keeps_the_markers() {
         let fake = marker(markers_only(), 7, [1.0, 2.0, 3.0], LABEL, TOWN);
         let (_loader, map) = start(fake);
