@@ -319,8 +319,9 @@ pub(crate) fn arm(
             // counters, so counter `i` lies inside the data pages.
             let counter_ptr = unsafe { counter_base.add(i) };
             // SAFETY: `reserve` committed and zeroed the block, and the
-            // loader never frees it; the slots end on an 8-byte boundary,
-            // and a zeroed `Counter` is valid.
+            // loader never frees it; the data pages are page-aligned and
+            // `slots_len` is rounded up to the counters' alignment, so the
+            // counter is aligned, and a zeroed `Counter` is valid.
             let counter: &'static Counter = unsafe { &*counter_ptr };
             counters.push((chain.target, counter));
             (counter, counting == Count::Timed)
