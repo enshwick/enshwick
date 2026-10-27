@@ -88,3 +88,7 @@ harness = false
 [[bench]]
 name = "dispatch"
 harness = false
+
+[[bench]]
+name = "ticks"
+harness = false
