@@ -289,10 +289,18 @@ export type Slot = {
 	pide: number?,
 }
 
---- The data of the `Ticked` event.
+--- The data of the `Ticked` event. A handler on a period sees the steps and the time since its own last call; an every-step handler sees one step and the time since the step before.
 export type TickData = {
 	--- Steps since the loader started counting, from 1.
 	step: string,
+	--- Server steps since this handler's last call: 1 for an every-step handler and for a handler's first call. Since minor 2.
+	elapsed_steps: string,
+	--- Wall time since this handler's last call in nanoseconds; for its first call, and for an every-step handler, the time since the step before. 0 on the loader's first step. Since minor 2.
+	elapsed_nanos: string,
+	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured. Since minor 2.
+	step_nanos: string,
+	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler and unless the loader's diagnostics time callbacks. Since minor 2.
+	cost_nanos: string,
 }
 
 --- A character gained experience.
@@ -387,11 +395,11 @@ declare enshwick: {
 		--- `entity`'s position in metres.
 		position: (entity: number) -> vector?,
 	},
-	--- Work for the server's game thread: on the next step, after a delay, or repeatedly.
+	--- Work for the server's game thread: on the next pass, after a delay, or repeatedly.
 	scheduler: {
-		--- Runs `task` after the next simulation step.
+		--- Runs `task` on the scheduler's next pass, within the tick period.
 		next_tick: (task: () -> ()) -> (),
-		--- Runs `task` after the first step at least `delay` from now.
+		--- Runs `task` on the first pass at least `delay` from now.
 		after: (delay: number, task: () -> ()) -> (),
 		--- Runs `task` about every `period`, the first time a period from now, until it asks to stop, which a script's task does by returning `false`.
 		every: (period: number, task: () -> boolean?) -> (),

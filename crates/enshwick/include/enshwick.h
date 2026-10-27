@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 1
+#define ENSHWICK_ABI_MINOR 2
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -2714,6 +2714,12 @@ typedef struct EnshwickMapMarkerInfo {
   uint8_t label[16];
 } EnshwickMapMarkerInfo;
 
+// A periodic tick handler a mod subscribed with
+// `HostApi::subscribe_tick`, for
+// `HostApi::set_tick_every`; valid for
+// the process, for the mod that subscribed it only. Since minor 2.
+typedef uint32_t EnshwickTickHandle;
+
 // The table of services the loader offers a mod.
 //
 // Fields are only ever appended; a mod checks `Header::covers` before it
@@ -4013,6 +4019,33 @@ typedef struct EnshwickHostApi {
   // while the list changes. A panic in the loader returns
   // `Status::REFUSED`. Since minor 1.
   EnshwickStatus (*allowlist_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *listed);
+  // Calls `callback` with `user`, `Event::TICKED` and a `TickData`
+  // on the server's game thread after a step, once `every_nanos` of wall
+  // time have passed since its last call, and on the first step after it
+  // subscribed; 0 calls it every step. Steps the handler skips cost it
+  // nothing. The data lives for the call; the loader keeps `user` and
+  // never frees it. Writes the handler's handle to `out`, the caller's,
+  // writable for four bytes, on `Status::OK` only. `Status::BAD_ARGS`
+  // for a null `out`; `Status::TOO_LATE` outside `enshwick_mod_init`
+  // and a reloading mod's init again. The handler runs until the mod is
+  // off; a panic in it turns the mod off. It may call
+  // `HostApi::set_tick_every` on itself. Since minor 2.
+  EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
+                                   uint64_t every_nanos,
+                                   EnshwickEventFn callback,
+                                   void *user,
+                                   EnshwickTickHandle *out);
+  // Sets the period of the mod's periodic tick handler `handle` to
+  // `every_nanos`, 0 for every step, from the next step on: the next
+  // call comes `every_nanos` after its last one, or on the next step when
+  // that time has passed. `Status::REFUSED` for another mod's handle;
+  // `Status::MISSING` for a handle the loader never gave out or one of
+  // the mod's copy before a reload. Any thread, the handler itself
+  // included. A panic in the loader returns `Status::REFUSED`. Since
+  // minor 2.
+  EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
+                                   EnshwickTickHandle handle,
+                                   uint64_t every_nanos);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
@@ -4161,11 +4194,30 @@ typedef struct EnshwickQuestData {
 } EnshwickQuestData;
 
 // The data of the `Ticked` event.
+//
+// A handler on a period sees the steps and the time since its own last
+// call; an every-step handler sees one step and the time since the step
+// before.
 typedef struct EnshwickTickData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // Steps since the loader started counting, from 1.
   uint64_t step;
+  // Server steps since this handler's last call: 1 for an every-step
+  // handler and for a handler's first call. Since minor 2.
+  uint64_t elapsed_steps;
+  // Wall time since this handler's last call in nanoseconds; for its
+  // first call, and for an every-step handler, the time since the step
+  // before. 0 on the loader's first step. Since minor 2.
+  uint64_t elapsed_nanos;
+  // The average time between server steps in nanoseconds, over about the
+  // last 16 steps; 0 until a step has been measured. Since minor 2.
+  uint64_t step_nanos;
+  // What one call of this mod's event handlers cost on average since
+  // this handler's last call, in nanoseconds; 0 for an every-step
+  // handler and unless the loader's diagnostics time callbacks. Since
+  // minor 2.
+  uint64_t cost_nanos;
 } EnshwickTickData;
 
 // A box of voxels, for `TransactionOp::ERASE`.

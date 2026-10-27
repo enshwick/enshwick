@@ -16,9 +16,9 @@ use crate::abi::{
     RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
     ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
     StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TransactionInfo,
-    TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
-    ZoneCheckFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle,
+    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront, ZoneCheckFn,
 };
 use crate::abi::{Entity, ItemId, PlayerKey, RecipeId};
 
@@ -1391,4 +1391,32 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. Since minor 1.
     pub allowlist_has:
         extern "system" fn(me: ModHandle, account: PlayerKey, listed: *mut u8) -> Status,
+    /// Calls `callback` with `user`, [`Event::TICKED`] and a [`TickData`](super::TickData)
+    /// on the server's game thread after a step, once `every_nanos` of wall
+    /// time have passed since its last call, and on the first step after it
+    /// subscribed; 0 calls it every step. Steps the handler skips cost it
+    /// nothing. The data lives for the call; the loader keeps `user` and
+    /// never frees it. Writes the handler's handle to `out`, the caller's,
+    /// writable for four bytes, on [`Status::OK`] only. [`Status::BAD_ARGS`]
+    /// for a null `out`; [`Status::TOO_LATE`] outside `enshwick_mod_init`
+    /// and a reloading mod's init again. The handler runs until the mod is
+    /// off; a panic in it turns the mod off. It may call
+    /// [`HostApi::set_tick_every`] on itself. Since minor 2.
+    pub subscribe_tick: extern "system" fn(
+        me: ModHandle,
+        every_nanos: u64,
+        callback: EventFn,
+        user: *mut c_void,
+        out: *mut TickHandle,
+    ) -> Status,
+    /// Sets the period of the mod's periodic tick handler `handle` to
+    /// `every_nanos`, 0 for every step, from the next step on: the next
+    /// call comes `every_nanos` after its last one, or on the next step when
+    /// that time has passed. [`Status::REFUSED`] for another mod's handle;
+    /// [`Status::MISSING`] for a handle the loader never gave out or one of
+    /// the mod's copy before a reload. Any thread, the handler itself
+    /// included. A panic in the loader returns [`Status::REFUSED`]. Since
+    /// minor 2.
+    pub set_tick_every:
+        extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
 }

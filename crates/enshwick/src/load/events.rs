@@ -1,6 +1,8 @@
 use core::ffi::c_void;
+use core::time::Duration;
 
-use crate::abi::Event;
+use crate::abi::{Event, TickData, TickHandle};
+use crate::events::{LoaderEvent, TickPeriod, Ticked};
 use crate::host::Host;
 use crate::services::{Emitter, ModEvent};
 
@@ -63,6 +65,63 @@ impl Load<'_> {
             |user| host.subscribe(event, deliver::<F>, user),
             &format!("event {}", event.0),
         )
+    }
+
+    /// Calls `handler` on the server's game thread about every `every` of
+    /// wall time, after the step that reaches it, and on the first step after
+    /// `init`; [`Duration::ZERO`] calls it every step. Steps in between cost
+    /// the mod nothing. The [`TickData`] says how many steps and how much time
+    /// passed since the handler's last call; the [`TickPeriod`] changes the
+    /// period later. A panic in `handler` turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_tick(Duration::from_secs(5), |tick| {
+    ///         enshwick::debug!("{} steps in {:?}", tick.elapsed_steps(), tick.elapsed());
+    ///     })?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn on_tick(
+        &mut self,
+        every: Duration,
+        handler: impl Fn(&TickData) + Send + Sync + 'static,
+    ) -> Result<TickPeriod, Off> {
+        let host = self.host;
+        let handle = subscribe_tick(host, every, typed_tick(handler))?;
+        Ok(TickPeriod::new(host, handle))
+    }
+
+    /// Calls `handler` on the server's game thread after every server step,
+    /// for work that follows each step: per-step state, input or the camera.
+    /// Every call costs the mod about a microsecond, 20 to 60 times a
+    /// second, so a handler that can wait takes [`on_tick`](Self::on_tick).
+    /// A panic in `handler` turns the mod off.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_every_step(|tick| enshwick::debug!("step {}", tick.step))
+    /// }
+    /// ```
+    pub fn on_every_step(
+        &mut self,
+        handler: impl Fn(&TickData) + Send + Sync + 'static,
+    ) -> Result<(), Off> {
+        self.on_raw_event(Event::TICKED, typed_tick(handler))
     }
 
     /// The reflected game event type `name`, such as
@@ -207,6 +266,40 @@ impl Load<'_> {
     ) -> Result<(), Off> {
         subscribe_mod_event(self.host, handler)
     }
+}
+
+/// A tick handler on the raw data, which reads it as a [`TickData`].
+fn typed_tick(handler: impl Fn(&TickData)) -> impl Fn(*const c_void) {
+    move |raw| {
+        // SAFETY: the loader passes a tick's data with every tick handler's
+        // call, null or valid with no other thread writing it for the call.
+        if let Some(tick) = unsafe { <Ticked as LoaderEvent>::data(raw) } {
+            handler(&tick);
+        }
+    }
+}
+
+/// Subscribes `handler` on a period of `every`.
+fn subscribe_tick<F>(host: Host, every: Duration, handler: F) -> Result<TickHandle, Off>
+where
+    F: Fn(*const c_void) + Send + Sync + 'static,
+{
+    let mut handle = TickHandle(0);
+    let out = &raw mut handle;
+    hand_over(
+        handler,
+        |user| {
+            (host.api().subscribe_tick)(
+                host.handle(),
+                crate::events::nanos(every),
+                deliver::<F>,
+                user,
+                out,
+            )
+        },
+        "the tick",
+    )?;
+    Ok(handle)
 }
 
 /// Subscribes `handler` to the mod event `E`.

@@ -12,9 +12,11 @@
 //! [`PlayerJoined`] is [`Event::PLAYER_JOINED`].
 
 use core::ffi::c_void;
+use core::time::Duration;
 
 use crate::abi::{
-    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, PlayerDeathData, QuestData, TickData,
+    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, PlayerDeathData, QuestData,
+    TickData, TickHandle,
 };
 
 pub(crate) mod sealed {
@@ -125,8 +127,27 @@ macro_rules! without_data {
     };
 }
 
+/// The subscription of a loader event with data: every raise, or through
+/// a function of its own.
+macro_rules! subscribe_with_data {
+    ($load:ident, $handler:ident, $name:ident, $event:ident) => {
+        $load.on_raw_event(Event::$event, move |raw| {
+            // SAFETY: this closure is subscribed under
+            // `Event::$event`, this type's `LoaderEvent::EVENT`, and
+            // `EventFn` has the loader pass that event's data, null or
+            // valid with no other thread writing it for the call.
+            if let Some(data) = unsafe { <$name as LoaderEvent>::data(raw) } {
+                $handler(&data);
+            }
+        })
+    };
+    ($load:ident, $handler:ident, $name:ident, $event:ident, $own:path) => {
+        $own($load, $handler)
+    };
+}
+
 macro_rules! with_data {
-    ($($(#[doc = $doc:literal])* $name:ident = $event:ident: $data:ty, $born:expr;)*) => {
+    ($($(#[doc = $doc:literal])* $name:ident = $event:ident: $data:ty, $born:expr $(, $own:path)?;)*) => {
         /// The script entries of the events with data.
         const SCRIPT_WITH_DATA: &[crate::script::EventKind] = &[$(
             crate::script::EventKind::new(
@@ -161,15 +182,7 @@ macro_rules! with_data {
             where
                 F: Fn(&$data) + Send + Sync + 'static,
             {
-                load.on_raw_event(Event::$event, move |raw| {
-                    // SAFETY: this closure is subscribed under
-                    // `Event::$event`, this type's `LoaderEvent::EVENT`, and
-                    // `EventFn` has the loader pass that event's data, null or
-                    // valid with no other thread writing it for the call.
-                    if let Some(data) = unsafe { <$name as LoaderEvent>::data(raw) } {
-                        handler(&data);
-                    }
-                })
+                subscribe_with_data!(load, handler, $name, $event $(, $own)?)
             }
         }
 
@@ -216,8 +229,11 @@ without_data! {
 // Each event names its data and the size that data had in the minor that
 // added the event, the part every loader that runs the mod writes.
 with_data! {
-    /// [`Event::TICKED`].
-    Ticked = TICKED: TickData, size_of::<TickData>();
+    /// [`Event::TICKED`], every [`Ticked::DEFAULT_EVERY`] through
+    /// [`Load::on`](crate::Load::on); [`Load::on_tick`](crate::Load::on_tick)
+    /// picks the period and [`Load::on_every_step`](crate::Load::on_every_step)
+    /// runs on every server step.
+    Ticked = TICKED: TickData, core::mem::offset_of!(TickData, elapsed_steps), subscribe_ticked;
     /// [`Event::PLAYER_JOINED`].
     PlayerJoined = PLAYER_JOINED: PlayerData, size_of::<PlayerData>();
     /// [`Event::PLAYER_LEFT`].
@@ -236,6 +252,76 @@ with_data! {
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
     /// [`Event::PLAYER_DIED`].
     PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
+}
+
+impl Ticked {
+    /// How often a tick handler runs unless it asks otherwise: about every
+    /// second step of an empty dedicated server, every sixth with players.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// assert_eq!(enshwick::events::Ticked::DEFAULT_EVERY, Duration::from_millis(100));
+    /// ```
+    pub const DEFAULT_EVERY: Duration = Duration::from_millis(100);
+}
+
+/// [`Ticked`] through [`Load::on`](crate::Load::on): on the default period.
+fn subscribe_ticked<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+where
+    F: Fn(&TickData) + Send + Sync + 'static,
+{
+    load.on_tick(Ticked::DEFAULT_EVERY, handler).map(|_| ())
+}
+
+/// A tick handler's period, from [`Load::on_tick`](crate::Load::on_tick);
+/// copy it anywhere, the handler itself included, to change the period
+/// while the game runs.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let period = load.on_tick(Duration::from_secs(1), |_| enshwick::debug!("a second"))?;
+///     period.set_every(Duration::from_millis(250))
+/// }
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TickPeriod {
+    host: crate::Host,
+    handle: TickHandle,
+}
+
+impl TickPeriod {
+    pub(crate) const fn new(host: crate::Host, handle: TickHandle) -> Self {
+        Self { host, handle }
+    }
+
+    /// Runs the handler about every `every` from the next step on: its next
+    /// call comes `every` after its last, or on the next step when that time
+    /// has passed. [`Duration::ZERO`] runs it on every step.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when the loader refuses: this mod is off.
+    ///
+    /// # Examples
+    ///
+    /// See [`TickPeriod`].
+    pub fn set_every(self, every: Duration) -> Result<(), crate::Off> {
+        let status =
+            (self.host.api().set_tick_every)(self.host.handle(), self.handle, nanos(every));
+        crate::load::ok(status, (), || "the tick period".to_owned())
+    }
+}
+
+/// `duration` in nanoseconds, the longest the ABI holds past that.
+pub(crate) fn nanos(duration: Duration) -> u64 {
+    u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
 }
 
 /// Every event's script entry, for [`crate::script::events`].

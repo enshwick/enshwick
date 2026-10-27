@@ -1,9 +1,13 @@
-//! Work for the server's game thread: on the next step, after a delay, or
-//! repeatedly. Tasks run after a simulation step, where the game's own server
-//! code runs, so they may call into the game.
+//! Work for the server's game thread: on the scheduler's next pass, after a
+//! delay, or repeatedly.
+//!
+//! Tasks run after a simulation step, where the game's own server code runs,
+//! so they may call into the game. The scheduler passes on a tick of
+//! [`Ticked::DEFAULT_EVERY`](crate::events::Ticked::DEFAULT_EVERY), which is
+//! its precision.
 //!
 //! Delays and periods are wall-clock time: after a stall, a task whose time
-//! passed runs on the next step. A wait that should stand still with the
+//! passed runs on the next pass. A wait that should stand still with the
 //! server counts on the [`StepClock`](crate::time::StepClock) instead. A
 //! panic in a task turns the mod off, as in any event handler.
 
@@ -93,7 +97,7 @@ pub struct Scheduler {
 impl crate::script::Bound for Scheduler {
     const NAME: &'static str = "scheduler";
     const DOC: &'static str =
-        "Work for the server's game thread: on the next step, after a delay, or repeatedly.";
+        "Work for the server's game thread: on the next pass, after a delay, or repeatedly.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_TASKS];
 
     fn resolve(load: &mut crate::Load<'_>) -> Result<Self, crate::Off> {
@@ -138,7 +142,7 @@ impl Scheduler {
         self.queue.ticking.store(false, Ordering::Release);
     }
 
-    /// Runs `task` after the next simulation step.
+    /// Runs `task` on the scheduler's next pass, within the tick period.
     ///
     /// # Examples
     ///
@@ -148,7 +152,7 @@ impl Scheduler {
         self.after(Duration::ZERO, task);
     }
 
-    /// Runs `task` after the first step at least `delay` from now.
+    /// Runs `task` on the first pass at least `delay` from now.
     ///
     /// # Examples
     ///
@@ -196,7 +200,7 @@ impl Scheduler {
         tasks.push(task);
     }
 
-    /// Runs the tasks that are due; called after each step.
+    /// Runs the tasks that are due; called on each pass.
     #[inline]
     pub(crate) fn run_due(self) {
         let next_due = self.queue.next_due.load(Ordering::Acquire);
