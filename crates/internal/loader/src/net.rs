@@ -29,6 +29,7 @@ use std::time::Instant;
 
 use enshwick::Entity;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
+use enshwick::i18n::Language;
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};
@@ -81,6 +82,9 @@ struct State {
     /// On the server: the hellos on their way in from clients that are no
     /// peers yet, by key.
     greeting: FxHashMap<u64, Peer>,
+    /// On the server: the language each client's player reads the game in,
+    /// by key, as its hello said.
+    languages: FxHashMap<u64, Language>,
 }
 
 static CHANNELS: Registry<Channel> = Registry::new();
@@ -403,6 +407,9 @@ pub(crate) fn server_received(key: u64, args: &str) {
         return;
     }
     if let Some(hello) = read_hello(&data) {
+        if let Some(language) = hello.language {
+            state(|s| s.languages.insert(key, language));
+        }
         said_hello(key, &hello);
         return;
     }
@@ -532,7 +539,14 @@ pub(crate) fn forget_peer(key: u64) {
         s.peers.remove(&key);
         s.sending.remove(&key);
         s.greeting.remove(&key);
+        s.languages.remove(&key);
     });
+}
+
+/// The language the player of client `key` reads the game in, as its hello
+/// said; `None` before a hello or for a game without Enshwick.
+pub(crate) fn language_of(key: u64) -> Option<Language> {
+    state(|s| s.languages.get(&key).copied())
 }
 
 /// Whether `peer` takes messages: on the server, a player's client that said
@@ -657,7 +671,9 @@ pub(crate) fn client_lines() -> Vec<String> {
             } else {
                 0
             };
-            lines.extend(control_frames(&hello(&mods, nonce)).unwrap_or_default());
+            lines.extend(
+                control_frames(&hello(&mods, nonce, crate::texts::language())).unwrap_or_default(),
+            );
         }
         if WAITING.swap(false, Ordering::AcqRel) {
             lines.extend(s.outbox.drain(..));
@@ -701,7 +717,8 @@ mod tests {
                 parts: Vec::new(),
             },
         );
-        let lines = control_frames(&hello("you.trading-post@0.3.0", 0)).unwrap();
+        let lines =
+            control_frames(&hello("you.trading-post@0.3.0", 0, Language::FALLBACK)).unwrap();
         let hellos =
             core::iter::repeat_with(|| take_frame(&mut state, 7, parsed(&lines).remove(0)))
                 .take(100)
@@ -716,7 +733,7 @@ mod tests {
     fn a_new_client_s_hello_in_several_frames_comes_back_whole() {
         let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
         let mods = many.join(",");
-        let lines = control_frames(&hello(&mods, 0)).unwrap();
+        let lines = control_frames(&hello(&mods, 0, Language::FALLBACK)).unwrap();
         assert!(lines.len() > 1);
         let mut state = State::default();
         let mut whole = None;
@@ -739,7 +756,7 @@ mod tests {
     #[test]
     fn frames_from_an_unknown_sender_are_not_taken() {
         let mut state = State::default();
-        let frame = parsed(&control_frames(&hello("", 0)).unwrap()).remove(0);
+        let frame = parsed(&control_frames(&hello("", 0, Language::FALLBACK)).unwrap()).remove(0);
         assert_eq!(take_frame(&mut state, 0, frame), None);
         assert!(state.greeting.is_empty());
     }
@@ -748,7 +765,7 @@ mod tests {
     fn every_frame_of_a_stranger_takes_from_its_rate() {
         let mut state = State::default();
         let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
-        let lines = control_frames(&hello(&many.join(","), 0)).unwrap();
+        let lines = control_frames(&hello(&many.join(","), 0, Language::FALLBACK)).unwrap();
         for _ in 0..200 {
             let _taken = take_frame(&mut state, 7, parsed(&lines).remove(1));
         }
@@ -759,7 +776,7 @@ mod tests {
     fn strangers_waiting_to_say_hello_are_bounded_and_follow_the_live_slots() {
         let mut state = State::default();
         let many: Vec<String> = (0..100).map(|i| format!("mod-{i:04}@1.0.0")).collect();
-        let lines = control_frames(&hello(&many.join(","), 0)).unwrap();
+        let lines = control_frames(&hello(&many.join(","), 0, Language::FALLBACK)).unwrap();
         for key in 1..=1000 {
             let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
         }
@@ -773,7 +790,8 @@ mod tests {
     #[test]
     fn a_full_greeting_store_makes_room_from_keys_without_a_live_slot() {
         let mut state = State::default();
-        let lines = control_frames(&hello("you.trading-post@0.3.0", 0)).unwrap();
+        let lines =
+            control_frames(&hello("you.trading-post@0.3.0", 0, Language::FALLBACK)).unwrap();
         for key in 1..=MAX_GREETING as u64 {
             let _taken = take_frame(&mut state, key, parsed(&lines).remove(0));
         }

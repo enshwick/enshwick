@@ -142,7 +142,7 @@ impl ModRecord {
         let texts = self.texts.lock().ok();
         self.meta.name_in(
             texts.as_ref().and_then(|t| t.as_ref()),
-            crate::content::language(),
+            crate::texts::language(),
         )
     }
 
@@ -157,7 +157,7 @@ impl ModRecord {
         let texts = self.texts.lock().ok();
         self.meta.description_in(
             texts.as_ref().and_then(|t| t.as_ref()),
-            crate::content::language(),
+            crate::texts::language(),
         )
     }
 

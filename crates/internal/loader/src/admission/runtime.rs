@@ -254,7 +254,9 @@ fn refuse_unlisted(key: u64) -> bool {
         return false;
     };
     if key != 0 {
-        crate::chat::send(key, &crate::texts::fill("allowlist.refused", &[]));
+        crate::texts::for_player(key, || {
+            crate::chat::send(key, &crate::texts::fill("allowlist.refused", &[]))
+        });
     }
     match disconnect(loader, kick, key, host, false) {
         Ok(machine) => {
@@ -413,6 +415,18 @@ pub(crate) fn after_step(loader: &Loader) {
     });
 }
 
+/// The names of the running join mods, `(id, name)`, in the reader's
+/// language: each mod's own text, else its manifest's name.
+fn reader_names(loader: &Loader) -> Names {
+    loader
+        .mods
+        .iter()
+        .filter(|m| m.joins())
+        .map(|m| (m.id.clone(), m.name()))
+        .filter(|(_, name)| !name.is_empty())
+        .collect()
+}
+
 /// Does one step; a kick needs the `loader`.
 fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
     match step {
@@ -422,7 +436,10 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 .get()
                 .and_then(Option::as_ref)
                 .map(|_| serving.rules.grace);
-            let text = super::note(&needs, hello, &serving.names, &serving.pages, leaving);
+            let text = crate::texts::for_player(key, || {
+                let names = loader.map_or_else(|| serving.names.clone(), reader_names);
+                super::note(&needs, hello, &names, &serving.pages, leaving)
+            });
             let ids: Vec<&str> = needs.iter().map(|n| n.id.as_str()).collect();
             let why = if hello {
                 "runs other join mods"
@@ -441,7 +458,9 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
                 INFO,
                 "join check: the game of {key:016x} said a matching hello late; it stays"
             );
-            crate::chat::send(key, &crate::texts::fill("join.admitted", &[]));
+            crate::texts::for_player(key, || {
+                crate::chat::send(key, &crate::texts::fill("join.admitted", &[]))
+            });
         }
         Step::Kick { key } => {
             let (Some(loader), Some(kick)) = (loader, STATE.kick.get().and_then(Option::as_ref))

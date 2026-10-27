@@ -392,7 +392,7 @@ unsafe extern "system" fn check_table(text: Str, why: *mut Str, user: *mut c_voi
                 return Status::OK;
             };
             crate::load::CHECK_WHY.with_borrow_mut(|kept| {
-                *kept = reason.to_string();
+                *kept = reason.to_reason();
                 if !why.is_null() {
                     // SAFETY: the loader's out pointer; the reason stays in
                     // this thread's `CHECK_WHY` until its next check.

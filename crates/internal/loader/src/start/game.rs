@@ -111,6 +111,7 @@ pub(super) fn begin(
     crate::admission::configure(&settings);
     crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
+    crate::texts::configure(&settings.language);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
     log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));

@@ -23,8 +23,9 @@ use crate::shape::{expand_shape, toml_string};
 /// the struct's doc comment heads the file, each field's doc comment precedes
 /// its key, and each value comes from `Default`. Struct attributes:
 /// `#[config(validate = path)]` names a `fn(&Self) -> Result<(), E>`, `E`
-/// any `Display` such as a `String`, that checks parsed values, `#[config(text = "key")]` the text key of the
-/// set's translated title.
+/// a `String`, a `&str` or a `ConfigError` such as `ConfigError::text`, that
+/// checks parsed values; `#[config(text = "key")]` the text key of the set's
+/// translated title.
 ///
 /// Field attributes: one stage of `startup`, `runtime` (the default), `restart`,
 /// `client` and `sync`, or the pair `startup, sync`, applied when a world loads

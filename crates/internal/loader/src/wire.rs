@@ -15,13 +15,15 @@ pub(crate) use frame::Partial;
 pub use frame::{Frame, assemble, frames, parse};
 pub use peer::Peer;
 
+use enshwick::i18n::Language;
+
 use crate::admission::Hello;
 use crate::remote::Message;
 
 /// The prefix of a frame line, both ways.
 pub const PREFIX: &str = "/enshwick-net ";
 /// The version of the frame protocol.
-pub const PROTOCOL: u8 = 1;
+pub const PROTOCOL: u8 = 2;
 /// The largest message a mod may send, in bytes.
 pub const MAX_MESSAGE: usize = 4096;
 /// The most frames one message takes.
@@ -50,8 +52,8 @@ pub const BURST: f64 = 40.0;
 
 /// Bit of a hello's flags: the mod list is whole.
 const HELLO_COMPLETE: u8 = 1;
-/// A hello's flags and host number, after its kind and version.
-const HELLO_HEAD: usize = 1 + 8;
+/// A hello's flags, host number and language, after its kind and version.
+const HELLO_HEAD: usize = 1 + 8 + 4;
 
 /// A control message's start: its kind and the protocol version.
 ///
@@ -67,23 +69,26 @@ pub fn control(kind: u8) -> Vec<u8> {
     vec![kind, PROTOCOL]
 }
 
-/// A client's hello, which names the join mods it runs.
+/// A client's hello, which names the join mods it runs and the language its
+/// player reads the game in.
 ///
 /// The control kind and version, flags, the host number `nonce` (0 unless
-/// the client hosts the game), then the mods, `id@version,...`, cut after
-/// the last whole entry that fits.
+/// the client hosts the game), the language, then the mods,
+/// `id@version,...`, cut after the last whole entry that fits.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick::i18n::Language;
 /// use enshwick_loader::wire::{hello, read_hello};
 ///
-/// let said = read_hello(&hello("you.zones@1.0.0", 9)).ok_or("no hello")?;
+/// let said = read_hello(&hello("you.zones@1.0.0", 9, Language::DE_DE)).ok_or("no hello")?;
 /// assert_eq!((said.mods.as_str(), said.complete, said.nonce), ("you.zones@1.0.0", true, 9));
+/// assert_eq!(said.language, Some(Language::DE_DE));
 /// # Ok::<(), &str>(())
 /// ```
 #[must_use]
-pub fn hello(mods: &str, nonce: u64) -> Vec<u8> {
+pub fn hello(mods: &str, nonce: u64, language: Language) -> Vec<u8> {
     let mut data = control(HELLO);
     let room = MAX_CONTROL - data.len() - HELLO_HEAD;
     let kept = if mods.len() <= room {
@@ -101,6 +106,7 @@ pub fn hello(mods: &str, nonce: u64) -> Vec<u8> {
         0
     });
     data.extend_from_slice(&nonce.to_le_bytes());
+    data.extend_from_slice(&language.0.to_le_bytes());
     data.extend_from_slice(kept.as_bytes());
     data
 }
@@ -127,11 +133,16 @@ pub fn read_hello(data: &[u8]) -> Option<Hello> {
             ..Hello::default()
         });
     };
-    let (nonce, mods) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
+    let (nonce, rest) = rest.split_first_chunk::<8>().unwrap_or((&[0; 8], &[]));
+    let (language, mods) = match rest.split_first_chunk::<4>() {
+        Some((language, mods)) => (Some(Language(u32::from_le_bytes(*language))), mods),
+        None => (None, rest),
+    };
     Some(Hello {
         mods: core::str::from_utf8(mods).unwrap_or_default().to_owned(),
         complete: flags & HELLO_COMPLETE != 0,
         nonce: u64::from_le_bytes(*nonce),
+        language,
     })
 }
 
@@ -215,15 +226,23 @@ mod tests {
 
     #[test]
     fn a_hello_names_the_join_mods_within_its_frames() {
-        let said = read_hello(&hello("you.trading-post@0.3.0,zones@0.1.0", 9)).unwrap();
+        let said = read_hello(&hello(
+            "you.trading-post@0.3.0,zones@0.1.0",
+            9,
+            Language::UK_UA,
+        ))
+        .unwrap();
         assert_eq!(said.mods, "you.trading-post@0.3.0,zones@0.1.0");
         assert!(said.complete);
         assert_eq!(said.nonce, 9);
+        assert_eq!(said.language, Some(Language::UK_UA));
         let bare = read_hello(&control(HELLO)).unwrap();
         assert_eq!((bare.mods.as_str(), bare.complete), ("", true));
+        assert_eq!(bare.language, None);
         assert_eq!(read_hello(&control(WELCOME)), None);
         let many: Vec<String> = (0..1000).map(|i| format!("mod-{i:04}@1.0.0")).collect();
-        let long = hello(&many.join(","), 0);
+        let long = hello(&many.join(","), 0, Language::DE_DE);
+        assert_eq!(read_hello(&long).unwrap().language, Some(Language::DE_DE));
         assert!(frames(CONTROL, 1, &long).is_some());
         let cut = read_hello(&long).unwrap();
         assert!(!cut.complete, "a cut list says so");
