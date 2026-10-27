@@ -72,7 +72,11 @@ pub(crate) fn apply(
     crate::log!(INFO, "{who} set {id} {key} = {}", change.value);
     change.destination = destination.clone();
     if destination != Destination::Next {
-        loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+        // The change is the world's, not the asking player's: the mod's
+        // handler reads no reader's language.
+        texts::for_nobody(|| {
+            loader.emit(Event::SETTINGS_CHANGED, Some(index), core::ptr::null());
+        });
     }
     Ok(change)
 }

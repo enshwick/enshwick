@@ -16,6 +16,7 @@
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
 
 use enshwick::abi::{BuildingData, Event, Header, HookFlags, PlayerData, Side, TickData};
 use enshwick::raw::read_at;
@@ -26,6 +27,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use crate::ticks::{StepTime, TICKS};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -322,6 +324,8 @@ unsafe extern "system" fn step(server: *mut u8) {
 /// - Called on the game thread after its step, where nothing else writes
 ///   the slots.
 unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8) {
+    // The step's one clock read: every part that needs the time takes it.
+    let now = Instant::now();
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
     let seen = SESSION.relock().step(server.expose_provenance(), thread);
@@ -356,8 +360,8 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             }
         });
     }
-    part!("inventory deliveries", crate::inventory::deliver());
-    part!("altar steps", crate::altars::after_step(loader));
+    part!("inventory deliveries", crate::inventory::deliver(now));
+    part!("altar steps", crate::altars::after_step(loader, now));
     part!("day steps", crate::daytime::after_step(loader));
     part!("knowledge steps", crate::knowledge::after_step(loader));
     part!("death steps", crate::deaths::after_step(loader));
@@ -373,20 +377,26 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
         "interaction steps",
         crate::interactions::after_step(loader, step)
     );
-    part!("stat steps", crate::stats::after_step(loader, step));
-    part!("action hints", crate::actions::after_step(loader));
+    part!("stat steps", crate::stats::after_step(loader, step, now));
+    part!("action hints", crate::actions::after_step(loader, now));
     part!(
         "knowledge change steps",
         crate::knowledge::changes::after_step(loader, step)
     );
-    let tick = TickData {
-        header: Header::of::<TickData>(),
-        step,
-    };
-    part!(
-        "tick events",
-        loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
-    );
+    if crate::host::handles(Event::TICKED) || TICKS.listed() {
+        let nanos = TICKS.nanos(now);
+        let time = TICKS.advance(nanos);
+        let tick = TickData {
+            elapsed_nanos: time.elapsed,
+            step_nanos: time.average,
+            ..TickData::new(step)
+        };
+        part!(
+            "tick events",
+            loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
+        );
+        part!("periodic ticks", periodic_ticks(step, nanos, time));
+    }
     part!("join admission", crate::admission::after_step(loader));
     part!("console lines", crate::console::after_step(loader));
     part!("chat sending", crate::chat::drain());
@@ -422,6 +432,41 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             });
         }
     }
+}
+
+/// Calls the periodic tick handlers due after step `step` at `now`, each
+/// with its mod's recent cost when callbacks are timed.
+fn periodic_ticks(step: u64, now: u64, time: StepTime) -> usize {
+    TICKS.run(
+        step,
+        now,
+        time,
+        |tick| {
+            !crate::host::is_off(tick.owner())
+                && tick.generation() == crate::reload::generation(tick.owner().get())
+        },
+        |tick, mut data| {
+            data.cost_nanos = crate::profile::events_reading(tick.owner())
+                .and_then(|(calls, ticks)| {
+                    let (calls, ticks) = tick.since_seen(calls, ticks);
+                    crate::profile::nanos(ticks.checked_div(calls)?)
+                })
+                .unwrap_or(0);
+            crate::profile::call(tick.owner(), crate::profile::Feature::Events, || {
+                // SAFETY: the handler lives in the mod's DLL, which stays
+                // loaded, with the pointer it was subscribed with; `data`
+                // lives for the call, and the safe layer catches the
+                // handler's panics.
+                unsafe {
+                    (tick.callback())(
+                        Event::TICKED,
+                        (&raw const data).cast::<c_void>(),
+                        tick.user(),
+                    );
+                };
+            });
+        },
+    )
 }
 
 fn forget_joined() {

@@ -79,6 +79,12 @@ pub struct Settings {
     /// game; the console's enshwick allowlist add and remove change the
     /// file, and changes apply at the next join. Read at start.
     pub allowlist: bool,
+    /// On a dedicated server, the language of the loader's texts where no
+    /// player's game names its own, such as the console's answers: a code
+    /// such as "de", "pt-br" or "uk"; empty for English. A player with
+    /// Enshwick, and a game's own client, always read the loader's texts in
+    /// their game's language. Read at start.
+    pub language: String,
 }
 
 /// What the knowledge guard does with a request a vanilla client never makes.
@@ -111,6 +117,7 @@ impl Default for Settings {
             join_hello_seconds: JOIN_HELLO_SECONDS,
             join_note_seconds: JOIN_NOTE_SECONDS,
             allowlist: false,
+            language: String::new(),
         }
     }
 }

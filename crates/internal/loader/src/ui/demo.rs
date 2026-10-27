@@ -56,16 +56,16 @@ pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
     let Some(fill) = *HUD_SAMPLES.relock() else {
         return;
     };
-    let label = |anchor: u32, words: &[u8], style: u32| super::HudItem {
+    let label = |anchor: u32, key: &str, style: u32| super::HudItem {
         anchor,
         kind: UiWidget::LABEL,
         style,
-        text: super::copy(&[words]),
+        text: super::copy(&[words(key).as_bytes()]),
         value: 0.0,
     };
     items.push(label(
         UiWidget::TOP_RIGHT,
-        b"Enshwick HUD sample",
+        "demo.hud.sample",
         UiWidget::STYLE_BODY,
     ));
     items.push(super::HudItem {
@@ -77,13 +77,28 @@ pub(super) fn hud_samples(items: &mut Vec<super::HudItem>) {
     });
     items.push(label(
         UiWidget::BOTTOM_LEFT,
-        b"Bottom left, in the warning style",
+        "demo.hud.warning",
         UiWidget::STYLE_WARNING,
     ));
 }
 
-const PAGES: usize = 4;
-const OPTIONS: [&[u8]; 3] = [b"First", b"Second", b"Third"];
+/// The topic of each page, by the key of its text.
+const PAGES: [&str; 4] = [
+    "demo.topic.text",
+    "demo.topic.rows",
+    "demo.topic.buttons",
+    "demo.topic.hud",
+];
+const OPTIONS: [&str; 3] = [
+    "demo.option.first",
+    "demo.option.second",
+    "demo.option.third",
+];
+
+/// The text of `key` in the game's language.
+fn words(key: &str) -> String {
+    crate::texts::fill(key, &[])
+}
 
 fn answer_name(raw: Option<u32>) -> &'static str {
     match raw {
@@ -91,6 +106,16 @@ fn answer_name(raw: Option<u32>) -> &'static str {
         Some(UiDialog::CANCEL) => "Cancel",
         Some(_) => "another button",
         None => "closed",
+    }
+}
+
+/// The key of the text that names an answer [`answer_name`] named.
+fn answer_key(name: &str) -> &'static str {
+    match name {
+        "OK" => "demo.answer.ok",
+        "Cancel" => "demo.answer.cancel",
+        "closed" => "demo.answer.closed",
+        _ => "demo.answer.other",
     }
 }
 
@@ -145,7 +170,7 @@ pub(super) unsafe fn draw(engine: &Engine, context: usize) {
 /// - `context` is the non-zero context `Engine::context` read in this frame.
 /// - No other window is open.
 unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
-    let title = super::copy(&[b"Enshwick interface demo"]);
+    let title = super::copy(&[words("demo.title").as_bytes()]);
     let name = super::copy(&[b"enshwick/loader/ui-demo"]);
     // SAFETY: this function's `# Safety` gives the frame, its thread and its
     // `context`; `demo.window` stays in the thread-local demo state, unmoved,
@@ -162,13 +187,13 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
         2 => buttons_page(&paint, demo),
         _ => hud_page(&paint, demo),
     }
-    if demo.page + 1 < PAGES && paint.button(b"Next page", true) {
+    if demo.page + 1 < PAGES.len() && paint.button(words("mods.page.next").as_bytes(), true) {
         demo.page += 1;
     }
-    if demo.page > 0 && paint.button(b"Previous page", true) {
+    if demo.page > 0 && paint.button(words("mods.page.previous").as_bytes(), true) {
         demo.page -= 1;
     }
-    let close = paint.button(b"Close", true);
+    let close = paint.button(words("actions.close").as_bytes(), true);
     // SAFETY: `window_begin` started `demo.window` in this frame, on this
     // thread, with this `context`; it did not move, and the painter's widgets
     // close every frame they open.
@@ -176,41 +201,54 @@ unsafe fn page(engine: &Engine, context: usize, demo: &mut Demo) -> bool {
     close
 }
 
+/// The heading of page `page`: its number of all and its topic.
+fn heading(paint: &Painter<'_>, page: usize) {
+    let line = crate::texts::fill(
+        "demo.page",
+        &[
+            ("page", &(page + 1).to_string()),
+            ("pages", &PAGES.len().to_string()),
+            ("topic", &words(PAGES[page])),
+        ],
+    );
+    paint.label(line.as_bytes(), UiWidget::STYLE_H3, false, true);
+}
+
 fn text_page(paint: &Painter<'_>) {
-    paint.label(b"Page 1 of 4: text styles", UiWidget::STYLE_H3, false, true);
-    for (words, style) in [
-        (&b"Body text"[..], UiWidget::STYLE_BODY),
-        (b"Secondary text", UiWidget::STYLE_SECONDARY),
-        (b"Heading 1", UiWidget::STYLE_H1),
-        (b"Heading 2", UiWidget::STYLE_H2),
-        (b"Warning", UiWidget::STYLE_WARNING),
-        (b"Positive", UiWidget::STYLE_POSITIVE),
-        (b"Negative", UiWidget::STYLE_NEGATIVE),
+    heading(paint, 0);
+    for (key, style) in [
+        ("demo.style.body", UiWidget::STYLE_BODY),
+        ("demo.style.secondary", UiWidget::STYLE_SECONDARY),
+        ("demo.style.h1", UiWidget::STYLE_H1),
+        ("demo.style.h2", UiWidget::STYLE_H2),
+        ("demo.style.warning", UiWidget::STYLE_WARNING),
+        ("demo.style.positive", UiWidget::STYLE_POSITIVE),
+        ("demo.style.negative", UiWidget::STYLE_NEGATIVE),
     ] {
-        paint.label(words, style, false, false);
+        paint.label(words(key).as_bytes(), style, false, false);
     }
     paint.label(
-        "A long body line that wraps at the width of the window, with Ukrainian letters: \u{0416}\u{0438}\u{0432}\u{0456} \u{0432}\u{043e}\u{0433}\u{043d}\u{0456}, \u{0436}\u{0438}\u{0432}\u{0456} \u{0441}\u{0435}\u{043b}\u{0430}.".as_bytes(),
+        words("demo.wrap").as_bytes(),
         UiWidget::STYLE_BODY,
         true,
         false,
     );
-    paint.label(b"A centred line", UiWidget::STYLE_SECONDARY, false, true);
-}
-
-fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
     paint.label(
-        b"Page 2 of 4: settings rows",
-        UiWidget::STYLE_H3,
+        words("demo.centred").as_bytes(),
+        UiWidget::STYLE_SECONDARY,
         false,
         true,
     );
-    if let Some(on) = paint.toggle(b"Toggle", demo.on, false) {
+}
+
+fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
+    heading(paint, 1);
+    if let Some(on) = paint.toggle(words("demo.toggle").as_bytes(), demo.on, false) {
         demo.on = on;
     }
-    let _fixed = paint.toggle(b"Toggle, read-only", demo.on, true);
+    let _fixed = paint.toggle(words("demo.toggle.fixed").as_bytes(), demo.on, true);
     if let Some(value) = paint.slider(
-        b"Slider, 0 to 10 in 11 stops",
+        words("demo.slider.stops").as_bytes(),
         demo.stops,
         (0.0, 10.0),
         11,
@@ -218,15 +256,34 @@ fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
     ) {
         demo.stops = value;
     }
-    if let Some(value) = paint.slider(b"Slider, continuous", demo.smooth, (0.0, 1.0), 0, false) {
+    if let Some(value) = paint.slider(
+        words("demo.slider.smooth").as_bytes(),
+        demo.smooth,
+        (0.0, 1.0),
+        0,
+        false,
+    ) {
         demo.smooth = value;
     }
-    let _fixed = paint.slider(b"Slider, read-only", demo.stops, (0.0, 10.0), 11, true);
-    if let Some(pick) = paint.dropdown(b"Dropdown", &OPTIONS, demo.pick, false) {
+    let _fixed = paint.slider(
+        words("demo.slider.fixed").as_bytes(),
+        demo.stops,
+        (0.0, 10.0),
+        11,
+        true,
+    );
+    let options = OPTIONS.map(words);
+    let options = options.each_ref().map(String::as_bytes);
+    if let Some(pick) = paint.dropdown(
+        words("demo.dropdown").as_bytes(),
+        &options,
+        demo.pick,
+        false,
+    ) {
         demo.pick = pick;
     }
     paint.label(
-        b"A progress bar at the continuous slider's value",
+        words("demo.progress").as_bytes(),
         UiWidget::STYLE_SECONDARY,
         false,
         false,
@@ -235,41 +292,33 @@ fn rows_page(paint: &Painter<'_>, demo: &mut Demo) {
 }
 
 fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
+    heading(paint, 3);
     paint.label(
-        b"Page 4 of 4: the HUD and the map",
-        UiWidget::STYLE_H3,
-        false,
-        true,
-    );
-    paint.label(
-        b"Close this window to see the HUD samples: a line and a bar at the top right, a line at the bottom left. They hide with the HUD, in menus and in screenshot mode.",
+        words("demo.hud.help").as_bytes(),
         UiWidget::STYLE_SECONDARY,
         true,
         false,
     );
-    if let Some(on) = paint.toggle(b"Show HUD samples", demo.hud, false) {
+    if let Some(on) = paint.toggle(words("demo.hud.show").as_bytes(), demo.hud, false) {
         demo.hud = on;
     }
     let at = *WHERE.relock();
     let Some(position) = at else {
         paint.label(
-            b"The server sent no position for a marker.",
+            words("demo.marker.none").as_bytes(),
             UiWidget::STYLE_WARNING,
             true,
             false,
         );
         return;
     };
-    if let Some(on) = paint.toggle(
-        b"Show a map marker where you typed the command",
-        demo.marker,
-        false,
-    ) {
+    if let Some(on) = paint.toggle(words("demo.marker.show").as_bytes(), demo.marker, false) {
         demo.marker = on;
+        let label = words("demo.marker.label");
         let marker = enshwick::abi::UiMarker {
             header: enshwick::abi::Header::of::<enshwick::abi::UiMarker>(),
             position,
-            label: enshwick::abi::Str::new("Enshwick demo marker"),
+            label: enshwick::abi::Str::new(&label),
             color: enshwick::abi::UiMarker::GREEN,
             reserved: 0,
         };
@@ -279,28 +328,23 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
 }
 
 fn buttons_page(paint: &Painter<'_>, demo: &Demo) {
-    paint.label(
-        b"Page 3 of 4: buttons, sounds and the dialog",
-        UiWidget::STYLE_H3,
-        false,
-        true,
-    );
-    for (words, sound) in [
-        (&b"Play click"[..], UiWidget::SOUND_CLICK),
-        (b"Play confirm", UiWidget::SOUND_CONFIRM),
-        (b"Play back", UiWidget::SOUND_BACK),
-        (b"Play error", UiWidget::SOUND_ERROR),
+    heading(paint, 2);
+    for (key, sound) in [
+        ("demo.play.click", UiWidget::SOUND_CLICK),
+        ("demo.play.confirm", UiWidget::SOUND_CONFIRM),
+        ("demo.play.back", UiWidget::SOUND_BACK),
+        ("demo.play.error", UiWidget::SOUND_ERROR),
     ] {
-        if paint.button(words, true) {
+        if paint.button(words(key).as_bytes(), true) {
             paint.sound(sound);
         }
     }
-    let _never = paint.button(b"Disabled button", false);
-    if paint.button(b"Show a dialog", true) {
+    let _never = paint.button(words("demo.button.disabled").as_bytes(), false);
+    if paint.button(words("demo.dialog.show").as_bytes(), true) {
         super::show(
             "Enshwick",
-            "This is a dialog in the game's own style.",
-            "Its buttons are the game's, in your language. The answer shows on this page and in the log.",
+            &words("demo.dialog.message"),
+            &words("demo.dialog.detail"),
             1 << UiDialog::OK | 1 << UiDialog::CANCEL,
             |raw| {
                 let name = answer_name(raw);
@@ -310,8 +354,8 @@ fn buttons_page(paint: &Painter<'_>, demo: &Demo) {
         );
     }
     let last = match demo.answer {
-        Some(name) => format!("Last answer: {name}"),
-        None => "No answer yet".to_owned(),
+        Some(name) => crate::texts::fill("demo.answer", &[("answer", &words(answer_key(name)))]),
+        None => words("demo.answer.none"),
     };
     paint.label(last.as_bytes(), UiWidget::STYLE_SECONDARY, false, true);
 }
@@ -325,5 +369,13 @@ mod tests {
         assert_eq!(answer_name(Some(UiDialog::OK)), "OK");
         assert_eq!(answer_name(Some(UiDialog::CANCEL)), "Cancel");
         assert_eq!(answer_name(None), "closed");
+    }
+
+    #[test]
+    fn every_answer_has_a_text_of_its_own() {
+        let raws = [Some(UiDialog::OK), Some(UiDialog::CANCEL), Some(99), None];
+        let mut keys: Vec<&str> = raws.map(|raw| answer_key(answer_name(raw))).to_vec();
+        keys.dedup();
+        assert_eq!(keys.len(), raws.len());
     }
 }

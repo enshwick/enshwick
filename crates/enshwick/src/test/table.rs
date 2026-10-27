@@ -242,6 +242,8 @@ pub(crate) struct State {
     pub(crate) points: super::points::FakePoints,
     /// Calls the mod serves and asks for.
     pub(crate) calls: super::calls::FakeCalls,
+    /// The fake steps and the mod's periodic tick handlers.
+    pub(crate) ticks: super::ticks::FakeTicks,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
@@ -458,6 +460,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         stats: super::stats::FakeStats::default(),
         points: super::points::FakePoints::default(),
         calls: super::calls::FakeCalls::default(),
+        ticks: super::ticks::FakeTicks::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -706,4 +709,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     account_action,
     allowlist_set,
     allowlist_has,
+    subscribe_tick: super::ticks::subscribe_tick,
+    set_tick_every: super::ticks::set_tick_every,
 };

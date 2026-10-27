@@ -8,7 +8,7 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- `BuffTypeId` and `SurvivorId` are ABI ids (ABI 3.3): the buff and
+- `BuffTypeId` and `SurvivorId` are ABI ids (ABI 3.4): the buff and
   survivor structs and `HostApi::remove_buff`, `summon_item` and the
   survivor status merge take them, and they print as their number. Every
   id the game derives from a GUID has `named` (#623).
@@ -16,6 +16,9 @@ Each entry names the pull request that made the change.
   labels; `Roll::node` and `Roll::labels` are `None` where the game has
   none, and `Source::with_nodes` and `with_labels` take the ids (#623).
 
+- `Language::OFFERED`, the languages the game's settings offer, and
+  `Texts::missing_in(languages)`, each language's missing texts, so a mod's
+  test holds its texts complete for every offered language.
 - Every id type prints as its number (`Display`): `Entity`, `ItemId`,
   `PlayerKey`, `RecipeId`, `AffixId`, `SkillNode` and `KnowledgeId` go
   into a log line as they are (#615).
@@ -24,9 +27,31 @@ Each entry names the pull request that made the change.
   (ABI 3.2) (#615).
 - `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
   give the game's id of a GUID with its type, in a constant too (#615).
+- `Load::on_tick` runs a tick handler on a period of wall time and returns
+  a `TickPeriod`, whose `set_every` changes the period while the game runs;
+  `Load::on_every_step` runs one on every server step. A step a handler
+  skips never enters the mod (`HostApi::subscribe_tick`,
+  `HostApi::set_tick_every`, `TickHandle`, ABI 3.3) (#614).
+- `TickData` carries the steps and the time since the handler's last call,
+  the average step interval and, with timed diagnostics, the mod's recent
+  cost per handler call: `elapsed_steps`, `elapsed`, `step_interval` and
+  `cost`, with `TickData::new` and `with_elapsed` for tests (ABI 3.3) (#614).
+- The fake host runs steps as the loader does with `Installed::tick` (#614).
 
 ### Changed
 
+- Breaking: `Load::on::<Ticked>` runs the handler every
+  `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's
+  `enshwick.on("Ticked", ...)` and the scheduler, whose `next_tick` runs on
+  its next pass, within that period. `Load::on_every_step` keeps the old
+  timing (#614).
+- Breaking: `StepClock::step(instant)` is `StepClock::advance(elapsed,
+  steps)`, and the mod's step clock moves by the time its ticks carry,
+  without reading the clock itself (#614).
+- The loader reads the clock once per server step and hands that reading
+  to every part of the step that needs the time (#614).
+- `abi::read_headed` copies a struct in one move when the writer's struct
+  covers all of it, so a larger event struct costs a handler no more (#614).
 - Breaking: `Guid::id` is `Guid::fnv1a`, the bare hash, and `Id::id` is
   gone; `ItemId::from_guid(id.guid())` and its siblings take their place.
   `World::used_item` returns an `ItemId`, and `migrations::current_id`
@@ -39,6 +64,22 @@ Each entry names the pull request that made the change.
   `Option<Entity>` for no entity and returns the mod's `Answer`;
   `set_knowledge`, `grants`, `revokes` and `account_changes` carry
   `KnowledgeId`, and `None` for the world (#615).
+- A text missing in a regional language comes from its main variety before
+  English: `pt-br` from `pt`, `es-mx` from `es-419` and `es`, `fr-ca` from
+  `fr`, `nb` from `no` (`Language::lookup_order`).
+- The loader's own texts sit in a file per language, and every console
+  answer, the status summary, the per-mod costs, the conflict report and
+  the interface demo follow the reader's language.
+- A player's game tells the server its language when it joins; the
+  loader's answers, join notes and mod names to that player follow it, and
+  on a server `i18n::language()` is that player's language while the loader
+  asks a mod about the player. The loader's setting `language` sets the
+  language of its console. The join message protocol moved to version 2
+  (#620).
+- `ConfigError::text(key, args)` refuses settings with a text of the mod's
+  texts, which each player reads in their own language; the `validate` of
+  the `Config` derive takes any error that converts into `ConfigError`
+  (`String`, `&str` or a `ConfigError`) (#620).
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

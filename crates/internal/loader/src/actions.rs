@@ -304,8 +304,7 @@ fn cut(text: &str, max: usize) -> &str {
 
 /// Pushes each client the hints its player has at hand, once a second, on
 /// the server's game thread.
-pub(crate) fn after_step(loader: &Loader) {
-    let now = Instant::now();
+pub(crate) fn after_step(loader: &Loader, now: Instant) {
     let due = server_state(|s| {
         if s.next_hints.is_some_and(|next| now < next) {
             return false;
