@@ -314,7 +314,7 @@ impl Message {
 /// The settings file `text` as an administrator sees it remotely: every
 /// field the schema marks `secret` taken out.
 #[must_use]
-pub fn without_secrets(schema: &Schema, text: &str) -> String {
+pub fn redacted(schema: &Schema, text: &str) -> String {
     let Ok(mut doc) = text.parse::<toml_edit::DocumentMut>() else {
         return String::new();
     };
@@ -385,7 +385,7 @@ mod live {
     use enshwick::abi::PlayerInfo;
     use enshwick::config::Schema;
 
-    use super::{Message, admit, texts, values_text, without_secrets};
+    use super::{Message, admit, redacted, texts, values_text};
     use crate::host::Loader;
 
     /// When each player last changed a setting.
@@ -570,7 +570,7 @@ mod live {
         };
         let text = if admin {
             let file = crate::worlds::show_text(loader, record);
-            without_secrets(&schema, &file)
+            redacted(&schema, &file)
         } else {
             record
                 .synced
@@ -752,7 +752,7 @@ mod tests {
     #[test]
     fn secrets_never_leave_and_never_change() {
         let text = "# Limit.\nlimit = 4\ntoken = \"hunter2\"\n";
-        let shown = without_secrets(&schema(), text);
+        let shown = redacted(&schema(), text);
         assert!(
             shown.contains("limit = 4") && !shown.contains("hunter2"),
             "{shown}"
