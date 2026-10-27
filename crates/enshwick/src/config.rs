@@ -8,10 +8,12 @@
 
 use serde::{Deserialize, Serialize};
 
+mod reason;
 mod schema;
 mod table;
 mod values;
 
+pub(crate) use reason::reason;
 pub use schema::{Field, Group, Kind, Schema, value_at};
 pub use table::TableConfig;
 pub(crate) use values::changed_keys;
@@ -382,8 +384,9 @@ impl ConfigError {
 }
 
 impl From<toml::de::Error> for ConfigError {
+    /// The key and the type `error` expected, never the value it found.
     fn from(error: toml::de::Error) -> Self {
-        Self::Parse(error.message().to_owned())
+        Self::Parse(reason(None, &error))
     }
 }
 
@@ -877,5 +880,16 @@ workers = 2"
             vec![Field::new("auth.token", Stage::Runtime, "x")],
         );
         assert_eq!(Schema::parse(&fine.to_text()).unwrap(), fine);
+    }
+
+    #[test]
+    fn a_held_value_is_not_logged() {
+        use super::{Field, Schema, Stage};
+
+        let pin = Field::new("pin", Stage::Runtime, &4).with_range(Some(1.0), Some(16.0));
+        let schema = Schema::new("", "config", vec![pin]);
+        let mut settings: toml::Table = toml::from_str("pin = 4815162342").unwrap();
+        let held = schema.clamp(&mut settings);
+        assert_eq!(held, ["pin is outside 1 to 16; 16 applies"]);
     }
 }

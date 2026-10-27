@@ -13,6 +13,7 @@ pub mod call_schema;
 mod calls;
 mod capture;
 mod config_check;
+mod config_errors;
 mod config_groups;
 mod config_lists;
 mod containers;
