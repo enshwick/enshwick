@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::Off;
-use crate::content::changes::{Change, Entry, ItemsChange};
+use crate::content::changes::{Change, Entry, ItemsChange, RecipesChange};
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -78,6 +78,7 @@ pub struct Pack {
     pub(super) drops: Vec<Drop>,
     pub(super) changes: Vec<(Change, String)>,
     pub(super) selections: Vec<(ItemsChange, String)>,
+    pub(super) recipe_selections: Vec<(RecipesChange, String)>,
     pub(super) texts: String,
     pub(super) hash: u32,
 }
@@ -394,6 +395,7 @@ impl Pack {
             drops: Vec::new(),
             changes: Vec::new(),
             selections: Vec::new(),
+            recipe_selections: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -413,11 +415,10 @@ impl Pack {
             &loot_file,
             &loot_text,
         ));
-        pack.changes.extend(super::changes::recipe_changes(
-            &mut reader,
-            &recipes_file,
-            &recipes_text,
-        ));
+        let (recipe_changes, recipe_selections) =
+            super::changes::recipe_changes(&mut reader, &recipes_file, &recipes_text);
+        pack.changes.extend(recipe_changes);
+        pack.recipe_selections = recipe_selections;
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
@@ -509,6 +510,28 @@ impl Pack {
         &self.selections
     }
 
+    /// The pack's changes of every vanilla recipe a selection picks, each
+    /// with its source: the file and line, then the selection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::Recipes;
+    /// use enshwick::content::recipes::RecipeKind;
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("recipes.toml", "[[change]]\nkind = [\"roof\"]\ncost = { times = 0.5 }\n");
+    /// let pack = Pack::parse("you.roofs", &files)?;
+    /// let (change, source) = &pack.recipe_selections()[0];
+    /// assert_eq!(change.recipes, Recipes::Kind(RecipeKind::Roof));
+    /// assert_eq!(source, "recipes.toml:1 (kind roof)");
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn recipe_selections(&self) -> &[(RecipesChange, String)] {
+        &self.recipe_selections
+    }
+
     /// Whether the pack adds or changes anything players' games read: items,
     /// workshops, recipes, texts or changes of values beside loot. Such a pack runs on
     /// the server and every player alike, so it keeps `join` on.
@@ -537,6 +560,7 @@ impl Pack {
                 .iter()
                 .all(|(change, _)| change.field.entry() == Entry::Loot)
             && self.selections.is_empty()
+            && self.recipe_selections.is_empty()
             && self.texts.trim().is_empty())
     }
 
@@ -564,6 +588,7 @@ impl Pack {
             && self.workshops == other.workshops
             && self.changes == other.changes
             && self.selections == other.selections
+            && self.recipe_selections == other.recipe_selections
             && self.texts == other.texts
     }
 

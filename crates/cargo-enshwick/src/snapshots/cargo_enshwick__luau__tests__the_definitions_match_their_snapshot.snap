@@ -129,6 +129,8 @@ declare enshwick: {
 		& ((event: "ChunkUnloaded", handler: (data: ChunkData) -> ()) -> ())
 		& ((event: "BuildingRemoved", handler: (data: BuildingData) -> ()) -> ())
 		& ((event: "PlayerDied", handler: (data: PlayerDeathData) -> ()) -> ()),
+	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
+	settings: () -> { [string]: any },
 	--- The mod's log file, one line per call.
 	log: {
 		--- Writes `text` to the mod's log as information.

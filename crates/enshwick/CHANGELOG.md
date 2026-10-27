@@ -14,6 +14,13 @@ Each entry names the pull request that made the change.
   on a build it leaves vanilla at start; `world_holds`, `held_worlds` and
   `WORLDS_DIR` read them. A data pack that raised a stack size now holds
   the worlds saved with it, not the whole data folder (#563).
+- `Load::change_recipes` changes the output count, cost or time of every
+  vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
+  makes, `Recipes::Workshop` by where it is made, read from the game's
+  data by the loader (`DataSelect::RECIPE_KIND`, `DataSelect::WORKSHOP`,
+  ABI minor 91); a data pack's `recipes.toml` takes `kind = [...]` and
+  `workshop = [...]` for the same, and `RecipeKind::name` gives the names
+  (#562).
 - `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
@@ -26,6 +33,12 @@ Each entry names the pull request that made the change.
 - The `world_quiet` entry answers whether a mod is on the server's game
   thread at a quiet moment while a world runs, where it may read live
   components (ABI 2.90) (#557).
+- `Load::table_config` reads settings described by a `config::Schema` at
+  run time, with the file, checks, stages, Mods screen and join values of a
+  typed `Config`; `config::TableConfig::on_change` follows them, and
+  `Schema::template` writes the file.
+- A pack's `pack.toml` declares settings in `[[setting]]` tables
+  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read.
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
@@ -62,6 +75,11 @@ Each entry names the pull request that made the change.
   player's rights for every change before it writes, and a refusal shows
   as `TransactionStatus::NotAllowed`; the op kinds, records and
   `transaction_commit_for` are ABI minor 89 (#551).
+- The conflict report lists code patches refused over another mod's
+  bytes, vanilla values one mod's set overrides with both values, and
+  components several mods write; the loader compares the game's code with
+  the executable on disk while it starts and names the DLL or mod that
+  changed it outside the API, after each load, `init` and `ready` (#555).
 - A data pack's `items.toml` changes the stack size or container slots of
   every vanilla item of some categories (`category = ["Materials"]`), every
   item that stacks (`items = "stackable"`) or every container

@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 90
+#define ENSHWICK_ABI_MINOR 91
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -703,6 +703,12 @@ typedef uint32_t EnshwickDataSelect;
 #define EnshwickDataSelect_STACKABLE 2
 // Every item that places a container.
 #define EnshwickDataSelect_CONTAINERS 3
+// Every recipe whose output is of the kind whose
+// `RecipeKind` code is `DataChange::categories`. Since minor 91.
+#define EnshwickDataSelect_RECIPE_KIND 4
+// Every recipe made at the workshop whose GUID is
+// `DataChange::entry`. Since minor 91.
+#define EnshwickDataSelect_WORKSHOP 5
 
 // One change of a vanilla value, as
 // `HostApi::change_data` takes it. The
@@ -724,11 +730,14 @@ typedef struct EnshwickDataChange {
   // The item the field names inside its entry, such as a recipe's
   // ingredient; all zero for none. Since minor 79.
   uint8_t item[16];
-  // Which vanilla items the change reaches: `entry` alone, or every item
-  // a selection picks, with `entry` all zero. Since minor 83.
+  // Which vanilla entries the change reaches: `entry` alone, or every
+  // item or recipe a selection picks, with `entry` all zero but for
+  // `DataSelect::WORKSHOP`. Since minor 83.
   EnshwickDataSelect select;
   // The item categories `DataSelect::CATEGORY` picks, a bit per the
-  // game's `ItemCategory`; 0 for any other selection. Since minor 83.
+  // game's `ItemCategory`, or the `RecipeKind` code
+  // `DataSelect::RECIPE_KIND` picks; 0 for any other selection. Since
+  // minor 83.
   uint32_t categories;
 } EnshwickDataChange;
 

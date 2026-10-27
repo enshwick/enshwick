@@ -62,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 
 ## Names and references
 
@@ -229,6 +230,30 @@ any item of a kind keeps its count. Most workbench recipes
 take no time; production stations such as the kiln do. A changed time
 reaches a production that runs already from its next step on.
 
+A change can also pick every vanilla recipe of some kinds, by what it
+makes, or every vanilla recipe made at some crafting stations, named by
+their items:
+
+```toml
+[[change]]
+kind = ["building-block", "roof"]
+cost = { times = 0.5 }
+
+[[change]]
+workshop = ["Prop_Production_T2_Kiln", "Prop_Production_T2_Smelter"]
+time = { times = 0.5 }
+```
+
+| Selection | Picks |
+| --- | --- |
+| `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
+| `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
+
+A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
+the pack also names in `recipes` or `output` keeps that change alone, and
+the pack's log says how many recipes each selection reached.
+
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check
 proves. [Game rates](../rates.md) multiply what a pack sets.
@@ -250,8 +275,8 @@ warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from
 
 A Rust mod declares the same changes with
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`. With `Load::change_items` it makes the selections a pack
-makes. The loader reads the selection from the game's data and merges one
+during `init`. With `Load::change_items` and `Load::change_recipes` it
+makes the selections a pack makes. The loader reads the selection from the game's data and merges one
 change per item in the mod's place in load order, as it does for a pack:
 
 ```rust

@@ -63,6 +63,7 @@ end)
 | `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md), with its data as a table; only at the top level of `main.luau` |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
+| `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
 | `enshwick.scheduler` | `next_tick`, `after` and `every` run a function on the game thread; an `every` task stops when it returns `false` |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
 
@@ -92,6 +93,49 @@ reaches Luau and the definitions with no other change.
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
+
+## Settings
+
+A Luau mod declares its settings in `pack.toml`, one `[[setting]]` table
+each, in the order the Mods screen shows them:
+
+```toml
+[[setting]]
+key = "greeting"
+default = "Welcome"
+doc = "What a player who joins reads before their name."
+
+[[setting]]
+key = "announce_minutes"
+default = 30
+min = 1
+max = 1440
+stage = "restart"
+doc = "How often the log counts the players online, in minutes."
+```
+
+| Field | Meaning |
+| --- | --- |
+| `key` | the key in `mod-configs/<id>.toml`, of `[a-z0-9_]` |
+| `default` | the value on first start; its type is the setting's |
+| `doc` | what it does, for the file's comments and the Mods screen |
+| `stage` | when a change takes effect, as for a Rust mod's [settings](settings.md): `runtime` (the default), `startup`, `restart`, `client` or `sync` |
+| `synced` | with `stage = "startup"`, a joined player takes the server's value |
+| `min`, `max` | the range of a number |
+| `choices` | the values it accepts |
+| `text` | the key of its label in the pack's `texts.toml`; `config.<key>` unless given |
+
+The loader writes the file from these on first start, checks every value
+against its declaration, and shows the settings behind the mod's gear on the
+Mods screen, as it does a Rust mod's. `enshwick.settings()` returns the
+values in force as a table. A `SettingsChanged` handler runs after the new
+values are in place, so it reads them again there:
+
+```luau
+enshwick.on("SettingsChanged", function()
+    enshwick.log.info(`greeting now {enshwick.settings().greeting}`)
+end)
+```
 
 ## The sandbox
 

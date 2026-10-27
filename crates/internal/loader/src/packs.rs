@@ -248,6 +248,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
         .ok()
         .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
+    let settings = manifest.as_ref().and_then(|(m, _)| m.settings_schema());
     if let Some((manifest, text)) = manifest
         && let Err(problem) = manifest.check(&text, &pack)
     {
@@ -272,6 +273,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
                     load,
                     &id,
                     scripts,
+                    settings,
                     enshwick_luau::Limits::default(),
                 )?);
             }
@@ -292,7 +294,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
                 pack.ids().len(),
                 pack.drops().len(),
                 pack.changes().len(),
-                pack.selections().len()
+                pack.selections().len() + pack.recipe_selections().len()
             ),
         );
         with(|packs| {
@@ -433,6 +435,7 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             ModIndex::new(index),
             pack.changes().to_vec(),
             pack.selections().to_vec(),
+            pack.recipe_selections().to_vec(),
         ) {
             Ok(rebuilt) => {
                 crate::log::write(
@@ -440,7 +443,9 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
                     id,
                     &format!(
                         "data pack reloaded: {} changes of values, {rebuilt} resources built again",
-                        pack.changes().len() + pack.selections().len()
+                        pack.changes().len()
+                            + pack.selections().len()
+                            + pack.recipe_selections().len()
                     ),
                 );
                 taken = true;

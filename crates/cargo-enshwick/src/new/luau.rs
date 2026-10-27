@@ -79,6 +79,12 @@ authors = ["Your Name"]
 license = "MIT"
 side = "{side}"
 join = {join}
+
+# Settings players change on the Mods screen; `enshwick.settings()` reads them.
+# [[setting]]
+# key = "greeting"
+# default = "Welcome"
+# doc = "What a player who joins reads."
 "#;
 
 const MAIN_LUAU: &str = r#"--!strict
