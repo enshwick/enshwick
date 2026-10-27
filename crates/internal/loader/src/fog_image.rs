@@ -82,7 +82,9 @@ impl FogShape {
         self.edge
     }
 
-    /// The metres one pixel covers along each axis.
+    /// The metres one pixel covers along each axis, from the z size and the
+    /// pixel rows: the game reads no scale of its own here, and its fixed
+    /// 8 m per pixel matches while the world is a multiple of a tile.
     #[must_use]
     pub fn metres_per_pixel(&self) -> f64 {
         f64::from(self.size_z) / f64::from(self.size()[1])
@@ -172,7 +174,8 @@ impl FogImage {
     ///
     /// let shape = FogShape::new(2, 1, 4, 4.0).unwrap();
     /// let mut image = FogImage::new(shape);
-    /// image.put_tile(1, 0, &[255; 16]);
+    /// assert!(image.put_tile(1, 0, &[255; 16]));
+    /// assert!(!image.put_tile(1, 0, &[255; 16]));
     /// let mut out = [0u8; 2];
     /// image.read([3, 0], [2, 1], &mut out).unwrap();
     /// assert_eq!(out, [0, 255]);
@@ -194,28 +197,37 @@ impl FogImage {
         self.shape
     }
 
-    /// How many tiles have been put since it was made.
+    /// How many puts changed a pixel since it was made.
     #[must_use]
     pub const fn version(&self) -> u64 {
         self.version
     }
 
     /// Writes tile (`tx`, `ty`) from `tile`, its pixels row by row, x
-    /// fastest, as the game keeps them. A tile outside the fog or of the
-    /// wrong length is skipped.
-    pub fn put_tile(&mut self, tx: u32, ty: u32, tile: &[u8]) {
+    /// fastest, as the game keeps them, and whether a pixel changed, which
+    /// moves the version. A tile outside the fog or of the wrong length is
+    /// skipped.
+    pub fn put_tile(&mut self, tx: u32, ty: u32, tile: &[u8]) -> bool {
         let edge = self.shape.edge as usize;
         let [tiles_wide, tiles_high] = self.shape.tiles();
         if tx >= tiles_wide || ty >= tiles_high || tile.len() != edge * edge {
-            return;
+            return false;
         }
         let width = self.shape.size()[0] as usize;
         let left = tx as usize * edge;
+        let mut changed = false;
         for (row, line) in tile.chunks_exact(edge).enumerate() {
             let start = (ty as usize * edge + row) * width + left;
-            self.pixels[start..start + edge].copy_from_slice(line);
+            let kept = &mut self.pixels[start..start + edge];
+            if kept != line {
+                kept.copy_from_slice(line);
+                changed = true;
+            }
         }
-        self.version += 1;
+        if changed {
+            self.version += 1;
+        }
+        changed
     }
 
     /// Copies the box of `size` pixels at `min` into `out`, row by row.
@@ -244,6 +256,82 @@ impl FogImage {
                 .copy_from_slice(&self.pixels[start..start + box_width]);
         }
         Ok(())
+    }
+}
+
+/// What a reveal copies into the loader's image.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Plan {
+    /// A fog the image does not hold yet: a new image, every tile, a new
+    /// session.
+    Full,
+    /// These tiles of the fog the image holds.
+    Tiles(TileRect),
+    /// Nothing.
+    Nothing,
+}
+
+/// The copy a reveal of the fog at `fog` of `shape` makes, when the image
+/// holds `held` and tiles `skipped` were left out by earlier reveals.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::fog_image::{FogShape, Plan, TileRect, plan};
+///
+/// let shape = FogShape::new(40, 40, 32, 10_240.0).unwrap();
+/// assert_eq!(plan(None, 0x1000, shape, None, None), Plan::Full);
+/// let rect = TileRect { x: 1..2, y: 3..4 };
+/// assert_eq!(plan(Some((0x1000, shape)), 0x1000, shape, Some(rect.clone()), None), Plan::Tiles(rect));
+/// ```
+#[must_use]
+pub fn plan(
+    held: Option<(usize, FogShape)>,
+    fog: usize,
+    shape: FogShape,
+    revealed: Option<TileRect>,
+    skipped: Option<TileRect>,
+) -> Plan {
+    if held != Some((fog, shape)) {
+        return Plan::Full;
+    }
+    match (revealed, skipped) {
+        (Some(a), Some(b)) => Plan::Tiles(a.union(&b)),
+        (Some(rect), None) | (None, Some(rect)) => Plan::Tiles(rect),
+        (None, None) => Plan::Nothing,
+    }
+}
+
+impl TileRect {
+    /// The smallest rectangle holding both.
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            x: self.x.start.min(other.x.start)..self.x.end.max(other.x.end),
+            y: self.y.start.min(other.y.start)..self.y.end.max(other.y.end),
+        }
+    }
+
+    /// The rectangle in one word, 16 bits per bound, for a lock-free
+    /// record of skipped tiles; 0 is no rectangle.
+    #[must_use]
+    pub fn pack(&self) -> u64 {
+        let bound = |value: u32| u64::from(u16::try_from(value).unwrap_or(u16::MAX));
+        // Ends are stored plus one, so no packed rectangle is 0.
+        bound(self.x.start)
+            | bound(self.x.end + 1) << 16
+            | bound(self.y.start) << 32
+            | bound(self.y.end + 1) << 48
+    }
+
+    /// The rectangle [`TileRect::pack`] made; `None` for 0.
+    #[must_use]
+    pub fn unpack(word: u64) -> Option<Self> {
+        let bound = |shift: u32| u32::try_from((word >> shift) & 0xffff).unwrap_or(0);
+        (word != 0).then(|| Self {
+            x: bound(0)..bound(16).saturating_sub(1),
+            y: bound(32)..bound(48).saturating_sub(1),
+        })
     }
 }
 
@@ -325,6 +413,62 @@ mod tests {
             let mut out = vec![0u8; 1024];
             image.read([tx * 32, ty * 32], [32, 32], &mut out).unwrap();
             prop_assert_eq!(out, tile);
+        }
+    }
+
+    fn rect(x: Range<u32>, y: Range<u32>) -> TileRect {
+        TileRect { x, y }
+    }
+
+    #[test]
+    fn a_fog_the_image_does_not_hold_is_copied_whole() {
+        let shape = world();
+        let other = FogShape::new(20, 40, 32, 10_240.0).unwrap();
+        assert_eq!(
+            plan(None, 1, shape, Some(rect(0..1, 0..1)), None),
+            Plan::Full
+        );
+        assert_eq!(plan(Some((1, shape)), 2, shape, None, None), Plan::Full);
+        assert_eq!(plan(Some((1, other)), 1, shape, None, None), Plan::Full);
+    }
+
+    #[test]
+    fn a_held_fog_copies_the_reveal_and_what_earlier_reveals_skipped() {
+        let shape = world();
+        let held = Some((1, shape));
+        assert_eq!(plan(held, 1, shape, None, None), Plan::Nothing);
+        assert_eq!(
+            plan(
+                held,
+                1,
+                shape,
+                Some(rect(2..3, 2..4)),
+                Some(rect(0..1, 5..6))
+            ),
+            Plan::Tiles(rect(0..3, 2..6))
+        );
+        assert_eq!(
+            plan(held, 1, shape, None, Some(rect(0..1, 5..6))),
+            Plan::Tiles(rect(0..1, 5..6))
+        );
+    }
+
+    #[test]
+    fn a_tile_that_holds_the_same_pixels_keeps_the_version() {
+        let mut image = FogImage::new(FogShape::new(2, 2, 2, 4.0).unwrap());
+        assert!(!image.put_tile(0, 0, &[0; 4]));
+        assert_eq!(image.version(), 0);
+        assert!(image.put_tile(1, 1, &[0, 0, 9, 0]));
+        assert!(!image.put_tile(1, 1, &[0, 0, 9, 0]));
+        assert_eq!(image.version(), 1);
+    }
+
+    proptest! {
+        #[test]
+        fn a_packed_rectangle_unpacks_as_it_was(x0 in 0u32..256, w in 0u32..256, y0 in 0u32..256, h in 0u32..256) {
+            let given = rect(x0..x0 + w, y0..y0 + h);
+            prop_assert_ne!(given.pack(), 0);
+            prop_assert_eq!(TileRect::unpack(given.pack()), Some(given));
         }
     }
 }

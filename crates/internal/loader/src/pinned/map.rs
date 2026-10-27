@@ -2,6 +2,7 @@
 
 use super::{Constant, Symbol};
 
+pub(crate) const FOG_DESTROY: Symbol = Symbol::new("map.fog_destroy");
 pub(crate) const FOG_REVEAL: Symbol = Symbol::new("map.fog_reveal");
 pub(crate) const FOG_SIZE_Z: Constant = Constant::new("map.fog_size_z");
 pub(crate) const FOG_TILES: Constant = Constant::new("map.fog_tiles");

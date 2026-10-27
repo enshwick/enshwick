@@ -55,10 +55,11 @@ pub struct FogState {
     pub metres_per_pixel: f64,
     /// The world's z size the fog covers, in metres.
     pub size_z: f64,
-    /// Grows whenever pixels may have changed: a mod that compares it
-    /// reads again only when it moved.
+    /// Grows whenever pixels changed: a mod that compares it reads again
+    /// only when it moved.
     pub version: u64,
-    /// Changes with each world the client enters.
+    /// Changes with each world the client enters; the copy of a world is
+    /// gone once the client leaves it.
     pub session: u64,
 }
 
@@ -213,8 +214,8 @@ impl FogImage {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum FogError {
-    /// The client has not entered a world yet, or this game build lacks
-    /// the fog.
+    /// The client is in no world, this game build lacks the fog, or the
+    /// loader stopped copying it after a fault.
     #[error("no fog of war to read")]
     Missing,
     /// The box leaves the fog.
@@ -247,8 +248,8 @@ impl FogOfWar {
     ///
     /// # Errors
     ///
-    /// [`FogError::Missing`] before the client has entered a world or on a
-    /// game build without the fog.
+    /// [`FogError::Missing`] while the client is in no world, on a game
+    /// build without the fog, or after the loader stopped copying it.
     ///
     /// # Examples
     ///

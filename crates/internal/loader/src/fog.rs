@@ -13,7 +13,10 @@
 //! the same thread, it copies the tiles the reveal touched into its own
 //! image, and all of them the first time it sees a fog, which mods read
 //! from any thread. The reveal never waits for a mod: when a mod holds the
-//! image, the next reveal copies the whole fog instead.
+//! image, it notes the tiles it skipped and the next reveal copies them.
+//! The loader also detours the fog's destroy, which the client's world
+//! teardown alone calls, and drops its copy there, so no copy outlives its
+//! world and a new fog at the same address starts a new copy.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, TryLockError};
@@ -21,7 +24,7 @@ use std::sync::{Mutex, TryLockError};
 use enshwick::abi::{FogInfo, Header, HookFlags, Side, Status};
 
 use crate::chains::Next;
-use crate::fog_image::{FogImage, FogShape, ReadError, TileRect};
+use crate::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -29,6 +32,7 @@ use crate::pinned;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::map::FOG_DESTROY.id(),
     pinned::map::FOG_REVEAL.id(),
     pinned::map::FOG_SIZE_Z.id(),
     pinned::map::FOG_TILES.id(),
@@ -43,6 +47,14 @@ type RevealFn = unsafe extern "system" fn(fog: *mut u8, xz: *const [f32; 2], ran
 // table's `map.fog_reveal`, its result passed through whatever it is, and
 // the slot is used only as the `next` of the `reveal` link on that function.
 static NEXT: Next<RevealFn> = unsafe { Next::new() };
+
+type DestroyFn = unsafe extern "system" fn(allocator: *mut u8, fog: *mut u8) -> usize;
+
+// SAFETY: `DestroyFn` is the signature of the game's fog destroy at the
+// table's `map.fog_destroy`, its result passed through whatever it is, and
+// the slot is used only as the `next` of the `destroy` link on that
+// function.
+static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 
 /// The switch of the fog copy.
 static FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("fog of war");
@@ -66,8 +78,9 @@ static OPENERS: Mutex<Vec<ModIndex>> = Mutex::new(Vec::new());
 static WANTED: AtomicBool = AtomicBool::new(false);
 /// The copy, with the fog object it copies.
 static MIRROR: Mutex<Option<Mirror>> = Mutex::new(None);
-/// Set when a reveal could not take the copy: the next copies everything.
-static STALE: AtomicBool = AtomicBool::new(false);
+/// The tiles reveals skipped while a mod held the copy, as
+/// [`TileRect::pack`] writes them; 0 for none.
+static SKIPPED: AtomicU64 = AtomicU64::new(0);
 /// Fogs seen so far.
 static SESSIONS: AtomicU64 = AtomicU64::new(0);
 
@@ -130,6 +143,25 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LAYOUT.set(found);
+    let checked = [pinned::map::FOG_REVEAL, pinned::map::FOG_DESTROY];
+    if let Some(symbol) = checked.iter().find(|s| !loader.code_holds(**s)) {
+        crate::log!(
+            WARN,
+            "fog of war off: the code of {symbol} on {} is not the table's",
+            loader.build.name
+        );
+        return;
+    }
+    // The destroy goes first: a copy must never outlive its fog.
+    if !loader.link_feature(
+        "fog of war",
+        loader.address(pinned::map::FOG_DESTROY),
+        &DESTROY_NEXT,
+        destroy,
+        HookFlags::NONE,
+    ) {
+        return;
+    }
     loader.link_feature(
         "fog of war",
         loader.address(pinned::map::FOG_REVEAL),
@@ -137,6 +169,25 @@ pub(crate) fn link(loader: &'static Loader) {
         reveal,
         HookFlags::NONE,
     );
+}
+
+unsafe extern "system" fn destroy(allocator: *mut u8, fog: *mut u8) -> usize {
+    if !fog.is_null() {
+        forget(fog.expose_provenance());
+    }
+    // SAFETY: the game's own arguments, passed on unchanged to the rest of
+    // the chain, which has the destroy's signature.
+    unsafe { DESTROY_NEXT.get()(allocator, fog) }
+}
+
+/// Drops the copy of the fog at `fog`, which the game frees now.
+#[cold]
+fn forget(fog: usize) {
+    let mut mirror = MIRROR.relock();
+    if mirror.as_ref().is_some_and(|m| m.fog == fog) {
+        *mirror = None;
+        SKIPPED.store(0, Ordering::Release);
+    }
 }
 
 unsafe extern "system" fn reveal(fog: *mut u8, xz: *const [f32; 2], range: f32) -> usize {
@@ -177,40 +228,39 @@ fn shape(layout: &Layout, fog: usize) -> Option<FogShape> {
         .filter(|shape| shape.edge() as usize * shape.edge() as usize == layout.tile_bytes)
 }
 
-/// Copies the tiles a reveal at `at` with `range` touched, or the whole fog
-/// when it is new or the last copy was skipped.
+/// Copies the tiles a reveal at `at` with `range` touched, those earlier
+/// reveals skipped, or the whole fog when the copy does not hold it yet.
 fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
+    let Some(shape) = shape(layout, fog) else {
+        return;
+    };
+    let revealed = at.and_then(|xz| shape.revealed(xz, range));
     let mut mirror = match MIRROR.try_lock() {
         Ok(mirror) => mirror,
         Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
         Err(TryLockError::WouldBlock) => {
-            STALE.store(true, Ordering::Release);
+            if let Some(rect) = revealed {
+                skip(&rect);
+            }
             return;
         }
     };
-    let Some(shape) = shape(layout, fog) else {
-        return;
-    };
-    let known = mirror
-        .as_ref()
-        .is_some_and(|m| m.fog == fog && m.image.shape() == shape);
-    let rect = if known && !STALE.swap(false, Ordering::AcqRel) {
-        match at.and_then(|xz| shape.revealed(xz, range)) {
-            Some(rect) => rect,
-            None => return,
-        }
-    } else {
-        let [wide, high] = shape.tiles();
-        if !known {
+    let held = mirror.as_ref().map(|m| (m.fog, m.image.shape()));
+    let skipped = TileRect::unpack(SKIPPED.swap(0, Ordering::AcqRel));
+    let rect = match plan(held, fog, shape, revealed, skipped) {
+        Plan::Nothing => return,
+        Plan::Tiles(rect) => rect,
+        Plan::Full => {
             *mirror = Some(Mirror {
                 fog,
                 session: SESSIONS.fetch_add(1, Ordering::AcqRel) + 1,
                 image: FogImage::new(shape),
             });
-        }
-        TileRect {
-            x: 0..wide,
-            y: 0..high,
+            let [wide, high] = shape.tiles();
+            TileRect {
+                x: 0..wide,
+                y: 0..high,
+            }
         }
     };
     let Some(mirror) = mirror.as_mut() else {
@@ -232,11 +282,30 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
             let start = (ty as usize * wide + tx as usize) * layout.tile_bytes;
             // SAFETY: `tiles` is the fog's non-null (checked earlier) block
             // of `wide` × `high` tiles of `tile_bytes` each, which `shape`
-            // read from the same object; `tx` and `ty` lie below those
+            // read from the same object; the plan's tiles lie below those
             // counts, so `start` plus a tile stays inside the block. Only
             // this thread writes it.
             unsafe { crate::memory::read_bytes(tiles.expose_provenance(), start, tile) };
             mirror.image.put_tile(tx, ty, tile);
+        }
+    }
+}
+
+/// Notes tiles `rect` for the next reveal, which a mod's read kept this
+/// one from copying.
+#[cold]
+fn skip(rect: &TileRect) {
+    let mut held = SKIPPED.load(Ordering::Acquire);
+    loop {
+        let merged = TileRect::unpack(held).map_or_else(|| rect.clone(), |old| old.union(rect));
+        match SKIPPED.compare_exchange_weak(
+            held,
+            merged.pack(),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return,
+            Err(now) => held = now,
         }
     }
 }
@@ -252,6 +321,9 @@ pub(crate) fn read(
 ) -> Status {
     if !opened(owner) {
         return Status::REFUSED;
+    }
+    if FUSE.is_off() {
+        return Status::MISSING;
     }
     let mirror = MIRROR.relock();
     let Some(mirror) = mirror.as_ref() else {

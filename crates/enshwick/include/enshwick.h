@@ -996,8 +996,7 @@ typedef struct EnshwickFogInfo {
   // The world's z size the fog covers, in metres: pixel row
   // `(size_z - z) / metres_per_pixel`.
   float size_z;
-  // How many tiles the loader has copied since the fog appeared; it
-  // grows whenever pixels may have changed.
+  // Grows whenever pixels of the copy changed.
   uint64_t version;
   // Counts the fogs the loader has seen, one per world the client
   // enters; a new one starts from the save of that world.
@@ -3830,8 +3829,8 @@ typedef struct EnshwickHostApi {
   // Writes the fog's `FogInfo` to `info`, then copies the box of
   // `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
   // most `capacity` bytes; a box of no pixels copies nothing. Any thread.
-  // `Status::MISSING` before the client has entered a world or when
-  // this build lacks the fog; `Status::REFUSED` for a mod that did not
+  // `Status::MISSING` while the client is in no world, when this build
+  // lacks the fog, or after the loader stopped copying it; `Status::REFUSED` for a mod that did not
   // open it; `Status::OUTSIDE_WORLD` for a box past the image;
   // `Status::BAD_ARGS` for a null `info`, or a null or short `out`
   // for a box of pixels. The loader may refresh the copy meanwhile:

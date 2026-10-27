@@ -75,12 +75,13 @@ so `FogOfWar` reads from any thread.
 `fog.state()` returns a `FogState`: the image's size in pixels, the metres
 one pixel covers, the world's z size, a `version` that grows whenever pixels
 may have changed, and a `session` that changes with each world the client
-enters. `state.pixel_of(position)` finds the pixel of a place in metres:
+enters. Once the client leaves the world, the copy is gone until it enters one
+again. `state.pixel_of(position)` finds the pixel of a place in metres:
 row 0 is the world's high z edge, and x grows with world x. `fog.read(min,
 size)` copies a box of pixels as a `FogImage`, one byte each from 0 (hidden)
-to 255 (uncovered), and `fog.coverage(position)` reads one place. Before
-the client enters a world, or on a game build without the fog, they fail
-with `FogError::Missing`.
+to 255 (uncovered), and `fog.coverage(position)` reads one place. While
+the client is in no world, on a game build without the fog, or after the
+loader stopped copying it, they fail with `FogError::Missing`.
 
 ## What a server does not have
 

@@ -276,7 +276,8 @@ pub(crate) extern "system" fn fog_read(
     out: *mut u8,
     capacity: u32,
 ) -> Status {
-    if info.is_null() {
+    let wanted = width != 0 && height != 0;
+    if info.is_null() || (wanted && out.is_null()) {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
@@ -288,7 +289,7 @@ pub(crate) extern "system" fn fog_read(
         };
         // SAFETY: the safe layer passes a writable `FogInfo` for the call.
         unsafe { info.write(*found) };
-        if width == 0 || height == 0 {
+        if !wanted {
             return Status::OK;
         }
         let inside = |start: u32, size: u32, limit: u32| {
@@ -298,7 +299,7 @@ pub(crate) extern "system" fn fog_read(
             return Status::OUTSIDE_WORLD;
         }
         let (row, rows) = (width as usize, height as usize);
-        if out.is_null() || (capacity as usize) < row * rows {
+        if (capacity as usize) < row * rows {
             return Status::BAD_ARGS;
         }
         for r in 0..rows {

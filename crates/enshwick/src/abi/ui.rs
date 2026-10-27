@@ -366,8 +366,7 @@ pub struct FogInfo {
     /// The world's z size the fog covers, in metres: pixel row
     /// `(size_z - z) / metres_per_pixel`.
     pub size_z: f32,
-    /// How many tiles the loader has copied since the fog appeared; it
-    /// grows whenever pixels may have changed.
+    /// Grows whenever pixels of the copy changed.
     pub version: u64,
     /// Counts the fogs the loader has seen, one per world the client
     /// enters; a new one starts from the save of that world.
