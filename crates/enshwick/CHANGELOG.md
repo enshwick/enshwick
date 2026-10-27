@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.8] - 2026-10-27
+
 ### Added
 
 - `packs::script_files` lists the scripts `PackFiles::read_dir` would read,
@@ -32,12 +34,12 @@ Each entry names the pull request that made the change.
   fields and sizes once every mod is initialised (`HostApi::serve_call`,
   `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
   them (`Installed::serve_call`, `call`, `served_calls`). A call's input
-  and answer have no padding, which `Shape::PADDING_FREE` reports.
+  and answer have no padding, which `Shape::PADDING_FREE` reports (#574).
 - `Load::on_described_mod_event` and `Load::define_described_event`
   (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
   event described at run time, its data as bytes in the definer's layout;
   `manifest!(events: [..])` puts the schema of each listed `#[event]` into
-  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it (#571).
 - `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
   copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
   read what the player has uncovered, as a `FogState` and `FogImage`; the
@@ -68,7 +70,7 @@ Each entry names the pull request that made the change.
 - `Load::extend_described_point` links into an extension point described at
   run time (`points::DescribedPoint`, `DescribedField`), the input and the
   answer as bytes in the owner's layout, as a script's schema gives them;
-  the loader checks the layout hashes as for a typed link.
+  the loader checks the layout hashes as for a typed link (#569).
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
@@ -82,7 +84,7 @@ Each entry names the pull request that made the change.
   format (`MAP_SNAPSHOT_FORMAT`) (#560).
 - `script::game_events` lists every typed game event for script languages
   (`GameEventKind`); the game event structs, masks and values convert for
-  scripts (a mask as its bit names, a value as its name).
+  scripts (a mask as its bit names, a value as its name) (#565).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type
@@ -94,9 +96,9 @@ Each entry names the pull request that made the change.
 - `Load::table_config` reads settings described by a `config::Schema` at
   run time, with the file, checks, stages, Mods screen and join values of a
   typed `Config`; `config::TableConfig::on_change` follows them, and
-  `Schema::template` writes the file.
+  `Schema::template` writes the file (#561).
 - A pack's `pack.toml` declares settings in `[[setting]]` tables
-  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read.
+  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read (#561).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
@@ -198,9 +200,9 @@ Each entry names the pull request that made the change.
   64-bit integer, `usize` and `isize` included, as a number both ways;
   before, every such value was refused (#587).
 - The loader's profile names the survivors feature `survivors`; it showed a
-  mod id.
+  mod id (#574).
 - The loader and the fake leave a mod event subscription idle when it
-  reads more bytes than the definer sends.
+  reads more bytes than the definer sends (#571).
 - `Map::markers` listed no marker on a dedicated server, whose marker
   entities the entity walk does not find (#573).
 - `World::component` and `World::get` read the static half of a component
