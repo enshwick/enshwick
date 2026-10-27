@@ -33,6 +33,8 @@ pub(crate) use admin::TABLE_IDS;
 #[cfg(windows)]
 mod tools;
 #[cfg(windows)]
+pub(crate) use tools::{is_admin as player_is_admin, name as player_name};
+#[cfg(windows)]
 mod world_orders;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
@@ -209,6 +211,8 @@ pub enum Tool<'a> {
     Log(&'a str),
     /// `enshwick recipes ...`: disabled recipes.
     Recipes(&'a str),
+    /// `enshwick allowlist [add|remove <player or account>]`: who may join.
+    Allowlist(&'a str),
     /// `enshwick config [mod [key [value]]]`: mods' settings.
     Config(&'a str),
     /// `enshwick ui-demo <player>`: the interface demo on a player's client.
@@ -268,6 +272,7 @@ pub fn parse(line: &str) -> Line<'_> {
         "conflicts" => Tool::Conflicts,
         "log" => Tool::Log(args),
         "recipes" => Tool::Recipes(args),
+        "allowlist" => Tool::Allowlist(args),
         "config" => Tool::Config(args),
         "ui-demo" => Tool::UiDemo(args),
         _ => Tool::About(word),

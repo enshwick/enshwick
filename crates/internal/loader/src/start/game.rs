@@ -109,6 +109,7 @@ pub(super) fn begin(
     crate::reload::configure(settings.dev_reload);
     crate::knowledge::guard::configure(settings.knowledge_guard);
     crate::admission::configure(&settings);
+    crate::allowlist::configure(&settings);
     crate::ui::configure_actions_key(&settings.actions_key);
     builds::configure(settings.build_patterns);
     log::set_levels(settings);

@@ -226,6 +226,7 @@ pub(crate) fn start(
         names(loader).into_iter().collect(),
         pages(loader).into_iter().collect(),
     );
+    crate::allowlist::start(loader);
 }
 
 /// Starts what only a dedicated server runs: the advertised join mods and

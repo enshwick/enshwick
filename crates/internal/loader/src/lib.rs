@@ -14,6 +14,7 @@
 mod actions;
 pub mod admission;
 pub mod advertise;
+pub mod allowlist;
 #[cfg(windows)]
 mod altars;
 pub mod archive;

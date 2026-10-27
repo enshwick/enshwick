@@ -13,12 +13,12 @@ use super::accounts::{self, Act, Refusal};
 use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
-pub(super) fn name(player: &PlayerInfo) -> String {
+pub(crate) fn name(player: &PlayerInfo) -> String {
     let len = usize::from(player.name_len).min(player.name.len());
     accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
 }
 
-pub(super) fn is_admin(player: &PlayerInfo) -> bool {
+pub(crate) fn is_admin(player: &PlayerInfo) -> bool {
     player.permissions & PlayerInfo::CAN_KICK_BAN != 0
 }
 

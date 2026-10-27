@@ -74,6 +74,11 @@ pub struct Settings {
     /// Seconds between the chat line and the disconnect, for the player to
     /// read it. Read at start.
     pub join_note_seconds: u32,
+    /// On a dedicated server or in a game this client hosts, let only the
+    /// accounts in mod-data/enshwick/allowlist.txt, and administrators,
+    /// stay in the game; the console's enshwick allowlist add and remove
+    /// change the file, and changes apply at the next join. Read at start.
+    pub allowlist: bool,
 }
 
 /// What the knowledge guard does with a request a vanilla client never makes.
@@ -105,6 +110,7 @@ impl Default for Settings {
             require_enshwick: true,
             join_hello_seconds: JOIN_HELLO_SECONDS,
             join_note_seconds: JOIN_NOTE_SECONDS,
+            allowlist: false,
         }
     }
 }
