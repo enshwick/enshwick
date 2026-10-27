@@ -43,15 +43,25 @@ struct World {
     stateful: FxHashMap<u32, u32>,
     /// The last entity id handed out.
     last_entity: u32,
-    /// The bytes of each logic trigger's settings, by entity.
+    /// The bytes of each prop's start state, by entity: a logic trigger's
+    /// settings, a plant's level.
     triggers: FxHashMap<u32, Vec<u8>>,
-    /// The items whose props are logic triggers.
-    trigger_items: FxHashSet<u32>,
+    /// The kind of start state each item's props hold, as a `HOLDS_` bit:
+    /// logic triggers, plants.
+    trigger_items: FxHashMap<u32, u32>,
+    /// The kind of start state each prop holds, by entity.
+    kinds: FxHashMap<u32, u32>,
     /// Whether a spawned prop lands only at [`World::land`], as the
     /// game's appear the step after their spawn.
     spawns_wait: bool,
     /// Props spawned and not landed yet.
     landing: FxHashSet<u32>,
+    /// Props held against players before their destroy.
+    held: FxHashSet<u32>,
+    /// Creatures placed from items: animals, pets, survivors.
+    creatures: FxHashSet<u32>,
+    /// Whether the facts the state reads need fail to resolve.
+    facts_missing: bool,
 }
 
 impl World {
@@ -96,8 +106,9 @@ impl Voxels for World {
     fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
         self.last_entity += 1;
         self.props.insert(self.last_entity, *prop);
-        if self.trigger_items.contains(&prop.item) {
+        if let Some(&kind) = self.trigger_items.get(&prop.item) {
             self.triggers.insert(self.last_entity, vec![1, 2, 3]);
+            self.kinds.insert(self.last_entity, kind);
         }
         if self.spawns_wait {
             self.landing.insert(self.last_entity);
@@ -107,22 +118,30 @@ impl Voxels for World {
     }
 
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
-        if self.landing.contains(&entity) {
+        if self.landing.contains(&entity) || self.facts_missing {
             return Err(Status::MISSING);
         }
-        let prop = self.props.get(&entity).copied().ok_or(Status::MISSING)?;
-        let trigger = if self.triggers.contains_key(&entity) {
-            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER
-        } else {
-            0
-        };
+        if self.creatures.contains(&entity) {
+            return Err(Status::NOT_A_PROP);
+        }
+        let prop = self.props.get(&entity).copied().ok_or(Status::NOT_A_PROP)?;
+        let trigger = self.kinds.get(&entity).copied().unwrap_or(0);
         Ok((
             prop,
             self.stateful.get(&entity).copied().unwrap_or(0) | trigger,
         ))
     }
 
-    fn trigger_settings(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+    fn hold_prop(&mut self, entity: u32) -> Result<(), Status> {
+        self.held.insert(entity);
+        Ok(())
+    }
+
+    fn release_prop(&mut self, entity: u32) {
+        self.held.remove(&entity);
+    }
+
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
         if self.landing.contains(&entity) || !self.props.contains_key(&entity) {
             return Err(Status::MISSING);
         }
@@ -135,6 +154,7 @@ impl Voxels for World {
 
     fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status> {
         self.props.remove(&entity).ok_or(Status::MISSING)?;
+        self.held.remove(&entity);
         self.announced.push(("prop removed", actor));
         Ok(())
     }
@@ -951,14 +971,14 @@ fn a_placed_prop_is_listed_and_its_undo_removes_it() {
     let id = ledger
         .commit(ME, Some(7), vec![Change::PlaceProp(prop(20.0))])
         .unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
     assert_eq!(ledger.entities(ME, id), Some(vec![1]));
     assert_eq!(world.props.get(&1), Some(&prop(20.0)));
     assert_eq!(world.announced, [("prop placed", 7)]);
 
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     assert!(world.props.is_empty());
 }
@@ -996,7 +1016,7 @@ fn a_removed_prop_comes_back_on_undo_as_it_was() {
             }],
         )
         .unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
     assert!(world.props.is_empty());
     assert_eq!(
@@ -1006,7 +1026,7 @@ fn a_removed_prop_comes_back_on_undo_as_it_was() {
     );
 
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     assert_eq!(world.props.values().collect::<Vec<_>>(), [&prop(20.0)]);
 }
@@ -1027,10 +1047,10 @@ fn a_removed_prop_whose_place_is_taken_is_not_brought_back() {
             }],
         )
         .unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     world.props.insert(41, prop(20.0));
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(
         state(&ledger, id),
         (TransactionInfo::UNDO_REFUSED, Status::REFUSED)
@@ -1083,12 +1103,12 @@ fn a_removal_that_discards_state_goes_ahead_and_its_undo_is_refused() {
             }],
         )
         .unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
     assert!(world.props.is_empty());
 
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     let info = ledger.info(ME, id).unwrap();
     assert_eq!(
         (info.state, info.reason, info.holds),
@@ -1118,7 +1138,7 @@ fn an_undo_never_destroys_a_placed_prop_that_has_gained_state() {
 
     world.stateful.remove(&1);
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(
         state(&ledger, id).0,
         TransactionInfo::UNDONE,
@@ -1137,11 +1157,11 @@ fn a_prop_and_bricks_in_one_transaction_undo_newest_first() {
             vec![dig(20.0), Change::PlaceProp(prop(20.0)), dig(22.0)],
         )
         .unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
     assert_eq!(ledger.info(ME, id).unwrap().applied, 3);
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     assert!(world.props.is_empty());
     assert_eq!(world.snapshot(), Vec::new());
@@ -1211,7 +1231,9 @@ fn every_kind_of_state_stops_a_removal_and_an_undo() {
 /// after their spawn.
 fn trigger_world() -> World {
     let mut world = World::new();
-    world.trigger_items.insert(77);
+    world
+        .trigger_items
+        .insert(77, TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER);
     world.spawns_wait = true;
     world
 }
@@ -1234,7 +1256,7 @@ fn a_placed_trigger_left_as_it_was_is_taken_away_by_undo() {
     assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
 
     ledger.undo(ME, id).unwrap();
-    ledger.step(&mut world, 1000);
+    run_out(&mut ledger, &mut world);
     assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
     assert!(world.props.is_empty());
 }
@@ -1300,6 +1322,9 @@ fn a_trigger_the_transaction_did_not_place_is_not_removed() {
     let mut ledger = Ledger::new(LIMITS);
     world.props.insert(40, prop(20.0));
     world.triggers.insert(40, vec![1, 2, 3]);
+    world
+        .kinds
+        .insert(40, TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER);
     let id = ledger
         .commit(
             ME,
@@ -1320,4 +1345,208 @@ fn a_trigger_the_transaction_did_not_place_is_not_removed() {
         )
     );
     assert_eq!(world.props.len(), 1);
+}
+
+/// Steps until transaction `id` stops working, at most ten steps.
+fn settle(ledger: &mut Ledger, world: &mut World, id: u64) {
+    for _ in 0..10 {
+        let (state, _) = state(ledger, id);
+        if state != TransactionInfo::PENDING && state != TransactionInfo::UNDOING {
+            return;
+        }
+        ledger.step(world, 1000);
+    }
+}
+
+fn remove(entity: u32, discard_state: bool) -> Change {
+    Change::RemoveProp {
+        entity,
+        discard_state,
+    }
+}
+
+#[test]
+fn a_removal_holds_the_prop_a_step_before_it_destroys_it() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    let id = ledger.commit(ME, None, vec![remove(40, false)]).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::PENDING);
+    assert!(world.held.contains(&40), "held against players");
+    assert_eq!(world.props.len(), 1, "not destroyed yet");
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    assert!(world.props.is_empty());
+}
+
+#[test]
+fn items_that_land_while_a_chest_is_held_stop_its_removal() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    let id = ledger.commit(ME, None, vec![remove(40, false)]).unwrap();
+    ledger.step(&mut world, 1000);
+    world.stateful.insert(40, TransactionInfo::HOLDS_INVENTORY);
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.reason, info.holds),
+        (
+            TransactionInfo::FAILED,
+            Status::REFUSED,
+            TransactionInfo::HOLDS_INVENTORY
+        )
+    );
+    assert_eq!(world.props.len(), 1, "the chest stands");
+    assert!(world.held.is_empty(), "and players reach it again");
+}
+
+#[test]
+fn an_undo_holds_a_placed_chest_and_keeps_it_if_items_land() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    settle(&mut ledger, &mut world, id);
+    let entity = ledger.entities(ME, id).unwrap()[0];
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDOING);
+    assert!(world.held.contains(&entity));
+    world
+        .stateful
+        .insert(entity, TransactionInfo::HOLDS_INVENTORY);
+    ledger.step(&mut world, 1000);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.holds),
+        (
+            TransactionInfo::UNDO_REFUSED,
+            TransactionInfo::HOLDS_INVENTORY
+        )
+    );
+    assert_eq!(world.props.len(), 1);
+    assert!(world.held.is_empty());
+}
+
+#[test]
+fn the_state_that_stopped_an_undo_clears_when_one_is_asked_again() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    settle(&mut ledger, &mut world, id);
+    let entity = ledger.entities(ME, id).unwrap()[0];
+    world.stateful.insert(entity, TransactionInfo::HOLDS_GROWTH);
+    ledger.undo(ME, id).unwrap();
+    settle(&mut ledger, &mut world, id);
+    assert_eq!(
+        ledger.info(ME, id).unwrap().holds,
+        TransactionInfo::HOLDS_GROWTH
+    );
+
+    world.stateful.remove(&entity);
+    ledger.undo(ME, id).unwrap();
+    assert_eq!(ledger.info(ME, id).unwrap().holds, 0, "cleared when queued");
+    settle(&mut ledger, &mut world, id);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!((info.state, info.holds), (TransactionInfo::UNDONE, 0));
+}
+
+#[test]
+fn a_creature_is_never_removed_even_discarding_state() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    world.creatures.insert(40);
+    let id = ledger.commit(ME, None, vec![remove(40, true)]).unwrap();
+    settle(&mut ledger, &mut world, id);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::NOT_A_PROP)
+    );
+    assert_eq!(world.props.len(), 1);
+}
+
+#[test]
+fn state_reads_this_build_lacks_turn_removal_and_undo_off() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    let placed = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(30.0))])
+        .unwrap();
+    settle(&mut ledger, &mut world, placed);
+    world.facts_missing = true;
+    let removal = ledger.commit(ME, None, vec![remove(40, true)]).unwrap();
+    settle(&mut ledger, &mut world, removal);
+    assert_eq!(
+        state(&ledger, removal),
+        (TransactionInfo::FAILED, Status::MISSING)
+    );
+    ledger.undo(ME, placed).unwrap();
+    settle(&mut ledger, &mut world, placed);
+    assert_eq!(
+        state(&ledger, placed),
+        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+    );
+    assert_eq!(world.props.len(), 2);
+}
+
+/// Steps until no work is left, at most ten steps.
+fn run_out(ledger: &mut Ledger, world: &mut World) {
+    for _ in 0..10 {
+        ledger.step(world, 1000);
+    }
+}
+
+/// A world whose props of item 77 are plants, landing a step after their
+/// spawn.
+fn crop_world() -> World {
+    let mut world = World::new();
+    world
+        .trigger_items
+        .insert(77, TransactionInfo::HOLDS_GROWTH);
+    world.spawns_wait = true;
+    world
+}
+
+#[test]
+fn a_placed_crop_that_has_not_grown_is_taken_away_by_undo() {
+    let mut world = crop_world();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    world.land();
+    settle(&mut ledger, &mut world, id);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::APPLIED);
+    ledger.undo(ME, id).unwrap();
+    settle(&mut ledger, &mut world, id);
+    assert_eq!(state(&ledger, id).0, TransactionInfo::UNDONE);
+}
+
+#[test]
+fn a_placed_crop_that_has_grown_stays() {
+    let mut world = crop_world();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    ledger.step(&mut world, 1000);
+    world.land();
+    settle(&mut ledger, &mut world, id);
+    let entity = ledger.entities(ME, id).unwrap()[0];
+    world.triggers.insert(entity, vec![4]);
+    ledger.undo(ME, id).unwrap();
+    settle(&mut ledger, &mut world, id);
+    let info = ledger.info(ME, id).unwrap();
+    assert_eq!(
+        (info.state, info.holds),
+        (TransactionInfo::UNDO_REFUSED, TransactionInfo::HOLDS_GROWTH)
+    );
 }

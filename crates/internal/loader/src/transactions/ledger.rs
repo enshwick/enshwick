@@ -41,10 +41,18 @@ pub(crate) trait Voxels {
     /// The prop `entity` is, and the kinds of state it holds that a
     /// respawn would lose, as bits; [`Status::MISSING`] when it is no prop.
     fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status>;
-    /// The bytes of the logic trigger settings of the prop `entity`, `None`
-    /// for a prop with none; [`Status::MISSING`] while it is not in the
-    /// world.
-    fn trigger_settings(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status>;
+    /// Holds the prop `entity` against players until its destroy: no
+    /// opening, moving items in or out, Quick Stash or dismantling; the
+    /// game's systems of the next step run with it held.
+    fn hold_prop(&mut self, entity: u32) -> Result<(), Status>;
+    /// Lets players reach the prop `entity` again, as before
+    /// [`Voxels::hold_prop`].
+    fn release_prop(&mut self, entity: u32);
+    /// The start state of the prop `entity` as bytes to compare: what a
+    /// fresh prop of its kind holds and a player or time may change, a
+    /// logic trigger's settings and a plant's level; `None` for a prop with
+    /// none, [`Status::MISSING`] while it is not in the world.
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status>;
     /// Whether a prop like `prop` stands where it stood.
     fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status>;
     /// Removes the prop `entity` for `actor` (0 for none), as the game tears
@@ -150,8 +158,8 @@ impl Op {
 enum Done {
     /// The earlier voxels of each brick it wrote.
     Bricks(Vec<(Brick, Image)>),
-    /// A prop it placed, as `entity`, and its logic trigger settings when
-    /// it first stood in the world.
+    /// A prop it placed, as `entity`, and its start state when it first
+    /// stood in the world.
     Placed {
         entity: u32,
         prop: Prop,
@@ -161,15 +169,15 @@ enum Done {
     Removed { prop: Prop, holds: u32 },
 }
 
-/// The logic trigger settings of a prop a transaction placed, as they were
-/// the first step the prop stood in the world, before a player could
-/// change them.
+/// The start state of a prop a transaction placed, a logic trigger's
+/// settings and a plant's level, as it was the first step the prop stood
+/// in the world, before a player or time could change it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Settings {
     /// Not read: the prop did not stand in the world within the wait limit,
-    /// or the read failed; an undo cannot tell a player's settings.
+    /// or the read failed; an undo cannot tell what changed.
     Unread,
-    /// Read: the bytes, `None` for a prop that is no trigger.
+    /// Read: the bytes, `None` for a prop with no start state.
     Read(Option<Vec<u8>>),
 }
 
@@ -204,6 +212,8 @@ struct Work {
     refusal: u32,
     /// The kinds of state a prop held that stopped it, as bits; 0 for none.
     holds: u32,
+    /// The props it holds against players until it destroys them.
+    held: Vec<u32>,
 }
 
 impl Work {
@@ -471,6 +481,7 @@ impl Ledger {
                 return Ok(());
             }
             TransactionInfo::PENDING if record.applied == 0 => {
+                record.holds = 0;
                 record.settle(TransactionInfo::UNDONE, Status::OK);
                 self.work.retain(|&queued| queued != id);
                 return Ok(());
@@ -487,9 +498,11 @@ impl Ledger {
             _ => return Err(Status::REFUSED),
         };
         record.settle(TransactionInfo::UNDOING, Status::OK);
+        record.holds = 0;
         if let Some(work) = &mut record.work {
             work.undo_checked = false;
             work.waits = 0;
+            work.holds = 0;
         }
         if queue {
             self.work.push_back(id);
@@ -711,10 +724,16 @@ fn write_over(
 impl Task {
     /// Runs the task against the world for what is left of the pass.
     pub(crate) fn run(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
-        match self.mode {
+        let outcome = match self.mode {
             Mode::Apply => self.apply(world, pass),
             Mode::Undo => self.take_back(world, pass),
+        };
+        if matches!(outcome, Outcome::Done(..)) {
+            for entity in self.work.held.drain(..) {
+                world.release_prop(entity);
+            }
         }
+        outcome
     }
 
     fn apply(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
@@ -724,6 +743,11 @@ impl Task {
             work.started = true;
             if let Some(outcome) = work.first_check(world, pass) {
                 return outcome;
+            }
+            match work.hold_removals(world) {
+                Ok(false) => {}
+                Ok(true) => return Outcome::Later,
+                Err(reason) => return failed(reason),
             }
         }
         while let Some(op) = work.ops.get(work.done.len()) {
@@ -745,18 +769,9 @@ impl Task {
                     entity,
                     discard_state,
                 } => {
-                    let (prop, holds) = match world.read_prop(entity) {
-                        Ok(read) => read,
-                        Err(reason) => return failed(not_a_prop(reason)),
-                    };
-                    if holds != 0 && !discard_state {
-                        work.holds = holds;
-                        return failed(Status::REFUSED);
-                    }
-                    if let Err(reason) = world.remove_prop(entity, actor) {
+                    if let Err(reason) = work.remove(world, entity, discard_state, actor) {
                         return failed(reason);
                     }
-                    work.done.push(Done::Removed { prop, holds });
                 }
                 change => {
                     let Some(bricks) = op.bricks else {
@@ -824,6 +839,23 @@ impl Task {
                 return work.refuse_undo(reason, holds);
             }
             work.undo_checked = true;
+            let placed: Vec<u32> = work
+                .done
+                .iter()
+                .filter_map(|done| match done {
+                    Done::Placed { entity, .. } => Some(*entity),
+                    _ => None,
+                })
+                .collect();
+            for entity in placed {
+                if let Err(reason) = world.hold_prop(entity) {
+                    return work.refuse_undo(reason, 0);
+                }
+                work.held.push(entity);
+            }
+            if !work.held.is_empty() {
+                return Outcome::Later;
+            }
         }
         while let Some(done) = work.done.last_mut() {
             if pass.spent >= pass.budget {
@@ -873,6 +905,7 @@ impl Task {
                     if let Err(reason) = world.remove_prop(entity, work.actor.unwrap_or(0)) {
                         return work.refuse_undo(reason, 0);
                     }
+                    work.held.retain(|&held| held != entity);
                     work.done.pop();
                     pass.spent += 1;
                 }
@@ -889,34 +922,25 @@ impl Task {
             }
         }
         work.now.clear();
+        work.holds = 0;
         Outcome::Done(TransactionInfo::UNDONE, Status::OK)
     }
 }
 
-/// The reason to give for a removal of `entity` whose read failed: a
-/// thing that is no prop is refused as an argument.
-fn not_a_prop(reason: Status) -> Status {
-    if reason == Status::MISSING {
-        Status::BAD_ARGS
-    } else {
-        reason
-    }
-}
-
 /// `Ok` while the prop the transaction placed as `entity` is still there
-/// as it placed it and holds no state, its trigger settings as they first
-/// were; the reason and the kinds of state otherwise.
+/// as it placed it and holds no state, its start state as it first was;
+/// the reason and the kinds of state otherwise.
 fn still_placed(
     world: &mut impl Voxels,
     entity: u32,
     prop: &Prop,
     settings: &Settings,
 ) -> Result<(), (Status, u32)> {
-    const TRIGGER: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER;
+    const START: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER | TransactionInfo::HOLDS_GROWTH;
     match world.read_prop(entity) {
         Ok((now, holds)) if now.same_place(prop) => {
-            let holds = if holds & TRIGGER != 0 && settings_kept(world, entity, settings) {
-                holds & !TRIGGER
+            let holds = if holds & START != 0 && settings_kept(world, entity, settings) {
+                holds & !START
             } else {
                 holds
             };
@@ -926,17 +950,17 @@ fn still_placed(
                 Err((Status::REFUSED, holds))
             }
         }
-        Ok(_) | Err(Status::MISSING) => Err((Status::REFUSED, 0)),
+        Ok(_) | Err(Status::NOT_A_PROP) => Err((Status::REFUSED, 0)),
         Err(reason) => Err((reason, 0)),
     }
 }
 
-/// Whether the trigger settings of `entity` are still the ones read the
-/// first step it stood in the world.
+/// Whether the start state of `entity` is still the one read the first
+/// step it stood in the world.
 fn settings_kept(world: &mut impl Voxels, entity: u32, settings: &Settings) -> bool {
     match settings {
         Settings::Read(Some(first)) => {
-            matches!(world.trigger_settings(entity), Ok(Some(now)) if now == *first)
+            matches!(world.start_state(entity), Ok(Some(now)) if now == *first)
         }
         Settings::Read(None) | Settings::Unread => false,
     }
@@ -981,7 +1005,7 @@ impl Work {
                         self.holds = holds;
                         return failed(Status::REFUSED);
                     }
-                    Err(reason) => return failed(not_a_prop(reason)),
+                    Err(reason) => return failed(reason),
                 },
                 _ => None,
             };
@@ -1046,7 +1070,41 @@ impl Work {
         Ok(())
     }
 
-    /// Reads the trigger settings of every prop it placed once the prop
+    /// Holds every prop it removes against players, for the step before
+    /// it removes them; whether it holds any.
+    fn hold_removals(&mut self, world: &mut impl Voxels) -> Result<bool, Status> {
+        let removals = self.ops.iter().filter_map(|op| match op.change {
+            Change::RemoveProp { entity, .. } => Some(entity),
+            _ => None,
+        });
+        for entity in removals {
+            world.hold_prop(entity)?;
+            self.held.push(entity);
+        }
+        Ok(!self.held.is_empty())
+    }
+
+    /// Removes the prop `entity` held since the step before, checking
+    /// again that it holds no state unless `discard_state`.
+    fn remove(
+        &mut self,
+        world: &mut impl Voxels,
+        entity: u32,
+        discard_state: bool,
+        actor: u32,
+    ) -> Result<(), Status> {
+        let (prop, holds) = world.read_prop(entity)?;
+        if holds != 0 && !discard_state {
+            self.holds = holds;
+            return Err(Status::REFUSED);
+        }
+        world.remove_prop(entity, actor)?;
+        self.held.retain(|&held| held != entity);
+        self.done.push(Done::Removed { prop, holds });
+        Ok(())
+    }
+
+    /// Reads the start state of every prop it placed once the prop
     /// stands in the world, waiting a step at a time up to the wait limit;
     /// applied once read, or at the limit, with those unread kept unread.
     fn read_settings(&mut self, world: &mut impl Voxels, pass: &Pass) -> Outcome {
@@ -1058,7 +1116,7 @@ impl Work {
                 ..
             } = done
             {
-                match world.trigger_settings(*entity) {
+                match world.start_state(*entity) {
                     Ok(bytes) => *settings = Settings::Read(bytes),
                     Err(Status::MISSING) => waiting = true,
                     Err(_) => {}

@@ -58,6 +58,7 @@ impl Off {
             Status::WRONG_THREAD => "called off the thread it serves",
             Status::NOT_LOADED => "not loaded yet",
             Status::OUTSIDE_WORLD => "outside the world",
+            Status::NOT_A_PROP => "not a prop",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))

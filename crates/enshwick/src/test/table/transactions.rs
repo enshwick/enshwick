@@ -70,6 +70,9 @@ fn commit(
         let host = &s.host;
         for change in &changes {
             if let FakeChange::PlaceProp(prop) = change {
+                if host.no_prop_items.contains(&prop.item) {
+                    return Status::NOT_A_PROP;
+                }
                 let places = host
                     .items
                     .get(&prop.item)

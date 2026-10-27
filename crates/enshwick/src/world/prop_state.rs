@@ -15,7 +15,9 @@ pub enum HeldState {
     /// Items in its `Inventory`, its linked inventories included: a chest's
     /// contents, a station's materials and outputs.
     Inventory,
-    /// A plant's `Growth`: its `Level` above where it started.
+    /// A plant, its `Growth`: any plant the transaction did not place, as
+    /// the level a plant starts at is not known; one it placed once its
+    /// `Level` differs from the level it first stood with.
     Growth,
     /// A `FactoryStation`'s production: a recipe running or queued.
     FactoryStation,

@@ -98,6 +98,7 @@ impl Installed {
                                 info.state = TransactionInfo::APPLIED;
                                 info.applied = info.ops;
                                 info.bricks = bricks;
+                                info.holds = 0;
                             }
                             Err((reason, holds)) => {
                                 let info = &mut transaction.info;
@@ -116,6 +117,7 @@ impl Installed {
                                 info.state = TransactionInfo::UNDONE;
                                 info.applied = 0;
                                 info.bricks = 0;
+                                info.holds = 0;
                             }
                             Err((reason, holds)) => {
                                 let info = &mut transaction.info;
@@ -224,13 +226,16 @@ impl FakeChange {
                 min.map(|at| f64::from(at) / 2.0),
                 [0, 1, 2].map(|axis| f64::from(min[axis] + size[axis]) / 2.0),
             ),
-            Self::PlaceProp(prop) => super::props::reach(prop.position),
-            Self::RemoveProp(remove) => super::props::reach(
-                host.props
-                    .iter()
-                    .find(|prop| prop.entity == remove.entity)
-                    .map_or([0.0; 3], |prop| prop.at),
-            ),
+            Self::PlaceProp(prop) => {
+                super::props::reach(host, prop.item, prop.position, prop.orientation)
+            }
+            Self::RemoveProp(remove) => host
+                .props
+                .iter()
+                .find(|prop| prop.entity == remove.entity)
+                .map_or(([0.0; 3], [0.0; 3]), |prop| {
+                    super::props::reach(host, prop.item, prop.at, prop.orientation)
+                }),
             Self::Block(block) => {
                 let size = host.blueprints.get(&block.shape).copied().unwrap_or([0; 3]);
                 let half = size.map(|voxels| f64::from(voxels) / 4.0);

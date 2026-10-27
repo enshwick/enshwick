@@ -222,6 +222,22 @@ pub const LOGIC_TRIGGER: &str = "logic_graph_trigger";
 pub const LOGIC_TRIGGER_CONFIG: &str = "logic_graph_trigger.trigger_config";
 /// The id of a logic trigger's area.
 pub const LOGIC_TRIGGER_SHAPE: &str = "logic_trigger_shape";
+/// The id of an animal's saved state, which marks a creature placed from
+/// an item.
+pub const ANIMAL_SAVED: &str = "animal_saved";
+/// The id of the component that marks a flame altar, which owns a base.
+pub const BASE_ID: &str = "base_id_component";
+/// The id of a survivor's saved state, which marks a creature placed from
+/// an item.
+pub const ACTIVE_NPC_STATE_SAVED: &str = "active_npc_state_saved";
+/// The id of the bit of an item's flags that marks a survivor.
+pub const ITEM_FLAG_IS_NPC: &str = "item_flag.is_npc";
+/// The id of the bit of an item's flags that marks an animal.
+pub const ITEM_FLAG_IS_ANIMAL: &str = "item_flag.is_animal";
+/// The id of a container's Quick Stash settings.
+pub const CRAFTING_STOCK: &str = "inventory_crafting_stock";
+/// The id of the byte that lets Quick Stash put items into a container.
+pub const CRAFTING_STOCK_DEPOSIT: &str = "inventory_crafting_stock.can_receive_area_deposit";
 /// The id of the component that names the item an entity was placed from.
 pub const USED_ITEM: &str = "used_item";
 /// The id of an entity's place in the world.

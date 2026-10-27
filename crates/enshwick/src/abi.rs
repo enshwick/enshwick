@@ -476,6 +476,11 @@ impl Status {
     /// the height the loader takes. A mod built before minor 87 reads it as
     /// an unknown failure. Since minor 87.
     pub const OUTSIDE_WORLD: Self = Self(9);
+    /// The entity named is no prop: not placed from an item, or a creature
+    /// such as an animal, a pet or a survivor, which only the general
+    /// entity calls reach. A mod built before minor 90 reads it as an
+    /// unknown failure. Since minor 90.
+    pub const NOT_A_PROP: Self = Self(10);
 
     /// Whether this is [`Status::OK`].
     ///

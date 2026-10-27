@@ -311,9 +311,15 @@ pub enum WorldError {
     #[error("outside the world")]
     OutsideWorld,
     /// The prop holds state a player would lose: items, growth, a
-    /// production queue, assigned survivors or written text.
+    /// production queue, assigned survivors, written text, fuel, logic
+    /// wiring or a logic trigger's settings; [`HeldState`] names each
+    /// kind.
     #[error("the prop holds {0}")]
     HoldsState(PropState),
+    /// The entity is no prop: not placed from an item, or a creature such
+    /// as an animal, a pet or a survivor, which prop calls never touch.
+    #[error("not a prop")]
+    NotAProp,
 }
 
 impl WorldError {
@@ -326,6 +332,7 @@ impl WorldError {
             Status::WRONG_THREAD => Err(Self::WrongThread),
             Status::NOT_LOADED => Err(Self::NotLoaded),
             Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
+            Status::NOT_A_PROP => Err(Self::NotAProp),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
             Status::MISSING => Err(missing),
             _ => Err(Self::Missing),
@@ -398,6 +405,9 @@ struct Resolved {
     /// Where a `CurrentTransform` holds its orientation, on builds that
     /// reflect it and the template an item places, which tells props apart.
     orientation: Option<usize>,
+    /// The components that mark what is placed from an item but is no
+    /// prop: an animal, a survivor, a flame altar.
+    no_props: Option<[ComponentType; 3]>,
     label: Option<ComponentType>,
     stats: Option<stats::Stats>,
     containers: Option<containers::Containers>,
@@ -436,6 +446,15 @@ impl World {
             transform: type_named(host, ids::CURRENT_TRANSFORM)?,
             used_item: type_named(host, ids::USED_ITEM)?,
             orientation: orientation_offset(load),
+            no_props: [
+                ids::ANIMAL_SAVED,
+                ids::ACTIVE_NPC_STATE_SAVED,
+                ids::BASE_ID_COMPONENT,
+            ]
+            .map(|name| type_named(host, name).ok())
+            .into_iter()
+            .collect::<Option<Vec<_>>>()
+            .and_then(|types| types.try_into().ok()),
             label: type_named(host, ids::LABEL).ok(),
             containers: containers::Containers::resolve(host),
             stats: stats::Stats::resolve(load, host)

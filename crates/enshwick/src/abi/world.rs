@@ -1012,8 +1012,9 @@ impl TransactionInfo {
     pub const EXPIRED: u32 = 5;
     /// The prop's inventory holds items, in any of its linked slots.
     pub const HOLDS_INVENTORY: u32 = 1;
-    /// The plant has grown: its `Level` is above its start, as `Growth`
-    /// keeps it.
+    /// It is a plant (`Growth`): any plant for a removal; for the undo of
+    /// a placement, one whose `Level` differs from the level it first
+    /// stood with.
     pub const HOLDS_GROWTH: u32 = 1 << 1;
     /// The `FactoryStation` has a recipe running or queued.
     pub const HOLDS_FACTORY_STATION: u32 = 1 << 2;

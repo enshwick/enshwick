@@ -140,6 +140,7 @@ reason of the form `<what>: <why>`, such as
 | 7    | `WRONG_THREAD`  | Called from a thread the function does not serve                           | `called off the thread it serves`  |
 | 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
 | 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
+| 10   | `NOT_A_PROP`    | The entity is no prop: a creature, a flame altar or not placed             | `not a prop`                       |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs

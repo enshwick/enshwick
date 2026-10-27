@@ -269,36 +269,57 @@ what it has now:
 | State | What it is |
 | --- | --- |
 | `Inventory` | items in any of its slots, its linked inventories included: a chest's contents, a station's materials and outputs |
-| `Growth` | a plant grown past its start |
+| `Growth` | a plant: any plant, as the loader cannot tell the level it starts at |
 | `FactoryStation` | a recipe running or waiting in a production station |
 | `NpcBed` | a survivor assigned to a bed |
 | `StoreAssociatedNpcIds` | survivors assigned to a station |
 | `CustomPlayerString` | text a player wrote on a sign |
 | `Fuel` | more charges than a fresh one starts with: water in a well or a water store |
 | `LogicGraphNodeConnected` | a switch, plate or other logic prop wired to other logic |
-| `LogicGraphTrigger` | a logic trigger, such as a pressure plate: always when the transaction did not place it, as the loader cannot tell a player's settings from its item's; one it placed only once its settings changed |
+| `LogicGraphTrigger` | a logic trigger prop, as the loader cannot tell a player's settings from its item's |
 
 A switch's on or off and a container's Quick Stash setting are settings a
-player sets again in a moment, and do not count. A transaction that
-places props waits until they stand in the world, usually a step, before
-it is `Applied`, and notes each trigger's settings then, before a player
-can reach it. Its undo takes a trigger away while those settings are
-unchanged, and stops with `UndoRefused(HoldsState(…))` once a player has
-changed them. `remove_prop` refuses a prop that holds state: the transaction
-fails with `WorldError::HoldsState(state)`, naming the kinds, before it
-writes anything. Empty the chest first, with the inventory API, or use
-`remove_prop_discarding_state(entity)`, which removes it anyway and loses
-what it held for good: the items, the growth, the queue, the survivors'
-places, the text, the fuel, the wiring and a trigger's settings.
+player sets again in a moment, and do not count.
+
+`remove_prop` refuses a prop that holds state: the transaction fails with
+`WorldError::HoldsState(state)`, naming the kinds, before it writes
+anything. So removing a plant or a logic trigger always needs the
+destructive mode. Empty a chest first, with the inventory API, or use
+`remove_prop_discarding_state(entity)`, which removes the prop anyway and
+loses what it held for good: the items, the plant and its growth, the
+queue, the survivors' places, the text, the fuel, the wiring and a
+trigger's settings.
+
+A removal takes two steps. In the first the loader checks the prop and
+keeps players from it: they cannot open it, move items in or out, sort it
+or dismantle it, and Quick Stash skips it. In the second it checks the
+prop again and only then asks the game to remove it. If anything landed
+in it meanwhile, the removal fails with `HoldsState` and the prop stays,
+open to players again.
+
+A transaction that places props is `Applied` once they stand in the
+world, usually a step after the place. The loader notes then what a fresh
+prop starts with: a logic trigger's settings and a plant's level.
 
 An undo keeps to the same rule. It takes a placed prop away only while it
-holds no state: once a chest it placed has items, a plant has grown or a
-survivor has moved in, the undo stops with `UndoRefused(HoldsState(…))`
-and the prop stays; empty it and ask again. An undo brings a removed prop
-back from its item, at its place, only when the removal took no state with
-it; one removed with `remove_prop_discarding_state` that held state stays
-removed, and the undo is refused the same way. An undo also refuses to
-bring a prop back where another like it now stands.
+holds no state, a trigger's settings and a plant's level as they first
+were. Once a chest it placed has items, a plant has grown or a player has
+set a trigger, the undo stops with `UndoRefused(HoldsState(…))` and the
+prop stays; empty it and ask again. A plant that grows into its next stage
+becomes a new entity, which an undo no longer finds. Like a removal, an
+undo keeps players from the props it takes away for the step before.
+
+An undo brings a removed prop back from its item, at its place, only when
+the removal took no state with it; one removed with
+`remove_prop_discarding_state` that held state stays removed, and the
+undo is refused the same way. An undo also refuses to bring a prop back
+where another like it now stands.
+
+Creatures placed from items, animals, pets and survivors, and flame
+altars, which own a base, are no props. `props_in` and `capture` leave
+them out, `place_prop` refuses an item that places a creature, and
+`remove_prop`, in either mode, fails with `WorldError::NotAProp`. The
+entity calls reach them.
 
 ### For a player
 

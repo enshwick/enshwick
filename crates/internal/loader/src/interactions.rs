@@ -5,7 +5,8 @@
 
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -14,6 +15,7 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered};
+use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
@@ -80,6 +82,17 @@ static FILTERS: Registry<Filter> = Registry::new();
 static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
+/// The props transactions hold against players before destroying them,
+/// each with the step by which its destroy has landed, `None` while it
+/// is only held.
+static HELD: Mutex<Vec<(u32, Option<u64>)>> = Mutex::new(Vec::new());
+/// The entities in [`HELD`], for the filter's lock-free check.
+static HELD_IDS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
+/// The last step the loader saw.
+static STEP: AtomicU64 = AtomicU64::new(0);
+/// Steps after its request by which a destroy has landed: the request
+/// plays back at the end of the next step.
+const DESTROY_STEPS: u64 = 2;
 
 // SAFETY: `OfferFn` is the signature of the build table's
 // `access.offer_test`, and `link` uses this slot only as that function's
@@ -176,7 +189,8 @@ pub(crate) fn register(
 
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
-    let wanted = !filters.is_empty();
+    // The server links the filter for the props transactions hold too.
+    let wanted = !filters.is_empty() || loader.side == Side::SERVER;
     if !wanted {
         return;
     }
@@ -235,8 +249,65 @@ pub(crate) fn link(loader: &'static Loader) {
     crate::log!(INFO, "interaction filters on");
 }
 
-/// Reads the players again now and then, on the game thread.
+/// Keeps players from `entity` until [`release`] or its destroy: opening
+/// it, moving items in or out, sorting, its Quick Stash switch and
+/// dismantling it are refused. [`Status::MISSING`] when the filter is not
+/// linked on this build.
+pub(crate) fn hold(entity: u32) -> Result<(), Status> {
+    if LOADED.get().is_none() {
+        return Err(Status::MISSING);
+    }
+    let mut held = HELD.relock();
+    if !held.iter().any(|&(id, _)| id == entity) {
+        held.push((entity, None));
+    }
+    publish(&held);
+    Ok(())
+}
+
+/// Lets players reach `entity` again.
+pub(crate) fn release(entity: u32) {
+    let mut held = HELD.relock();
+    held.retain(|&(id, _)| id != entity);
+    publish(&held);
+}
+
+/// Keeps `entity` held until its destroy, asked for now, has landed; then
+/// its id is free for the game to give again.
+pub(crate) fn destroying(entity: u32) {
+    let until = STEP.load(Ordering::Acquire) + DESTROY_STEPS;
+    let mut held = HELD.relock();
+    for (id, landed) in held.iter_mut() {
+        if *id == entity {
+            *landed = Some(until);
+        }
+    }
+}
+
+fn publish(held: &[(u32, Option<u64>)]) {
+    let ids: Vec<u32> = held.iter().map(|&(id, _)| id).collect();
+    HELD_IDS.store((!ids.is_empty()).then(|| std::sync::Arc::new(ids)));
+}
+
+fn is_held(entity: u32) -> bool {
+    HELD_IDS
+        .load()
+        .as_deref()
+        .is_some_and(|ids| ids.contains(&entity))
+}
+
+/// Reads the players again now and then, and lets destroyed props go, on
+/// the game thread.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
+    STEP.store(step, Ordering::Release);
+    {
+        let mut held = HELD.relock();
+        let before = held.len();
+        held.retain(|&(_, landed)| landed.is_none_or(|until| step < until));
+        if held.len() != before {
+            publish(&held);
+        }
+    }
     if LOADED.get().is_none() || !step.is_multiple_of(PLAYERS_EVERY) {
         return;
     }
@@ -249,9 +320,14 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
 
 pub(crate) fn forget() {
     PLAYERS.store(None);
+    HELD.relock().clear();
+    HELD_IDS.store(None);
 }
 
 fn allowed(call: &Interaction) -> bool {
+    if is_held(call.target) {
+        return false;
+    }
     let Some(filters) = FILTERS.sealed() else {
         return true;
     };

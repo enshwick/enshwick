@@ -34,7 +34,9 @@ pub(crate) struct FactoryRead {
 pub(crate) struct StateReads {
     /// An item in any slot of its inventory, linked ones included.
     pub(crate) items: bool,
-    /// A plant whose `Level` is above its start.
+    /// A plant, its `Growth`: any, as the loader does not know the level it
+    /// starts at; a plant the transaction placed is compared with its
+    /// level when it first stood instead.
     pub(crate) grown: bool,
     /// Its `FactoryStation`, when it has one.
     pub(crate) factory: Option<FactoryRead>,
@@ -76,6 +78,56 @@ impl StateReads {
     }
 }
 
+/// Links an `InventorySetup` holds, stacks a sub-inventory holds, how deep
+/// virtual links nest before the walk stops, and the virtual link category
+/// (server 399, client 426).
+pub(crate) const LINKS: usize = 16;
+pub(crate) const SLOTS: usize = 8;
+const MAX_DEPTH: u32 = 4;
+const VIRTUAL: u8 = 5;
+
+/// An entity's `InventorySetup` as read: whether the game set it up, and
+/// its linked entities with their categories.
+pub(crate) struct Setup {
+    pub(crate) initialized: bool,
+    pub(crate) links: [(u32, u8); LINKS],
+}
+
+/// Whether any slot of `root`'s inventory, its linked and virtual
+/// inventories included, holds an item: `setup` reads an entity's setup,
+/// `slots` the item of each stack of a sub-inventory. Virtual links nested
+/// deeper than the walk goes count as holding items.
+pub(crate) fn holds_items(
+    root: u32,
+    setup: &mut dyn FnMut(u32) -> Option<Setup>,
+    slots: &mut dyn FnMut(u32) -> Option<[u32; SLOTS]>,
+) -> bool {
+    walk(root, 0, setup, slots)
+}
+
+fn walk(
+    entity: u32,
+    depth: u32,
+    setup: &mut dyn FnMut(u32) -> Option<Setup>,
+    slots: &mut dyn FnMut(u32) -> Option<[u32; SLOTS]>,
+) -> bool {
+    let Some(found) = setup(entity) else {
+        return false;
+    };
+    if !found.initialized {
+        return false;
+    }
+    found.links.iter().any(|&(link, category)| {
+        if link == 0 {
+            false
+        } else if category == VIRTUAL {
+            depth + 1 >= MAX_DEPTH || walk(link, depth + 1, setup, slots)
+        } else {
+            slots(link).is_some_and(|items| items.iter().any(|&item| item != 0))
+        }
+    })
+}
+
 /// Whether a prop's `Fuel` holds more charges than a fresh one starts
 /// with: `start` is its `FuelSetup`'s most charges and the share it starts
 /// with, `None` without one, when any charge counts.
@@ -115,8 +167,8 @@ fn turn(rotation: [f32; 4], vector: [f64; 3]) -> [f64; 3] {
 /// Metres to the game's 32.32 fixed point.
 const FIXED_ONE: f64 = 4_294_967_296.0;
 /// Half the side of the box a player's rights are checked for around a
-/// prop's position, in metres: the box is enshwick's, since the game keeps
-/// no bounds a server can read for a prop.
+/// prop's position, in metres, for an item without a placement box: this
+/// fallback box is enshwick's own.
 pub(crate) const REACH: f64 = 2.0;
 
 /// A prop as the world holds it: the template its item places, the item,
@@ -330,6 +382,52 @@ mod tests {
             ..StateReads::default()
         };
         assert_eq!(plate.holds(), HOLDS_LOGIC_GRAPH_TRIGGER);
+    }
+
+    /// A setup set up with `links`, the rest empty.
+    fn setup(links: &[(u32, u8)]) -> Setup {
+        let mut all = [(0, 0); LINKS];
+        all[..links.len()].copy_from_slice(links);
+        Setup {
+            initialized: true,
+            links: all,
+        }
+    }
+
+    #[test]
+    fn an_item_in_any_linked_slot_is_found() {
+        let mut setups = |entity| (entity == 1).then(|| setup(&[(1, 0), (2, 0)]));
+        let mut slots = |entity| match entity {
+            2 => Some([0, 0, 0, 7, 0, 0, 0, 0]),
+            _ => Some([0; SLOTS]),
+        };
+        assert!(holds_items(1, &mut setups, &mut slots));
+        let mut empty = |_| Some([0; SLOTS]);
+        assert!(!holds_items(1, &mut setups, &mut empty));
+    }
+
+    #[test]
+    fn virtual_links_are_followed_and_too_deep_ones_count_as_items() {
+        let mut empty = |_| Some([0; SLOTS]);
+        let mut shallow = |entity: u32| (entity < 3).then(|| setup(&[(entity + 1, VIRTUAL)]));
+        assert!(!holds_items(1, &mut shallow, &mut empty));
+        let mut deep = |entity: u32| Some(setup(&[(entity + 1, VIRTUAL)]));
+        assert!(
+            holds_items(1, &mut deep, &mut empty),
+            "the walk stops, and stopping keeps the prop"
+        );
+    }
+
+    #[test]
+    fn a_setup_the_game_has_not_set_up_holds_nothing() {
+        let mut setups = |_| {
+            Some(Setup {
+                initialized: false,
+                ..setup(&[(1, 0)])
+            })
+        };
+        let mut full = |_| Some([5; SLOTS]);
+        assert!(!holds_items(1, &mut setups, &mut full));
     }
 
     #[test]

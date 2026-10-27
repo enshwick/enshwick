@@ -354,9 +354,11 @@ impl Transaction {
     /// item places, with the item it came from, standing at `at`. The game's
     /// `BuildingPlaceEvent` tells its listeners, and its
     /// `LogicEntityPlacedEvent` for a logic prop. It takes no cost from
-    /// anyone. The prop is in the world from the step after it is placed;
+    /// anyone. The prop is in the world from the step after it is placed,
+    /// and the transaction is applied once it stands there;
     /// [`World::transaction_entities`] lists it. [`Transaction::commit`]
-    /// refuses an item that places nothing.
+    /// refuses an item that places nothing, and one that places a creature
+    /// with [`WorldError::NotAProp`].
     ///
     /// # Examples
     ///
@@ -381,11 +383,15 @@ impl Transaction {
 
     /// Removes the prop `entity` as the game tears one down, without loot,
     /// and raises the game's `BuildingTearDownEvent`. A prop that holds
-    /// state a player would lose (see [`PropState`]: items, growth, a
-    /// production queue, assigned survivors, written text) is refused: the
-    /// transaction fails with [`WorldError::HoldsState`] before it writes
-    /// anything. Empty it first, or use
-    /// [`Transaction::remove_prop_discarding_state`].
+    /// state a player would lose is refused: items, any plant, a
+    /// production queue, assigned survivors, written text, fuel above a
+    /// fresh prop's, logic wiring or a logic trigger (each a
+    /// [`HeldState`](super::HeldState)). The transaction fails with
+    /// [`WorldError::HoldsState`] before it writes anything; empty it
+    /// first, or use [`Transaction::remove_prop_discarding_state`]. The
+    /// loader keeps players from the prop for the step before it goes and
+    /// checks again then, so nothing put in meanwhile is lost. A creature
+    /// or a flame altar fails with [`WorldError::NotAProp`].
     ///
     /// # Examples
     ///
@@ -406,11 +412,13 @@ impl Transaction {
     }
 
     /// Removes the prop `entity` even when it holds state a player would
-    /// lose. Destructive: a chest's items, a plant's growth, a station's
-    /// queue, survivors' places and written text are gone for good, and an
-    /// undo will not bring the prop back without them, so it refuses with
+    /// lose. Destructive: a chest's items, a plant and its growth, a
+    /// station's queue, survivors' places, written text, fuel, logic
+    /// wiring and a trigger's settings are gone for good, and an undo will
+    /// not bring the prop back without them, so it refuses with
     /// [`WorldError::HoldsState`]. Without state, it is
-    /// [`Transaction::remove_prop`].
+    /// [`Transaction::remove_prop`]. A creature or a flame altar still
+    /// fails with [`WorldError::NotAProp`].
     ///
     /// # Examples
     ///

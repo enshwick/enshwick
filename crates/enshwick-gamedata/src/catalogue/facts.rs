@@ -1505,6 +1505,28 @@ pub const FACTS: &[(&str, Fact)] = &[
         "logic_trigger_shape",
         Fact::Type("keen::ecs::LogicTriggerShape"),
     ),
+    ("animal_saved", Fact::Type("keen::ecs::AnimalSaved")),
+    (
+        "base_id_component",
+        Fact::Type("keen::ecs::BaseIdComponent"),
+    ),
+    (
+        "active_npc_state_saved",
+        Fact::Type("keen::ecs::ActiveNpcStateSaved"),
+    ),
+    ("item_flag.is_npc", enum_constant("keen::ItemFlag", "IsNpc")),
+    (
+        "item_flag.is_animal",
+        enum_constant("keen::ItemFlag", "IsAnimal"),
+    ),
+    (
+        "inventory_crafting_stock",
+        Fact::Type("keen::ecs::InventoryCraftingStock"),
+    ),
+    (
+        "inventory_crafting_stock.can_receive_area_deposit",
+        offset("keen::ecs::InventoryCraftingStock", "canReceiveAreaDeposit"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.

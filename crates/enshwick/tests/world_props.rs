@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{Header, Status, TerrainMaterialInfo};
+    use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo};
     use enshwick::ecs::Entity;
     use enshwick::world::{HeldState, TransactionStatus, World, WorldError, WorldTransform};
     use enshwick::{ItemId, Load, Mod, Off};
@@ -41,6 +41,11 @@ mod tests {
             .fold(enshwick::test::FakeHost::new(), |host, item| {
                 host.item_triggers(item.get())
             });
+        started_from(host)
+    }
+
+    /// The fake started from `host`, with the items and the old chest.
+    fn started_from(host: enshwick::test::FakeHost) -> (enshwick::test::Installed, World) {
         let loader = host
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
@@ -243,7 +248,7 @@ mod tests {
         loader.run_transactions();
         assert_eq!(
             world.transaction_status(id),
-            Some(TransactionStatus::Failed(WorldError::Refused))
+            Some(TransactionStatus::Failed(WorldError::NotAProp))
         );
     }
 
@@ -290,5 +295,165 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert_eq!(loader.props().len(), 1);
+    }
+
+    const PET: ItemId = ItemId::new(32);
+    const PET_ENTITY: Entity = Entity(41);
+    const SEED: ItemId = ItemId::new(33);
+    const CROP: Entity = Entity(42);
+
+    #[test]
+    fn a_creature_or_an_altar_is_no_prop_to_place_or_remove() {
+        let (loader, world) = started_from(
+            enshwick::test::FakeHost::new()
+                .item(PET.get(), 1, 0)
+                .item_places(PET.get(), [0x5e; 16])
+                .item_not_a_prop(PET.get())
+                .prop(PET_ENTITY, PET, [60.0, 40.0, 60.0]),
+        );
+        assert_eq!(
+            world.transaction().place_prop(PET, here()).commit(),
+            Err(WorldError::NotAProp)
+        );
+        for discard in [false, true] {
+            let transaction = world.transaction();
+            let transaction = if discard {
+                transaction.remove_prop_discarding_state(PET_ENTITY)
+            } else {
+                transaction.remove_prop(PET_ENTITY)
+            };
+            let id = transaction.commit().unwrap();
+            loader.run_transactions();
+            assert_eq!(
+                world.transaction_status(id),
+                Some(TransactionStatus::Failed(WorldError::NotAProp)),
+                "discarding state: {discard}"
+            );
+        }
+        assert_eq!(loader.props().len(), 2, "the pet and the chest stay");
+    }
+
+    #[test]
+    fn a_placed_crop_goes_on_undo_until_it_grows() {
+        let host = enshwick::test::FakeHost::new()
+            .item(SEED.get(), 1, 0)
+            .item_places(SEED.get(), [0x5d; 16])
+            .item_grows(SEED.get());
+        let (loader, world) = started_from(host);
+        let young = world
+            .transaction()
+            .place_prop(SEED, here())
+            .commit()
+            .unwrap();
+        let grown = world
+            .transaction()
+            .place_prop(SEED, WorldTransform::at([200.0, 40.0, 200.0]))
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        loader.grow_plant(world.transaction_entities(grown)[0]);
+        world.undo(young).unwrap();
+        world.undo(grown).unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(young),
+            Some(TransactionStatus::Undone)
+        );
+        match world.transaction_status(grown) {
+            Some(TransactionStatus::UndoRefused(WorldError::HoldsState(state))) => {
+                assert!(state.holds(HeldState::Growth));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_crop_the_transaction_did_not_place_is_not_removed() {
+        let host = enshwick::test::FakeHost::new()
+            .item(SEED.get(), 1, 0)
+            .item_places(SEED.get(), [0x5d; 16])
+            .item_grows(SEED.get())
+            .prop(CROP, SEED, [70.0, 40.0, 70.0]);
+        let (loader, world) = started_from(host);
+        let id = world.transaction().remove_prop(CROP).commit().unwrap();
+        loader.run_transactions();
+        match world.transaction_status(id) {
+            Some(TransactionStatus::Failed(WorldError::HoldsState(state))) => {
+                assert!(state.holds(HeldState::Growth));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_removed_prop_whose_place_a_like_one_took_does_not_come_back() {
+        let (loader, world) = started();
+        let removal = world.transaction().remove_prop(OLD_CHEST).commit().unwrap();
+        loader.run_transactions();
+        let again = world
+            .transaction()
+            .place_prop(CHEST, WorldTransform::at([50.0, 40.0, 50.0]))
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(again),
+            Some(TransactionStatus::Applied)
+        );
+        world.undo(removal).unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(removal),
+            Some(TransactionStatus::UndoRefused(WorldError::Refused))
+        );
+    }
+
+    #[test]
+    fn a_player_s_rights_are_checked_for_the_turned_placement_box() {
+        const BUILDER: u32 = 2;
+        let host = enshwick::test::FakeHost::new()
+            .placement_box(CHEST.get(), [-0.5, 0.0, -5.0], [0.5, 2.0, 5.0])
+            .player(PlayerInfo {
+                header: Header::of::<PlayerInfo>(),
+                slot: BUILDER,
+                entity: BUILDER,
+                key: u64::from(BUILDER),
+                permissions: PlayerInfo::CAN_EDIT_WORLD,
+                name_len: 0,
+                name: [0; 64],
+            })
+            .building_area([0.0; 3], [1000.0; 3])
+            .no_build_zone([104.0, 0.0, 0.0], [106.0, 1000.0, 1000.0], true);
+        let (loader, world) = started_from(host);
+        let builder = world.player(Entity(BUILDER)).unwrap();
+        let along = world
+            .transaction_for(&builder)
+            .place_prop(CHEST, here())
+            .commit()
+            .unwrap();
+        let quarter = core::f32::consts::FRAC_1_SQRT_2;
+        let across = world
+            .transaction_for(&builder)
+            .place_prop(
+                CHEST,
+                WorldTransform {
+                    position: [100.0, 40.0, 100.0],
+                    orientation: [0.0, quarter, 0.0, quarter],
+                },
+            )
+            .commit()
+            .unwrap();
+        loader.run_transactions();
+        assert_eq!(
+            world.transaction_status(along),
+            Some(TransactionStatus::Applied)
+        );
+        assert!(
+            matches!(
+                world.transaction_status(across),
+                Some(TransactionStatus::NotAllowed(_))
+            ),
+            "turned, its box reaches the zone"
+        );
     }
 }

@@ -428,7 +428,8 @@ ids! {
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL = "building_terraforming_config.building_material";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
-    BUILDING_TERRAFORMING_CONFIG_HARDNESS = "building_terraforming_config.hardness";    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    BUILDING_TERRAFORMING_CONFIG_HARDNESS = "building_terraforming_config.hardness";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     DISABLE_RANDOM_LOOT_ON_DESTROY = "disable_random_loot_on_destroy";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LEVEL = "level";
@@ -484,4 +485,15 @@ ids! {
     LOGIC_GRAPH_TRIGGER_TRIGGER_CONFIG = "logic_graph_trigger.trigger_config";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_TRIGGER_SHAPE = "logic_trigger_shape";
+    ANIMAL_SAVED = "animal_saved";
+    BASE_ID_COMPONENT = "base_id_component";
+    ACTIVE_NPC_STATE_SAVED = "active_npc_state_saved";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_FLAG_IS_NPC = "item_flag.is_npc";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_FLAG_IS_ANIMAL = "item_flag.is_animal";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    INVENTORY_CRAFTING_STOCK = "inventory_crafting_stock";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    INVENTORY_CRAFTING_STOCK_CAN_RECEIVE_AREA_DEPOSIT = "inventory_crafting_stock.can_receive_area_deposit";
 }
