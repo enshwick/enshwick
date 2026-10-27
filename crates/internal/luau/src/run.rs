@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
 use enshwick::__private::Relock as _;
-use enshwick::abi::{Event, Level};
+use enshwick::abi::Level;
 use enshwick::script::{self, EventKind, Opened, Signature, Value};
 use enshwick::{Host, Load, Off};
 use mlua::chunk::ChunkMode;
@@ -18,6 +18,7 @@ use crate::bridge::{arguments, from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 use crate::files::{Requirer, Scripts};
+use crate::subscribe::{RawReader, Subscription, raw_table};
 
 /// How much a mod's scripts may take.
 ///
@@ -118,7 +119,7 @@ pub(crate) struct Vm {
     scripts: Scripts,
     /// Whether `main.luau` is still running its top level.
     starting: AtomicBool,
-    handlers: Mutex<Vec<(Event, Function)>>,
+    handlers: Mutex<Vec<(Subscription, Function)>>,
 }
 
 pub(crate) struct Inner {
@@ -131,8 +132,10 @@ pub(crate) struct Inner {
     namespaces: Vec<(&'static script::Namespace, Opened)>,
     /// The VM; gone once the mod is off, which frees its memory.
     vm: ArcSwapOption<Vm>,
-    /// The events subscribed at start, the only ones a reload can serve.
-    subscribed: Mutex<Vec<Event>>,
+    /// The subscriptions made at start, the only ones a reload can serve.
+    subscribed: Mutex<Vec<Subscription>>,
+    /// The game event types of the build, with their sizes, read at start.
+    event_types: Vec<(&'static str, u32)>,
     off: AtomicBool,
     /// The mod's settings in force, from its `pack.toml` schema.
     settings: ArcSwap<toml::Table>,
@@ -247,13 +250,12 @@ impl Runtime {
             return Err(ReloadError::Off);
         }
         let vm = inner.run_main(scripts).map_err(ReloadError::Start)?;
-        let waiting: Vec<&str> = {
+        let waiting: Vec<String> = {
             let subscribed = inner.subscribed.relock();
             vm.events()
                 .into_iter()
-                .filter(|event| !subscribed.contains(event))
-                .filter_map(|event| script::events().find(|k| k.event() == event))
-                .map(EventKind::name)
+                .filter(|sub| !subscribed.contains(sub))
+                .map(|sub| sub.name())
                 .collect()
         };
         if !waiting.is_empty() {
@@ -362,6 +364,10 @@ pub fn start(
             ),
         }
     }
+    let event_types = load
+        .event_types()
+        .map(|types| types.iter().map(|t| (t.name(), t.size())).collect())
+        .unwrap_or_default();
     let inner = Arc::new_cyclic(|me| Inner {
         me: Weak::clone(me),
         id: id.to_owned(),
@@ -370,6 +376,7 @@ pub fn start(
         namespaces,
         vm: ArcSwapOption::empty(),
         subscribed: Mutex::new(Vec::new()),
+        event_types,
         off: AtomicBool::new(false),
         calls: AtomicU64::new(0),
         overruns: Arc::new(AtomicU64::new(0)),
@@ -392,12 +399,31 @@ pub fn start(
     let events = vm.events();
     inner.vm.store(Some(vm));
     inner.subscribed.relock().clone_from(&events);
-    for event in events {
-        let kind = script::events()
-            .find(|k| k.event() == event)
-            .ok_or_else(|| Off::new(format!("event {} has no script entry", event.0)))?;
-        let inner = Arc::clone(&inner);
-        load.on_raw_event(event, move |raw| inner.dispatch(kind, raw))?;
+    for sub in events {
+        let handled = Arc::clone(&inner);
+        match &sub {
+            Subscription::Loader(event) => {
+                let kind = Subscription::loader_kind(*event)?;
+                load.on_raw_event(*event, move |raw| handled.dispatch(kind, raw))?;
+            }
+            Subscription::Game(name) => {
+                let kind = Subscription::game_kind(name)?;
+                let key = sub.clone();
+                kind.subscribe(load, move |value| {
+                    handled.deliver(&key, |lua, scope| {
+                        to_lua(lua, scope, value.clone(), kind.data())
+                    });
+                })?;
+            }
+            Subscription::Raw(spec) => {
+                let (ty, reader) = RawReader::resolve(load, spec)?;
+                let key = sub.clone();
+                load.on_raw_game_event(ty, move |event| {
+                    let values = reader.read(event);
+                    handled.deliver(&key, |lua, _| raw_table(lua, &values));
+                })?;
+            }
+        }
     }
     let usage = Arc::downgrade(&inner);
     load.add_status(move || {
@@ -467,30 +493,33 @@ fn describe(error: &mlua::Error) -> String {
 }
 
 impl Vm {
-    /// Every event a handler was registered for, once each.
-    fn events(&self) -> Vec<Event> {
-        let mut events: Vec<Event> = self
-            .handlers
-            .relock()
-            .iter()
-            .map(|(event, _)| *event)
-            .collect();
-        events.sort_unstable_by_key(|e| e.0);
-        events.dedup();
+    /// Every subscription a handler was registered for, once each, in the
+    /// order of the first.
+    fn events(&self) -> Vec<Subscription> {
+        let mut events: Vec<Subscription> = Vec::new();
+        for (sub, _) in self.handlers.relock().iter() {
+            if !events.contains(sub) {
+                events.push(sub.clone());
+            }
+        }
         events
     }
 
-    fn on(&self, name: &str, handler: Function) -> mlua::Result<()> {
+    fn subscribe(&self, what: &str, sub: Subscription, handler: Function) -> mlua::Result<()> {
         if !self.starting.load(Ordering::Acquire) {
-            return Err(mlua::Error::runtime(
-                "enshwick.on: subscribe at the top level of main.luau, while the mod starts",
-            ));
+            return Err(mlua::Error::runtime(format!(
+                "{what}: subscribe at the top level of main.luau, while the mod starts"
+            )));
         }
-        let kind = script::events().find(|k| k.name() == name).ok_or_else(|| {
+        self.handlers.relock().push((sub, handler));
+        Ok(())
+    }
+
+    fn on(&self, name: &str, handler: Function) -> mlua::Result<()> {
+        let sub = Subscription::named(name).ok_or_else(|| {
             mlua::Error::runtime(format!("enshwick.on: no event is named {name:?}"))
         })?;
-        self.handlers.relock().push((kind.event(), handler));
-        Ok(())
+        self.subscribe("enshwick.on", sub, handler)
     }
 }
 
@@ -587,6 +616,33 @@ impl Inner {
         )?;
         let weak = Arc::downgrade(vm);
         api.raw_set(
+            "on_game_type",
+            lua.create_function(
+                move |_, (name, fields, handler): (String, Table, Function)| {
+                    let vm = weak
+                        .upgrade()
+                        .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                    let sub = Subscription::raw(name, &fields)?;
+                    vm.subscribe("enshwick.on_game_type", sub, handler)
+                },
+            )?,
+        )?;
+        let types = self.event_types.clone();
+        api.raw_set(
+            "game_event_types",
+            lua.create_function(move |lua, ()| {
+                let list = lua.create_table_with_capacity(types.len(), 0)?;
+                for (name, size) in &types {
+                    let entry = lua.create_table_with_capacity(0, 2)?;
+                    entry.raw_set("name", *name)?;
+                    entry.raw_set("size", *size)?;
+                    list.raw_push(entry)?;
+                }
+                Ok(list)
+            })?,
+        )?;
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
             "on",
             lua.create_function(move |_, (name, handler): (String, Function)| {
                 let vm = weak
@@ -676,6 +732,17 @@ impl Inner {
         let Some(data) = (unsafe { kind.read(raw) }) else {
             return;
         };
+        self.deliver(&Subscription::Loader(kind.event()), |lua, scope| {
+            to_lua(lua, scope, data.clone(), kind.data())
+        });
+    }
+
+    /// Calls every handler of `sub` in the current VM with the argument
+    /// `arg` makes; stops at the first that fails, which turns the mod off.
+    fn deliver(&self, sub: &Subscription, arg: impl Fn(&Lua, &Scope) -> mlua::Result<LuaValue>) {
+        if self.off.load(Ordering::Acquire) {
+            return;
+        }
         let Some(vm) = self.vm.load_full() else {
             return;
         };
@@ -683,18 +750,16 @@ impl Inner {
             .handlers
             .relock()
             .iter()
-            .filter(|(event, _)| *event == kind.event())
+            .filter(|(key, _)| key == sub)
             .map(|(_, handler)| handler.clone())
             .collect();
         let scope = Scope {
             inner: Weak::clone(&self.me),
             vm: Arc::downgrade(&vm),
         };
+        let what = sub.name();
         for handler in handlers {
-            let done = self.call(&vm, kind.name(), |vm| {
-                let arg = to_lua(&vm.lua, &scope, data.clone(), kind.data())?;
-                handler.call::<()>(arg)
-            });
+            let done = self.call(&vm, &what, |vm| handler.call::<()>(arg(&vm.lua, &scope)?));
             if done.is_none() {
                 return;
             }

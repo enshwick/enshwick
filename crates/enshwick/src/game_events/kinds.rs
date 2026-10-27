@@ -74,7 +74,7 @@ where
 ///     })
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct HitEvent {
     /// Who the hit is credited to: a character or enemy, not its arrow.
@@ -163,7 +163,7 @@ impl Kind for HitEvent {
 ///     })
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct EntityDiedEvent {
     /// The entity that died.
@@ -292,7 +292,7 @@ impl Kind for EntityDiedEvent {
 ///     load.on_game::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct LevelUpEvent {
     /// The player's character.
@@ -340,7 +340,7 @@ impl Kind for LevelUpEvent {
 ///     })
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct XpGainedEvent {
     /// The player's character.
@@ -395,7 +395,7 @@ impl Kind for XpGainedEvent {
 ///     load.on_game::<CraftRecipeEvent>(|craft| enshwick::debug!("recipe {:#x} x{}", craft.recipe_id, craft.recipe_amount))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct CraftRecipeEvent {
     /// The crafting player's character.
@@ -449,7 +449,7 @@ impl Kind for CraftRecipeEvent {
 ///     load.on_game::<CraftRecipeSuccessEvent>(|done| enshwick::debug!("workshop {:#x} made {:#x}", done.workshop_id, done.recipe_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct CraftRecipeSuccessEvent {
     /// The workshop id.
@@ -495,7 +495,7 @@ impl Kind for CraftRecipeSuccessEvent {
 ///     load.on_game::<AcceptOfferedInteractionEvent>(|used| enshwick::debug!("{:?} used {:?}", used.guest_entity_id, used.host_entity_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 #[expect(
     clippy::struct_field_names,
@@ -545,7 +545,7 @@ impl Kind for AcceptOfferedInteractionEvent {
 /// # Examples
 ///
 /// See [`BuildingPlaceEvent`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct Block {
     /// The player's character.
@@ -626,7 +626,7 @@ impl BlockFields {
 ///     load.on_game::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.owner_id, built.block.position))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct BuildingPlaceEvent {
     /// The block.
@@ -680,7 +680,7 @@ impl Kind for BuildingPlaceEvent {
 ///     load.on_game::<BuildingTearDownEvent>(|torn| enshwick::debug!("torn down at {:?}", torn.block.position))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct BuildingTearDownEvent {
     /// The block.
@@ -730,7 +730,7 @@ impl Kind for BuildingTearDownEvent {
 ///     load.on_game::<BuildingPickUpEvent>(|picked| enshwick::debug!("picked up {:?}", picked.picked_entity_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
 #[non_exhaustive]
 pub struct BuildingPickUpEvent {
     /// The block.
@@ -785,7 +785,7 @@ impl Kind for BuildingPickUpEvent {
 ///     load.on_game::<FlameAltarEvent>(|used| enshwick::info!("{:?} at altar {:?}", used.r#type, used.base_entity_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct FlameAltarEvent {
     /// The player's character.
@@ -840,7 +840,7 @@ impl Kind for FlameAltarEvent {
 ///     load.on_game::<LootInteractionEvent>(|loot| enshwick::debug!("{:?} looted {:?}", loot.guest_id, loot.host_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct LootInteractionEvent {
     /// The player's character.
@@ -888,7 +888,7 @@ impl Kind for LootInteractionEvent {
 ///     load.on_game::<HandleEquipmentSlotChangedEvent>(|changed| enshwick::debug!("{:?} of {:?}", changed.equipment_slot, changed.player_entity_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct HandleEquipmentSlotChangedEvent {
     /// The player's character.
@@ -944,7 +944,7 @@ impl Kind for HandleEquipmentSlotChangedEvent {
 ///     load.on_game::<RevivedPlayerEvent>(|revived| enshwick::info!("{:?} revived by {:?}", revived.target_entity_id, revived.source_entity_id))
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
 #[non_exhaustive]
 pub struct RevivedPlayerEvent {
     /// The revived player's character.

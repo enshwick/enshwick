@@ -60,7 +60,8 @@ end)
 
 | Name | What |
 | --- | --- |
-| `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md), with its data as a table; only at the top level of `main.luau` |
+| `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md) or typed [game event](#game-events), with its data as a table; only at the top level of `main.luau` |
+| `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
@@ -93,6 +94,37 @@ reaches Luau and the definitions with no other change.
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
+
+## Game events
+
+`enshwick.on` takes the name of a typed [game event](game-events.md) as
+well, such as `HitEvent` or `EntityDiedEvent`. The handler gets the event's
+fields as `game_events::HitEvent` has them, a mask as the list of its bit
+names, a game value as its name:
+
+```luau
+enshwick.on("HitEvent", function(hit)
+    if hit.health_change < 0 and hit.root_source_id then
+        enshwick.log.info(`{hit.root_source_id} hit {hit.target_id}`)
+    end
+end)
+```
+
+Any other game event is read by its reflected type and the fields the script
+names, each with how to read it: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`,
+`u64`, `i64`, `f32`, `f64`, `bool` or `entity`, the 64-bit ones as strings.
+`enshwick.game_event_types()` lists every type of the running build with
+its size. A field the type lacks on this build leaves the mod off at start,
+with the reason in the log.
+
+```luau
+enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
+    enshwick.log.info(`entity {event.deadEntityId} died`)
+end)
+```
+
+Game events run on the server's game thread before the step's systems, as
+for a Rust mod; on a client, only while it hosts a game.
 
 ## Settings
 

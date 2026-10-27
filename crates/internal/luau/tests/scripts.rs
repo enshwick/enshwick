@@ -442,4 +442,90 @@ mod tests {
         let loader = run("enshwick.log.info(`keys {next(enshwick.settings()) == nil}`)");
         assert!(logged(&loader, "keys true"), "{:?}", loader.logs());
     }
+
+    const LEVEL_UP: u32 = 0x51;
+    const DIED: u32 = 0x52;
+
+    fn game_host() -> FakeHost {
+        FakeHost::new()
+            .type_hash("level_up_event", LEVEL_UP)
+            .type_size("level_up_event", 16)
+            .constant("level_up_event.player_entity_id", 8)
+            .constant("level_up_event.level", 12)
+            .event_type("keen::ecs::EntityDiedEvent", DIED, 16)
+            .field_offset("keen::ecs::EntityDiedEvent", "deadEntityId", 8)
+    }
+
+    #[test]
+    fn a_typed_game_event_reaches_its_handler_as_a_table() {
+        let (loader, status) = run_full(
+            r#"enshwick.on("LevelUpEvent", function(up)
+                enshwick.log.info(`entity {up.player_entity_id} reached {up.level}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let mut bytes = [0u8; 16];
+        bytes[8..12].copy_from_slice(&7u32.to_le_bytes());
+        bytes[12..16].copy_from_slice(&5i32.to_le_bytes());
+        assert_eq!(loader.raise_game_event(LEVEL_UP, &bytes), 1);
+        assert!(logged(&loader, "entity 7 reached 5"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_game_event_by_type_reads_the_fields_the_script_names() {
+        let (loader, status) = run_full(
+            r#"local types = enshwick.game_event_types()
+            enshwick.log.info(`{#types} types, first {types[1].name}`)
+            enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
+                enshwick.log.info(`died {event.deadEntityId}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "1 types, first keen::ecs::EntityDiedEvent"),
+            "{:?}",
+            loader.logs()
+        );
+        let mut bytes = [0u8; 16];
+        bytes[8..12].copy_from_slice(&4096u32.to_le_bytes());
+        assert_eq!(loader.raise_game_event(DIED, &bytes), 1);
+        assert!(logged(&loader, "died 4096"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_field_of_an_unknown_kind_refuses_the_mod() {
+        let (loader, status) = run_full(
+            r#"enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "pointer" }, function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_ne!(status, Status::OK);
+        assert!(
+            logged(&loader, "\"pointer\" is none of"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_field_the_type_lacks_refuses_the_mod() {
+        let (_loader, status) = run_full(
+            r#"enshwick.on_game_type("keen::ecs::EntityDiedEvent", { nope = "u32" }, function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_ne!(status, Status::OK);
+    }
 }

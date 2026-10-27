@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `script::game_events` lists every typed game event for script languages
+  (`GameEventKind`); the game event structs, masks and values convert for
+  scripts (a mask as its bit names, a value as its name).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type

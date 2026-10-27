@@ -200,6 +200,16 @@ impl IntoScript for [f32; 3] {
     }
 }
 
+impl FromScript for [f32; 3] {
+    fn from_value(value: Value) -> Result<Self, Error> {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a script's vector is f32 already; f64 holds it exactly"
+        )]
+        <[f64; 3]>::from_value(value).map(|v| v.map(|n| n as f32))
+    }
+}
+
 /// A GUID, such as a template's, as 32 lowercase hex digits.
 impl Typed for [u8; 16] {
     const TY: &'static Ty = &Ty::String;
