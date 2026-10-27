@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 92
+#define ENSHWICK_ABI_MINOR 93
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -1058,6 +1058,11 @@ typedef uint32_t EnshwickStatus;
 // the height the loader takes. A mod built before minor 87 reads it as
 // an unknown failure. Since minor 87.
 #define EnshwickStatus_OUTSIDE_WORLD 9
+// The component type is the static half of its ECS type: the set-up
+// values the entity's template holds and every entity of that template
+// shares, which a write would change for all of them. A mod built
+// before minor 93 reads it as an unknown failure. Since minor 93.
+#define EnshwickStatus_STATIC_HALF 10
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -2676,7 +2681,9 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*type_hash)(struct EnshwickStr type_name, uint32_t *out);
   // A read-only pointer to `entity`'s component of type `type_hash`, valid
   // until the game thread moves on; on the server's game thread only.
-  // Since minor 3.
+  // For the static half of an ECS type, such as `FuelSetup`, it is the
+  // set-up data the entity's template holds (since minor 93; the
+  // dynamic half's data before). Since minor 3.
   EnshwickStatus (*component)(EnshwickModHandle me,
                               uint32_t entity,
                               uint32_t type_hash,
@@ -2956,8 +2963,10 @@ typedef struct EnshwickHostApi {
   // loader marks the component changed, as the game's own writes do, so
   // the game sends it to clients and saves it. `Status::REFUSED` for a
   // copy the game keeps for clients (`Network*`, `Client*`), which it
-  // overwrites; `Status::MISSING` when the entity lacks the component.
-  // On the server's game thread only. Since minor 22.
+  // overwrites; `Status::STATIC_HALF` for the static half of an ECS
+  // type, the template's set-up data (since minor 93);
+  // `Status::MISSING` when the entity lacks the component. On the
+  // server's game thread only. Since minor 22.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
                                     uint32_t entity,
                                     uint32_t type_hash,

@@ -405,7 +405,9 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
     Ok((world, index))
 }
 
-/// A component's data pointer, or why not.
+/// A component's data pointer, or why not: for the static half of an ECS
+/// type, the set-up data the entity's template holds, which nothing may
+/// write; otherwise the entity's own data.
 pub(crate) fn component(
     loader: &Loader,
     entity: Entity,
@@ -413,6 +415,23 @@ pub(crate) fn component(
 ) -> Result<*const c_void, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (world, index) = type_index(loader, hash)?;
+    if let Some(halves) = crate::static_halves::halves(loader)
+        // SAFETY: `world` is the live entity world and `index` the non-null
+        // type index `type_index` found for `hash`, on the game thread
+        // (checked by `reader` inside `type_index`).
+        && unsafe { halves.is_static(world, index, hash) }
+    {
+        // SAFETY: `world` is the live entity world and `index` the type
+        // index of `hash`, whose type has a static half (`is_static`
+        // returned true), on the game thread (checked by `reader` inside
+        // `type_index`).
+        let data = unsafe { halves.read(world, index, entity.0) };
+        return if data.is_null() {
+            Err(Status::MISSING)
+        } else {
+            Ok(data.cast())
+        };
+    }
     let mut out = [0usize; 2];
     // SAFETY: `read_component` is the table's `ecs.component_read_raw`;
     // `out` is two writable words on this stack, `world` the non-zero entity
@@ -430,6 +449,19 @@ pub(crate) fn component(
         0 => Err(Status::MISSING),
         data => Ok(core::ptr::with_exposed_provenance(data)),
     }
+}
+
+/// Whether `hash` names the static half of an ECS type, the template's
+/// set-up data; false on a build without the static read. On the game
+/// thread.
+pub(crate) fn is_static(loader: &Loader, hash: u32) -> Result<bool, Status> {
+    let (world, index) = type_index(loader, hash)?;
+    Ok(crate::static_halves::halves(loader).is_some_and(|halves| {
+        // SAFETY: `world` is the live entity world and `index` the non-null
+        // type index `type_index` found for `hash`, on the game thread
+        // (checked by `reader` inside `type_index`).
+        unsafe { halves.is_static(world, index, hash) }
+    }))
 }
 
 /// An entity's template GUID.

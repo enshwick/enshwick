@@ -769,7 +769,7 @@ unsafe fn refuse_pending(ctx: *mut u64) {
         let input = unsafe { components.component(ctx, player, layout.player_input) };
         // SAFETY: the caller guarantees the system's live context, at its
         // entry on its thread.
-        let consumed = unsafe { components.component(ctx, player, layout.consumed_input) };
+        let consumed = unsafe { components.component_mut(ctx, player, layout.consumed_input) };
         let (Some(input), Some(consumed)) = (input, consumed) else {
             continue;
         };

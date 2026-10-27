@@ -87,6 +87,9 @@ pub(crate) fn component_mut(
     if refused(loader).contains(&hash) {
         return Err(Status::REFUSED);
     }
+    if crate::world::is_static(loader, hash)? {
+        return Err(Status::STATIC_HALF);
+    }
     let mut out = [0usize; 2];
     // SAFETY: the server's entity world on its game thread between steps,
     // where no system runs; the tracker lies inside the entity world, and

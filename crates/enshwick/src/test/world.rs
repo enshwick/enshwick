@@ -50,6 +50,24 @@ impl FakeHost {
         self
     }
 
+    /// Makes the component type `type_hash` the static half of its ECS type,
+    /// the template's set-up data: reads find it as
+    /// [`FakeHost::component`] gives it, and writes are refused with
+    /// [`Status::STATIC_HALF`](crate::abi::Status::STATIC_HALF), as the loader
+    /// refuses them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().static_half(0x139a_fbec).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn static_half(mut self, type_hash: u32) -> Self {
+        self.static_halves.insert(type_hash);
+        self
+    }
+
     /// An entity in the world with a component of type `type_hash`, at
     /// `position` in metres, for [`World::entities`](crate::world::World::entities)
     /// and [`World::near`](crate::world::World::near).

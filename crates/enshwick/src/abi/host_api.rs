@@ -97,7 +97,9 @@ pub struct HostApi {
     pub type_hash: extern "system" fn(type_name: Str, out: *mut u32) -> Status,
     /// A read-only pointer to `entity`'s component of type `type_hash`, valid
     /// until the game thread moves on; on the server's game thread only.
-    /// Since minor 3.
+    /// For the static half of an ECS type, such as `FuelSetup`, it is the
+    /// set-up data the entity's template holds (since minor 93; the
+    /// dynamic half's data before). Since minor 3.
     pub component: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -396,8 +398,10 @@ pub struct HostApi {
     /// loader marks the component changed, as the game's own writes do, so
     /// the game sends it to clients and saves it. [`Status::REFUSED`] for a
     /// copy the game keeps for clients (`Network*`, `Client*`), which it
-    /// overwrites; [`Status::MISSING`] when the entity lacks the component.
-    /// On the server's game thread only. Since minor 22.
+    /// overwrites; [`Status::STATIC_HALF`] for the static half of an ECS
+    /// type, the template's set-up data (since minor 93);
+    /// [`Status::MISSING`] when the entity lacks the component. On the
+    /// server's game thread only. Since minor 22.
     pub component_write: extern "system" fn(
         me: ModHandle,
         entity: u32,
