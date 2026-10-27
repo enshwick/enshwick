@@ -12,13 +12,13 @@ Each entry names the pull request that made the change.
   `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
   the game's Decorative crafting group, so `Recipes::Kind`,
   `Rate::RecipeOutput` and `RecipeView::kind` pick decorations by the
-  game's own grouping (#PR).
+  game's own grouping (#616).
 
 ### Removed
 
 - Breaking: `Load::modify_recipes`, `RecipeEdit` and `modify_recipes_in`;
   a data change through `Load::change_recipes` or a `Rate::RecipeOutput`
-  changes recipe counts by kind (#PR).
+  changes recipe counts by kind (#616).
 
 ## [1.0.0-alpha.9] - 2026-10-27
 
