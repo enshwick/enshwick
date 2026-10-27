@@ -9,7 +9,7 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick new --data` shows a selection of items by category in
-  the commented `items.toml` (#PR).
+  the commented `items.toml` (#558).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 
