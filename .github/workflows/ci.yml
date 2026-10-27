@@ -13,10 +13,12 @@ on:
     branches: [main]
   # The merge queue checks each group of pull requests on top of main.
   merge_group:
-  # GitHub delays scheduled runs for hours and drops many: four tries a
-  # night, and the gate lets the first through.
+  # GitHub delays scheduled runs for hours and drops most of them (on
+  # 2026-10-27 the 15-minute build watch ran 4 times in 24 hours): a try
+  # every half hour through the night, and the gate lets the first through.
+  # A try the gate stops costs one hosted job of seconds.
   schedule:
-    - cron: "17 1,3,5,7 * * *"
+    - cron: "17,47 0-8 * * *"
   workflow_dispatch:
     inputs:
       nightly:
@@ -33,8 +35,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # A scheduled run goes ahead unless a nightly lane already ran or runs
-  # within the last 20 hours.
+  # A scheduled run goes ahead unless a nightly lane ran, failed or runs
+  # within the last 20 hours: a failed night is not run again by the next
+  # try, it is fixed.
   gate:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-24.04
@@ -52,13 +55,17 @@ jobs:
         run: |
           since=$(date -u -d '20 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           ran=false
-          for id in $(gh run list -R "$REPO" --workflow ci.yml --created ">=$since" \
-              --limit 100 --json databaseId,event \
-              -q ".[] | select(.event == \"schedule\" or .event == \"workflow_dispatch\") | .databaseId"); do
+          # Listed per event: pull requests and the merge queue run this
+          # workflow more than a hundred times a day.
+          ids=$(for event in schedule workflow_dispatch; do
+            gh run list -R "$REPO" --workflow ci.yml --event "$event" --created ">=$since" \
+              --limit 100 --json databaseId -q '.[].databaseId'
+          done)
+          for id in $ids; do
             [ "$id" = "$RUN_ID" ] && continue
             if gh run view "$id" -R "$REPO" --json jobs -q '.jobs[]
                 | select(.name == "nightly / nightly")
-                | select(.status != "completed" or .conclusion == "success")
+                | select(.status != "completed" or .conclusion == "success" or .conclusion == "failure")
                 | .name' | grep -q .; then
               ran=true
               echo "the nightly lane ran in run $id"
