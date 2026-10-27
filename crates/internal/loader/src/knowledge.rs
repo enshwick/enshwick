@@ -139,7 +139,7 @@ impl Layout {
 /// Whether a log entry of `size` bytes holds its `u32` id at `id` and its
 /// `u32` value at `value`.
 const fn entry_holds(size: usize, id: usize, value: usize) -> bool {
-    id + 4 <= size && value + 4 <= size
+    id.saturating_add(4) <= size && value.saturating_add(4) <= size
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -606,11 +606,13 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         let entry = log + i * layout.log_entry;
         // SAFETY: `log` is non-null and `i` below its count by the check
         // before it, so `entry` is an entry of the log, of the build table's
-        // `knowledge.log_entry_size`, with its u32 id at
-        // `knowledge.log_entry_id`.
+        // `knowledge.log_entry_size`; `layout` passed
+        // `Layout::entry_holds_its_fields` when it resolved, so the u32 at
+        // `knowledge.log_entry_id` ends inside the entry.
         let id: u32 = unsafe { read(entry, layout.log_entry_id) };
-        // SAFETY: `entry` is an entry of the live log, with its u32 new value
-        // at the build table's `knowledge.log_entry_value`.
+        // SAFETY: `entry` is an entry of the live log, and
+        // `Layout::entry_holds_its_fields` put the u32 at the build table's
+        // `knowledge.log_entry_value` inside it.
         let value: u32 = unsafe { read(entry, layout.log_entry_value) };
         if id == 0 {
             continue;
@@ -651,5 +653,6 @@ mod tests {
         assert!(!entry_holds(0x10, 0, 0xd), "the value ends past the entry");
         assert!(!entry_holds(4, 0, 4), "the value ends past the entry");
         assert!(!entry_holds(0x10, 0x10, 4), "the id ends past the entry");
+        assert!(!entry_holds(0x10, usize::MAX, 4), "the id's end overflows");
     }
 }

@@ -70,8 +70,10 @@ build context) and bake it from there, by version.
 
 ## Linux hosts
 
-A Linux image runs the Windows server under Wine or Proton. Set the DLL
-override so that the game loads Enshwick's `powrprof.dll`:
+A Linux image runs the Windows server under Proton: GE-Proton or Valve's,
+pinned by version, run outside Steam. Plain Wine works too, but Proton
+carries the fixes games need first. Set the DLL override so that the game
+loads Enshwick's `powrprof.dll`:
 
 ```dockerfile
 ENV WINEDLLOVERRIDES="powrprof=n,b"

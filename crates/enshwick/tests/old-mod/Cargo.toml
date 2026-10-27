@@ -10,7 +10,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-enshwick = "=1.0.0-alpha.2"
+enshwick = "=1.0.0-alpha.9"
 
 # Its own workspace, so the platform's workspace and patches stay out.
 [workspace]

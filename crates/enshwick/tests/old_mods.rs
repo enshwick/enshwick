@@ -36,7 +36,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "the fixture pins a release of ABI 2; the first ABI 3 release repins it"]
     fn a_mod_built_against_the_last_release_starts_in_the_current_host() {
         let Some(path) = build_old_mod() else {
             return;
@@ -66,7 +65,7 @@ mod tests {
         let manifest = unsafe { read_headed(query(), REQUIRED) }.unwrap();
         // SAFETY: a `'static` string of the old mod's manifest, alive while
         // `library` is loaded.
-        assert_eq!(unsafe { manifest.id.as_str() }, Some("old-mod"));
+        assert_eq!(unsafe { manifest.id.as_str() }, Some("you.old-mod"));
 
         let host = FakeHost::new().install();
         // SAFETY: `init` and `ready` are the exports of the old mod's one
