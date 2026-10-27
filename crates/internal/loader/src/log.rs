@@ -86,8 +86,8 @@ static COUNTS: Counts = Counts {
     sent: AtomicU64::new(0),
     taken: AtomicU64::new(0),
 };
-/// The latest [`RECENT`] lines, oldest first.
-static RECENT_LINES: Mutex<VecDeque<Line>> = Mutex::new(VecDeque::new());
+/// The latest lines the writer kept.
+static RECENT_LINES: Mutex<Recent> = Mutex::new(Recent::new());
 static LEVELS: ArcSwapOption<Settings> = ArcSwapOption::const_empty();
 
 /// Keeps lines up to the levels in `settings`; before the first call every
@@ -316,27 +316,50 @@ pub fn settle(longest: Duration) -> bool {
 
 /// Keeps `line` among the latest lines.
 fn keep(line: Line) {
-    let mut recent = RECENT_LINES.relock();
-    if recent.len() == RECENT {
-        recent.pop_front();
+    RECENT_LINES.relock().keep(line);
+}
+
+/// The latest [`RECENT`] lines, oldest first.
+#[derive(Debug)]
+struct Recent {
+    lines: VecDeque<Line>,
+}
+
+impl Recent {
+    const fn new() -> Self {
+        Self {
+            lines: VecDeque::new(),
+        }
     }
-    recent.push_back(line);
+
+    fn keep(&mut self, line: Line) {
+        if self.lines.len() == RECENT {
+            self.lines.pop_front();
+        }
+        self.lines.push_back(line);
+    }
+
+    fn latest(&self, source: Option<&str>, level: Level, count: usize) -> Vec<String> {
+        let mut found: Vec<String> = self
+            .lines
+            .iter()
+            .rev()
+            .filter(|line| {
+                line.level <= level && source.is_none_or(|source| source == line.source())
+            })
+            .take(count)
+            .map(|line| line.text.trim_end().to_owned())
+            .collect();
+        found.reverse();
+        found
+    }
 }
 
 /// The latest `count` kept lines from `source` (every source for `None`) at
 /// `level` or more severe, oldest first, without their line ends.
 #[must_use]
 pub fn recent(source: Option<&str>, level: Level, count: usize) -> Vec<String> {
-    let recent = RECENT_LINES.relock();
-    let mut found: Vec<String> = recent
-        .iter()
-        .rev()
-        .filter(|line| line.level <= level && source.is_none_or(|source| source == line.source()))
-        .take(count)
-        .map(|line| line.text.trim_end().to_owned())
-        .collect();
-    found.reverse();
-    found
+    RECENT_LINES.relock().latest(source, level, count)
 }
 
 fn now() -> u64 {
@@ -363,28 +386,29 @@ mod tests {
 
     #[test]
     fn the_latest_lines_are_kept_bounded_and_filtered() {
+        let mut ring = Recent::new();
         for i in 0..RECENT + 10 {
             let level = if i % 2 == 0 { Level::INFO } else { Level::WARN };
             let source = if i % 3 == 0 { "a" } else { "b" };
-            keep(Line::new(0, level, source, &format!("line {i}")));
+            ring.keep(Line::new(0, level, source, &format!("line {i}")));
         }
-        assert_eq!(RECENT_LINES.relock().len(), RECENT);
+        assert_eq!(ring.lines.len(), RECENT);
         let message = |line: &String| line.rsplit_once("] ").unwrap().1.to_owned();
         let last = RECENT + 9;
         assert_eq!(
-            recent(None, Level::DEBUG, 2)
+            ring.latest(None, Level::DEBUG, 2)
                 .iter()
                 .map(message)
                 .collect::<Vec<_>>(),
             [format!("line {}", last - 1), format!("line {last}")]
         );
-        let warnings = recent(Some("b"), Level::WARN, 3);
+        let warnings = ring.latest(Some("b"), Level::WARN, 3);
         assert_eq!(warnings.len(), 3);
         assert!(warnings.iter().map(message).all(|line| {
             let i: usize = line.trim_start_matches("line ").parse().unwrap();
             i % 2 == 1 && !i.is_multiple_of(3)
         }));
-        assert!(recent(Some("nobody"), Level::DEBUG, 5).is_empty());
+        assert!(ring.latest(Some("nobody"), Level::DEBUG, 5).is_empty());
     }
 
     #[test]
