@@ -193,6 +193,8 @@ mod standins;
 #[cfg(windows)]
 mod start;
 #[cfg(windows)]
+mod static_halves;
+#[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};
 #[cfg(windows)]
 mod stats;

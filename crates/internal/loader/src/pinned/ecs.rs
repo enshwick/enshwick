@@ -14,6 +14,7 @@ pub(crate) const COMMAND_SET_HASH: Constant = Constant::new("ecs.command_set_has
 pub(crate) const COMMAND_SET_SIZE: Constant = Constant::new("ecs.command_set_size");
 pub(crate) const COMPONENT_READ: Symbol = Symbol::new("ecs.component_read");
 pub(crate) const COMPONENT_READ_RAW: Symbol = Symbol::new("ecs.component_read_raw");
+pub(crate) const COMPONENT_READ_STATIC: Symbol = Symbol::new("ecs.component_read_static");
 pub(crate) const COMPONENT_WRITE: Symbol = Symbol::new("ecs.component_write");
 pub(crate) const CONTEXT_ENTITY_WORLD: Constant = Constant::new("ecs.context_entity_world");
 pub(crate) const CONTEXT_ROW: Constant = Constant::new("ecs.context_row");
@@ -46,8 +47,14 @@ pub(crate) const RECORD_TEMPLATE: Constant = Constant::new("ecs.record_template"
 pub(crate) const REGISTRY_TYPE_MAP: Constant = Constant::new("ecs.registry_type_map");
 pub(crate) const REGISTRY_TYPE_MAP_FALLBACK: Constant =
     Constant::new("ecs.registry_type_map_fallback");
+pub(crate) const REGISTRY_TYPE_COUNT: Constant = Constant::new("ecs.registry_type_count");
+pub(crate) const REGISTRY_TYPE_RECORDS: Constant = Constant::new("ecs.registry_type_records");
+pub(crate) const REGISTRY_TYPE_RECORD_SIZE: Constant =
+    Constant::new("ecs.registry_type_record_size");
 pub(crate) const ROW_ENTITY: Symbol = Symbol::new("ecs.row_entity");
 pub(crate) const SLOT_ROOT: Symbol = Symbol::new("ecs.slot_root");
 pub(crate) const SPAWN_REQUEST: Symbol = Symbol::new("ecs.spawn_request");
 pub(crate) const TEMPLATE_GUID: Symbol = Symbol::new("ecs.template_guid");
 pub(crate) const TYPE_INDEX: Symbol = Symbol::new("ecs.type_index");
+pub(crate) const TYPE_INFO_HASH: Constant = Constant::new("ecs.type_info_hash");
+pub(crate) const TYPE_RECORD_STATIC: Constant = Constant::new("ecs.type_record_static");

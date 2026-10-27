@@ -241,6 +241,10 @@ name = "world_queries"
 required-features = ["test"]
 
 [[test]]
+name = "static_halves"
+required-features = ["test"]
+
+[[test]]
 name = "capture"
 required-features = ["test"]
 

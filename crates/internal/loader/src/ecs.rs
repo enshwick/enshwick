@@ -488,6 +488,15 @@ type SlotRoot = unsafe extern "system" fn(
     ctx: *mut u64,
 ) -> *mut [u64; 2];
 
+/// Where a component read inside a running system found the data.
+#[derive(Debug, Clone, Copy)]
+enum Found {
+    /// The static half of the type, the template's set-up data.
+    Static(*const u8),
+    /// The entity's own data, the dynamic half.
+    Dynamic(*mut u8),
+}
+
 /// Component reads by type hash from inside a running system, and the walk
 /// from an item slot to the inventory that holds it.
 #[derive(Debug, Clone, Copy)]
@@ -497,6 +506,8 @@ pub(crate) struct Components {
     slot_root: SlotRoot,
     entity_world: usize,
     registry_maps: [usize; 2],
+    /// The static reads, on builds whose table has them.
+    halves: Option<crate::static_halves::StaticHalves>,
 }
 
 impl Components {
@@ -534,10 +545,13 @@ impl Components {
                 size(pinned::ecs::REGISTRY_TYPE_MAP)?,
                 size(pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK)?,
             ],
+            halves: crate::static_halves::halves(loader).copied(),
         })
     }
 
-    /// `entity`'s component of type `hash`, or `None` when it has none.
+    /// `entity`'s component of type `hash`, read-only, or `None` when it
+    /// has none: for the static half of an ECS type, the set-up data its
+    /// template holds.
     ///
     /// # Safety
     ///
@@ -548,7 +562,43 @@ impl Components {
         ctx: *mut u64,
         entity: u32,
         hash: u32,
+    ) -> Option<*const u8> {
+        // SAFETY: the caller's contract is `find`'s.
+        match unsafe { self.find(ctx, entity, hash) }? {
+            Found::Static(data) => Some(data),
+            Found::Dynamic(data) => Some(data.cast_const()),
+        }
+    }
+
+    /// `entity`'s own component of type `hash` for a write, or `None` when it
+    /// has none or `hash` names the static half of its type, which belongs
+    /// to the template.
+    ///
+    /// # Safety
+    ///
+    /// - `ctx` is null or the live context of a running system, used on its
+    ///   thread.
+    pub(crate) unsafe fn component_mut(
+        &self,
+        ctx: *mut u64,
+        entity: u32,
+        hash: u32,
     ) -> Option<*mut u8> {
+        // SAFETY: the caller's contract is `find`'s.
+        match unsafe { self.find(ctx, entity, hash) }? {
+            Found::Static(_) => None,
+            Found::Dynamic(data) => Some(data),
+        }
+    }
+
+    /// Where `entity`'s component of type `hash` is, or `None` when it has
+    /// none.
+    ///
+    /// # Safety
+    ///
+    /// - `ctx` is null or the live context of a running system, used on its
+    ///   thread.
+    unsafe fn find(&self, ctx: *mut u64, entity: u32, hash: u32) -> Option<Found> {
         if ctx.is_null() || entity == 0 {
             return None;
         }
@@ -577,13 +627,28 @@ impl Components {
             let index = unsafe { (self.type_index)(registry.wrapping_add(map), &raw const hash) };
             (!index.is_null()).then_some(index)
         })?;
+        if let Some(halves) = &self.halves
+            && !registry.is_null()
+            // SAFETY: `registry` is the running system's live entity world's
+            // non-null component registry and `index` the non-null type index
+            // the lookup found for `hash`; the caller guarantees the system's
+            // thread.
+            && unsafe { halves.is_static(registry.expose_provenance(), index, hash) }
+        {
+            // SAFETY: `world` is the running system's live entity world and
+            // `index` the type index of `hash`, whose type has a static half
+            // (`is_static` returned true); the caller guarantees the
+            // system's thread.
+            let data = unsafe { halves.read(world.expose_provenance(), index, entity) };
+            return data.ok().map(Found::Static);
+        }
         let mut out = [0usize; 2];
         // SAFETY: `index` is the non-null type index the lookup found and
         // `world` the live, non-null entity world; the caller guarantees the
         // running system's thread; `out` holds the two words the function
         // writes.
         unsafe { (self.read)(&raw mut out, world, index, entity) };
-        (out[0] != 0).then(|| core::ptr::with_exposed_provenance_mut(out[0]))
+        (out[0] != 0).then(|| Found::Dynamic(core::ptr::with_exposed_provenance_mut(out[0])))
     }
 
     /// The inventory an item slot belongs to at the root.
