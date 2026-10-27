@@ -27,8 +27,9 @@ pub enum HeldState {
     StoreAssociatedNpcIds,
     /// Text a player wrote on it: `CustomPlayerString`.
     CustomPlayerString,
-    /// More `Fuel` charges than a fresh one starts with: water in a well
-    /// or a water store.
+    /// More `Fuel` charges than a fresh one starts with, in a prop that
+    /// does not refill itself, such as a barrel or a station; a well or a
+    /// rain barrel never counts.
     Fuel,
     /// Wiring to other logic: `LogicGraphNodeConnected`.
     LogicGraphNodeConnected,

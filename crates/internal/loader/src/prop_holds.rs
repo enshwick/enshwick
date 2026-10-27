@@ -14,6 +14,18 @@ use crate::locks::Relock;
 /// plays back at the end of the next step.
 const DESTROY_STEPS: u64 = 2;
 
+/// What a hold changed to keep Quick Stash out of a magic chest, as it
+/// was before, for its release to put back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Stash {
+    /// The chest's switch a player sets: whether a player set it, and to
+    /// what.
+    Switch([u8; 2]),
+    /// The chest's own Quick Stash byte, where no player set the switch
+    /// yet and the chest has none.
+    Stock(u8),
+}
+
 /// A prop held against players.
 #[derive(Debug, Clone, Copy)]
 struct Hold {
@@ -23,9 +35,8 @@ struct Hold {
     world: u64,
     /// The step by which its destroy has landed; `None` while only held.
     landed: Option<u64>,
-    /// Its Quick Stash switch before the hold set it: whether a player set
-    /// it, and to what.
-    deposit: Option<[u8; 2]>,
+    /// What the hold changed to keep Quick Stash out, as it was.
+    deposit: Option<Stash>,
 }
 
 /// The props held, and whether the interaction filter that keeps players
@@ -117,9 +128,9 @@ impl PropHolds {
         !fuse_off && self.linked.load(Ordering::Acquire) && self.is_held(entity)
     }
 
-    /// Notes the Quick Stash switch `before` of the held `entity`, which
-    /// its release puts back.
-    pub fn note_deposit(&self, entity: u32, before: [u8; 2]) {
+    /// Notes what the hold of `entity` changed to keep Quick Stash out, as
+    /// it was, `before`, which its release puts back.
+    pub fn note_deposit(&self, entity: u32, before: Stash) {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         for hold in held.iter_mut() {
@@ -129,9 +140,9 @@ impl PropHolds {
         }
     }
 
-    /// Lets players reach `entity` again; the Quick Stash switch to put
-    /// back, if the hold changed it in this world.
-    pub fn release(&self, entity: u32) -> Option<[u8; 2]> {
+    /// Lets players reach `entity` again; what to put back to let Quick
+    /// Stash in again, if the hold changed it in this world.
+    pub fn release(&self, entity: u32) -> Option<Stash> {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         let index = held.iter().position(|hold| hold.entity == entity)?;
@@ -140,9 +151,9 @@ impl PropHolds {
         gone.deposit.filter(|_| gone.world == world)
     }
 
-    /// Lets every held prop go; the Quick Stash switches to put back, by
-    /// entity, for those of this world still standing.
-    pub fn release_all(&self) -> Vec<(u32, [u8; 2])> {
+    /// Lets every held prop go; what to put back to let Quick Stash in
+    /// again, by entity, for those of this world still standing.
+    pub fn release_all(&self) -> Vec<(u32, Stash)> {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         let back = held
@@ -154,9 +165,9 @@ impl PropHolds {
         back
     }
 
-    /// The Quick Stash switches the holds set, by entity, as they were, for
-    /// a save to keep them so.
-    pub fn deposits(&self) -> Vec<(u32, [u8; 2])> {
+    /// What the holds changed to keep Quick Stash out, by entity, as it
+    /// was, for a save to keep it so.
+    pub fn deposits(&self) -> Vec<(u32, Stash)> {
         let world = self.world.load(Ordering::Acquire);
         self.held
             .relock()
@@ -254,11 +265,11 @@ mod tests {
         let holds = linked();
         assert!(holds.quiet());
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, [1, 1]);
+        holds.note_deposit(7, Stash::Switch([1, 1]));
         assert!(!holds.quiet());
         assert!(holds.is_held(7));
-        assert_eq!(holds.deposits(), [(7, [1, 1])]);
-        assert_eq!(holds.release(7), Some([1, 1]));
+        assert_eq!(holds.deposits(), [(7, Stash::Switch([1, 1]))]);
+        assert_eq!(holds.release(7), Some(Stash::Switch([1, 1])));
         assert!(holds.quiet());
         assert!(!holds.is_held(7));
     }
@@ -275,6 +286,15 @@ mod tests {
     }
 
     #[test]
+    fn a_chest_without_a_switch_gets_its_own_byte_back() {
+        let holds = linked();
+        holds.hold(7, false).unwrap();
+        holds.note_deposit(7, Stash::Stock(1));
+        assert_eq!(holds.deposits(), [(7, Stash::Stock(1))]);
+        assert_eq!(holds.release(7), Some(Stash::Stock(1)));
+    }
+
+    #[test]
     fn filters_keep_the_detours_awake() {
         let holds = PropHolds::new();
         holds.linked(2, true);
@@ -285,7 +305,7 @@ mod tests {
     fn a_destroyed_prop_stays_held_until_its_destroy_has_landed() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, [1, 1]);
+        holds.note_deposit(7, Stash::Switch([1, 1]));
         holds.after_step(10);
         holds.destroying(7);
         holds.after_step(11);
@@ -303,7 +323,7 @@ mod tests {
     fn a_world_end_forgets_holds_so_a_reused_id_meets_none() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, [1, 1]);
+        holds.note_deposit(7, Stash::Switch([1, 1]));
         holds.forget();
         assert!(!holds.is_held(7));
         holds.hold(7, false).unwrap();
@@ -314,9 +334,9 @@ mod tests {
     fn releasing_all_gives_back_what_to_restore() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, [1, 1]);
+        holds.note_deposit(7, Stash::Switch([1, 1]));
         holds.hold(8, false).unwrap();
-        assert_eq!(holds.release_all(), [(7, [1, 1])]);
+        assert_eq!(holds.release_all(), [(7, Stash::Switch([1, 1]))]);
         assert!(holds.quiet());
     }
 }

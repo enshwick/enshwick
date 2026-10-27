@@ -240,6 +240,15 @@ pub const ITEM_FLAG_IS_ANIMAL: &str = "item_flag.is_animal";
 /// The id of the component that lets Quick Stash put items into a
 /// container: magic chests have it, plain boxes do not.
 pub const CRAFTING_STOCK: &str = "inventory_crafting_stock";
+/// The id of the byte that lets Quick Stash fill a magic chest, read while
+/// no player has set the chest's switch.
+pub const CRAFTING_STOCK_DEPOSIT: &str = "inventory_crafting_stock.can_receive_area_deposit";
+/// The ids of the bools that make a prop's `Fuel` refill on its own: over
+/// time, as a well does, and from rain, as a water barrel does.
+pub const FUEL_REFILLS: [&str; 2] = [
+    "fuel_setup.automatic_refill_enabled",
+    "fuel_setup.rain_refill_enabled",
+];
 /// The id of a container's per-chest Quick Stash switch a player sets.
 pub const STASH_SWITCH: &str = "dynamic_inventory_crafting_stock";
 /// The id of the switch's byte that tells a player set it.

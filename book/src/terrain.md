@@ -274,12 +274,13 @@ what it has now:
 | `NpcBed` | a survivor assigned to a bed |
 | `StoreAssociatedNpcIds` | survivors assigned to a station |
 | `CustomPlayerString` | text a player wrote on a sign |
-| `Fuel` | more charges than a fresh one starts with: water in a well or a water store |
+| `Fuel` | fuel a player put in a prop that does not refill itself, such as a barrel or a station: more charges than a fresh one starts with |
 | `LogicGraphNodeConnected` | a switch, plate or other logic prop wired to other logic |
 | `LogicGraphTrigger` | a logic trigger prop, as the loader cannot tell a player's settings from its item's |
 
 A switch's on or off and a container's Quick Stash setting are settings a
-player sets again in a moment, and do not count.
+player sets again in a moment, and do not count. Nor does the water in a
+well or a rain barrel: it refills on its own, whatever a player took.
 
 `remove_prop` refuses a prop that holds state: the transaction fails with
 `WorldError::HoldsState(state)`, naming the kinds, before it writes
@@ -292,8 +293,8 @@ trigger's settings.
 
 A removal takes two steps. In the first the loader checks the prop and
 keeps players from it: they cannot open it, move items in or out, sort it
-or dismantle it, and a magic chest's Quick Stash switch is set off for
-the while, then put back as the player left it. In the second it checks the
+or dismantle it, and Quick Stash is turned off for a magic chest, the only
+container it fills, then put back as the player left it. In the second it checks the
 prop again and only then asks the game to remove it. If anything landed
 in it meanwhile, the removal fails with `HoldsState` and the prop stays,
 open to players again.

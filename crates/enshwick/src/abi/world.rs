@@ -1024,7 +1024,8 @@ impl TransactionInfo {
     pub const HOLDS_STORE_ASSOCIATED_NPC_IDS: u32 = 1 << 4;
     /// A player wrote its text: `CustomPlayerString`.
     pub const HOLDS_CUSTOM_PLAYER_STRING: u32 = 1 << 5;
-    /// It holds more `Fuel` charges than a fresh one starts with.
+    /// It holds more `Fuel` charges than a fresh one starts with, and does
+    /// not refill itself, as a well or a rain barrel does.
     pub const HOLDS_FUEL: u32 = 1 << 6;
     /// It is wired to other logic: `LogicGraphNodeConnected`.
     pub const HOLDS_LOGIC_GRAPH_NODE_CONNECTED: u32 = 1 << 7;

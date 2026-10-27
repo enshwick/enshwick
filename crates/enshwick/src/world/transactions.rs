@@ -385,8 +385,9 @@ impl Transaction {
     /// Removes the prop `entity` as the game tears one down, without loot,
     /// and raises the game's `BuildingTearDownEvent`. A prop that holds
     /// state a player would lose is refused: items, any plant, a
-    /// production queue, assigned survivors, written text, fuel above a
-    /// fresh prop's, logic wiring or a logic trigger (each a
+    /// production queue, assigned survivors, written text, fuel a player
+    /// put in a prop that does not refill itself, logic wiring or a logic
+    /// trigger (each a
     /// [`HeldState`](super::HeldState)). The transaction fails with
     /// [`WorldError::HoldsState`] before it writes anything; empty it
     /// first, or use [`Transaction::remove_prop_discarding_state`]. The

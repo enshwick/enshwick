@@ -193,9 +193,9 @@ impl Voxels for Game<'_> {
     }
 }
 
-/// Puts back the Quick Stash switches `deposits` of props no longer held,
+/// Puts back the Quick Stash `deposits` of props no longer held,
 /// by entity. On the game thread.
-pub(crate) fn restore_deposits(deposits: &[(u32, [u8; 2])]) {
+pub(crate) fn restore_deposits(deposits: &[(u32, crate::prop_holds::Stash)]) {
     let Some(loader) = crate::host::loader() else {
         return;
     };
@@ -205,8 +205,8 @@ pub(crate) fn restore_deposits(deposits: &[(u32, [u8; 2])]) {
 }
 
 /// Around one call of the game's save: with `saving`, puts back the Quick
-/// Stash switches of the magic chests held, so a save keeps them as
-/// players left them; after it, sets them off again. Plain boxes take no
+/// Stash of the magic chests held, so a save keeps it as players left it;
+/// after it, turns it off again. Plain boxes take no
 /// Quick Stash and are never written. The game's `server.save_step`
 /// runs on the game thread after the step's systems and before the
 /// post-step, with none running (server 399, client 426), a quiet moment
@@ -216,10 +216,11 @@ pub(crate) fn saving(saving: bool) {
         return;
     };
     for (entity, before) in super::holds().deposits() {
-        props::set_deposit(
-            loader,
-            entity,
-            if saving { before } else { props::STASH_OFF },
-        );
+        let value = if saving {
+            before
+        } else {
+            props::stash_off(before)
+        };
+        props::set_deposit(loader, entity, value);
     }
 }

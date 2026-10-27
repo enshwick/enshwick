@@ -1531,6 +1531,24 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::InventoryCraftingStock"),
     ),
     (
+        "fuel_setup.automatic_refill_enabled",
+        Fact::Path(&[
+            ("keen::ecs::FuelSetup", "automaticRefill"),
+            ("keen::ecs::FuelRefillSetup", "enabled"),
+        ]),
+    ),
+    (
+        "fuel_setup.rain_refill_enabled",
+        Fact::Path(&[
+            ("keen::ecs::FuelSetup", "rainRefill"),
+            ("keen::ecs::FuelRefillSetup", "enabled"),
+        ]),
+    ),
+    (
+        "inventory_crafting_stock.can_receive_area_deposit",
+        offset("keen::ecs::InventoryCraftingStock", "canReceiveAreaDeposit"),
+    ),
+    (
         "dynamic_inventory_crafting_stock",
         Fact::Type("keen::ecs::DynamicInventoryCraftingStock"),
     ),

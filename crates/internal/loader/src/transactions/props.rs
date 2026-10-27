@@ -46,7 +46,8 @@ pub(crate) struct StateReads {
     pub(crate) store_npcs: bool,
     /// Text a player wrote: its `CustomPlayerString`.
     pub(crate) text: bool,
-    /// More `Fuel` charges than a fresh one starts with.
+    /// More `Fuel` charges than a fresh one starts with, in a prop that
+    /// does not refill itself.
     pub(crate) fuel: bool,
     /// Logic wired to other logic: its `LogicGraphNodeConnected`.
     pub(crate) logic: bool,
@@ -141,6 +142,14 @@ pub(crate) fn fuel_above_start(charges: i32, start: Option<(i32, f32)>) -> bool 
         f64::from(most.max(0)) * f64::from(share)
     });
     f64::from(charges) > fresh
+}
+
+/// Whether a prop's `Fuel` is state a player would lose: charges above
+/// what a fresh one starts with ([`fuel_above_start`]) in a prop that does
+/// not refill itself; a well or a rain barrel, which `refills`, never
+/// holds fuel a player built up.
+pub(crate) fn fuel_held(charges: i32, start: Option<(i32, f32)>, refills: bool) -> bool {
+    !refills && fuel_above_start(charges, start)
 }
 
 /// Whether a logic prop is wired: it writes to a graph, or a graph reads it.
@@ -366,6 +375,17 @@ mod tests {
             "without a setup any charge counts"
         );
         assert!(fuel_above_start(1, Some((8, f32::NAN))));
+    }
+
+    #[test]
+    fn fuel_that_refills_itself_is_never_state() {
+        let well = Some((500, 0.25));
+        assert!(!fuel_held(500, well, true), "a full well refilled itself");
+        assert!(
+            fuel_held(51, Some((150, 0.0)), false),
+            "a barrel a player filled"
+        );
+        assert!(!fuel_held(0, Some((150, 0.0)), false));
     }
 
     #[test]
