@@ -21,8 +21,8 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Status};
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
@@ -617,7 +617,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         }
         let data = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
-            entity: entity.0,
+            entity,
             id,
             value,
         };
@@ -628,7 +628,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         {
             let quest = QuestData {
                 header: Header::of::<QuestData>(),
-                entity: entity.0,
+                entity,
                 quest: id,
             };
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());

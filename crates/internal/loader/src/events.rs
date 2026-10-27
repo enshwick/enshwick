@@ -415,7 +415,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             // SAFETY: `slot` is a live player slot of the server, read on the
             // game thread after its step, as the caller guarantees.
             let data = unsafe { player(index, slot, offsets) };
-            crate::admission::joined(data.key);
+            crate::admission::joined(data.key.get());
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);
                 loader.emit(Event::PLAYER_JOINED, None, (&raw const data).cast());
@@ -551,9 +551,9 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             // the slot count by the check before it and intact on entry, on the
             // thread the game removes it on.
             let data = unsafe { player(index, slot, offsets) };
-            crate::net::forget_peer(data.key);
-            crate::remote::forget_player(data.key);
-            crate::admission::left(data.key);
+            crate::net::forget_peer(data.key.get());
+            crate::remote::forget_player(data.key.get());
+            crate::admission::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
@@ -597,12 +597,12 @@ unsafe extern "system" fn place(
     {
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
-            entity,
+            entity: enshwick::Entity(entity),
             // SAFETY: `context` is non-null by the check before it and is the
             // hooked function's build context; its u32 acting player sits at
             // the build table's `building.ctx_player` offset.
             player: unsafe { read_at(context, offsets.ctx_player) },
-            item,
+            item: enshwick::ItemId::new(item),
             kind: BuildingData::PLACED,
             // SAFETY: `context` is non-null by the check before it and is the
             // hooked function's build context; its u8 replay flag sits at the
@@ -660,9 +660,9 @@ unsafe extern "system" fn pickup(context: *mut u8, target: *const u8, tool: u32)
     {
         queue(BuildingData {
             header: Header::of::<BuildingData>(),
-            entity,
-            player,
-            item: 0,
+            entity: enshwick::Entity(entity),
+            player: enshwick::Entity(player),
+            item: enshwick::ItemId::new(0),
             kind: if mode == 2 {
                 BuildingData::TORN_DOWN
             } else {

@@ -5,8 +5,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::item_data::{ItemData, ItemInstance, SetError};
     use enshwick::{Load, Mod, Off};
 
@@ -44,7 +44,7 @@ mod tests {
         let (bonus, shared) = (BONUS.get().unwrap(), SHARED.get().unwrap());
         let ring = ItemInstance {
             pide: Entity(900),
-            item: 0x5e01,
+            item: enshwick::ItemId::new(0x5e01),
         };
         assert_eq!(bonus.get(ring), None);
         let value = Bonus {
@@ -54,7 +54,7 @@ mod tests {
         bonus.set(ring, &value).unwrap();
         assert_eq!(bonus.get(ring), Some(value));
         let reused = ItemInstance {
-            item: 0x0c01,
+            item: enshwick::ItemId::new(0x0c01),
             ..ring
         };
         assert_eq!(bonus.get(reused), None, "the entity holds another item");

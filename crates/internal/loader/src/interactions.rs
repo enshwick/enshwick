@@ -267,7 +267,7 @@ pub(crate) fn forget() {
 }
 
 fn allowed(call: &Interaction) -> bool {
-    if crate::transactions::holds().is_held(call.target) {
+    if crate::transactions::holds().is_held(call.target.0) {
         return false;
     }
     let Some(filters) = FILTERS.sealed() else {
@@ -294,9 +294,9 @@ unsafe fn interaction(kind: u32, player: u32, target: u32, ctx: *mut u64) -> Int
     let mut call = Interaction {
         header: Header::of::<Interaction>(),
         kind,
-        player,
-        target,
-        item: 0,
+        player: enshwick::Entity(player),
+        target: enshwick::Entity(target),
+        item: enshwick::ItemId::new(0),
         known: 0,
         reserved: [0; 3],
         position: [0.0; 3],

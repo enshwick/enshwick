@@ -349,8 +349,8 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::Entity;
     use crate::ItemId;
-    use crate::ecs::Entity;
     use crate::voxels::VoxelMaterial;
     use crate::world::WorldTransform;
 

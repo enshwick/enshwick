@@ -20,7 +20,8 @@ mod drops;
 pub use drops::{Drop, Kinds, MeterRoll, Roll, Source, replace_drops};
 pub(crate) use drops::{replace_group, watch_rolls};
 
-use crate::ecs::{Components, Ecs, Entity};
+use crate::Entity;
+use crate::ecs::{Components, Ecs};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::{Load, Off};
@@ -56,7 +57,7 @@ pub struct InteractionOfferRuntime {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::loot::{Container, InteractionOfferRuntime};
 ///
 /// let corpse = Container {
@@ -272,7 +273,7 @@ impl Containers {
     /// unsafe fn still_full(
     ///     containers: &enshwick::loot::Containers,
     ///     ctx: *mut u64,
-    ///     corpse: enshwick::ecs::Entity,
+    ///     corpse: enshwick::Entity,
     /// ) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { containers.container(ctx, corpse) }.is_some_and(|c| !c.is_empty)
@@ -330,7 +331,7 @@ impl Containers {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn at(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::ecs::Entity) -> bool {
+    /// unsafe fn at(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::Entity) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { c.position(ctx, e) }.is_some()
     /// }
@@ -358,7 +359,7 @@ impl Containers {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn by_player(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::ecs::Entity) -> bool {
+    /// unsafe fn by_player(c: &enshwick::loot::Containers, ctx: *mut u64, e: enshwick::Entity) -> bool {
     ///     // SAFETY: called from a system's hook with its context.
     ///     unsafe { c.is_player(ctx, e) }
     /// }
@@ -405,7 +406,7 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn full(pass: &enshwick::loot::LootPass<'_>, e: enshwick::ecs::Entity) -> bool {
+    /// fn full(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.container(e).is_some_and(|c| !c.is_empty)
     /// }
     /// ```
@@ -422,7 +423,7 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn here(pass: &enshwick::loot::LootPass<'_>, e: enshwick::ecs::Entity) -> bool {
+    /// fn here(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.position(e).is_some()
     /// }
     /// ```
@@ -439,7 +440,7 @@ impl LootPass<'_> {
     /// # Examples
     ///
     /// ```
-    /// fn by_player(pass: &enshwick::loot::LootPass<'_>, e: enshwick::ecs::Entity) -> bool {
+    /// fn by_player(pass: &enshwick::loot::LootPass<'_>, e: enshwick::Entity) -> bool {
     ///     pass.is_player(e)
     /// }
     /// ```

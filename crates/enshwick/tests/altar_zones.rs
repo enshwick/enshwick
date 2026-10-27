@@ -37,8 +37,8 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
         assert_eq!(loader.altars_opened(), (true, true));
-        assert_eq!(loader.altar_zone(4096, 2, 60), (2, 80));
-        assert_eq!(loader.altar_zone(4097, 3, 120), (2, 120));
+        assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (2, 80));
+        assert_eq!(loader.altar_zone(enshwick::Entity(4097), 3, 120), (2, 120));
         let sizes = SIZES.lock().unwrap().unwrap();
         sizes.changed().unwrap();
         assert_eq!(loader.zone_resizes(), 1);

@@ -14,10 +14,10 @@ pub struct Price {
     pub item: u32,
     /// How many items the player trades.
     pub count: u32,
-    /// The player's account key.
-    pub player: u64,
+    /// The player's account.
+    pub player: enshwick::PlayerKey,
     /// The player's character.
-    pub character: enshwick::ecs::Entity,
+    pub character: enshwick::Entity,
     /// Whether the player buys or sells.
     pub deal: Deal,
 }
@@ -45,7 +45,7 @@ const _: () = {
         "`count` differs from the owner's",
     );
     assert!(
-        <Price as enshwick::points::Point>::LAYOUT[2].hash == 0xbf8b_8be7_73f8_f86c,
+        <Price as enshwick::points::Point>::LAYOUT[2].hash == 0xf065_a0b6_cf87_b711,
         "`player` differs from the owner's",
     );
     assert!(

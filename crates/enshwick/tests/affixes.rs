@@ -9,8 +9,8 @@ mod tests {
     use enshwick::abi::{ItemData, Status};
     use enshwick::affixes::{AffixDef, Affixes, ItemRarity, Range, RollError, RollRules};
 
+    use enshwick::Entity;
     use enshwick::content::categories::ItemCategoryMask;
-    use enshwick::ecs::Entity;
     use enshwick::item_data::ItemInstance;
     use enshwick::stats::{Op, Stat, StatDef, Stats};
     use enshwick::{Load, Mod, Off};
@@ -61,10 +61,10 @@ mod tests {
     #[test]
     fn items_roll_once_the_same_from_a_seed_and_count_when_worn() {
         let loader = enshwick::test::FakeHost::new()
-            .item(RING, 1, ItemData::HAS_PIDE)
-            .item_category(RING, 1)
-            .item(SWORD, 1, ItemData::HAS_PIDE)
-            .item_category(SWORD, 2)
+            .item(enshwick::ItemId::new(RING), 1, ItemData::HAS_PIDE)
+            .item_category(enshwick::ItemId::new(RING), 1)
+            .item(enshwick::ItemId::new(SWORD), 1, ItemData::HAS_PIDE)
+            .item_category(enshwick::ItemId::new(SWORD), 2)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Loot)`.
         let started = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -76,7 +76,7 @@ mod tests {
         } = KIT.get().unwrap();
         let ring = ItemInstance {
             pide: Entity(900),
-            item: RING,
+            item: enshwick::ItemId::new(RING),
         };
         let rules = RollRules::new(1, 1);
 
@@ -92,12 +92,12 @@ mod tests {
 
         let sword = ItemInstance {
             pide: Entity(901),
-            item: SWORD,
+            item: enshwick::ItemId::new(SWORD),
         };
         assert_eq!(affixes.roll(sword, rules, Some(7), true), Ok(0));
         assert!(!stats.item(sword).rolled, "no affix fits a weapon");
 
-        loader.wear(2, ring);
+        loader.wear(Entity(2), ring);
         let rolled = first.affixes[0].values[0];
         assert!((1.0..=5.0).contains(&rolled));
         assert!((stats.value(Entity(2), *luck) - rolled).abs() < 1e-5);

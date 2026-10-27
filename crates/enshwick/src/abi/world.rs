@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Status, Str};
+use crate::abi::{Entity, Header, ItemId, RecipeId, Status, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -83,14 +83,14 @@ pub type GameEventFn = unsafe extern "system" fn(event: *const GameEventData, us
 /// ```
 /// use enshwick::abi::EntityPlace;
 ///
-/// let chest = EntityPlace { entity: 4096, reserved: 0, position: [1 << 32, 0, 0] };
+/// let chest = EntityPlace { entity: enshwick::Entity(4096), reserved: 0, position: [1 << 32, 0, 0] };
 /// assert_eq!(chest.position[0] >> 32, 1);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct EntityPlace {
     /// The entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// Zero.
     pub reserved: u32,
     /// Where it is, in 32.32 fixed-point metres.
@@ -106,7 +106,7 @@ pub struct EntityPlace {
 ///
 /// let to_spawn = TeleportRequest {
 ///     header: Header::of::<TeleportRequest>(),
-///     entity: 2,
+///     entity: enshwick::Entity(2),
 ///     flags: TeleportRequest::BEST_SPAWN,
 ///     position: [100 << 32, 40 << 32, -(20 << 32)],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
@@ -119,7 +119,7 @@ pub struct TeleportRequest {
     /// Size and version of this struct.
     pub header: Header,
     /// The entity to move.
-    pub entity: u32,
+    pub entity: Entity,
     /// [`TeleportRequest::BEST_SPAWN`], [`TeleportRequest::ORIENTED`] or
     /// none.
     pub flags: u32,
@@ -189,8 +189,8 @@ impl_headed!(SpawnRequest);
 /// ```
 /// use enshwick::abi::{CraftCheck, Header};
 ///
-/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: 2, station: 0, recipe: 0x51, amount: 3 };
-/// assert_eq!(craft.station, 0);
+/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: enshwick::Entity(2), station: enshwick::Entity(0), recipe: enshwick::RecipeId::new(0x51), amount: 3 };
+/// assert_eq!(craft.station, enshwick::Entity(0));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -198,11 +198,11 @@ pub struct CraftCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The crafting player's character.
-    pub player: u32,
+    pub player: Entity,
     /// The station, or 0 for crafting by hand.
-    pub station: u32,
+    pub station: Entity,
     /// The recipe id.
-    pub recipe: u32,
+    pub recipe: RecipeId,
     /// How many.
     pub amount: u32,
 }
@@ -221,8 +221,8 @@ pub type CraftCheckFn = unsafe extern "system" fn(call: *const CraftCheck, user:
 /// ```
 /// use enshwick::abi::{BuildCheck, Header};
 ///
-/// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: 2, item: 0x1d, position: [0; 3] };
-/// assert_eq!(wall.item, 0x1d);
+/// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: enshwick::Entity(2), item: enshwick::ItemId::new(0x1d), position: [0; 3] };
+/// assert_eq!(wall.item, enshwick::ItemId::new(0x1d));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -230,9 +230,9 @@ pub struct BuildCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The building player's character.
-    pub player: u32,
+    pub player: Entity,
     /// The item placed: a building block, a prop or another placeable.
-    pub item: u32,
+    pub item: ItemId,
     /// Where, in 32.32 fixed-point metres.
     pub position: [i64; 3],
 }
@@ -305,9 +305,9 @@ impl DaytimeInfo {
 /// let mut fall = DamageCheck {
 ///     header: Header::of::<DamageCheck>(),
 ///     cause: DamageCheck::FALL,
-///     target: 2,
-///     source: 0,
-///     attacker: 0,
+///     target: enshwick::Entity(2),
+///     source: enshwick::Entity(0),
+///     attacker: enshwick::Entity(0),
 ///     amounts: [0.0; 13],
 ///     total: 40.0,
 /// };
@@ -325,13 +325,13 @@ pub struct DamageCheck {
     /// [`DamageCheck::ADMIN_KILL`].
     pub cause: u32,
     /// The entity that takes the damage.
-    pub target: u32,
+    pub target: Entity,
     /// What dealt a hit: the attacker, or its projectile; 0 for other
     /// causes.
-    pub source: u32,
+    pub source: Entity,
     /// Who dealt a hit, the root of the impact that hit (the archer for an
     /// arrow), or `source` when the game names none; 0 for other causes.
-    pub attacker: u32,
+    pub attacker: Entity,
     /// A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
     /// fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
     /// stone 10, metal 11, explosion 12), after the target's resistances
@@ -487,7 +487,7 @@ impl WeatherFront {
 ///     flags: TerrainMaterialInfo::FLATTENS,
 ///     hardness: 0,
 ///     reserved: 0,
-///     item: 0x0d9b_7a1c,
+///     item: enshwick::ItemId::new(0x0d9b_7a1c),
 ///     health: 100,
 /// };
 /// assert_eq!(dirt.flags & TerrainMaterialInfo::FLATTENS, TerrainMaterialInfo::FLATTENS);
@@ -505,8 +505,8 @@ pub struct TerrainMaterialInfo {
     pub hardness: u8,
     /// Zero.
     pub reserved: u8,
-    /// The item digging it yields, as an item id.
-    pub item: u32,
+    /// The item digging it yields.
+    pub item: ItemId,
     /// The health a voxel of it has against tools.
     pub health: i32,
 }
@@ -676,7 +676,7 @@ impl Voxel {
 ///
 /// let check = BuildRights {
 ///     header: Header::of::<BuildRights>(),
-///     player: 2,
+///     player: enshwick::Entity(2),
 ///     refusal: BuildRights::ALLOWED,
 ///     min: [100.0, 40.0, 100.0],
 ///     max: [104.0, 44.0, 104.0],
@@ -689,7 +689,7 @@ pub struct BuildRights {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character entity.
-    pub player: u32,
+    pub player: Entity,
     /// [`BuildRights::ALLOWED`] or why the server refuses, written by the
     /// loader.
     pub refusal: u32,
@@ -778,12 +778,12 @@ impl TransactionOp {
 ///
 /// let chest = PropPlace {
 ///     header: Header::of::<PropPlace>(),
-///     item: 0x1234,
+///     item: enshwick::ItemId::new(0x1234),
 ///     reserved: 0,
 ///     position: [100.0, 40.0, 100.0],
 ///     orientation: [0.0, 0.0, 0.0, 1.0],
 /// };
-/// assert_eq!(chest.item, 0x1234);
+/// assert_eq!(chest.item, enshwick::ItemId::new(0x1234));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
@@ -791,7 +791,7 @@ pub struct PropPlace {
     /// Size and version of this struct.
     pub header: Header,
     /// The item whose placed template the prop is.
-    pub item: u32,
+    pub item: ItemId,
     /// Zero.
     pub reserved: u32,
     /// Where it stands, in metres.
@@ -809,7 +809,7 @@ impl_headed!(PropPlace);
 /// ```
 /// use enshwick::abi::{Header, PropRemove};
 ///
-/// let gone = PropRemove { header: Header::of::<PropRemove>(), entity: 77, flags: 0 };
+/// let gone = PropRemove { header: Header::of::<PropRemove>(), entity: enshwick::Entity(77), flags: 0 };
 /// assert_eq!(gone.flags & PropRemove::DISCARD_STATE, 0);
 /// ```
 #[repr(C)]
@@ -818,7 +818,7 @@ pub struct PropRemove {
     /// Size and version of this struct.
     pub header: Header,
     /// The prop's entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// [`PropRemove::DISCARD_STATE`] or none.
     pub flags: u32,
 }
@@ -901,8 +901,8 @@ impl_headed!(VoxelRegion);
 ///
 /// let block = BlockPlace {
 ///     header: Header::of::<BlockPlace>(),
-///     shape: 0x1234,
-///     material: 0x5678,
+///     shape: enshwick::ItemId::new(0x1234),
+///     material: enshwick::ItemId::new(0x5678),
 ///     position: [100.0, 40.0, 100.0],
 ///     rotation: [0.0, 0.0, 0.0, 1.0],
 /// };
@@ -914,10 +914,10 @@ pub struct BlockPlace {
     /// Size and version of this struct.
     pub header: Header,
     /// The shape's item: one with a `VoxelBlueprintItem`.
-    pub shape: u32,
+    pub shape: ItemId,
     /// The material's item: one whose `ChangeVoxelData` places a building
     /// material.
-    pub material: u32,
+    pub material: ItemId,
     /// Where the block's middle lies, in metres.
     pub position: [f64; 3],
     /// The block's rotation, a quaternion x, y, z, w; the game keeps the

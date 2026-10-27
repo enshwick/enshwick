@@ -161,7 +161,7 @@ fn operations_must_name_what_they_need() {
     let give = InventoryOp {
         kind: InventoryOp::GIVE,
         target: 2,
-        item: 7,
+        item: enshwick::ItemId::new(7),
         count: 1,
         ..InventoryOp::default()
     };

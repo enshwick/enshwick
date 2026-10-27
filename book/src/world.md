@@ -8,13 +8,13 @@ queries, build rights, labels, chat lines, destroy requests and saves. It is
 `Copy`; get it during `init` and move it into handlers and tasks.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::PlayerJoined;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        if let Some(player) = world.player(Entity(joined.entity)) {
+        if let Some(player) = world.player(joined.entity) {
             enshwick::info!("{} joined, admin: {}", player.name, player.is_admin());
         }
     })
@@ -53,13 +53,13 @@ type is not reflected on the running build. Its `hash()` is the hash
 takes inside systems.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::BuildingPlaced;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
-        let entity = Entity(placed.entity);
+        let entity = placed.entity;
         if let (Some(at), Some(item)) = (world.position(entity), world.used_item(entity)) {
             enshwick::debug!("item {item} placed at {at:?}");
         }
@@ -81,7 +81,7 @@ use enshwick::events::PlayerJoined;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        let entity = enshwick::ecs::Entity(joined.entity);
+        let entity = joined.entity;
         if let (Some(vitals), Some(progress)) = (world.vitals(entity), world.progress(entity)) {
             enshwick::info!("level {} with {} health", progress.level, vitals.health.current);
         }
@@ -293,7 +293,7 @@ next join. Outside a dedicated server they return `WorldError::Missing`.
 ```rust
 use enshwick::world::{World, WorldError};
 
-fn invite(world: &World, key: u64) -> Result<(), WorldError> {
+fn invite(world: &World, key: enshwick::PlayerKey) -> Result<(), WorldError> {
     if !world.allowlisted(key)? {
         world.set_allowlisted(key, true)?;
     }
@@ -335,13 +335,13 @@ on a game build without the checks, the answer is `Unchecked`, and the edit
 is refused.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::world::BuildRefusal;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<enshwick::events::PlayerJoined>(move |joined| {
-        let Some(player) = world.player(Entity(joined.entity)) else {
+        let Some(player) = world.player(joined.entity) else {
             return;
         };
         let Some([x, y, z]) = world.position(player.entity) else {
@@ -369,15 +369,15 @@ when the entity is gone.
 name, or `None` when the world cannot tell.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::BuildingPlaced;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<BuildingPlaced>(move |placed| {
-        if let Some(player) = world.player(Entity(placed.player)) {
+        if let Some(player) = world.player(placed.player) {
             let label = format!("Built by {}", player.name);
-            let _labelled = world.set_label(Entity(placed.entity), &label);
+            let _labelled = world.set_label(placed.entity, &label);
         }
     })
 }

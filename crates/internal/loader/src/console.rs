@@ -170,8 +170,8 @@ pub fn remember(built: &[BuildingData]) {
         .iter()
         .filter(|data| data.kind == BuildingData::PLACED)
         .map(|data| answers::Placed {
-            entity: data.entity,
-            item: data.item,
+            entity: data.entity.0,
+            item: data.item.get(),
             template: data.template,
             position: data.position,
         });
@@ -452,16 +452,16 @@ mod tests {
         let piece = |entity, kind| BuildingData {
             header: enshwick::abi::Header::of::<BuildingData>(),
             entity,
-            player: 7,
-            item: 1,
+            player: enshwick::Entity(7),
+            item: enshwick::ItemId::new(1),
             kind,
             replay: 0,
             template: [0; 16],
             position: [0.0; 3],
         };
         let built: Vec<BuildingData> = (0..40)
-            .map(|entity| piece(entity, BuildingData::PLACED))
-            .chain([piece(99, BuildingData::TORN_DOWN)])
+            .map(|entity| piece(enshwick::Entity(entity), BuildingData::PLACED))
+            .chain([piece(enshwick::Entity(99), BuildingData::TORN_DOWN)])
             .collect();
         remember(&built);
         let newest: Vec<u32> = newest(usize::MAX).iter().map(|p| p.entity).collect();

@@ -75,11 +75,10 @@ mod tests {
         .fold(
             host.type_hash("inventory_setup", SETUP),
             |host, (entity, markers)| {
-                markers
-                    .iter()
-                    .fold(host.placed(SETUP, entity, [0.0; 3]), |host, &marker| {
-                        host.component(entity, marker, &[0; 4])
-                    })
+                markers.iter().fold(
+                    host.placed(SETUP, enshwick::Entity(entity), [0.0; 3]),
+                    |host, &marker| host.component(enshwick::Entity(entity), marker, &[0; 4]),
+                )
             },
         )
     }

@@ -3,8 +3,8 @@
 
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{PlayerInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::texts;
@@ -35,10 +35,10 @@ pub(crate) fn world(loader: &Loader) -> String {
                 .map(|p| Online {
                     name: name(p),
                     slot: p.slot,
-                    entity: p.entity,
-                    key: p.key,
+                    entity: p.entity.0,
+                    key: p.key.get(),
                     admin: is_admin(p),
-                    position: position(loader, p.entity),
+                    position: position(loader, p.entity.0),
                 })
                 .collect::<Vec<_>>(),
         ),
@@ -51,9 +51,12 @@ pub(crate) fn entity(loader: &Loader, args: &str) -> String {
     let Ok(entity) = args.trim().parse::<u32>() else {
         return texts::fill("console.usage", &[("usage", "enshwick entity <number>")]);
     };
-    let player = crate::world::players(loader)
-        .ok()
-        .and_then(|players| players.iter().find(|p| p.entity == entity).map(name));
+    let player = crate::world::players(loader).ok().and_then(|players| {
+        players
+            .iter()
+            .find(|p| p.entity == Entity(entity))
+            .map(name)
+    });
     answers::entity(&Seen {
         entity,
         template: crate::world::template(loader, Entity(entity)).ok(),
@@ -108,7 +111,7 @@ pub(crate) fn account(loader: &Loader, act: Act, args: &str) -> String {
             .iter()
             .map(|p| accounts::Online {
                 name: name(p),
-                key: p.key,
+                key: p.key.get(),
                 admin: is_admin(p),
             })
             .collect(),

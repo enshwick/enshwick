@@ -329,7 +329,7 @@ fn back(screen: &mut Screen) -> bool {
 /// Whether this client is joined to a server it does not host, which takes
 /// messages: whose settings an administrator may change from here.
 fn joined_elsewhere() -> bool {
-    crate::net::ready(enshwick::abi::NetMessage::SERVER) && !crate::world::hosting()
+    crate::net::ready(enshwick::abi::NetMessage::SERVER.get()) && !crate::world::hosting()
 }
 
 fn open_server_list(screen: &mut Screen) {

@@ -31,7 +31,7 @@ pub(crate) extern "system" fn net_channel(
 pub(crate) extern "system" fn net_send(
     _me: ModHandle,
     channel: u32,
-    peer: u64,
+    peer: crate::PlayerKey,
     data: *const u8,
     size: u32,
 ) -> Status {
@@ -42,7 +42,7 @@ pub(crate) extern "system" fn net_send(
         unsafe { core::slice::from_raw_parts(data, size as usize) }.to_vec()
     };
     with(Status::MISSING, |s| {
-        if peer != 0 && !s.host.net_peers.contains(&peer) {
+        if peer.get() != 0 && !s.host.net_peers.contains(&peer.get()) {
             return Status::MISSING;
         }
         s.net_sent.push((channel, peer, bytes));
@@ -50,9 +50,9 @@ pub(crate) extern "system" fn net_send(
     })
 }
 
-pub(crate) extern "system" fn net_ready(_me: ModHandle, peer: u64) -> Status {
+pub(crate) extern "system" fn net_ready(_me: ModHandle, peer: crate::PlayerKey) -> Status {
     with(Status::MISSING, |s| {
-        if s.host.net_peers.contains(&peer) {
+        if s.host.net_peers.contains(&peer.get()) {
             Status::OK
         } else {
             Status::MISSING

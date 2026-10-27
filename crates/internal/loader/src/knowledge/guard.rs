@@ -282,7 +282,7 @@ fn note(call: &KnowledgeInput, refused: bool) {
             call.kind,
             call.value,
             call.scope,
-            call.player,
+            call.player.0,
             call.refusal
         );
     } else if line == LOGGED {
@@ -345,7 +345,7 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         let mode = MODE.load(Ordering::Acquire);
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player,
+            player: enshwick::Entity(player),
             id,
             kind,
             scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
@@ -465,7 +465,7 @@ mod tests {
     fn without_filters_the_guards_verdict_stands() {
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
-            player: 1,
+            player: enshwick::Entity(1),
             id: 2,
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,

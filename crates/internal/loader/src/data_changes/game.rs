@@ -794,7 +794,7 @@ fn loot_patches(
             || archive.resource(&key).is_some_and(|table| {
                 fill_items(&layout, &table)
                     .iter()
-                    .any(|id| items.contains_key(id))
+                    .any(|id| items.contains_key(&id.get()))
             });
         if names {
             add(key, true);
@@ -840,8 +840,8 @@ unsafe extern "system" fn build_loot(
     let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let sealed = CHANGES.sealed.get()?;
         let merged = sealed.merged();
-        let value = |id: u32, field: Field, base: f64| {
-            let item = *patch.items.get(&id)?;
+        let value = |id: enshwick::ItemId, field: Field, base: f64| {
+            let item = *patch.items.get(&id.get())?;
             let on = |m| on(sealed.loader, m);
             let every = merged.value(Key::new(item, field), base, on);
             let here = Key {

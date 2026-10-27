@@ -108,7 +108,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         let [Value::Number(id)] = request.args else {
             return Outcome::refused("Name an entity");
         };
-        let source = enshwick::ecs::Entity(*id as u32);
+        let source = enshwick::Entity(*id as u32);
         let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
             return Outcome::refused("Nothing to copy, or you are nowhere");
         };

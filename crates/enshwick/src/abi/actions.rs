@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, PlayerInfo, Str};
+use crate::abi::{Entity, Header, PlayerInfo, Str};
 
 /// A question the loader asks a mod about its player actions, registered
 /// with [`HostApi::actions`](super::HostApi::actions).
@@ -19,8 +19,8 @@ use crate::abi::{Header, PlayerInfo, Str};
 ///     player: PlayerInfo {
 ///         header: Header::of::<PlayerInfo>(),
 ///         slot: 0,
-///         entity: 2,
-///         key: 7,
+///         entity: enshwick::Entity(2),
+///         key: enshwick::PlayerKey::new(7),
 ///         permissions: 0,
 ///         name_len: 0,
 ///         name: [0; 64],
@@ -92,13 +92,13 @@ pub type StatusFn = unsafe extern "system" fn(user: *mut c_void, out: *mut Str);
 ///
 /// let call = RenameCall {
 ///     header: Header::of::<RenameCall>(),
-///     entity: 4096,
+///     entity: enshwick::Entity(4096),
 ///     known: 0,
 ///     player: PlayerInfo {
 ///         header: Header::of::<PlayerInfo>(),
 ///         slot: 0,
-///         entity: 0,
-///         key: 0,
+///         entity: enshwick::Entity(0),
+///         key: enshwick::PlayerKey::new(0),
 ///         permissions: 0,
 ///         name_len: 0,
 ///         name: [0; 64],
@@ -113,7 +113,7 @@ pub struct RenameCall {
     /// Size and version of this struct.
     pub header: Header,
     /// The entity being renamed.
-    pub entity: u32,
+    pub entity: Entity,
     /// 1 when `player` holds the renaming player, 0 when the loader could
     /// not tell who sent the rename.
     pub known: u8,

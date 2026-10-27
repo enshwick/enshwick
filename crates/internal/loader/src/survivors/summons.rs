@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, Summon};
 use enshwick::altars::cell_of_fixed;
-use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, write_at};
 
 use crate::host::Loader;
@@ -111,7 +111,7 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         template,
         target,
         slot,
-        pide,
+        pide: Entity(pide),
         meter: if pide == 0 {
             [0; 2]
         } else {

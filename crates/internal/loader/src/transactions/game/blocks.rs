@@ -92,16 +92,16 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
         return Err(Status::BAD_ARGS);
     }
     let access = crate::world::access(&"block transaction commit").ok_or(Status::MISSING)?;
-    let material = building_material(loader, &access, request.material)?;
+    let material = building_material(loader, &access, request.material.get())?;
     let (game, holder) = game_box(
         loader,
         &access,
-        request.shape,
+        request.shape.get(),
         request.position,
         request.rotation,
     )?;
     Ok(Block {
-        shape: request.shape,
+        shape: request.shape.get(),
         feedback: feedback(loader, &access, holder, material),
         material,
         position: request.position,

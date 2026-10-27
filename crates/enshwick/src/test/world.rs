@@ -16,13 +16,13 @@ impl FakeHost {
     /// ```
     /// let health = [80.0f32.to_le_bytes(), 100.0f32.to_le_bytes()].concat();
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .component(4096, 0x027a_c564, &health)
-    ///     .template(4096, [0x3a; 16])
+    ///     .component(enshwick::Entity(4096), 0x027a_c564, &health)
+    ///     .template(enshwick::Entity(4096), [0x3a; 16])
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn component(mut self, entity: u32, type_hash: u32, bytes: &[u8]) -> Self {
+    pub fn component(mut self, entity: crate::Entity, type_hash: u32, bytes: &[u8]) -> Self {
         let mut words = vec![0u128; bytes.len().div_ceil(16).max(1)].into_boxed_slice();
         for (word, chunk) in words.iter_mut().zip(bytes.chunks(16)) {
             let mut le = [0u8; 16];
@@ -30,8 +30,10 @@ impl FakeHost {
             *word = u128::from_le_bytes(le);
         }
         let data = Box::leak(words).as_mut_ptr();
-        self.components
-            .insert((entity, type_hash), (data.expose_provenance(), bytes.len()));
+        self.components.insert(
+            (entity.0, type_hash),
+            (data.expose_provenance(), bytes.len()),
+        );
         self
     }
 
@@ -76,16 +78,16 @@ impl FakeHost {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new()
-    ///     .placed(0x027a_c564, 4096, [1.0, 2.0, 3.0])
+    ///     .placed(0x027a_c564, enshwick::Entity(4096), [1.0, 2.0, 3.0])
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn placed(mut self, type_hash: u32, entity: u32, position: [f64; 3]) -> Self {
+    pub fn placed(mut self, type_hash: u32, entity: crate::Entity, position: [f64; 3]) -> Self {
         self.placed.push((
             type_hash,
             EntityPlace {
-                entity,
+                entity: crate::Entity(entity.0),
                 reserved: 0,
                 position: crate::ecs::fixed(position),
             },
@@ -117,8 +119,8 @@ impl FakeHost {
     ///
     /// See [`FakeHost::component`].
     #[must_use]
-    pub fn template(mut self, entity: u32, guid: [u8; 16]) -> Self {
-        self.templates.insert(entity, guid);
+    pub fn template(mut self, entity: crate::Entity, guid: [u8; 16]) -> Self {
+        self.templates.insert(entity.0, guid);
         self
     }
 }
@@ -137,7 +139,7 @@ impl Installed {
     /// assert!(loader.banned().is_empty());
     /// ```
     #[must_use]
-    pub fn banned(&self) -> Vec<u64> {
+    pub fn banned(&self) -> Vec<crate::PlayerKey> {
         table::with(Vec::new(), |s| s.banned.clone())
     }
 
@@ -164,7 +166,7 @@ impl Installed {
     /// assert!(loader.allowlisted().is_empty());
     /// ```
     #[must_use]
-    pub fn allowlisted(&self) -> Vec<u64> {
+    pub fn allowlisted(&self) -> Vec<crate::PlayerKey> {
         table::with(Vec::new(), |s| s.allowlisted.clone())
     }
 
@@ -380,14 +382,14 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// let loader = enshwick::test::FakeHost::new().component(7, 1, &[4, 2]).install();
-    /// assert_eq!(loader.component_bytes(7, 1), Some(vec![4, 2]));
-    /// assert_eq!(loader.component_bytes(7, 2), None);
+    /// let loader = enshwick::test::FakeHost::new().component(enshwick::Entity(7), 1, &[4, 2]).install();
+    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 1), Some(vec![4, 2]));
+    /// assert_eq!(loader.component_bytes(enshwick::Entity(7), 2), None);
     /// ```
     #[must_use]
-    pub fn component_bytes(&self, entity: u32, type_hash: u32) -> Option<Vec<u8>> {
+    pub fn component_bytes(&self, entity: crate::Entity, type_hash: u32) -> Option<Vec<u8>> {
         let (address, len) = table::with(None, |s| {
-            s.host.components.get(&(entity, type_hash)).copied()
+            s.host.components.get(&(entity.0, type_hash)).copied()
         })?;
         let data: *const u8 = core::ptr::with_exposed_provenance(address);
         // SAFETY: `component` leaked `len` initialised bytes at `address`,

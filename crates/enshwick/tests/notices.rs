@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::net::Peer;
     use enshwick::world::{Notice, World};
     use enshwick::{Load, Mod, Off};
@@ -31,8 +31,8 @@ mod tests {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
-            entity,
-            key,
+            entity: Entity(entity),
+            key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: 0,
             name: [0; 64],
@@ -46,7 +46,7 @@ mod tests {
             .type_hash("used_item", 2)
             .player(player(2, 20))
             .player(player(3, 30))
-            .net_peer(Peer::Player(20))
+            .net_peer(Peer::Player(enshwick::PlayerKey::new(20)))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Herald)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -56,7 +56,13 @@ mod tests {
         let vanilla = world.player(Entity(3)).unwrap();
         assert_eq!(world.notify(&modded, "Low fuel"), Notice::OnScreen);
         assert_eq!(world.notify(&vanilla, "Low fuel"), Notice::Chat);
-        assert_eq!(loader.notices(), [(20, "Low fuel".to_owned())]);
-        assert_eq!(loader.chat(), [(30, "Low fuel".to_owned())]);
+        assert_eq!(
+            loader.notices(),
+            [(enshwick::PlayerKey::new(20), "Low fuel".to_owned())]
+        );
+        assert_eq!(
+            loader.chat(),
+            [(enshwick::PlayerKey::new(30), "Low fuel".to_owned())]
+        );
     }
 }

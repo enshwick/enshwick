@@ -5,8 +5,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::world::{Meter, World};
     use enshwick::{Load, Mod, Off};
 
@@ -68,12 +68,12 @@ mod tests {
             .type_hash("attribute_set.fuel", 6)
             .constant("attribute.fuel", 60)
             .constant("attribute.fuel_max_slot", 1)
-            .component(900, 6, &fuel)
-            .component(7, 1, &health)
-            .component(7, 2, &stamina)
-            .component(7, 4, &level)
-            .component(7, 5, &experience)
-            .component(8, 1, &wrong)
+            .component(Entity(900), 6, &fuel)
+            .component(Entity(7), 1, &health)
+            .component(Entity(7), 2, &stamina)
+            .component(Entity(7), 4, &level)
+            .component(Entity(7), 5, &experience)
+            .component(Entity(8), 1, &wrong)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Stats)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };

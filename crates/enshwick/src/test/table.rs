@@ -121,7 +121,7 @@ pub(crate) struct State {
     pub(crate) synced: Vec<String>,
     /// The mod's player actions callback, once registered.
     pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
-    pub(crate) chat: Vec<(u64, String)>,
+    pub(crate) chat: Vec<(crate::PlayerKey, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
@@ -136,11 +136,11 @@ pub(crate) struct State {
     /// How many saves the mod asked for.
     pub(crate) saves: usize,
     /// The accounts on the fake server's ban list, in the order banned.
-    pub(crate) banned: Vec<u64>,
+    pub(crate) banned: Vec<crate::PlayerKey>,
     /// The accounts the mod removed from the game, by kick or ban, in order.
     pub(crate) removed: Vec<u64>,
     /// The accounts on the fake server's allowlist, in the order listed.
-    pub(crate) allowlisted: Vec<u64>,
+    pub(crate) allowlisted: Vec<crate::PlayerKey>,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
@@ -153,9 +153,9 @@ pub(crate) struct State {
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
     /// Messages the mod sent: channel id, raw peer and bytes.
-    pub(crate) net_sent: Vec<(u32, u64, Vec<u8>)>,
+    pub(crate) net_sent: Vec<(u32, crate::PlayerKey, Vec<u8>)>,
     /// Notices the mod showed: account key and text.
-    pub(crate) notices: Vec<(u64, String)>,
+    pub(crate) notices: Vec<(crate::PlayerKey, String)>,
     pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
     /// The clock `time_of_day` writes, settable while installed.
     pub(crate) daytime: Option<DaytimeInfo>,
@@ -179,7 +179,7 @@ pub(crate) struct State {
     pub(crate) revokes: Vec<(u32, u32, u32, u32)>,
     /// The changes the mod asked for accounts: key, id, kind, value,
     /// whether a revoke.
-    pub(crate) account_changes: Vec<(u64, u32, u32, u32, bool)>,
+    pub(crate) account_changes: Vec<(crate::PlayerKey, u32, u32, u32, bool)>,
     /// The quest ids the fake knows.
     pub(crate) quests: Vec<u32>,
     /// The weather weights everywhere and the fronts, settable.

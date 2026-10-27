@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header, ItemId};
 
 /// One operation of an inventory transaction, in [`InventoryRequest::ops`].
 ///
@@ -17,7 +17,7 @@ use crate::abi::Header;
 ///     flags: 0,
 ///     target: 40,
 ///     other: 2,
-///     item: 0,
+///     item: enshwick::ItemId::new(0),
 ///     count: 0,
 /// };
 /// assert_eq!(op.kind, 5);
@@ -37,7 +37,7 @@ pub struct InventoryOp {
     /// meter starts with; 0 otherwise.
     pub other: u64,
     /// The item id of a give or take.
-    pub item: u32,
+    pub item: ItemId,
     /// How many to give or take; for a slot move, how many to move, 0 for the
     /// whole stack.
     pub count: u32,
@@ -76,11 +76,11 @@ impl InventoryOp {
 /// ```
 /// use enshwick::abi::{Header, InventoryOp, InventoryRequest};
 ///
-/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: 2, item: 0x1234, count: 5, ..Default::default() }];
+/// let ops = [InventoryOp { kind: InventoryOp::GIVE, target: 2, item: enshwick::ItemId::new(0x1234), count: 5, ..Default::default() }];
 /// let request = InventoryRequest {
 ///     header: Header::of::<InventoryRequest>(),
 ///     flags: InventoryRequest::NOTIFY,
-///     actor: 2,
+///     actor: enshwick::Entity(2),
 ///     ops: ops.as_ptr(),
 ///     op_count: 1,
 ///     reserved: 0,
@@ -96,7 +96,7 @@ pub struct InventoryRequest {
     pub flags: u32,
     /// The player the game credits with the change, for pickup and
     /// inventory-full messages; 0 for whichever player the game is serving.
-    pub actor: u32,
+    pub actor: Entity,
     /// The operations, read during the call.
     pub ops: *const InventoryOp,
     /// How many operations `ops` holds.
@@ -192,7 +192,7 @@ pub type InventoryResultFn =
 ///
 /// let sword = ItemData {
 ///     header: Header::of::<ItemData>(),
-///     id: 7,
+///     id: enshwick::ItemId::new(7),
 ///     max_stack: 1,
 ///     category: 2,
 ///     rarity: 0,
@@ -207,7 +207,7 @@ pub struct ItemData {
     /// Size and version of this struct.
     pub header: Header,
     /// The item id: FNV-1a of the item's GUID.
-    pub id: u32,
+    pub id: ItemId,
     /// How many fit one stack.
     pub max_stack: u16,
     /// The game's `ItemCategory`: 1 equipment, 2 weapons, 3 tools and so

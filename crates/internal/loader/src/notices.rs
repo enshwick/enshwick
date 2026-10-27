@@ -13,8 +13,8 @@
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::Status;
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -258,14 +258,14 @@ pub(crate) unsafe fn raise(loader: &Loader, entity_world: usize) {
 pub(crate) fn send(loader: &Loader, key: u64, text: &str) -> Result<(), Status> {
     let player = crate::world::players(loader)?
         .into_iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key == enshwick::PlayerKey::new(key))
         .ok_or(Status::MISSING)?;
     if !crate::net::ready(key) {
         return Err(Status::MISSING);
     }
     // Cut here too: a longer text would take several frames, which the
     // client does not read as a notice.
-    crate::net::notice(key, Entity(player.entity), cut(text))
+    crate::net::notice(key, player.entity, cut(text))
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let engravings = load.item_data::<Engraving>("engraving")?;
-//!     let ring = ItemInstance { pide: enshwick::ecs::Entity(900), item: 0x5e01 };
+//!     let ring = ItemInstance { pide: enshwick::Entity(900), item: enshwick::ItemId::new(0x5e01) };
 //!     let _set = engravings.set(ring, &Engraving { by: "Balthazar".into() });
 //!     let _by = engravings.get(ring).map(|e| e.by);
 //!     Ok(())
@@ -41,8 +41,8 @@
 use core::marker::PhantomData;
 
 use crate::abi::{Status, Str};
-use crate::ecs::Entity;
 use crate::inventory::Slot;
+use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
 /// The largest encoded value.
@@ -53,19 +53,19 @@ pub const MAX_VALUE: usize = 512;
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 /// use enshwick::item_data::ItemInstance;
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: 0x5e01, count: 1, pide: Some(Entity(900)) };
-/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: 0x5e01 }));
+/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0x5e01), count: 1, pide: Some(Entity(900)) };
+/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) }));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemInstance {
     /// The item's own entity.
     pub pide: Entity,
     /// The item id.
-    pub item: u32,
+    pub item: ItemId,
 }
 
 impl ItemInstance {
@@ -167,7 +167,7 @@ where
         let status = (self.host.api().item_data_get)(
             self.host.handle(),
             self.kind,
-            item.pide.0,
+            item.pide,
             item.item,
             buffer.as_mut_ptr(),
             u32::try_from(buffer.len()).unwrap_or(u32::MAX),
@@ -220,7 +220,7 @@ where
         let status = (self.host.api().item_data_set)(
             self.host.handle(),
             self.kind,
-            item.pide.0,
+            item.pide,
             item.item,
             bytes.as_ptr(),
             u32::try_from(bytes.len()).unwrap_or(u32::MAX),
@@ -280,8 +280,8 @@ mod tests {
             count,
             pide: Entity::from_raw(pide),
         };
-        assert!(ItemInstance::of(&slot(7, 1, 900)).is_some());
-        assert!(ItemInstance::of(&slot(7, 5, 0)).is_none());
-        assert!(ItemInstance::of(&slot(0, 0, 900)).is_none());
+        assert!(ItemInstance::of(&slot(ItemId::new(7), 1, 900)).is_some());
+        assert!(ItemInstance::of(&slot(ItemId::new(7), 5, 0)).is_none());
+        assert!(ItemInstance::of(&slot(ItemId::new(0), 0, 900)).is_none());
     }
 }

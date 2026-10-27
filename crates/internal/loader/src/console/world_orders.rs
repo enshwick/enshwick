@@ -4,12 +4,12 @@
 
 use core::ffi::c_void;
 
+use enshwick::Entity;
 use enshwick::abi::{
     Header, InventoryOp, InventoryRequest, InventoryResult, PlayerInfo, SpawnRequest, Status,
     TeleportRequest,
 };
 use enshwick::content::Guid;
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::mod_index::ModIndex;
@@ -42,7 +42,7 @@ fn player(loader: &Loader, words: &str) -> Result<PlayerInfo, String> {
         .iter()
         .map(|p| accounts::Online {
             name: tools::name(p),
-            key: p.key,
+            key: p.key.get(),
             admin: tools::is_admin(p),
         })
         .collect();
@@ -67,7 +67,7 @@ fn player(loader: &Loader, words: &str) -> Result<PlayerInfo, String> {
     };
     players
         .into_iter()
-        .find(|p| p.key == key && p.entity != 0)
+        .find(|p| p.key == enshwick::PlayerKey::new(key) && p.entity != Entity(0))
         .ok_or_else(|| {
             texts::fill(
                 "console.order.offline",
@@ -117,7 +117,10 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
     }
     let players = match give.to {
         Recipients::Everyone => match crate::world::players(loader) {
-            Ok(players) => players.into_iter().filter(|p| p.entity != 0).collect(),
+            Ok(players) => players
+                .into_iter()
+                .filter(|p| p.entity != Entity(0))
+                .collect(),
             Err(status) => return tools::unread(status),
         },
         Recipients::Named(words) => match player(loader, words) {
@@ -134,9 +137,9 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
         let op = InventoryOp {
             kind: InventoryOp::GIVE,
             flags: 0,
-            target: u64::from(player.entity),
+            target: u64::from(player.entity.0),
             other: 0,
-            item: give.item,
+            item: enshwick::ItemId::new(give.item),
             count: give.count,
         };
         let request = InventoryRequest {
@@ -193,7 +196,7 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
                 Err(answer) => return answer,
             };
             let Some([x, y, z]) =
-                crate::world::fixed_position(loader, Entity(player.entity)).map(answers::metres)
+                crate::world::fixed_position(loader, player.entity).map(answers::metres)
             else {
                 return texts::fill("console.order.nowhere", &[("who", &tools::name(&player))]);
             };
@@ -263,7 +266,7 @@ fn teleport(loader: &Loader, order: &orders::Teleport<'_>) -> String {
         position: enshwick::ecs::fixed(order.to),
         orientation: [0.0, 0.0, 0.0, 1.0],
     };
-    if crate::world::fixed_position(loader, Entity(player.entity)).is_none() {
+    if crate::world::fixed_position(loader, player.entity).is_none() {
         return texts::fill("console.order.nowhere", &[("who", &tools::name(&player))]);
     }
     let who = format!("{} ({:016x})", tools::name(&player), player.key);

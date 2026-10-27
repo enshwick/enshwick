@@ -34,7 +34,7 @@ struct Settings {
 /// The rules the link reads, swapped whole when the settings change.
 #[derive(Debug, Default)]
 struct Rules {
-    regulars: Vec<u64>,
+    regulars: Vec<enshwick::PlayerKey>,
     bonus_percent: u32,
     refused_items: Vec<u32>,
 }
@@ -45,7 +45,9 @@ impl Rules {
             .regulars
             .iter()
             .filter_map(|key| {
-                let parsed = u64::from_str_radix(key.trim(), 16).ok();
+                let parsed = u64::from_str_radix(key.trim(), 16)
+                    .ok()
+                    .map(enshwick::PlayerKey::new);
                 if parsed.is_none() {
                     enshwick::warn!("regular {key:?} is no account key; skipped");
                 }
@@ -112,14 +114,14 @@ enshwick::declare_mod!(Haggling);
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::points::Decision;
+    use enshwick::{Entity, PlayerKey};
 
     use super::price::{Deal, Price};
 
-    const REGULAR: u64 = 0x00ab_cdef_0123_4567;
+    const REGULAR: PlayerKey = PlayerKey::new(0x00ab_cdef_0123_4567);
 
-    fn price(player: u64, item: u32, deal: Deal) -> Price {
+    fn price(player: PlayerKey, item: u32, deal: Deal) -> Price {
         Price {
             item,
             count: 1,
@@ -145,11 +147,11 @@ mod tests {
             Decision::Changed(12)
         );
         assert_eq!(
-            loader.ask_point(&price(7, 1, Deal::SELL), 10),
+            loader.ask_point(&price(PlayerKey::new(7), 1, Deal::SELL), 10),
             Decision::Kept(10)
         );
         assert_eq!(
-            loader.ask_point(&price(7, 5, Deal::SELL), 10),
+            loader.ask_point(&price(PlayerKey::new(7), 5, Deal::SELL), 10),
             Decision::Refused
         );
         assert_eq!(

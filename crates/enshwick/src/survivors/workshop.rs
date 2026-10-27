@@ -49,12 +49,14 @@ impl WorkshopSurvivor {
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-    /// assert_eq!(WorkshopSurvivor::by_staff(smith.staff().id()), Some(smith));
+    /// assert_eq!(WorkshopSurvivor::by_staff(enshwick::ItemId::new(smith.staff().id())), Some(smith));
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
-    pub fn by_staff(item: u32) -> Option<&'static Self> {
-        WORKSHOP_SURVIVORS.iter().find(|s| s.staff.id() == item)
+    pub fn by_staff(item: crate::ItemId) -> Option<&'static Self> {
+        WORKSHOP_SURVIVORS
+            .iter()
+            .find(|s| s.staff.id() == item.get())
     }
 
     /// The short name, lower case with underscores, as the survivor is

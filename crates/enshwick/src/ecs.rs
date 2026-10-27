@@ -7,7 +7,7 @@
 
 use crate::abi::Side;
 use crate::raw::{read_at, read_ptr_at, write_at};
-use crate::{Host, Load, Off};
+use crate::{Entity, Host, Load, Off};
 
 type IteratorInit = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64);
 type IteratorNext = unsafe extern "system" fn(ctx: *mut u64, iterator: *mut u64, size: u64) -> u64;
@@ -19,54 +19,6 @@ type MarkChanged = unsafe extern "system" fn(
     kind: u16,
     flags: u8,
 );
-
-/// An entity id, as the engine numbers entities.
-///
-/// The engine's id 0 stands for no entity; the API hands it over as `None`
-/// in an `Option<Entity>`, never as an `Entity`.
-///
-/// # Examples
-///
-/// ```
-/// let entity = enshwick::ecs::Entity(1210);
-/// assert_eq!(entity.0, 1210);
-/// ```
-#[repr(transparent)]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    serde::Serialize,
-    serde::Deserialize,
-    crate::Shape,
-    crate::Script,
-)]
-#[serde(transparent)]
-#[shape(api = "entity")]
-pub struct Entity(pub u32);
-
-impl Entity {
-    /// The engine's id for no entity.
-    pub(crate) const NONE: Self = Self(0);
-
-    /// Whether this is the engine's id for no entity.
-    #[must_use]
-    pub(crate) const fn is_none(self) -> bool {
-        self.0 == 0
-    }
-
-    /// `Some(entity)` for the engine's id `raw`, `None` for 0.
-    #[must_use]
-    pub(crate) const fn from_raw(raw: u32) -> Option<Self> {
-        if raw == 0 { None } else { Some(Self(raw)) }
-    }
-}
 
 /// The engine's ECS functions and layout on the running build.
 ///
@@ -235,7 +187,7 @@ impl Ecs {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn current(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) -> Option<enshwick::ecs::Entity> {
+    /// unsafe fn current(ecs: &enshwick::ecs::Ecs, ctx: *mut u64) -> Option<enshwick::Entity> {
     ///     // SAFETY: called from the system's hook with its context.
     ///     unsafe { ecs.entity(ctx) }
     /// }
@@ -434,7 +386,7 @@ impl Components {
     /// unsafe fn used_item(
     ///     c: &enshwick::ecs::Components,
     ///     ctx: *mut u64,
-    ///     chest: enshwick::ecs::Entity,
+    ///     chest: enshwick::Entity,
     /// ) -> Option<u32> {
     ///     // SAFETY: called from a system's hook with its live context.
     ///     let data = unsafe { c.component(ctx, chest, 0x0b02_361d) }?;

@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo, TransactionInfo};
-    use enshwick::ecs::Entity;
     use enshwick::test::FakeChange;
     use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     use enshwick::world::{
@@ -41,8 +41,8 @@ mod tests {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
-            entity,
-            key: u64::from(entity),
+            entity: Entity(entity),
+            key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
             name: [0; 64],
@@ -72,7 +72,7 @@ mod tests {
             flags: 0,
             hardness: 3,
             reserved: 0,
-            item: DIRT.get(),
+            item: DIRT,
             health: 500,
         }]);
         (loader, *WORLD.get().unwrap())
@@ -113,7 +113,7 @@ mod tests {
                     (enshwick::abi::Voxel::BUILDING, 0x83)
                 );
                 assert_eq!((*erased, *erased_size), ([210, 80, 200], [4, 4, 4]));
-                assert_eq!((block.shape, block.material), (SHAPE.get(), STONE.get()));
+                assert_eq!((block.shape, block.material), (SHAPE, STONE));
                 assert_eq!(block.position, at.position);
             }
             other => panic!("{other:?}"),
@@ -224,7 +224,7 @@ mod tests {
         let api = unsafe { &*loader.api() };
         let status = (api.transaction_commit_for)(
             enshwick::abi::ModHandle(1),
-            0,
+            Entity(0),
             &raw const op,
             1,
             &raw mut id,

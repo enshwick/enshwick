@@ -70,10 +70,10 @@ pub(crate) extern "system" fn recipe_rule(
 
 pub(crate) extern "system" fn recipe_disabled(
     _me: ModHandle,
-    recipe: u32,
+    recipe: crate::RecipeId,
     out: *mut u32,
 ) -> Status {
-    let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe));
+    let disabled = with(false, |s| s.host.disabled_recipes.contains(&recipe.get()));
     if !out.is_null() {
         // SAFETY: the safe layer passes its out value for the call.
         unsafe { out.write(u32::from(disabled)) };
@@ -83,10 +83,13 @@ pub(crate) extern "system" fn recipe_disabled(
 
 pub(crate) extern "system" fn recipe_kind(
     _me: ModHandle,
-    item: u32,
+    item: crate::ItemId,
     out: *mut crate::abi::RecipeKind,
 ) -> Status {
-    found(with(None, |s| s.host.recipe_kinds.get(&item).copied()), out)
+    found(
+        with(None, |s| s.host.recipe_kinds.get(&item.get()).copied()),
+        out,
+    )
 }
 
 pub(crate) extern "system" fn change_data(
@@ -250,16 +253,16 @@ pub(crate) extern "system" fn entity_data_open(
 pub(crate) extern "system" fn item_data_get(
     _me: ModHandle,
     kind: u32,
-    pide: u32,
-    item: u32,
+    pide: crate::Entity,
+    item: crate::ItemId,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
 ) -> Status {
     let value = with(None, |s| {
         s.item_values
-            .get(&(kind, pide))
-            .filter(|(held, _)| *held == item)
+            .get(&(kind, pide.0))
+            .filter(|(held, _)| *held == item.get())
             .map(|(_, bytes)| bytes.clone())
     });
     let Some(value) = value else {
@@ -284,12 +287,12 @@ pub(crate) extern "system" fn item_data_get(
 pub(crate) extern "system" fn item_data_set(
     _me: ModHandle,
     kind: u32,
-    pide: u32,
-    item: u32,
+    pide: crate::Entity,
+    item: crate::ItemId,
     data: *const u8,
     len: u32,
 ) -> Status {
-    if pide == 0 {
+    if pide.is_none() {
         return Status::BAD_ARGS;
     }
     let value = if len == 0 || data.is_null() {
@@ -300,9 +303,9 @@ pub(crate) extern "system" fn item_data_set(
     };
     with(Status::MISSING, |s| {
         if value.is_empty() {
-            s.item_values.remove(&(kind, pide));
+            s.item_values.remove(&(kind, pide.0));
         } else {
-            s.item_values.insert((kind, pide), (item, value));
+            s.item_values.insert((kind, pide.0), (item.get(), value));
         }
         Status::OK
     })

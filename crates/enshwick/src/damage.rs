@@ -31,8 +31,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::DamageCheck;
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 /// A damage type, as the game sorts a hit's damage.
@@ -201,7 +201,7 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn target(&self) -> Entity {
-        Entity(self.check.target)
+        self.check.target
     }
 
     /// What dealt a hit: the attacker, or its projectile; `None` for other
@@ -221,10 +221,10 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn source(&self) -> Option<Entity> {
-        if self.check.source == 0 {
+        if self.check.source.is_none() {
             None
         } else {
-            Some(Entity(self.check.source))
+            Some(self.check.source)
         }
     }
 
@@ -245,10 +245,10 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub const fn attacker(&self) -> Option<Entity> {
-        if self.check.attacker != 0 {
-            Some(Entity(self.check.attacker))
-        } else {
+        if self.check.attacker.is_none() {
             self.source()
+        } else {
+            Some(self.check.attacker)
         }
     }
 

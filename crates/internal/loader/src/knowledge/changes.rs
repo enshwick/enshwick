@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -253,7 +253,7 @@ pub(crate) fn revoke(
     }
     RAISED.relock().push(KnowledgeData {
         header: Header::of::<KnowledgeData>(),
-        entity: if player { entity } else { 0 },
+        entity: if player { Entity(entity) } else { Entity(0) },
         id,
         value: new,
     });
@@ -366,13 +366,13 @@ fn apply(loader: &Loader, entity: Entity, change: &Waiting) -> Result<(), Status
 
 /// The character of the account `key` whose save has loaded, if it is in
 /// the game.
-fn character_of(loader: &Loader, key: u64) -> Option<u32> {
+fn character_of(loader: &Loader, key: u64) -> Option<Entity> {
     let players = crate::world::players(loader).ok()?;
     players
         .iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key == enshwick::PlayerKey::new(key))
         .map(|p| p.entity)
-        .filter(|&entity| character_loaded(loader, Entity(entity)))
+        .filter(|&entity| character_loaded(loader, entity))
 }
 
 /// Applies a change of knowledge `id` for the account `key` now, when its
@@ -403,7 +403,7 @@ pub(crate) fn for_account(
         revoke: revoking,
     };
     if let Some(entity) = character_of(loader, key) {
-        return apply(loader, Entity(entity), &change);
+        return apply(loader, entity, &change);
     }
     let mut queue = QUEUE.relock();
     let world = queue.key.clone().ok_or(Status::MISSING)?;
@@ -468,13 +468,16 @@ fn settle(loader: &Loader) {
         let Ok(key) = u64::from_str_radix(&change.account, 16) else {
             return false;
         };
-        let Some(player) = players.iter().find(|p| p.key == key) else {
+        let Some(player) = players
+            .iter()
+            .find(|p| p.key == enshwick::PlayerKey::new(key))
+        else {
             return true;
         };
-        if !character_loaded(loader, Entity(player.entity)) {
+        if !character_loaded(loader, player.entity) {
             return true;
         }
-        match apply(loader, Entity(player.entity), change) {
+        match apply(loader, player.entity, change) {
             Ok(()) => false,
             Err(status) if status == Status::REFUSED => true,
             Err(status) => {

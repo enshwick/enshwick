@@ -229,5 +229,11 @@ pub fn is_disabled(recipe: impl Into<Guid>) -> bool {
     };
     let api = host.api();
     let mut out = 0u32;
-    (api.recipe_disabled)(host.handle(), recipe.into().id(), &raw mut out).is_ok() && out != 0
+    (api.recipe_disabled)(
+        host.handle(),
+        crate::RecipeId::new(recipe.into().id()),
+        &raw mut out,
+    )
+    .is_ok()
+        && out != 0
 }

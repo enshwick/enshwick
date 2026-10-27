@@ -3,8 +3,8 @@
 
 use core::ops::BitOr;
 
+use crate::Entity;
 use crate::Host;
-use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::world::{ComponentType, Placed, World};
 

@@ -39,8 +39,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::Entity;
 use crate::abi::{AffixRoll, Header, ItemLine, StatRef, Status, Str};
-use crate::ecs::Entity;
 use crate::game_events::CraftRecipeEvent;
 use crate::inventory::Slot;
 use crate::item_data::ItemInstance;
@@ -104,7 +104,7 @@ fn fresh_seed(item: ItemInstance) -> u64 {
         .map_or(0, |d| d.as_nanos());
     #[expect(clippy::cast_possible_truncation, reason = "the low bits seed")]
     let now = now as u64;
-    now ^ (u64::from(item.pide.0) << 32 | u64::from(item.item))
+    now ^ (u64::from(item.pide.0) << 32 | u64::from(item.item.get()))
 }
 
 impl Affixes {
@@ -136,7 +136,7 @@ impl Affixes {
     ) -> Result<u32, RollError> {
         let request = AffixRoll {
             header: Header::of::<AffixRoll>(),
-            pide: item.pide.0,
+            pide: item.pide,
             item: item.item,
             min: rules.min,
             max: rules.max,
@@ -171,7 +171,7 @@ impl Affixes {
             let mut count = 0u32;
             let status = (self.host.api().item_lines)(
                 self.host.handle(),
-                item.pide.0,
+                item.pide,
                 item.item,
                 out.as_mut_ptr(),
                 u32::try_from(out.len()).unwrap_or(u32::MAX),
@@ -193,7 +193,7 @@ impl Affixes {
                     stat: l.modifier.stat,
                     op: Op::from_raw(l.modifier.op)?,
                     value: l.modifier.value,
-                    affix: l.affix.checked_sub(1),
+                    affix: l.affix.checked_sub(1).map(AffixId::new),
                 })
             })
             .collect()
@@ -210,11 +210,15 @@ impl Affixes {
     /// }
     /// ```
     #[must_use]
-    pub fn info(&self, affix: u32) -> Option<AffixInfo> {
+    pub fn info(&self, affix: AffixId) -> Option<AffixInfo> {
         let mut text = Str::EMPTY;
         let mut rarity = 0u8;
-        let status =
-            (self.host.api().affix_info)(self.host.handle(), affix, &raw mut text, &raw mut rarity);
+        let status = (self.host.api().affix_info)(
+            self.host.handle(),
+            affix.get(),
+            &raw mut text,
+            &raw mut rarity,
+        );
         if !status.is_ok() {
             return None;
         }
@@ -354,7 +358,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn define_affix(&mut self, name: &str, def: &AffixDef) -> Result<u32, Off> {
+    pub fn define_affix(&mut self, name: &str, def: &AffixDef) -> Result<AffixId, Off> {
         def.check()
             .map_err(|why| Off::new(format!("affix {name:?}: {why}")))?;
         let host = self.host();
@@ -363,7 +367,7 @@ impl Load<'_> {
         let mut out = StatRef::default();
         let status =
             (host.api().affix_open)(host.handle(), Str::new(name), &raw const data, &raw mut out);
-        crate::load::ok(status, out.index, || format!("affix {name:?}"))
+        crate::load::ok(status, out.index, || format!("affix {name:?}")).map(AffixId::new)
     }
 
     /// The affix pool and rolls. Call it during `init`.

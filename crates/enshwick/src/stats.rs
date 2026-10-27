@@ -49,8 +49,8 @@ use crate::abi::{
 };
 use crate::buffs::BuffTypeId;
 use crate::content::items::StatFormat;
-use crate::ecs::Entity;
 use crate::item_data::{ItemData, ItemInstance, SetError};
+use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
 /// The item data kind that holds every item's [`ItemStats`].
@@ -153,7 +153,7 @@ impl Stats {
     pub fn value(&self, entity: Entity, stat: Stat) -> f32 {
         let mut out = 0.0;
         let status =
-            (self.host.api().stat_value)(self.host.handle(), entity.0, stat.index, &raw mut out);
+            (self.host.api().stat_value)(self.host.handle(), entity, stat.index, &raw mut out);
         if status.is_ok() { out } else { 0.0 }
     }
 
@@ -162,7 +162,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn glows(stats: &enshwick::stats::Stats, glow: enshwick::stats::Stat, entity: enshwick::ecs::Entity) -> bool {
+    /// fn glows(stats: &enshwick::stats::Stats, glow: enshwick::stats::Stat, entity: enshwick::Entity) -> bool {
     ///     stats.is_on(entity, glow)
     /// }
     /// ```
@@ -207,7 +207,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn unbless(stats: &enshwick::stats::Stats, health: enshwick::stats::Stat, player: enshwick::ecs::Entity) {
+    /// fn unbless(stats: &enshwick::stats::Stats, health: enshwick::stats::Stat, player: enshwick::Entity) {
     ///     let _removed = stats.remove(player, "bless", health);
     /// }
     /// ```
@@ -229,7 +229,7 @@ impl Stats {
     ) -> Result<(), ModifyError> {
         let request = StatModify {
             header: Header::of::<StatModify>(),
-            entity: entity.0,
+            entity,
             key: key_hash(key),
             modifier,
             flags,
@@ -293,7 +293,7 @@ impl Stats {
     /// ```
     /// use enshwick::stats::Origin;
     ///
-    /// fn from_items(stats: &enshwick::stats::Stats, player: enshwick::ecs::Entity) -> usize {
+    /// fn from_items(stats: &enshwick::stats::Stats, player: enshwick::Entity) -> usize {
     ///     stats.sources(player, None).iter().filter(|s| matches!(s.origin, Origin::Item(_))).count()
     /// }
     /// ```
@@ -305,7 +305,7 @@ impl Stats {
             let mut count = 0u32;
             let status = (self.host.api().stat_sources)(
                 self.host.handle(),
-                entity.0,
+                entity,
                 stat,
                 out.as_mut_ptr(),
                 u32::try_from(out.len()).unwrap_or(u32::MAX),
@@ -326,7 +326,7 @@ impl Stats {
                 let origin = match s.kind {
                     StatSource::ITEM => Origin::Item(ItemInstance {
                         pide: Entity(s.id),
-                        item: s.owner,
+                        item: ItemId::new(s.owner),
                     }),
                     StatSource::BUFF => Origin::Buff(BuffTypeId(s.id)),
                     StatSource::ENTITY => Origin::Mod {
@@ -382,12 +382,12 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn curse(stats: &enshwick::stats::Stats, enemy: enshwick::ecs::Entity) {
+    /// fn curse(stats: &enshwick::stats::Stats, enemy: enshwick::Entity) {
     ///     stats.watch(enemy, true);
     /// }
     /// ```
     pub fn watch(&self, entity: Entity, watch: bool) {
-        let _status = (self.host.api().stat_watch)(self.host.handle(), entity.0, u8::from(watch));
+        let _status = (self.host.api().stat_watch)(self.host.handle(), entity, u8::from(watch));
     }
 }
 
@@ -416,7 +416,7 @@ where
     // shared references.
     let handler = unsafe { &*user.cast::<F>() };
     let change = StatChange {
-        entity: Entity(change.entity),
+        entity: change.entity,
         stat: Stat::from_ref(change.stat),
         old: change.old,
         new: change.new,

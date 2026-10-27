@@ -6,8 +6,8 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::events::Kind;
     use enshwick::game_events::{
         AcceptOfferedInteractionEvent, AttackCategoryMask, BuildingPickUpEvent, BuildingPlaceEvent,
@@ -124,8 +124,8 @@ mod tests {
         let mut credit = [0u8; 8];
         credit[4..].copy_from_slice(&6u32.to_le_bytes());
         let loader = host()
-            .component(77, HISTORY, &history)
-            .component(77, CREDIT, &credit)
+            .component(Entity(77), HISTORY, &history)
+            .component(Entity(77), CREDIT, &credit)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };

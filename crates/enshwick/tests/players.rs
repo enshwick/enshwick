@@ -31,8 +31,8 @@ mod tests {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
-            entity,
-            key,
+            entity: enshwick::Entity(entity),
+            key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: u8::try_from(name.len()).unwrap(),
             name: bytes,
@@ -54,12 +54,19 @@ mod tests {
         let world = WORLD.get().unwrap();
 
         assert_eq!(
-            world.player_by_key(9).map(|p| p.name).as_deref(),
+            world
+                .player_by_key(enshwick::PlayerKey::new(9))
+                .map(|p| p.name)
+                .as_deref(),
             Some("Bob")
         );
-        assert!(world.player_by_key(1).is_none());
-        let keys: Vec<u64> = world.players_named("ANN").iter().map(|p| p.key).collect();
-        assert_eq!(keys, [7, 8]);
+        assert!(world.player_by_key(enshwick::PlayerKey::new(1)).is_none());
+        let keys: Vec<enshwick::PlayerKey> =
+            world.players_named("ANN").iter().map(|p| p.key).collect();
+        assert_eq!(
+            keys,
+            [enshwick::PlayerKey::new(7), enshwick::PlayerKey::new(8)]
+        );
         assert!(world.players_named("Bo").is_empty());
     }
 }

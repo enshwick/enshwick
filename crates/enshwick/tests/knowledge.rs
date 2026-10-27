@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::events::KnowledgeChanged;
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeType, Scope};
     use enshwick::world::WorldError;
@@ -23,7 +23,12 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = KNOWLEDGE.set(load.knowledge());
             load.on::<KnowledgeChanged>(|changed| {
-                enshwick::info!("{} of {} is {}", changed.id, changed.entity, changed.value);
+                enshwick::info!(
+                    "{} of {} is {}",
+                    changed.id,
+                    changed.entity.0,
+                    changed.value
+                );
             })?;
             Ok(Self)
         }
@@ -94,7 +99,7 @@ mod tests {
 
         let changed = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
-            entity: 2,
+            entity: Entity(2),
             id: 0x1d,
             value: 3,
         };

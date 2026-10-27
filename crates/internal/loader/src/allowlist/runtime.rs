@@ -205,7 +205,7 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
                 .iter()
                 .map(|p| Online {
                     name: crate::console::player_name(p),
-                    key: p.key,
+                    key: p.key.get(),
                     admin: crate::console::player_is_admin(p),
                 })
                 .collect()

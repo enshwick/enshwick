@@ -2,8 +2,8 @@
 
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, PlayerInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -112,8 +112,8 @@ pub(crate) fn the_console() -> PlayerInfo {
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: 0,
-        key: 0,
+        entity: Entity(0),
+        key: enshwick::PlayerKey::new(0),
         permissions: PlayerInfo::CAN_KICK_BAN,
         name_len: 7,
         name,
@@ -337,8 +337,8 @@ fn ui_demo(loader: &Loader, name: &str) -> String {
         return texts::fill("ui-demo.player", &[("name", name)]);
     };
     match crate::net::ui_demo(
-        player.key,
-        crate::world::fixed_position(loader, Entity(player.entity)),
+        player.key.get(),
+        crate::world::fixed_position(loader, player.entity),
     ) {
         Ok(()) => texts::fill("ui-demo.opening", &[("name", name)]),
         Err(_) => texts::fill("ui-demo.no-client", &[("name", name)]),

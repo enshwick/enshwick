@@ -1,5 +1,5 @@
 use crate::abi::ItemData;
-use crate::ecs::Entity;
+use crate::{Entity, ItemId};
 
 /// A slot: a sub-inventory entity and a slot index in it, as the game packs
 /// it, `entity | index << 32`.
@@ -7,7 +7,7 @@ use crate::ecs::Entity;
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::SlotRef;
 ///
 /// let slot = SlotRef::new(Entity(0x41), 3);
@@ -83,10 +83,10 @@ impl InventoryCategory {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
-/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: 0, count: 0, pide: None };
+/// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0), count: 0, pide: None };
 /// assert!(slot.is_empty());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
@@ -96,7 +96,7 @@ pub struct Slot {
     /// The sub-inventory's category.
     pub category: InventoryCategory,
     /// The item id, 0 for none.
-    pub item: u32,
+    pub item: ItemId,
     /// How many.
     pub count: u32,
     /// The item's own entity, for items with durability or a level.
@@ -111,7 +111,7 @@ impl Slot {
     /// See [`Slot`].
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.item == 0 || self.count == 0
+        self.item.get() == 0 || self.count == 0
     }
 }
 
@@ -120,14 +120,14 @@ impl Slot {
 /// # Examples
 ///
 /// ```
-/// fn stackable(inventories: &enshwick::inventory::Inventories, item: u32) -> bool {
+/// fn stackable(inventories: &enshwick::inventory::Inventories, item: enshwick::ItemId) -> bool {
 ///     inventories.item_info(item).is_some_and(|info| info.max_stack_size > 1 && !info.has_pide())
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ItemInfo {
     /// The item id.
-    pub id: u32,
+    pub id: ItemId,
     /// How many fit one stack.
     pub max_stack_size: u16,
     /// `ItemInfo` flags, see [`ItemData`].

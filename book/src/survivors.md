@@ -73,7 +73,7 @@ its id, its vanilla staff and the template the staff places;
 use enshwick::survivors::{SummonVerdict, WorkshopSurvivor};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    const MY_STAFF: u32 = 0x5e01;
+    const MY_STAFF: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
     let smith = WorkshopSurvivor::find("blacksmith")
         .ok_or_else(|| enshwick::Off::new("no blacksmith"))?;
     load.add_summon_item(MY_STAFF, smith.id())?;

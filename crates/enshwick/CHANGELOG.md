@@ -37,6 +37,21 @@ Each entry names the pull request that made the change.
   in plain words, without Rust paths (#604).
 - Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
   rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
+- Breaking: ids have their own types across the ABI and the safe API.
+  `Entity`, `ItemId`, `PlayerKey` and `RecipeId` live in the ABI module,
+  re-exported from the crate root, and the C header declares them as
+  `EnshwickEntity`, `EnshwickItemId`, `EnshwickPlayerKey` and
+  `EnshwickRecipeId`; `ecs::Entity` is now `enshwick::Entity`. Account keys
+  (`Player::key`, `Peer::Player`, actions' player lists,
+  `Knowledge::grant_account`, `World::account_action` and the allowlist),
+  item ids (inventory ops and slots, drops, interactions, vetoes, summons,
+  `ItemInstance`, terrain materials) and recipe ids (`CraftRequest`,
+  `CraftRecipeEvent`) take them, and the fake host's methods do too.
+  `affixes::AffixId` names an affix in this process (`Load::define_affix`,
+  `Affixes::info`, `Line::affix`), and `world::SkillNode` a skill node
+  (`Skill::node`). `Summon::ammo` is an `Option`. Point and event schemas
+  name the four ABI ids as built-in types, so `cargo enshwick point` writes
+  them as the API's types (#608).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
   `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
   `load.on_game`. `events::Kind` is the one trait `on` takes; the loader

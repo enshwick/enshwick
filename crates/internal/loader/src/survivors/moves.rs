@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{BedCheck, Header};
-use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, read_ptr_at};
 
 use crate::locks::Relock;
@@ -172,8 +172,8 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
     let check = BedCheck {
         header: Header::of::<BedCheck>(),
         survivor,
-        entity,
-        bed,
+        entity: Entity(entity),
+        bed: Entity(bed),
         // SAFETY: `saved` and `transform` are null or the survivor's live
         // components, which the behaviour context holds while it runs.
         home: unsafe { home(saved, transform) },

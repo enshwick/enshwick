@@ -13,7 +13,7 @@ unsafe extern "system" fn wider(zone: *mut AltarZone, _user: *mut c_void) {
 unsafe extern "system" fn broken(zone: *mut AltarZone, _user: *mut c_void) {
     // SAFETY: the loader's zone, writable for the call.
     let zone = unsafe { &mut *zone };
-    zone.altar = 1;
+    zone.altar = enshwick::Entity(1);
     zone.grow = -5;
     zone.height = 0;
 }
@@ -28,7 +28,7 @@ unsafe extern "system" fn lists(zone: *mut AltarZone, _user: *mut c_void) {
 fn vanilla() -> AltarZone {
     AltarZone {
         header: Header::of::<AltarZone>(),
-        altar: 4096,
+        altar: enshwick::Entity(4096),
         level: 2,
         reserved: [0; 3],
         grow: 0,
@@ -170,7 +170,7 @@ fn an_upright_altar_reports_its_zone_and_levels() {
         Some(&[20.0; 3]),
         Some(&[[40.0; 3]].into_iter().collect()),
     );
-    assert_eq!(altar.entity, 7);
+    assert_eq!(altar.entity, enshwick::Entity(7));
     assert_eq!(altar.level, 1);
     assert_eq!(altar.tilted, 0);
     assert_eq!(

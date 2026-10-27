@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header, ItemId};
 
 /// A game system asking which entity is a survivor, as
 /// [`HostApi::survivor_lookup`](super::HostApi::survivor_lookup) hands it to the mod that answers.
@@ -19,9 +19,9 @@ use crate::abi::Header;
 /// let lookup = SurvivorLookup {
 ///     header: Header::of::<SurvivorLookup>(),
 ///     survivor: 0x47a1_5e4a,
-///     vanilla: 4096,
+///     vanilla: enshwick::Entity(4096),
 ///     purpose: SurvivorLookup::SPAWN,
-///     entity: 0,
+///     entity: enshwick::Entity(0),
 ///     cell: [10, 0, 10],
 ///     bed_of: None,
 ///     token: core::ptr::null_mut(),
@@ -36,16 +36,16 @@ pub struct SurvivorLookup {
     /// The survivor's id.
     pub survivor: u32,
     /// The game's own answer, 0 for none.
-    pub vanilla: u32,
+    pub vanilla: Entity,
     /// Who asks; one of the constants on this type.
     pub purpose: u32,
     /// The entity the asker works on, as its purpose says; 0 for none.
-    pub entity: u32,
+    pub entity: Entity,
     /// The cell its purpose names.
     pub cell: [i64; 3],
     /// The bed an entity sleeps in, 0 for none; valid during the call with
     /// `token`.
-    pub bed_of: Option<unsafe extern "system" fn(token: *mut c_void, entity: u32) -> u32>,
+    pub bed_of: Option<unsafe extern "system" fn(token: *mut c_void, entity: Entity) -> Entity>,
     /// The argument of `bed_of`.
     pub token: *mut c_void,
 }
@@ -82,8 +82,11 @@ impl SurvivorLookup {
 
 /// The mod's survivor lookup: the call and the pointer given at
 /// registration; returns 1 with the answer in `out`, or 0 for the game's own.
-pub type SurvivorLookupFn =
-    unsafe extern "system" fn(call: *const SurvivorLookup, user: *mut c_void, out: *mut u32) -> u8;
+pub type SurvivorLookupFn = unsafe extern "system" fn(
+    call: *const SurvivorLookup,
+    user: *mut c_void,
+    out: *mut Entity,
+) -> u8;
 
 /// A survivor's own check that its bed is still its, after the game kept it,
 /// as [`HostApi::survivor_bed_check`](super::HostApi::survivor_bed_check) hands it on. Cells are whole 0.5 m
@@ -94,8 +97,8 @@ pub type SurvivorLookupFn =
 /// ```
 /// use enshwick::abi::{BedCheck, Header};
 ///
-/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: 4096, bed: 4100, home: [0; 3], bed_at: [4, 0, 4] };
-/// assert_eq!(check.bed, 4100);
+/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: enshwick::Entity(4096), bed: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
+/// assert_eq!(check.bed, enshwick::Entity(4100));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -105,9 +108,9 @@ pub struct BedCheck {
     /// The survivor's id.
     pub survivor: u32,
     /// The survivor's entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// The bed.
-    pub bed: u32,
+    pub bed: Entity,
     /// Where the survivor belongs: its saved spawn cell, or where it stands.
     pub home: [i64; 3],
     /// Where the bed stands.
@@ -130,12 +133,12 @@ pub type BedCheckFn = unsafe extern "system" fn(check: *const BedCheck, user: *m
 ///
 /// let summon = Summon {
 ///     header: Header::of::<Summon>(),
-///     item: 0x5e01,
-///     ammo: 0,
+///     item: enshwick::ItemId::new(0x5e01),
+///     ammo: enshwick::ItemId::new(0),
 ///     template: [0; 16],
 ///     target: [0; 3],
 ///     slot: 0x3_0000_0041,
-///     pide: 900,
+///     pide: enshwick::Entity(900),
 ///     meter: [2, 3],
 ///     consumed: 0,
 ///     reserved: [0; 3],
@@ -148,9 +151,9 @@ pub struct Summon {
     /// Size and version of this struct.
     pub header: Header,
     /// The item used.
-    pub item: u32,
+    pub item: ItemId,
     /// The ammunition it used, 0 for none.
-    pub ammo: u32,
+    pub ammo: ItemId,
     /// The template GUID it places, in file order.
     pub template: [u8; 16],
     /// The target cell.
@@ -158,7 +161,7 @@ pub struct Summon {
     /// The slot the used item lies in, `sub-inventory | index << 32`.
     pub slot: u64,
     /// The used item's own entity, 0 for an item without one.
-    pub pide: u32,
+    pub pide: Entity,
     /// The used item's meter as clients see it, current and maximum;
     /// `[0, 0]` for an item without one.
     pub meter: [u16; 2],

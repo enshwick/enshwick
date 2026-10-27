@@ -1,10 +1,10 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
+use crate::Entity;
 use crate::abi::{
     BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     VoxelRegion, VoxelWrite,
 };
-use crate::ecs::Entity;
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
 use crate::{Host, ItemId};
@@ -152,7 +152,7 @@ pub struct Transaction {
     host: Host,
     changes: Vec<Change>,
     /// The character of the player it acts for, 0 for the mod's own.
-    actor: u32,
+    actor: Entity,
 }
 
 /// A change as the loader takes it, with what it points at.
@@ -344,8 +344,8 @@ impl Transaction {
     pub fn place_block(mut self, shape: ItemId, material: ItemId, at: WorldTransform) -> Self {
         self.changes.push(Change::Block(BlockPlace {
             header: Header::of::<BlockPlace>(),
-            shape: shape.get(),
-            material: material.get(),
+            shape,
+            material,
             position: at.position,
             rotation: at.orientation,
         }));
@@ -377,7 +377,7 @@ impl Transaction {
     pub fn place_prop(mut self, item: ItemId, at: WorldTransform) -> Self {
         self.changes.push(Change::PlaceProp(PropPlace {
             header: Header::of::<PropPlace>(),
-            item: item.get(),
+            item,
             reserved: 0,
             position: at.position,
             orientation: at.orientation,
@@ -401,7 +401,7 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn tidy(world: enshwick::world::World, crate_entity: Entity) -> bool {
     ///     world.transaction().remove_prop(crate_entity).commit().is_ok()
@@ -410,7 +410,7 @@ impl Transaction {
     pub fn remove_prop(mut self, entity: Entity) -> Self {
         self.changes.push(Change::RemoveProp(PropRemove {
             header: Header::of::<PropRemove>(),
-            entity: entity.0,
+            entity,
             flags: 0,
         }));
         self
@@ -428,7 +428,7 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn clear_ruin(world: enshwick::world::World, ruined: Entity) -> bool {
     ///     world.transaction().remove_prop_discarding_state(ruined).commit().is_ok()
@@ -437,7 +437,7 @@ impl Transaction {
     pub fn remove_prop_discarding_state(mut self, entity: Entity) -> Self {
         self.changes.push(Change::RemoveProp(PropRemove {
             header: Header::of::<PropRemove>(),
-            entity: entity.0,
+            entity,
             flags: PropRemove::DISCARD_STATE,
         }));
         self
@@ -493,7 +493,7 @@ impl Transaction {
         let count = u32::try_from(ops.len()).map_err(|_| WorldError::Refused)?;
         let mut id = 0u64;
         let api = self.host.api();
-        let status = if self.actor == 0 {
+        let status = if self.actor.is_none() {
             (api.transaction_commit)(self.host.handle(), ops.as_ptr(), count, &raw mut id)
         } else {
             (api.transaction_commit_for)(
@@ -518,7 +518,7 @@ impl World {
         Transaction {
             host: self.0.host,
             changes: Vec::new(),
-            actor: 0,
+            actor: Entity::NONE,
         }
     }
 
@@ -543,7 +543,7 @@ impl World {
     /// ```
     pub fn transaction_for(self, player: &Player) -> Transaction {
         Transaction {
-            actor: player.entity.0,
+            actor: player.entity,
             ..self.transaction()
         }
     }
@@ -601,7 +601,7 @@ impl World {
         {
             return Vec::new();
         }
-        let mut raw = vec![0u32; count as usize];
+        let mut raw = vec![Entity::NONE; count as usize];
         let capacity = u32::try_from(raw.len()).unwrap_or(u32::MAX);
         if (api.transaction_entities)(
             host.handle(),
@@ -614,7 +614,7 @@ impl World {
             return Vec::new();
         }
         raw.truncate(count as usize);
-        raw.into_iter().map(Entity).collect()
+        raw
     }
 
     /// Where transaction `id` of this mod stands; `None` for an id the

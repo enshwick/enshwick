@@ -1,8 +1,8 @@
 //! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
+use enshwick::Entity;
 use enshwick::abi as api_frame;
 use enshwick::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
-use enshwick::ecs::Entity;
 
 use crate::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
@@ -11,14 +11,12 @@ use crate::locks::Relock;
 
 pub(crate) extern "system" fn component(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     type_hash: u32,
     out: *mut *const core::ffi::c_void,
 ) -> Status {
     entry("component", || {
-        match caller(me)
-            .and_then(|loader| crate::world::component(loader, Entity(entity), type_hash))
-        {
+        match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
             // SAFETY: `HostApi::component` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.
@@ -30,11 +28,11 @@ pub(crate) extern "system" fn component(
 
 pub(crate) extern "system" fn entity_template(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     out: *mut [u8; 16],
 ) -> Status {
     entry("entity_template", || {
-        match caller(me).and_then(|loader| crate::world::template(loader, Entity(entity))) {
+        match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
             // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
             // pointing at a writable, aligned `[u8; 16]` that no other thread
             // touches during the call.
@@ -46,7 +44,7 @@ pub(crate) extern "system" fn entity_template(
 
 pub(crate) extern "system" fn player(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     out: *mut api_frame::PlayerInfo,
 ) -> Status {
     entry("player", || {
@@ -100,25 +98,25 @@ pub(crate) extern "system" fn server_world() -> u64 {
     entry("server_world", crate::world::server_world)
 }
 
-pub(crate) extern "system" fn chat(me: ModHandle, to: u64, message: Str) -> Status {
+pub(crate) extern "system" fn chat(me: ModHandle, to: enshwick::PlayerKey, message: Str) -> Status {
     entry("chat", || {
         let Some(message) = text(message) else {
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(_) => crate::chat::send(to, message),
+            Ok(_) => crate::chat::send(to.get(), message),
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) -> Status {
+pub(crate) extern "system" fn set_label(me: ModHandle, entity: Entity, label: Str) -> Status {
     entry("set_label", || {
         let Some(label) = text(label) else {
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(loader) => crate::label::set(loader, Entity(entity), label),
+            Ok(loader) => crate::label::set(loader, entity, label),
             Err(status) => status,
         }
     })
@@ -284,9 +282,9 @@ pub(crate) extern "system" fn entities(
     })
 }
 
-pub(crate) extern "system" fn destroy(me: ModHandle, entity: u32) -> Status {
+pub(crate) extern "system" fn destroy(me: ModHandle, entity: Entity) -> Status {
     entry("destroy", || {
-        match caller(me).and_then(|loader| crate::entities::destroy(loader, Entity(entity))) {
+        match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -345,13 +343,13 @@ pub(crate) extern "system" fn map_markers(
 
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     type_hash: u32,
     out: *mut *mut core::ffi::c_void,
 ) -> Status {
     entry("component_write", || {
         match caller_index(me).and_then(|(loader, index)| {
-            let data = crate::writes::component_mut(loader, entity, type_hash)?;
+            let data = crate::writes::component_mut(loader, entity.0, type_hash)?;
             crate::conflicts::note_write(type_hash, index);
             Ok(data)
         }) {
@@ -408,7 +406,7 @@ pub(crate) extern "system" fn teleport(
 pub(crate) extern "system" fn spawn(
     me: ModHandle,
     request: *const enshwick::abi::SpawnRequest,
-    out: *mut u32,
+    out: *mut Entity,
 ) -> Status {
     entry("spawn", || {
         // SAFETY: the caller passes null or a request with its header; an
@@ -420,21 +418,21 @@ pub(crate) extern "system" fn spawn(
         };
         match caller(me).and_then(|loader| crate::spawns::spawn(loader, &request)) {
             // SAFETY: `HostApi::spawn` has the mod pass `out` null or pointing
-            // at a writable, aligned `u32` that no other thread touches during
+            // at a writable, aligned `Entity` that no other thread touches during
             // the call.
-            Ok(entity) => unsafe { put(out, entity) },
+            Ok(entity) => unsafe { put(out, Entity(entity)) },
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
+pub(crate) extern "system" fn notify(me: ModHandle, key: enshwick::PlayerKey, text: Str) -> Status {
     entry("notify", || {
         // SAFETY: the text is borrowed for the call.
         let Some(text) = (unsafe { text.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        match caller(me).and_then(|loader| crate::notices::send(loader, key, text)) {
+        match caller(me).and_then(|loader| crate::notices::send(loader, key.get(), text)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -768,7 +766,7 @@ pub(crate) extern "system" fn world_persists(
 pub(crate) extern "system" fn account_action(
     me: ModHandle,
     action: AccountActionType,
-    account: u64,
+    account: enshwick::PlayerKey,
 ) -> Status {
     entry("account_action", || {
         let act = match action {
@@ -777,7 +775,9 @@ pub(crate) extern "system" fn account_action(
             AccountActionType::UN_BAN => Act::Unban,
             _ => return Status::BAD_ARGS,
         };
-        match caller(me).and_then(|loader| crate::console::account_action(loader, act, account)) {
+        match caller(me)
+            .and_then(|loader| crate::console::account_action(loader, act, account.get()))
+        {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -785,9 +785,13 @@ pub(crate) extern "system" fn account_action(
 }
 
 /// `HostApi::allowlist_set`: lists `account` on the allowlist or takes it off.
-pub(crate) extern "system" fn allowlist_set(me: ModHandle, account: u64, listed: u8) -> Status {
+pub(crate) extern "system" fn allowlist_set(
+    me: ModHandle,
+    account: enshwick::PlayerKey,
+    listed: u8,
+) -> Status {
     entry("allowlist_set", || {
-        if account == 0 || listed > 1 {
+        if account == enshwick::PlayerKey::new(0) || listed > 1 {
             return Status::BAD_ARGS;
         }
         let (loader, record) = match calling(me) {
@@ -796,7 +800,7 @@ pub(crate) extern "system" fn allowlist_set(me: ModHandle, account: u64, listed:
             Err(status) => return status,
         };
         let who = format!("the mod {}", record.id);
-        match crate::allowlist::set(loader, account, listed == 1, None, &who) {
+        match crate::allowlist::set(loader, account.get(), listed == 1, None, &who) {
             Ok(_) => Status::OK,
             Err(e) => {
                 crate::log!(WARN, "allowlist: {who} changed nothing: {e}");
@@ -809,11 +813,11 @@ pub(crate) extern "system" fn allowlist_set(me: ModHandle, account: u64, listed:
 /// `HostApi::allowlist_has`: whether the allowlist lists `account`.
 pub(crate) extern "system" fn allowlist_has(
     me: ModHandle,
-    account: u64,
+    account: enshwick::PlayerKey,
     listed: *mut u8,
 ) -> Status {
     entry("allowlist_has", || {
-        if account == 0 || listed.is_null() {
+        if account == enshwick::PlayerKey::new(0) || listed.is_null() {
             return Status::BAD_ARGS;
         }
         let loader = match caller(me) {
@@ -821,7 +825,7 @@ pub(crate) extern "system" fn allowlist_has(
             Ok(_) => return Status::MISSING,
             Err(status) => return status,
         };
-        let has = crate::allowlist::has(loader, account);
+        let has = crate::allowlist::has(loader, account.get());
         // SAFETY: the caller passes `listed` writable for one byte for the
         // call, as `HostApi::allowlist_has` states; `put` refuses null.
         unsafe { put(listed, u8::from(has)) }

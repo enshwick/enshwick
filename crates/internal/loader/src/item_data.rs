@@ -22,8 +22,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, HookFlags, Status};
-use enshwick::ecs::Entity;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::Next;

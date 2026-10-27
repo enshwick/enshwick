@@ -1,8 +1,8 @@
 //! Host functions for altars, survivors, stats, affixes, buffs, knowledge, game rates and the game's checks.
 
+use enshwick::Entity;
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, RateId, Status, Str};
-use enshwick::ecs::Entity;
 
 use crate::host::entries::mods::list;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
@@ -216,7 +216,7 @@ pub(crate) extern "system" fn stat_info(
 
 pub(crate) extern "system" fn stat_value(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     stat: u32,
     out: *mut f32,
 ) -> Status {
@@ -224,7 +224,7 @@ pub(crate) extern "system" fn stat_value(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::stats::value(Entity(entity), stat) {
+        match crate::stats::value(entity, stat) {
             // SAFETY: `HostApi::stat_value` has the mod pass `out` null or
             // pointing at a writable, aligned `f32` that no other thread
             // touches during the call.
@@ -295,7 +295,7 @@ pub(crate) extern "system" fn stats_changed(
 
 pub(crate) extern "system" fn stat_sources(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     stat: u32,
     out: *mut api_frame::StatSource,
     capacity: u32,
@@ -306,7 +306,7 @@ pub(crate) extern "system" fn stat_sources(
             Ok(loader) => loader,
             Err(status) => return status,
         };
-        match crate::stats::sources(loader, Entity(entity), stat) {
+        match crate::stats::sources(loader, entity, stat) {
             // SAFETY: `HostApi::stat_sources` has the mod pass `out` null or
             // pointing at `capacity` writable, aligned `StatSource`s, and
             // `count` null or pointing at a writable, aligned `u32`, neither
@@ -317,12 +317,12 @@ pub(crate) extern "system" fn stat_sources(
     })
 }
 
-pub(crate) extern "system" fn stat_watch(me: ModHandle, entity: u32, watch: u8) -> Status {
+pub(crate) extern "system" fn stat_watch(me: ModHandle, entity: Entity, watch: u8) -> Status {
     entry("stat_watch", || {
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::stats::watch(Entity(entity), watch != 0) {
+        match crate::stats::watch(entity, watch != 0) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -383,8 +383,8 @@ pub(crate) extern "system" fn affix_roll(
 
 pub(crate) extern "system" fn item_lines(
     me: ModHandle,
-    pide: u32,
-    item: u32,
+    pide: Entity,
+    item: enshwick::ItemId,
     out: *mut api_frame::ItemLine,
     capacity: u32,
     count: *mut u32,
@@ -393,7 +393,7 @@ pub(crate) extern "system" fn item_lines(
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::stats::item_lines(pide, item) {
+        match crate::stats::item_lines(pide.0, item.get()) {
             // SAFETY: `HostApi::item_lines` has the mod pass `out` null or
             // pointing at `capacity` writable, aligned `ItemLine`s, and `count`
             // null or pointing at a writable, aligned `u32`, neither touched by
@@ -434,9 +434,13 @@ pub(crate) extern "system" fn affix_info(
     })
 }
 
-pub(crate) extern "system" fn summon_item(me: ModHandle, item: u32, survivor: u32) -> Status {
+pub(crate) extern "system" fn summon_item(
+    me: ModHandle,
+    item: enshwick::ItemId,
+    survivor: u32,
+) -> Status {
     entry("summon_item", || match caller_index(me) {
-        Ok((loader, _)) => crate::survivors::register_item(loader, item, survivor),
+        Ok((loader, _)) => crate::survivors::register_item(loader, item.get(), survivor),
         Err(status) => status,
     })
 }
@@ -683,13 +687,13 @@ pub(crate) extern "system" fn buff_types(
 
 pub(crate) extern "system" fn buffs(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     out: *mut enshwick::abi::ActiveBuff,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     entry("buffs", || {
-        match caller(me).and_then(|loader| crate::buffs::of(loader, Entity(entity))) {
+        match caller(me).and_then(|loader| crate::buffs::of(loader, entity)) {
             // SAFETY: `HostApi::buffs` has the mod pass `out` null or pointing
             // at `capacity` entries of its version of `ActiveBuff`, each
             // writable for the size the first entry's header states, and
@@ -722,12 +726,12 @@ pub(crate) extern "system" fn apply_buff(
 
 pub(crate) extern "system" fn remove_buff(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     id: u32,
     removed: *mut u8,
 ) -> Status {
     entry("remove_buff", || {
-        match caller(me).and_then(|loader| crate::buffs::remove(loader, Entity(entity), id)) {
+        match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
             // SAFETY: `HostApi::remove_buff` has the mod pass `removed` null or
             // pointing at a writable, aligned `u8` that no other thread touches
             // during the call.
@@ -739,12 +743,12 @@ pub(crate) extern "system" fn remove_buff(
 
 pub(crate) extern "system" fn knowledge(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     id: u32,
     out: *mut enshwick::abi::KnowledgeInfo,
 ) -> Status {
     entry("knowledge", || {
-        match caller(me).and_then(|loader| crate::knowledge::value(loader, Entity(entity), id)) {
+        match caller(me).and_then(|loader| crate::knowledge::value(loader, entity, id)) {
             // SAFETY: `HostApi::knowledge` has the mod pass `out` null or
             // pointing at its version of `KnowledgeInfo`, writable for the size
             // its header states, that no other thread touches during the call.
@@ -756,14 +760,14 @@ pub(crate) extern "system" fn knowledge(
 
 pub(crate) extern "system" fn revoke_knowledge(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     id: u32,
     kind: u32,
     value: u32,
 ) -> Status {
     entry("revoke_knowledge", || {
         match caller(me)
-            .and_then(|loader| crate::knowledge::changes::revoke(loader, entity, id, kind, value))
+            .and_then(|loader| crate::knowledge::changes::revoke(loader, entity.0, id, kind, value))
         {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -773,7 +777,7 @@ pub(crate) extern "system" fn revoke_knowledge(
 
 pub(crate) extern "system" fn account_knowledge(
     me: ModHandle,
-    key: u64,
+    key: enshwick::PlayerKey,
     id: u32,
     kind: u32,
     value: u32,
@@ -781,7 +785,7 @@ pub(crate) extern "system" fn account_knowledge(
 ) -> Status {
     entry("account_knowledge", || {
         match caller(me).and_then(|loader| {
-            crate::knowledge::changes::for_account(loader, key, id, kind, value, revoke != 0)
+            crate::knowledge::changes::for_account(loader, key.get(), id, kind, value, revoke != 0)
         }) {
             Ok(()) => Status::OK,
             Err(status) => status,
@@ -791,13 +795,14 @@ pub(crate) extern "system" fn account_knowledge(
 
 pub(crate) extern "system" fn grant_knowledge(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     id: u32,
     kind: u32,
     value: u32,
 ) -> Status {
     entry("grant_knowledge", || {
-        match caller(me).and_then(|loader| crate::knowledge::grant(loader, entity, id, kind, value))
+        match caller(me)
+            .and_then(|loader| crate::knowledge::grant(loader, entity.0, id, kind, value))
         {
             Ok(()) => Status::OK,
             Err(status) => status,

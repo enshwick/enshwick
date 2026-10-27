@@ -14,7 +14,7 @@ fn all(from: u32, to: u32) -> Op {
 fn give(to: u32) -> Op {
     Op::Give {
         to: Entity(to),
-        item: 7,
+        item: crate::ItemId::new(7),
         count: 1,
         fill: None,
     }
@@ -39,7 +39,7 @@ fn batches_are_checked_against_the_game_limits() {
     let renew = Op::Renew {
         slot: SlotRef::new(Entity(41), 2),
         root: Entity(40),
-        item: 7,
+        item: crate::ItemId::new(7),
         count: 1,
         fill: Fill::FULL,
     };
@@ -55,7 +55,7 @@ fn batches_are_checked_against_the_game_limits() {
             .with(Op::Renew {
                 slot: SlotRef::new(Entity(41), 2),
                 root: Entity::NONE,
-                item: 7,
+                item: crate::ItemId::new(7),
                 count: 1,
                 fill: Fill::FULL,
             })
@@ -64,7 +64,7 @@ fn batches_are_checked_against_the_game_limits() {
     );
     let zero = Op::Give {
         to: Entity(2),
-        item: 7,
+        item: crate::ItemId::new(7),
         count: 0,
         fill: None,
     };
@@ -120,7 +120,7 @@ fn requests_notify_for_gives_and_credit_the_first_destination() {
     let paid = Batch::new()
         .with(Op::Take {
             from: Entity(3),
-            item: 1,
+            item: crate::ItemId::new(1),
             count: 1,
         })
         .with(give(3))

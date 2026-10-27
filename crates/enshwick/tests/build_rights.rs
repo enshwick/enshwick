@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::world::{BuildRefusal, Player, PlayerPermissions, World, WorldError};
     use enshwick::{Load, Mod, Off};
 
@@ -34,8 +34,8 @@ mod tests {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
-            entity,
-            key: u64::from(entity),
+            entity: Entity(entity),
+            key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions,
             name_len: 0,
             name: [0; 64],
@@ -46,7 +46,7 @@ mod tests {
         Player {
             entity: Entity(entity),
             slot: entity,
-            key: u64::from(entity),
+            key: enshwick::PlayerKey::new(u64::from(entity)),
             permissions: 0,
             name: String::new(),
         }

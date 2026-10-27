@@ -16,8 +16,12 @@ pub(crate) extern "system" fn inventory_open(_me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn item_info(_me: ModHandle, item: u32, out: *mut ItemData) -> Status {
-    found(with(None, |s| s.host.items.get(&item).copied()), out)
+pub(crate) extern "system" fn item_info(
+    _me: ModHandle,
+    item: crate::ItemId,
+    out: *mut ItemData,
+) -> Status {
+    found(with(None, |s| s.host.items.get(&item.get()).copied()), out)
 }
 
 pub(crate) extern "system" fn inventory_submit(
@@ -44,7 +48,7 @@ pub(crate) extern "system" fn inventory_submit(
             request: SubmittedRequest {
                 ops: ops.to_vec(),
                 flags: request.flags,
-                actor: request.actor,
+                actor: request.actor.0,
             },
             done,
             user: user.expose_provenance(),

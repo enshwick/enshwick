@@ -1,8 +1,8 @@
 //! What a script subscribes to: a loader event, a typed game event, or a
 //! game event read by its reflected type and the fields the script names.
 
+use enshwick::Entity;
 use enshwick::abi::Event;
-use enshwick::ecs::Entity;
 use enshwick::game_events::{Field, RawGameEvent};
 use enshwick::script::{self, EventKind, GameEventKind};
 use enshwick::{Load, Off};

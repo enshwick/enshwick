@@ -80,37 +80,64 @@ fn a_single_roll_slot_that_cannot_hold_its_fields_is_refused() {
 #[test]
 fn invalid_drops_are_refused() {
     let from = Source::bosses();
-    assert!(Drop::new(7, 0.5, from.clone()).check().is_ok());
-    assert!(Drop::new(0, 0.5, from.clone()).check().is_err());
-    assert!(Drop::new(7, 1.5, from.clone()).check().is_err());
-    assert!(Drop::new(7, f64::NAN, from.clone()).check().is_err());
-    assert!(Drop::new(7, 0.5, from.clone()).count(0, 1).check().is_err());
-    assert!(Drop::new(7, 0.5, from.clone()).count(3, 2).check().is_err());
+    assert!(Drop::new(ItemId::new(7), 0.5, from.clone()).check().is_ok());
     assert!(
-        Drop::new(7, 0.5, from.clone())
+        Drop::new(ItemId::new(0), 0.5, from.clone())
+            .check()
+            .is_err()
+    );
+    assert!(
+        Drop::new(ItemId::new(7), 1.5, from.clone())
+            .check()
+            .is_err()
+    );
+    assert!(
+        Drop::new(ItemId::new(7), f64::NAN, from.clone())
+            .check()
+            .is_err()
+    );
+    assert!(
+        Drop::new(ItemId::new(7), 0.5, from.clone())
+            .count(0, 1)
+            .check()
+            .is_err()
+    );
+    assert!(
+        Drop::new(ItemId::new(7), 0.5, from.clone())
+            .count(3, 2)
+            .check()
+            .is_err()
+    );
+    assert!(
+        Drop::new(ItemId::new(7), 0.5, from.clone())
             .meter(1, 5, 5)
             .check()
             .is_ok()
     );
     assert!(
-        Drop::new(7, 0.5, from.clone())
+        Drop::new(ItemId::new(7), 0.5, from.clone())
             .meter(3, 2, 5)
             .check()
             .is_err()
     );
     assert!(
-        Drop::new(7, 0.5, from.clone())
+        Drop::new(ItemId::new(7), 0.5, from.clone())
             .meter(1, 6, 5)
             .check()
             .is_err()
     );
-    assert!(Drop::new(7, 0.5, from).meter(0, 0, 0).check().is_err());
+    assert!(
+        Drop::new(ItemId::new(7), 0.5, from)
+            .meter(0, 0, 0)
+            .check()
+            .is_err()
+    );
 }
 
 #[test]
 fn meters_roll_every_count_between_their_bounds() {
     let dice = Dice(AtomicU64::new(3));
-    let drop = Drop::new(7, 1.0, Source::bosses()).meter(2, 4, 5);
+    let drop = Drop::new(ItemId::new(7), 1.0, Source::bosses()).meter(2, 4, 5);
     let mut seen = [0usize; 6];
     for _ in 0..30_000 {
         let (_, _, fill) = drop.draw(&dice).unwrap();
@@ -133,7 +160,7 @@ fn meters_roll_every_count_between_their_bounds() {
 #[test]
 fn the_chance_holds_over_many_rolls() {
     let dice = Dice(AtomicU64::new(42));
-    let drop = Drop::new(7, 0.1, Source::bosses()).count(2, 4);
+    let drop = Drop::new(ItemId::new(7), 0.1, Source::bosses()).count(2, 4);
     let mut hits = 0;
     for _ in 0..100_000 {
         if let Some((item, n, fill)) = drop.draw(&dice) {
@@ -143,8 +170,8 @@ fn the_chance_holds_over_many_rolls() {
         }
     }
     assert!((9_000..11_000).contains(&hits), "{hits}");
-    let never = Drop::new(7, 0.0, Source::bosses());
-    let always = Drop::new(7, 1.0, Source::bosses());
+    let never = Drop::new(ItemId::new(7), 0.0, Source::bosses());
+    let always = Drop::new(ItemId::new(7), 1.0, Source::bosses());
     for _ in 0..1000 {
         assert_eq!(never.draw(&dice), None);
         assert_eq!(always.draw(&dice), Some((7, 1, None)));
@@ -154,7 +181,11 @@ fn the_chance_holds_over_many_rolls() {
 #[test]
 fn one_of_spreads_over_its_items() {
     let dice = Dice(AtomicU64::new(7));
-    let drop = Drop::one_of(&[1, 2, 3], 1.0, Source::bosses());
+    let drop = Drop::one_of(
+        &[ItemId::new(1), ItemId::new(2), ItemId::new(3)],
+        1.0,
+        Source::bosses(),
+    );
     let mut seen = [0usize; 3];
     for _ in 0..30_000 {
         let (item, _, _) = drop.draw(&dice).unwrap();
@@ -166,7 +197,7 @@ fn one_of_spreads_over_its_items() {
     );
     assert!(Drop::one_of(&[], 0.5, Source::bosses()).check().is_err());
     assert!(
-        Drop::one_of(&[1, 0], 0.5, Source::bosses())
+        Drop::one_of(&[ItemId::new(1), ItemId::new(0)], 0.5, Source::bosses())
             .check()
             .is_err()
     );

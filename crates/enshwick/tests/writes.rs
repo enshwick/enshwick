@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::game_events::Field;
     use enshwick::world::{Meter, World, WorldError, WritableType};
     use enshwick::{Load, Mod, Off};
@@ -84,12 +84,12 @@ mod tests {
             .constant("attribute.level", 40)
             .constant("attribute.experience", 50)
             .constant("attribute.experience_needed_slot", 2)
-            .component(7, 1, &health)
-            .component(7, 2, &stamina)
-            .component(7, 6, &[0; 8])
-            .component(8, 1, &dead)
-            .template(7, [1; 16])
-            .template(8, [2; 16])
+            .component(Entity(7), 1, &health)
+            .component(Entity(7), 2, &stamina)
+            .component(Entity(7), 6, &[0; 8])
+            .component(Entity(8), 1, &dead)
+            .template(Entity(7), [1; 16])
+            .template(Entity(8), [2; 16])
             .refuse_write(7)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Writes)`.
@@ -126,7 +126,7 @@ mod tests {
             bytes.len()
         });
         assert_eq!(size, Ok(8));
-        let flag = |at: usize| loader.component_bytes(7, 6).map(|flags| flags[at]);
+        let flag = |at: usize| loader.component_bytes(Entity(7), 6).map(|flags| flags[at]);
         assert_eq!(flag(1), Some(9));
         assert_eq!(
             world.update(Entity(8), resolved.flags, |_| ()),

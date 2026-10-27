@@ -78,7 +78,7 @@ definition from [the schema](#getting-a-points-definition) in `price`:
 #         pub item: u32,
 #         pub count: u32,
 #         pub player: u64,
-#         pub character: enshwick::ecs::Entity,
+#         pub character: enshwick::Entity,
 #         pub deal: Deal,
 #     }
 # }
@@ -203,7 +203,7 @@ the input struct, the name `<owner id>:<point>`, the mode, the answer's type
 and, when links may refuse, `refusable`. List it under `points` in the
 [manifest](concepts/loader-and-abi.md#the-manifest), so its schema ships with
 the mod and other mods can write their definitions from it. Every field's
-type and the answer's are numbers, `bool`, `enshwick::ecs::Entity`,
+type and the answer's are numbers, `bool`, `enshwick::Entity`,
 `enshwick::content::Guid`, or types of the mod's own with
 [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);
 the doc comments of the point and its fields go into the schema too, each up
@@ -290,11 +290,11 @@ loader. The example's test:
 #         pub item: u32,
 #         pub count: u32,
 #         pub player: u64,
-#         pub character: enshwick::ecs::Entity,
+#         pub character: enshwick::Entity,
 #         pub deal: Deal,
 #     }
 # }
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::points::Decision;
 use price::{Deal, Price};
 

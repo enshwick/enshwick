@@ -19,7 +19,7 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::ecs::Entity;
+//! use enshwick::Entity;
 //! use enshwick::entity_data::Replication;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
@@ -40,8 +40,8 @@
 use core::marker::PhantomData;
 
 use crate::abi::{EntityDataFlags, Status, Str};
-use crate::ecs::Entity;
 pub use crate::item_data::{MAX_VALUE, SetError};
+use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
 /// Who gets a kind's values.
@@ -107,8 +107,8 @@ where
         let status = (self.host.api().item_data_get)(
             self.host.handle(),
             self.kind,
-            entity.0,
-            0,
+            entity,
+            ItemId::new(0),
             buffer.as_mut_ptr(),
             u32::try_from(buffer.len()).unwrap_or(u32::MAX),
             &raw mut len,
@@ -149,7 +149,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn forget(owners: &enshwick::entity_data::EntityData<u64>, chest: Entity) {
     ///     let _removed = owners.remove(chest);
@@ -163,8 +163,8 @@ where
         let status = (self.host.api().item_data_set)(
             self.host.handle(),
             self.kind,
-            entity.0,
-            0,
+            entity,
+            ItemId::new(0),
             bytes.as_ptr(),
             u32::try_from(bytes.len()).unwrap_or(u32::MAX),
         );

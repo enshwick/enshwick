@@ -154,6 +154,19 @@ behind a host function never reaches the mod: the call returns `REFUSED`
 (or zero for a function that returns a value) and the loader logs the
 fault.
 
+## Ids
+
+Struct fields and host function arguments that name a thing of the game
+take an id type, the same size and alignment as its integer. The header
+declares each as a typedef:
+
+| Rust        | C                   | Integer | Names                                       |
+| ----------- | ------------------- | ------- | ------------------------------------------- |
+| `Entity`    | `EnshwickEntity`    | `u32`   | an entity of the world; 0 for none          |
+| `ItemId`    | `EnshwickItemId`    | `u32`   | an item, by the number its item data gives  |
+| `PlayerKey` | `EnshwickPlayerKey` | `u64`   | a player's account, the same every session  |
+| `RecipeId`  | `EnshwickRecipeId`  | `u32`   | a crafting recipe                           |
+
 ## Events
 
 A mod subscribes with

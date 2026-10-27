@@ -450,7 +450,7 @@ impl Primitive {
             Self::F64 => f64::SHAPE,
             Self::Bool => bool::SHAPE,
             Self::Guid => enshwick::content::Guid::SHAPE,
-            Self::Entity => enshwick::ecs::Entity::SHAPE,
+            Self::Entity => enshwick::Entity::SHAPE,
         }
     }
 

@@ -160,7 +160,7 @@ pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<
         .iter()
         .map(|p| Online {
             name: super::tools::name(p),
-            key: p.key,
+            key: p.key.get(),
             admin: super::tools::is_admin(p),
         })
         .collect();

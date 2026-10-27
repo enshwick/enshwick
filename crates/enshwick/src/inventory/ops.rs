@@ -1,5 +1,5 @@
 use crate::abi::{InventoryOp, InventoryRequest};
-use crate::ecs::Entity;
+use crate::{Entity, ItemId};
 
 use super::slots::{Fill, SlotRef};
 use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
@@ -9,7 +9,7 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::Op;
 ///
 /// let loot = Op::MoveAll { from: Entity(40), to: Entity(2), include_special: false };
@@ -22,7 +22,7 @@ pub enum Op {
         /// The inventory.
         to: Entity,
         /// The item id.
-        item: u32,
+        item: ItemId,
         /// How many.
         count: u32,
         /// How full each new item's meter starts; `None` for its
@@ -34,7 +34,7 @@ pub enum Op {
         /// The inventory.
         from: Entity,
         /// The item id.
-        item: u32,
+        item: ItemId,
         /// How many.
         count: u32,
     },
@@ -61,7 +61,7 @@ pub enum Op {
         /// ([`Reader::root`](super::Reader::root)).
         root: Entity,
         /// The new items' id.
-        item: u32,
+        item: ItemId,
         /// How many.
         count: u32,
         /// Their meter's fill.
@@ -184,7 +184,7 @@ impl Op {
                 from: e,
                 item,
                 count,
-            } => !e.is_none() && item != 0 && count != 0 && i32::try_from(count).is_ok(),
+            } => !e.is_none() && item.get() != 0 && count != 0 && i32::try_from(count).is_ok(),
             Self::DestroySlot(slot) => !slot.inventory().is_none(),
             Self::Renew {
                 slot,
@@ -195,7 +195,7 @@ impl Op {
             } => {
                 !slot.inventory().is_none()
                     && !root.is_none()
-                    && item != 0
+                    && item.get() != 0
                     && count != 0
                     && i32::try_from(count).is_ok()
             }
@@ -241,14 +241,14 @@ pub enum BatchError {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{Batch, Op};
 ///
 /// // A trade: 5 coins out, a sword in, or neither.
 /// let player = Entity(2);
 /// let trade = Batch::new()
-///     .with(Op::Take { from: player, item: 0x0c01, count: 5 })
-///     .with(Op::Give { to: player, item: 0x5e01, count: 1, fill: None });
+///     .with(Op::Take { from: player, item: enshwick::ItemId::new(0x0c01), count: 5 })
+///     .with(Op::Give { to: player, item: enshwick::ItemId::new(0x5e01), count: 1, fill: None });
 /// assert_eq!(trade.check(), Ok(()));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -300,11 +300,11 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // As many as fit.
-    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: 7, count: 500, fill: None }).allow_partial();
+    /// let _ = Batch::new().with(Op::Give { to: Entity(2), item: enshwick::ItemId::new(7), count: 500, fill: None }).allow_partial();
     /// ```
     #[must_use]
     pub const fn allow_partial(mut self) -> Self {
@@ -320,7 +320,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let (corpse, player) = (Entity(40), Entity(2));
@@ -342,7 +342,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let _ = Batch::new().with(Op::MoveAll { from: Entity(40), to: Entity(41), include_special: false }).actor(Entity(2));
@@ -398,7 +398,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let mut everything = Batch::new();

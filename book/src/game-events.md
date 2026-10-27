@@ -59,7 +59,7 @@ mod's subscription off until the mod follows. Resolve the type and the fields
 you read once, at init; each `Field` reads its value for the running build:
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let pushed = load.game_event_type("keen::ecs::ApplyPushBackEvent")?;

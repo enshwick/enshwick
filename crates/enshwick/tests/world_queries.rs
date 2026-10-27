@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::events::{ShutdownStarted, WorldLoaded, WorldSaved};
     use enshwick::state::WorldStore;
     use enshwick::world::{ComponentType, World, WorldError};
@@ -48,8 +48,8 @@ mod tests {
         let player = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
-            entity: 2,
-            key: 7,
+            entity: Entity(2),
+            key: enshwick::PlayerKey::new(7),
             permissions: 0,
             name_len: 0,
             name: [0; 64],
@@ -58,9 +58,9 @@ mod tests {
             .type_hash("current_transform", TRANSFORM)
             .type_hash("used_item", 2)
             .type_hash("keen::ecs::NpcBed", BED)
-            .placed(BED, 10, [0.0, 0.0, 30.0])
-            .placed(BED, 11, [3.0, 0.0, 4.0])
-            .placed(TRANSFORM, 2, [0.0, 0.0, 0.0])
+            .placed(BED, Entity(10), [0.0, 0.0, 30.0])
+            .placed(BED, Entity(11), [3.0, 0.0, 4.0])
+            .placed(TRANSFORM, Entity(2), [0.0, 0.0, 0.0])
             .player(player)
             .data_dir(data.to_str().unwrap())
             .world_key("world0-1a2b3c4d")

@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Status, TeleportRequest};
-    use enshwick::ecs::Entity;
     use enshwick::effects::{Effects, NpcCommandType, Spawn, Teleport};
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
@@ -54,7 +54,7 @@ mod tests {
             .type_size(ping, 40)
             .constant("ui_ping_event.sender_entity_id", 8)
             .constant("ui_ping_event.position", 16)
-            .template(5, [5; 16])
+            .template(Entity(5), [5; 16])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Acting)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
@@ -112,7 +112,7 @@ mod tests {
         assert_eq!(spawns[0].1.position, [1 << 32, 2 << 32, 3 << 32]);
         let teleports = loader.teleports();
         assert_eq!(teleports.len(), 1);
-        assert_eq!(teleports[0].entity, 5);
+        assert_eq!(teleports[0].entity, Entity(5));
         assert_eq!(teleports[0].flags, TeleportRequest::BEST_SPAWN);
         assert_eq!(teleports[0].position, [10 << 32, 20 << 32, 30 << 32]);
     }

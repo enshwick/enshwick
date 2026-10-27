@@ -1,9 +1,9 @@
 //! The fake's props: what stands in its world, the state each holds, and how transactions change them.
 
 use super::{FakeHost, FakeTransaction, Installed, table};
+use crate::Entity;
 use crate::ItemId;
 use crate::abi::{PropRemove, Status, TransactionInfo};
-use crate::ecs::Entity;
 use crate::test::FakeChange;
 use crate::world::HeldState;
 
@@ -19,8 +19,8 @@ const STILL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 /// A prop in the fake's world.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct FakeProp {
-    pub(crate) entity: u32,
-    pub(crate) item: u32,
+    pub(crate) entity: Entity,
+    pub(crate) item: ItemId,
     pub(crate) at: [f64; 3],
     pub(crate) orientation: [f32; 4],
     /// The kinds of state it holds, as `TransactionInfo::HOLDS_` bits.
@@ -39,7 +39,7 @@ impl FakeHost {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0, 40.0, 50.0]).install();
     /// assert_eq!(loader.props().len(), 1);
@@ -47,8 +47,8 @@ impl FakeHost {
     #[must_use]
     pub fn prop(mut self, entity: Entity, item: ItemId, at: [f64; 3]) -> Self {
         self.props.push(FakeProp {
-            entity: entity.0,
-            item: item.get(),
+            entity,
+            item,
             at,
             orientation: STILL,
             holds: 0,
@@ -66,13 +66,13 @@ impl FakeHost {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
-    /// let _loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// let _loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// ```
     #[must_use]
-    pub fn item_triggers(mut self, item: u32) -> Self {
-        self.trigger_items.push(item);
+    pub fn item_triggers(mut self, item: ItemId) -> Self {
+        self.trigger_items.push(item.get());
         self
     }
 
@@ -83,11 +83,11 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let _loader = enshwick::test::FakeHost::new().item_grows(30).install();
+    /// let _loader = enshwick::test::FakeHost::new().item_grows(enshwick::ItemId::new(30)).install();
     /// ```
     #[must_use]
-    pub fn item_grows(mut self, item: u32) -> Self {
-        self.growing_items.push(item);
+    pub fn item_grows(mut self, item: ItemId) -> Self {
+        self.growing_items.push(item.get());
         self
     }
 
@@ -99,11 +99,11 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let _loader = enshwick::test::FakeHost::new().item_not_a_prop(30).install();
+    /// let _loader = enshwick::test::FakeHost::new().item_not_a_prop(enshwick::ItemId::new(30)).install();
     /// ```
     #[must_use]
-    pub fn item_not_a_prop(mut self, item: u32) -> Self {
-        self.no_prop_items.push(item);
+    pub fn item_not_a_prop(mut self, item: ItemId) -> Self {
+        self.no_prop_items.push(item.get());
         self
     }
 
@@ -114,11 +114,11 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let _loader = enshwick::test::FakeHost::new().placement_box(30, [-1.0, 0.0, -0.5], [1.0, 2.0, 0.5]).install();
+    /// let _loader = enshwick::test::FakeHost::new().placement_box(enshwick::ItemId::new(30), [-1.0, 0.0, -0.5], [1.0, 2.0, 0.5]).install();
     /// ```
     #[must_use]
-    pub fn placement_box(mut self, item: u32, min: [f32; 3], max: [f32; 3]) -> Self {
-        self.placement_boxes.push((item, min, max));
+    pub fn placement_box(mut self, item: ItemId, min: [f32; 3], max: [f32; 3]) -> Self {
+        self.placement_boxes.push((item.get(), min, max));
         self
     }
 }
@@ -140,7 +140,7 @@ impl Installed {
             s.host
                 .props
                 .iter()
-                .map(|prop| (Entity(prop.entity), ItemId::new(prop.item), prop.at))
+                .map(|prop| (prop.entity, prop.item, prop.at))
                 .collect()
         })
     }
@@ -152,9 +152,9 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// let loader = enshwick::test::FakeHost::new().item_triggers(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// loader.change_trigger_settings(Entity(40));
     /// ```
     pub fn change_trigger_settings(&self, entity: Entity) {
@@ -167,9 +167,9 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item_grows(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
+    /// let loader = enshwick::test::FakeHost::new().item_grows(ItemId::new(30)).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// loader.grow_plant(Entity(40));
     /// ```
     pub fn grow_plant(&self, entity: Entity) {
@@ -184,7 +184,7 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::world::HeldState;
     ///
     /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
@@ -193,7 +193,7 @@ impl Installed {
     pub fn set_prop_state(&self, entity: Entity, kinds: &[HeldState]) {
         let holds = kinds.iter().fold(0, |bits, kind| bits | kind.bit());
         table::with((), |s| {
-            if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity.0) {
+            if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity) {
                 prop.holds = holds;
             }
         });
@@ -203,7 +203,7 @@ impl Installed {
 /// Marks the start state of the prop `entity` changed.
 fn change_start(entity: Entity) {
     table::with((), |s| {
-        if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity.0) {
+        if let Some(prop) = s.host.props.iter_mut().find(|prop| prop.entity == entity) {
             prop.settings_changed = true;
         }
     });
@@ -270,23 +270,25 @@ fn start_bits(host: &FakeHost, prop: &FakeProp, unknown: bool) -> u32 {
         return 0;
     }
     let mut bits = 0;
-    if host.trigger_items.contains(&prop.item) {
+    if host.trigger_items.contains(&prop.item.get()) {
         bits |= TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER;
     }
-    if host.growing_items.contains(&prop.item) {
+    if host.growing_items.contains(&prop.item.get()) {
         bits |= TransactionInfo::HOLDS_GROWTH;
     }
     bits
 }
 
 /// The next entity id the fake hands out.
-fn next_entity(host: &FakeHost) -> u32 {
-    host.props
-        .iter()
-        .map(|prop| prop.entity + 1)
-        .max()
-        .unwrap_or(FIRST_ENTITY)
-        .max(FIRST_ENTITY)
+fn next_entity(host: &FakeHost) -> Entity {
+    Entity(
+        host.props
+            .iter()
+            .map(|prop| prop.entity.0 + 1)
+            .max()
+            .unwrap_or(FIRST_ENTITY)
+            .max(FIRST_ENTITY),
+    )
 }
 
 /// Writes `transaction`'s prop changes, as the loader's step does: every
@@ -303,7 +305,7 @@ pub(crate) fn apply(
                 .iter()
                 .find(|prop| prop.entity == remove.entity)
                 .ok_or((Status::NOT_A_PROP, 0))?;
-            if host.no_prop_items.contains(&prop.item) {
+            if host.no_prop_items.contains(&prop.item.get()) {
                 return Err((Status::NOT_A_PROP, 0));
             }
             let holds = prop.holds | start_bits(host, prop, true);

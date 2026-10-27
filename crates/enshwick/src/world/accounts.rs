@@ -1,5 +1,6 @@
 //! The game's account actions: kick, ban and unban by account.
 
+use crate::PlayerKey;
 use crate::abi::AccountActionType;
 
 use super::{World, WorldError};
@@ -52,13 +53,13 @@ impl World {
     /// ```
     /// use enshwick::world::{AccountAction, World};
     ///
-    /// fn ban_for_cheating(world: &World, key: u64) {
+    /// fn ban_for_cheating(world: &World, key: enshwick::PlayerKey) {
     ///     if let Err(why) = world.account_action(AccountAction::Ban, key) {
     ///         enshwick::warn!("no ban for {key:016x}: {why}");
     ///     }
     /// }
     /// ```
-    pub fn account_action(self, action: AccountAction, key: u64) -> Result<(), WorldError> {
+    pub fn account_action(self, action: AccountAction, key: PlayerKey) -> Result<(), WorldError> {
         WorldError::from_status((self.0.host.api().account_action)(
             self.0.host.handle(),
             action.abi(),
@@ -82,13 +83,13 @@ impl World {
     /// ```
     /// use enshwick::world::World;
     ///
-    /// fn let_in(world: &World, key: u64) {
+    /// fn let_in(world: &World, key: enshwick::PlayerKey) {
     ///     if let Err(why) = world.set_allowlisted(key, true) {
     ///         enshwick::warn!("{key:016x} not listed: {why}");
     ///     }
     /// }
     /// ```
-    pub fn set_allowlisted(self, key: u64, listed: bool) -> Result<(), WorldError> {
+    pub fn set_allowlisted(self, key: PlayerKey, listed: bool) -> Result<(), WorldError> {
         WorldError::from_status((self.0.host.api().allowlist_set)(
             self.0.host.handle(),
             key,
@@ -109,11 +110,11 @@ impl World {
     /// ```
     /// use enshwick::world::World;
     ///
-    /// fn may_join(world: &World, key: u64) -> bool {
+    /// fn may_join(world: &World, key: enshwick::PlayerKey) -> bool {
     ///     world.allowlisted(key).unwrap_or(false)
     /// }
     /// ```
-    pub fn allowlisted(self, key: u64) -> Result<bool, WorldError> {
+    pub fn allowlisted(self, key: PlayerKey) -> Result<bool, WorldError> {
         let mut listed = 0u8;
         WorldError::from_status((self.0.host.api().allowlist_has)(
             self.0.host.handle(),

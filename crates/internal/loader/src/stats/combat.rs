@@ -1,7 +1,7 @@
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::PlayerInfo;
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
@@ -78,11 +78,11 @@ pub(super) fn expire(state: &mut State, now: Instant) {
 /// Watches the players online and forgets the entities nothing keeps
 /// watched or that left the world; whether it forgot any.
 pub(super) fn follow(loader: &Loader, state: &mut State, players: &[PlayerInfo]) -> bool {
-    let online: FxHashSet<u32> = players.iter().map(|p| p.entity).collect();
+    let online: FxHashSet<u32> = players.iter().map(|p| p.entity.0).collect();
     for p in players {
-        let watched = state.watched.entry(p.entity).or_default();
+        let watched = state.watched.entry(p.entity.0).or_default();
         if watched.player.is_none() {
-            watched.player = Some(p.key);
+            watched.player = Some(p.key.get());
             watched.dirty = true;
         }
     }

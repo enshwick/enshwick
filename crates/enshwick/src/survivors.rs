@@ -27,8 +27,8 @@ use crate::abi::{
     BedCheck as RawBedCheck, HostApi, Summon as RawSummon, SurvivorLookup as RawLookup,
 };
 use crate::content::Guid;
-use crate::ecs::Entity;
 use crate::inventory::{Bar, SlotRef};
+use crate::{Entity, ItemId};
 use crate::{Load, Off};
 
 mod workshop;
@@ -126,7 +126,7 @@ pub struct Lookup {
     pub vanilla: Option<Entity>,
     /// Who asks.
     pub purpose: Purpose,
-    bed_of: Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>,
+    bed_of: Option<unsafe extern "system" fn(*mut c_void, Entity) -> Entity>,
     token: *mut c_void,
 }
 
@@ -137,7 +137,7 @@ impl Lookup {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::survivors::{Answer, Lookup, Purpose};
     ///
     /// fn previous(lookup: &Lookup, entities: &[Entity]) -> Answer {
@@ -154,8 +154,8 @@ impl Lookup {
     pub fn bed_of(&self, entity: Entity) -> Option<Entity> {
         let bed_of = self.bed_of?;
         // SAFETY: the loader's function and token, valid for this call.
-        let bed = unsafe { bed_of(self.token, entity.0) };
-        (bed != 0).then_some(Entity(bed))
+        let bed = unsafe { bed_of(self.token, entity) };
+        (!bed.is_none()).then_some(bed)
     }
 }
 
@@ -204,9 +204,9 @@ pub struct BedCheck {
 #[non_exhaustive]
 pub struct Summon {
     /// The item used.
-    pub item: u32,
-    /// The ammunition used, 0 for none.
-    pub ammo: u32,
+    pub item: ItemId,
+    /// The ammunition used, if any.
+    pub ammo: Option<ItemId>,
     /// The template it places.
     pub template: Guid,
     /// The target cell.
@@ -228,11 +228,11 @@ impl Summon {
         let [current, max] = raw.meter;
         Self {
             item: raw.item,
-            ammo: raw.ammo,
+            ammo: (raw.ammo.get() != 0).then_some(raw.ammo),
             template: Guid(raw.template),
             target: raw.target,
             slot: SlotRef(raw.slot),
-            pide: Entity::from_raw(raw.pide),
+            pide: Entity::from_raw(raw.pide.0),
             meter: (max != 0).then_some(Bar { current, max }),
             consumed: raw.consumed != 0,
         }
@@ -242,7 +242,7 @@ impl Summon {
 unsafe extern "system" fn run_lookup<F>(
     call: *const RawLookup,
     user: *mut c_void,
-    out: *mut u32,
+    out: *mut Entity,
 ) -> u8
 where
     F: Fn(&Lookup) -> Answer,
@@ -251,7 +251,7 @@ where
     let Some(call) = (unsafe { call.as_ref() }) else {
         return 0;
     };
-    let entity = Entity(call.entity);
+    let entity = call.entity;
     let purpose = match call.purpose {
         RawLookup::UNIQUENESS => Purpose::Uniqueness {
             entity,
@@ -277,7 +277,7 @@ where
     };
     let lookup = Lookup {
         survivor: SurvivorId(call.survivor),
-        vanilla: (call.vanilla != 0).then_some(Entity(call.vanilla)),
+        vanilla: (!call.vanilla.is_none()).then_some(call.vanilla),
         purpose,
         bed_of: call.bed_of,
         token: call.token,
@@ -291,8 +291,8 @@ where
     );
     let value = match answer {
         Answer::Vanilla => return 0,
-        Answer::Entity(entity) => entity.0,
-        Answer::Nobody => 0,
+        Answer::Entity(entity) => entity,
+        Answer::Nobody => Entity::NONE,
     };
     if !out.is_null() {
         // SAFETY: the loader's out pointer.
@@ -311,8 +311,8 @@ where
     };
     let call = BedCheck {
         survivor: SurvivorId(check.survivor),
-        entity: Entity(check.entity),
-        bed: Entity(check.bed),
+        entity: check.entity,
+        bed: check.bed,
         home: check.home,
         bed_at: check.bed_at,
     };
@@ -505,9 +505,9 @@ impl Load<'_> {
     /// use enshwick::survivors::SummonVerdict;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     const MY_STAFF: u32 = 0x5e01;
+    ///     const MY_STAFF: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
     ///     load.on_summon(|summon| {
-    ///         if summon.item == MY_STAFF && summon.ammo == 0 {
+    ///         if summon.item == MY_STAFF && summon.ammo.is_none() {
     ///             SummonVerdict::Take
     ///         } else {
     ///             SummonVerdict::Allow
@@ -577,17 +577,18 @@ impl Load<'_> {
     /// use enshwick::survivors::SurvivorId;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_summon_item(0x5e01, SurvivorId(1_201_801_546))
+    ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), SurvivorId(1_201_801_546))
     /// }
     /// ```
-    pub fn add_summon_item(&mut self, item: u32, survivor: SurvivorId) -> Result<(), Off> {
+    pub fn add_summon_item(&mut self, item: ItemId, survivor: SurvivorId) -> Result<(), Off> {
         let host = self.host();
         let status = (host.api().summon_item)(host.handle(), item, survivor.0);
         if status.is_ok() {
             Ok(())
         } else {
             Err(Off::new(format!(
-                "summon item {item:#x} refused by the loader (status {})",
+                "summon item {:#x} refused by the loader (status {})",
+                item.get(),
                 status.0
             )))
         }
@@ -634,12 +635,12 @@ mod tests {
     fn raw(pide: u32, meter: [u16; 2]) -> RawSummon {
         RawSummon {
             header: Header::of::<RawSummon>(),
-            item: 7,
-            ammo: 0,
+            item: ItemId::new(7),
+            ammo: ItemId::new(0),
             template: [1; 16],
             target: [1, 2, 3],
             slot: 0x3_0000_0041,
-            pide,
+            pide: Entity(pide),
             meter,
             consumed: 1,
             reserved: [0; 3],
@@ -665,6 +666,9 @@ mod tests {
         old.header.size = u32::try_from(core::mem::offset_of!(RawSummon, slot)).unwrap();
         // SAFETY: a valid summon, its header naming the older size.
         let use_ = unsafe { read_summon(&raw const old) }.unwrap();
-        assert_eq!((use_.item, use_.pide, use_.meter), (7, None, None));
+        assert_eq!(
+            (use_.item, use_.pide, use_.meter),
+            (ItemId::new(7), None, None)
+        );
     }
 }

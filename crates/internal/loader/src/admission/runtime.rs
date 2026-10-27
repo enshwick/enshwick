@@ -241,7 +241,7 @@ fn refuse_unlisted(key: u64) -> bool {
     let admin = crate::world::players(loader).is_ok_and(|players| {
         players
             .iter()
-            .any(|p| p.key == key && crate::console::player_is_admin(p))
+            .any(|p| p.key == enshwick::PlayerKey::new(key) && crate::console::player_is_admin(p))
     });
     if !crate::allowlist::refuses(loader, key, host, admin) {
         return false;
@@ -396,7 +396,7 @@ pub(crate) fn after_step(loader: &Loader) {
         crate::net::keep_greeting(&live);
         let in_game: Vec<u64> = if serving.side == Side::CLIENT {
             crate::world::players(loader)
-                .map(|players| players.iter().map(|p| p.key).collect())
+                .map(|players| players.iter().map(|p| p.key.get()).collect())
                 .unwrap_or_default()
         } else {
             Vec::new()

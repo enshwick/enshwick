@@ -1,5 +1,6 @@
 use core::ops::RangeInclusive;
 
+use crate::PlayerKey;
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
 
@@ -26,7 +27,7 @@ pub enum Value {
     /// server knows it.
     Player {
         /// The account key, as [`Player::key`].
-        key: u64,
+        key: PlayerKey,
         /// The name, online or as the mod's list keeps it.
         name: String,
     },

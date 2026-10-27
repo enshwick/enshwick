@@ -572,7 +572,7 @@ mod live {
         crate::world::players(loader)
             .ok()?
             .into_iter()
-            .find(|p| p.key == key)
+            .find(|p| p.key == enshwick::PlayerKey::new(key))
     }
 
     fn name(player: &PlayerInfo) -> String {

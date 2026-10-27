@@ -39,8 +39,8 @@ mod tests {
         PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: entity,
-            entity,
-            key,
+            entity: enshwick::Entity(entity),
+            key: enshwick::PlayerKey::new(key),
             permissions: 0,
             name_len: u8::try_from(name.len()).unwrap(),
             name: bytes,
@@ -87,8 +87,8 @@ mod tests {
         PlayerData {
             header: Header::of::<PlayerData>(),
             slot: 0,
-            entity,
-            key,
+            entity: enshwick::Entity(entity),
+            key: enshwick::PlayerKey::new(key),
         }
     }
 
@@ -120,11 +120,13 @@ mod tests {
         let chat = loader.chat();
         assert!(
             chat.iter()
-                .any(|(to, line)| *to == 0 && line == "1 online, first Ann"),
+                .any(|(to, line)| *to == enshwick::PlayerKey::new(0)
+                    && line == "1 online, first Ann"),
             "{chat:?}"
         );
         assert!(
-            chat.iter().any(|(to, line)| *to == 7 && line == "hello"),
+            chat.iter()
+                .any(|(to, line)| *to == enshwick::PlayerKey::new(7) && line == "hello"),
             "{chat:?}"
         );
     }

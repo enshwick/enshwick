@@ -6,9 +6,9 @@ mod tests {
     use std::sync::OnceLock;
     use std::time::Duration;
 
+    use enshwick::Entity;
     use enshwick::abi::{BuffTypeInfo, Header, Status};
     use enshwick::buffs::{Apply, BuffSlotType, BuffTypeId, Buffs};
-    use enshwick::ecs::Entity;
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -45,7 +45,7 @@ mod tests {
             name: 99,
             duration: 60_000_000_000,
         };
-        loader.set_buffs(&[swift], &[2]);
+        loader.set_buffs(&[swift], &[Entity(2)]);
         let types = buffs.types();
         assert_eq!(types.len(), 1);
         assert_eq!(types[0].slot, BuffSlotType::Buff);

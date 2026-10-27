@@ -56,8 +56,8 @@
 use core::ffi::c_void;
 
 use crate::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
-use crate::ecs::Entity;
 use crate::world::WorldError;
+use crate::{Entity, PlayerKey};
 use crate::{Host, Load, Off};
 
 /// What a knowledge value is.
@@ -99,7 +99,7 @@ pub enum Scope {
 /// ```
 /// use enshwick::knowledge::KnowledgeType;
 ///
-/// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity, recipe: u32) -> bool {
+/// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: u32) -> bool {
 ///     knowledge
 ///         .get(player, recipe)
 ///         .is_some_and(|known| known.r#type == KnowledgeType::Flags && known.has_flag(1))
@@ -220,7 +220,7 @@ pub struct Knowledge {
 }
 
 impl Knowledge {
-    fn read(&self, entity: u32, id: u32) -> Option<Known> {
+    fn read(&self, entity: Entity, id: u32) -> Option<Known> {
         let mut info = KnowledgeInfo {
             header: Header::of::<KnowledgeInfo>(),
             id: 0,
@@ -243,7 +243,7 @@ impl Knowledge {
     /// See [`Known`].
     #[must_use]
     pub fn get(&self, player: Entity, id: u32) -> Option<Known> {
-        self.read(player.0, id)
+        self.read(player, id)
     }
 
     /// Knowledge `id` of the world; `None` for an id the game does not
@@ -258,7 +258,7 @@ impl Knowledge {
     /// ```
     #[must_use]
     pub fn world(&self, id: u32) -> Option<Known> {
-        self.read(0, id)
+        self.read(Entity::NONE, id)
     }
 
     /// Grants knowledge `id` to the player whose character is `player` (or
@@ -281,7 +281,7 @@ impl Knowledge {
         let (kind, value) = grant.raw();
         WorldError::from_status((self.host.api().grant_knowledge)(
             self.host.handle(),
-            player.0,
+            player,
             id,
             kind,
             value,
@@ -329,7 +329,7 @@ impl Knowledge {
     /// ```
     /// use enshwick::knowledge::Revoke;
     ///
-    /// fn unlearn(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity, recipe: u32) {
+    /// fn unlearn(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: u32) {
     ///     let _taken = knowledge.revoke(player, recipe, Revoke::Unflag(1));
     /// }
     /// ```
@@ -337,7 +337,7 @@ impl Knowledge {
         let (kind, value) = revoke.raw();
         WorldError::from_status((self.host.api().revoke_knowledge)(
             self.host.handle(),
-            player.0,
+            player,
             id,
             kind,
             value,
@@ -383,11 +383,16 @@ impl Knowledge {
     /// ```
     /// use enshwick::knowledge::Grant;
     ///
-    /// fn reward(knowledge: &enshwick::knowledge::Knowledge, account: u64, recipe: u32) {
+    /// fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, recipe: u32) {
     ///     let _queued = knowledge.grant_account(account, recipe, Grant::Flag(0));
     /// }
     /// ```
-    pub fn grant_account(&self, account: u64, id: u32, grant: Grant) -> Result<(), WorldError> {
+    pub fn grant_account(
+        &self,
+        account: PlayerKey,
+        id: u32,
+        grant: Grant,
+    ) -> Result<(), WorldError> {
         let (kind, value) = grant.raw();
         self.for_account(account, id, kind, value, false)
     }
@@ -406,18 +411,23 @@ impl Knowledge {
     /// ```
     /// use enshwick::knowledge::Revoke;
     ///
-    /// fn punish(knowledge: &enshwick::knowledge::Knowledge, account: u64, recipe: u32) {
+    /// fn punish(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerKey, recipe: u32) {
     ///     let _queued = knowledge.revoke_account(account, recipe, Revoke::Unflag(1));
     /// }
     /// ```
-    pub fn revoke_account(&self, account: u64, id: u32, revoke: Revoke) -> Result<(), WorldError> {
+    pub fn revoke_account(
+        &self,
+        account: PlayerKey,
+        id: u32,
+        revoke: Revoke,
+    ) -> Result<(), WorldError> {
         let (kind, value) = revoke.raw();
         self.for_account(account, id, kind, value, true)
     }
 
     fn for_account(
         &self,
-        account: u64,
+        account: PlayerKey,
         id: u32,
         kind: u32,
         value: u32,
@@ -439,7 +449,7 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// fn done(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity) -> usize {
+    /// fn done(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity) -> usize {
     ///     knowledge.quests().into_iter().filter(|&quest| knowledge.completed(player, quest)).count()
     /// }
     /// ```
@@ -560,7 +570,7 @@ where
     };
     let allowed = call.allowed != 0;
     let request = KnowledgeRequest {
-        player: Entity(call.player),
+        player: call.player,
         id: call.id,
         kind: kind_of(call.kind),
         scope: match call.scope {

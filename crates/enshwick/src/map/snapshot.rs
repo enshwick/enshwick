@@ -22,7 +22,7 @@ pub const MAP_SNAPSHOT_FORMAT: u16 = 1;
 ///
 /// let mut snapshot = MapSnapshot::default();
 /// snapshot.players.push(MapPlayer {
-///     key: 7,
+///     key: enshwick::PlayerKey::new(7),
 ///     name: "Bob".to_owned(),
 ///     position: Some([10.0, 40.0, -3.5]),
 ///     waypoint: None,
@@ -51,7 +51,7 @@ pub struct MapPlayer {
     /// The same for the same account in every session, as
     /// [`Player::key`](crate::world::Player::key); a public map may leave
     /// it out.
-    pub key: u64,
+    pub key: crate::PlayerKey,
     /// The name the client sent; untrusted, may repeat between players.
     pub name: String,
     /// Where the character is, in metres; `None` while it has no place,
@@ -192,7 +192,7 @@ mod tests {
             prop::option::of(position.clone()),
         )
             .prop_map(|(key, name, position, waypoint)| MapPlayer {
-                key,
+                key: crate::PlayerKey::new(key),
                 name,
                 position,
                 waypoint,
@@ -248,7 +248,7 @@ mod tests {
     fn the_format_is_pinned_byte_for_byte() {
         let snapshot = MapSnapshot {
             players: vec![MapPlayer {
-                key: 1,
+                key: crate::PlayerKey::new(1),
                 name: "A".to_owned(),
                 position: Some([0.5, 0.0, -1.0]),
                 waypoint: None,

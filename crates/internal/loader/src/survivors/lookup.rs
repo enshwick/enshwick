@@ -2,9 +2,9 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, Side, SurvivorLookup};
 use enshwick::altars::cell_of_fixed;
-use enshwick::ecs::Entity;
 use enshwick::raw::read_at;
 
 use crate::ecs::Engine;
@@ -22,7 +22,7 @@ pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
     if crate::host::is_off(registered.owner) {
         return None;
     }
-    let mut out = 0u32;
+    let mut out = Entity(0);
     let user = core::ptr::with_exposed_provenance_mut(registered.user);
     // SAFETY: the registered `SurvivorLookupFn` lives in the mod's DLL, which
     // stays loaded for the process, and takes the `user` word it registered;
@@ -32,7 +32,7 @@ pub(super) fn ask(call: &SurvivorLookup) -> Option<u32> {
         crate::profile::Feature::Survivors,
         || unsafe { (registered.callback)(call, user, &raw mut out) },
     );
-    (answered != 0).then_some(out)
+    (answered != 0).then_some(out.0)
 }
 
 pub(super) fn call(
@@ -45,9 +45,9 @@ pub(super) fn call(
     SurvivorLookup {
         header: Header::of::<SurvivorLookup>(),
         survivor,
-        vanilla,
+        vanilla: Entity(vanilla),
         purpose,
-        entity: entity.0,
+        entity,
         cell,
         bed_of: None,
         token: core::ptr::null_mut(),
@@ -287,10 +287,10 @@ pub(super) struct BedToken<'e> {
 }
 
 /// The bed `entity` sleeps in: its `NpcCommon.bedId`.
-pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> u32 {
+pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: Entity) -> Entity {
     let kind = NPC_COMMON_TYPE.load(Ordering::Acquire);
-    if token.is_null() || kind == u16::MAX || entity == 0 {
-        return 0;
+    if token.is_null() || kind == u16::MAX || entity == Entity(0) {
+        return Entity(0);
     }
     // SAFETY: the non-null `token` (checked earlier) is the `BedToken` that
     // `resolve` handed the mod with this function, alive on its stack until
@@ -298,9 +298,9 @@ pub(super) unsafe extern "system" fn bed_of(token: *mut c_void, entity: u32) -> 
     let token = unsafe { &*token.cast::<BedToken<'_>>() };
     // SAFETY: `token.ctx` is null or the running caller's live query context,
     // used on its system's thread while the lookup runs.
-    let common = unsafe { token.engine.component(token.ctx, kind, Entity(entity)) };
+    let common = unsafe { token.engine.component(token.ctx, kind, entity) };
     if common.is_null() {
-        return 0;
+        return Entity(0);
     }
     // SAFETY: `common` is the entity's non-null live `NpcCommon` (checked
     // earlier), which keeps its `u32` bed id at the table's

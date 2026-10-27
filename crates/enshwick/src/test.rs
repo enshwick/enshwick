@@ -209,7 +209,7 @@ pub struct FakeHost {
     players: Vec<PlayerInfo>,
     mods: Vec<ModInfo>,
     hosting: bool,
-    host_key: Option<u64>,
+    host_key: Option<crate::PlayerKey>,
     server_world: u64,
     join_missing: Vec<ModInfo>,
     replaced: Vec<ModInfo>,

@@ -43,7 +43,7 @@
 
 use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use crate::world::WorldError;
-use crate::{Host, Load};
+use crate::{Host, ItemId, Load};
 
 /// The largest radius and height of an edit, in metres.
 pub const MAX_RADIUS: f32 = 16.0;
@@ -53,7 +53,7 @@ pub const MAX_RADIUS: f32 = 16.0;
 /// # Examples
 ///
 /// ```
-/// fn dirt(terrain: &enshwick::terrain::Terrain, dirt_item: u32) -> Option<u8> {
+/// fn dirt(terrain: &enshwick::terrain::Terrain, dirt_item: enshwick::ItemId) -> Option<u8> {
 ///     terrain.materials().iter().find(|m| m.terrain_item == dirt_item).map(|m| m.terrain_material)
 /// }
 /// ```
@@ -62,8 +62,8 @@ pub const MAX_RADIUS: f32 = 16.0;
 pub struct TerrainTerraformingConfig {
     /// Its voxel id, 1 to 127.
     pub terrain_material: u8,
-    /// The item digging it yields, as an item id.
-    pub terrain_item: u32,
+    /// The item digging it yields.
+    pub terrain_item: ItemId,
     /// How hard it is to dig: the game's hardness category from 0.
     pub hardness: u8,
     /// The health a voxel of it has against tools.
@@ -130,7 +130,7 @@ impl Terrain {
             flags: 0,
             hardness: 0,
             reserved: 0,
-            item: 0,
+            item: ItemId::new(0),
             health: 0,
         };
         let mut infos = vec![blank; 128];

@@ -2,8 +2,8 @@
 //! sizes per item, and the counts, chances and weights of the fill tables
 //! containers roll.
 
-use crate::Off;
 use crate::engine_ids as ids;
+use crate::{ItemId, Off};
 
 use super::changes::Field;
 use super::{Blob, EngineFacts, Guid};
@@ -169,7 +169,7 @@ pub fn template_table(layout: &FillTableLayout, template: &[u8]) -> Option<(Stri
 
 /// The value in force of `field` for the item with game id `item`, from
 /// `base`; `None` when nothing changes it.
-pub type LootValue<'a> = &'a dyn Fn(u32, Field, f64) -> Option<f64>;
+pub type LootValue<'a> = &'a dyn Fn(ItemId, Field, f64) -> Option<f64>;
 
 /// A whole value in force as the integer type `T`, which the field's range
 /// keeps it inside.
@@ -195,7 +195,7 @@ fn whole<T: TryFrom<i64>>(value: f64) -> Option<T> {
 /// use enshwick::content::loot_tables::{LootLayout, change_random_loot};
 ///
 /// fn doubled(layout: &LootLayout, table: &[u8]) -> Option<Vec<u8>> {
-///     let double = |_item: u32, field: Field, base: f64| Some(field.resolve(base, [Value::Times(2.0)]));
+///     let double = |_item: enshwick::ItemId, field: Field, base: f64| Some(field.resolve(base, [Value::Times(2.0)]));
 ///     change_random_loot(layout, table, &double).map(|(bytes, _)| bytes)
 /// }
 /// ```
@@ -209,7 +209,7 @@ pub fn change_random_loot(
     let (start, count) = blob.array(layout.items)?;
     let mut changed = 0;
     for at in (0..usize::try_from(count).ok()?).map(|i| start + i * layout.item) {
-        let item = blob.read_u32(at + layout.item_id)?;
+        let item = ItemId::new(blob.read_u32(at + layout.item_id)?);
         let read = |blob: &Blob, at: usize| -> Option<u16> {
             Some(u16::from_le_bytes(
                 blob.bytes().get(at..at + 2)?.try_into().ok()?,
@@ -260,12 +260,12 @@ pub fn scaled_ceiling(scaled: u16, max: u16, new_max: u16) -> u16 {
 ///
 /// See [`change_fill_table`].
 #[must_use]
-pub fn fill_items(layout: &LootLayout, table: &[u8]) -> Vec<u32> {
+pub fn fill_items(layout: &LootLayout, table: &[u8]) -> Vec<ItemId> {
     let blob = Blob::new(table);
     let mut items = Vec::new();
     let _whole = walk(layout, &blob, layout.root, 0, &mut |at| {
         if let Some(item) = blob.read_u32(at + layout.stack_item) {
-            items.push(item);
+            items.push(ItemId::new(item));
         }
         Some(())
     });
@@ -306,11 +306,11 @@ fn walk(
 /// use enshwick::content::changes::{Field, Value};
 /// use enshwick::content::loot_tables::{LootLayout, change_fill_table, fill_items};
 ///
-/// fn more_of(layout: &LootLayout, table: &[u8], wanted: u32) -> Option<Vec<u8>> {
+/// fn more_of(layout: &LootLayout, table: &[u8], wanted: enshwick::ItemId) -> Option<Vec<u8>> {
 ///     if !fill_items(layout, table).contains(&wanted) {
 ///         return None;
 ///     }
-///     let more = |item: u32, field: Field, base: f64| {
+///     let more = |item: enshwick::ItemId, field: Field, base: f64| {
 ///         (item == wanted && field == Field::Count).then(|| field.resolve(base, [Value::Times(2.0)]))
 ///     };
 ///     change_fill_table(layout, table, &more).map(|(bytes, _)| bytes)
@@ -331,8 +331,8 @@ pub fn change_fill_table(
     let mut blob = Blob::new(table);
     let mut changed = 0;
     for at in stacks {
-        let item = blob.read_u32(at + layout.stack_item)?;
-        if item == 0 {
+        let item = ItemId::new(blob.read_u32(at + layout.stack_item)?);
+        if item.get() == 0 {
             continue;
         }
         let mut touched = false;
@@ -431,9 +431,10 @@ pub(crate) mod tests {
         );
     }
 
-    fn double(field: Field) -> impl Fn(u32, Field, f64) -> Option<f64> {
+    fn double(field: Field) -> impl Fn(ItemId, Field, f64) -> Option<f64> {
         move |item, asked, base| {
-            (item == WOOD && asked == field).then(|| asked.resolve(base, [Value::Times(2.0)]))
+            (item == ItemId::new(WOOD) && asked == field)
+                .then(|| asked.resolve(base, [Value::Times(2.0)]))
         }
     }
 
@@ -496,8 +497,8 @@ pub(crate) mod tests {
         assert_eq!(scaled_ceiling(3, 3, 999), 999);
         assert_eq!(scaled_ceiling(250, 1, 999), 65535);
         assert_eq!(scaled_ceiling(7, 0, 4), 7);
-        let set = |item: u32, field: Field, base: f64| {
-            (item == WOOD).then(|| field.resolve(base, [Value::Set(10.0)]))
+        let set = |item: ItemId, field: Field, base: f64| {
+            (item == ItemId::new(WOOD)).then(|| field.resolve(base, [Value::Set(10.0)]))
         };
         let (bytes, _) = change_random_loot(&LAYOUT, &random_table(), &set).unwrap();
         let blob = Blob::new(&bytes);
@@ -509,7 +510,10 @@ pub(crate) mod tests {
     fn a_fill_table_lists_the_items_of_every_group() {
         let mut items = fill_items(&LAYOUT, &fill_table());
         items.sort_unstable();
-        assert_eq!(items, [0, STONE, WOOD]);
+        assert_eq!(
+            items,
+            [ItemId::new(0), ItemId::new(STONE), ItemId::new(WOOD)]
+        );
     }
 
     #[test]
@@ -526,7 +530,8 @@ pub(crate) mod tests {
             change_fill_table(&LAYOUT, &table, &double(Field::SpawnProbability)).unwrap();
         let chance = f32::from_le_bytes(bytes[stacks + 0x1c..stacks + 0x20].try_into().unwrap());
         assert_eq!(chance, 0.5);
-        let every = |_: u32, field: Field, base: f64| Some(field.resolve(base, [Value::Set(9.0)]));
+        let every =
+            |_: ItemId, field: Field, base: f64| Some(field.resolve(base, [Value::Set(9.0)]));
         let (bytes, _) = change_fill_table(&LAYOUT, &table, &every).unwrap();
         assert_eq!(
             bytes[stacks + 0x28..stacks + 0x50],

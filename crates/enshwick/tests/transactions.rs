@@ -33,7 +33,7 @@ mod tests {
             flags: 0,
             hardness: 3,
             reserved: 0,
-            item: 77,
+            item: enshwick::ItemId::new(77),
             health: 500,
         }
     }

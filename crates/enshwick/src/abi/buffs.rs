@@ -1,6 +1,6 @@
 //! Buffs: their types, the active ones and requests to apply them.
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header};
 
 /// A buff or debuff type of the running game, written by
 /// [`HostApi::buff_types`](super::HostApi::buff_types).
@@ -68,7 +68,7 @@ impl BuffTypeInfo {
 /// let fed = ActiveBuff {
 ///     header: Header::of::<ActiveBuff>(),
 ///     id: 7,
-///     entity: 4100,
+///     entity: enshwick::Entity(4100),
 ///     slot: 0,
 ///     level: 0,
 ///     duration: 600_000_000_000,
@@ -84,7 +84,7 @@ pub struct ActiveBuff {
     /// Its type's id.
     pub id: u32,
     /// The buff's own entity, which carries its effect.
-    pub entity: u32,
+    pub entity: Entity,
     /// Where the entity holds it, as [`BuffTypeInfo::slot`].
     pub slot: u32,
     /// Its level; 0 for none.
@@ -106,7 +106,7 @@ impl_headed!(ActiveBuff);
 ///
 /// let request = BuffRequest {
 ///     header: Header::of::<BuffRequest>(),
-///     entity: 2,
+///     entity: enshwick::Entity(2),
 ///     id: 7,
 ///     level: 0,
 ///     reserved: 0,
@@ -120,7 +120,7 @@ pub struct BuffRequest {
     /// Size and version of this struct.
     pub header: Header,
     /// The entity to give it.
-    pub entity: u32,
+    pub entity: Entity,
     /// The type's id.
     pub id: u32,
     /// Its level, 1 to 255; 0 for none.

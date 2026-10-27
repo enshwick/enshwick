@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Str};
+use crate::abi::{Entity, Header, ItemId, Str};
 
 /// A stat kind's definition, for [`HostApi::stat_open`](super::HostApi::stat_open) and
 /// [`HostApi::stat_info`](super::HostApi::stat_info).
@@ -129,7 +129,7 @@ impl StatModifierData {
 ///
 /// let blessing = StatModify {
 ///     header: Header::of::<StatModify>(),
-///     entity: 2,
+///     entity: enshwick::Entity(2),
 ///     key: 7,
 ///     modifier: StatModifierData { stat: 0, op: StatModifierData::ADD, reserved: [0; 3], value: 50.0 },
 ///     flags: 0,
@@ -143,7 +143,7 @@ pub struct StatModify {
     /// Size and version of this struct.
     pub header: Header,
     /// The entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// The mod's own key; a modifier with the same mod, key and stat
     /// replaces the one before.
     pub key: u32,
@@ -173,7 +173,7 @@ impl StatModify {
 /// ```
 /// use enshwick::abi::{Header, StatChange, StatRef};
 ///
-/// let change = StatChange { header: Header::of::<StatChange>(), entity: 2, stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 };
+/// let change = StatChange { header: Header::of::<StatChange>(), entity: enshwick::Entity(2), stat: StatRef { index: 0, key: 0x1234 }, old: 0.0, new: 50.0, reserved: 0 };
 /// assert!(change.new > change.old);
 /// ```
 #[repr(C)]
@@ -182,7 +182,7 @@ pub struct StatChange {
     /// Size and version of this struct.
     pub header: Header,
     /// The entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// The stat.
     pub stat: StatRef,
     /// The value before.
@@ -306,7 +306,7 @@ pub struct AffixModifierData {
 /// ```
 /// use enshwick::abi::{AffixRoll, Header};
 ///
-/// let roll = AffixRoll { header: Header::of::<AffixRoll>(), pide: 900, item: 7, min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 };
+/// let roll = AffixRoll { header: Header::of::<AffixRoll>(), pide: enshwick::Entity(900), item: enshwick::ItemId::new(7), min: 1, max: 2, max_rarity: 4, flags: AffixRoll::ONCE, seed: 42 };
 /// assert!(roll.min <= roll.max);
 /// ```
 #[repr(C)]
@@ -315,9 +315,9 @@ pub struct AffixRoll {
     /// Size and version of this struct.
     pub header: Header,
     /// The item's entity.
-    pub pide: u32,
+    pub pide: Entity,
     /// The item id it holds.
-    pub item: u32,
+    pub item: ItemId,
     /// The fewest affixes.
     pub min: u8,
     /// The most affixes.

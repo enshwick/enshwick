@@ -1,7 +1,6 @@
 //! Typed game events: a struct per event with its fields read for the
 //! running build, for [`Load::on`](crate::Load::on).
 
-use crate::ecs::Entity;
 use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
 use crate::game_events::values::{
@@ -10,6 +9,7 @@ use crate::game_events::values::{
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
+use crate::{Entity, ItemId, RecipeId};
 use crate::{Load, Off};
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
@@ -375,7 +375,7 @@ pub struct CraftRecipeEvent {
     /// The station, or none for crafting by hand.
     pub crafting_station_id: Option<Entity>,
     /// The recipe id.
-    pub recipe_id: u32,
+    pub recipe_id: RecipeId,
     /// How many.
     pub recipe_amount: u16,
 }
@@ -392,7 +392,7 @@ impl crate::events::Kind for CraftRecipeEvent {
             ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_CRAFTING_OPERATOR_ID)?;
         let station: Field<Entity> =
             ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_CRAFTING_STATION_ID)?;
-        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_RECIPE_ID)?;
+        let recipe: Field<RecipeId> = ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_RECIPE_ID)?;
         let amount: Field<u16> = ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_RECIPE_AMOUNT)?;
         on(
             load,
@@ -427,7 +427,7 @@ pub struct CraftRecipeSuccessEvent {
     /// The workshop id.
     pub workshop_id: u32,
     /// The recipe id.
-    pub recipe_id: u32,
+    pub recipe_id: RecipeId,
 }
 
 impl crate::events::Kind for CraftRecipeSuccessEvent {
@@ -440,7 +440,8 @@ impl crate::events::Kind for CraftRecipeSuccessEvent {
         let ty = load.game_event_type(ids::CRAFT_RECIPE_SUCCESS_EVENT)?;
         let workshop: Field<u32> =
             ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_WORKSHOP_ID)?;
-        let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID)?;
+        let recipe: Field<RecipeId> =
+            ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID)?;
         on(
             load,
             ty,
@@ -604,7 +605,7 @@ pub struct BuildingPlaceEvent {
     /// The block.
     pub block: Block,
     /// The item the block was built from.
-    pub tracking_item_id: u32,
+    pub tracking_item_id: ItemId,
 }
 
 impl crate::events::Kind for BuildingPlaceEvent {
@@ -626,7 +627,8 @@ impl crate::events::Kind for BuildingPlaceEvent {
                 material: ids::BUILDING_PLACE_EVENT_MATERIAL,
             },
         )?;
-        let item: Field<u32> = ty.field_by_id(load, ids::BUILDING_PLACE_EVENT_TRACKING_ITEM_ID)?;
+        let item: Field<ItemId> =
+            ty.field_by_id(load, ids::BUILDING_PLACE_EVENT_TRACKING_ITEM_ID)?;
         on(
             load,
             ty,

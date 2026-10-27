@@ -123,3 +123,11 @@ fn definitions_need_modifiers_and_sane_ranges() {
     let fine = empty.with(Range::new(stat(0), Op::Add, 1.0, 3.0));
     assert!(fine.check().is_ok());
 }
+
+#[test]
+fn an_affix_id_keeps_the_number_the_process_gave_it() {
+    let affix = AffixId::new(3);
+    assert_eq!(affix.get(), 3);
+    assert_eq!(affix, AffixId::new(3));
+    assert_ne!(affix, AffixId::new(4));
+}

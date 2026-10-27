@@ -208,6 +208,8 @@ Dependency size 40 align 8
     id at 0 size 16
     range at 16 size 16
     relation at 32 size 1
+Entity size 4 align 4
+    0 at 0 size 4
 EntityDataFlags size 4 align 4
     0 at 0 size 4
 EntityPlace size 32 align 8
@@ -478,6 +480,8 @@ ItemData size 36 align 4
     rarity at 15 size 1
     flags at 16 size 4
     placed_entity at 20 size 16
+ItemId size 4 align 4
+    0 at 0 size 4
 ItemLine size 16 align 4
     modifier at 0 size 12
     affix at 12 size 4
@@ -616,6 +620,8 @@ PlayerInfo size 96 align 8
     permissions at 24 size 1
     name_len at 25 size 1
     name at 26 size 64
+PlayerKey size 8 align 8
+    0 at 0 size 8
 PointFlags size 4 align 4
     0 at 0 size 4
 PointHandle size 24 align 8
@@ -656,6 +662,8 @@ QuestData size 16 align 4
     entity at 8 size 4
     quest at 12 size 4
 RateId size 4 align 4
+    0 at 0 size 4
+RecipeId size 4 align 4
     0 at 0 size 4
 RecipeKind size 4 align 4
     0 at 0 size 4

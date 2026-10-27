@@ -5,8 +5,8 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::events::WorldSaved;
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};

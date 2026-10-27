@@ -15,10 +15,10 @@ const RING: Id = Id::new("my-mod:ring");
 const AMULET: Id = Id::new("my-mod:amulet");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
-    load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
+    load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses()))?;
+    load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.02, Source::locked_chests()))?;
     load.add_loot(
-        Drop::one_of(&[RING.id(), AMULET.id()], 0.01, Source::kinds(Kinds::CORPSES))
+        Drop::one_of(&[enshwick::ItemId::new(RING.id()), enshwick::ItemId::new(AMULET.id())], 0.01, Source::kinds(Kinds::CORPSES))
             .count(1, 2),
     )
 }
@@ -86,7 +86,7 @@ collection GUID. `Source::matches` tells whether a
 comes from a source, which a unit test can check without the game:
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::loot::{Kinds, Roll, Source};
 
 let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };

@@ -20,16 +20,16 @@ pub(crate) extern "system" fn transaction_commit(
 
 pub(crate) extern "system" fn transaction_commit_for(
     me: ModHandle,
-    actor: u32,
+    actor: enshwick::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
 ) -> Status {
     entry("transaction_commit_for", || {
-        if actor == 0 {
+        if actor == enshwick::Entity(0) {
             return Status::BAD_ARGS;
         }
-        commit(me, Some(actor), ops, count, id)
+        commit(me, Some(actor.0), ops, count, id)
     })
 }
 
@@ -149,11 +149,13 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
                 enshwick::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
             }
             .ok_or(Status::BAD_ARGS)?;
-            if remove.entity == 0 || remove.flags & !PropRemove::DISCARD_STATE != 0 {
+            if remove.entity == enshwick::Entity(0)
+                || remove.flags & !PropRemove::DISCARD_STATE != 0
+            {
                 return Err(Status::BAD_ARGS);
             }
             Ok(Change::RemoveProp {
-                entity: remove.entity,
+                entity: remove.entity.0,
                 discard_state: remove.flags & PropRemove::DISCARD_STATE != 0,
             })
         }
@@ -164,7 +166,7 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
 pub(crate) extern "system" fn transaction_entities(
     me: ModHandle,
     id: u64,
-    out: *mut u32,
+    out: *mut enshwick::Entity,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
@@ -176,9 +178,10 @@ pub(crate) extern "system" fn transaction_entities(
         let Some(created) = crate::transactions::entities(owner, id) else {
             return Status::MISSING;
         };
+        let created: Vec<enshwick::Entity> = created.into_iter().map(enshwick::Entity).collect();
         // SAFETY: `HostApi::transaction_entities` has the mod pass `count`
         // null or a writable `u32`, and `out` null or `capacity` writable
-        // `u32`s, untouched by other threads during the call.
+        // `Entity`s, untouched by other threads during the call.
         unsafe { put_list(&created, out, capacity, count) }
     })
 }

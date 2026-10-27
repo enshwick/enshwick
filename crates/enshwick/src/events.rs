@@ -251,14 +251,14 @@ mod tests {
         let player = PlayerData {
             header: Header::of::<PlayerData>(),
             slot: 2,
-            entity: 9,
-            key: 1,
+            entity: crate::Entity(9),
+            key: crate::PlayerKey::new(1),
         };
         let raw = (&raw const player).cast::<c_void>();
         // SAFETY: `player` is a whole `PlayerData` on this stack frame,
         // readable for the size its header states.
         let joined = unsafe { PlayerJoined::data(raw) };
-        assert_eq!(joined.map(|p| p.entity), Some(9));
+        assert_eq!(joined.map(|p| p.entity), Some(crate::Entity(9)));
         // SAFETY: `data` accepts a null pointer and reads nothing.
         assert!(unsafe { PlayerLeft::data(core::ptr::null()) }.is_none());
         let mut short = player;
@@ -274,22 +274,25 @@ mod tests {
     fn a_death_from_minor_60_reads_without_its_killer_entity() {
         let mut death = PlayerDeathData {
             header: Header::of::<PlayerDeathData>(),
-            entity: 3,
+            entity: crate::Entity(3),
             cause: PlayerDeathData::HIT,
-            key: 7,
+            key: crate::PlayerKey::new(7),
             position: [0.0; 3],
             killer: [1; 16],
             deadly_shroud: 0,
             drowned: 0,
             reserved: 0,
-            killer_entity: 9,
+            killer_entity: crate::Entity(9),
             reserved_tail: 0,
         };
         death.header.size = 56;
         // SAFETY: `death` is a whole `PlayerDeathData` on this stack frame,
         // its header stating fewer bytes than it holds.
         let read = unsafe { PlayerDied::data((&raw const death).cast()) }.unwrap();
-        assert_eq!((read.entity, read.killer_entity), (3, 0));
+        assert_eq!(
+            (read.entity, read.killer_entity),
+            (crate::Entity(3), crate::Entity(0))
+        );
     }
 
     #[test]
@@ -303,8 +306,8 @@ mod tests {
             player: PlayerData {
                 header: Header::of::<PlayerData>(),
                 slot: 2,
-                entity: 9,
-                key: 1,
+                entity: crate::Entity(9),
+                key: crate::PlayerKey::new(1),
             },
             appended: 5,
         };
@@ -313,7 +316,10 @@ mod tests {
         // `PlayerData` whose header states the size of `Newer`, all of it
         // readable.
         let joined = unsafe { PlayerJoined::data((&raw const newer).cast()) }.unwrap();
-        assert_eq!((joined.entity, joined.key), (9, 1));
+        assert_eq!(
+            (joined.entity, joined.key),
+            (crate::Entity(9), crate::PlayerKey::new(1))
+        );
         assert_eq!(newer.appended, 5);
     }
 }

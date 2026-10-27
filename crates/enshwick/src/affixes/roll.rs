@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::abi::{ItemLine, StatModifierData};
 use crate::stats::{ItemStats, Op, StatKey};
 
-use super::defs::{AffixDef, AffixKey, ItemRarity};
+use super::defs::{AffixDef, AffixId, AffixKey, ItemRarity};
 
 /// An affix an item rolled: its key and each modifier's value, in the order
 /// of the affix's ranges.
@@ -255,5 +255,5 @@ pub struct Line {
     pub value: f32,
     /// The affix it comes from, by index (see [`Affixes::info`](crate::affixes::Affixes::info)); `None` for
     /// the item's own modifiers.
-    pub affix: Option<u32>,
+    pub affix: Option<AffixId>,
 }

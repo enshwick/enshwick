@@ -71,8 +71,8 @@ mod tests {
             .constant("durability.max", 2)
             .constant("fuel.max", 2)
             .type_size("item_stack", 12)
-            .component(CHEST, SETUP, &setup)
-            .component(41, INVENTORY, &stacks)
+            .component(enshwick::Entity(CHEST), SETUP, &setup)
+            .component(enshwick::Entity(41), INVENTORY, &stacks)
     }
 
     fn run(main: &str) -> Installed {

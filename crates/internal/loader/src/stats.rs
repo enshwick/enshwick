@@ -14,7 +14,7 @@
 //! the player joins.
 
 use combat::{combat, expire, follow};
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -344,11 +344,11 @@ fn pool(sealed: &Sealed) -> Vec<Candidate<'_>> {
 pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
     let sealed = SEALED.get().filter(|_| wanted()).ok_or(Status::MISSING)?;
     crate::world::server()?;
-    if roll.pide == 0 || roll.item == 0 {
+    if roll.pide == Entity(0) || roll.item == enshwick::ItemId::new(0) {
         return Err(Status::BAD_ARGS);
     }
-    let category = crate::inventory::item_info(loader, roll.item)?.category;
-    let current = crate::item_data::get_platform(roll.pide, roll.item)
+    let category = crate::inventory::item_info(loader, roll.item.get())?.category;
+    let current = crate::item_data::get_platform(roll.pide.0, roll.item.get())
         .and_then(|bytes| postcard::from_bytes::<ItemStats>(&bytes).ok())
         .unwrap_or_default();
     let rules = RollRules::new(roll.min, roll.max)
@@ -360,7 +360,7 @@ pub(crate) fn roll(loader: &Loader, roll: &AffixRoll) -> Result<u32, Status> {
         return Ok(0);
     }
     let bytes = postcard::to_allocvec(&next).map_err(|_| Status::REFUSED)?;
-    crate::item_data::set_platform(roll.pide, roll.item, &bytes)?;
+    crate::item_data::set_platform(roll.pide.0, roll.item.get(), &bytes)?;
     Ok(u32::try_from(next.affixes.len()).unwrap_or(0))
 }
 
@@ -516,7 +516,9 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> Result<(), Status> {
     let sealed = SEALED.get().ok_or(Status::MISSING)?;
     let stat = request.modifier.stat;
-    if request.entity == 0 || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len()) {
+    if request.entity == Entity(0)
+        || usize::try_from(stat).map_or(true, |s| s >= sealed.kinds.len())
+    {
         return Err(Status::BAD_ARGS);
     }
     if !serves() {
@@ -536,7 +538,7 @@ pub(crate) fn modify(loader: &Loader, owner: ModIndex, request: &StatModify) -> 
         ),
     };
     with_state(|state| {
-        let watched = state.watched.entry(request.entity).or_default();
+        let watched = state.watched.entry(request.entity.0).or_default();
         if saved && !remove && watched.player.is_none() {
             return Err(Status::REFUSED);
         }
@@ -626,7 +628,7 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
     };
     with_state(|state| {
         let mut restored = Vec::new();
-        for saved in state.saved.iter().filter(|s| s.player == player.key) {
+        for saved in state.saved.iter().filter(|s| s.player == player.key.get()) {
             let owner = loader.mods.iter().position(|m| m.owns(&saved.owner));
             let stat = sealed.by_key.get(&key_of(&saved.stat).0).copied();
             if let (Some(owner), Some(stat)) = (owner, stat) {
@@ -641,8 +643,8 @@ pub(crate) fn player_joined(loader: &Loader, player: &PlayerData) {
                 });
             }
         }
-        let watched = state.watched.entry(player.entity).or_default();
-        watched.player = Some(player.key);
+        let watched = state.watched.entry(player.entity.0).or_default();
+        watched.player = Some(player.key.get());
         watched.modifiers.retain(|h| !h.saved);
         watched.modifiers.extend(restored);
         watched.modifiers.sort_by_key(|h| (h.owner, h.key, h.stat));
@@ -771,7 +773,7 @@ fn take_values(
             if old.to_bits() != new.to_bits() {
                 changes.push(StatChange {
                     header: Header::of::<StatChange>(),
-                    entity,
+                    entity: Entity(entity),
                     stat: StatRef {
                         index: u32::try_from(index).unwrap_or(u32::MAX),
                         key: key_of(&sealed.kinds[index].id).0,
