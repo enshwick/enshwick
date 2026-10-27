@@ -6,9 +6,30 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `error_once!` and `info_every!`, so every level that has a once or a
+  periodic macro has both (#597).
+
 ### Changed
 
-- `ReadPackError::TooLarge` names the `limit` the file broke, and
+- Breaking: `Load::on` subscribes to typed game events too, as Luau's
+  `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
+  `load.on_game`. `events::Kind` is the one trait `on` takes; the loader
+  events' `EVENT` constant and raw read moved to `events::LoaderEvent`,
+  which `FakeHost::raise` takes. `game_events::Kind` is gone (#597).
+- Breaking: `Load::event_type` and `Load::event_types` are
+  `game_event_type` and `game_event_types`, the names Luau uses;
+  `FakeHost::event_type` is `game_event_type` (#597).
+- Breaking: `Load::on_skill` takes the `Skill` and finds its node itself;
+  `Load::skill_node` and `SkillCheck::node` are gone, and `SkillCheck` is
+  `#[non_exhaustive]` (#597).
+- Breaking: `Load::buff_modifiers` is `add_buff_modifiers` (#597).
+- Breaking: `mods::all()` lists the loaded mods; the crate root's
+  `enshwick::mods()` and `Host::{mods, join_missing, replaced}` are gone,
+  so each list has one call: `mods::all`, `mods::join_missing`,
+  `mods::replaced`. `mods::label` is hidden: `ModEntry::label` names a mod (#597).
+- Breaking: `ReadPackError::TooLarge` names the `limit` the file broke, and
   `PackFiles::read_dir` refuses a pack with more than `MAX_ICONS` icons
   (`ReadPackError::TooManyIcons`) or an icon over `MAX_ICON_FILE`; icon
   PNGs past `icons::MAX_SIDE` pixels do not decode (#596).
@@ -29,6 +50,12 @@ Each entry names the pull request that made the change.
 - `Schema::parse` refuses a field or group key with an empty part, such as
   `auth..token`, and `Load::table_config` a field with an empty key; the
   loader refuses such a schema, and the mod's warning names the key (#593).
+
+### Removed
+
+- Breaking: `Load::settings`, which read the settings file into any
+  `Deserialize` type past the stages, `sync` and `secret` checks: derive
+  `Config` and call `Load::config` (#597).
 
 ## [1.0.0-alpha.8] - 2026-10-27
 

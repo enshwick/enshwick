@@ -1159,7 +1159,8 @@ typedef struct EnshwickServiceFound {
 } EnshwickServiceFound;
 
 // A mod's handler for an `Event`: the event, its data (null for events
-// without data, valid for the call) and the pointer given at subscription.
+// without data, valid for the call, and no other thread writes it during
+// the call) and the pointer given at subscription.
 typedef void (*EnshwickEventFn)(EnshwickEvent event, const void *data, void *user);
 
 // A game resource's key: its GUID in memory order, its type hash and part.

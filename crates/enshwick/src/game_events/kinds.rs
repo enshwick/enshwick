@@ -1,5 +1,5 @@
 //! Typed game events: a struct per event with its fields read for the
-//! running build, for [`Load::on_game`](crate::Load::on_game).
+//! running build, for [`Load::on`](crate::Load::on).
 
 use crate::ecs::Entity;
 use crate::engine_enum::{Bits, Values};
@@ -11,34 +11,6 @@ use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
 use crate::world::{ComponentType, World};
 use crate::{Load, Off};
-
-pub(super) mod sealed {
-    pub trait Sealed {}
-}
-
-/// A game event with a typed form; implemented by the types in this
-/// module only.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::game_events::{EntityDiedEvent, Kind};
-///
-/// fn watch<E: Kind + core::fmt::Debug>(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<E>(|event| enshwick::debug!("{event:?}"))
-/// }
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     watch::<EntityDiedEvent>(load)
-/// }
-/// ```
-pub trait Kind: sealed::Sealed + Sized + 'static {
-    /// Resolves the event's fields and subscribes `handler`.
-    #[doc(hidden)]
-    fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
-    where
-        F: Fn(&Self) + Send + Sync + 'static;
-}
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
 fn some(entity: Entity) -> Option<Entity> {
@@ -67,7 +39,7 @@ where
 /// use enshwick::game_events::HitEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<HitEvent>(|hit| {
+///     load.on::<HitEvent>(|hit| {
 ///         if hit.health_change < 0 {
 ///             enshwick::debug!("{:?} took {} from {:?}", hit.target_id, -hit.health_change, hit.root_source_id);
 ///         }
@@ -99,12 +71,14 @@ pub struct HitEvent {
     pub target_faction: u8,
 }
 
-impl Kind for HitEvent {
+impl crate::events::Kind for HitEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::HIT_EVENT)?;
+        let ty = load.game_event_type(ids::HIT_EVENT)?;
         let attacker: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_ROOT_SOURCE_ID)?;
         let target: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_TARGET_ID)?;
         let source: Field<Entity> = ty.field_by_id(load, ids::HIT_EVENT_SOURCE_ID)?;
@@ -154,7 +128,7 @@ impl Kind for HitEvent {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let world = load.world()?;
-///     load.on_game::<EntityDiedEvent>(move |died| {
+///     load.on::<EntityDiedEvent>(move |died| {
 ///         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
 ///             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
 ///         }
@@ -251,12 +225,14 @@ impl Credit {
     }
 }
 
-impl Kind for EntityDiedEvent {
+impl crate::events::Kind for EntityDiedEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::ENTITY_DIED_EVENT)?;
+        let ty = load.game_event_type(ids::ENTITY_DIED_EVENT)?;
         let dead: Field<Entity> = ty.field_by_id(load, ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID)?;
         let credit = Credit::resolve(load)
             .inspect_err(|off| crate::debug!("kill credit off: {off}"))
@@ -285,7 +261,7 @@ impl Kind for EntityDiedEvent {
 /// use enshwick::game_events::LevelUpEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
+///     load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -297,12 +273,14 @@ pub struct LevelUpEvent {
     pub level: u32,
 }
 
-impl Kind for LevelUpEvent {
+impl crate::events::Kind for LevelUpEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::LEVEL_UP_EVENT)?;
+        let ty = load.game_event_type(ids::LEVEL_UP_EVENT)?;
         let player: Field<Entity> = ty.field_by_id(load, ids::LEVEL_UP_EVENT_PLAYER_ENTITY_ID)?;
         let level: Field<i32> = ty.field_by_id(load, ids::LEVEL_UP_EVENT_LEVEL)?;
         on(
@@ -327,7 +305,7 @@ impl Kind for LevelUpEvent {
 /// use enshwick::game_events::{XpGainedEvent, ExperienceSourceType};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<XpGainedEvent>(|gained| {
+///     load.on::<XpGainedEvent>(|gained| {
 ///         if gained.source == ExperienceSourceType::Combat {
 ///             enshwick::debug!("{} experience for a kill", gained.amount);
 ///         }
@@ -345,12 +323,14 @@ pub struct XpGainedEvent {
     pub source: ExperienceSourceType,
 }
 
-impl Kind for XpGainedEvent {
+impl crate::events::Kind for XpGainedEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::XP_GAINED_EVENT)?;
+        let ty = load.game_event_type(ids::XP_GAINED_EVENT)?;
         let player: Field<Entity> = ty.field_by_id(load, ids::XP_GAINED_EVENT_PLAYER_ENTITY_ID)?;
         let amount: Field<u32> = ty.field_by_id(load, ids::XP_GAINED_EVENT_AMOUNT)?;
         let source: Field<u8> = ty.field_by_id(load, ids::XP_GAINED_EVENT_SOURCE)?;
@@ -384,7 +364,7 @@ impl Kind for XpGainedEvent {
 /// use enshwick::game_events::CraftRecipeEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<CraftRecipeEvent>(|craft| enshwick::debug!("recipe {:#x} x{}", craft.recipe_id, craft.recipe_amount))
+///     load.on::<CraftRecipeEvent>(|craft| enshwick::debug!("recipe {:#x} x{}", craft.recipe_id, craft.recipe_amount))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -400,12 +380,14 @@ pub struct CraftRecipeEvent {
     pub recipe_amount: u16,
 }
 
-impl Kind for CraftRecipeEvent {
+impl crate::events::Kind for CraftRecipeEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::CRAFT_RECIPE_EVENT)?;
+        let ty = load.game_event_type(ids::CRAFT_RECIPE_EVENT)?;
         let player: Field<Entity> =
             ty.field_by_id(load, ids::CRAFT_RECIPE_EVENT_CRAFTING_OPERATOR_ID)?;
         let station: Field<Entity> =
@@ -436,7 +418,7 @@ impl Kind for CraftRecipeEvent {
 /// use enshwick::game_events::CraftRecipeSuccessEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<CraftRecipeSuccessEvent>(|done| enshwick::debug!("workshop {:#x} made {:#x}", done.workshop_id, done.recipe_id))
+///     load.on::<CraftRecipeSuccessEvent>(|done| enshwick::debug!("workshop {:#x} made {:#x}", done.workshop_id, done.recipe_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -448,12 +430,14 @@ pub struct CraftRecipeSuccessEvent {
     pub recipe_id: u32,
 }
 
-impl Kind for CraftRecipeSuccessEvent {
+impl crate::events::Kind for CraftRecipeSuccessEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::CRAFT_RECIPE_SUCCESS_EVENT)?;
+        let ty = load.game_event_type(ids::CRAFT_RECIPE_SUCCESS_EVENT)?;
         let workshop: Field<u32> =
             ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_WORKSHOP_ID)?;
         let recipe: Field<u32> = ty.field_by_id(load, ids::CRAFT_RECIPE_SUCCESS_EVENT_RECIPE_ID)?;
@@ -480,7 +464,7 @@ impl Kind for CraftRecipeSuccessEvent {
 /// use enshwick::game_events::AcceptOfferedInteractionEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<AcceptOfferedInteractionEvent>(|used| enshwick::debug!("{:?} used {:?}", used.guest_entity_id, used.host_entity_id))
+///     load.on::<AcceptOfferedInteractionEvent>(|used| enshwick::debug!("{:?} used {:?}", used.guest_entity_id, used.host_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -498,12 +482,14 @@ pub struct AcceptOfferedInteractionEvent {
     pub offer_id: u32,
 }
 
-impl Kind for AcceptOfferedInteractionEvent {
+impl crate::events::Kind for AcceptOfferedInteractionEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::ACCEPT_OFFERED_INTERACTION_EVENT)?;
+        let ty = load.game_event_type(ids::ACCEPT_OFFERED_INTERACTION_EVENT)?;
         let player: Field<Entity> =
             ty.field_by_id(load, ids::ACCEPT_OFFERED_INTERACTION_EVENT_GUEST_ENTITY_ID)?;
         let target: Field<Entity> =
@@ -609,7 +595,7 @@ impl BlockFields {
 /// use enshwick::game_events::BuildingPlaceEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.owner_id, built.block.position))
+///     load.on::<BuildingPlaceEvent>(|built| enshwick::debug!("{:?} built at {:?}", built.block.owner_id, built.block.position))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
@@ -621,12 +607,14 @@ pub struct BuildingPlaceEvent {
     pub tracking_item_id: u32,
 }
 
-impl Kind for BuildingPlaceEvent {
+impl crate::events::Kind for BuildingPlaceEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::BUILDING_PLACE_EVENT)?;
+        let ty = load.game_event_type(ids::BUILDING_PLACE_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
@@ -661,7 +649,7 @@ impl Kind for BuildingPlaceEvent {
 /// use enshwick::game_events::BuildingTearDownEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<BuildingTearDownEvent>(|torn| enshwick::debug!("torn down at {:?}", torn.block.position))
+///     load.on::<BuildingTearDownEvent>(|torn| enshwick::debug!("torn down at {:?}", torn.block.position))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
@@ -671,12 +659,14 @@ pub struct BuildingTearDownEvent {
     pub block: Block,
 }
 
-impl Kind for BuildingTearDownEvent {
+impl crate::events::Kind for BuildingTearDownEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::BUILDING_TEAR_DOWN_EVENT)?;
+        let ty = load.game_event_type(ids::BUILDING_TEAR_DOWN_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
@@ -709,7 +699,7 @@ impl Kind for BuildingTearDownEvent {
 /// use enshwick::game_events::BuildingPickUpEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<BuildingPickUpEvent>(|picked| enshwick::debug!("picked up {:?}", picked.picked_entity_id))
+///     load.on::<BuildingPickUpEvent>(|picked| enshwick::debug!("picked up {:?}", picked.picked_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, crate::Script)]
@@ -721,12 +711,14 @@ pub struct BuildingPickUpEvent {
     pub picked_entity_id: Option<Entity>,
 }
 
-impl Kind for BuildingPickUpEvent {
+impl crate::events::Kind for BuildingPickUpEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::BUILDING_PICK_UP_EVENT)?;
+        let ty = load.game_event_type(ids::BUILDING_PICK_UP_EVENT)?;
         let block = BlockFields::resolve(
             load,
             ty,
@@ -762,7 +754,7 @@ impl Kind for BuildingPickUpEvent {
 /// use enshwick::game_events::FlameAltarEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<FlameAltarEvent>(|used| enshwick::info!("{:?} at altar {:?}", used.r#type, used.base_entity_id))
+///     load.on::<FlameAltarEvent>(|used| enshwick::info!("{:?} at altar {:?}", used.r#type, used.base_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -776,12 +768,14 @@ pub struct FlameAltarEvent {
     pub r#type: FlameAltarActionType,
 }
 
-impl Kind for FlameAltarEvent {
+impl crate::events::Kind for FlameAltarEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::FLAME_ALTAR_EVENT)?;
+        let ty = load.game_event_type(ids::FLAME_ALTAR_EVENT)?;
         let player: Field<Entity> =
             ty.field_by_id(load, ids::FLAME_ALTAR_EVENT_PLAYER_ENTITY_ID)?;
         let altar: Field<Entity> = ty.field_by_id(load, ids::FLAME_ALTAR_EVENT_BASE_ENTITY_ID)?;
@@ -815,7 +809,7 @@ impl Kind for FlameAltarEvent {
 /// use enshwick::game_events::LootInteractionEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<LootInteractionEvent>(|loot| enshwick::debug!("{:?} looted {:?}", loot.guest_id, loot.host_id))
+///     load.on::<LootInteractionEvent>(|loot| enshwick::debug!("{:?} looted {:?}", loot.guest_id, loot.host_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -829,12 +823,14 @@ pub struct LootInteractionEvent {
     pub loot_all: bool,
 }
 
-impl Kind for LootInteractionEvent {
+impl crate::events::Kind for LootInteractionEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::LOOT_INTERACTION_EVENT)?;
+        let ty = load.game_event_type(ids::LOOT_INTERACTION_EVENT)?;
         let player: Field<Entity> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_GUEST_ID)?;
         let container: Field<Entity> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_HOST_ID)?;
         let all: Field<bool> = ty.field_by_id(load, ids::LOOT_INTERACTION_EVENT_LOOT_ALL)?;
@@ -861,7 +857,7 @@ impl Kind for LootInteractionEvent {
 /// use enshwick::game_events::HandleEquipmentSlotChangedEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<HandleEquipmentSlotChangedEvent>(|changed| enshwick::debug!("{:?} of {:?}", changed.equipment_slot, changed.player_entity_id))
+///     load.on::<HandleEquipmentSlotChangedEvent>(|changed| enshwick::debug!("{:?} of {:?}", changed.equipment_slot, changed.player_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -873,12 +869,14 @@ pub struct HandleEquipmentSlotChangedEvent {
     pub equipment_slot: EquipmentSlot,
 }
 
-impl Kind for HandleEquipmentSlotChangedEvent {
+impl crate::events::Kind for HandleEquipmentSlotChangedEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT)?;
+        let ty = load.game_event_type(ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT)?;
         let player: Field<Entity> = ty.field_by_id(
             load,
             ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT_PLAYER_ENTITY_ID,
@@ -915,7 +913,7 @@ impl Kind for HandleEquipmentSlotChangedEvent {
 /// use enshwick::game_events::RevivedPlayerEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     load.on_game::<RevivedPlayerEvent>(|revived| enshwick::info!("{:?} revived by {:?}", revived.target_entity_id, revived.source_entity_id))
+///     load.on::<RevivedPlayerEvent>(|revived| enshwick::info!("{:?} revived by {:?}", revived.target_entity_id, revived.source_entity_id))
 /// }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, crate::Script)]
@@ -927,12 +925,14 @@ pub struct RevivedPlayerEvent {
     pub source_entity_id: Option<Entity>,
 }
 
-impl Kind for RevivedPlayerEvent {
+impl crate::events::Kind for RevivedPlayerEvent {
+    type Data = Self;
+
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
         F: Fn(&Self) + Send + Sync + 'static,
     {
-        let ty = load.event_type(ids::REVIVED_PLAYER_EVENT)?;
+        let ty = load.game_event_type(ids::REVIVED_PLAYER_EVENT)?;
         let player: Field<Entity> =
             ty.field_by_id(load, ids::REVIVED_PLAYER_EVENT_TARGET_ENTITY_ID)?;
         let by: Field<Entity> = ty.field_by_id(load, ids::REVIVED_PLAYER_EVENT_SOURCE_ENTITY_ID)?;

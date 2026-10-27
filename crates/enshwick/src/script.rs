@@ -1028,7 +1028,7 @@ pub struct GameEventKind {
 impl GameEventKind {
     pub(crate) const fn of<E>() -> Self
     where
-        E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
+        E: crate::events::Kind<Data = E> + IntoScript + Clone + Send + Sync,
     {
         let record = match E::TY {
             Ty::Record(record) => *record,
@@ -1077,7 +1077,7 @@ impl GameEventKind {
     }
 
     /// Calls `handler` with each event's data, as
-    /// [`Load::on_game`](crate::Load::on_game) does for the Rust type.
+    /// [`Load::on`](crate::Load::on) does for the Rust type.
     ///
     /// # Errors
     ///
@@ -1108,9 +1108,9 @@ fn subscribe_game<E>(
     handler: Box<GameHandler>,
 ) -> Result<(), crate::Off>
 where
-    E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
+    E: crate::events::Kind<Data = E> + IntoScript + Clone + Send + Sync,
 {
-    load.on_game::<E>(move |event| handler(&|| event.clone().into_value()))
+    load.on::<E>(move |event| handler(&|| event.clone().into_value()))
 }
 
 /// Every typed game event a script may subscribe to.

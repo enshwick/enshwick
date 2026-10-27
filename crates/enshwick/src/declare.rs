@@ -391,6 +391,37 @@ macro_rules! warn_once {
     ($($arg:tt)+) => { $crate::__once!($crate::abi::Level::WARN, $($arg)+) };
 }
 
+/// Logs a line at `error` level the first time this call site runs only.
+///
+/// # Examples
+///
+/// ```
+/// for _ in 0..3 {
+///     enshwick::error_once!("the altar table could not be read");
+/// }
+/// ```
+#[macro_export]
+macro_rules! error_once {
+    ($($arg:tt)+) => { $crate::__once!($crate::abi::Level::ERROR, $($arg)+) };
+}
+
+/// Logs a line at `info` level at most once per period from this call site,
+/// noting how many it skipped since the last.
+///
+/// # Examples
+///
+/// ```
+/// use std::time::Duration;
+///
+/// for player in 0..100 {
+///     enshwick::info_every!(Duration::from_secs(60), "player {player} rested");
+/// }
+/// ```
+#[macro_export]
+macro_rules! info_every {
+    ($period:expr, $($arg:tt)+) => { $crate::__every!($crate::abi::Level::INFO, $period, $($arg)+) };
+}
+
 /// Logs a line at `warn` level at most once per period from this call site,
 /// noting how many it skipped since the last.
 ///
