@@ -693,10 +693,19 @@ fn apply(
         }
     }
     let looted = sealed.loot_items.get();
-    for item in merged.entries(Entry::Loot) {
+    for item in merged.loot_items() {
         if !looted.is_some_and(|items| items.contains(&item)) {
             return Err(format!(
                 "the loot of {item} changes for the first time, which takes a restart"
+            ));
+        }
+    }
+    let fill = catalogue::type_hash(catalogue::LOOT_FILL_TABLE);
+    for (table, _) in merged.table_items() {
+        let key = fill.map(|hash| table.key_by_hash(hash));
+        if !key.is_some_and(|key| patched.contains(&key)) {
+            return Err(format!(
+                "the loot table {table} changes for the first time, which takes a restart"
             ));
         }
     }
@@ -739,13 +748,16 @@ fn loot_patches(
     let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
-    let items: FxHashMap<u32, Guid> = sealed
-        .merged()
-        .entries(Entry::Loot)
+    let merged = sealed.merged();
+    let scoped = merged.table_items();
+    let items: FxHashMap<u32, Guid> = merged
+        .loot_items()
         .into_iter()
+        .chain(scoped.iter().map(|(_, item)| *item))
         .map(|item| (item.id(), item))
         .collect();
-    let _first = sealed.loot_items.set(items.values().copied().collect());
+    let alone: Vec<Guid> = scoped.iter().map(|(table, _)| *table).collect();
+    let _first = sealed.loot_items.set(merged.loot_items());
     if items.is_empty() {
         return Vec::new();
     }
@@ -768,6 +780,7 @@ fn loot_patches(
             layout,
             items,
             fill,
+            table: Guid(key.guid),
         }));
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
         patches.push((key, build_loot as enshwick::abi::ResourcePatchFn, user));
@@ -777,11 +790,12 @@ fn loot_patches(
     }
     let mut tables = 0;
     for key in archive.keys_of(fill) {
-        let names = archive.resource(&key).is_some_and(|table| {
-            fill_items(&layout, &table)
-                .iter()
-                .any(|id| items.contains_key(id))
-        });
+        let names = alone.contains(&Guid(key.guid))
+            || archive.resource(&key).is_some_and(|table| {
+                fill_items(&layout, &table)
+                    .iter()
+                    .any(|id| items.contains_key(id))
+            });
         if names {
             add(key, true);
             tables += 1;
@@ -802,6 +816,9 @@ struct LootPatch {
     layout: LootLayout,
     items: &'static FxHashMap<u32, Guid>,
     fill: bool,
+    /// The table's GUID: changes of this table alone apply after the
+    /// changes of every table.
+    table: Guid,
 }
 
 /// The loader's patch of a loot table: the base with the values the
@@ -825,7 +842,14 @@ unsafe extern "system" fn build_loot(
         let merged = sealed.merged();
         let value = |id: u32, field: Field, base: f64| {
             let item = *patch.items.get(&id)?;
-            merged.value(Key::new(item, field), base, |m| on(sealed.loader, m))
+            let on = |m| on(sealed.loader, m);
+            let every = merged.value(Key::new(item, field), base, on);
+            let here = Key {
+                entry: patch.table,
+                field,
+                item: Some(item),
+            };
+            merged.value(here, every.unwrap_or(base), on).or(every)
         };
         if patch.fill {
             change_fill_table(&patch.layout, &bytes, &value)

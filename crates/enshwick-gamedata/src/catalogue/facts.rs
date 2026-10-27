@@ -519,6 +519,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::TemplateResource", "components"),
     ),
     (
+        "template.name",
+        offset("keen::ecs::TemplateResource", "name"),
+    ),
+    (
         "template_collection",
         Fact::Type("keen::ecs::TemplateCollectionResource"),
     ),
@@ -882,6 +886,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     ("npc", Fact::Type("keen::ecs::ActiveNpcState")),
     ("animal", Fact::Type("keen::ecs::Animal")),
     ("loot_fill", Fact::Type("keen::ecs::DefaultInventory")),
+    (
+        "loot_fill.table",
+        offset("keen::ecs::DefaultInventory", "defaultInventory"),
+    ),
     ("resource_node", Fact::Type("keen::ecs::MiningNode")),
     ("game_settings", Fact::Type(GAME_SETTINGS)),
     (
