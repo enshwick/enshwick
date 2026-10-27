@@ -62,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 
 ## Names and references
 

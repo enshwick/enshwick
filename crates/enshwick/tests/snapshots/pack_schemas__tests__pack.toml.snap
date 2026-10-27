@@ -4,6 +4,55 @@ expression: shape
 ---
 {
   "$defs": {
+    "PackSetting": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "default": [],
+          "items": true,
+          "type": "array"
+        },
+        "default": {},
+        "doc": {
+          "default": "",
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "max": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stage": {
+          "$ref": "#/$defs/Stage",
+          "default": "runtime"
+        },
+        "synced": {
+          "default": false,
+          "type": "boolean"
+        },
+        "text": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "default"
+      ],
+      "type": "object"
+    },
     "PackSide": {
       "oneOf": [
         {
@@ -16,6 +65,30 @@ expression: shape
         },
         {
           "const": "client",
+          "type": "string"
+        }
+      ]
+    },
+    "Stage": {
+      "oneOf": [
+        {
+          "const": "startup",
+          "type": "string"
+        },
+        {
+          "const": "runtime",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "type": "string"
+        },
+        {
+          "const": "sync",
+          "type": "string"
+        },
+        {
+          "const": "restart",
           "type": "string"
         }
       ]
@@ -60,6 +133,12 @@ expression: shape
       },
       "default": {},
       "type": "object"
+    },
+    "setting": {
+      "items": {
+        "$ref": "#/$defs/PackSetting"
+      },
+      "type": "array"
     },
     "side": {
       "$ref": "#/$defs/PackSide"
