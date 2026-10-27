@@ -597,7 +597,7 @@ mod tests {
         let mut ported = row::port_row(row, &old, &new);
         let anchors = row::port_anchors(row, &mut ported, &source, &old, &new);
         let (new_code, _) = new.text();
-        let resolved = source.fall_back(new_code, code_rva);
+        let resolved = source.fall_back(new_code, code_rva, |_| None);
         for (id, value) in &changed {
             let line = ported.lines.iter().find(|l| &l.id == id).unwrap();
             assert_eq!(

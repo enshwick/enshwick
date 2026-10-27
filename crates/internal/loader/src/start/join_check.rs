@@ -10,7 +10,6 @@ use super::game::identify;
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::net::JOIN_GAME.id(),
     pinned::net::PROVIDER_VTABLE.id(),
-    pinned::net::PROVIDER_JOIN_SLOT.id(),
     pinned::user::START_INTERACTION.id(),
     pinned::user::INTERACTION_KIND.id(),
     pinned::user::JOIN_FAILED_KIND.id(),

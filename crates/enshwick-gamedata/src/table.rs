@@ -108,6 +108,7 @@ struct ConstantFull {
     via: Option<String>,
     within: Option<u32>,
     attribute: Option<String>,
+    cell: Option<String>,
     #[serde(default = "carried")]
     carried: bool,
 }
@@ -138,6 +139,39 @@ impl ConstantFull {
             (false, false) => {}
         }
         Ok(Some(operand.plus(self.plus)))
+    }
+
+    /// Refuses a row whose keys contradict each other, or whose `cell`
+    /// names none of `symbols`.
+    fn check(&self, id: &str, symbols: &[Symbol]) -> Result<(), TableError> {
+        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+        if self.via.is_some() && self.pattern.is_none() {
+            return bad("`via` needs a pattern");
+        }
+        if self.within.is_some() && self.via.is_none() {
+            return bad("`within` needs `via`");
+        }
+        if self.attribute.is_some() && (self.pattern.is_some() || self.via.is_some()) {
+            return bad("`attribute` takes no pattern and no `via`");
+        }
+        if !self.carried
+            && (self.pattern.is_some() || self.via.is_some() || self.attribute.is_some())
+        {
+            return bad("`carried = false` takes no pattern, `via` or `attribute`");
+        }
+        if let Some(cell) = &self.cell {
+            if self.pattern.is_some()
+                || self.via.is_some()
+                || self.attribute.is_some()
+                || !self.carried
+            {
+                return bad("`cell` takes no pattern, `via`, `attribute` or `carried = false`");
+            }
+            if !symbols.iter().any(|s| &s.id == cell) {
+                return bad("`cell` names no symbol of the table");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -201,7 +235,7 @@ impl Table {
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let file: TableFile = toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
         let guid = parse_guid(&file.guid).ok_or_else(|| TableError::Guid(file.guid.clone()))?;
-        let symbols = file
+        let symbols: Vec<Symbol> = file
             .symbols
             .into_iter()
             .map(|(id, value)| {
@@ -233,31 +267,13 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, within, attribute, carried) = match value {
+                let (value, text, operand, via, within, attribute, cell, carried) = match value {
                     ConstantValue::Plain(value) => {
-                        (value.value(&id)?, None, None, None, None, None, true)
+                        (value.value(&id)?, None, None, None, None, None, None, true)
                     }
                     ConstantValue::Full(full) => {
                         let operand = full.operand(&id)?;
-                        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
-                        if full.via.is_some() && full.pattern.is_none() {
-                            return bad("`via` needs a pattern");
-                        }
-                        if full.within.is_some() && full.via.is_none() {
-                            return bad("`within` needs `via`");
-                        }
-                        if full.attribute.is_some()
-                            && (full.pattern.is_some() || full.via.is_some())
-                        {
-                            return bad("`attribute` takes no pattern and no `via`");
-                        }
-                        if !full.carried
-                            && (full.pattern.is_some()
-                                || full.via.is_some()
-                                || full.attribute.is_some())
-                        {
-                            return bad("`carried = false` takes no pattern, `via` or `attribute`");
-                        }
+                        full.check(&id, &symbols)?;
                         (
                             full.value.value(&id)?,
                             full.pattern,
@@ -265,6 +281,7 @@ impl Table {
                             full.via,
                             full.within,
                             full.attribute,
+                            full.cell,
                             full.carried,
                         )
                     }
@@ -277,6 +294,7 @@ impl Table {
                     via,
                     within,
                     attribute,
+                    cell,
                     carried,
                 })
             })
@@ -402,13 +420,20 @@ impl Table {
     /// any; a constant counts when the code that uses it is still found
     /// once, and takes the value read from that code where its operand
     /// say; a constant read [`Constant::via`] a symbol counts when that
-    /// symbol counts and its code there matches. Everything else is
+    /// symbol counts and its code there matches; a constant in a
+    /// [`Constant::cell`] counts when the cell's symbol counts and `cell`
+    /// reads the `u32` at its RVA, and takes that value. Everything else is
     /// [`Resolved::missing`], the slots of [`Constant::attribute`]s among
     /// them until the loader supplies them, except the constants that are
     /// not [`Constant::carried`], which are [`Resolved::uncarried`]. The
     /// checks do not apply.
     #[must_use]
-    pub fn fall_back(&self, code: &[u8], code_rva: u64) -> Resolved {
+    pub fn fall_back(
+        &self,
+        code: &[u8],
+        code_rva: u64,
+        cell: impl Fn(u64) -> Option<u32> + Sync,
+    ) -> Resolved {
         let found_symbols = search(&self.symbols, |s| {
             let rva = s.find(code, code_rva)?;
             let bytes_ok = self
@@ -435,6 +460,10 @@ impl Table {
             if let Some(via) = &c.via {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == via)?;
                 return c.find_at(code, rva.checked_sub(code_rva)?);
+            }
+            if let Some(at) = &c.cell {
+                let (_, rva) = symbols.iter().find(|(id, _)| id == at)?;
+                return cell(*rva).map(u64::from);
             }
             c.find(code)
         });

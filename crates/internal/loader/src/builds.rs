@@ -157,13 +157,15 @@ pub fn load() -> Vec<Table> {
 ///
 /// Its own when there is one; else, unless the settings turned it off, the
 /// newest table of its side carried over by patterns in `code` (the code
-/// section and its RVA).
+/// section and its RVA), with `cell` reading the `u32` the game's image
+/// holds at an RVA for the constants the game keeps in data cells.
 #[must_use]
 pub fn select(
     tables: &[Table],
     running: Side,
     fingerprint: Fingerprint,
     code: Option<(&[u8], u64)>,
+    cell: impl Fn(u64) -> Option<u32> + Sync,
 ) -> Option<KnownBuild> {
     let side = side(running)?;
     if let Some(table) = tables::exact(tables, side, fingerprint) {
@@ -179,7 +181,7 @@ pub fn select(
     }
     let (code, code_rva) = code?;
     let base = tables::newest(tables, side)?;
-    let table = base.fall_back(code, code_rva);
+    let table = base.fall_back(code, code_rva, cell);
     Some(KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Fallback,
@@ -189,11 +191,17 @@ pub fn select(
 }
 
 /// The newest table of `running`'s side carried over by patterns in `code`
-/// even when the build has its own, to see what the patterns alone carry.
+/// even when the build has its own, to see what the patterns alone carry;
+/// `cell` reads as for [`select`].
 #[must_use]
-pub fn by_patterns(tables: &[Table], running: Side, code: (&[u8], u64)) -> Option<KnownBuild> {
+pub fn by_patterns(
+    tables: &[Table],
+    running: Side,
+    code: (&[u8], u64),
+    cell: impl Fn(u64) -> Option<u32> + Sync,
+) -> Option<KnownBuild> {
     let base = tables::newest(tables, side(running)?)?;
-    let table = base.fall_back(code.0, code.1);
+    let table = base.fall_back(code.0, code.1, cell);
     Some(KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Fallback,
@@ -263,7 +271,14 @@ mod tests {
         let tables = load();
         let unknown = Fingerprint::new([0xee; 16], 1);
         let code = [0u8; 64];
-        let carried = select(&tables, Side::SERVER, unknown, Some((&code, 0x1000))).unwrap();
+        let carried = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+        )
+        .unwrap();
         let lacking = carried.lacking(crate::TABLE_IDS);
         assert!(
             lacking.split(", ").any(|name| name == "altars"),
@@ -285,12 +300,12 @@ mod tests {
             .find(|t| t.name() == server.name)
             .unwrap()
             .fingerprint();
-        let found = select(&tables, Side::SERVER, fingerprint, None).unwrap();
+        let found = select(&tables, Side::SERVER, fingerprint, None, |_| None).unwrap();
         assert_eq!(found.kind, Kind::Exact);
         assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
         assert_eq!(found.symbol("npc.nope"), None);
         assert!(!found.checks().is_empty());
-        assert!(select(&tables, Side::CLIENT, fingerprint, None).is_none());
+        assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None).is_none());
     }
 
     #[test]
@@ -298,13 +313,25 @@ mod tests {
         let tables = load();
         let unknown = Fingerprint::new([0xee; 16], 1);
         let code = [0u8; 64];
-        let found = select(&tables, Side::SERVER, unknown, Some((&code, 0x1000))).unwrap();
+        let found = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+        )
+        .unwrap();
         assert_eq!(found.kind, Kind::Fallback);
         assert_eq!(found.symbol("npc.lookup"), None);
         assert!(found.checks().is_empty());
         assert!(!found.missing().is_empty());
-        assert!(select(&tables, Side::SERVER, unknown, None).is_none());
-        assert!(select(&tables, Side::BOTH, unknown, Some((&code, 0x1000))).is_none());
+        assert!(select(&tables, Side::SERVER, unknown, None, |_| None).is_none());
+        assert!(
+            select(&tables, Side::BOTH, unknown, Some((&code, 0x1000)), |_| {
+                None
+            })
+            .is_none()
+        );
     }
 
     /// Every symbol with a `.bytes` constant reads those bytes in the client
@@ -382,7 +409,13 @@ mod tests {
         let code = image.read(range.start, range.end - range.start).unwrap();
         let tables = load();
         let started = std::time::Instant::now();
-        let found = by_patterns(&tables, Side::SERVER, (code, range.start - image.base())).unwrap();
+        let found = by_patterns(
+            &tables,
+            Side::SERVER,
+            (code, range.start - image.base()),
+            |rva| image.u32(image.base() + rva),
+        )
+        .unwrap();
         let took = started.elapsed();
         assert_eq!(found.kind, Kind::Fallback);
         // Unoptimised code scans about ten times slower than the release build.

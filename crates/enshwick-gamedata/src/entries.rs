@@ -222,6 +222,7 @@ pub struct Constant {
     pub(crate) via: Option<String>,
     pub(crate) within: Option<u32>,
     pub(crate) attribute: Option<String>,
+    pub(crate) cell: Option<String>,
     pub(crate) carried: bool,
 }
 
@@ -274,6 +275,14 @@ impl Constant {
     #[must_use]
     pub fn attribute(&self) -> Option<&str> {
         self.attribute.as_deref()
+    }
+
+    /// The symbol of the data cell the game keeps the value in, a `u32`
+    /// its code loads instead of holding it: a build without its own table
+    /// reads the value from the cell where its symbol is found.
+    #[must_use]
+    pub fn cell(&self) -> Option<&str> {
+        self.cell.as_deref()
     }
 
     /// Whether a build without its own table takes the value over; `false`

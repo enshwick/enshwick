@@ -4,9 +4,8 @@
 //!
 //! No reflection or stable boundary names the provider, so its table and
 //! join come from the build table, by address or by pattern. The join is
-//! hooked only where the provider's table holds it in the pinned slot, or,
-//! on a build without a pinned slot, in exactly one slot, and where its
-//! first bytes are the pinned ones; anything else leaves the check off.
+//! hooked only where the provider's table holds it in exactly one slot and
+//! its first bytes are the pinned ones; anything else leaves the check off.
 
 use core::ops::Range;
 
@@ -65,31 +64,13 @@ pub enum Error {
     /// The game's code section is not found in its image.
     #[error("the game's code section is not found")]
     NoCode,
-    /// The provider's table ends before the pinned slot.
-    #[error("the provider's table ends after {slots} slots, before the pinned slot {slot}")]
-    Short {
-        /// The pinned slot.
-        slot: usize,
-        /// The slots the table holds.
-        slots: usize,
-    },
-    /// The pinned slot holds another function.
-    #[error("slot {slot} of the provider's table holds {found:#x}, not the join at {join:#x}")]
-    Slot {
-        /// The pinned slot.
-        slot: usize,
-        /// The function the slot holds.
-        found: u64,
-        /// The join's address.
-        join: u64,
-    },
-    /// No slot holds the join, on a build without a pinned slot.
+    /// No slot holds the join.
     #[error("the provider's table holds the join at {join:#x} in no slot")]
     NotFound {
         /// The join's address.
         join: u64,
     },
-    /// Two slots hold the join, on a build without a pinned slot.
+    /// Two slots hold the join.
     #[error("the provider's table holds the join in slots {first} and {second}")]
     Twice {
         /// The first slot.
@@ -106,8 +87,8 @@ pub enum Error {
 /// ```
 /// use enshwick_loader::join::provider::Pins;
 ///
-/// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, slot: Some(16), bytes: None };
-/// assert_eq!(pins.slot, Some(16));
+/// let pins = Pins { table: 0x1_41db_2f28, join: 0x1_4108_9230, bytes: None };
+/// assert_eq!(pins.bytes, None);
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pins {
@@ -115,9 +96,6 @@ pub struct Pins {
     pub table: u64,
     /// The join.
     pub join: u64,
-    /// The join's slot in the table; `None` on a build whose table found the
-    /// rest by patterns.
-    pub slot: Option<usize>,
     /// The join's first eight bytes.
     pub bytes: Option<u64>,
 }
@@ -152,8 +130,6 @@ impl Pins {
         Ok(Self {
             table: at(pinned::net::PROVIDER_VTABLE.id())?,
             join: at(pinned::net::JOIN_GAME.id())?,
-            slot: constant(pinned::net::PROVIDER_JOIN_SLOT.id())
-                .and_then(|slot| usize::try_from(slot).ok()),
             bytes: constant(BYTES_ID),
         })
     }
@@ -174,7 +150,7 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
 /// with `read`, whose code section spans `code`.
 ///
 /// Its first bytes must be the pinned ones and the provider's table must hold
-/// it in the pinned slot, or in exactly one slot when none is pinned.
+/// it in exactly one slot, the slot of this build.
 ///
 /// Returns the join to hook.
 ///
@@ -194,7 +170,7 @@ fn slots(read: impl Fn(u64) -> Option<u64>, table: u64, code: &Range<u64>) -> Ve
 ///     0x4000 => Some(bytes),
 ///     _ => None,
 /// };
-/// let pins = Pins { table, join, slot: Some(1), bytes: Some(bytes) };
+/// let pins = Pins { table, join, bytes: Some(bytes) };
 /// assert_eq!(verify(&pins, read, 0x1000..0x8000), Ok(join));
 /// ```
 pub fn verify(
@@ -215,16 +191,6 @@ pub fn verify(
     let slots = slots(&read, pins.table, &code);
     if slots.is_empty() {
         return Err(Error::Unreadable { table: pins.table });
-    }
-    if let Some(slot) = pins.slot {
-        return match slots.get(slot) {
-            Some(&function) if function == join => Ok(join),
-            Some(&found) => Err(Error::Slot { slot, found, join }),
-            None => Err(Error::Short {
-                slot,
-                slots: slots.len(),
-            }),
-        };
     }
     let mut holding = slots
         .iter()
@@ -292,59 +258,34 @@ mod tests {
         }
     }
 
-    fn pins(slot: Option<usize>, bytes: Option<u64>) -> Pins {
+    fn pins(bytes: Option<u64>) -> Pins {
         Pins {
             table: TABLE,
             join: JOIN,
-            slot,
             bytes,
         }
     }
 
     #[test]
-    fn the_pinned_slot_holding_the_join_passes() {
-        let read = memory(&[0x1100, 0x1200, JOIN, 0x1300]);
-        assert_eq!(verify(&pins(Some(2), Some(BYTES)), read, CODE), Ok(JOIN));
+    fn the_one_slot_holding_the_join_is_taken_wherever_it_is() {
+        for slot in 0..4 {
+            let mut slots = vec![0x1100, 0x1200, 0x1300, 0x1400];
+            slots[slot] = JOIN;
+            let read = memory(&slots);
+            assert_eq!(verify(&pins(Some(BYTES)), read, CODE), Ok(JOIN), "{slot}");
+        }
     }
 
     #[test]
-    fn a_pinned_slot_holding_another_function_turns_the_check_off() {
-        let read = memory(&[0x1100, 0x1200, 0x1300, JOIN]);
-        assert_eq!(
-            verify(&pins(Some(2), Some(BYTES)), read, CODE),
-            Err(Error::Slot {
-                slot: 2,
-                found: 0x1300,
-                join: JOIN
-            })
-        );
-    }
-
-    #[test]
-    fn a_pinned_slot_past_the_table_turns_the_check_off() {
-        let read = memory(&[0x1100, JOIN]);
-        assert_eq!(
-            verify(&pins(Some(5), Some(BYTES)), read, CODE),
-            Err(Error::Short { slot: 5, slots: 2 })
-        );
-    }
-
-    #[test]
-    fn without_a_pinned_slot_the_one_slot_holding_the_join_is_taken() {
-        let read = memory(&[0x1100, 0x1200, JOIN]);
-        assert_eq!(verify(&pins(None, Some(BYTES)), read, CODE), Ok(JOIN));
-    }
-
-    #[test]
-    fn without_a_pinned_slot_no_or_two_slots_holding_the_join_turn_it_off() {
+    fn no_or_two_slots_holding_the_join_turn_the_check_off() {
         let none = memory(&[0x1100, 0x1200]);
         assert_eq!(
-            verify(&pins(None, Some(BYTES)), none, CODE),
+            verify(&pins(Some(BYTES)), none, CODE),
             Err(Error::NotFound { join: JOIN })
         );
         let two = memory(&[JOIN, 0x1200, JOIN]);
         assert_eq!(
-            verify(&pins(None, Some(BYTES)), two, CODE),
+            verify(&pins(Some(BYTES)), two, CODE),
             Err(Error::Twice {
                 first: 0,
                 second: 2
@@ -356,7 +297,7 @@ mod tests {
     fn other_code_at_the_join_turns_the_check_off() {
         let read = memory(&[JOIN]);
         assert_eq!(
-            verify(&pins(Some(0), Some(0x1234)), read, CODE),
+            verify(&pins(Some(0x1234)), read, CODE),
             Err(Error::Bytes {
                 join: JOIN,
                 found: BYTES,
@@ -364,7 +305,7 @@ mod tests {
             })
         );
         assert_eq!(
-            verify(&pins(Some(0), None), memory(&[JOIN]), CODE),
+            verify(&pins(None), memory(&[JOIN]), CODE),
             Err(Error::NoBytes)
         );
     }
@@ -373,7 +314,7 @@ mod tests {
     fn an_unreadable_join_names_the_join() {
         let read = |va| (va != JOIN).then_some(0x21);
         assert_eq!(
-            verify(&pins(Some(0), Some(BYTES)), read, CODE),
+            verify(&pins(Some(BYTES)), read, CODE),
             Err(Error::JoinUnreadable { join: JOIN })
         );
     }
@@ -390,7 +331,6 @@ mod tests {
         let pins = Pins {
             table: start + 16,
             join: start,
-            slot: Some(0),
             bytes: Some(BYTES),
         };
         // SAFETY: `image` spans the 32 bytes of `memory`, whose provenance
@@ -408,15 +348,14 @@ mod tests {
     fn an_unreadable_table_turns_the_check_off() {
         let read = |va| (va == JOIN).then_some(BYTES);
         assert_eq!(
-            verify(&pins(Some(0), Some(BYTES)), read, CODE),
+            verify(&pins(Some(BYTES)), read, CODE),
             Err(Error::Unreadable { table: TABLE })
         );
     }
 
     /// On the client `ENSH_CLIENT_EXE` names (skipped without it), its own
     /// table's pins pass against the executable, and every client table
-    /// carried to it by patterns, without a pinned slot, finds the same join
-    /// in the provider's table.
+    /// carried to it by patterns finds the same join in the provider's table.
     #[test]
     fn the_client_s_tables_pass_on_its_executable() {
         let Ok(path) = std::env::var("ENSH_CLIENT_EXE") else {
@@ -446,10 +385,9 @@ mod tests {
             .iter()
             .filter(|t| t.side() == enshwick_gamedata::Side::Client)
         {
-            let carried = other.fall_back(code, text.start - base);
+            let carried = other.fall_back(code, text.start - base, |rva| image.u32(base + rva));
             let by_patterns =
                 Pins::from_table(|id| carried.symbol(id), |id| carried.constant(id), base).unwrap();
-            assert_eq!(by_patterns.slot, None, "{}", other.name());
             assert_eq!(by_patterns.join, join, "{}", other.name());
             assert_eq!(
                 verify(&by_patterns, read, text.clone()),
