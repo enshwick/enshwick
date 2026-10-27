@@ -271,7 +271,9 @@ actions, as its administrators do; the mod decides who may ask:
 A dedicated server keeps the list in `bannedAccounts` of
 `enshrouded_server.json`; a game a client hosts keeps it until the game
 ends. The game never removes an administrator online, so a kick or a ban of
-one, and a kick of an account not online, return `WorldError::Refused`.
+one returns `WorldError::Refused`; so do a kick or a ban of a hosted game's
+host, a kick of an account not online, and a ban the game's list does not
+take. A ban of an account on the list already succeeds.
 Call it on the server's game thread between steps.
 
 ### The allowlist

@@ -26,6 +26,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `World::account_action` refuses a kick or a ban of a hosted game's host,
+  succeeds for a ban of an account on the ban list already, and refuses a
+  ban the game's list does not take instead of answering that the action
+  is missing; the console says so in its own words. The fake takes the
+  host with `FakeHost::host_key` (#606).
 - The crate docs say to depend on the crate from crates.io and carry a
   module map, the feature table and the target; docs.rs builds every
   feature. The Luau definitions describe events, codes and permission bits

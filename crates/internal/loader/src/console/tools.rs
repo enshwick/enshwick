@@ -132,6 +132,12 @@ pub(crate) fn account(loader: &Loader, act: Act, args: &str) -> String {
             texts::fill(asked, &[("who", who)])
         }
         Err(Status::MISSING) => texts::fill("console.account.missing", &[]),
+        Err(Status::REFUSED) if decision.route == Route::Handler => {
+            texts::fill("console.account.host", &[("who", who)])
+        }
+        Err(Status::REFUSED) if decision.route == Route::BanList => {
+            texts::fill("console.ban.unlisted", &[("who", who)])
+        }
         Err(status) => unread(status),
     }
 }

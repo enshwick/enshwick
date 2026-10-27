@@ -117,6 +117,34 @@ mod tests {
     }
 
     #[test]
+    fn the_host_is_never_kicked_or_banned_and_a_second_ban_is_no_error() {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
+            .host_key(7)
+            .player(player(10, 7, 0))
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+
+        assert_eq!(
+            world.account_action(AccountAction::Kick, 7),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(
+            world.account_action(AccountAction::Ban, 7),
+            Err(WorldError::Refused)
+        );
+        assert_eq!(world.account_action(AccountAction::UnBan, 7), Ok(()));
+        assert_eq!(world.account_action(AccountAction::Ban, 99), Ok(()));
+        assert_eq!(world.account_action(AccountAction::Ban, 99), Ok(()));
+        assert_eq!(loader.banned(), [99]);
+        assert!(loader.removed().is_empty());
+    }
+
+    #[test]
     fn account_actions_wait_for_the_game_thread() {
         let loader = enshwick::test::FakeHost::new()
             .type_hash("current_transform", 1)

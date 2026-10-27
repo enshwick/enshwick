@@ -179,6 +179,14 @@ pub(crate) fn forget() {
     STATE.busy.store(false, Ordering::Release);
 }
 
+/// The account of a hosted game's host, once its own hello named it.
+pub(crate) fn host() -> Option<u64> {
+    STATE
+        .serving
+        .get()
+        .and_then(|serving| with_gate(serving, |gate| gate.host))
+}
+
 /// The player `key` entered the world; on the game thread.
 pub(crate) fn joined(key: u64) {
     if key != 0

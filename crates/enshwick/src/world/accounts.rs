@@ -41,7 +41,8 @@ impl World {
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a kick or a ban of an administrator
-    /// online, whom the game never removes, a kick of an account not online
+    /// online, whom the game never removes, or of a hosted game's host, a
+    /// kick of an account not online, a ban the game's list does not take
     /// and account 0; [`WorldError::WrongThread`] off the server's game
     /// thread or inside a step; [`WorldError::Missing`] while no server
     /// runs or on a game build that lacks the action.
