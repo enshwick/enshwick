@@ -166,25 +166,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_manifest_of_an_older_minor_is_copied_up_to_its_size() {
-        let mut old = *enshwick::manifest!(id: "you.old-mod", side: SERVER, version: "1.0.0");
-        old.header.size = u32::try_from(core::mem::offset_of!(Manifest, builds)).unwrap();
-        // SAFETY: `old` is a local manifest readable for the size its header
-        // states, with the static strings of `manifest!`.
-        let copied = unsafe { copy(&raw const old) }.unwrap();
-        assert!(copied.name.is_empty());
-        assert_eq!(
-            // SAFETY: `copied` holds the `'static` strings of `manifest!`.
-            unsafe { describe(&copied) },
-            "id: you.old-mod
-version: 1.0.0
-side: server
-join check: no"
-        );
-        old.header.size = 8;
-        // SAFETY: `old` is a local manifest readable for the eight bytes its
+    fn a_manifest_without_every_field_of_its_major_is_refused() {
+        let mut short = *enshwick::manifest!(id: "you.old-mod", side: SERVER, version: "1.0.0");
+        // SAFETY: `short` is a whole local manifest with the static strings
+        // of `manifest!`.
+        let copied = unsafe { copy(&raw const short) }.unwrap();
+        // SAFETY: `copied` holds the `'static` strings of `manifest!`.
+        assert_eq!(unsafe { copied.id.as_str() }, Some("you.old-mod"));
+        short.header.size = u32::try_from(core::mem::offset_of!(Manifest, points)).unwrap();
+        // SAFETY: `short` is a local manifest readable for the size its
         // header now states.
-        assert!(unsafe { copy(&raw const old) }.is_err());
+        assert!(unsafe { copy(&raw const short) }.is_err());
         // SAFETY: `copy` accepts null and reads nothing.
         assert!(unsafe { copy(core::ptr::null()) }.is_err());
     }
