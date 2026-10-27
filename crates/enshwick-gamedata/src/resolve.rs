@@ -123,7 +123,7 @@ impl Resolved {
     ///     "attribute.health_max_slot" = { value = 7, attribute = "Health_Max" }
     ///     "#,
     /// )?;
-    /// let mut resolved = table.fall_back(&[], 0);
+    /// let mut resolved = table.fall_back(&[], 0, |_| None);
     /// assert_eq!(resolved.missing(), ["attribute.health_max_slot"]);
     /// assert_eq!(resolved.supply("attribute.health_max_slot", 7), None);
     /// assert_eq!(resolved.constant("attribute.health_max_slot"), Some(7));

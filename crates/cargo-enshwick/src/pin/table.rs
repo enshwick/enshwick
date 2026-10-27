@@ -257,7 +257,9 @@ fn patterns_into(
     let kept: HashMap<&str, &enshwick_gamedata::Constant> = present
         .constants()
         .iter()
-        .filter(|c| c.via().is_some() || c.attribute().is_some() || !c.carried())
+        .filter(|c| {
+            c.via().is_some() || c.attribute().is_some() || c.cell().is_some() || !c.carried()
+        })
         .map(|c| (c.id(), c))
         .collect();
     let failed = || Err(anyhow!("the search failed"));
@@ -354,8 +356,9 @@ fn constant_written(exe: &Exe<'_>, id: &str, value: u64, anchor: &Anchor) -> Wri
     }
 }
 
-/// A constant only its own build holds, read from the game's data, or read
-/// via a symbol in its code at the symbol's address in `exe`.
+/// A constant only its own build holds, read from the game's data, read
+/// from its data cell, or read via a symbol in its code at the symbol's
+/// address in `exe`.
 fn kept_written(
     exe: &Exe<'_>,
     constant: &enshwick_gamedata::Constant,
@@ -373,6 +376,20 @@ fn kept_written(
         return Ok(Some(format!(
             "{{ value = {}, attribute = \"{name}\" }}",
             spelled(constant.value())
+        )));
+    }
+    if let Some(cell) = constant.cell() {
+        let Some((_, rva)) = symbols.iter().find(|(symbol, _)| symbol == cell) else {
+            bail!("{id}: the table has no {cell}");
+        };
+        let value = exe
+            .data(*rva, 4)
+            .and_then(|bytes| bytes.try_into().ok())
+            .map(u32::from_le_bytes)
+            .with_context(|| format!("{id}: the cell at {cell} is unreadable"))?;
+        return Ok(Some(format!(
+            "{{ value = {}, cell = \"{cell}\" }}",
+            spelled(u64::from(value))
         )));
     }
     let (Some(via), Some(text)) = (constant.via(), pattern) else {

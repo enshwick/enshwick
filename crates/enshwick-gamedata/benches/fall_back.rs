@@ -35,10 +35,10 @@ fn fall_back(c: &mut Criterion) {
         };
         let code_rva = range.start - image.base();
         group.bench_function(format!("{name}_search"), |b| {
-            b.iter(|| table.fall_back(black_box(code), code_rva));
+            b.iter(|| table.fall_back(black_box(code), code_rva, |_| None));
         });
         let key = table.carry_key(code, code_rva);
-        let Some(saved) = table.fall_back(code, code_rva).to_saved(key) else {
+        let Some(saved) = table.fall_back(code, code_rva, |_| None).to_saved(key) else {
             continue;
         };
         group.bench_function(format!("{name}_saved"), |b| {

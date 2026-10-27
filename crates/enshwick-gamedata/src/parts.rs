@@ -160,7 +160,7 @@ mod tests {
     fn a_part_is_partly_there_when_patterns_find_some_of_its_entries() {
         let table = Table::parse(TABLE).unwrap();
         let code = [0x11, 0x22, 0x33, 0x44, 0, 0, 0, 0];
-        let parts = table.fall_back(&code, 0x1000).parts(PARTS);
+        let parts = table.fall_back(&code, 0x1000, |_| None).parts(PARTS);
         assert_eq!(parts[0].state(), PartState::Partly);
         assert_eq!(parts[0].missing, ["f.two"]);
         assert_eq!(parts[1].state(), PartState::Off);

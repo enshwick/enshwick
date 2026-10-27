@@ -159,6 +159,7 @@ fn port_tables(
             enshwick_gamedata::Table::parse(&src).with_context(|| path.display().to_string())?;
         let anchors = row::port_anchors(&row, &mut ported, &source, old, new);
         row::confirm_by_patterns(&mut ported, &source, new);
+        row::confirm_cells(&mut ported, &source, new);
         let name = new_name(
             row.name.as_deref().unwrap_or_default(),
             args.steam_build,
@@ -597,7 +598,7 @@ mod tests {
         let mut ported = row::port_row(row, &old, &new);
         let anchors = row::port_anchors(row, &mut ported, &source, &old, &new);
         let (new_code, _) = new.text();
-        let resolved = source.fall_back(new_code, code_rva);
+        let resolved = source.fall_back(new_code, code_rva, |_| None);
         for (id, value) in &changed {
             let line = ported.lines.iter().find(|l| &l.id == id).unwrap();
             assert_eq!(
@@ -629,6 +630,11 @@ mod tests {
                 let source = enshwick_gamedata::Table::parse(src).unwrap();
                 row::port_anchors(row, &mut result, &source, &exe, &exe);
                 row::confirm_by_patterns(&mut result, &source, &exe);
+                row::confirm_cells(&mut result, &source, &exe);
+                for cell in source.constants().iter().filter(|c| c.cell().is_some()) {
+                    let line = result.lines.iter().find(|l| l.id == cell.id()).unwrap();
+                    assert_eq!(line.status, row::Status::Kept, "{}: {}", line.id, line.note);
+                }
             }
             for line in &result.lines {
                 if line.kind == row::Kind::Constant {

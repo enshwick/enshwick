@@ -70,7 +70,7 @@ impl Table {
     /// )?;
     /// let code = [0x90, 0xcc, 0xc3];
     /// let key = table.carry_key(&code, 0x2000);
-    /// let carried = table.fall_back(&code, 0x2000);
+    /// let carried = table.fall_back(&code, 0x2000, |_| None);
     /// let saved = carried.to_saved(key).ok_or("not carried")?;
     /// assert_eq!(table.restore(&saved, key), Some(carried));
     /// assert_eq!(table.restore(&saved, table.carry_key(&[0xc3], 0x2000)), None);
@@ -193,7 +193,7 @@ mod tests {
         let table = Table::parse(TABLE).unwrap();
         let code = code();
         let key = table.carry_key(&code, 0x5000);
-        let carried = table.fall_back(&code, 0x5000);
+        let carried = table.fall_back(&code, 0x5000, |_| None);
         let saved = carried.to_saved(key).unwrap();
         assert_eq!(table.restore(&saved, key), Some(carried));
     }
@@ -203,7 +203,10 @@ mod tests {
         let table = Table::parse(TABLE).unwrap();
         let mut code = code();
         let key = table.carry_key(&code, 0x5000);
-        let saved = table.fall_back(&code, 0x5000).to_saved(key).unwrap();
+        let saved = table
+            .fall_back(&code, 0x5000, |_| None)
+            .to_saved(key)
+            .unwrap();
         assert_ne!(table.carry_key(&code, 0x6000), key);
         let edited = Table::parse(&TABLE.replace("0x1010", "0x1011")).unwrap();
         assert_ne!(edited.carry_key(&code, 0x5000), key);
@@ -220,7 +223,10 @@ mod tests {
         let table = Table::parse(TABLE).unwrap();
         let code = code();
         let key = table.carry_key(&code, 0x5000);
-        let saved = table.fall_back(&code, 0x5000).to_saved(key).unwrap();
+        let saved = table
+            .fall_back(&code, 0x5000, |_| None)
+            .to_saved(key)
+            .unwrap();
         let without = |line: &str| saved.replace(&format!("{line}\n"), "");
         assert!(table.restore(&saved, key).is_some());
         assert_eq!(table.restore(&without("missing f.twice"), key), None);

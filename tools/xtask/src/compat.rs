@@ -163,8 +163,12 @@ fn build(exe: &Path, patterns: bool) -> Result<Build, String> {
     let exact = tables::exact(&all, side, fingerprint).filter(|_| !patterns);
     let mut table = match exact {
         Some(table) => Some((table.resolve(), table.clone())),
-        None => tables::newest(&all, side)
-            .map(|table| (table.fall_back(code, range.start - base), table.clone())),
+        None => tables::newest(&all, side).map(|table| {
+            (
+                table.fall_back(code, range.start - base, |rva| image.u32(base + rva)),
+                table.clone(),
+            )
+        }),
     };
     let slots = match &mut table {
         Some((resolved, _)) => supply_slots(exe, &reflection, resolved),
@@ -601,30 +605,9 @@ mod tests {
             exact.iter().all(|f| f.missing.is_empty()),
             "an exact table lacks nothing"
         );
-        let nothing = server.fall_back(&[0; 64], 0x1000);
+        let nothing = server.fall_back(&[0; 64], 0x1000, |_| None);
         let fallback = nothing.parts(MODULE_IDS);
         assert!(fallback.iter().all(|f| f.missing.len() == f.named));
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn a_carried_table_does_not_miss_what_only_its_own_build_holds() {
-        let all = known_tables().unwrap();
-        let client = tables::newest(&all, tables::Side::Client).unwrap();
-        assert!(
-            client
-                .resolve()
-                .constant("net.provider_join_slot")
-                .is_some()
-        );
-        let carried = client.fall_back(&[0; 64], 0x1000);
-        for feature in carried.parts(MODULE_IDS) {
-            assert!(
-                !feature.missing.contains(&"net.provider_join_slot"),
-                "{}",
-                feature.name
-            );
-        }
     }
 
     #[test]

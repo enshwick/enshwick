@@ -57,7 +57,7 @@ revision = 1
 "building.spawn_prop" = { rva = 0x48_5a80, pattern = "48 89 5C 24 ?? 55 56 57 41 56 41 57 48 8D 6C 24 ?? 48 81 EC 70 01 00 00" }
 "building.pickup" = { rva = 0x48_9300, pattern = "40 55 53 56 57 41 55 41 56 41 57 48 8D 6C 24 ?? 48 81 EC A0 00 00 00" }
 # The online provider's function table, from its constructor, whose
-# slot `net.provider_join_slot` the loader checks holds the join.
+# one slot the loader checks holds the join.
 "net.provider_vtable" = { rva = 0x1db_0d28, pattern = "48 89 5C 24 10 57 48 81 EC B0 00 00 00 33 FF 48 8D 05 ?? ?? ?? ?? 48 89 01 48 8B D9 8B C7 87 41 58", rel = 18 }
 "net.join_game" = { rva = 0x108_6d50, pattern = "40 53 55 56 57 48 83 EC 78 80 7A 20 01 48 8B F1 74 09 48 8B 1D ?? ?? ?? ?? EB 0D 0F 10 02 0F 11 44 24 ?? 48 8B 5C 24 ??" }
 # The game's start of a user interaction, such as a dialog, which the
@@ -108,6 +108,8 @@ revision = 1
 "inventory.resend" = { rva = 0x49_ee40, pattern = "74 0B 8B 53 ?? 48 8B CF E8 ?? ?? ?? ?? 83 7B ?? 00 74 0B 8B 53 ?? 48 8B CF", rel = 9 }
 "item.info" = { rva = 0xe7_a870, pattern = "89 4C 24 ?? 48 83 EC 28 85 C9 74 1B 48 8D 4A ?? 48 8D 54 24 ??" }
 "skill.fly_mode_gate_return" = { rva = 0x2d_8295, pattern = "48 8B 95 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01 EB 02 32 DB", at = 18 }
+# The node of Airborne Architect, which the fly mode gate loads from data.
+"skill.airborne_architect_cell" = { rva = 0x150_a9c0, pattern = "48 8B 95 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01 EB 02 32 DB", rel = 9 }
 "experience.need_for_level" = { rva = 0xe7_dad0, pattern = "4C 8B 4A ?? 44 8B D1 4D 85 C9 75 06 B8 01 00 00 00" }
 "experience.level_cap" = { rva = 0xe7_f720, pattern = "48 8B 41 20 48 85 C0 75 06 B8 01 00 00 00 C3 8B 40 10" }
 "experience.source_factor" = { rva = 0xe7_6620, pattern = "4C 8B 81 90 00 00 00 0F B6 C2 FF C8 83 F8 05 77 2A 48 8D 15 ?? ?? ?? ??" }
@@ -243,15 +245,13 @@ revision = 1
 "pacing.background_workers" = { rva = 0x8d_e9b0, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 34 }
 
 [constants]
-# The join's slot in the online provider's function table, which only
-# this build holds (`carried = false`), and the join's first eight bytes.
-"net.provider_join_slot" = { value = 16, carried = false }
+# The join's first eight bytes.
 "net.join_game.bytes" = "0xec83_4857_5655_5340"
 "user.start_interaction.bytes" = "0x88ec_8148_5641_5540"
 # An interaction request's kind byte, and the kind of the dialog that a
-# join failed, checked on this build only (`carried = false`).
-"user.interaction_kind" = { value = 0x8, carried = false }
-"user.join_failed_kind" = { value = 10, carried = false }
+# join failed.
+"user.interaction_kind" = { value = 0x8, pattern = "49 8B 06 48 89 ?? ?? 41 0F B6 46 ?? 88 ?? ?? 41 8B 46 ??", at = 11, size = 1 }
+"user.join_failed_kind" = { value = 10, pattern = "25 FF FF 0F 00 83 F8 01 74 ?? 48 8D 15 ?? ?? ?? ?? 0F 10 05 ?? ?? ?? ?? 4C 8D 44 24 ?? 45 33 C9 B1 01 0F 11 44 24 ?? F2 0F 10 05 ?? ?? ?? ?? F2 0F 11 44 24 ?? E8 ?? ?? ?? ?? 41 B8 01 00 00 00 B2 ??", at = 65, size = 1 }
 "text.pool_language" = { value = 0xd8, pattern = "75 38 48 8D 6E ?? 39 BE ?? ?? ?? ?? 75 11 48 8B D5 48 8D 4C 24 ??", at = 8, size = 4 }
 # The first eight code bytes at each mod textures symbol, and
 # the layouts they rely on: a content request (0x48 bytes:
@@ -769,7 +769,7 @@ revision = 1
 "knowledge.request_kind" = { value = 0x4, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
 "knowledge.request_value" = { value = 0x8, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
 "knowledge.request_target" = { value = 0xc, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
-"skill.airborne_architect" = 0x4475_e8dd
+"skill.airborne_architect" = { value = 0x4475_e8dd, cell = "skill.airborne_architect_cell" }
 "pacing.loop_wait.bytes" = "0x8bc0_3345_d855_8b48"
 "pacing.message_wait.bytes" = 0x1cff_b941_d855_8b48
 "pacing.server_wait.bytes" = 0x48c7_558d_48c4_8b4d
