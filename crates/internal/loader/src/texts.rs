@@ -1,15 +1,15 @@
 //! The loader's own texts, such as the Mods screen's words and the
-//! stand-ins' names: `texts.toml` beside this file, a table per language,
-//! with `mod-configs/enshwick.texts.toml` over it, read once, the first time
-//! a text is needed after the loader is installed.
+//! stand-ins' names: a file per language in `texts/` beside this file, with
+//! `mod-configs/enshwick.texts.toml` over them, read once, the first time a
+//! text is needed after the loader is installed.
 
 use std::path::Path;
 use std::sync::OnceLock;
 
 use enshwick::i18n::{Language, Texts};
 
-/// The texts the loader ships.
-const EMBEDDED: &str = include_str!("texts.toml");
+/// The texts the loader ships, a file per language.
+const EMBEDDED: &[&str] = include!(concat!(env!("OUT_DIR"), "/texts.rs"));
 /// The file in `mod-configs/` that overrides or adds to them.
 #[cfg_attr(
     all(not(windows), not(test)),
@@ -37,10 +37,22 @@ fn language() -> Language {
     Language::FALLBACK
 }
 
+/// The texts the loader ships, every language's file merged; a file that
+/// does not read is left out, which a test keeps from shipping.
+fn shipped() -> Texts {
+    let mut texts = Texts::default();
+    for file in EMBEDDED {
+        if let Ok(language) = Texts::parse(file) {
+            texts.merge(language);
+        }
+    }
+    texts
+}
+
 /// The shipped texts with the file at `overrides` over them, when it is
 /// there and reads.
 fn read(overrides: Option<&Path>) -> Texts {
-    let mut texts = Texts::parse(EMBEDDED).unwrap_or_default();
+    let mut texts = shipped();
     let Some(path) = overrides else {
         return texts;
     };
@@ -103,12 +115,40 @@ mod tests {
     }
 
     /// The keys the loader's code asks for: the first argument of each
-    /// `texts::` call that is a literal, and the stand-ins' keys.
+    /// `texts::` call that is a literal, every literal shaped like a key in
+    /// one of the fallback texts' namespaces, such as a key in a table of
+    /// keys, and the stand-ins' keys.
     fn keys() -> Vec<String> {
         let source: String = sources()
             .iter()
             .map(|path| std::fs::read_to_string(path).unwrap())
             .collect();
+        let fallback = EMBEDDED
+            .iter()
+            .map(|file| file.parse::<toml::Table>().unwrap())
+            .find_map(|mut table| table.remove(Language::FALLBACK.code()))
+            .unwrap();
+        let namespaces: Vec<String> = fallback
+            .as_table()
+            .unwrap()
+            .keys()
+            .filter_map(|key| key.split_once('.').map(|(first, _)| first.to_owned()))
+            .collect();
+        let key_shaped = |literal: &&str| {
+            let parts: Vec<&str> = literal.split('.').collect();
+            parts.len() > 1
+                && parts.iter().all(|part| {
+                    !part.is_empty()
+                        && part
+                            .bytes()
+                            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+                })
+                && namespaces.iter().any(|n| n == parts[0])
+                // Ids of services, messages and engine names share these
+                // namespaces; their texts are found by the calls alone.
+                && !["enshwick", "world"].contains(&parts[0])
+                && !["toml", "txt", "log", "json", "dll"].contains(parts.last().unwrap())
+        };
         let mut keys: Vec<String> = source
             .split("texts::")
             .skip(1)
@@ -117,6 +157,14 @@ mod tests {
                 let quoted = argument.strip_prefix('"')?;
                 Some(quoted.split_once('"')?.0.to_owned())
             })
+            .chain(
+                source
+                    .split('"')
+                    .skip(1)
+                    .filter(|between| !between.contains(['\n', ' ']))
+                    .filter(key_shaped)
+                    .map(str::to_owned),
+            )
             .chain([
                 "stand-in.name".to_owned(),
                 "stand-in.description".to_owned(),
@@ -128,19 +176,42 @@ mod tests {
     }
 
     #[test]
+    fn every_shipped_file_holds_one_language_of_its_own() {
+        let mut codes: Vec<String> = EMBEDDED
+            .iter()
+            .map(|file| {
+                assert!(
+                    Texts::parse(file).is_ok(),
+                    "{}",
+                    &file[..file.len().min(40)]
+                );
+                let table: toml::Table = file.parse().unwrap();
+                assert_eq!(table.len(), 1, "{:?}", table.keys().collect::<Vec<_>>());
+                table.keys().next().unwrap().clone()
+            })
+            .collect();
+        let shipped = codes.len();
+        codes.sort_unstable();
+        codes.dedup();
+        assert_eq!(codes.len(), shipped, "{codes:?}");
+        assert!(codes.iter().any(|code| code == Language::FALLBACK.code()));
+    }
+
+    #[test]
     fn every_key_the_loader_asks_for_has_a_fallback_text() {
-        let texts = Texts::parse(EMBEDDED).unwrap();
+        let texts = shipped();
         let keys = keys();
         assert!(keys.len() > 30, "{keys:?}");
-        for key in keys {
-            assert!(texts.get(&key, Language::FALLBACK).is_some(), "{key}");
-        }
+        let missing: Vec<&String> = keys
+            .iter()
+            .filter(|key| texts.get(key, Language::FALLBACK).is_none())
+            .collect();
+        assert_eq!(missing, Vec::<&String>::new());
     }
 
     #[test]
     fn every_text_exists_in_all_languages() {
-        let texts = Texts::parse(EMBEDDED).unwrap();
-        assert_eq!(texts.untranslated(), []);
+        assert_eq!(shipped().untranslated(), []);
     }
 
     #[test]
@@ -154,8 +225,12 @@ mod tests {
             names.sort_unstable();
             names
         }
-        let texts = Texts::parse(EMBEDDED).unwrap();
-        let table: toml::Table = EMBEDDED.parse().unwrap();
+        let texts = shipped();
+        let table = EMBEDDED
+            .iter()
+            .map(|file| file.parse::<toml::Table>().unwrap())
+            .find(|table| table.contains_key(Language::FALLBACK.code()))
+            .unwrap();
         let fallback = table[Language::FALLBACK.code()].as_table().unwrap();
         for key in fallback.keys() {
             let expected = placeholders(texts.get(key, Language::FALLBACK).unwrap());

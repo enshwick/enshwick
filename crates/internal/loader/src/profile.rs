@@ -431,11 +431,13 @@ pub fn render(
                 .iter()
                 .take(items)
                 .map(|i| {
-                    format!(
-                        "{} {} in {} calls",
-                        i.what,
-                        per_second(i.ticks, tsc_hz, window),
-                        i.calls
+                    crate::texts::fill(
+                        "costs.item",
+                        &[
+                            ("what", &i.what),
+                            ("cost", &per_second(i.ticks, tsc_hz, window)),
+                            ("calls", &i.calls.to_string()),
+                        ],
                     )
                 })
                 .collect();

@@ -6,6 +6,15 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- A text missing in a regional language comes from its main variety before
+  English: `pt-br` from `pt`, `es-mx` from `es-419` and `es`, `fr-ca` from
+  `fr`, `nb` from `no` (`Language::lookup_order`).
+- The loader's own texts sit in a file per language, and every console
+  answer, the status summary, the per-mod costs, the conflict report and
+  the interface demo follow the reader's language.
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added

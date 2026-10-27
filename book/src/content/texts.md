@@ -25,7 +25,14 @@ module reads it, and a server owner can add to it or change it.
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
 - `en` is the fallback: a language without a text of its own for a key gets
-  the `en` text.
+  the `en` text. A regional language looks in its main variety first:
+  `pt-br` in `pt`, `es-mx` in `es-419` and then `es`, `fr-ca` in `fr`, `nb`
+  in `no`.
+  [`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+  gives the order.
+- The game's settings offer these languages: `en-us`, `de`, `fr`, `it`,
+  `es`, `ru`, `pl`, `ja`, `ko`, `pt-br`, `th`, `tr`, `zh-cn`, `zh-tw` and
+  `uk`. English reads as `en-us`, which falls back to `en`.
 
 Embed the file with `include_str!("texts.toml")` and read it during `init`
 with
@@ -210,8 +217,8 @@ without rebuilding it.
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
 name of an item whose mod is gone, ship in
-[`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
-and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
+[`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts),
+a file per language, and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.
 
 The file is read on the machine the mod runs on. On a dedicated server it
