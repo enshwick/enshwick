@@ -66,7 +66,7 @@ impl Host {
 /// game in, such as an item's or a survivor's name; a text missing there
 /// comes in English, as the game shows it.
 ///
-/// `id` is a text tag's game id, [`Guid::id`](crate::content::Guid::id) of
+/// `id` is a text tag's game id, [`Guid::fnv1a`](crate::content::Guid::fnv1a) of
 /// the tag an item's or a template's data names. The text is read from the
 /// game's archive and stays valid for the process. `None` for a tag the
 /// game lacks, and always on a server, whose archive holds no texts.
