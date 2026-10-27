@@ -336,7 +336,8 @@ static EXECUTOR: OnceLock<Option<Executor>> = OnceLock::new();
 static QUEUE: Queue = Queue::new();
 static BUSY: AtomicBool = AtomicBool::new(false);
 static FINISHED: Mutex<Vec<Finished>> = Mutex::new(Vec::new());
-/// A mod asked for inventories during init.
+/// A mod asked for inventories during init, or a dedicated server runs,
+/// whose console gives items.
 static WANTED: AtomicBool = AtomicBool::new(false);
 /// The row hook is in place.
 static ARMED: AtomicBool = AtomicBool::new(false);
@@ -567,7 +568,7 @@ pub(crate) fn open(loader: &Loader) -> Status {
 /// Links the row hook when a mod asked for inventories, and always on a
 /// dedicated server, whose console gives items.
 pub(crate) fn link(loader: &Loader) {
-    if loader.side == Side::SERVER {
+    if loader.side == Side::SERVER && executor(loader).is_some() {
         WANTED.store(true, Ordering::Release);
     }
     if !WANTED.load(Ordering::Acquire) {
@@ -860,7 +861,8 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     // row loop (`inventory.view_fill` checked by `Loader::code_holds`); it holds the
     // item registry pointer at the table's `inventory.view_item_registry`.
     let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
-    if REGISTRY.swap(registry, Ordering::AcqRel) != registry
+    if REGISTRY.load(Ordering::Acquire) != registry
+        && REGISTRY.swap(registry, Ordering::AcqRel) != registry
         && pick_registry(
             registry,
             crate::host::loader()

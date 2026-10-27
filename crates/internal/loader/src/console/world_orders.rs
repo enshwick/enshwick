@@ -186,6 +186,7 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
         }
     };
     let mut entities = Vec::new();
+    let mut stopped = None;
     for i in 0..spawn.count {
         let [x, y, z] = origin;
         let request = SpawnRequest {
@@ -199,9 +200,19 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
         };
         match crate::spawns::spawn(loader, &request) {
             Ok(entity) => entities.push(entity.to_string()),
-            Err(Status::MISSING) => return texts::fill("console.spawn.missing", &[]),
-            Err(status) => return tools::unread(status),
+            Err(status) => {
+                stopped = Some(status);
+                break;
+            }
         }
+    }
+    let why = match stopped {
+        None => None,
+        Some(Status::MISSING) => Some(texts::fill("console.spawn.missing", &[])),
+        Some(status) => Some(tools::unread(status)),
+    };
+    if entities.is_empty() {
+        return why.unwrap_or_default();
     }
     crate::log!(
         INFO,
@@ -210,14 +221,18 @@ fn spawn(loader: &Loader, spawn: &orders::Spawn<'_>) -> String {
         answers::place(Some(origin)),
         entities.join(", ")
     );
-    texts::fill(
+    let asked = texts::fill(
         "console.spawn.asked",
         &[
             ("template", &Guid(spawn.template).to_string()),
             ("place", &answers::place(Some(origin))),
             ("entities", &entities.join(", ")),
         ],
-    )
+    );
+    match why {
+        Some(why) => format!("{asked} {why}"),
+        None => asked,
+    }
 }
 
 /// Moves the named player's character.
@@ -247,6 +262,7 @@ fn teleport(loader: &Loader, order: &orders::Teleport<'_>) -> String {
             )
         }
         Err(Status::MISSING) => texts::fill("console.teleport.missing", &[]),
+        Err(Status::REFUSED) => texts::fill("console.teleport.refused", &[("who", &who)]),
         Err(status) => tools::unread(status),
     }
 }

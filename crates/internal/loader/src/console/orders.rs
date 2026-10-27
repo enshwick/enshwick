@@ -9,6 +9,10 @@ use enshwick::content::Guid;
 pub const MAX_ITEMS: u32 = 10_000;
 /// The most entities one `spawn` creates.
 pub const MAX_SPAWNS: u32 = 32;
+/// The farthest a place may lie from the origin on any axis, in metres:
+/// well past the edge of the world, well inside the game's fixed-point
+/// range.
+pub const MAX_METRES: f64 = 100_000.0;
 
 /// `give <item> <count>`: items for every player online.
 pub const GIVE_USAGE: &str = "enshwick give <item> <count>";
@@ -87,9 +91,9 @@ fn count(word: &str, max: u32) -> Option<u32> {
     word.parse().ok().filter(|count| (1..=max).contains(count))
 }
 
-/// A finite coordinate in metres.
+/// A coordinate in metres, at most [`MAX_METRES`] from the origin.
 fn metres(word: &str) -> Option<f64> {
-    word.parse::<f64>().ok().filter(|m| m.is_finite())
+    word.parse::<f64>().ok().filter(|m| m.abs() <= MAX_METRES)
 }
 
 /// The first `N` words of `args` and the rest, trimmed.
@@ -159,10 +163,10 @@ pub fn spawn(args: &str) -> Result<Spawn<'_>, Usage> {
     if template == [0; 16] || rest.is_empty() {
         return Err(usage);
     }
-    let at = match words::<3>(rest) {
-        Some((xyz, "")) if point(xyz).is_some() => Place::Point(point(xyz).ok_or(usage)?),
-        _ => Place::Beside(rest),
-    };
+    let at = words::<3>(rest)
+        .filter(|(_, after)| after.is_empty())
+        .and_then(|(xyz, _)| point(xyz))
+        .map_or(Place::Beside(rest), Place::Point);
     Ok(Spawn {
         template,
         count: count(n, MAX_SPAWNS).ok_or(usage)?,
@@ -283,6 +287,9 @@ mod tests {
         assert_eq!(teleport("10 20 -3"), usage);
         assert_eq!(teleport("10 NaN 0 Ann"), usage);
         assert_eq!(teleport("10 inf 0 Ann"), usage);
+        assert_eq!(teleport("1e9 0 0 Ann"), usage);
+        assert_eq!(teleport("0 -100001 0 Ann"), usage);
+        assert!(teleport(&format!("{MAX_METRES} 0 0 Ann")).is_ok());
         assert_eq!(teleport("Ann 1 2 3"), usage);
     }
 
@@ -293,10 +300,10 @@ mod tests {
         }
 
         #[test]
-        fn a_teleport_reads_back_any_finite_point(
-            x in -1.0e6f64..1.0e6,
-            y in -1.0e6f64..1.0e6,
-            z in -1.0e6f64..1.0e6,
+        fn a_teleport_reads_back_any_point_in_range(
+            x in -MAX_METRES..=MAX_METRES,
+            y in -MAX_METRES..=MAX_METRES,
+            z in -MAX_METRES..=MAX_METRES,
         ) {
             let line = format!("{x} {y} {z} Ann");
             let order = teleport(&line).unwrap();
