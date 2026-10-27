@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.map()` returns the `Map` of the game server: `Map::markers` and
+  `Map::markers_in` list the world's map markers, each a `MapMarker` with
+  its position, its `MapMarkerTypeId` (the key of the game's marker type
+  registry) and its label's text tag; `Map::waypoint` reads the waypoint a
+  player set (#557).
+- The `world_quiet` entry answers whether a mod is on the server's game
+  thread at a quiet moment while a world runs, where it may read live
+  components (ABI 2.90) (#557).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the

@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 89
+#define ENSHWICK_ABI_MINOR 90
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -3791,6 +3791,12 @@ typedef struct EnshwickHostApi {
                                            const struct EnshwickTransactionOp *ops,
                                            uint32_t count,
                                            uint64_t *id);
+  // `Status::OK` on the server's game thread at a quiet moment while a
+  // world runs, where a mod may read live components that no system
+  // writes meanwhile; `Status::WRONG_THREAD` on another thread or
+  // inside a step, `Status::MISSING` while no world runs. Since
+  // minor 90.
+  EnshwickStatus (*world_quiet)(EnshwickModHandle me);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.
