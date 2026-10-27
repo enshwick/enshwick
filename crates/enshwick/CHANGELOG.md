@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::account_action` asks the game to kick, ban or unban an account
+  (`AccountAction`); a ban of an account that is not online goes straight
+  onto the server's ban list (`HostApi::account_action`,
+  `AccountActionType`, ABI minor 97). The fake keeps a ban list
+  (`Installed::banned`, `removed`).
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread

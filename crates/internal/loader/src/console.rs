@@ -23,12 +23,14 @@ pub mod accounts;
 #[cfg(windows)]
 mod admin;
 pub mod answers;
+#[cfg(windows)]
+mod ban_list;
 pub mod file;
 pub mod input;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
-pub(crate) use admin::TABLE_IDS;
+pub(crate) use admin::{TABLE_IDS, account_action};
 #[cfg(windows)]
 mod tools;
 #[cfg(windows)]
@@ -80,10 +82,20 @@ struct State {
     waiting: AtomicBool,
     /// The pieces placed lately, newest last.
     placed: Mutex<VecDeque<answers::Placed>>,
+    /// The accounts put on the ban list while not online, this run: the
+    /// game checks joins against its session's own list, which it fills
+    /// from the ban list only when hosting starts, so the loader removes
+    /// them when they join.
+    #[cfg(windows)]
+    offline_bans: Mutex<Vec<u64>>,
     /// The game's account action handler and its action's layout, or why
     /// this build lacks them.
     #[cfg(windows)]
     handler: std::sync::OnceLock<Result<admin::Handler, String>>,
+    /// The game's ban list add and its entry's layout, or why this build
+    /// lacks them.
+    #[cfg(windows)]
+    ban_list: std::sync::OnceLock<Result<ban_list::BanList, String>>,
 }
 
 static STATE: State = State {
@@ -91,7 +103,11 @@ static STATE: State = State {
     waiting: AtomicBool::new(false),
     placed: Mutex::new(VecDeque::new()),
     #[cfg(windows)]
+    offline_bans: Mutex::new(Vec::new()),
+    #[cfg(windows)]
     handler: std::sync::OnceLock::new(),
+    #[cfg(windows)]
+    ban_list: std::sync::OnceLock::new(),
 };
 
 /// Queues `line` from `source` for the game thread.
@@ -99,6 +115,31 @@ pub fn submit(line: String, source: Source) {
     let mut pending = STATE.pending.relock();
     pending.push(Pending { line, source });
     STATE.waiting.store(true, Ordering::Release);
+}
+
+/// Notes that `account` went onto the ban list while not online.
+#[cfg(windows)]
+pub(crate) fn remember_offline_ban(account: u64) {
+    let mut bans = STATE.offline_bans.relock();
+    if !bans.contains(&account) {
+        bans.push(account);
+    }
+}
+
+/// Forgets an offline ban of `account`, which the game took back.
+#[cfg(windows)]
+pub(crate) fn forget_offline_ban(account: u64) {
+    STATE
+        .offline_bans
+        .relock()
+        .retain(|&banned| banned != account);
+}
+
+/// Whether `account` went onto the ban list while not online this run, so
+/// its join must be refused.
+#[cfg(windows)]
+pub(crate) fn banned_offline(account: u64) -> bool {
+    STATE.offline_bans.relock().contains(&account)
 }
 
 /// Keeps the pieces placed among `built`, one step's building events, among
@@ -281,6 +322,17 @@ pub fn log_query(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    #[test]
+    fn an_offline_ban_is_remembered_until_the_game_takes_it_back() {
+        assert!(!banned_offline(0x77));
+        remember_offline_ban(0x77);
+        remember_offline_ban(0x77);
+        assert!(banned_offline(0x77));
+        forget_offline_ban(0x77);
+        assert!(!banned_offline(0x77));
+    }
+
     use super::*;
 
     #[test]

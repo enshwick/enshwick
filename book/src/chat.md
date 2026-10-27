@@ -112,7 +112,7 @@ input, such as a Windows service, reads only its command file.
 | `enshwick placed [n]`                 | the pieces players placed last, newest first, at most 32                                                                                                                 |
 | `enshwick reload <mod id>`            | makes the mod read its settings file again, the running world's own copy when it has one                                                                                 |
 | `enshwick kick <player>`              | asks the game to remove a player online                                                                                                                                  |
-| `enshwick ban <player>`               | asks the game to ban a player online and remove them; the ban stays in `bannedAccounts` of `enshrouded_server.json`                                                      |
+| `enshwick ban <player>`               | bans a player or an account, removing the player when online; the ban stays in `bannedAccounts` of `enshrouded_server.json`                                              |
 | `enshwick unban <account>`            | asks the game to take an account off its ban list                                                                                                                        |
 | `enshwick status`                     | a short [status summary](logging.md#status-summary), and a fresh `status.log`                                                                                            |
 | `enshwick profile [reset]`            | the five [costliest mods](logging.md#per-mod-costs) since start, or since `enshwick profile reset`                                                                       |
@@ -125,7 +125,9 @@ input, such as a Windows service, reads only its command file.
 A player is named by name, or by account: the 16 hex digits
 `enshwick world` shows, or hex with `0x` in front. A name several players
 share is refused, with their accounts. The game never kicks or bans an
-administrator, nor a player who is not online.
+administrator online, and kicks only players online; a ban of an account
+that is not online goes straight onto the ban list, and the loader removes
+that account if it joins before the server restarts.
 
 No mod may take the id `enshwick`.
 
