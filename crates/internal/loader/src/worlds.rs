@@ -122,12 +122,16 @@ pub fn set_at(doc: &mut toml_edit::Table, key: &str, mut value: toml_edit::Value
     true
 }
 
-/// Removes the dotted `key` of `doc`, if it is there.
+/// Removes the dotted `key` of `doc`, if it is there, through standard and
+/// inline tables alike.
 pub fn remove_at(doc: &mut toml_edit::Table, key: &str) {
     let (path, leaf) = key.rsplit_once('.').map_or(("", key), |(p, l)| (p, l));
-    let mut table = doc;
+    let mut table: &mut dyn toml_edit::TableLike = doc;
     for part in path.split('.').filter(|p| !p.is_empty()) {
-        let Some(next) = table.get_mut(part).and_then(toml_edit::Item::as_table_mut) else {
+        let Some(next) = table
+            .get_mut(part)
+            .and_then(toml_edit::Item::as_table_like_mut)
+        else {
             return;
         };
         table = next;

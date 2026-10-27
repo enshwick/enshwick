@@ -764,4 +764,33 @@ mod tests {
         assert!(admit(&schema(), "limit", true, Some(now), now).is_err());
         assert_eq!(values_text("{ a = 1, b = \"x\" }"), "a = 1\nb = \"x\"\n");
     }
+
+    #[test]
+    fn secrets_in_inline_tables_never_leave() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("auth.token", Stage::Runtime, "x").with_secret(true),
+                Field::new("auth.user", Stage::Runtime, "x"),
+                Field::new("outer.inner.key", Stage::Runtime, "x").with_secret(true),
+                Field::new("outer.keep", Stage::Runtime, &1),
+            ],
+        );
+        for text in [
+            "auth = { token = \"hunter2\", user = \"ann\" }\nouter = { inner = { key = \"swordfish\" }, keep = 1 }\n",
+            "[auth]\ntoken = \"hunter2\"\nuser = \"ann\"\n[outer]\ninner = { key = \"swordfish\" }\nkeep = 1\n",
+            "auth.token = \"hunter2\"\nauth.user = \"ann\"\nouter.inner.key = \"swordfish\"\nouter.keep = 1\n",
+        ] {
+            let shown = redacted(&schema, text);
+            assert!(
+                !shown.contains("hunter2") && !shown.contains("swordfish"),
+                "{shown}"
+            );
+            assert!(
+                shown.contains("ann") && shown.contains("keep = 1"),
+                "{shown}"
+            );
+        }
+    }
 }
