@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Fixed
+
+- The client 426 table pins `map.fog_destroy.bytes` as a constant, so the
+  fog hook checks its bytes; `Table::parse` refuses pinned bytes among the
+  symbols (#600).
+
 ## [1.0.0-alpha.8] - 2026-10-27
 
 ### Added
