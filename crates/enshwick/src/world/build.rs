@@ -100,6 +100,46 @@ impl World {
         WorldError::from_status(status)?;
         BuildRefusal::from_code(check.refusal).map_or(Ok(()), Err)
     }
+    /// Whether a save keeps changes in the box between corners `a` and `b`,
+    /// in metres. The game saves a world only inside its bases, the flame
+    /// altars' build zones: a prop placed or terrain changed anywhere else
+    /// is gone after a restart, a player's as well as a mod's. The box
+    /// must lie wholly inside one base's zone, half a metre in from its
+    /// edges.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for a corner that is not finite;
+    /// [`WorldError::WrongThread`] off the server's game thread or inside a
+    /// step; [`WorldError::Missing`] while no world is loaded or on a game
+    /// build without the zone list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::{World, WorldError};
+    ///
+    /// fn worth_placing(world: World, at: [f64; 3]) -> Result<bool, WorldError> {
+    ///     let [x, y, z] = at;
+    ///     world.persists([x - 1.0, y, z - 1.0], [x + 1.0, y + 2.0, z + 1.0])
+    /// }
+    /// ```
+    pub fn persists(self, a: [f64; 3], b: [f64; 3]) -> Result<bool, WorldError> {
+        if !a.iter().chain(&b).all(|v| v.is_finite()) {
+            return Err(WorldError::Refused);
+        }
+        let min = [0, 1, 2].map(|i| a[i].min(b[i]));
+        let max = [0, 1, 2].map(|i| a[i].max(b[i]));
+        let mut kept = 0u8;
+        let status = (self.0.host.api().world_persists)(
+            self.0.host.handle(),
+            &raw const min,
+            &raw const max,
+            &raw mut kept,
+        );
+        WorldError::from_status(status)?;
+        Ok(kept != 0)
+    }
 }
 
 impl BuildRefusal {

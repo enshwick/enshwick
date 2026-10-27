@@ -723,3 +723,31 @@ pub(crate) extern "system" fn build_rights(
         Status::BAD_ARGS
     }
 }
+
+pub(crate) extern "system" fn world_persists(
+    _me: ModHandle,
+    min: *const [f64; 3],
+    max: *const [f64; 3],
+    kept: *mut u8,
+) -> Status {
+    if min.is_null() || max.is_null() || kept.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `min` pointing at three live `f64` for
+    // the call, non-null by the check before it.
+    let low = unsafe { min.read_unaligned() };
+    // SAFETY: as for `min`, `max` points at three live `f64`.
+    let high = unsafe { max.read_unaligned() };
+    let finite = low.iter().chain(&high).all(|v| v.is_finite());
+    if !finite || (0..3).any(|a| high[a] < low[a]) {
+        return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let saved = with(false, |s| s.host.zones.kept(low, high));
+    // SAFETY: the safe layer passes `kept` writable for one byte for the
+    // call, non-null by the check before it.
+    unsafe { kept.write(u8::from(saved)) };
+    Status::OK
+}

@@ -176,11 +176,10 @@ pub(crate) fn register(
 
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
-    let wanted = !filters.is_empty();
-    if !wanted {
-        return;
-    }
+    // Linked on every side, as any can host a world whose transactions hold
+    // props; the detours act only in a server's world.
     let (Some(layout), Some(components)) = (layout(loader), Components::resolve(loader)) else {
+        crate::transactions::holds().linked(filters.len(), false);
         return;
     };
     let _first = LOADED.set((loader, layout, components));
@@ -196,47 +195,63 @@ pub(crate) fn link(loader: &'static Loader) {
         HookFlags::CALLER_FRAME
     };
     let none = HookFlags::NONE;
-    loader.link_feature(
+    let offers = loader.link_feature(
         "interaction offers",
         at("offer_test"),
         &OFFER_NEXT,
         offer,
         none,
     );
-    loader.link_feature(
+    let transfers = loader.link_feature(
         "transfers",
         at("transfer"),
         &TRANSFER_NEXT,
         transfer as ActionFn,
         none,
     );
-    loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
-    loader.link_feature(
+    let sorting = loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
+    let _stock = loader.link_feature(
         "base stock",
         at("base_stock"),
         &STOCK_NEXT,
         stock,
         stock_flags,
     );
-    loader.link_feature(
+    let dismantling = loader.link_feature(
         "dismantling",
         at("dismantle_method"),
         &DISMANTLE_NEXT,
         dismantle,
         none,
     );
-    loader.link_feature(
+    let actions = loader.link_feature(
         "inventory actions",
         actions,
         &ACTIONS_NEXT,
         inventory_actions,
         none,
     );
+    let hold_ready = offers && transfers && sorting && dismantling && actions;
+    if !hold_ready {
+        crate::log!(
+            WARN,
+            "prop removal by transactions off: a hook that keeps players from a prop did not link"
+        );
+    }
+    crate::transactions::holds().linked(filters.len(), hold_ready);
     crate::log!(INFO, "interaction filters on");
 }
 
-/// Reads the players again now and then, on the game thread.
+/// Whether the filter's fuse is off, after a panic in its work: a hold
+/// would not keep anyone out.
+pub(crate) fn filter_off() -> bool {
+    INTERACTIONS_FUSE.is_off()
+}
+
+/// Reads the players again now and then, and lets destroyed props go, on
+/// the game thread.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
+    crate::transactions::holds().after_step(step);
     if LOADED.get().is_none() || !step.is_multiple_of(PLAYERS_EVERY) {
         return;
     }
@@ -252,6 +267,9 @@ pub(crate) fn forget() {
 }
 
 fn allowed(call: &Interaction) -> bool {
+    if crate::transactions::holds().is_held(call.target) {
+        return false;
+    }
     let Some(filters) = FILTERS.sealed() else {
         return true;
     };
@@ -354,6 +372,23 @@ unsafe extern "system" fn offer(
     permissions: u8,
     range: u32,
 ) -> *mut u8 {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.offer_test` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe {
+            OFFER_NEXT.get()(
+                out,
+                query,
+                hits,
+                candidate,
+                shape,
+                transform,
+                permissions,
+                range,
+            )
+        };
+    }
     let refused = !out.is_null()
         && !query.is_null()
         && INTERACTIONS_FUSE
@@ -448,6 +483,12 @@ unsafe fn may_touch(
 }
 
 unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.transfer` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { TRANSFER_NEXT.get()(ctx, state) };
+    }
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
             && INTERACTIONS_FUSE
@@ -503,6 +544,12 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
 }
 
 unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.sort` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { SORT_NEXT.get()(ctx, state) };
+    }
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
             && INTERACTIONS_FUSE
@@ -585,6 +632,12 @@ unsafe extern "system" fn stock(
     position: *const f32,
     player: u32,
 ) -> *mut u8 {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.base_stock` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
+    }
     // Asked by the client's own interface, which sees the client's world;
     // read before the chain calls on.
     let ui = LOADED.get().is_some_and(|(loader, layout, _)| {
@@ -687,6 +740,9 @@ unsafe extern "system" fn dismantle(
     // the slot holds the next function of that signature; the game's
     // arguments pass unchanged.
     let method = unsafe { DISMANTLE_NEXT.get()(ctx, object, held, permissions) };
+    if crate::transactions::holds().quiet() {
+        return method;
+    }
     if method.trailing_zeros() >= 8 || ctx.is_null() || object.is_null() {
         return method;
     }
@@ -731,7 +787,7 @@ unsafe extern "system" fn dismantle(
 /// the upgrade a filter refuses; the system then skips them as already
 /// handled.
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
-    if LOADED.get().is_some() && !ctx.is_null() {
+    if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
         // own context, at its entry on its thread.
         let _done =

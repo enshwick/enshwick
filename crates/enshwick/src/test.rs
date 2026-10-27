@@ -84,6 +84,7 @@ mod inventory;
 mod pacing;
 mod players;
 mod points;
+mod props;
 mod rates;
 mod settings;
 mod stats;
@@ -234,6 +235,17 @@ pub struct FakeHost {
     zones: world::FakeZones,
     extent: Option<[u32; 3]>,
     blueprints: HashMap<u32, [u32; 3]>,
+    props: Vec<props::FakeProp>,
+    /// The items whose props are logic triggers.
+    trigger_items: Vec<u32>,
+    /// The items whose props are plants.
+    growing_items: Vec<u32>,
+    /// The items that place something that is no prop: a creature, a
+    /// flame altar.
+    no_prop_items: Vec<u32>,
+    /// Each item's placement box, lowest and highest corner before it
+    /// turns.
+    placement_boxes: Vec<(u32, [f32; 3], [f32; 3])>,
     building_materials: HashMap<u32, u8>,
 }
 
@@ -306,6 +318,11 @@ impl FakeHost {
             zones: world::FakeZones::default(),
             extent: None,
             blueprints: HashMap::new(),
+            props: Vec::new(),
+            trigger_items: Vec::new(),
+            growing_items: Vec::new(),
+            no_prop_items: Vec::new(),
+            placement_boxes: Vec::new(),
             building_materials: HashMap::new(),
         }
     }

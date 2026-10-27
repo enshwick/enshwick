@@ -58,7 +58,8 @@ use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
 };
 use transactions::{
-    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
+    transaction_undo,
 };
 use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
@@ -67,7 +68,7 @@ use world::{
     hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    voxel_read, weather_at, weather_fronts, world_key, world_quiet,
+    voxel_read, weather_at, weather_fronts, world_key, world_persists, world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -689,4 +690,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     serve_call: super::calls::serve_call,
     find_call: super::calls::find_call,
     call: super::calls::call,
+    transaction_entities,
+    world_persists,
 };
