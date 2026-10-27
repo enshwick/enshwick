@@ -18,6 +18,17 @@
 // status to show.
 #define ENSHWICK_SURVIVOR_STATUS_SET 256
 
+// An account action of `HostApi::account_action`,
+// with the values of the game's own `AccountActionType`.
+typedef uint8_t EnshwickAccountActionType;
+// Removes a player online from the game.
+#define EnshwickAccountActionType_KICK 0
+// Puts the account on the ban list, and removes its player when
+// online.
+#define EnshwickAccountActionType_BAN 1
+// Takes the account off the ban list.
+#define EnshwickAccountActionType_UN_BAN 2
+
 // The start of every struct the other side may know an older or newer
 // version of.
 typedef struct EnshwickHeader {
@@ -3925,6 +3936,22 @@ typedef struct EnshwickHostApi {
                                 uint32_t entry_size,
                                 uint32_t capacity,
                                 uint32_t *count);
+  // Asks the game for the account action `action` on `account`, as its
+  // administrators' account actions do: `AccountActionType::KICK`
+  // removes a player online, `AccountActionType::BAN` puts the account
+  // on the server's ban list and removes its player when online,
+  // `AccountActionType::UN_BAN` takes it off the list. A ban of an
+  // account not online goes straight onto the list, which the dedicated
+  // server writes to `bannedAccounts` of `enshrouded_server.json`.
+  // `Status::REFUSED` for a kick or a ban of an administrator online,
+  // whom the game never removes, and for a kick of an account not online;
+  // `Status::BAD_ARGS` for account 0 or an action this loader does not
+  // know; `Status::MISSING` while no server runs or on a build that
+  // lacks the action. On the server's game thread between steps only:
+  // `Status::WRONG_THREAD` elsewhere.
+  EnshwickStatus (*account_action)(EnshwickModHandle me,
+                                   EnshwickAccountActionType action,
+                                   uint64_t account);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.

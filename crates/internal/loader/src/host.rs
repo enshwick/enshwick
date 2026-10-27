@@ -63,8 +63,8 @@ use entries::transactions::{
 };
 use entries::ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, build_rights, chat, component, component_write, destroy, emit, entities,
-    entity_template, feature, forget_game_settings, game_event, game_settings, hosting,
+    account_action, actions, build_rights, chat, component, component_write, destroy, emit,
+    entities, entity_template, feature, forget_game_settings, game_event, game_settings, hosting,
     keep_game_settings, map_markers, notify, player, players, rename_filter, run_console,
     save_world, server_world, set_game_settings, set_label, set_time_of_day, set_time_speed,
     set_weather, spawn, status, teleport, terrain_edit, terrain_materials, time_of_day,
@@ -785,6 +785,7 @@ pub(crate) static API: HostApi = HostApi {
     transaction_entities,
     world_persists,
     map_markers,
+    account_action,
 };
 
 /// The loader and the calling mod, when the mod is on.

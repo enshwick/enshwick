@@ -3,6 +3,7 @@
 //! Every test still runs in a process of its own under nextest, and the fake
 //! host takes its turn behind a lock under `cargo test`.
 
+mod accounts;
 mod actions;
 mod affixes;
 mod altar_limit;

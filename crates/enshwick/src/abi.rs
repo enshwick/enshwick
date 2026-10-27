@@ -693,8 +693,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 167 * 8);
+    assert!(size_of::<HostApi>() == 24 + 168 * 8);
     assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 166 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 167 * 8);
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 159 * 8);
     assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 160 * 8);
@@ -704,6 +705,7 @@ const _: () = {
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 164 * 8);
     assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 165 * 8);
+    assert!(size_of::<AccountActionType>() == 1);
     assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<PropRemove>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 157 * 8);
