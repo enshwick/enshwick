@@ -574,11 +574,7 @@ impl Loader {
     ) -> impl Iterator<Item = &'static enshwick::abi::BuildRow> + '_ {
         let manifest = self.mods.get(index).map(|record| record.manifest);
         let rows: &'static [enshwick::abi::BuildRow] = match manifest {
-            Some(m)
-                if m.header
-                    .covers(core::mem::offset_of!(Manifest, build_count) + 8)
-                    && !m.builds.is_null() =>
-            {
+            Some(m) if !m.builds.is_null() => {
                 // SAFETY: the manifest points at `build_count` static rows.
                 unsafe { core::slice::from_raw_parts(m.builds, m.build_count) }
             }
