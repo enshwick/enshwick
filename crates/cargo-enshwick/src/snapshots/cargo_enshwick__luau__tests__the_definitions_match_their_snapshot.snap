@@ -262,7 +262,7 @@ export type XpGainedEvent = {
 }
 
 declare enshwick: {
-	--- Calls `handler` on every event named `event`, with its data; subscribe at the top level of main.luau.
+	--- Calls `handler` on every loader or typed game event named `event`, with its data; subscribe at the top level of main.luau. A game value the API does not name arrives as `Other(<number>)`, a name of ours.
 	on: ((event: "SettingsChanged", handler: () -> ()) -> ())
 		& ((event: "LoaderSettingsChanged", handler: () -> ()) -> ())
 		& ((event: "WorldLoaded", handler: () -> ()) -> ())

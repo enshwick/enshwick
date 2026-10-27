@@ -12,7 +12,7 @@ use crate::raw::read_at;
 use crate::world::{ComponentType, World};
 use crate::{Load, Off};
 
-mod sealed {
+pub(super) mod sealed {
     pub trait Sealed {}
 }
 
@@ -99,8 +99,6 @@ pub struct HitEvent {
     pub target_faction: u8,
 }
 
-impl sealed::Sealed for HitEvent {}
-
 impl Kind for HitEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -176,8 +174,6 @@ pub struct EntityDiedEvent {
     /// enshwick's, not the game's.
     pub killer_player: Option<Entity>,
 }
-
-impl sealed::Sealed for EntityDiedEvent {}
 
 /// Where the kill credit lives on a dying entity.
 #[derive(Clone, Copy, Debug)]
@@ -301,8 +297,6 @@ pub struct LevelUpEvent {
     pub level: u32,
 }
 
-impl sealed::Sealed for LevelUpEvent {}
-
 impl Kind for LevelUpEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -350,8 +344,6 @@ pub struct XpGainedEvent {
     /// Where from.
     pub source: ExperienceSourceType,
 }
-
-impl sealed::Sealed for XpGainedEvent {}
 
 impl Kind for XpGainedEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -408,8 +400,6 @@ pub struct CraftRecipeEvent {
     pub recipe_amount: u16,
 }
 
-impl sealed::Sealed for CraftRecipeEvent {}
-
 impl Kind for CraftRecipeEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -457,8 +447,6 @@ pub struct CraftRecipeSuccessEvent {
     /// The recipe id.
     pub recipe_id: u32,
 }
-
-impl sealed::Sealed for CraftRecipeSuccessEvent {}
 
 impl Kind for CraftRecipeSuccessEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -509,8 +497,6 @@ pub struct AcceptOfferedInteractionEvent {
     /// Which of the target's offers.
     pub offer_id: u32,
 }
-
-impl sealed::Sealed for AcceptOfferedInteractionEvent {}
 
 impl Kind for AcceptOfferedInteractionEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -635,8 +621,6 @@ pub struct BuildingPlaceEvent {
     pub tracking_item_id: u32,
 }
 
-impl sealed::Sealed for BuildingPlaceEvent {}
-
 impl Kind for BuildingPlaceEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -687,8 +671,6 @@ pub struct BuildingTearDownEvent {
     pub block: Block,
 }
 
-impl sealed::Sealed for BuildingTearDownEvent {}
-
 impl Kind for BuildingTearDownEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -738,8 +720,6 @@ pub struct BuildingPickUpEvent {
     /// The entity picked up.
     pub picked_entity_id: Option<Entity>,
 }
-
-impl sealed::Sealed for BuildingPickUpEvent {}
 
 impl Kind for BuildingPickUpEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -796,8 +776,6 @@ pub struct FlameAltarEvent {
     pub r#type: FlameAltarActionType,
 }
 
-impl sealed::Sealed for FlameAltarEvent {}
-
 impl Kind for FlameAltarEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -851,8 +829,6 @@ pub struct LootInteractionEvent {
     pub loot_all: bool,
 }
 
-impl sealed::Sealed for LootInteractionEvent {}
-
 impl Kind for LootInteractionEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
     where
@@ -896,8 +872,6 @@ pub struct HandleEquipmentSlotChangedEvent {
     /// The slot.
     pub equipment_slot: EquipmentSlot,
 }
-
-impl sealed::Sealed for HandleEquipmentSlotChangedEvent {}
 
 impl Kind for HandleEquipmentSlotChangedEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>
@@ -952,8 +926,6 @@ pub struct RevivedPlayerEvent {
     /// Who revived them.
     pub source_entity_id: Option<Entity>,
 }
-
-impl sealed::Sealed for RevivedPlayerEvent {}
 
 impl Kind for RevivedPlayerEvent {
     fn subscribe<F>(load: &mut Load<'_>, handler: F) -> Result<(), Off>

@@ -446,8 +446,40 @@ mod tests {
     const LEVEL_UP: u32 = 0x51;
     const DIED: u32 = 0x52;
 
+    const XP: u32 = 0x53;
+    const HIT: u32 = 0x54;
+    const WIDE: u32 = 0x55;
+
     fn game_host() -> FakeHost {
-        FakeHost::new()
+        let hit_fields = [
+            ("hit_event.root_source_id", 8),
+            ("hit_event.target_id", 12),
+            ("hit_event.source_id", 16),
+            ("hit_event.root_target_id", 20),
+            ("hit_event.weapon_pide_id", 24),
+            ("hit_event.health_change", 28),
+            ("hit_event.stamina_change", 32),
+            ("hit_event.damage_types", 36),
+            ("hit_event.attack_category", 38),
+            ("hit_event.target_faction", 39),
+            ("damage_type.magical_fire", 3),
+            ("attack_category.melee", 0),
+            ("xp_gained_event.player_entity_id", 8),
+            ("xp_gained_event.amount", 12),
+            ("xp_gained_event.source", 16),
+            ("experience_source.combat", 4),
+        ];
+        let mut host = FakeHost::new();
+        for (id, value) in hit_fields {
+            host = host.constant(id, value);
+        }
+        host.type_hash("hit_event", HIT)
+            .type_size("hit_event", 48)
+            .type_hash("xp_gained_event", XP)
+            .type_size("xp_gained_event", 24)
+            .event_type("keen::ecs::WideEvent", WIDE, 32)
+            .field_offset("keen::ecs::WideEvent", "account", 8)
+            .field_offset("keen::ecs::WideEvent", "delta", 16)
             .type_hash("level_up_event", LEVEL_UP)
             .type_size("level_up_event", 16)
             .constant("level_up_event.player_entity_id", 8)
@@ -479,7 +511,10 @@ mod tests {
     fn a_game_event_by_type_reads_the_fields_the_script_names() {
         let (loader, status) = run_full(
             r#"local types = enshwick.game_event_types()
-            enshwick.log.info(`{#types} types, first {types[1].name}`)
+            local names = {}
+            for _, t in types do table.insert(names, `{t.name}:{t.size}`) end
+            table.sort(names)
+            enshwick.log.info(table.concat(names, " "))
             enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
                 enshwick.log.info(`died {event.deadEntityId}`)
             end)"#,
@@ -490,7 +525,10 @@ mod tests {
         );
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert!(
-            logged(&loader, "1 types, first keen::ecs::EntityDiedEvent"),
+            logged(
+                &loader,
+                "keen::ecs::EntityDiedEvent:16 keen::ecs::WideEvent:32"
+            ),
             "{:?}",
             loader.logs()
         );
@@ -519,7 +557,7 @@ mod tests {
 
     #[test]
     fn a_field_the_type_lacks_refuses_the_mod() {
-        let (_loader, status) = run_full(
+        let (loader, status) = run_full(
             r#"enshwick.on_game_type("keen::ecs::EntityDiedEvent", { nope = "u32" }, function() end)"#,
             Limits::default(),
             Scripts::new(),
@@ -527,5 +565,109 @@ mod tests {
             game_host(),
         );
         assert_ne!(status, Status::OK);
+        assert!(logged(&loader, "nope"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_mask_and_a_game_value_reach_luau_by_name() {
+        let (loader, status) = run_full(
+            r#"enshwick.on("HitEvent", function(hit)
+                enshwick.log.info(`hit with {table.concat(hit.damage_types, ",")} by {table.concat(hit.attack_category, ",")}`)
+            end)
+            enshwick.on("XpGainedEvent", function(xp)
+                enshwick.log.info(`xp from {xp.source}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let mut hit = [0u8; 48];
+        hit[12..16].copy_from_slice(&5u32.to_le_bytes());
+        hit[36..38].copy_from_slice(&(1u16 << 3).to_le_bytes());
+        hit[38] = 1;
+        assert_eq!(loader.raise_game_event(HIT, &hit), 1);
+        assert!(
+            logged(&loader, "hit with MAGICAL_FIRE by MELEE"),
+            "{:?}",
+            loader.logs()
+        );
+        let mut xp = [0u8; 24];
+        xp[16] = 4;
+        assert_eq!(loader.raise_game_event(XP, &xp), 1);
+        assert!(logged(&loader, "xp from Combat"), "{:?}", loader.logs());
+        xp[16] = 9;
+        let _handled = loader.raise_game_event(XP, &xp);
+        assert!(logged(&loader, "xp from Other(9)"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn sixty_four_bit_fields_by_type_arrive_as_strings() {
+        let (loader, status) = run_full(
+            r#"enshwick.on_game_type("keen::ecs::WideEvent", { account = "u64", delta = "i64" }, function(e)
+                enshwick.log.info(`account {e.account} delta {e.delta}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let mut wide = [0u8; 32];
+        wide[8..16].copy_from_slice(&u64::MAX.to_le_bytes());
+        wide[16..24].copy_from_slice(&(-3i64).to_le_bytes());
+        assert_eq!(loader.raise_game_event(WIDE, &wide), 1);
+        assert!(
+            logged(&loader, &format!("account {} delta -3", u64::MAX)),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_typed_game_event_this_build_lacks_a_field_of_refuses_the_mod_with_why() {
+        let (loader, status) = run_full(
+            r#"enshwick.on("LevelUpEvent", function() end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new()
+                .type_hash("level_up_event", LEVEL_UP)
+                .type_size("level_up_event", 16)
+                .constant("level_up_event.player_entity_id", 8),
+        );
+        assert_ne!(status, Status::OK);
+        assert!(
+            logged(&loader, "level_up_event.level"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn a_reload_moves_game_event_handlers_and_a_new_one_waits() {
+        let (loader, status) = run_full(
+            r#"enshwick.on("LevelUpEvent", function() print("first") end)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            game_host(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        runtime()
+            .reload(main(
+                r#"enshwick.on("LevelUpEvent", function() print("second") end)
+                enshwick.on("XpGainedEvent", function() end)"#,
+            ))
+            .unwrap();
+        let _handled = loader.raise_game_event(LEVEL_UP, &[0u8; 16]);
+        assert!(logged(&loader, "second"), "{:?}", loader.logs());
+        assert!(!logged(&loader, "first"));
+        assert!(
+            logged(&loader, "handlers of XpGainedEvent run from the next start"),
+            "{:?}",
+            loader.logs()
+        );
     }
 }

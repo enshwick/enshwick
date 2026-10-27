@@ -319,7 +319,7 @@ impl Scope {
         if !current {
             return Err(stale());
         }
-        let answer = inner.call(&vm, "a function passed to the API", |vm| {
+        let answer = inner.call(&vm, &|| "a function passed to the API".to_owned(), |vm| {
             let lua_args = args
                 .into_iter()
                 .zip(signature.params())
@@ -410,13 +410,11 @@ pub fn start(
                 let kind = Subscription::game_kind(name)?;
                 let key = sub.clone();
                 kind.subscribe(load, move |value| {
-                    handled.deliver(&key, |lua, scope| {
-                        to_lua(lua, scope, value.clone(), kind.data())
-                    });
+                    handled.deliver(&key, |lua, scope| to_lua(lua, scope, value(), kind.data()));
                 })?;
             }
             Subscription::Raw(spec) => {
-                let (ty, reader) = RawReader::resolve(load, spec)?;
+                let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
                 let key = sub.clone();
                 load.on_raw_game_event(ty, move |event| {
                     let values = reader.read(event);
@@ -695,18 +693,23 @@ impl Inner {
 
     /// Runs `body` on `vm` as a call into the scripts after start; on an
     /// error or a panic, turns the mod off with why.
-    fn call<R>(&self, vm: &Vm, what: &str, body: impl FnOnce(&Vm) -> mlua::Result<R>) -> Option<R> {
+    fn call<R>(
+        &self,
+        vm: &Vm,
+        what: &dyn Fn() -> String,
+        body: impl FnOnce(&Vm) -> mlua::Result<R>,
+    ) -> Option<R> {
         if self.off.load(Ordering::Acquire) {
             return None;
         }
         match self.enter(&vm.lua, self.limits.call, || body(vm)) {
             Ok(Ok(value)) => Some(value),
             Ok(Err(error)) => {
-                self.fail(&format!("{what}: {}", describe(&error)));
+                self.fail(&format!("{}: {}", what(), describe(&error)));
                 None
             }
             Err(()) => {
-                self.fail(&format!("{what}: a call it made panicked"));
+                self.fail(&format!("{}: a call it made panicked", what()));
                 None
             }
         }
@@ -757,9 +760,10 @@ impl Inner {
             inner: Weak::clone(&self.me),
             vm: Arc::downgrade(&vm),
         };
-        let what = sub.name();
         for handler in handlers {
-            let done = self.call(&vm, &what, |vm| handler.call::<()>(arg(&vm.lua, &scope)?));
+            let done = self.call(&vm, &|| sub.name(), |vm| {
+                handler.call::<()>(arg(&vm.lua, &scope)?)
+            });
             if done.is_none() {
                 return;
             }

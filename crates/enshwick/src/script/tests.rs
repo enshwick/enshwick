@@ -188,7 +188,7 @@ fn a_call_names_the_argument_of_the_wrong_type() {
 }
 
 #[test]
-fn every_typed_game_event_has_a_script_entry() {
+fn typed_game_events_have_unique_names_apart_from_loader_events() {
     let kinds = include_str!("../game_events/kinds.rs")
         .matches("\nimpl Kind for ")
         .count();
