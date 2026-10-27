@@ -153,6 +153,46 @@ mod tests {
         assert_eq!(client.symbol("npc.lookup"), Some(0x46_9c30));
     }
 
+    /// The ids of the newest table of `side` that a build without a table
+    /// could not find: a symbol without a pattern, a constant with neither
+    /// a pattern nor an attribute nor a patterned symbol whose bytes it
+    /// holds, or one the table keeps to its own build.
+    fn found_only_on_their_own_build(tables: &[Table], side: Side) -> Vec<String> {
+        let table = newest(tables, side).unwrap();
+        let patterned = |id: &str| {
+            table
+                .symbols()
+                .iter()
+                .any(|s| s.id() == id && s.pattern().is_some())
+        };
+        let symbols = table
+            .symbols()
+            .iter()
+            .filter(|s| s.pattern().is_none())
+            .map(|s| s.id().to_owned());
+        let constants = table
+            .constants()
+            .iter()
+            .filter(|c| {
+                !c.carried()
+                    || (c.pattern().is_none()
+                        && c.attribute().is_none()
+                        && !c.id().strip_suffix(".bytes").is_some_and(patterned))
+            })
+            .map(|c| c.id().to_owned());
+        symbols.chain(constants).collect()
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    fn every_entry_of_the_newest_tables_resolves_on_a_build_without_a_table() {
+        let tables = tables();
+        for side in [Side::Server, Side::Client] {
+            let only = found_only_on_their_own_build(&tables, side);
+            assert!(only.is_empty(), "{side:?}: {only:?}");
+        }
+    }
+
     const TABLE: &str = r#"
         name = "test (2)"
         side = "server"
