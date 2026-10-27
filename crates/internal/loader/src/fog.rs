@@ -18,8 +18,8 @@
 //! teardown alone calls, and drops its copy there, so no copy outlives its
 //! world and a new fog at the same address starts a new copy.
 
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, TryLockError};
 
 use enshwick::abi::{FogInfo, Header, HookFlags, Side, Status};
 
@@ -235,15 +235,11 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
         return;
     };
     let revealed = at.and_then(|xz| shape.revealed(xz, range));
-    let mut mirror = match MIRROR.try_lock() {
-        Ok(mirror) => mirror,
-        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-        Err(TryLockError::WouldBlock) => {
-            if let Some(rect) = revealed {
-                skip(&rect);
-            }
-            return;
+    let Some(mut mirror) = MIRROR.try_relock() else {
+        if let Some(rect) = revealed {
+            skip(&rect);
         }
+        return;
     };
     let held = mirror.as_ref().map(|m| (m.fog, m.image.shape()));
     let skipped = TileRect::unpack(SKIPPED.swap(0, Ordering::AcqRel));

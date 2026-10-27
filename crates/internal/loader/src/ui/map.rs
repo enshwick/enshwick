@@ -117,17 +117,17 @@ impl Layout {
     /// writes, and a marker type every field it reads.
     fn fits(&self) -> bool {
         let entry_ends = [
-            self.entry_position + 3 * 8,
-            self.entry_type + 4,
-            self.entry_visibility + 1,
-            self.entry_label + 3 * 8,
-            self.entry_color + 1,
+            self.entry_position.saturating_add(3 * 8),
+            self.entry_type.saturating_add(4),
+            self.entry_visibility.saturating_add(1),
+            self.entry_label.saturating_add(3 * 8),
+            self.entry_color.saturating_add(1),
         ];
         let type_ends = [
-            self.type_id + 4,
-            self.type_custom + 1,
-            self.type_above_fog + 1,
-            self.type_label + 1,
+            self.type_id.saturating_add(4),
+            self.type_custom.saturating_add(1),
+            self.type_above_fog.saturating_add(1),
+            self.type_label.saturating_add(1),
         ];
         self.entry_size <= ENTRY_ROOM
             && entry_ends.iter().all(|&end| end <= self.entry_size)
@@ -146,8 +146,39 @@ enum LayoutError {
     Reflection(&'static str),
 }
 
-/// The layout [`link`] read, once the build has every part of it.
-static LAYOUT: OnceLock<Layout> = OnceLock::new();
+/// The map markers' state: the layout, the mods' markers and what the
+/// replicate system's frames noted.
+struct Markers {
+    /// The layout [`link`] read, once the build has every part of it.
+    layout: OnceLock<Layout>,
+    /// Each mod's markers, by owner.
+    sets: Mutex<Vec<(usize, Arc<[Owned]>)>>,
+    /// Every mod's markers, swapped whole for the system's thread.
+    snapshot: OnceLock<ArcSwap<Sets>>,
+    /// Replaced marker sets, with the frame they were replaced in.
+    retired: Mutex<VecDeque<(u64, Arc<Sets>)>>,
+    /// Frames the replicate system has run.
+    frame: AtomicU64,
+    /// The interface's play data, as the last frame found it; 0 outside a
+    /// world.
+    play_data: AtomicUsize,
+    /// When a frame last found it, in milliseconds since the system
+    /// started.
+    noted_at: AtomicU64,
+    /// The marker type mod markers show with, once the registry is read.
+    marker_type: OnceLock<Option<u32>>,
+}
+
+static MARKERS: Markers = Markers {
+    layout: OnceLock::new(),
+    sets: Mutex::new(Vec::new()),
+    snapshot: OnceLock::new(),
+    retired: Mutex::new(VecDeque::new()),
+    frame: AtomicU64::new(0),
+    play_data: AtomicUsize::new(0),
+    noted_at: AtomicU64::new(0),
+    marker_type: OnceLock::new(),
+};
 
 /// One marker, owned by the loader.
 struct Owned {
@@ -163,30 +194,18 @@ type SystemFn = unsafe extern "system" fn(context: *mut u8);
 // `replicate_map_markers_for_ui`, and the slot is used only as the `next` of
 // the `detour` link on that system's entry.
 static NEXT: Next<SystemFn> = unsafe { Next::new() };
-/// Each mod's markers, by owner.
-static SETS: Mutex<Vec<(usize, Arc<[Owned]>)>> = Mutex::new(Vec::new());
-/// Every mod's markers, swapped whole for the system's thread.
-static SNAPSHOT: OnceLock<ArcSwap<Sets>> = OnceLock::new();
 /// Every mod's markers, one shared set each.
 type Sets = Vec<Arc<[Owned]>>;
-/// Replaced marker sets, with the frame they were replaced in.
-static RETIRED_SETS: Mutex<VecDeque<(u64, Arc<Sets>)>> = Mutex::new(VecDeque::new());
-/// Frames the replicate system has run.
-static FRAME: AtomicU64 = AtomicU64::new(0);
-/// The interface's play data, as the last frame found it; 0 outside a world.
-static PLAY_DATA: AtomicUsize = AtomicUsize::new(0);
-/// When a frame last found it, in milliseconds since the system started.
-static NOTED_AT: AtomicU64 = AtomicU64::new(0);
 /// How old the play data may be: frames that stop noting it, such as under a
 /// loading screen between two worlds, leave it to a world that may be gone.
 const FRESH_MS: u64 = 500;
 /// More marker types than any build has: a count past it is a misread.
 const MAX_TYPES: u32 = 4096;
-/// The marker type mod markers show with, once the registry is read.
-static MARKER_TYPE: OnceLock<Option<u32>> = OnceLock::new();
 
 fn snapshot() -> &'static ArcSwap<Sets> {
-    SNAPSHOT.get_or_init(|| ArcSwap::from_pointee(Vec::new()))
+    MARKERS
+        .snapshot
+        .get_or_init(|| ArcSwap::from_pointee(Vec::new()))
 }
 
 /// Replaces mod `owner`'s markers with `markers`.
@@ -205,7 +224,7 @@ pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
         })
         .collect();
-    let mut sets = SETS.relock();
+    let mut sets = MARKERS.sets.relock();
     sets.retain(|(o, _)| *o != owner.get());
     if !copied.is_empty() {
         sets.push((owner.get(), copied.into()));
@@ -213,9 +232,9 @@ pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
     let next: Sets = sets.iter().map(|(_, list)| Arc::clone(list)).collect();
     drop(sets);
     let old = snapshot().swap(Arc::new(next));
-    let mut retired = RETIRED_SETS.relock();
-    retired.push_back((FRAME.load(Ordering::Acquire), old));
-    retire(&mut retired, FRAME.load(Ordering::Acquire));
+    let mut retired = MARKERS.retired.relock();
+    retired.push_back((MARKERS.frame.load(Ordering::Acquire), old));
+    retire(&mut retired, MARKERS.frame.load(Ordering::Acquire));
     Status::OK
 }
 
@@ -233,7 +252,7 @@ fn retire(retired: &mut VecDeque<(u64, Arc<Sets>)>, now: u64) {
 /// Notes the play data of the interface context `context`, for the
 /// system's thread.
 pub(super) fn note(context: usize) {
-    let (Some(_), Some(layout)) = (NEXT.wired(), LAYOUT.get()) else {
+    let (Some(_), Some(layout)) = (NEXT.wired(), MARKERS.layout.get()) else {
         return;
     };
     // SAFETY: the one caller passes the live interface context of the frame
@@ -257,9 +276,11 @@ pub(super) fn note(context: usize) {
         unsafe { crate::memory::read_ptr::<u8>(play.expose_provenance(), layout.state_play_data) }
             .expose_provenance()
     };
-    PLAY_DATA.store(data, Ordering::Release);
+    MARKERS.play_data.store(data, Ordering::Release);
     // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
-    NOTED_AT.store(unsafe { GetTickCount64() }, Ordering::Release);
+    MARKERS
+        .noted_at
+        .store(unsafe { GetTickCount64() }, Ordering::Release);
 }
 
 /// Links the replicate system on the client, on a build whose table and
@@ -279,7 +300,7 @@ pub(crate) fn link(loader: &Loader) {
             return;
         }
     };
-    let _set = LAYOUT.set(layout);
+    let _set = MARKERS.layout.set(layout);
     let target = loader
         .reflection
         .system("replicate_map_markers_for_ui")
@@ -302,23 +323,23 @@ unsafe extern "system" fn detour(context: *mut u8) {
     if appended.is_err() {
         crate::log!(ERROR, "map markers: the loader panicked while adding them");
     }
-    let now = FRAME.fetch_add(1, Ordering::AcqRel) + 1;
-    if let Ok(mut retired) = RETIRED_SETS.try_lock() {
+    let now = MARKERS.frame.fetch_add(1, Ordering::AcqRel) + 1;
+    if let Some(mut retired) = MARKERS.retired.try_relock() {
         retire(&mut retired, now);
     }
 }
 
 fn append() {
     let sets = snapshot().load();
-    let Some(layout) = LAYOUT.get() else {
+    let Some(layout) = MARKERS.layout.get() else {
         return;
     };
     if sets.is_empty() {
         return;
     }
-    let data = PLAY_DATA.load(Ordering::Acquire);
+    let data = MARKERS.play_data.load(Ordering::Acquire);
     // SAFETY: `GetTickCount64` takes no arguments and has no preconditions.
-    let age = unsafe { GetTickCount64() }.saturating_sub(NOTED_AT.load(Ordering::Acquire));
+    let age = unsafe { GetTickCount64() }.saturating_sub(MARKERS.noted_at.load(Ordering::Acquire));
     if data == 0 || age > FRESH_MS {
         return;
     }
@@ -361,7 +382,7 @@ fn append() {
         }
         entry.u32(layout.entry_type, kind);
         entry.u8(layout.entry_visibility, layout.visible);
-        // The label lives in the snapshot, kept for `RETIRED` sets after it
+        // The label lives in the snapshot, kept among the retired sets after it
         // is replaced.
         entry.text(layout.entry_label, &UiText::new(&marker.label));
         entry.u8(layout.entry_color, marker.color);
@@ -393,7 +414,7 @@ fn append() {
 /// - The call runs on the replicate system's thread while the system runs,
 ///   so nothing writes the play data or its registry during the call.
 unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
-    if let Some(found) = MARKER_TYPE.get() {
+    if let Some(found) = MARKERS.marker_type.get() {
         return *found;
     }
     // SAFETY: the caller's contract makes `data` the live play data, read on
@@ -465,7 +486,7 @@ unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
         listed.join(" "),
         chosen.map_or_else(|| "none".to_owned(), |id| format!("{id:08x}"))
     );
-    *MARKER_TYPE.get_or_init(|| chosen)
+    *MARKERS.marker_type.get_or_init(|| chosen)
 }
 
 fn flag(on: bool, letter: &'static str) -> &'static str {
@@ -533,6 +554,11 @@ mod tests {
             ..client_426()
         };
         assert!(!flag_past.fits(), "a marker type flag past the type");
+        let overflowing = Layout {
+            entry_label: usize::MAX,
+            ..client_426()
+        };
+        assert!(!overflowing.fits(), "a field whose end overflows");
     }
 
     #[test]
