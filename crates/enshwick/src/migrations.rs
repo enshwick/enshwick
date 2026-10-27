@@ -237,7 +237,8 @@ impl Migration {
         map: impl Fn(&mut toml::Table) -> Result<(), MigrationError> + Send + Sync + 'static,
     ) -> Self {
         let map: Map = Box::new(move |text| {
-            let mut table: toml::Table = toml::from_str(text)?;
+            let mut table: toml::Table = toml::from_str(text)
+                .map_err(|e| MigrationError(crate::config::reason(Some(text), &e)))?;
             map(&mut table)?;
             toml::to_string(&table).map_err(|e| MigrationError(e.to_string()))
         });
@@ -389,7 +390,9 @@ impl Migrations {
 
 /// A TOML value from its text, as the loader hands a setting over.
 pub(crate) fn parse_value(text: &str) -> Result<toml::Value, MigrationError> {
-    let mut table: toml::Table = toml::from_str(&format!("v = {text}"))?;
+    let text = format!("v = {text}");
+    let mut table: toml::Table = toml::from_str(&text)
+        .map_err(|e| MigrationError(crate::config::reason(Some(&text), &e)))?;
     table.remove("v").ok_or_else(|| "no value".into())
 }
 
@@ -747,5 +750,15 @@ mod tests {
         let error =
             super::MigrationError::from(toml::from_str::<Pin>("pin = \"hunter2\"").unwrap_err());
         assert_eq!(error.to_string(), "key pin: expected u32");
+    }
+
+    #[test]
+    fn a_value_that_is_no_toml_says_why_without_itself() {
+        let why = parse_value("\"hunter2").unwrap_err().to_string();
+        assert!(
+            why.starts_with("line 1: ") && !why.contains("hunter2"),
+            "{why}"
+        );
+        assert!(!why.contains("does not fit"), "{why}");
     }
 }
