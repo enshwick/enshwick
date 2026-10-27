@@ -586,15 +586,15 @@ impl EventDesc {
         let mut fields = Vec::new();
         let mut end = 0usize;
         let mut align = 1usize;
-        let mut given = None;
+        let mut by_hand = None;
         for field in list.sequence_values::<Table>() {
             let field = field?;
             let field_name: String = field.get("name")?;
             let read = read_of(&field.get("read")?, 0)?;
             let offset: Option<usize> = field.get("offset")?;
             let hash: Option<String> = field.get("hash")?;
-            let gives = offset.is_some() || hash.is_some();
-            if *given.get_or_insert(gives) != gives {
+            let explicit = offset.is_some() || hash.is_some();
+            if *by_hand.get_or_insert(explicit) != explicit {
                 return Err(bad(
                     "give every field an offset and a hash, or none of them",
                 ));
