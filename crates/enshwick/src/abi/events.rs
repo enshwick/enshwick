@@ -487,8 +487,9 @@ pub struct TickData {
     pub step_nanos: u64,
     /// What one call of this mod's event handlers cost on average since
     /// this handler's last call, in nanoseconds; 0 for an every-step
-    /// handler and unless the loader's diagnostics time callbacks. Since
-    /// minor 2.
+    /// handler, unless the loader's diagnostics time callbacks, and for
+    /// about a second after they start, while the loader measures its
+    /// clock. Since minor 2.
     pub cost_nanos: u64,
 }
 
@@ -613,8 +614,10 @@ const fn end_of(offset: usize) -> usize {
 
 /// A periodic tick handler a mod subscribed with
 /// [`HostApi::subscribe_tick`](super::HostApi::subscribe_tick), for
-/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every); valid for
-/// the process, for the mod that subscribed it only. Since minor 2.
+/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every). Since minor 2.
+///
+/// Valid for the mod that subscribed it until that mod reloads, after which
+/// the loader answers [`Status::MISSING`](super::Status::MISSING).
 ///
 /// # Examples
 ///

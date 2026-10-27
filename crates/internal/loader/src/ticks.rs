@@ -257,7 +257,16 @@ impl Ticks {
         for &tick in handlers {
             let last_step = tick.last_step.load(Ordering::Relaxed);
             let last = (last_step != 0).then(|| tick.last_nanos.load(Ordering::Relaxed));
-            if !due(now, last, tick.every.load(Ordering::Relaxed)) || !live(tick) {
+            if !due(now, last, tick.every.load(Ordering::Relaxed)) {
+                continue;
+            }
+            if !live(tick) {
+                // A mod that is off or reloaded never takes this handler
+                // back, so it stops being due instead of being checked on
+                // every step.
+                tick.every.store(u64::MAX, Ordering::Relaxed);
+                tick.last_step.store(step.max(1), Ordering::Relaxed);
+                tick.last_nanos.store(now, Ordering::Relaxed);
                 continue;
             }
             tick.last_step.store(step, Ordering::Relaxed);
@@ -372,11 +381,26 @@ mod tests {
     }
 
     #[test]
-    fn a_handler_of_a_mod_not_running_is_skipped_and_keeps_its_due_time() {
+    fn a_handler_of_a_mod_not_running_is_skipped_and_never_due_again() {
         let ticks = listed(&[0]);
         let ran = ticks.run(1, 0, StepTime::default(), |_| false, |_, _| unreachable!());
         assert_eq!(ran, 0);
-        assert_eq!(steps(&ticks, 1, 1, 10)[0].2, 1, "still its first call");
+        let checked = core::cell::Cell::new(0);
+        let ran = ticks.run(
+            2,
+            10,
+            StepTime::default(),
+            |_| {
+                checked.set(checked.get() + 1);
+                true
+            },
+            |_, _| unreachable!(),
+        );
+        assert_eq!(
+            (ran, checked.get()),
+            (0, 0),
+            "a dead handler costs no check"
+        );
     }
 
     #[test]

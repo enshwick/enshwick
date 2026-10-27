@@ -102,8 +102,9 @@ impl Load<'_> {
 
     /// Calls `handler` on the server's game thread after every server step,
     /// for work that follows each step: per-step state, input or the camera.
-    /// Every call costs the mod about a microsecond, 20 to 60 times a
-    /// second, so a handler that can wait takes [`on_tick`](Self::on_tick).
+    /// Every call costs the mod about a microsecond (a server copy of build
+    /// 399), on every step, so a handler that can wait takes
+    /// [`on_tick`](Self::on_tick).
     /// A panic in `handler` turns the mod off.
     ///
     /// # Errors

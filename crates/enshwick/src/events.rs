@@ -256,7 +256,8 @@ with_data! {
 
 impl Ticked {
     /// How often a tick handler runs unless it asks otherwise: about every
-    /// second step of an empty dedicated server, every sixth with players.
+    /// second step of an empty dedicated server (20 steps a second, build
+    /// 399), more steps apart when the server steps faster.
     ///
     /// # Examples
     ///

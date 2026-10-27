@@ -6,20 +6,12 @@ raw hooks come last, as the way down when the API has no call.
 
 ## Performance
 
-Mods run inside the game's frame, so their handlers cost the game time.
-Each call of a tick handler costs about 1 µs, most of it the processor
-fetching the mod's code and data afresh.
-
-The server simulates in fixed ticks of 1/60 s and runs 1 to 3 of them in one
-step. A dedicated server with nobody online runs about 20 steps a second. One
-measurement with players saw about 60. Since steps are not time, a tick
-handler runs every 100 ms by default, and the steps in between cost the mod
-nothing.
-
-Ask for every step with `load.on_every_step` only for state that changes each
-step, input or the camera. A handler from `load.on_tick` changes its period
-while the game runs, and its tick data says how long steps take and what its
-calls cost. See [Ticks](events.md#ticks).
+Mods run inside the game's frame, so their handlers cost the game time. A
+tick handler runs every 100 ms by default, since a call costs about 1 µs and
+the number of server steps a second differs between servers, clients and
+load. Ask for every step only for state that changes each step, input or
+the camera. [Ticks](events.md#ticks) has the numbers, the every-step and
+runtime period options, and an adaptive tick.
 
 ## The toolchain
 

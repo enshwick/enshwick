@@ -58,7 +58,8 @@ pub struct StepClock {
 }
 
 impl StepClock {
-    /// The most one step counts for.
+    /// The most one step counts for: a tick that covers `n` steps counts
+    /// `n` times this at most.
     pub const MAX_STEP: Duration = Duration::from_millis(250);
 
     /// A clock at zero.

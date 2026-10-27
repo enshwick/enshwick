@@ -2716,8 +2716,10 @@ typedef struct EnshwickMapMarkerInfo {
 
 // A periodic tick handler a mod subscribed with
 // `HostApi::subscribe_tick`, for
-// `HostApi::set_tick_every`; valid for
-// the process, for the mod that subscribed it only. Since minor 2.
+// `HostApi::set_tick_every`. Since minor 2.
+//
+// Valid for the mod that subscribed it until that mod reloads, after which
+// the loader answers `Status::MISSING`.
 typedef uint32_t EnshwickTickHandle;
 
 // The table of services the loader offers a mod.
@@ -4029,7 +4031,9 @@ typedef struct EnshwickHostApi {
   // for a null `out`; `Status::TOO_LATE` outside `enshwick_mod_init`
   // and a reloading mod's init again. The handler runs until the mod is
   // off; a panic in it turns the mod off. It may call
-  // `HostApi::set_tick_every` on itself. Since minor 2.
+  // `HostApi::set_tick_every` on itself. `Status::REFUSED` once the
+  // loader holds `u32::MAX` handlers, and when the loader panics.
+  // Since minor 2.
   EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
                                    uint64_t every_nanos,
                                    EnshwickEventFn callback,
@@ -4215,8 +4219,9 @@ typedef struct EnshwickTickData {
   uint64_t step_nanos;
   // What one call of this mod's event handlers cost on average since
   // this handler's last call, in nanoseconds; 0 for an every-step
-  // handler and unless the loader's diagnostics time callbacks. Since
-  // minor 2.
+  // handler, unless the loader's diagnostics time callbacks, and for
+  // about a second after they start, while the loader measures its
+  // clock. Since minor 2.
   uint64_t cost_nanos;
 } EnshwickTickData;
 

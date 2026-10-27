@@ -83,10 +83,12 @@ game thread.
 
 ## Ticks
 
-The server simulates in fixed ticks of 1/60 s and runs 1 to 3 of them in one
-step. A dedicated server with nobody online runs about 20 steps a second; one
-measurement with players saw about 60. Steps are not time, so a tick handler
-runs on a period of wall time:
+On dedicated server build 399 the simulation runs fixed ticks of 1/60 s, and
+one step runs 1 to 3 of them (read from the server's code). With nobody
+online the server made 20 steps a second over 229 minutes of its own
+statistics. With players its loop waits only 1 ms, which allows up to 60
+steps a second; that rate is not yet measured with a real player. Steps
+are not time, so a tick handler runs on a period of wall time:
 
 - `load.on::<Ticked>(f)` runs `f` after the first step, then after the first
   step at least `Ticked::DEFAULT_EVERY` (100 ms) after its last call.
@@ -96,7 +98,7 @@ runs on a period of wall time:
   that changes each step, input or the camera.
 
 A call costs about 1 µs, most of it the processor fetching the mod's code and
-data afresh. Steps a handler skips never enter the mod and cost it nothing.
+data afresh (measured on a server copy with 11 mods, build 399). Steps a handler skips never enter the mod and cost it nothing.
 
 `TickData` says what passed since the handler's last call:
 

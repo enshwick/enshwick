@@ -299,7 +299,7 @@ export type TickData = {
 	elapsed_nanos: string,
 	--- The average time between server steps in nanoseconds, over about the last 16 steps; 0 until a step has been measured. Since minor 2.
 	step_nanos: string,
-	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler and unless the loader's diagnostics time callbacks. Since minor 2.
+	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock. Since minor 2.
 	cost_nanos: string,
 }
 

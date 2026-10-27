@@ -1401,7 +1401,9 @@ pub struct HostApi {
     /// for a null `out`; [`Status::TOO_LATE`] outside `enshwick_mod_init`
     /// and a reloading mod's init again. The handler runs until the mod is
     /// off; a panic in it turns the mod off. It may call
-    /// [`HostApi::set_tick_every`] on itself. Since minor 2.
+    /// [`HostApi::set_tick_every`] on itself. [`Status::REFUSED`] once the
+    /// loader holds `u32::MAX` handlers, and when the loader panics.
+    /// Since minor 2.
     pub subscribe_tick: extern "system" fn(
         me: ModHandle,
         every_nanos: u64,
