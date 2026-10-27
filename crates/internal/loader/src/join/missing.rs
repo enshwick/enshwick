@@ -92,19 +92,20 @@ mod tests {
     #[test]
     fn a_server_sending_new_text_on_every_join_is_listed_only_within_the_budget() {
         let mut advertised = KeptText::new(ADVERTISED_BYTES);
-        let mut listed_total = 0;
+        let mut texts = std::collections::BTreeSet::new();
         let mut left_total = 0;
         for join in 0..2000 {
             let (entries, left_out) = listed(&mut advertised, &wanted(join), |_| "");
-            listed_total += entries.len();
+            texts.extend(
+                entries
+                    .iter()
+                    .flat_map(|e| [e.id, e.name, e.version, e.page]),
+            );
             left_total += left_out;
         }
         assert!(left_total > 0, "the budget ran out");
-        assert!(
-            listed_total * "server.mod-0-0Mod 0 01.0.0https://example.com/0/0".len()
-                <= ADVERTISED_BYTES,
-            "{listed_total} entries listed"
-        );
+        let kept: usize = texts.iter().map(|text| text.len()).sum();
+        assert!(kept <= ADVERTISED_BYTES, "{kept} bytes of text listed");
         let (again, left_out) = listed(&mut advertised, &wanted(0), |_| "");
         assert_eq!(
             (again.len(), left_out),
