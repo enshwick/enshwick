@@ -215,6 +215,11 @@ mod tests {
     }
 
     #[test]
+    fn every_language_the_game_offers_has_every_text() {
+        assert_eq!(shipped().missing_in(Language::OFFERED), []);
+    }
+
+    #[test]
     fn every_language_names_the_fallback_s_placeholders() {
         fn placeholders(text: &str) -> Vec<&str> {
             let mut names: Vec<&str> = text

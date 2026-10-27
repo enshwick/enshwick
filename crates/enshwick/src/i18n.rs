@@ -226,6 +226,28 @@ languages! {
 }
 
 impl Language {
+    /// The languages the game's settings offer a player, the set a mod
+    /// translates into: English as [`Language::FALLBACK`], which the game's
+    /// English (`en-us`) reads, then the others in the menu's order (client
+    /// build 426).
+    pub const OFFERED: &[Self] = &[
+        Self::FALLBACK,
+        Self::DE_DE,
+        Self::FR_FR,
+        Self::IT_IT,
+        Self::ES_ES,
+        Self::RU_RU,
+        Self::PL_PL,
+        Self::JA_JP,
+        Self::KO_KR,
+        Self::PT_BR,
+        Self::TH_TH,
+        Self::TR_TR,
+        Self::ZH_CN,
+        Self::ZH_TW,
+        Self::UK_UA,
+    ];
+
     /// The languages a text for this one is looked up in, in order: this
     /// language, the main variety of a regional one (`es-mx`, `es-419`,
     /// `es`), and [`Language::FALLBACK`] last.
@@ -459,6 +481,49 @@ impl Texts {
             .filter(|language| self.by_language.contains_key(language))
     }
 
+    /// Each of `languages` paired with each key some language has a text
+    /// for and it lacks, in the order of `languages`, then by key; a text of
+    /// its main variety counts (`pt` for `pt-br`), English only for
+    /// [`Language::FALLBACK`] itself. A mod's test checks its texts against
+    /// [`Language::OFFERED`] with it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::{Language, Texts};
+    ///
+    /// let texts = Texts::parse("[en]\na = \"A\"\n[uk]\na = \"А\"\n")?;
+    /// assert_eq!(texts.missing_in(&[Language::UK_UA, Language::DE_DE]), [(Language::DE_DE, "a")]);
+    /// // In a mod's test: assert_eq!(texts.missing_in(Language::OFFERED), []);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn missing_in(&self, languages: &[Language]) -> Vec<(Language, &str)> {
+        let keys: std::collections::BTreeSet<&str> = self
+            .by_language
+            .values()
+            .flat_map(|entries| entries.keys().map(String::as_str))
+            .collect();
+        let has = |language: Language, key: &str| {
+            language
+                .lookup_order()
+                .take_while(|l| *l != Language::FALLBACK || language == Language::FALLBACK)
+                .any(|l| {
+                    self.by_language
+                        .get(&l)
+                        .is_some_and(|e| e.contains_key(key))
+                })
+        };
+        languages
+            .iter()
+            .flat_map(|&language| {
+                keys.iter()
+                    .filter(move |key| !has(language, key))
+                    .map(move |&key| (language, key))
+            })
+            .collect()
+    }
+
     /// Each language paired with each key another language has a text for
     /// and it lacks, sorted by language as [`languages`](Self::languages)
     /// gives them, then by key; empty when every language has every text.
@@ -616,6 +681,37 @@ mod tests {
         assert_eq!(texts.get("b", Language::PT_BR), Some("B"));
         assert_eq!(texts.get("a", Language::ZH_TW), Some("A"));
         assert_eq!(texts.get("a", Language(99)), Some("A"));
+    }
+
+    #[test]
+    fn missing_texts_are_named_per_language_and_a_main_variety_counts() {
+        let texts = Texts::parse(
+            "[en]\na = \"A\"\nb = \"B\"\n[pt]\na = \"Ap\"\nb = \"Bp\"\n[de]\na = \"Ad\"\n",
+        )
+        .unwrap();
+        let wanted = [
+            Language::FALLBACK,
+            Language::PT_BR,
+            Language::DE_DE,
+            Language::UK_UA,
+        ];
+        assert_eq!(
+            texts.missing_in(&wanted),
+            [
+                (Language::DE_DE, "b"),
+                (Language::UK_UA, "a"),
+                (Language::UK_UA, "b")
+            ]
+        );
+    }
+
+    #[test]
+    fn every_offered_language_has_a_code_and_english_is_the_fallback() {
+        assert_eq!(Language::OFFERED.first(), Some(&Language::FALLBACK));
+        assert!(!Language::OFFERED.contains(&Language::EN_US));
+        for language in Language::OFFERED {
+            assert!(!language.code().is_empty());
+        }
     }
 
     #[test]

@@ -30,9 +30,10 @@ module reads it, and a server owner can add to it or change it.
   in `no`.
   [`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
   gives the order.
-- The game's settings offer these languages: `en-us`, `de`, `fr`, `it`,
-  `es`, `ru`, `pl`, `ja`, `ko`, `pt-br`, `th`, `tr`, `zh-cn`, `zh-tw` and
-  `uk`. English reads as `en-us`, which falls back to `en`.
+- `Language::OFFERED` lists the languages the game's settings offer: `en`,
+  `de`, `fr`, `it`, `es`, `ru`, `pl`, `ja`, `ko`, `pt-br`, `th`, `tr`,
+  `zh-cn`, `zh-tw` and `uk`. The game's English reads as `en-us`, which
+  falls back to `en`.
 
 Embed the file with `include_str!("texts.toml")` and read it during `init`
 with
@@ -133,11 +134,13 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
-A test holds the file complete without naming its languages, so a new
-language is a new table and no change to the test:
+A test holds the file complete without naming its languages:
+`missing_in(Language::OFFERED)` lists each language the game offers and each
+key it lacks, so a language the game adds shows up as missing texts, and
+`untranslated()` catches a key one table forgot:
 
 ```rust
-use enshwick::i18n::Texts;
+use enshwick::i18n::{Language, Texts};
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
@@ -145,6 +148,9 @@ const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт
 // The body of the mod's test `every_text_exists_in_all_languages`.
 let texts = Texts::parse(TEXTS).unwrap();
 assert_eq!(texts.untranslated(), []);
+// The body of `every_language_the_game_offers_has_every_text`; this short
+// file lacks most of them.
+assert!(!texts.missing_in(Language::OFFERED).is_empty());
 ```
 
 On a client,

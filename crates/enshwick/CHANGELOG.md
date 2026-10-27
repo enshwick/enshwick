@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Language::OFFERED`, the languages the game's settings offer, and
+  `Texts::missing_in(languages)`, each language's missing texts, so a mod's
+  test holds its texts complete for every offered language.
+
 ### Changed
 
 - A text missing in a regional language comes from its main variety before
