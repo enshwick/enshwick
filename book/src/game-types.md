@@ -20,6 +20,11 @@ cargo enshwick types --from "$ENSHROUDED_DIR" keen::ecs::Health \
 runtime type comes out, over six thousand of them; the editor's `keen::ds::`
 copies come only when named. Add `pub mod game;` to `src/lib.rs`.
 
+Luau has no namespaces, and luau-lsp makes every exported type global, so a
+game type whose name the [API's definitions](luau.md) already take keeps its
+namespace: the game's `keen::ecs::HitEvent` is `Ecs_HitEvent` beside the API's
+`HitEvent`. A [Luau mod](luau.md#start-a-luau-mod) loads both files at once.
+
 ## Read a struct from game memory
 
 Every struct is `repr(C)` with each field at the offset the game reflects, and

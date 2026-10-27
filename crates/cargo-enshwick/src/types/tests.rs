@@ -217,3 +217,32 @@ fn a_folder_without_the_game_is_named_in_the_error() {
     std::fs::remove_dir_all(&dir).unwrap();
     assert!(error.contains("enshrouded_server.exe"), "{error}");
 }
+
+#[test]
+fn a_game_type_named_as_an_api_type_takes_its_namespace() {
+    let mut catalogue = catalogue();
+    catalogue.insert(
+        "keen::Player".to_owned(),
+        Ty {
+            fields: fields(&[("item", 0, Some("keen::ItemId"))]),
+            ..ty(Kind::Struct, 4, 4)
+        },
+    );
+    let chosen = select(&catalogue, &[]).unwrap();
+    let text = luau::render(&catalogue, &chosen, "sample");
+    assert!(text.contains("export type Keen_Player = {"), "{text}");
+    for name in cargo_enshwick::luau::type_names() {
+        assert!(!text.contains(&format!("export type {name} =")), "{name}");
+    }
+}
+
+#[test]
+fn every_game_type_keeps_clear_of_the_api_s_names() {
+    let Some(exe) = std::env::var_os("ENSH_SERVER_EXE") else {
+        return;
+    };
+    let text = luau_definitions(Path::new(&exe)).unwrap();
+    for name in cargo_enshwick::luau::type_names() {
+        assert!(!text.contains(&format!("\nexport type {name} =")), "{name}");
+    }
+}

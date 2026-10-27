@@ -31,7 +31,7 @@ export type GameEvent = {
 }
 
 -- `keen::ecs::HitEvent`
-export type HitEvent = GameEvent & {
+export type Ecs_HitEvent = GameEvent & {
     damage: number,
     item: ItemId,
     slots: {number},

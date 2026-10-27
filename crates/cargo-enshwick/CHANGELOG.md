@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick new --luau --game <game>` writes the game's own types
+  beside the API's definitions, in `types/game.d.luau`, and points
+  luau-lsp at them; `cargo enshwick types --luau` keeps every type clear of
+  the names the API's definitions export, and
+  `cargo_enshwick::luau::type_names` lists them.
 - `cargo enshwick call <call>` writes the Rust declaration of another mod's
   call from the server's schema (`cargo_enshwick::points::rust_call`).
 - `cargo enshwick event <event>` writes a mod event's Luau module from the
