@@ -51,10 +51,14 @@ impl DescribedField {
 ///     let price = DescribedPoint::new("you.trading-post:price", Mode::Override)
 ///         .with_input(vec![DescribedField::new("item", 5_938_679_357_011_966_802)], 4)
 ///         .with_output(14_918_346_923_295_848_190, 4);
-///     load.extend_described_point(&price, &Order::new(), |input, _answer| {
-///         let item = u32::from_le_bytes(input[..4].try_into().unwrap_or_default());
-///         if item == 7 { DescribedVerdict::Set(10u32.to_le_bytes().to_vec()) } else { DescribedVerdict::Pass }
-///     })
+///     // SAFETY: every answer set is a `u32`, the point's answer type, for
+///     // which any bytes are a valid value.
+///     unsafe {
+///         load.extend_described_point(&price, &Order::new(), |input, _answer| {
+///             let item = u32::from_le_bytes(input[..4].try_into().unwrap_or_default());
+///             if item == 7 { DescribedVerdict::Set(10u32.to_le_bytes().to_vec()) } else { DescribedVerdict::Pass }
+///         })
+///     }
 /// }
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,12 +174,20 @@ impl Load<'_> {
     /// # Errors
     ///
     /// [`Off`] when the loader refuses the link, as after `init` or for a
-    /// second link of this mod on the point.
+    /// second link of this mod on the point, and at the seal when the
+    /// description reads past the owner's input or its answer has another
+    /// size.
+    ///
+    /// # Safety
+    ///
+    /// - The bytes of every [`DescribedVerdict::Set`] the link answers are a
+    ///   valid value of the owner's answer type: a `bool` is 0 or 1, an enum
+    ///   one of its variants, every field of a struct likewise.
     ///
     /// # Examples
     ///
     /// See [`DescribedPoint`].
-    pub fn extend_described_point<F>(
+    pub unsafe fn extend_described_point<F>(
         &mut self,
         point: &DescribedPoint,
         order: &Order,
@@ -262,12 +274,13 @@ where
     if input.is_null() || value.is_null() {
         return PointVerdict::PASS;
     }
-    // SAFETY: the loader checked the owner's input starts with every
-    // described field, `input_size` bytes, and the input lives for the call.
+    // SAFETY: at the seal the loader checked the owner's input starts with
+    // every described field and is at least `input_size` bytes, and the
+    // input lives for the call.
     let input = unsafe { core::slice::from_raw_parts(input.cast::<u8>(), link.input_size) };
-    // SAFETY: the loader checked the owner's answer has the described
-    // layout, `output_size` bytes, alive and written by nothing else for the
-    // call.
+    // SAFETY: at the seal the loader checked the owner's answer has the
+    // described layout and exactly `output_size` bytes, alive and written by
+    // nothing else for the call.
     let answer = unsafe { core::slice::from_raw_parts_mut(value.cast::<u8>(), link.output_size) };
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (link.run)(input, answer))) {
         Ok(DescribedVerdict::Set(bytes)) if link.changes && bytes.len() == answer.len() => {

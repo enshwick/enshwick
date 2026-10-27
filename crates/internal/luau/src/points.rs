@@ -14,6 +14,8 @@ pub(crate) enum Read {
     Primitive(Primitive),
     /// A struct: its size and each field at its offset.
     Struct(Vec<(String, usize, Read)>),
+    /// An enum: its integer and the values it has, the only ones written.
+    Enum(Primitive, Vec<i64>),
 }
 
 /// The primitives a point's values are made of.
@@ -31,6 +33,7 @@ pub(crate) enum Primitive {
     F64,
     Bool,
     Guid,
+    Entity,
 }
 
 impl Primitive {
@@ -48,6 +51,7 @@ impl Primitive {
             "f64" => Self::F64,
             "bool" => Self::Bool,
             "guid" => Self::Guid,
+            "entity" => Self::Entity,
             _ => return None,
         })
     }
@@ -56,7 +60,7 @@ impl Primitive {
         match self {
             Self::U8 | Self::I8 | Self::Bool => 1,
             Self::U16 | Self::I16 => 2,
-            Self::U32 | Self::I32 | Self::F32 => 4,
+            Self::U32 | Self::I32 | Self::F32 | Self::Entity => 4,
             Self::U64 | Self::I64 | Self::F64 => 8,
             Self::Guid => 16,
         }
@@ -91,6 +95,12 @@ fn read_of(value: &LuaValue, depth: u32) -> mlua::Result<Read> {
                 .ok_or_else(|| bad(format!("no primitive {name:?}")))
         }
         LuaValue::Table(table) => {
+            if let Some(variants) = table.get::<Option<Vec<i64>>>("variants")? {
+                let Read::Primitive(repr) = read_of(&table.get("repr")?, depth + 1)? else {
+                    return Err(bad("an enum's repr is an integer"));
+                };
+                return Ok(Read::Enum(repr, variants));
+            }
             let fields: Table = table.get("fields")?;
             Ok(Read::Struct(fields_of(&fields, depth + 1)?))
         }
@@ -114,10 +124,10 @@ fn fields_of(fields: &Table, depth: u32) -> mlua::Result<Vec<(String, usize, Rea
 /// The size of a value read as `read`, from its fields' offsets.
 fn size_of_read(read: &Read) -> usize {
     match read {
-        Read::Primitive(p) => p.size(),
+        Read::Primitive(p) | Read::Enum(p, _) => p.size(),
         Read::Struct(fields) => fields
             .iter()
-            .map(|(_, offset, read)| offset + size_of_read(read))
+            .map(|(_, offset, read)| offset.saturating_add(size_of_read(read)))
             .max()
             .unwrap_or(0),
     }
@@ -149,7 +159,8 @@ impl PointDesc {
                 .map_err(|_| bad("a layout hash is no number"))?;
             let offset: usize = field.get("offset")?;
             let read = read_of(&field.get("read")?, 0)?;
-            if offset + size_of_read(&read) > usize::try_from(input_size).unwrap_or(0) {
+            if offset.saturating_add(size_of_read(&read)) > usize::try_from(input_size).unwrap_or(0)
+            {
                 return Err(bad(format!("{field_name} lies past the input's size")));
             }
             described.push(DescribedField::new(&field_name, hash));
@@ -162,6 +173,16 @@ impl PointDesc {
             .parse()
             .map_err(|_| bad("a layout hash is no number"))?;
         let output_read = read_of(&output.get("read")?, 0)?;
+        if mode.changes() {
+            let verified = matches!(&output_read, Read::Primitive(p)
+                if usize::try_from(output_size).is_ok_and(|size| size == p.size())
+                    && enshwick::services::layout_hash("output", p.shape(), p.size(), p.align(), 0) == output_hash);
+            if !verified {
+                return Err(bad(
+                    "a script changes only an answer of a primitive type, whose layout hash it checks",
+                ));
+            }
+        }
         if size_of_read(&output_read) > usize::try_from(output_size).unwrap_or(0) {
             return Err(bad("the answer lies past its size"));
         }
@@ -188,12 +209,20 @@ pub(crate) fn decode(
         Read::Struct(fields) => {
             let table = lua.create_table_with_capacity(0, fields.len())?;
             for (name, at, inner) in fields {
-                table.raw_set(name.as_str(), decode(lua, bytes, offset + at, inner)?)?;
+                let value = match offset.checked_add(*at) {
+                    Some(at) => decode(lua, bytes, at, inner)?,
+                    None => LuaValue::Nil,
+                };
+                table.raw_set(name.as_str(), value)?;
             }
             Ok(LuaValue::Table(table))
         }
+        Read::Enum(p, _) => decode(lua, bytes, offset, &Read::Primitive(*p)),
         Read::Primitive(p) => {
-            let Some(raw) = bytes.get(offset..offset + p.size()) else {
+            let Some(raw) = offset
+                .checked_add(p.size())
+                .and_then(|end| bytes.get(offset..end))
+            else {
                 return Ok(LuaValue::Nil);
             };
             let mut word = [0u8; 16];
@@ -208,9 +237,11 @@ pub(crate) fn decode(
                 Primitive::I8 => LuaValue::Number(f64::from(i8::from_le_bytes([raw[0]]))),
                 Primitive::U16 => LuaValue::Number(f64::from(u16::from_le_bytes([raw[0], raw[1]]))),
                 Primitive::I16 => LuaValue::Number(f64::from(i16::from_le_bytes([raw[0], raw[1]]))),
-                Primitive::U32 => LuaValue::Number(f64::from(u32::from_le_bytes([
-                    raw[0], raw[1], raw[2], raw[3],
-                ]))),
+                Primitive::U32 | Primitive::Entity => {
+                    LuaValue::Number(f64::from(u32::from_le_bytes([
+                        raw[0], raw[1], raw[2], raw[3],
+                    ])))
+                }
                 Primitive::I32 => LuaValue::Number(f64::from(i32::from_le_bytes([
                     raw[0], raw[1], raw[2], raw[3],
                 ]))),
@@ -251,13 +282,31 @@ pub(crate) fn encode(
                 return Err(wrong("a table"));
             };
             for (name, at, inner) in fields {
-                encode(&table.raw_get(name.as_str())?, inner, bytes, offset + at)?;
+                let at = offset
+                    .checked_add(*at)
+                    .ok_or_else(|| wrong("a value that fits the answer"))?;
+                encode(&table.raw_get(name.as_str())?, inner, bytes, at)?;
             }
             Ok(())
         }
         Read::Primitive(p) => {
             let out = bytes
-                .get_mut(offset..offset + p.size())
+                .get_mut(offset..offset.saturating_add(p.size()))
+                .ok_or_else(|| wrong("a value that fits the answer"))?;
+            encode_primitive(value, *p, out)
+        }
+        Read::Enum(p, variants) => {
+            let listed = match value {
+                LuaValue::Integer(i) => variants.contains(i),
+                #[expect(clippy::cast_possible_truncation, reason = "compared only when whole")]
+                LuaValue::Number(n) => n.fract() == 0.0 && variants.contains(&(*n as i64)),
+                _ => false,
+            };
+            if !listed {
+                return Err(wrong("one of the enum's values"));
+            }
+            let out = bytes
+                .get_mut(offset..offset.saturating_add(p.size()))
                 .ok_or_else(|| wrong("a value that fits the answer"))?;
             encode_primitive(value, *p, out)
         }
@@ -313,7 +362,7 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
                 .unwrap_or(0)
                 .to_le_bytes(),
         ),
-        Primitive::U32 => out.copy_from_slice(
+        Primitive::U32 | Primitive::Entity => out.copy_from_slice(
             &u32::try_from(whole(0.0, f64::from(u32::MAX))?)
                 .unwrap_or(0)
                 .to_le_bytes(),
@@ -345,7 +394,7 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
         },
         Primitive::Guid => {
             let text = digits(value)?;
-            if text.len() != 32 {
+            if text.len() != 32 || !text.is_ascii() {
                 return Err(wrong("32 hex digits"));
             }
             for (i, byte) in out.iter_mut().enumerate() {
@@ -355,4 +404,140 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
         }
     }
     Ok(())
+}
+
+impl Primitive {
+    /// The type's shape hash, as `#[derive(Shape)]` gives it in Rust.
+    pub(crate) const fn shape(self) -> u64 {
+        use enshwick::Shape;
+        match self {
+            Self::U8 => u8::SHAPE,
+            Self::I8 => i8::SHAPE,
+            Self::U16 => u16::SHAPE,
+            Self::I16 => i16::SHAPE,
+            Self::U32 => u32::SHAPE,
+            Self::I32 => i32::SHAPE,
+            Self::U64 => u64::SHAPE,
+            Self::I64 => i64::SHAPE,
+            Self::F32 => f32::SHAPE,
+            Self::F64 => f64::SHAPE,
+            Self::Bool => bool::SHAPE,
+            Self::Guid => enshwick::content::Guid::SHAPE,
+            Self::Entity => enshwick::ecs::Entity::SHAPE,
+        }
+    }
+
+    /// The type's alignment.
+    pub(crate) const fn align(self) -> usize {
+        match self {
+            Self::Guid => 1,
+            other => other.size(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    fn primitive() -> impl Strategy<Value = Primitive> {
+        prop::sample::select(vec![
+            Primitive::U8,
+            Primitive::I8,
+            Primitive::U16,
+            Primitive::I16,
+            Primitive::U32,
+            Primitive::I32,
+            Primitive::U64,
+            Primitive::I64,
+            Primitive::F32,
+            Primitive::F64,
+            Primitive::Bool,
+            Primitive::Guid,
+            Primitive::Entity,
+        ])
+    }
+
+    fn read() -> impl Strategy<Value = Read> {
+        let leaf = prop_oneof![
+            primitive().prop_map(Read::Primitive),
+            (primitive(), prop::collection::vec(any::<i64>(), 0..4))
+                .prop_map(|(p, v)| Read::Enum(p, v)),
+        ];
+        leaf.prop_recursive(3, 16, 4, |inner| {
+            prop::collection::vec(("[a-z]{1,4}", any::<usize>(), inner), 0..4)
+                .prop_map(Read::Struct)
+        })
+    }
+
+    proptest! {
+        #[test]
+        fn decoding_any_layout_over_any_bytes_never_panics(
+            read in read(),
+            offset in any::<usize>(),
+            bytes in prop::collection::vec(any::<u8>(), 0..64),
+        ) {
+            let lua = Lua::new();
+            let _value = decode(&lua, &bytes, offset, &read);
+        }
+
+        #[test]
+        fn encoding_any_value_into_any_layout_never_panics(
+            read in read(),
+            offset in any::<usize>(),
+            size in 0usize..64,
+            number in any::<f64>(),
+            text in ".{0,40}",
+        ) {
+            let lua = Lua::new();
+            let mut bytes = vec![0u8; size];
+            for value in [
+                LuaValue::Number(number),
+                LuaValue::String(lua.create_string(&text).unwrap()),
+                LuaValue::Boolean(true),
+                LuaValue::Nil,
+            ] {
+                let _written = encode(&value, &read, &mut bytes, offset);
+            }
+        }
+
+        #[test]
+        fn a_u32_written_reads_back(value in any::<u32>()) {
+            let lua = Lua::new();
+            let mut bytes = [0u8; 4];
+            encode(&LuaValue::Number(f64::from(value)), &Read::Primitive(Primitive::U32), &mut bytes, 0).unwrap();
+            let read = decode(&lua, &bytes, 0, &Read::Primitive(Primitive::U32)).unwrap();
+            prop_assert_eq!(read.as_f64(), Some(f64::from(value)));
+        }
+    }
+
+    #[test]
+    fn an_enum_takes_only_its_variants() {
+        let mut bytes = [0u8; 1];
+        let read = Read::Enum(Primitive::U8, vec![0, 2]);
+        assert!(encode(&LuaValue::Number(2.0), &read, &mut bytes, 0).is_ok());
+        assert!(encode(&LuaValue::Number(1.0), &read, &mut bytes, 0).is_err());
+    }
+
+    fn description(lua: &Lua, mode: &str, read: &str, hash: u64) -> Table {
+        lua.load(format!(
+            r#"return {{ name = "you.post:price", mode = "{mode}", refusable = false,
+                input = {{ size = 4, fields = {{ {{ name = "item", offset = 0, read = "u32", hash = "1" }} }} }},
+                output = {{ size = 4, hash = "{hash}", read = "{read}" }} }}"#
+        ))
+        .eval()
+        .unwrap()
+    }
+
+    #[test]
+    fn a_changing_link_needs_an_answer_whose_hash_it_checks() {
+        let lua = Lua::new();
+        let right = enshwick::services::layout_hash("output", Primitive::U32.shape(), 4, 4, 0);
+        assert!(PointDesc::parse(&description(&lua, "override", "u32", right)).is_ok());
+        assert!(PointDesc::parse(&description(&lua, "override", "u32", right ^ 1)).is_err());
+        assert!(PointDesc::parse(&description(&lua, "override", "u8", right)).is_err());
+        assert!(PointDesc::parse(&description(&lua, "observe", "u8", 7)).is_ok());
+    }
 }

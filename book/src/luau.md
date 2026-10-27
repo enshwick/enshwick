@@ -133,8 +133,12 @@ for a Rust mod; on a client, only while it hosts a game.
 A Luau mod links into another mod's [extension point](extending.md) as a
 Rust mod does. `cargo enshwick point <owner>:<point> --from <owner's DLL>
 --luau --out points/<point>.luau` writes the point's module: the types it
-reaches, its named values, and the layout the owner's build wrote, which the
-loader checks before it links. The handler gets the input and the answer so
+reaches, its named values, and each field's place with the layout hash the
+owner's build wrote. The loader links only when every hash matches the
+owner's, the input the module reads is no larger than the owner's and the
+answer has the owner's size. A script changes an answer only of a number,
+`boolean`, entity or GUID type, whose hash the runtime checks against the
+type the module names; on another answer type it may observe the point. The handler gets the input and the answer so
 far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
 refusable point:
 
@@ -151,8 +155,9 @@ end)
 
 The handler runs on the thread that asks the point, under the same budget
 as an event handler. An error or an answer of the wrong type turns the mod
-off, and the answer stays as it was. A new owner version with another
-layout refuses the link until the module is written again.
+off, and the answer stays as it was. An owner version with another layout
+leaves the link idle, with the reason in the log, until the module is
+written again.
 
 ## Settings
 

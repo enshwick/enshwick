@@ -19,7 +19,7 @@ return table.freeze({
 	mode = "override",
 	refusable = true,
 	input = { size = 12, fields = {
-		{ name = "character", offset = 0, read = "u32", hash = "13059086432849901944" },
+		{ name = "character", offset = 0, read = "entity", hash = "13059086432849901944" },
 		{ name = "deal", offset = 4, read = "u32", hash = "4757988806913211573" },
 		{ name = "own", offset = 8, read = "bool", hash = "3608188286181557718" },
 	} },
