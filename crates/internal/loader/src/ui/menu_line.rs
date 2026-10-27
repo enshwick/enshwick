@@ -2,10 +2,11 @@
 //! many mods load and what is off.
 
 use core::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 
 use enshwick::abi::Registers;
 
+use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -20,8 +21,8 @@ thread_local! {
     static LINE: RefCell<Option<(usize, String)>> = const { RefCell::new(None) };
 }
 
-/// Set once the line's hook panicked; the line stays off from then on.
-static OFF: AtomicBool = AtomicBool::new(false);
+/// Turns the line off, alone, at its first panic.
+static FUSE: Fuse = Fuse::new("the main menu's Enshwick line");
 
 /// Links the hook between the version line and the legal line, on a build
 /// whose site holds and that has the version line's look.
@@ -91,10 +92,7 @@ fn line(loader: &Loader) -> super::engine::UiText {
 /// - Called only by the mid-hook stub, on the hooked thread, with null or
 ///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
-    if OFF.load(Ordering::Relaxed) {
-        return;
-    }
-    let drawn = std::panic::catch_unwind(|| {
+    let _drawn = FUSE.run("the main menu's frame", || {
         let (Some(engine), Some(loader)) = (ENGINE.get(), crate::host::loader()) else {
             return;
         };
@@ -110,10 +108,4 @@ unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut c
         // lives in the frame's arena.
         let _drawn = unsafe { engine.legal_line(context, &text) };
     });
-    if drawn.is_err() && !OFF.swap(true, Ordering::Relaxed) {
-        crate::log!(
-            ERROR,
-            "interface: the loader panicked in the main menu's line; the line is off until the game starts again"
-        );
-    }
 }
