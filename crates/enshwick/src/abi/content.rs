@@ -274,6 +274,8 @@ impl DataSelect {
     /// Every recipe made at the workshop whose GUID is
     /// [`DataChange::entry`]. Since minor 91.
     pub const WORKSHOP: Self = Self(5);
+    /// Every backpack. Since minor 92.
+    pub const BACKPACKS: Self = Self(6);
 }
 
 /// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).

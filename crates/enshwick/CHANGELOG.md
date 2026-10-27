@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Items::Backpacks` selects every backpack for a change of `Field::Slots`,
+  which now reaches a backpack's own inventory too, for backpacks made
+  after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
+  `items = "backpacks"`, and `ItemTraits::backpack_slots` reads a
+  backpack's size (#566).
 - `Load::extend_described_point` links into an extension point described at
   run time (`points::DescribedPoint`, `DescribedField`), the input and the
   answer as bytes in the owner's layout, as a script's schema gives them;
