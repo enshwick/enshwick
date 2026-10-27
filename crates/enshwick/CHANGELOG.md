@@ -15,11 +15,22 @@ Each entry names the pull request that made the change.
   onto the server's ban list (`HostApi::account_action`,
   `AccountActionType`). The fake keeps a ban list
   (`Installed::banned`, `removed`) (#586).
+- With `allowlist = true` in the loader's settings, a dedicated server lets
+  in only the accounts `mod-data/enshwick/allowlist.txt` lists, and its
+  administrators; the console's `enshwick allowlist add|remove` and
+  `World::set_allowlisted` change the list, `World::allowlisted` reads it
+  (`HostApi::allowlist_set`, `HostApi::allowlist_has`, ABI 3.1). The
+  fake keeps the list (`Installed::allowlisted`) (#602).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 
 ### Changed
 
+- `World::account_action` refuses a kick or a ban of a hosted game's host,
+  succeeds for a ban of an account on the ban list already, and refuses a
+  ban the game's list does not take instead of answering that the action
+  is missing; the console says so in its own words. The fake takes the
+  host with `FakeHost::host_key` (#606).
 - The crate docs say to depend on the crate from crates.io and carry a
   module map, the feature table and the target; docs.rs builds every
   feature. The Luau definitions describe events, codes and permission bits

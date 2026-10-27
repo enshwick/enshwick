@@ -370,3 +370,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           |
 | `map_markers`            | The markers the scene places, read from the game's data once per scene; game thread, quiet           |
 | `account_action`         | Kicks, bans or unbans an account; a ban of an account not online goes onto the list; game thread     |
+| `allowlist_set`          | Lists an account on the loader's allowlist or takes it off; dedicated server, any thread             |
+| `allowlist_has`          | Whether the loader's allowlist lists an account; dedicated server, any thread                        |

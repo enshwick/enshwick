@@ -120,8 +120,9 @@ fn find(loader: &Loader) -> Result<BanList, String> {
 /// # Errors
 ///
 /// [`Status::MISSING`] when this build lacks the add, the config or the
-/// entry's layout, no config is set up, or the game's list did not grow; [`Status::WRONG_THREAD`] off
-/// the game thread.
+/// entry's layout, or no config is set up; [`Status::REFUSED`] when the
+/// game's list did not grow; [`Status::WRONG_THREAD`] off the game thread.
+/// An account on the list already is no error.
 pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
     const EMPTY: &[u8; 1] = b"\0";
     let list = ban_list(loader).ok_or(Status::MISSING)?;
@@ -132,6 +133,11 @@ pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
     let config: usize = unsafe { crate::memory::read(server, list.config) };
     if config == 0 {
         return Err(Status::MISSING);
+    }
+    if holds(loader, account) == Some(true) {
+        super::remember_offline_ban(account);
+        crate::log!(INFO, "account {account:016x} is on the ban list already");
+        return Ok(());
     }
     let date = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -156,7 +162,7 @@ pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
             WARN,
             "account {account:016x} not put on the ban list: the game's list did not grow"
         );
-        return Err(Status::MISSING);
+        return Err(Status::REFUSED);
     }
     // SAFETY: the live server on its game thread, which alone writes this
     // flag; the game's own handler sets the byte at the table's
