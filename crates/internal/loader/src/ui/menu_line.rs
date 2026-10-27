@@ -2,13 +2,14 @@
 //! many mods load and what is off.
 
 use core::cell::RefCell;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use enshwick::abi::Registers;
 
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::pinned;
 
 use super::engine::Engine;
 use super::{ENGINE, copy};
@@ -19,13 +20,29 @@ thread_local! {
     static LINE: RefCell<Option<(usize, String)>> = const { RefCell::new(None) };
 }
 
+/// Set once the line's hook panicked; the line stays off from then on.
+static OFF: AtomicBool = AtomicBool::new(false);
+
 /// Links the hook between the version line and the legal line, on a build
 /// whose site holds and that has the version line's look.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
+    let build = &loader.build.name;
     if engine.legal_line_site == 0 {
+        let why = if loader.address(pinned::ui::LEGAL_LINE_SITE).is_none() {
+            "its table has no ui.legal_line_site"
+        } else {
+            "the code at ui.legal_line_site does not match its pattern or bytes"
+        };
         crate::log!(
-            INFO,
-            "interface: the main menu's Enshwick line is off on this build"
+            WARN,
+            "interface: the main menu's Enshwick line off on {build}: {why}"
+        );
+        return;
+    }
+    if !engine.has_legal_look() {
+        crate::log!(
+            WARN,
+            "interface: the main menu's Enshwick line off on {build}: reflection lacks the version line's look (legalText, fontSizes.xsmall)"
         );
         return;
     }
@@ -74,6 +91,9 @@ fn line(loader: &Loader) -> super::engine::UiText {
 /// - Called only by the mid-hook stub, on the hooked thread, with null or
 ///   the registers it saved, valid and unaliased for the call.
 unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut core::ffi::c_void) {
+    if OFF.load(Ordering::Relaxed) {
+        return;
+    }
     let drawn = std::panic::catch_unwind(|| {
         let (Some(engine), Some(loader)) = (ENGINE.get(), crate::host::loader()) else {
             return;
@@ -88,12 +108,12 @@ unsafe extern "system" fn version_line(_registers: *mut Registers, _user: *mut c
         // thread, with the column of the `LegalLine` window open (client
         // 426); `context` is this frame's non-zero context, and the text
         // lives in the frame's arena.
-        unsafe { engine.legal_line(context, &text) };
+        let _drawn = unsafe { engine.legal_line(context, &text) };
     });
-    if drawn.is_err() {
+    if drawn.is_err() && !OFF.swap(true, Ordering::Relaxed) {
         crate::log!(
             ERROR,
-            "interface: the loader panicked in the main menu's line"
+            "interface: the loader panicked in the main menu's line; the line is off until the game starts again"
         );
     }
 }

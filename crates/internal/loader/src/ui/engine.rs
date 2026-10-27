@@ -563,10 +563,7 @@ impl Legal {
     fn find(loader: &Loader) -> Option<Self> {
         Some(Self {
             style: style(loader, "legalText")?,
-            size: path(
-                loader,
-                &[(BUNDLE, "fontSizes"), ("keen::FbUiFontSizes", "xsmall")],
-            )?,
+            size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "xsmall")])?,
         })
     }
 }
@@ -630,6 +627,7 @@ fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
 const BUNDLE: &str = "keen::FbUiBundle";
 const STYLES: &str = "keen::FbUiCharacterStyles";
 const SOUNDS: &str = "keen::FbUiSounds";
+const FONT_SIZES: &str = "keen::FbUiFontSizes";
 const MENU_SOUNDS: &str = "keen::FbUiSoundsMenuGeneric";
 
 fn style(loader: &Loader, name: &str) -> Option<usize> {
@@ -676,10 +674,7 @@ fn looks(loader: &Loader) -> Option<Looks> {
             ],
         )?,
         outline: style(loader, "defaultStyleOutline")?,
-        title_size: path(
-            loader,
-            &[(BUNDLE, "fontSizes"), ("keen::FbUiFontSizes", "caps_large")],
-        )?,
+        title_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "caps_large")])?,
         sounds: [
             sound(loader, "mouseClickGeneric")?,
             sound(loader, "entryTrigger")?,

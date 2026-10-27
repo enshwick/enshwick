@@ -91,6 +91,11 @@ impl Engine {
         unsafe { (self.label_draw)(label.ptr()) };
     }
 
+    /// Whether this build has the look of the main menu's version line.
+    pub(in crate::ui) const fn has_legal_look(&self) -> bool {
+        self.legal.is_some()
+    }
+
     /// Draws a line in the look of the main menu's version line, right under
     /// it; false, drawing nothing, on a build without that look.
     ///
@@ -115,8 +120,13 @@ impl Engine {
         // the frame's look bundle.
         unsafe { (self.label_new)(label.ptr(), text, bundle + legal.style, 0) };
         label.u8(self.layout.label_shown, 1);
+        // The flags the game sets on its version line (client 426).
+        label.u16(
+            self.layout.label_flags,
+            label.read_u16(self.layout.label_flags) | 0x48,
+        );
         let node = self.frame_node(&label);
-        // Bottom left, as the game aligns its version line (client 426).
+        // The version line's own alignment (client 426).
         let align: u16 = 0x301;
         // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
         // `Engine::resolve`, on the node the game just wrote into `label`,

@@ -106,7 +106,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::LABEL_NEW.id(),
     pinned::ui::LABEL_SHOWN.id(),
     pinned::ui::LEGAL_LINE_SITE.id(),
-    pinned::ui::LEGAL_LINE_SITE.id(),
     pinned::ui::LOCA_ID.id(),
     pinned::ui::LOCA_TEXT.id(),
     pinned::ui::MAIN_ENTRY.id(),
