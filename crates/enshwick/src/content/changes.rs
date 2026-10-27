@@ -540,11 +540,13 @@ pub enum ValueError {
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Change {
-    /// The vanilla entry, such as an item's GUID.
+    /// The vanilla entry, such as an item's GUID, or a fill table's for
+    /// [`Change::in_table`].
     pub entry: Guid,
     /// What changes.
     pub field: Field,
-    /// The item inside the entry, for [`Field::Ingredient`].
+    /// The item inside the entry: a recipe's ingredient for
+    /// [`Field::Ingredient`], or a fill table's item.
     pub item: Option<Guid>,
     /// How.
     pub value: Value,
@@ -562,6 +564,34 @@ impl Change {
             entry,
             field,
             item: None,
+            value,
+        }
+    }
+
+    /// The change of `field` of the item `item` in the one fill table
+    /// `table` alone, a `DefaultInventoryResource` such as
+    /// [`Vanilla::loot_table`](crate::content::vanilla::Vanilla::loot_table)
+    /// finds; `field` is [`Field::Count`], [`Field::SpawnProbability`] or
+    /// [`Field::Weight`]. It applies after the item's changes of every table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    ///
+    /// let (table, fur) = (Guid([1; 16]), Guid([2; 16]));
+    /// let change = Change::in_table(table, fur, Field::Count, Value::Times(2.0));
+    /// assert_eq!((change.entry, change.item), (table, Some(fur)));
+    /// assert!(change.check().is_ok());
+    /// assert!(Change::in_table(table, fur, Field::StackSize, Value::Set(2.0)).check().is_err());
+    /// ```
+    #[must_use]
+    pub const fn in_table(table: Guid, item: Guid, field: Field, value: Value) -> Self {
+        Self {
+            entry: table,
+            field,
+            item: Some(item),
             value,
         }
     }
@@ -627,7 +657,11 @@ impl Change {
     /// assert_eq!(change.check().unwrap_err().to_string(), "ingredient needs an item");
     /// ```
     pub fn check(&self) -> Result<(), ValueError> {
-        let wants_item = self.field == Field::Ingredient;
+        let fill_table = matches!(
+            self.field,
+            Field::Count | Field::SpawnProbability | Field::Weight
+        );
+        let wants_item = self.field == Field::Ingredient || (fill_table && self.item.is_some());
         if wants_item != self.item.is_some() {
             return Err(ValueError::Item {
                 field: self.field,

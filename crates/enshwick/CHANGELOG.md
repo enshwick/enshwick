@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Change::in_table` changes an item's count, chance or weight in one fill
+  table alone, after its changes of every table; `Vanilla::loot_table`
+  finds the table a container template rolls, with how many containers
+  share it; a data pack's `loot.toml` takes `table = [...]` with the
+  containers' template names. `FillTableLayout` and `template_table` read
+  a template's name and table (#570).
 - `Hold::for_world` holds the game for one world only
   (`mod-data/<id>/worlds/<key>/hold.txt`): the loader stops the game as
   that world starts to load without the mod, before its save is read, and

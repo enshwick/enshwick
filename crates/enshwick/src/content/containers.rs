@@ -70,7 +70,13 @@ impl ContainerLayout {
 
 /// The data offset of each component of `template` with type hash `hash`.
 fn components(layout: &ContainerLayout, blob: &Blob, hash: u32) -> Option<Vec<usize>> {
-    let (start, count) = blob.array(layout.components)?;
+    template_components(blob, layout.components, hash)
+}
+
+/// The data offset of each component with type hash `hash` in the template
+/// `blob`, whose component list sits at `list`.
+pub(crate) fn template_components(blob: &Blob, list: usize, hash: u32) -> Option<Vec<usize>> {
+    let (start, count) = blob.array(list)?;
     let mut found = Vec::new();
     for variant in (0..usize::try_from(count).ok()?).map(|i| start + i * VARIANT) {
         if blob.read_u32(variant)? == hash {

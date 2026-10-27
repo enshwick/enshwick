@@ -108,6 +108,13 @@ expression: shape
             }
           ]
         },
+        "table": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "weight": {
           "anyOf": [
             {
