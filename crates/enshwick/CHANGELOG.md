@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- A dedicated server's name in the server browser ends with the count of
+  its join mods, `[mods: 6]`, instead of the fingerprint, which stays in the
+  `enshwick` rule.
+
 ### Added
 
 - Every id type prints as its number (`Display`): `Entity`, `ItemId`,
