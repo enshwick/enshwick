@@ -25,12 +25,15 @@ mod admin;
 pub mod answers;
 pub mod file;
 pub mod input;
+pub mod orders;
 #[cfg(windows)]
 mod run;
 #[cfg(windows)]
 pub(crate) use admin::TABLE_IDS;
 #[cfg(windows)]
 mod tools;
+#[cfg(windows)]
+mod world_orders;
 #[cfg(windows)]
 pub(crate) use run::{after_step, run, start, the_console};
 
@@ -186,6 +189,9 @@ pub enum Tool<'a> {
     /// `enshwick kick|ban|unban <player or account>`: the game's account
     /// actions.
     Account(accounts::Act, &'a str),
+    /// `enshwick give|give-to|spawn|teleport ...`: the game's admin
+    /// orders on the world.
+    Order(Order, &'a str),
     /// `enshwick help`: the tools and the mods with actions.
     Help,
     /// `enshwick <mod id>`: what a mod is.
@@ -207,6 +213,19 @@ pub enum Tool<'a> {
     Config(&'a str),
     /// `enshwick ui-demo <player>`: the interface demo on a player's client.
     UiDemo(&'a str),
+}
+
+/// The game's admin orders on the world the console gives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Order {
+    /// Items for every player online.
+    Give,
+    /// Items for one player.
+    GiveTo,
+    /// Entities from a template.
+    Spawn,
+    /// A player moved.
+    Teleport,
 }
 
 /// The first word of `text` and the rest, trimmed.
@@ -238,6 +257,10 @@ pub fn parse(line: &str) -> Line<'_> {
         "kick" => Tool::Account(accounts::Act::Kick, args),
         "ban" => Tool::Account(accounts::Act::Ban, args),
         "unban" => Tool::Account(accounts::Act::Unban, args),
+        "give" => Tool::Order(Order::Give, args),
+        "give-to" => Tool::Order(Order::GiveTo, args),
+        "spawn" => Tool::Order(Order::Spawn, args),
+        "teleport" => Tool::Order(Order::Teleport, args),
         "status" => Tool::Status,
         "profile" => Tool::Profile {
             reset: args.eq_ignore_ascii_case("reset"),
@@ -303,6 +326,14 @@ mod tests {
             Line::Loader(Tool::Account(accounts::Act::Ban, "Ann Lee"))
         );
         assert_eq!(parse("Enshwick  HELP"), Line::Loader(Tool::Help));
+        assert_eq!(
+            parse("enshwick give-to 7 1 Ann"),
+            Line::Loader(Tool::Order(Order::GiveTo, "7 1 Ann"))
+        );
+        assert_eq!(
+            parse("enshwick teleport 1 2 3 Ann"),
+            Line::Loader(Tool::Order(Order::Teleport, "1 2 3 Ann"))
+        );
         assert_eq!(
             parse("enshwick you.trading-post"),
             Line::Loader(Tool::About("you.trading-post"))

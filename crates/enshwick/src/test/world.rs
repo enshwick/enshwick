@@ -93,6 +93,24 @@ impl FakeHost {
         self
     }
 
+    /// A map marker of the scene, as the loader reads it from the game's
+    /// archive for [`Map::markers`](crate::map::Map::markers).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::MapMarkerInfo;
+    ///
+    /// let marker = MapMarkerInfo { position: [10.0, 40.0, 20.0], ..MapMarkerInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new().map_marker(marker).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn map_marker(mut self, marker: crate::abi::MapMarkerInfo) -> Self {
+        self.map_markers.push(marker);
+        self
+    }
+
     /// The template GUID of `entity`, in file order.
     ///
     /// # Examples
@@ -121,6 +139,20 @@ impl Installed {
     /// ```
     pub fn stop_world(&self) {
         table::with((), |s| s.edits.stopped = true);
+    }
+
+    /// Has the scene's map markers still being read while `pending`; as the
+    /// loader does, the fake answers the first call of a world that way
+    /// whatever this says.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.read_map_markers(true);
+    /// ```
+    pub fn read_map_markers(&self, pending: bool) {
+        table::with((), |s| s.edits.markers_pending = pending);
     }
 
     /// Sets the clock the fake's `time_of_day` reports; until then the

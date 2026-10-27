@@ -196,7 +196,8 @@ pub fn reload(game: &Path, id: &str, world: Option<&str>) -> String {
 }
 
 /// `x, y, z` in metres to one decimal, or `-`.
-fn place(position: Option<[f64; 3]>) -> String {
+#[must_use]
+pub fn place(position: Option<[f64; 3]>) -> String {
     position.map_or_else(
         || "-".to_owned(),
         |[x, y, z]| format!("{x:.1}, {y:.1}, {z:.1}"),

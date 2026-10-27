@@ -33,6 +33,7 @@ pub static TABLE_IDS: &[(&str, &[&str])] = &[
     ("rate_links", crate::rate_links::TABLE_IDS),
     ("rights", crate::rights::TABLE_IDS),
     ("saves", crate::saves::TABLE_IDS),
+    ("scene", crate::scene::TABLE_IDS),
     ("spawns", crate::spawns::TABLE_IDS),
     ("start", crate::start::TABLE_IDS),
     ("static_halves", crate::static_halves::TABLE_IDS),

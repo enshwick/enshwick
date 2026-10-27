@@ -184,6 +184,9 @@ mod retire;
 mod rights;
 #[cfg(windows)]
 mod saves;
+#[cfg(windows)]
+mod scene;
+pub mod scene_markers;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build reads the game's server")

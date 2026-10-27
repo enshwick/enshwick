@@ -14,6 +14,10 @@ Each entry names the pull request that made the change.
   table with `Done` and `OpError` by name. `Inventories::slots` and
   `Inventories::count` read an inventory on the server's game thread
   without a `Reader` (#581).
+- A Luau mod calls another mod's call with `enshwick.caller(description)`,
+  from the module `cargo enshwick call --luau` writes; the input's fields
+  are numbers, booleans, entities and GUIDs, each checked against its
+  layout hash (#577).
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread
@@ -159,6 +163,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `Map::markers` reads the markers the scene places from the game's data
+  through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.97), once
+  per scene; `MapMarker` no longer names an entity (#573).
 - An item a mod or pack changes by name keeps that change over its own
   selection of the same field, so a selection can leave out exceptions
   (#558).
@@ -183,6 +190,8 @@ Each entry names the pull request that made the change.
   mod id.
 - The loader and the fake leave a mod event subscription idle when it
   reads more bytes than the definer sends.
+- `Map::markers` listed no marker on a dedicated server, whose marker
+  entities the entity walk does not find (#573).
 - `World::component` and `World::get` read the static half of a component
   type, such as `FuelSetup`, as the template's set-up values; they gave the
   data of its dynamic half, `DynamicFuelSetup`, before (#568).

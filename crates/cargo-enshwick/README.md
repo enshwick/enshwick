@@ -44,6 +44,7 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
   With `--luau` it writes the point's Luau module for a Luau mod instead.
 - `call <mod>:<call> --from <path> [--out <file>]` writes the declaration of
   another mod's call, which the server lists in `manifest!(calls: [..])`.
+  With `--luau` it writes the call's Luau module for a Luau mod instead.
 - `event <mod>:<event> --from <path> [--out <file>]` writes the Luau module
   of another mod's event, which the owner lists in `manifest!(events: [..])`.
 - `types [<name>...] --from <game> [--rust <file>] [--luau <file>]` writes

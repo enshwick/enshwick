@@ -26,6 +26,9 @@ proptest.workspace = true
 workspace = true
 
 [[test]]
+name = "calls"
+
+[[test]]
 name = "inventory"
 
 [[test]]
