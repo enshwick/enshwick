@@ -23,8 +23,8 @@ use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
-use crate::server_pin::ServerCell;
 pub(crate) use crate::server_pin::ServerPin;
+use crate::server_pin::{Place, ServerCell};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -57,9 +57,11 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The server object, seen by the post-step hook, and the pins of readers
 /// off its game thread.
 static SERVER: ServerCell = ServerCell::new();
-/// How long a hosted game's end waits for readers off the game thread to
-/// leave its server; each reads for microseconds.
-const PIN_WAIT: Duration = Duration::from_millis(250);
+/// When the server's end first warns of a reader that still holds it;
+/// readers hold the server for microseconds.
+const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
+/// How often the warning repeats while the reader still holds it.
+const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
 /// The game thread's id, seen by the post-step hook.
 pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
 /// The server's entity world, seen by the post-step hook.
@@ -83,22 +85,39 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     SERVER_WORLD.store(entity_world, Ordering::Release);
 }
 
-/// Forgets the server of a hosted game that stopped; on its game thread,
-/// which frees the server only on later updates (client 426). Waits up to
-/// [`PIN_WAIT`] for readers off the game thread to leave it.
-pub(crate) fn release() {
-    let deadline = Instant::now() + PIN_WAIT;
-    let left = SERVER.retire(|| {
+/// Begins the server's end at its shutdown, on its game thread: no reader
+/// off the game thread pins it from now on, while the game thread still
+/// reads it. The game frees the server only in the teardown after
+/// [`wait_unpinned`] (server 399, client 426).
+pub(crate) fn retire() {
+    SERVER.retire();
+}
+
+/// Waits, without a bound, until every reader off the game thread that
+/// pinned the server before [`retire`] has let go; on the game thread as it
+/// enters the teardown, before the game frees anything. A reader still
+/// holding on after a second is named in a warning, repeated every few
+/// seconds: a hang is better than a read of freed memory.
+pub(crate) fn wait_unpinned() {
+    let start = Instant::now();
+    let mut next_warning = start + STALL_FIRST_WARNING;
+    SERVER.wait_unpinned(|place| {
         std::thread::yield_now();
-        Instant::now() < deadline
+        let now = Instant::now();
+        if now >= next_warning {
+            next_warning = now + STALL_WARNING_EVERY;
+            crate::log!(
+                WARN,
+                "the server's end waits {} s for a reader to let go of it, last pinned by the {place}",
+                now.duration_since(start).as_secs()
+            );
+        }
     });
-    if !left {
-        crate::log!(
-            WARN,
-            "a reader still held the hosted server after {} ms; it ends anyway",
-            PIN_WAIT.as_millis()
-        );
-    }
+}
+
+/// Forgets the server of a hosted game that stopped, after [`retire`].
+pub(crate) fn release() {
+    SERVER.publish(0);
     SERVER_WORLD.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
     crate::stats::forget();
@@ -177,11 +196,12 @@ pub(crate) fn hosting() -> bool {
     SERVER.current() != 0
 }
 
-/// A pin on the running server for a reader on any thread: the server's
-/// memory and what it holds stay while the pin is held; `None` while no
-/// server runs or once a hosted game's end began.
-pub(crate) fn pin() -> Option<ServerPin<'static>> {
-    SERVER.pin()
+/// A pin on the running server for a reader on any thread, taken at
+/// `place`: the game frees the server and what it holds only after
+/// [`wait_unpinned`] has seen every pin drop; `None` while no server runs
+/// or once its end began at shutdown.
+pub(crate) fn pin(place: Place) -> Option<ServerPin<'static>> {
+    SERVER.pin(place)
 }
 
 /// The running server's entity world, 0 for none.

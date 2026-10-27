@@ -212,7 +212,7 @@ fn refusal(definition: Option<Definition>, kind: u8, value: u32) -> u32 {
 /// a pin on the server: the definitions and the journal stay put while a
 /// world runs, and the pin keeps the world from ending under the read.
 fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
-    let pin = crate::world::pin()?;
+    let pin = crate::world::pin(&"knowledge guard")?;
     let (game, state) = super::store_of(layout, pin.server()).ok()?;
     let (scope, def) = definition(layout, state, id)?;
     let player = scope == KnowledgeInfo::PLAYER;

@@ -373,10 +373,12 @@ fn registry(loader: &Loader, pin: &ServerPin<'_>) -> usize {
 fn held(loader: &Loader, pin: &ServerPin<'_>) -> Option<usize> {
     let holder_at = loader.offset(pinned::server::PLAYER_INFOS)?;
     let registry_at = loader.offset(pinned::server::ITEM_REGISTRY)?;
-    // SAFETY: `pin` holds the running server, non-zero, whose memory the
-    // game frees only after a hosted game's end has waited for the pin to
-    // drop (client 426); its game-systems holder, set at world start and
-    // freed with the server, sits at the table's `server.player_infos`.
+    // SAFETY: `pin` holds the running server, non-zero. The game frees it,
+    // with its game-systems holder, only in the teardown after
+    // set_state(…, 7), and `world::wait_unpinned` runs at that call until
+    // every pin drops, while no pin is taken after the shutdown's
+    // `world::retire` (server 399, client 426). The holder sits at the
+    // table's `server.player_infos`.
     let holder: usize = unsafe { crate::memory::read(pin.server(), holder_at) };
     if holder == 0 {
         return None;
@@ -735,8 +737,8 @@ pub(crate) fn item_info_at(
     // SAFETY: the game's lookup at the table's `item.info`, a read of the
     // non-zero item registry (checked earlier): the one the inventory system
     // last saw, or the game-systems holder's, which the world keeps from its
-    // start; `pin` keeps both until it drops, and the end clears the first
-    // only after its wait.
+    // start. The game frees both only in the server's teardown, which
+    // waits for `pin` to drop; clearing the loader's copy frees nothing.
     let info = unsafe { (executor.item_lookup)(item, registry) };
     Ok((!info.is_null()).then_some(info))
 }
@@ -744,7 +746,7 @@ pub(crate) fn item_info_at(
 /// The static data of `item`, once a world runs.
 pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
     let executor = executor(loader).ok_or(Status::MISSING)?;
-    let pin = crate::world::pin().ok_or(Status::MISSING)?;
+    let pin = crate::world::pin(&"item lookup").ok_or(Status::MISSING)?;
     let info = item_info_at(loader, &pin, item)?.ok_or(Status::MISSING)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
@@ -857,7 +859,7 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
         && pick_registry(
             registry,
             crate::host::loader()
-                .zip(crate::world::pin())
+                .zip(crate::world::pin(&"inventory registry check"))
                 .and_then(|(loader, pin)| held(loader, &pin))
                 .unwrap_or(0),
         )

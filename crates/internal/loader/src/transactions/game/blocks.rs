@@ -90,7 +90,7 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
     if !position_ok || !norm.is_finite() || norm < 1e-6 {
         return Err(Status::BAD_ARGS);
     }
-    let pin = crate::world::pin().ok_or(Status::MISSING)?;
+    let pin = crate::world::pin(&"block transaction commit").ok_or(Status::MISSING)?;
     let material = building_material(loader, &pin, request.material)?;
     let (game, holder) = game_box(
         loader,
@@ -113,7 +113,7 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
 /// [`Status::MISSING`] when it no longer gives the voxels the commit
 /// checked, as after the world changed.
 pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, Status> {
-    let pin = crate::world::pin().ok_or(Status::MISSING)?;
+    let pin = crate::world::pin(&"block rebuild").ok_or(Status::MISSING)?;
     let (game, _) = game_box(loader, &pin, block.shape, block.position, block.rotation)?;
     if game.region()? != block.region {
         return Err(Status::MISSING);
@@ -140,10 +140,12 @@ fn game_box(
     let registry_at = loader
         .offset(pinned::server::BLUEPRINT_REGISTRY)
         .ok_or(Status::MISSING)?;
-    // SAFETY: `pin` holds the running server, non-zero, whose memory the
-    // game frees only after a hosted game's end has waited for the pin to
-    // drop (client 426); its game-systems holder, set at load and freed
-    // with the server, sits at the table's `server.player_infos`.
+    // SAFETY: `pin` holds the running server, non-zero. The game frees it,
+    // with its game-systems holder, only in the teardown after
+    // set_state(…, 7), and `world::wait_unpinned` runs at that call until
+    // every pin drops, while no pin is taken after the shutdown's
+    // `world::retire` (server 399, client 426). The holder sits at the
+    // table's `server.player_infos`.
     let holder: usize = unsafe { read(pin.server(), holder_at) };
     if holder == 0 {
         return Err(Status::MISSING);
