@@ -324,6 +324,27 @@ altar, since placing an altar founds a base, and
 `remove_prop`, in either mode, fails with `WorldError::NotAProp`. The
 entity calls reach them.
 
+### What a save keeps
+
+The game saves a world only inside its bases, the flame altars' build
+zones. A prop placed, a block written or terrain changed anywhere else is
+gone after a restart, whoever made it, a mod or a player.
+`world.persists(min, max)` tells whether a save keeps a box: it lies
+wholly inside one base's zone, half a metre in from its edges.
+
+```rust
+use enshwick::ItemId;
+use enshwick::world::{TransactionId, World, WorldTransform};
+
+fn place_to_keep(world: World, chest: ItemId, at: [f64; 3]) -> Option<TransactionId> {
+    let [x, y, z] = at;
+    if !world.persists([x - 1.0, y, z - 1.0], [x + 1.0, y + 2.0, z + 1.0]).ok()? {
+        return None;
+    }
+    world.transaction().place_prop(chest, WorldTransform::at(at)).commit().ok()
+}
+```
+
 ### For a player
 
 `world.transaction_for(&player)` starts a transaction for a player. Before

@@ -9,7 +9,7 @@ use crate::prop_holds::Stash;
 use crate::transactions::props::{
     FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_held, holds_items, wired,
 };
-use crate::world::{ServerAccess, Stored};
+use crate::world::ServerAccess;
 
 /// Metres to the game's 32.32 fixed point.
 const FIXED_ONE: f64 = 4_294_967_296.0;
@@ -254,41 +254,55 @@ impl Facts {
 
 /// Whether `entity` has a component of type `hash`; on the game thread.
 fn has(loader: &Loader, entity: u32, hash: u32) -> bool {
-    crate::world::stored(loader, Entity(entity), hash).is_ok()
+    crate::world::component(loader, Entity(entity), hash).is_ok()
 }
 
-/// The data of `entity`'s own component of type `hash`, in its row, for a
-/// walk over it or a write: `None` when it has none, [`Status::MISSING`]
-/// when the entity shares it with its template, where neither is safe.
-/// On the game thread.
+/// The data of `entity`'s own component of type `hash`, its dynamic half,
+/// in its row: `None` when it has none. On the game thread.
 fn inline(loader: &Loader, entity: u32, hash: u32) -> Result<Option<*const u8>, Status> {
-    match crate::world::stored(loader, Entity(entity), hash) {
-        Ok(Stored::Inline(data)) => Ok(Some(data.cast())),
-        Ok(Stored::Shared) => Err(Status::MISSING),
+    match crate::world::component(loader, Entity(entity), hash) {
+        Ok(data) => Ok(Some(data.cast())),
         Err(Status::MISSING) => Ok(None),
         Err(reason) => Err(reason),
     }
 }
 
-/// The value of type `T` at `at` in `entity`'s component of type `hash`:
-/// its own, or the one it shares with its template, read-only; `None` when
-/// it has none. The type has fields, so it is no tag. On the game thread.
+/// The value of type `T` at `at` in `entity`'s own component of type
+/// `hash`, its dynamic half; `None` when it has none. On the game thread.
 fn field<T: enshwick::raw::AnyBitPattern>(
     loader: &Loader,
     entity: u32,
     hash: u32,
     at: usize,
 ) -> Result<Option<T>, Status> {
-    let data: *const u8 = match crate::world::stored(loader, Entity(entity), hash) {
-        Ok(Stored::Inline(data)) => data.cast(),
-        Ok(Stored::Shared) => crate::world::shared(loader, Entity(entity), hash)?.cast(),
-        Err(Status::MISSING) => return Ok(None),
+    let Some(data) = inline(loader, entity, hash)? else {
+        return Ok(None);
+    };
+    // SAFETY: `data` is the entity's live component of type `hash`, in its
+    // row, and the caller passes the reflected offset of a `T` field of
+    // that dynamic half, from `Facts`; read on the game thread, which alone
+    // writes it.
+    Ok(Some(unsafe { enshwick::raw::read_at(data, at) }))
+}
+
+/// The value of type `T` at `at` in the static half of `entity`'s
+/// component type `hash`, the values its template sets up, such as a
+/// `FuelSetup`; `None` when it has none. On the game thread.
+fn static_field<T: enshwick::raw::AnyBitPattern>(
+    loader: &Loader,
+    entity: u32,
+    hash: u32,
+    at: usize,
+) -> Result<Option<T>, Status> {
+    let data: *const u8 = match crate::world::static_component(loader, Entity(entity), hash) {
+        Ok(data) => data.cast(),
+        Err(Status::MISSING) if !has(loader, entity, hash) => return Ok(None),
         Err(reason) => return Err(reason),
     };
-    // SAFETY: `data` is the entity's live component of type `hash`, its own
-    // or its template's shared one, and the caller passes the reflected
-    // offset of a `T` field inside it, from `Facts`; read on the game thread,
-    // which alone writes it.
+    // SAFETY: `data` is the live static half of the entity's component type
+    // `hash`, and the caller passes the reflected offset of a `T` field of
+    // that static half, from `Facts`; read on the game thread; nothing
+    // writes it after the template is set up.
     Ok(Some(unsafe { enshwick::raw::read_at(data, at) }))
 }
 
@@ -426,8 +440,8 @@ pub(crate) fn set_deposit(loader: &Loader, entity: u32, Stash([set, on]): Stash)
     };
     if let Ok(Some(data)) = inline(loader, entity, switch) {
         // SAFETY: `data` is the entity's own live
-        // `DynamicInventoryCraftingStock`, kept in its row (checked by
-        // `inline`), with its bool "set by a player" at the reflected
+        // `DynamicInventoryCraftingStock`, the dynamic half the raw read
+        // returns, two bytes in its row, with its bool "set by a player" at the reflected
         // offset; `world::server` checked the game thread at a quiet moment,
         // outside any step's systems, so neither the game's own writer, the
         // player's switch action, nor a reader runs.
@@ -458,12 +472,12 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
     };
     let fuel = match field::<i32>(loader, entity, facts.fuel, facts.fuel_charges)? {
         Some(charges) => {
-            let most = field::<i32>(loader, entity, facts.fuel_setup, facts.fuel_most)?;
-            let start = field::<f32>(loader, entity, facts.fuel_setup, facts.fuel_start)?;
+            let most = static_field::<i32>(loader, entity, facts.fuel_setup, facts.fuel_most)?;
+            let start = static_field::<f32>(loader, entity, facts.fuel_setup, facts.fuel_start)?;
             let mut refills = false;
             for &at in &facts.fuel_refills {
-                refills |=
-                    field::<u8>(loader, entity, facts.fuel_setup, at)?.is_some_and(|on| on != 0);
+                refills |= static_field::<u8>(loader, entity, facts.fuel_setup, at)?
+                    .is_some_and(|on| on != 0);
             }
             fuel_held(charges, most.zip(start), refills)
         }

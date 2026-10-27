@@ -3859,6 +3859,18 @@ typedef struct EnshwickHostApi {
                                          uint32_t *out,
                                          uint32_t capacity,
                                          uint32_t *count);
+  // Writes to `kept` 1 when a save keeps changes in the box from `min`
+  // to `max`, in metres, and 0 when not: the game saves a world only
+  // inside its bases' zones, so the box must lie wholly inside one, half
+  // a metre in from its edges. `Status::BAD_ARGS` for a null pointer,
+  // a corner that is not finite or a `max` below `min`;
+  // `Status::MISSING` while no world is loaded or on a build without
+  // the zone list. On the server's game thread at a quiet moment only:
+  // `Status::WRONG_THREAD` elsewhere or inside a step. Since minor 92.
+  EnshwickStatus (*world_persists)(EnshwickModHandle me,
+                                   const double (*min)[3],
+                                   const double (*max)[3],
+                                   uint8_t *kept);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.

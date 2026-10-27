@@ -89,6 +89,10 @@ Each entry names the pull request that made the change.
   removed or taken away by an undo unless the mod opts in:
   `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
   records and `transaction_entities` are ABI minor 92 (#552).
+- `World::persists` tells whether a save keeps changes in a box: the
+  game saves a world only inside its bases' zones, so props, blocks and
+  terrain changed elsewhere are gone after a restart, a mod's as a
+  player's. `HostApi::world_persists` is ABI minor 92 (#552).
 - `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 92): creatures
   placed from items (animals, pets, survivors) and flame altars are no
   props; prop removal refuses them in either mode (#552).

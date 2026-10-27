@@ -472,4 +472,21 @@ mod tests {
         );
         assert!(loader.transactions().is_empty(), "nothing is queued");
     }
+
+    #[test]
+    fn only_a_box_inside_a_base_persists() {
+        let (_loader, world) =
+            started_from(enshwick::test::FakeHost::new().building_zone([0.0; 3], [40.0; 3]));
+        assert_eq!(world.persists([1.0; 3], [5.0; 3]), Ok(true));
+        assert_eq!(
+            world.persists([30.0; 3], [50.0; 3]),
+            Ok(false),
+            "partly out"
+        );
+        assert_eq!(world.persists([100.0; 3], [101.0; 3]), Ok(false));
+        assert_eq!(
+            world.persists([f64::NAN; 3], [1.0; 3]),
+            Err(WorldError::Refused)
+        );
+    }
 }

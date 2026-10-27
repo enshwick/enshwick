@@ -368,3 +368,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
 | `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
 | `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 92          |
+| `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 92          |

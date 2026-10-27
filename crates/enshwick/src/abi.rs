@@ -693,8 +693,9 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 164 * 8);
+    assert!(size_of::<HostApi>() == 24 + 165 * 8);
     assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 163 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 164 * 8);
     assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<PropRemove>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);

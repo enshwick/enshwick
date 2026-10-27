@@ -265,7 +265,9 @@ impl Transaction {
     /// Writes `voxels` over their box, whatever was there: air, ground and
     /// building blocks alike, each voxel with its fill. A box read with
     /// [`Voxels::read`](crate::voxels::Voxels::read), moved with
-    /// [`VoxelBox::moved_to`], pastes it elsewhere.
+    /// [`VoxelBox::moved_to`], pastes it elsewhere. Like a player's, voxels
+    /// written outside every base are not saved; [`World::persists`]
+    /// tells.
     ///
     /// # Examples
     ///
@@ -359,7 +361,8 @@ impl Transaction {
     /// [`World::transaction_entities`] lists it. [`Transaction::commit`]
     /// refuses an item that places nothing, and one that places a creature
     /// or a flame altar, which founds a base, with
-    /// [`WorldError::NotAProp`].
+    /// [`WorldError::NotAProp`]. Like a player's, a prop placed outside
+    /// every base is not saved; [`World::persists`] tells.
     ///
     /// # Examples
     ///

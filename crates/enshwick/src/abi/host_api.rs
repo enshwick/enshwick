@@ -1297,4 +1297,18 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Writes to `kept` 1 when a save keeps changes in the box from `min`
+    /// to `max`, in metres, and 0 when not: the game saves a world only
+    /// inside its bases' zones, so the box must lie wholly inside one, half
+    /// a metre in from its edges. [`Status::BAD_ARGS`] for a null pointer,
+    /// a corner that is not finite or a `max` below `min`;
+    /// [`Status::MISSING`] while no world is loaded or on a build without
+    /// the zone list. On the server's game thread at a quiet moment only:
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. Since minor 92.
+    pub world_persists: extern "system" fn(
+        me: ModHandle,
+        min: *const [f64; 3],
+        max: *const [f64; 3],
+        kept: *mut u8,
+    ) -> Status,
 }
