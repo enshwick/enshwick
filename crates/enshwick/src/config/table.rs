@@ -120,7 +120,7 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] for a schema with groups or dotted keys, a secret field a
+    /// [`Off`] for a schema with groups, dotted or empty keys, a secret field a
     /// server would send to its players, or `synced` off
     /// [`Stage::Startup`]; and when the file does not parse or a value is
     /// refused.
@@ -328,6 +328,9 @@ fn refuse_unsupported(schema: &Schema) -> Result<(), Off> {
     }
     for field in &schema.fields {
         let key = &field.key;
+        if key.is_empty() {
+            return Err(Off::new("settings: a field has an empty key"));
+        }
         if key.contains('.') {
             return Err(Off::new(format!(
                 "settings: {key} is a dotted key; a table has top-level keys"
@@ -412,6 +415,8 @@ mod tests {
         assert!(refuse_unsupported(&grouped).is_err());
         let dotted = Schema::new("", "config", vec![Field::new("g.a", Stage::Runtime, &1)]);
         assert!(refuse_unsupported(&dotted).is_err());
+        let empty = Schema::new("", "config", vec![Field::new("", Stage::Runtime, &1)]);
+        assert!(refuse_unsupported(&empty).is_err());
         let secret = Schema::new(
             "",
             "config",

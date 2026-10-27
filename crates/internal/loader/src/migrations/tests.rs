@@ -539,3 +539,33 @@ fn a_removed_setting_goes_from_an_inline_table_too() {
     assert_eq!(at("old.radius").as_deref(), Some("3"), "{new}");
     assert_eq!(at("old.inner.kept").as_deref(), Some("2"), "{new}");
 }
+
+#[test]
+fn a_broken_settings_line_is_named_without_its_value() {
+    let shown = |error: MigrationError| {
+        let text = format!("{error} {error:?}");
+        assert!(!text.contains("hunter2"), "{text}");
+        text
+    };
+    let remove = migration("2", vec![step(MigrationStep::REMOVE_SETTING, "old", "")]);
+    for broken in [
+        "limit = 4\ntoken = \"hunter2\n",
+        "limit = 4\ntoken = hunter2\n",
+    ] {
+        let text = shown(apply_settings(broken, 0, &remove, &double, &none).unwrap_err());
+        assert!(text.contains("line 2") && text.contains("token"), "{text}");
+    }
+
+    let take = migration(
+        "2",
+        vec![step(MigrationStep::TAKE_SETTING, "vault:token", "token")],
+    );
+    let source = |_: &str| Some("# Vault.\ntoken = \"hunter2\n".to_owned());
+    let text = shown(apply_settings("limit = 4\n", 0, &take, &double, &source).unwrap_err());
+    assert!(text.contains("vault") && text.contains("line 2"), "{text}");
+
+    let map = migration("2", vec![step(MigrationStep::MAP_SETTING, "token", "")]);
+    let leaky = |_: usize, _: usize, _: &str| Ok("\"hunter2".to_owned());
+    let text = shown(apply_settings("token = \"x\"\n", 0, &map, &leaky, &none).unwrap_err());
+    assert!(text.contains("token"), "{text}");
+}
