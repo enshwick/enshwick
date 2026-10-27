@@ -10,6 +10,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish.workspace = true
+autotests = false
 
 [dependencies]
 arc-swap.workspace = true
@@ -25,11 +26,6 @@ proptest.workspace = true
 [lints]
 workspace = true
 
+# One binary for every file in `tests/`, each a module of `tests/main.rs`.
 [[test]]
-name = "calls"
-
-[[test]]
-name = "inventory"
-
-[[test]]
-name = "scripts"
+name = "main"
