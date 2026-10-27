@@ -205,6 +205,20 @@ impl Load<'_> {
         crate::world::World::resolve(self)
     }
 
+    /// The map's markers and the players' waypoints in the game server,
+    /// dedicated or hosted by the client.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game build lacks the marker reads.
+    ///
+    /// # Examples
+    ///
+    /// See [`Map`](crate::map::Map).
+    pub fn map(&mut self) -> Result<crate::map::Map, Off> {
+        crate::map::Map::resolve(self)
+    }
+
     /// Inventory reads and transactions in the game server, dedicated or
     /// hosted by the client; a mod asks for them during `init`.
     ///

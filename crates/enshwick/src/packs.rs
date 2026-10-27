@@ -62,6 +62,19 @@ pub const FILES: [&str; 6] = [
     LOOT_FILE,
     TEXTS_FILE,
 ];
+/// The extension of a script, a Luau file the loader runs for a pack that
+/// has a [`SCRIPT_MAIN`].
+pub const SCRIPT_EXTENSION: &str = "luau";
+/// The script that makes a pack a Luau mod; the loader runs it at start.
+pub const SCRIPT_MAIN: &str = "main.luau";
+/// The end of a Luau definitions file's name, which editors read and the
+/// loader leaves out.
+pub const DEFINITIONS_SUFFIX: &str = ".d.luau";
+/// The most scripts a pack may hold.
+pub const MAX_SCRIPTS: usize = 256;
+/// How many folders deep below the pack's folder the loader looks for
+/// scripts; deeper folders are not read.
+pub const MAX_SCRIPT_DEPTH: usize = 4;
 /// The largest file a pack may hold: 4 MiB.
 pub const MAX_FILE: u64 = 4 << 20;
 

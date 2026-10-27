@@ -230,6 +230,9 @@ mod tests {
     #[test]
     fn every_example_pack_has_the_layout_a_new_pack_gets() {
         for dir in crate::pack::tests::example_packs() {
+            if dir.join(enshwick::packs::SCRIPT_MAIN).is_file() {
+                continue;
+            }
             let at = dir.display();
             let manifest: toml_edit::DocumentMut = std::fs::read_to_string(dir.join(MANIFEST_FILE))
                 .unwrap()

@@ -12,9 +12,21 @@ Each entry names the pull request that made the change.
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
   data by the loader (`DataSelect::RECIPE_KIND`, `DataSelect::WORKSHOP`,
-  ABI minor 90); a data pack's `recipes.toml` takes `kind = [...]` and
+  ABI minor 91); a data pack's `recipes.toml` takes `kind = [...]` and
   `workshop = [...]` for the same, and `RecipeKind::name` gives the names
   (#562).
+- `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
+  with their bases, and markers, plain data for a process outside the game;
+  `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
+  format (`MAP_SNAPSHOT_FORMAT`) (#560).
+- `load.map()` returns the `Map` of the game server: `Map::markers` and
+  `Map::markers_in` list the world's map markers, each a `MapMarker` with
+  its position, its `MapMarkerTypeId` (the key of the game's marker type
+  registry) and its label's text tag; `Map::waypoint` reads the waypoint a
+  player set (#557).
+- The `world_quiet` entry answers whether a mod is on the server's game
+  thread at a quiet moment while a world runs, where it may read live
+  components (ABI 2.90) (#557).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
@@ -97,6 +109,18 @@ Each entry names the pull request that made the change.
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
   build it would leave vanilla (#544).
+- `script` describes the API for script languages beside the Rust items:
+  `#[derive(Script)]` for types, `#[script(<part>)]` for the methods a script
+  may call, a script entry for every loader event, and `NAMESPACES` (#543).
+- A data pack folder with a `main.luau` reads its scripts:
+  `PackFiles::scripts`, `SCRIPT_MAIN`, `SCRIPT_EXTENSION`,
+  `DEFINITIONS_SUFFIX`, `MAX_SCRIPTS`, `MAX_SCRIPT_DEPTH` and
+  `ReadPackError::TooManyScripts`; scripts count in the pack's hash (#545).
+
+### Fixed
+
+- Each mod handle has a scheduler queue of its own, so one copy of the API
+  can run tasks for several packs and scripts (#543).
 
 ### Changed
 

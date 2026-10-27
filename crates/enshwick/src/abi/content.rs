@@ -269,10 +269,10 @@ impl DataSelect {
     /// Every item that places a container.
     pub const CONTAINERS: Self = Self(3);
     /// Every recipe whose output is of the kind whose
-    /// [`RecipeKind`] code is [`DataChange::categories`]. Since minor 90.
+    /// [`RecipeKind`] code is [`DataChange::categories`]. Since minor 91.
     pub const RECIPE_KIND: Self = Self(4);
     /// Every recipe made at the workshop whose GUID is
-    /// [`DataChange::entry`]. Since minor 90.
+    /// [`DataChange::entry`]. Since minor 91.
     pub const WORKSHOP: Self = Self(5);
 }
 

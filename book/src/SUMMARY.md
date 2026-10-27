@@ -27,6 +27,7 @@
 - [Weather and chunks](weather.md)
 - [Terrain](terrain.md)
 - [Altars and bases](altars.md)
+- [The map](map.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
 - [Crafting and building vetoes](vetoes.md)
@@ -42,6 +43,10 @@
 - [Migrations](migrations.md)
 - [Services between mods](services.md)
 - [Extending other mods](extending.md)
+
+# Writing a mod in Luau
+
+- [Luau mods](luau.md)
 
 # Reaching into the game
 

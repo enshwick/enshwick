@@ -92,6 +92,19 @@ impl FakeHost {
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
+    /// Stops the world, as between two worlds: the world's reads answer
+    /// that none runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.stop_world();
+    /// ```
+    pub fn stop_world(&self) {
+        table::with((), |s| s.edits.stopped = true);
+    }
+
     /// Sets the clock the fake's `time_of_day` reports; until then the
     /// clock is missing, as before a world runs.
     ///

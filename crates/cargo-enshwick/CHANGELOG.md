@@ -10,6 +10,9 @@ Each entry names the pull request that made the change.
 
 - `cargo enshwick new --data` shows a selection of items by category in
   the commented `items.toml` (#558).
+- `cargo_enshwick::luau::definitions` writes the API's Luau definitions
+  (#543); `cargo enshwick luau` writes them to a file, and
+  `cargo enshwick new --luau` starts a Luau mod (#545).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 

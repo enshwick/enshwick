@@ -509,6 +509,7 @@ dependencies = [
  "criterion",
  "enshwick",
  "enshwick-gamedata",
+ "enshwick-luau",
  "iced-x86",
  "insta",
  "loom",
@@ -534,11 +535,12 @@ dependencies = [
 
 [[package]]
 name = "enshwick-luau"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 dependencies = [
  "arc-swap",
  "enshwick",
  "mlua",
+ "thiserror",
 ]
 
 [[package]]

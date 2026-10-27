@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 90
+#define ENSHWICK_ABI_MINOR 91
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -704,10 +704,10 @@ typedef uint32_t EnshwickDataSelect;
 // Every item that places a container.
 #define EnshwickDataSelect_CONTAINERS 3
 // Every recipe whose output is of the kind whose
-// `RecipeKind` code is `DataChange::categories`. Since minor 90.
+// `RecipeKind` code is `DataChange::categories`. Since minor 91.
 #define EnshwickDataSelect_RECIPE_KIND 4
 // Every recipe made at the workshop whose GUID is
-// `DataChange::entry`. Since minor 90.
+// `DataChange::entry`. Since minor 91.
 #define EnshwickDataSelect_WORKSHOP 5
 
 // One change of a vanilla value, as
@@ -3800,6 +3800,12 @@ typedef struct EnshwickHostApi {
                                            const struct EnshwickTransactionOp *ops,
                                            uint32_t count,
                                            uint64_t *id);
+  // `Status::OK` on the server's game thread at a quiet moment while a
+  // world runs, where a mod may read live components that no system
+  // writes meanwhile; `Status::WRONG_THREAD` on another thread or
+  // inside a step, `Status::MISSING` while no world runs. Since
+  // minor 90.
+  EnshwickStatus (*world_quiet)(EnshwickModHandle me);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.
