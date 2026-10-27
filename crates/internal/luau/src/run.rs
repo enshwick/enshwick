@@ -18,7 +18,9 @@ use crate::bridge::{arguments, from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 use crate::files::{Requirer, Scripts};
+use crate::points::{PointDesc, Read, decode, encode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
+use enshwick::points::{DescribedVerdict, Order};
 
 /// How much a mod's scripts may take.
 ///
@@ -120,6 +122,10 @@ pub(crate) struct Vm {
     /// Whether `main.luau` is still running its top level.
     starting: AtomicBool,
     handlers: Mutex<Vec<(Subscription, Function)>>,
+    /// The descriptions of the points the scripts extend.
+    points: Mutex<Vec<PointDesc>>,
+    /// `enshwick.refuse`, which a point's handler returns to refuse.
+    refuse: std::sync::OnceLock<Table>,
 }
 
 pub(crate) struct Inner {
@@ -399,29 +405,8 @@ pub fn start(
     let events = vm.events();
     inner.vm.store(Some(vm));
     inner.subscribed.relock().clone_from(&events);
-    for sub in events {
-        let handled = Arc::clone(&inner);
-        match &sub {
-            Subscription::Loader(event) => {
-                let kind = Subscription::loader_kind(*event)?;
-                load.on_raw_event(*event, move |raw| handled.dispatch(kind, raw))?;
-            }
-            Subscription::Game(name) => {
-                let kind = Subscription::game_kind(name)?;
-                let key = sub.clone();
-                kind.subscribe(load, move |value| {
-                    handled.deliver(&key, |lua, scope| to_lua(lua, scope, value(), kind.data()));
-                })?;
-            }
-            Subscription::Raw(spec) => {
-                let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
-                let key = sub.clone();
-                load.on_raw_game_event(ty, move |event| {
-                    handled.deliver(&key, |lua, _| raw_table(lua, &reader.read(event)));
-                })?;
-            }
-        }
-    }
+    subscribe(&inner, load, events)?;
+
     let usage = Arc::downgrade(&inner);
     load.add_status(move || {
         usage.upgrade().map_or_else(String::new, |inner| {
@@ -436,6 +421,65 @@ pub fn start(
         })
     })?;
     Ok(Runtime(inner))
+}
+
+/// Subscribes what the scripts of `inner` asked for at start: loader
+/// events, typed and raw game events, and point links.
+fn subscribe(
+    inner: &Arc<Inner>,
+    load: &mut Load<'_>,
+    events: Vec<Subscription>,
+) -> Result<(), Off> {
+    for sub in events {
+        let handled = Arc::clone(inner);
+        match &sub {
+            Subscription::Loader(event) => {
+                let kind = Subscription::loader_kind(*event)?;
+                load.on_raw_event(*event, move |raw| handled.dispatch(kind, raw))?;
+            }
+            Subscription::Game(name) => {
+                let kind = Subscription::game_kind(name)?;
+                let key = sub.clone();
+                kind.subscribe(load, move |value| {
+                    handled.deliver(&key, |lua, scope| to_lua(lua, scope, value(), kind.data()));
+                })?;
+            }
+            Subscription::Point(name) => {
+                let desc = inner
+                    .vm
+                    .load()
+                    .as_ref()
+                    .and_then(|vm| {
+                        vm.points
+                            .relock()
+                            .iter()
+                            .find(|d| d.point.name == *name)
+                            .cloned()
+                    })
+                    .ok_or_else(|| Off::new(format!("point {name} has no description")))?;
+                let key = sub.clone();
+                let point = desc.point.clone();
+                // SAFETY: in a mode that changes the answer, `PointDesc::parse`
+                // accepts only a primitive answer whose layout hash, computed
+                // here from that primitive, equals the module's hash, which
+                // the loader matched to the owner's; `encode` writes that
+                // primitive's valid bytes, a bool as 0 or 1.
+                unsafe {
+                    load.extend_described_point(&point, &Order::new(), move |input, answer| {
+                        handled.run_point(&key, &desc, input, answer)
+                    })
+                }?;
+            }
+            Subscription::Raw(spec) => {
+                let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
+                let key = sub.clone();
+                load.on_raw_game_event(ty, move |event| {
+                    handled.deliver(&key, |lua, _| raw_table(lua, &reader.read(event)));
+                })?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A VM with Luau's safe libraries and the memory limit; the caller turns
@@ -545,6 +589,8 @@ impl Inner {
             scripts: scripts.clone(),
             starting: AtomicBool::new(true),
             handlers: Mutex::new(Vec::new()),
+            points: Mutex::new(Vec::new()),
+            refuse: std::sync::OnceLock::new(),
         });
         let api = self
             .globals(&vm, scripts)
@@ -568,6 +614,72 @@ impl Inner {
             Ok(Err(error)) => Err(describe(&error)),
             Err(()) => Err(format!("{MAIN} panicked in a call it made")),
         }
+    }
+
+    /// Puts `extend`, `refuse`, `on_game_type`, `game_event_types` and `on`
+    /// into `api`, the subscriptions `vm`'s scripts make at start.
+    fn subscription_functions(&self, vm: &Arc<Vm>, api: &Table) -> mlua::Result<()> {
+        let lua = &vm.lua;
+        let refuse = lua.create_table()?;
+        refuse.set_readonly(true);
+        let _first = vm.refuse.set(refuse.clone());
+        api.raw_set("refuse", refuse)?;
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
+            "extend",
+            lua.create_function(move |_, (point, handler): (Table, Function)| {
+                let vm = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                let desc = PointDesc::parse(&point)?;
+                let sub = Subscription::Point(desc.point.name.clone());
+                {
+                    let mut points = vm.points.relock();
+                    if !points.iter().any(|d| d.point.name == desc.point.name) {
+                        points.push(desc);
+                    }
+                }
+                vm.subscribe("enshwick.extend", sub, handler)
+            })?,
+        )?;
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
+            "on_game_type",
+            lua.create_function(
+                move |_, (name, fields, handler): (String, Table, Function)| {
+                    let vm = weak
+                        .upgrade()
+                        .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                    let sub = Subscription::raw(name, &fields)?;
+                    vm.subscribe("enshwick.on_game_type", sub, handler)
+                },
+            )?,
+        )?;
+        let types = self.event_types.clone();
+        api.raw_set(
+            "game_event_types",
+            lua.create_function(move |lua, ()| {
+                let list = lua.create_table_with_capacity(types.len(), 0)?;
+                for (name, size) in &types {
+                    let entry = lua.create_table_with_capacity(0, 2)?;
+                    entry.raw_set("name", *name)?;
+                    entry.raw_set("size", *size)?;
+                    list.raw_push(entry)?;
+                }
+                Ok(list)
+            })?,
+        )?;
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
+            "on",
+            lua.create_function(move |_, (name, handler): (String, Function)| {
+                let vm = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                vm.on(&name, handler)
+            })?,
+        )?;
+        Ok(())
     }
 
     /// Puts `enshwick`, `print` and `require` among the globals of `vm`.
@@ -611,43 +723,7 @@ impl Inner {
                 crate::bridge::toml_to_lua(lua, &toml::Value::Table((**values).clone()))
             })?,
         )?;
-        let weak = Arc::downgrade(vm);
-        api.raw_set(
-            "on_game_type",
-            lua.create_function(
-                move |_, (name, fields, handler): (String, Table, Function)| {
-                    let vm = weak
-                        .upgrade()
-                        .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-                    let sub = Subscription::raw(name, &fields)?;
-                    vm.subscribe("enshwick.on_game_type", sub, handler)
-                },
-            )?,
-        )?;
-        let types = self.event_types.clone();
-        api.raw_set(
-            "game_event_types",
-            lua.create_function(move |lua, ()| {
-                let list = lua.create_table_with_capacity(types.len(), 0)?;
-                for (name, size) in &types {
-                    let entry = lua.create_table_with_capacity(0, 2)?;
-                    entry.raw_set("name", *name)?;
-                    entry.raw_set("size", *size)?;
-                    list.raw_push(entry)?;
-                }
-                Ok(list)
-            })?,
-        )?;
-        let weak = Arc::downgrade(vm);
-        api.raw_set(
-            "on",
-            lua.create_function(move |_, (name, handler): (String, Function)| {
-                let vm = weak
-                    .upgrade()
-                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-                vm.on(&name, handler)
-            })?,
-        )?;
+        self.subscription_functions(vm, &api)?;
         let globals = lua.globals();
         globals.raw_set("enshwick", api.clone())?;
         let host = self.host;
@@ -737,6 +813,63 @@ impl Inner {
         self.deliver(&Subscription::Loader(kind.event()), |lua, scope| {
             to_lua(lua, scope, data.clone(), kind.data())
         });
+    }
+
+    /// Runs the handlers of the point `sub` on its `input`, the answer so
+    /// far `answer`, each seeing the answer the one before left; an error
+    /// turns the mod off and leaves the answer as it was.
+    fn run_point(
+        &self,
+        sub: &Subscription,
+        desc: &PointDesc,
+        input: &[u8],
+        answer: &[u8],
+    ) -> DescribedVerdict {
+        if self.off.load(Ordering::Acquire) {
+            return DescribedVerdict::Pass;
+        }
+        let Some(vm) = self.vm.load_full() else {
+            return DescribedVerdict::Pass;
+        };
+        let handlers: Vec<Function> = vm
+            .handlers
+            .relock()
+            .iter()
+            .filter(|(key, _)| key == sub)
+            .map(|(_, handler)| handler.clone())
+            .collect();
+        let input_read = Read::Struct(desc.input.clone());
+        let mut value = answer.to_vec();
+        let mut set = false;
+        for handler in handlers {
+            let outcome = self.call(&vm, &|| sub.name(), |vm| {
+                let lua_input = decode(&vm.lua, input, 0, &input_read)?;
+                let lua_answer = decode(&vm.lua, &value, 0, &desc.output)?;
+                let result: LuaValue = handler.call((lua_input, lua_answer))?;
+                if let (LuaValue::Table(t), Some(refuse)) = (&result, vm.refuse.get())
+                    && t == refuse
+                {
+                    return Ok(None);
+                }
+                if result.is_nil() {
+                    return Ok(Some(false));
+                }
+                let mut next = value.clone();
+                encode(&result, &desc.output, &mut next, 0)?;
+                value = next;
+                Ok(Some(true))
+            });
+            match outcome {
+                None => return DescribedVerdict::Pass,
+                Some(None) => return DescribedVerdict::Refuse,
+                Some(Some(changed)) => set |= changed,
+            }
+        }
+        if set {
+            DescribedVerdict::Set(value)
+        } else {
+            DescribedVerdict::Pass
+        }
     }
 
     /// Calls every handler of `sub` in the current VM with the argument

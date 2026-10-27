@@ -186,6 +186,10 @@ pub fn definitions() -> String {
     out.push_str(",\n");
     out.push_str("\t--- Calls `handler` on every game event of the reflected type `type_name`, with the fields `fields` names, each read as its kind: u8, i8, u16, i16, u32, i32, u64, i64, f32, f64, bool or entity; 64-bit values as strings. Subscribe at the top level of main.luau.\n\ton_game_type: (type_name: string, fields: { [string]: string }, handler: (event: { [string]: any }) -> ()) -> (),\n");
     out.push_str("\t--- Every game event type of the running build, with its size in bytes, read from the game's reflection.\n\tgame_event_types: () -> { { name: string, size: number } },\n");
+    out.push_str("\t--- Links `handler` into another mod's extension point, as `cargo enshwick point <point> --luau` describes it: it gets the input and the answer so far, and returns a new answer, nothing to keep it, or `enshwick.refuse`. Subscribe at the top level of main.luau.\n\textend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),\n");
+    out.push_str(
+        "\t--- What a point's handler returns to refuse, on a refusable point.\n\trefuse: {},\n",
+    );
     out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
     for namespace in script::NAMESPACES {
         comment(namespace.doc(), "\t", &mut out);

@@ -297,6 +297,10 @@ name = "task_workers"
 required-features = ["test"]
 
 [[test]]
+name = "points_described"
+required-features = ["test"]
+
+[[test]]
 name = "points_links"
 required-features = ["test"]
 

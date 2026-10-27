@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Hold::for_world` holds the game for one world only
+  (`mod-data/<id>/worlds/<key>/hold.txt`): the loader stops the game as
+  that world starts to load without the mod, before its save is read, and
+  on a build it leaves vanilla at start; `world_holds`, `held_worlds` and
+  `WORLDS_DIR` read them. A data pack that raised a stack size now holds
+  the worlds saved with it, not the whole data folder (#563).
 - `Field::Station` and `Change::station` move a vanilla recipe to another
   workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
   the recipe's workshop and lists it in the client's crafting menu at the
@@ -19,6 +25,10 @@ Each entry names the pull request that made the change.
   after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
   `items = "backpacks"`, and `ItemTraits::backpack_slots` reads a
   backpack's size (#566).
+- `Load::extend_described_point` links into an extension point described at
+  run time (`points::DescribedPoint`, `DescribedField`), the input and the
+  answer as bytes in the owner's layout, as a script's schema gives them;
+  the loader checks the layout hashes as for a typed link.
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
