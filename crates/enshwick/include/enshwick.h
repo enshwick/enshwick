@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 91
+#define ENSHWICK_ABI_MINOR 92
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -709,6 +709,8 @@ typedef uint32_t EnshwickDataSelect;
 // Every recipe made at the workshop whose GUID is
 // `DataChange::entry`. Since minor 91.
 #define EnshwickDataSelect_WORKSHOP 5
+// Every backpack. Since minor 92.
+#define EnshwickDataSelect_BACKPACKS 6
 
 // One change of a vanilla value, as
 // `HostApi::change_data` takes it. The
