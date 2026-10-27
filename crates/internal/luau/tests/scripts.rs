@@ -831,4 +831,66 @@ mod tests {
         assert_eq!(loader.sent_event_data(), [vec![4, 0, 0, 0]]);
         assert!(logged(&loader, "waved false"), "{:?}", loader.logs());
     }
+
+    #[test]
+    fn a_reload_cannot_change_a_defined_event_s_fields() {
+        let (loader, status) = run_full(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "u32" } } })"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        let failed = runtime().reload(main(
+            r#"local greeted = enshwick.define_event({ name = "you.luau:greeted", fields = { { name = "n", read = "f32" } } })
+            greeted.send({ n = 4 })"#,
+        ));
+        assert!(failed.is_err());
+        assert!(loader.sent_event_data().is_empty());
+    }
+
+    #[test]
+    fn a_definition_takes_no_hash_but_its_own() {
+        let (loader, status) = run_full(
+            r#"local ok, err = pcall(enshwick.define_event, { name = "you.luau:greeted", fields = {
+                { name = "flag", read = "u8", offset = 0, hash = "12345" },
+            } })
+            print(`defined {ok} {err}`)
+            local ok2, err2 = pcall(enshwick.on_mod_event, { name = "you.luau:mixed", fields = {
+                { name = "a", read = "u8" },
+                { name = "b", read = "u64", offset = 8, hash = "1" },
+            } }, function() end)
+            print(`mixed {ok2} {err2}`)"#,
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "defined false"), "{:?}", loader.logs());
+        assert!(
+            logged(&loader, "is not the one its read and offset give"),
+            "{:?}",
+            loader.logs()
+        );
+        assert!(logged(&loader, "mixed false"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn one_event_described_twice_differently_is_an_error() {
+        let (loader, status) = run_full(
+            &format!(
+                r#"enshwick.on_mod_event({SOLD}, function() end)
+                local ok = pcall(enshwick.on_mod_event, {{ name = "you.trading-post:sold", fields = {{ {{ name = "item", read = "u64" }} }} }}, function() end)
+                print(`twice {{ok}}`)"#
+            ),
+            Limits::default(),
+            Scripts::new(),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "twice false"), "{:?}", loader.logs());
+    }
 }

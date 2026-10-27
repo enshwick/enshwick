@@ -47,7 +47,9 @@ mod tests {
             load.on_described_mod_event(&described(size), |data| {
                 SEEN.lock().unwrap().push(data.to_vec());
             })?;
-            let send = load.define_described_event(&described(16))?;
+            // SAFETY: the fields are a `u32` and a `u64`, for which any bytes
+            // are valid.
+            let send = unsafe { load.define_described_event(&described(16)) }?;
             let mut data = [0u8; 16];
             data[..4].copy_from_slice(&3u32.to_le_bytes());
             send.send(&data);

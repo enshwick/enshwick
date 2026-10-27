@@ -83,7 +83,8 @@ impl DescribedEvent {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let greeted = DescribedEvent::new("you.greeter:greeted", vec![DescribedField::new("player", 1)], 8);
-///     let send = load.define_described_event(&greeted)?;
+///     // SAFETY: the one field is a `u64`, for which any bytes are valid.
+///     let send = unsafe { load.define_described_event(&greeted) }?;
 ///     send.send(&7u64.to_le_bytes());
 ///     Ok(())
 /// }
@@ -160,10 +161,17 @@ impl Load<'_> {
     ///
     /// [`Off`] when the name is outside this mod's id or defined twice.
     ///
+    /// # Safety
+    ///
+    /// - Every byte pattern sent through the returned emitter is a valid
+    ///   value of the type each field's hash names, since a subscriber reads
+    ///   the data as that type: a `bool` is 0 or 1, an enum one of its
+    ///   variants.
+    ///
     /// # Examples
     ///
     /// See [`DescribedEmitter`].
-    pub fn define_described_event(
+    pub unsafe fn define_described_event(
         &mut self,
         event: &DescribedEvent,
     ) -> Result<DescribedEmitter, Off> {

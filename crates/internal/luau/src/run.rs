@@ -434,7 +434,12 @@ pub fn start(
         .map(|d| (d.desc.event.clone(), Arc::clone(&d.emitter)))
         .collect();
     for (event, emitter) in defined {
-        let _first = emitter.set(load.define_described_event(&event)?);
+        // SAFETY: `EventDesc::parse_definition` accepts only primitive
+        // fields whose hashes it worked out from their reads and offsets,
+        // and `encode` writes each primitive's valid bytes, a bool as 0 or
+        // 1; every send goes through the table `define_event` made for this
+        // description, which a reload cannot change.
+        let _first = emitter.set(unsafe { load.define_described_event(&event) }?);
     }
     inner.started.store(true, Ordering::Release);
 
@@ -704,8 +709,15 @@ impl Inner {
                 let sub = Subscription::ModEvent(desc.event.name.clone());
                 {
                     let mut events = vm.events.relock();
-                    if !events.iter().any(|d| d.event.name == desc.event.name) {
-                        events.push(desc);
+                    match events.iter().find(|d| d.event.name == desc.event.name) {
+                        Some(known) if *known != desc => {
+                            return Err(mlua::Error::runtime(format!(
+                                "enshwick.on_mod_event: {} is described twice, differently",
+                                desc.event.name
+                            )));
+                        }
+                        Some(_) => {}
+                        None => events.push(desc),
                     }
                 }
                 vm.subscribe("enshwick.on_mod_event", sub, handler)
@@ -898,13 +910,19 @@ impl Inner {
     /// the loader once `main.luau` ran at start, or the one defined then
     /// for a reload.
     fn define_event(&self, lua: &Lua, event: &Table) -> mlua::Result<Table> {
-        let desc = EventDesc::parse(event)?;
+        let desc = EventDesc::parse_definition(event)?;
         let emitter = {
             let mut defined = self.defined.relock();
             match defined
                 .iter()
                 .find(|d| d.desc.event.name == desc.event.name)
             {
+                Some(known) if known.desc != desc => {
+                    return Err(mlua::Error::runtime(format!(
+                        "enshwick.define_event: {} changed its fields; the change takes the next start",
+                        desc.event.name
+                    )));
+                }
                 Some(known) => Arc::clone(&known.emitter),
                 None if self.started.load(Ordering::Acquire) => {
                     return Err(mlua::Error::runtime(format!(

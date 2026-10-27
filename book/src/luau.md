@@ -183,8 +183,10 @@ end)
 
 The loader matches a subscription by its layout hashes, as for a Rust mod,
 and leaves it idle, with the reason in the log, when the defining mod's
-event differs or is smaller. An event defined after the start waits for the
-next one.
+event differs or is smaller. An event a script defines has primitive fields
+only. `define_event` raises an error for a new event, or for changed
+fields, after the start: either takes the next start. A `send` before
+`main.luau` has finished reaches no one.
 
 ## Settings
 
