@@ -1106,14 +1106,18 @@ pub struct HostApi {
         found: *mut u32,
     ) -> Status,
     /// Caps the worker threads of the task system's default and background
-    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// groups (`foreground` and `background`) as it starts, 0 leaving a group as the game sizes it; with
     /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
     /// `enshwick_mod_init` only. Since minor 77.
-    pub task_workers:
-        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
+    pub task_workers: extern "system" fn(
+        me: ModHandle,
+        foreground: u32,
+        background: u32,
+        found: *mut u32,
+    ) -> Status,
     /// Calls `callback` with `user` for every altar of the server's world
     /// when the loader sizes the altar zones: after altars change and after
     /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
@@ -1273,4 +1277,10 @@ pub struct HostApi {
         count: u32,
         id: *mut u64,
     ) -> Status,
+    /// [`Status::OK`] on the server's game thread at a quiet moment while a
+    /// world runs, where a mod may read live components that no system
+    /// writes meanwhile; [`Status::WRONG_THREAD`] on another thread or
+    /// inside a step, [`Status::MISSING`] while no world runs. Since
+    /// minor 90.
+    pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
 }

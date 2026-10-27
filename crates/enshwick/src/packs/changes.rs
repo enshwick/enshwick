@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use crate::content::Guid;
-use crate::content::changes::{Change, Entry, Field, Value};
+use crate::content::categories::ItemCategoryMask;
+use crate::content::changes::{Change, Entry, Field, Items, ItemsChange, Value};
 
-use super::entries::{ItemsFile, LootFile, RecipesFile, ValueEntry};
+use super::entries::{ItemChangeEntry, ItemsEntry, ItemsFile, LootFile, RecipesFile, ValueEntry};
 use super::files::PackError;
 use super::pack::Reader;
 use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
@@ -13,6 +14,9 @@ use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
 /// A field a recipe change sets, with its ingredient and the name the pack
 /// gave it, and the value.
 type RecipeField = (Field, Option<(Guid, String)>, Value);
+
+/// Changes of every item a selection picks, each with its source.
+type Selections = Vec<(ItemsChange, String)>;
 
 /// One `[[change]]` table read: where it starts, the items it names and
 /// the value it gives each field.
@@ -55,33 +59,144 @@ fn value(entry: ValueEntry) -> Value {
     }
 }
 
+/// The fields an item change gives, with their values.
+fn item_fields(e: &ItemChangeEntry) -> Vec<(Field, Option<ValueEntry>)> {
+    vec![
+        (Field::MaxStackSize, e.max_stack),
+        (Field::Slots, e.slots),
+        (Field::DamageMod, e.damage_mod),
+        (Field::SpeedMod, e.speed_mod),
+        (Field::Armor, e.armor),
+        (Field::BurnTime, e.burn_time),
+        (Field::EnergyOutput, e.energy_output),
+        (Field::ComfortAmount, e.comfort_amount),
+    ]
+}
+
 /// The checked changes of `items_file`, each with its source,
 /// `items.toml:<line>`, followed by the name the pack wrote when it is no
-/// GUID: `items.toml:12 (Material_T1_Wood_Logs)`.
+/// GUID: `items.toml:12 (Material_T1_Wood_Logs)`; then the changes of
+/// every item a selection picks, which the loader resolves from the game's
+/// data, with the selection in the source: `items.toml:3 (stackable)`.
 pub(super) fn item_changes(
     reader: &mut Reader<'_>,
     items_file: &ItemsFile,
     text: &str,
-) -> Vec<(Change, String)> {
-    let entries: Vec<ChangeEntry<'_>> = items_file
-        .change
+) -> (Vec<(Change, String)>, Selections) {
+    let mut by_name: Vec<ChangeEntry<'_>> = Vec::new();
+    let mut selections = Vec::new();
+    let mut seen: HashMap<(Items, Field), usize> = HashMap::new();
+    for (index, entry) in items_file.change.iter().enumerate() {
+        let e = entry.get_ref();
+        let at = entry.span().start;
+        let number = index + 1;
+        let selected = match (&e.items, &e.category) {
+            (Some(_), Some(_)) => Err("give items or category, not both".to_owned()),
+            (Some(ItemsEntry::Names(list)), None) => {
+                by_name.push((at, list.as_slice(), item_fields(e)));
+                continue;
+            }
+            (Some(ItemsEntry::Word(word)), None) => match word.as_str() {
+                "stackable" => Ok((Items::Stackable, word.clone())),
+                "containers" => Ok((Items::Containers, word.clone())),
+                _ => Err(format!(
+                    "items {word:?} is no selection; give a list of items, \"stackable\" or \"containers\""
+                )),
+            },
+            (None, Some(categories)) => category(categories).map(|mask| {
+                (
+                    Items::Category(mask),
+                    format!("category {}", categories.join(", ")),
+                )
+            }),
+            (None, None) => Err("give items or category".to_owned()),
+        };
+        match selected {
+            Ok((items, label)) => {
+                let line = PackError::at(ITEMS_FILE, text, at, "").line;
+                for change in select(reader, text, at, number, items, &item_fields(e)) {
+                    if let Some(&first) = seen.get(&(items, change.field)) {
+                        reader.error(
+                            ITEMS_FILE,
+                            text,
+                            at,
+                            format!(
+                                "change {number}: {} of {label} is changed at line {first} already",
+                                change.field
+                            ),
+                        );
+                        continue;
+                    }
+                    seen.insert((items, change.field), line);
+                    selections.push((change, format!("{ITEMS_FILE}:{line} ({label})")));
+                }
+            }
+            Err(why) => reader.error(ITEMS_FILE, text, at, format!("change {number}: {why}")),
+        }
+    }
+    let changes = changes_of(reader, ITEMS_FILE, Entry::Item, &by_name, text);
+    (changes, selections)
+}
+
+/// The categories the game names `names`, or why not.
+fn category(names: &[String]) -> Result<ItemCategoryMask, String> {
+    if names.is_empty() {
+        return Err("category names no item category".to_owned());
+    }
+    names
         .iter()
-        .map(|entry| {
-            let e = entry.get_ref();
-            let fields = vec![
-                (Field::MaxStackSize, e.max_stack),
-                (Field::Slots, e.slots),
-                (Field::DamageMod, e.damage_mod),
-                (Field::SpeedMod, e.speed_mod),
-                (Field::Armor, e.armor),
-                (Field::BurnTime, e.burn_time),
-                (Field::EnergyOutput, e.energy_output),
-                (Field::ComfortAmount, e.comfort_amount),
-            ];
-            (entry.span().start, e.items.as_slice(), fields)
+        .try_fold(ItemCategoryMask::default(), |mask, name| {
+            ItemCategoryMask::named(name)
+                .map(|one| mask | one)
+                .ok_or_else(|| {
+                    let near: Vec<&str> = ItemCategoryMask::NAMES
+                        .iter()
+                        .map(|(game, _)| *game)
+                        .filter(|game| {
+                            strsim::levenshtein(&game.to_lowercase(), &name.to_lowercase()) <= 2
+                        })
+                        .collect();
+                    if near.is_empty() {
+                        format!("no item category {name:?}")
+                    } else {
+                        format!("no item category {name:?}; near: {}", near.join(", "))
+                    }
+                })
         })
+}
+
+/// The checked changes of each field `fields` gives through the selection
+/// `items`; problems are noted at the change.
+fn select(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    number: usize,
+    items: Items,
+    fields: &[(Field, Option<ValueEntry>)],
+) -> Vec<ItemsChange> {
+    let given: Vec<ItemsChange> = fields
+        .iter()
+        .filter_map(|(field, v)| v.map(|v| ItemsChange::new(items, *field, value(v))))
         .collect();
-    changes_of(reader, ITEMS_FILE, Entry::Item, &entries, text)
+    if given.is_empty() {
+        reader.error(
+            ITEMS_FILE,
+            text,
+            at,
+            format!("change {number}: changes nothing; give max_stack or slots"),
+        );
+    }
+    given
+        .into_iter()
+        .filter(|change| match change.check() {
+            Ok(()) => true,
+            Err(why) => {
+                reader.error(ITEMS_FILE, text, at, format!("change {number}: {why}"));
+                false
+            }
+        })
+        .collect()
 }
 
 /// The checked changes of `loot_file`, each with its source as

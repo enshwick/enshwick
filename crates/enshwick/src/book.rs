@@ -35,6 +35,7 @@ chapters! {
     Weather => "weather.md",
     Terrain => "terrain.md",
     Altars => "altars.md",
+    Map => "map.md",
     Survivors => "survivors.md",
     Interactions => "interactions.md",
     Vetoes => "vetoes.md",
@@ -45,7 +46,9 @@ chapters! {
     Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
+    Luau => "luau.md",
     FindingTheGame => "finding-the-game.md",
+    GameTypes => "game-types.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
     CodePatches => "code-patches.md",
@@ -72,6 +75,7 @@ chapters! {
     Releasing => "releasing.md",
     Servers => "servers.md",
     AbiReference => "abi-reference.md",
+    ModsInC => "mods-in-c.md",
     Faq => "faq.md",
 }
 

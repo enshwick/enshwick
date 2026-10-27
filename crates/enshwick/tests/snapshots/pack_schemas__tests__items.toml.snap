@@ -76,6 +76,15 @@ expression: shape
             }
           ]
         },
+        "category": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "comfort_amount": {
           "anyOf": [
             {
@@ -107,10 +116,14 @@ expression: shape
           ]
         },
         "items": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemsEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "max_stack": {
           "anyOf": [
@@ -143,9 +156,6 @@ expression: shape
           ]
         }
       },
-      "required": [
-        "items"
-      ],
       "type": "object"
     },
     "ItemEntry": {
@@ -207,6 +217,19 @@ expression: shape
         "like"
       ],
       "type": "object"
+    },
+    "ItemsEntry": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
     },
     "MeterEntry": {
       "additionalProperties": false,

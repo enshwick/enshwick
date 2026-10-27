@@ -21,7 +21,7 @@
 //! [`Load::field_offset`]: crate::Load::field_offset
 //! [`Load::constant`]: crate::Load::constant
 
-pub use bytemuck::{AnyBitPattern, NoUninit};
+pub use bytemuck::{AnyBitPattern, NoUninit, Zeroable};
 
 /// Reads a `T` at `offset` bytes past `base`.
 ///

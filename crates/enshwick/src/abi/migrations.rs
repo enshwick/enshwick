@@ -114,9 +114,18 @@ pub struct MigrationSet {
     pub migrations: *const Migration,
     /// How many `migrations` points at.
     pub count: u32,
-    /// Changes values for the steps that map them; the loader refuses a set
-    /// without it.
-    pub map: Option<MigrateFn>,
+    /// Changes values for the steps that map them, a [`MigrateFn`]; the
+    /// loader refuses a set without it. Spelled out so C sees a nullable
+    /// function pointer.
+    pub map: Option<
+        unsafe extern "system" fn(
+            user: *mut c_void,
+            migration: u32,
+            step: u32,
+            input: Str,
+            out: *mut Str,
+        ) -> Status,
+    >,
     /// The pointer `map` takes.
     pub user: *mut c_void,
 }

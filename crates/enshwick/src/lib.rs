@@ -100,6 +100,7 @@ pub mod knowledge;
 mod load;
 mod locks;
 pub mod loot;
+pub mod map;
 pub mod migrations;
 pub mod mods;
 pub mod net;

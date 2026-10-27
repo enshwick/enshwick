@@ -250,6 +250,58 @@ fn a_struct_names_its_base_and_types_derived_from_a_root_are_listed() {
     );
 }
 
+#[test]
+fn kinds_inner_types_and_array_lengths_are_read() {
+    let mut fake = Fake::new();
+    let at = |i: u64| rdata(0x100 * i);
+    let strings = |i: u64| rdata(0x800 + 0x80 * i);
+    let types = [
+        ("keen::uint32", 0x06, None),
+        ("keen::ItemId", 0x11, Some(at(1))),
+        ("keen::StaticArray<keen::uint32,4>", 0x13, Some(at(1))),
+        ("keen::Thing", 0x7f, None),
+    ];
+    for (i, (name, kind, inner)) in (1..).zip(types) {
+        describe(&mut fake, at(i), strings(i), name, kind, inner);
+    }
+    fake.put(at(3) + DESCRIPTOR_FIELD_COUNT, &4u32.to_le_bytes());
+
+    let image = Image::parse(&fake.bytes, Layout::File, None).unwrap();
+    let reflection = Reflection::scan(&image);
+    let primitive = reflection.type_info("keen::uint32").unwrap();
+    assert_eq!((primitive.kind(), primitive.inner()), (Kind::Uint32, None));
+    let alias = reflection.type_info("keen::ItemId").unwrap();
+    assert_eq!(alias.kind(), Kind::Typedef);
+    assert_eq!(alias.inner(), Some("keen::uint32"));
+    assert_eq!((alias.base(), alias.element_count()), (None, None));
+    let array = reflection
+        .type_info("keen::StaticArray<keen::uint32,4>")
+        .unwrap();
+    assert_eq!(array.kind(), Kind::StaticArray);
+    assert_eq!(array.element_count(), Some(4));
+    assert!(
+        array.fields().is_empty(),
+        "an array's count is no field count"
+    );
+    assert_eq!(
+        reflection.type_info("keen::Thing").unwrap().kind(),
+        Kind::Other(0x7f)
+    );
+}
+
+#[test]
+fn only_the_engine_s_kind_bytes_have_names() {
+    for byte in 0..=u8::MAX {
+        let kind = Kind::from_byte(byte);
+        let named = !matches!(kind, Kind::Other(_));
+        assert_eq!(
+            named,
+            (0x01..=0x1d).contains(&byte) && byte != 0x0b,
+            "{byte:#x}"
+        );
+    }
+}
+
 /// Writes an enum descriptor named `name` at `descriptor` with the
 /// constants `values`, its strings from `strings` on.
 fn put_enum(fake: &mut Fake, descriptor: u64, strings: u64, name: &str, values: &[(&str, u64)]) {

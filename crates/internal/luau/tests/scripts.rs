@@ -328,4 +328,73 @@ mod tests {
         let loader = run(r#"print("one", 2)"#);
         assert!(logged(&loader, "one\t2"), "{:?}", loader.logs());
     }
+
+    fn main(source: &str) -> Scripts {
+        Scripts::new().with("main.luau", source)
+    }
+
+    fn count(loader: &Installed, text: &str) -> usize {
+        loader
+            .logs()
+            .iter()
+            .filter(|(_, line)| line.contains(text))
+            .count()
+    }
+
+    #[test]
+    fn a_reload_moves_the_handlers_to_the_new_scripts() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
+        runtime()
+            .reload(main(
+                r#"enshwick.on("WorldSaved", function() print("second") end)"#,
+            ))
+            .unwrap();
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert!(logged(&loader, "second"), "{:?}", loader.logs());
+        assert!(!logged(&loader, "first"));
+    }
+
+    #[test]
+    fn a_failing_reload_keeps_the_old_scripts() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
+        let error = runtime().reload(main("local x = ")).unwrap_err();
+        assert!(error.to_string().contains("main.luau:1"), "{error}");
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert!(logged(&loader, "first"));
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_reload_stops_the_old_tasks_without_a_fault() {
+        let loader =
+            run(r#"enshwick.scheduler.every(0, function() print("old task") return true end)"#);
+        tick(&loader);
+        assert_eq!(count(&loader, "old task"), 1);
+        runtime().reload(main("")).unwrap();
+        tick(&loader);
+        tick(&loader);
+        assert_eq!(count(&loader, "old task"), 1);
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+        assert!(!runtime().is_off());
+    }
+
+    #[test]
+    fn a_handler_of_a_new_event_waits_for_the_next_start() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() end)"#);
+        runtime()
+            .reload(main(r#"enshwick.on("PlayerJoined", function() end)"#))
+            .unwrap();
+        assert!(
+            logged(&loader, "handlers of PlayerJoined run from the next start"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn the_status_shows_the_vm_s_cost() {
+        let _loader = run("local t = {} for i = 1, 1000 do t[i] = i end");
+        assert!(runtime().usage().memory > 0);
+        assert_eq!(runtime().usage().calls, 1);
+    }
 }

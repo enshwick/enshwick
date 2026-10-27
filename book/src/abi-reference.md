@@ -4,7 +4,8 @@ The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
 `extern "system"` functions, strings borrowed for the call, and no unwinding
 across the boundary. Mods normally use the safe layer of `enshwick`; this
 chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
+C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 ## Versions
 
@@ -364,3 +365,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
+| `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |

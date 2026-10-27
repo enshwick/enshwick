@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.map()` returns the `Map` of the game server: `Map::markers` and
+  `Map::markers_in` list the world's map markers, each a `MapMarker` with
+  its position, its `MapMarkerTypeId` (the key of the game's marker type
+  registry) and its label's text tag; `Map::waypoint` reads the waypoint a
+  player set (#557).
+- The `world_quiet` entry answers whether a mod is on the server's game
+  thread at a quiet moment while a world runs, where it may read live
+  components (ABI 2.90) (#557).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
@@ -49,9 +57,18 @@ Each entry names the pull request that made the change.
   components several mods write; the loader compares the game's code with
   the executable on disk while it starts and names the DLL or mod that
   changed it outside the API, after each load, `init` and `ready` (#555).
+- A data pack's `items.toml` changes the stack size or container slots of
+  every vanilla item of some categories (`category = ["Materials"]`), every
+  item that stacks (`items = "stackable"`) or every container
+  (`items = "containers"`), through the selections `Load::change_items`
+  makes; `Pack::selections` lists them, and `ItemCategoryMask::NAMES` and
+  `ItemCategoryMask::named` take the game's category names (#558).
 
 ### Changed
 
+- An item a mod or pack changes by name keeps that change over its own
+  selection of the same field, so a selection can leave out exceptions
+  (#558).
 - `Terrain::{add,dig,flatten}` write nothing and fail with
   `WorldError::NotLoaded` unless the whole area the edit can reach is
   loaded; the game would compute such an edit against air and merge it
@@ -86,6 +103,18 @@ Each entry names the pull request that made the change.
   from the start, so lowering a size or removing the mod that raised it
   never cuts a saved stack; while any size is kept it holds the game on a
   build it would leave vanilla (#544).
+- `script` describes the API for script languages beside the Rust items:
+  `#[derive(Script)]` for types, `#[script(<part>)]` for the methods a script
+  may call, a script entry for every loader event, and `NAMESPACES` (#543).
+- A data pack folder with a `main.luau` reads its scripts:
+  `PackFiles::scripts`, `SCRIPT_MAIN`, `SCRIPT_EXTENSION`,
+  `DEFINITIONS_SUFFIX`, `MAX_SCRIPTS`, `MAX_SCRIPT_DEPTH` and
+  `ReadPackError::TooManyScripts`; scripts count in the pack's hash (#545).
+
+### Fixed
+
+- Each mod handle has a scheduler queue of its own, so one copy of the API
+  can run tasks for several packs and scripts (#543).
 
 ### Changed
 

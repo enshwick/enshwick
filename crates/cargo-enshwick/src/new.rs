@@ -7,6 +7,7 @@ use anyhow::{Context as _, bail};
 use crate::Side;
 
 pub(crate) mod data;
+pub(crate) mod luau;
 
 /// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`;
 /// what was made, for the user.

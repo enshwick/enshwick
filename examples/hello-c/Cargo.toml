@@ -1,0 +1,25 @@
+[package]
+name = "enshwick-example-hello-c"
+version = "0.0.0-dev"
+description = "Example: a mod written in C against the ABI header"
+keywords = ["enshrouded", "mod", "example"]
+categories = ["game-development"]
+readme = "../README.md"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.enshwick]
+windows-tests = true
+
+[dev-dependencies]
+enshwick = { workspace = true, features = ["test"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_LibraryLoader"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,8 @@
+id = "you.welcome"
+version = "0.1.0"
+name = "Welcome"
+description = "Greets each player who joins and says how many are online."
+authors = ["Enshwick"]
+license = "MIT"
+side = "server"
+join = false

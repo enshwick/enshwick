@@ -9,3 +9,6 @@
 *.exe binary
 *.zip binary
 *.png binary
+
+# Written by `cargo xtask header`.
+crates/enshwick/include/enshwick.h linguist-generated=true
