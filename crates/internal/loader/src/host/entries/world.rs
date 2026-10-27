@@ -2,8 +2,9 @@
 
 use enshwick::Entity;
 use enshwick::abi as api_frame;
-use enshwick::abi::{Level, ModHandle, Side, Status, Str};
+use enshwick::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
 
+use crate::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};
 use crate::locks::Relock;
@@ -759,5 +760,74 @@ pub(crate) extern "system" fn world_persists(
             }
             Err(status) => status,
         }
+    })
+}
+
+pub(crate) extern "system" fn account_action(
+    me: ModHandle,
+    action: AccountActionType,
+    account: enshwick::PlayerKey,
+) -> Status {
+    entry("account_action", || {
+        let act = match action {
+            AccountActionType::KICK => Act::Kick,
+            AccountActionType::BAN => Act::Ban,
+            AccountActionType::UN_BAN => Act::Unban,
+            _ => return Status::BAD_ARGS,
+        };
+        match caller(me)
+            .and_then(|loader| crate::console::account_action(loader, act, account.get()))
+        {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
+/// `HostApi::allowlist_set`: lists `account` on the allowlist or takes it off.
+pub(crate) extern "system" fn allowlist_set(
+    me: ModHandle,
+    account: enshwick::PlayerKey,
+    listed: u8,
+) -> Status {
+    entry("allowlist_set", || {
+        if account == enshwick::PlayerKey::new(0) || listed > 1 {
+            return Status::BAD_ARGS;
+        }
+        let (loader, record) = match calling(me) {
+            Ok((loader, _, record)) if loader.side == Side::SERVER => (loader, record),
+            Ok(_) => return Status::MISSING,
+            Err(status) => return status,
+        };
+        let who = format!("the mod {}", record.id);
+        match crate::allowlist::set(loader, account.get(), listed == 1, None, &who) {
+            Ok(_) => Status::OK,
+            Err(e) => {
+                crate::log!(WARN, "allowlist: {who} changed nothing: {e}");
+                Status::REFUSED
+            }
+        }
+    })
+}
+
+/// `HostApi::allowlist_has`: whether the allowlist lists `account`.
+pub(crate) extern "system" fn allowlist_has(
+    me: ModHandle,
+    account: enshwick::PlayerKey,
+    listed: *mut u8,
+) -> Status {
+    entry("allowlist_has", || {
+        if account == enshwick::PlayerKey::new(0) || listed.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let loader = match caller(me) {
+            Ok(loader) if loader.side == Side::SERVER => loader,
+            Ok(_) => return Status::MISSING,
+            Err(status) => return status,
+        };
+        let has = crate::allowlist::has(loader, account.get());
+        // SAFETY: the caller passes `listed` writable for one byte for the
+        // call, as `HostApi::allowlist_has` states; `put` refuses null.
+        unsafe { put(listed, u8::from(has)) }
     })
 }

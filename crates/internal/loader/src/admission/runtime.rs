@@ -40,7 +40,6 @@ struct Serving {
     rules: Rules,
     names: Names,
     pages: BTreeMap<String, String>,
-    kick: Option<Kick>,
     side: Side,
 }
 
@@ -51,6 +50,9 @@ struct State {
     rules: OnceLock<Rules>,
     /// Set at start when the settings require Enshwick.
     serving: OnceLock<Serving>,
+    /// The game's kick, set at start whatever the settings: it also
+    /// removes accounts banned while not online.
+    kick: OnceLock<Option<Kick>>,
     gate: Mutex<Option<Gate>>,
     /// Set while the gate follows anyone, so an idle step takes no lock.
     busy: AtomicBool,
@@ -69,6 +71,7 @@ struct State {
 static STATE: State = State {
     rules: OnceLock::new(),
     serving: OnceLock::new(),
+    kick: OnceLock::new(),
     gate: Mutex::new(None),
     busy: AtomicBool::new(false),
     next: AtomicU64::new(0),
@@ -92,6 +95,19 @@ pub(crate) fn configure(settings: &crate::settings::Settings) {
 /// Starts admitting players, naming mods by `names` with the homepages
 /// `pages` by id.
 pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, String>) {
+    let kick = STATE.kick.get_or_init(|| {
+        loader
+            .address(pinned::session::KICK)
+            .and_then(|address| usize::try_from(address).ok())
+            .zip(loader.offset(pinned::server::SESSION))
+            .map(|(address, session)| Kick {
+                // SAFETY: the table's `session.kick` address is the game's kick on this
+                // build, whose signature `KickFn` states.
+                call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
+                session,
+                host_machine: loader.offset(pinned::session::HOST_MACHINE),
+            })
+    });
     let Some(&rules) = STATE.rules.get() else {
         crate::log!(
             INFO,
@@ -99,18 +115,7 @@ pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, Strin
         );
         return;
     };
-    let kick = loader
-        .address(pinned::session::KICK)
-        .and_then(|address| usize::try_from(address).ok())
-        .zip(loader.offset(pinned::server::SESSION))
-        .map(|(address, session)| Kick {
-            // SAFETY: the table's `session.kick` address is the game's kick on this
-            // build, whose signature `KickFn` states.
-            call: unsafe { core::mem::transmute::<usize, KickFn>(address) },
-            session,
-            host_machine: loader.offset(pinned::session::HOST_MACHINE),
-        });
-    match &kick {
+    match kick {
         None => crate::log!(
             WARN,
             "join check kicks off: not in this build; players without the join mods get the note and stay"
@@ -133,7 +138,6 @@ pub(crate) fn start(loader: &Loader, names: Names, pages: BTreeMap<String, Strin
         rules,
         names,
         pages,
-        kick,
         side: loader.side,
     });
 }
@@ -170,12 +174,33 @@ fn with_gate<R>(serving: &Serving, f: impl FnOnce(&mut Gate) -> R) -> R {
 
 /// Forgets every player, when a hosted game ends.
 pub(crate) fn forget() {
+    crate::console::forget_offline_bans();
     *STATE.gate.relock() = None;
     STATE.busy.store(false, Ordering::Release);
 }
 
+/// The account of a hosted game's host, once its own hello named it.
+pub(crate) fn host() -> Option<u64> {
+    STATE
+        .serving
+        .get()
+        .and_then(|serving| with_gate(serving, |gate| gate.host))
+}
+
 /// The player `key` entered the world; on the game thread.
 pub(crate) fn joined(key: u64) {
+    if key != 0
+        && crate::console::banned_offline(key)
+        && STATE
+            .fuse
+            .run("a banned account's join", || refuse_banned(key))
+            .unwrap_or(false)
+    {
+        return;
+    }
+    if crate::allowlist::guarded(|| refuse_unlisted(key)).unwrap_or(false) {
+        return;
+    }
     let Some(serving) = STATE.serving.get() else {
         return;
     };
@@ -198,6 +223,104 @@ pub(crate) fn joined(key: u64) {
             run(crate::host::loader(), serving, step);
         }
     });
+}
+
+/// Removes the player `key` from a dedicated server whose allowlist is on
+/// and lists neither the account nor an administrator, as
+/// `allowlist::refused` decides; a player without an account goes too. A
+/// player whose slot does not read counts as no administrator. Whether the
+/// player was removed.
+fn refuse_unlisted(key: u64) -> bool {
+    let Some(loader) = crate::host::loader() else {
+        return false;
+    };
+    let host = STATE
+        .serving
+        .get()
+        .and_then(|serving| with_gate(serving, |gate| gate.host));
+    let admin = crate::world::players(loader).is_ok_and(|players| {
+        players
+            .iter()
+            .any(|p| p.key == enshwick::PlayerKey::new(key) && crate::console::player_is_admin(p))
+    });
+    if !crate::allowlist::refuses(loader, key, host, admin) {
+        return false;
+    }
+    let Some(kick) = STATE.kick.get().and_then(Option::as_ref) else {
+        crate::log!(
+            WARN,
+            "allowlist: {key:016x} is not listed but joined: this build lacks the session's kick"
+        );
+        return false;
+    };
+    if key != 0 {
+        crate::chat::send(key, &crate::texts::fill("allowlist.refused", &[]));
+    }
+    match disconnect(loader, kick, key, host, false) {
+        Ok(machine) => {
+            crate::log!(
+                INFO,
+                "allowlist: {key:016x} is not listed: removed (machine {machine})"
+            );
+            true
+        }
+        Err(why) => {
+            crate::log!(
+                WARN,
+                "allowlist: {key:016x} is not listed but could not be removed: {why}"
+            );
+            false
+        }
+    }
+}
+
+/// Whether this build can remove a player, once [`start`] looked.
+pub(crate) fn can_kick() -> bool {
+    STATE.kick.get().is_some_and(Option::is_some)
+}
+
+/// Removes and bans the player `key`, whose account went onto the ban list
+/// while not online: the game checks joins only against its session's own
+/// list, filled from the ban list when hosting starts. The session's kick
+/// with its ban adds the account there for the rest of the run, also for a
+/// player who joined with an administrator's password. Whether the player
+/// was removed; an account the game's own unban took off the list since is
+/// forgotten and stays.
+fn refuse_banned(key: u64) -> bool {
+    let Some(loader) = crate::host::loader() else {
+        return false;
+    };
+    if !crate::console::still_banned(loader, key) {
+        crate::console::forget_offline_ban(key);
+        return false;
+    }
+    let Some(kick) = STATE.kick.get().and_then(Option::as_ref) else {
+        crate::log!(
+            WARN,
+            "{key:016x} is on the ban list but joined: this build lacks the session's kick"
+        );
+        return false;
+    };
+    let host = STATE
+        .serving
+        .get()
+        .and_then(|serving| with_gate(serving, |gate| gate.host));
+    match disconnect(loader, kick, key, host, true) {
+        Ok(machine) => {
+            crate::log!(
+                INFO,
+                "{key:016x} is on the ban list: removed and banned (machine {machine})"
+            );
+            true
+        }
+        Err(why) => {
+            crate::log!(
+                WARN,
+                "{key:016x} is on the ban list but could not be removed: {why}"
+            );
+            false
+        }
+    }
 }
 
 /// Forgets the player `key`, who left.
@@ -294,7 +417,11 @@ pub(crate) fn after_step(loader: &Loader) {
 fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
     match step {
         Step::Note { key, hello, needs } => {
-            let leaving = serving.kick.as_ref().map(|_| serving.rules.grace);
+            let leaving = STATE
+                .kick
+                .get()
+                .and_then(Option::as_ref)
+                .map(|_| serving.rules.grace);
             let text = super::note(&needs, hello, &serving.names, &serving.pages, leaving);
             let ids: Vec<&str> = needs.iter().map(|n| n.id.as_str()).collect();
             let why = if hello {
@@ -317,11 +444,12 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
             crate::chat::send(key, &crate::texts::fill("join.admitted", &[]));
         }
         Step::Kick { key } => {
-            let (Some(loader), Some(kick)) = (loader, &serving.kick) else {
+            let (Some(loader), Some(kick)) = (loader, STATE.kick.get().and_then(Option::as_ref))
+            else {
                 return;
             };
             let host = with_gate(serving, |gate| gate.host);
-            match disconnect(loader, kick, key, host) {
+            match disconnect(loader, kick, key, host, false) {
                 Ok(machine) => crate::log!(
                     INFO,
                     "join check: kicked the game of {key:016x} (machine {machine})"
@@ -335,7 +463,8 @@ fn run(loader: Option<&Loader>, serving: &Serving, step: Step) {
     }
 }
 
-/// Kicks the player `key` through the game, on the game thread, never
+/// Kicks the player `key` through the game, banning it from the session
+/// when `ban`, on the game thread, never
 /// on the machine of `host`, a hosted game's host, nor on the session's
 /// own machine; the player's machine handle, or why not.
 fn disconnect(
@@ -343,6 +472,7 @@ fn disconnect(
     kick: &Kick,
     key: u64,
     host: Option<u64>,
+    ban: bool,
 ) -> Result<u32, &'static str> {
     let server = crate::world::reader().map_err(|_| "not on the game thread")?;
     let machines = crate::world::machines(loader).map_err(|_| "the player slots do not read")?;
@@ -367,6 +497,6 @@ fn disconnect(
     // called with the server's non-null session and the machine of one of
     // its player slots, on the game thread, as the server's own account
     // actions call it.
-    unsafe { (kick.call)(session, machine, false) };
+    unsafe { (kick.call)(session, machine, ban) };
     Ok(machine)
 }

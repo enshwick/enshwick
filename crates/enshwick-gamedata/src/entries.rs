@@ -68,8 +68,15 @@ impl Symbol {
     /// without a pattern or a unique match.
     #[must_use]
     pub fn find(&self, code: &[u8], code_rva: u64) -> Option<u64> {
-        let pattern = self.pattern.as_ref()?;
-        let start = u64::try_from(pattern.find_unique(code).ok()?).ok()?;
+        let start = self.pattern.as_ref()?.find_unique(code).ok()?;
+        self.locate(code, code_rva, start)
+    }
+
+    /// The symbol's address relative to the image base from its pattern's
+    /// match at `start` in `code`, the code section that starts at
+    /// `code_rva`.
+    pub(crate) fn locate(&self, code: &[u8], code_rva: u64, start: usize) -> Option<u64> {
+        let start = u64::try_from(start).ok()?;
         let base = code_rva.checked_add(start)?;
         match self.locate {
             Locate::At(at) => base.checked_add(at),
@@ -222,6 +229,7 @@ pub struct Constant {
     pub(crate) via: Option<String>,
     pub(crate) within: Option<u32>,
     pub(crate) attribute: Option<String>,
+    pub(crate) cell: Option<String>,
     pub(crate) carried: bool,
 }
 
@@ -276,9 +284,17 @@ impl Constant {
         self.attribute.as_deref()
     }
 
+    /// The symbol of the data cell the game keeps the value in, a `u32`
+    /// its code loads instead of holding it: a build without its own table
+    /// reads the value from the cell where its symbol is found.
+    #[must_use]
+    pub fn cell(&self) -> Option<&str> {
+        self.cell.as_deref()
+    }
+
     /// Whether a build without its own table takes the value over; `false`
-    /// for a value only this build holds, such as a function table slot,
-    /// which such a build neither finds nor misses.
+    /// for a value only this build holds, which such a build neither finds
+    /// nor misses.
     #[must_use]
     pub const fn carried(&self) -> bool {
         self.carried
@@ -319,7 +335,14 @@ impl Constant {
         self.read(code, found)
     }
 
-    fn read(&self, code: &[u8], start: u64) -> Option<u64> {
+    /// Whether the pattern alone finds the value: neither read [`Self::via`]
+    /// a symbol nor a symbol's expected bytes.
+    pub(crate) fn searched_alone(&self) -> bool {
+        self.pattern.is_some() && self.via.is_none() && self.id.strip_suffix(".bytes").is_none()
+    }
+
+    /// The value from the pattern's match at `start` in `code`.
+    pub(crate) fn read(&self, code: &[u8], start: u64) -> Option<u64> {
         match self.operand {
             Some(operand) => operand.read(code, start),
             None => Some(self.value),

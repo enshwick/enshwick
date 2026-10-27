@@ -143,7 +143,8 @@ impl World {
         Notice::Chat
     }
 
-    /// [`World::notify`] for every connected player.
+    /// Sends a notice to every connected player, as [`notify`](World::notify)
+    /// does to one.
     ///
     /// # Examples
     ///

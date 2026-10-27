@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use enshwick::config::Schema;
 
 use crate::texts;
+use crate::wire::Peer;
 
 /// The control frame kinds, after the protocol's notice (3), item data (4)
 /// and demo (5).
@@ -39,6 +40,14 @@ pub const ACTION_HINTS: u8 = 16;
 
 /// The least time between two changes one player sends.
 pub const EDIT_GAP: Duration = Duration::from_millis(250);
+/// The [rated](Message::is_rated) messages a player who is no administrator
+/// sends per second, and in one burst.
+///
+/// The server answers each with up to a whole control message, so the frame
+/// rate alone would let a player make it send far more than the player sends.
+pub const QUERY_RATE: f64 = 2.0;
+/// See [`QUERY_RATE`].
+pub const QUERY_BURST: f64 = 8.0;
 
 /// A message between a client's loader and its server's.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,6 +176,16 @@ impl Message {
             Self::ActionResult { .. } => ACTION_RESULT,
             Self::ActionHints { .. } => ACTION_HINTS,
         }
+    }
+
+    /// Whether the server answers it with a reply of its own making, so a
+    /// player who is no administrator sends it at [`QUERY_RATE`] only.
+    #[must_use]
+    pub const fn is_rated(&self) -> bool {
+        matches!(
+            self,
+            Self::Query { .. } | Self::Edit { .. } | Self::ActionsQuery { .. }
+        )
     }
 
     /// The message's body, after its kind and the protocol version.
@@ -361,6 +380,59 @@ pub fn admit(
     Ok(())
 }
 
+/// What the server does with a message a client sent, by [`Queries::gate`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Gate {
+    /// Serve it.
+    Pass,
+    /// Send the player this answer instead of serving the message.
+    Busy(Message),
+    /// Neither serve nor answer it: the client asks again on its own.
+    Drop,
+}
+
+/// The rates of the [rated](Message::is_rated) messages of players who are
+/// no administrators, on the server.
+#[derive(Debug, Default)]
+pub struct Queries {
+    rates: rustc_hash::FxHashMap<u64, Peer>,
+}
+
+impl Queries {
+    /// Takes one rated message of the player with account key `key` at
+    /// `now`; false when the player is over [`QUERY_RATE`]. An
+    /// administrator's messages are not rated.
+    pub fn admit(&mut self, key: u64, admin: bool, now: Instant) -> bool {
+        admin
+            || self
+                .rates
+                .entry(key)
+                .or_insert_with(|| Peer::with_tokens(QUERY_BURST))
+                .admit_at(now, QUERY_RATE, QUERY_BURST)
+    }
+
+    /// Decides whether the server serves `message` of the player with
+    /// account key `key` at `now`. Only [rated](Message::is_rated) messages
+    /// spend the player's rate; an actions query over it gets no answer.
+    pub fn gate(&mut self, key: u64, admin: bool, message: &Message, now: Instant) -> Gate {
+        if !message.is_rated() || self.admit(key, admin, now) {
+            Gate::Pass
+        } else if matches!(message, Message::ActionsQuery { .. }) {
+            Gate::Drop
+        } else {
+            Gate::Busy(Message::Result {
+                ok: false,
+                text: texts::fill("remote.slow", &[]),
+            })
+        }
+    }
+
+    /// Forgets the player with account key `key`, who left.
+    pub fn forget(&mut self, key: u64) {
+        self.rates.remove(&key);
+    }
+}
+
 /// One [`Message::Sync`] per mod of `values`, its join values by mod id.
 #[cfg_attr(
     all(not(windows), not(test)),
@@ -374,7 +446,7 @@ fn sync_messages(values: std::collections::BTreeMap<String, String>) -> Vec<Mess
 }
 
 #[cfg(windows)]
-pub(crate) use live::{client, forget, heard, push_sync, server, sync_to};
+pub(crate) use live::{client, forget, forget_player, heard, push_sync, server, sync_to};
 
 #[cfg(windows)]
 mod live {
@@ -385,11 +457,13 @@ mod live {
     use enshwick::abi::PlayerInfo;
     use enshwick::config::Schema;
 
-    use super::{Message, admit, redacted, texts, values_text};
+    use super::{Gate, Message, Queries, admit, redacted, texts, values_text};
     use crate::host::Loader;
 
     /// When each player last changed a setting.
     static LAST_EDIT: Mutex<Option<rustc_hash::FxHashMap<u64, Instant>>> = Mutex::new(None);
+    /// The rates of the queries of players who are no administrators.
+    static QUERIES: Mutex<Option<Queries>> = Mutex::new(None);
     /// What the client last heard from its server, for the Mods screen.
     static HEARD: Mutex<Heard> = Mutex::new(Heard::new());
 
@@ -509,6 +583,11 @@ mod live {
     pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
         let admin =
             player(loader, key).is_some_and(|p| p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+        match gate(key, admin, &message) {
+            Gate::Pass => {}
+            Gate::Busy(answer) => return crate::net::to_player(key, &answer),
+            Gate::Drop => return,
+        }
         match message {
             Message::Query { id } if id.is_empty() => {
                 let mut text = String::new();
@@ -556,6 +635,27 @@ mod live {
             | Message::ActionsSheet { .. }
             | Message::ActionResult { .. }
             | Message::ActionHints { .. } => {}
+        }
+    }
+
+    /// What the server does with `message` of the player with account key
+    /// `key` now.
+    fn gate(key: u64, admin: bool, message: &Message) -> Gate {
+        QUERIES.relock().get_or_insert_with(Queries::default).gate(
+            key,
+            admin,
+            message,
+            Instant::now(),
+        )
+    }
+
+    /// Forgets the player with account key `key`, who left the server.
+    pub(crate) fn forget_player(key: u64) {
+        if let Some(queries) = QUERIES.relock().as_mut() {
+            queries.forget(key);
+        }
+        if let Some(last) = LAST_EDIT.relock().as_mut() {
+            last.remove(&key);
         }
     }
 
@@ -792,5 +892,127 @@ mod tests {
                 "{shown}"
             );
         }
+    }
+
+    #[test]
+    fn a_player_who_is_no_administrator_asks_at_the_query_rate() {
+        let mut queries = Queries::default();
+        let start = Instant::now();
+        let asked = (0..100).filter(|_| queries.admit(7, false, start)).count();
+        assert_eq!(f64::from(u32::try_from(asked).unwrap()), QUERY_BURST);
+        assert!(!queries.admit(7, false, start));
+        assert!(
+            queries.admit(8, false, start),
+            "each player has a rate of his own"
+        );
+        let later = start + Duration::from_secs(1);
+        let again = (0..100).filter(|_| queries.admit(7, false, later)).count();
+        assert_eq!(f64::from(u32::try_from(again).unwrap()), QUERY_RATE);
+    }
+
+    #[test]
+    fn an_administrator_s_queries_are_not_rated() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        assert!((0..1000).all(|_| queries.admit(7, true, now)));
+        assert!(queries.rates.is_empty());
+    }
+
+    #[test]
+    fn a_player_who_left_is_forgotten() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        while queries.admit(7, false, now) {}
+        queries.forget(7);
+        assert!(queries.rates.is_empty());
+        assert!(
+            queries.admit(7, false, now),
+            "a new join starts with a full burst"
+        );
+    }
+
+    #[test]
+    fn queries_and_edits_are_rated_and_answers_are_not() {
+        let rated = [
+            Message::Query { id: String::new() },
+            Message::Edit {
+                id: "zones".into(),
+                key: "radius".into(),
+                value: "5".into(),
+            },
+            Message::ActionsQuery { language: 0 },
+        ];
+        assert!(rated.iter().all(Message::is_rated));
+        let free = [
+            Message::Result {
+                ok: true,
+                text: String::new(),
+            },
+            Message::Sync {
+                id: "zones".into(),
+                values: String::new(),
+            },
+        ];
+        assert!(!free.iter().any(Message::is_rated));
+    }
+
+    fn over_the_rate(queries: &mut Queries, key: u64, now: Instant) {
+        while queries.admit(key, false, now) {}
+    }
+
+    #[test]
+    fn a_query_or_edit_over_the_rate_is_answered_busy_and_not_served() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let busy = Gate::Busy(Message::Result {
+            ok: false,
+            text: texts::fill("remote.slow", &[]),
+        });
+        for message in [
+            Message::Query { id: String::new() },
+            Message::Edit {
+                id: "zones".into(),
+                key: "radius".into(),
+                value: "5".into(),
+            },
+        ] {
+            assert_eq!(queries.gate(7, false, &message, now), busy);
+        }
+    }
+
+    #[test]
+    fn an_actions_query_over_the_rate_gets_no_answer_at_all() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let message = Message::ActionsQuery { language: 0 };
+        assert_eq!(queries.gate(7, false, &message, now), Gate::Drop);
+    }
+
+    #[test]
+    fn rated_messages_pass_until_the_burst_is_spent() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        let message = Message::Query { id: String::new() };
+        let passed = (0..100)
+            .take_while(|_| queries.gate(7, false, &message, now) == Gate::Pass)
+            .count();
+        assert_eq!(f64::from(u32::try_from(passed).unwrap()), QUERY_BURST);
+    }
+
+    #[test]
+    fn unrated_messages_and_administrators_always_pass() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let run = Message::ActionRun {
+            id: "zones".into(),
+            action: "clear".into(),
+            args: String::new(),
+        };
+        assert_eq!(queries.gate(7, false, &run, now), Gate::Pass);
+        let query = Message::Query { id: String::new() };
+        assert!((0..100).all(|_| queries.gate(8, true, &query, now) == Gate::Pass));
     }
 }

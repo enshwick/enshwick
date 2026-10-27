@@ -75,7 +75,7 @@ pub(super) type OpErrors = Values<OpError, 2>;
 /// See [`Outcome`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct OpResult {
-    /// Why it failed; `None` when it ran without an error.
+    /// Why it failed; none when it ran without an error.
     pub error: Option<OpError>,
     /// How much of the count the operation could not do.
     pub remaining: u32,

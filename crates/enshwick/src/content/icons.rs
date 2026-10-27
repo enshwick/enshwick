@@ -16,6 +16,10 @@ use crate::{Load, Off};
 
 use super::{Blob, Guid, Id, types};
 
+/// The widest and tallest PNG an icon may be, in pixels; a larger one does
+/// not decode.
+pub const MAX_SIDE: u32 = 2048;
+
 /// An item's own icon, for [`NewItem::icon`](super::items::NewItem::icon).
 ///
 /// # Examples
@@ -190,7 +194,10 @@ pub fn decode_png(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     use zune_core::colorspace::ColorSpace;
     use zune_core::options::DecoderOptions;
 
+    const SIDE: usize = MAX_SIDE as usize;
     let options = DecoderOptions::default()
+        .set_max_width(SIDE)
+        .set_max_height(SIDE)
         .png_set_strip_to_8bit(true)
         .png_set_add_alpha_channel(true);
     let mut decoder = zune_png::PngDecoder::new_with_options(ZCursor::new(png), options);
@@ -510,5 +517,34 @@ mod tests {
         let (rgba, w, h) = decode_png(png).unwrap();
         assert_eq!((w, h), (1, 1));
         assert_eq!(rgba, [255, 0, 0, 255]);
+    }
+
+    /// A grey PNG `width` by `height`.
+    fn grey_png(width: u32, height: u32) -> Vec<u8> {
+        use zune_core::bit_depth::BitDepth;
+        use zune_core::colorspace::ColorSpace;
+        use zune_core::options::EncoderOptions;
+
+        let (width, height) = (
+            usize::try_from(width).unwrap(),
+            usize::try_from(height).unwrap(),
+        );
+        let pixels = vec![0x80; width * height];
+        let options = EncoderOptions::new(width, height, ColorSpace::Luma, BitDepth::Eight);
+        let mut png = Vec::new();
+        zune_png::PngEncoder::new(&pixels, options)
+            .encode(&mut png)
+            .unwrap();
+        png
+    }
+
+    #[test]
+    fn a_png_up_to_the_icon_bound_decodes_and_a_larger_one_does_not() {
+        let (rgba, w, h) = decode_png(&grey_png(MAX_SIDE, 2)).unwrap();
+        assert_eq!((w, h), (MAX_SIDE, 2));
+        assert_eq!(rgba.len(), 4 * 2 * usize::try_from(MAX_SIDE).unwrap());
+        assert!(decode_png(&grey_png(2, MAX_SIDE)).is_some());
+        assert!(decode_png(&grey_png(MAX_SIDE + 1, 2)).is_none());
+        assert!(decode_png(&grey_png(2, MAX_SIDE + 1)).is_none());
     }
 }

@@ -47,8 +47,11 @@ restart would start a set nobody built, and replicas would drift apart.
 After a game update, a loader without the new build's table runs
 on the code patterns of the newest table it embeds, and only what they miss
 stays off; `build_patterns = false` in `mod-configs/enshwick.toml` keeps such
-a build vanilla instead. Rebuild the image with a loader that has the table
-once there is one.
+a build vanilla instead. The loader saves what the patterns found in
+`mod-data/enshwick/carried-server.txt` and reads it back while the game and
+the loader stay the same, so only the first start after an update searches;
+keep `mod-data/` on a volume to keep that file. Rebuild the image with a
+loader that has the table once there is one.
 
 ## Check what loaded
 

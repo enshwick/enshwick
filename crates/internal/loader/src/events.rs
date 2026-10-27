@@ -552,6 +552,7 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             // thread the game removes it on.
             let data = unsafe { player(index, slot, offsets) };
             crate::net::forget_peer(data.key.get());
+            crate::remote::forget_player(data.key.get());
             crate::admission::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());

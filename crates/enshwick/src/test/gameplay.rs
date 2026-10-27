@@ -199,7 +199,7 @@ impl Installed {
     /// assert!(loader.account_changes().is_empty());
     /// ```
     #[must_use]
-    pub fn account_changes(&self) -> Vec<(u64, u32, u32, u32, bool)> {
+    pub fn account_changes(&self) -> Vec<(crate::PlayerKey, u32, u32, u32, bool)> {
         table::with(Vec::new(), |s| s.account_changes.clone())
     }
 

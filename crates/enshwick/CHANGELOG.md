@@ -8,11 +8,33 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `code::find_each_unique` finds many patterns in one pass over the code,
+  each with the result `Pattern::find_unique` gives (#598).
+- `World::account_action` asks the game to kick, ban or unban an account
+  (`AccountAction`); a ban of an account that is not online goes straight
+  onto the server's ban list (`HostApi::account_action`,
+  `AccountActionType`). The fake keeps a ban list
+  (`Installed::banned`, `removed`) (#586).
+- With `allowlist = true` in the loader's settings, a dedicated server lets
+  in only the accounts `mod-data/enshwick/allowlist.txt` lists, and its
+  administrators; the console's `enshwick allowlist add|remove` and
+  `World::set_allowlisted` change the list, `World::allowlisted` reads it
+  (`HostApi::allowlist_set`, `HostApi::allowlist_has`, ABI 3.1). The
+  fake keeps the list (`Installed::allowlisted`) (#602).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 
 ### Changed
 
+- `World::account_action` refuses a kick or a ban of a hosted game's host,
+  succeeds for a ban of an account on the ban list already, and refuses a
+  ban the game's list does not take instead of answering that the action
+  is missing; the console says so in its own words. The fake takes the
+  host with `FakeHost::host_key` (#606).
+- The crate docs say to depend on the crate from crates.io and carry a
+  module map, the feature table and the target; docs.rs builds every
+  feature. The Luau definitions describe events, codes and permission bits
+  in plain words, without Rust paths (#604).
 - Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
   rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
 - Breaking: ids have their own types across the ABI and the safe API.
@@ -21,13 +43,13 @@ Each entry names the pull request that made the change.
   `EnshwickEntity`, `EnshwickItemId`, `EnshwickPlayerKey` and
   `EnshwickRecipeId`; `ecs::Entity` is now `enshwick::Entity`. Account keys
   (`Player::key`, `Peer::Player`, actions' player lists,
-  `Knowledge::grant_account`), item ids (inventory ops and slots, drops,
-  interactions, vetoes, summons, `ItemInstance`, terrain materials) and
-  recipe ids (`CraftRequest`, `CraftRecipeEvent`) take them, and the fake
-  host's methods do too. `affixes::AffixId` names an affix in this process
-  (`Load::define_affix`, `Affixes::info`, `Line::affix`), and
-  `world::SkillNode` a skill node (`Skill::node`). `Summon::ammo` is an
-  `Option`.
+  `Knowledge::grant_account`, `World::account_action` and the allowlist),
+  item ids (inventory ops and slots, drops, interactions, vetoes, summons,
+  `ItemInstance`, terrain materials) and recipe ids (`CraftRequest`,
+  `CraftRecipeEvent`) take them, and the fake host's methods do too.
+  `affixes::AffixId` names an affix in this process (`Load::define_affix`,
+  `Affixes::info`, `Line::affix`), and `world::SkillNode` a skill node
+  (`Skill::node`). `Summon::ammo` is an `Option`.
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
   `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
   `load.on_game`. `events::Kind` is the one trait `on` takes; the loader
@@ -44,11 +66,19 @@ Each entry names the pull request that made the change.
   `enshwick::mods()` and `Host::{mods, join_missing, replaced}` are gone,
   so each list has one call: `mods::all`, `mods::join_missing`,
   `mods::replaced`. `mods::label` is hidden: `ModEntry::label` names a mod (#597).
+- Breaking: `ReadPackError::TooLarge` names the `limit` the file broke, and
+  `PackFiles::read_dir` refuses a pack with more than `MAX_ICONS` icons
+  (`ReadPackError::TooManyIcons`) or an icon over `MAX_ICON_FILE`; icon
+  PNGs past `icons::MAX_SIDE` pixels do not decode (#596).
+- `mods::join_missing` leaves out an entry with new text once the loader
+  keeps 64 KiB of text servers advertised (#596).
 - `declare_mod!` exports the five functions under their C names only
   outside test builds, so one test binary can declare several mods.
 
 ### Fixed
 
+- A server rates the settings queries, setting changes and actions queries
+  of a player who is no administrator, 2 a second in bursts of 8 (#596).
 - Settings errors name the key and the expected type, and the line where
   the text is at hand, never the value: the settings check's reason, the
   settings read at start, table settings, join values, migrations, and

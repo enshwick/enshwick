@@ -10,7 +10,6 @@ use super::game::identify;
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::net::JOIN_GAME.id(),
     pinned::net::PROVIDER_VTABLE.id(),
-    pinned::net::PROVIDER_JOIN_SLOT.id(),
     pinned::user::START_INTERACTION.id(),
     pinned::user::INTERACTION_KIND.id(),
     pinned::user::JOIN_FAILED_KIND.id(),
@@ -100,8 +99,8 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
 }
 
 /// The online provider's join, once the provider's function table holds it
-/// where the build table says and its code starts with the pinned bytes, and
-/// the game's code section.
+/// in exactly one slot and its code starts with the pinned bytes, and the
+/// game's code section.
 fn verified_join(
     loader: &Loader,
 ) -> Result<(u64, core::ops::Range<u64>), crate::join::provider::Error> {

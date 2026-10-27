@@ -181,6 +181,7 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
         }
         Tool::Log(args) => log_lines(loader, args),
         Tool::Recipes(args) => crate::recipes::command(loader, args),
+        Tool::Allowlist(args) => crate::allowlist::command(loader, args),
         Tool::Config(args) => config(loader, args),
         Tool::UiDemo(name) => ui_demo(loader, name),
     }

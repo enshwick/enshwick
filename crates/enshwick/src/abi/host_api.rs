@@ -4,20 +4,21 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarZoneFn,
-    BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, BuildRights,
-    CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn,
-    EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec, MigrationSet,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
+    AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
+    BuildCheckFn, BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp,
+    ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
+    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
+    FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn,
+    ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites,
+    MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn,
+    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
+    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
+    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
+    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
+    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TransactionInfo,
+    TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
+    ZoneCheckFn,
 };
 use crate::abi::{Entity, ItemId, PlayerKey, RecipeId};
 
@@ -201,8 +202,9 @@ pub struct HostApi {
     /// entry has the server's version, [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN), `off` 1, the
     /// client's DLL path when it has the mod (empty otherwise), and the name
     /// and homepage the server advertises. The strings stay valid for the
-    /// process. Empty before a refused
-    /// join; see [`Event::JOIN_REFUSED`].
+    /// process; once 64 KiB of advertised text is kept, an entry with new
+    /// text is left out. Empty before a refused join; see
+    /// [`Event::JOIN_REFUSED`].
     pub join_missing: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
@@ -1349,4 +1351,44 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Asks the game for the account action `action` on `account`, as its
+    /// administrators' account actions do: [`AccountActionType::KICK`]
+    /// removes a player online, [`AccountActionType::BAN`] puts the account
+    /// on the server's ban list and removes its player when online,
+    /// [`AccountActionType::UN_BAN`] takes it off the list. A ban of an
+    /// account not online goes straight onto the list, which the dedicated
+    /// server writes to `bannedAccounts` of `enshrouded_server.json`.
+    /// [`Status::REFUSED`] for a kick or a ban of an administrator online,
+    /// whom the game never removes, for a kick or a ban of a hosted game's
+    /// host, for a kick of an account not online, and for a ban of an account
+    /// not online that the game's list does not take; an account on the
+    /// list already is no error. [`Status::BAD_ARGS`] for account 0 or an
+    /// action this loader does not know; [`Status::MISSING`] while no server runs or on a build that
+    /// lacks the action. On the server's game thread between steps only:
+    /// [`Status::WRONG_THREAD`] elsewhere.
+    pub account_action:
+        extern "system" fn(me: ModHandle, action: AccountActionType, account: PlayerKey) -> Status,
+    /// Puts `account` on the loader's allowlist when `listed` is 1, or takes
+    /// it off when 0: the accounts a dedicated server with the loader's
+    /// `allowlist` setting on lets join, beside its administrators. The
+    /// list is the file `mod-data/enshwick/allowlist.txt`, written at once
+    /// whether the setting is on or not; it applies from the next join.
+    /// `Status::OK` also when the list already says so;
+    /// [`Status::BAD_ARGS`] for account 0 or `listed` above 1;
+    /// [`Status::REFUSED`] when the file is not written;
+    /// [`Status::MISSING`] outside a dedicated server. Any thread, also
+    /// while another call or the console changes the list: changes take
+    /// turns and the file is replaced whole. A panic in the loader returns
+    /// [`Status::REFUSED`]. Since minor 1.
+    pub allowlist_set: extern "system" fn(me: ModHandle, account: PlayerKey, listed: u8) -> Status,
+    /// Writes 1 to `listed` when the loader's allowlist lists `account`, 0
+    /// when not or when the file never read, whether the `allowlist`
+    /// setting is on or not. `listed` is the caller's, writable for one
+    /// byte for the call, and written only on [`Status::OK`].
+    /// [`Status::BAD_ARGS`] for account 0 or a null `listed`;
+    /// [`Status::MISSING`] outside a dedicated server. Any thread, also
+    /// while the list changes. A panic in the loader returns
+    /// [`Status::REFUSED`]. Since minor 1.
+    pub allowlist_has:
+        extern "system" fn(me: ModHandle, account: PlayerKey, listed: *mut u8) -> Status,
 }

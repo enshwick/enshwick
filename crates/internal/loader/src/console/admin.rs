@@ -9,10 +9,15 @@ use crate::host::Loader;
 use crate::pinned;
 
 use super::STATE;
-use super::accounts::{Act, event};
+use super::accounts::{Act, Decision, Online, Route, Target, decide, event};
 
 /// The build table ids the console names.
-pub(crate) const TABLE_IDS: &[&str] = &[pinned::server::ACCOUNT_ACTION.id()];
+pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::server::ACCOUNT_ACTION.id(),
+    pinned::server::BAN_ADD.id(),
+    pinned::server::BAN_LIST_CHANGED.id(),
+    pinned::server::CONFIG.id(),
+];
 
 /// The reflected account action the handler takes.
 const EVENT: &str = "keen::ecs::AccountActionEvent";
@@ -114,4 +119,55 @@ pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), Status>
         );
     }
     Ok(())
+}
+
+/// Asks the game for `decision`: through the account action handler, or
+/// for a ban of an account not online, straight onto the ban list.
+///
+/// # Errors
+///
+/// [`Status::REFUSED`] for a kick or a ban of a hosted game's host; as
+/// [`act`] and [`super::ban_list::add`] otherwise.
+pub(crate) fn carry(loader: &Loader, act: Act, decision: &Decision) -> Result<(), Status> {
+    if act != Act::Unban && crate::admission::host() == Some(decision.key) {
+        return Err(Status::REFUSED);
+    }
+    match decision.route {
+        Route::Handler => {
+            self::act(loader, act, decision.key)?;
+            if act == Act::Unban {
+                super::forget_offline_ban(decision.key);
+            }
+            Ok(())
+        }
+        Route::BanList => super::ban_list::add(loader, decision.key),
+    }
+}
+
+/// A mod's account action on `account`: the console's checks, then
+/// [`carry`].
+///
+/// # Errors
+///
+/// [`Status::BAD_ARGS`] for account 0; [`Status::REFUSED`] for an
+/// administrator online or a hosted game's host, unless unbanned, and for a
+/// kick of an account not online; as [`carry`] otherwise.
+pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
+    if account == 0 {
+        return Err(Status::BAD_ARGS);
+    }
+    let online: Vec<Online> = crate::world::players(loader)?
+        .iter()
+        .map(|p| Online {
+            name: super::tools::name(p),
+            key: p.key.get(),
+            admin: super::tools::is_admin(p),
+        })
+        .collect();
+    let target = online
+        .iter()
+        .find(|p| p.key == account)
+        .map_or(Target::Account(account), |p| Target::Player(p.clone()));
+    let decision = decide(act, &target).map_err(|_| Status::REFUSED)?;
+    carry(loader, act, &decision)
 }

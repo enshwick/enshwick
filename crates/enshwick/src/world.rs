@@ -6,6 +6,7 @@
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.
 
+mod accounts;
 mod build;
 mod capture;
 mod containers;
@@ -27,6 +28,7 @@ use crate::game_events::{Field, Scalar};
 use crate::{Entity, PlayerKey};
 use crate::{Host, Load, Off};
 
+pub use accounts::AccountAction;
 pub use build::{BuildRefusal, PlayerPermissions};
 pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
@@ -170,7 +172,8 @@ pub struct Player {
     pub slot: u32,
     /// The same for the same account in every session.
     pub key: PlayerKey,
-    /// Permission bits, `PlayerInfo::CAN_*`.
+    /// The server's permission bits for the player, as
+    /// [player events](crate::abi::PlayerInfo::permissions) list them.
     pub permissions: u8,
     /// The name the client sent; untrusted, may repeat between players.
     pub name: String,
@@ -257,7 +260,7 @@ impl Placed {
     }
 }
 
-/// How a notice reached a player, from [`World::notify`].
+/// How a notice reached a player, from [`notify`](World::notify).
 ///
 /// # Examples
 ///

@@ -77,6 +77,7 @@ mod tests {
         "loot.txn_context",
         "loot.txn_entity",
         "skill.airborne_architect",
+        "skill.airborne_architect_cell",
         "ui_image.content",
         "ui_image.flags",
         "ui_image.format",

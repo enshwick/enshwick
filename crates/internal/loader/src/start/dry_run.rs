@@ -120,10 +120,11 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
+    let cell = |rva| image.u32(base + rva);
     let mut build = if patterns {
-        code.and_then(|code| builds::by_patterns(&tables, side, code))
+        code.and_then(|code| builds::by_patterns(&tables, side, code, cell))
     } else {
-        builds::select(&tables, side, fingerprint, code)
+        builds::select(&tables, side, fingerprint, code, cell, None)
     }
     .ok_or(DryRunError::NoTable)?;
     if let Some(exe_dir) = exe.parent() {

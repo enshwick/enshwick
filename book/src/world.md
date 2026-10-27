@@ -256,6 +256,51 @@ has:
 the console finds a player a line names. Since names repeat, code that wants
 one player refuses when it gets several.
 
+### Kicking and banning
+
+`account_action(action, key)` asks the game for one of its account
+actions, as its administrators do; the mod decides who may ask:
+
+- `AccountAction::Kick` removes a player online;
+- `AccountAction::Ban` puts the account on the ban list and removes its
+  player when online. An account that is not online goes straight onto the
+  list; until the server restarts, the loader removes and bans it when it
+  joins, since the game reads its list for joins only at start;
+- `AccountAction::UnBan` takes the account off the list.
+
+A dedicated server keeps the list in `bannedAccounts` of
+`enshrouded_server.json`; a game a client hosts keeps it until the game
+ends. The game never removes an administrator online, so a kick or a ban of
+one returns `WorldError::Refused`; so do a kick or a ban of a hosted game's
+host, a kick of an account not online, and a ban the game's list does not
+take. A ban of an account on the list already succeeds.
+Call it on the server's game thread between steps.
+
+### The allowlist
+
+With `allowlist = true` in `mod-configs/enshwick.toml`, a dedicated server
+lets in only the accounts its allowlist lists, and its administrators; the
+loader removes any other player as the player enters the world, and a player
+the game gives no account. The game has
+no such list, so the loader keeps it in `mod-data/enshwick/allowlist.txt`,
+one account per line, with `#` notes.
+
+`set_allowlisted(key, true)` lists an account and `set_allowlisted(key,
+false)` takes it off; `allowlisted(key)` tells whether the list holds it. Both
+work on any thread and with the setting off, and a change applies from the
+next join. Outside a dedicated server they return `WorldError::Missing`.
+
+```rust
+use enshwick::world::{World, WorldError};
+
+fn invite(world: &World, key: enshwick::PlayerKey) -> Result<(), WorldError> {
+    if !world.allowlisted(key)? {
+        world.set_allowlisted(key, true)?;
+    }
+    Ok(())
+}
+```
+
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit

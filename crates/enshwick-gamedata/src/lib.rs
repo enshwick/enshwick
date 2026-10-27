@@ -6,13 +6,16 @@
 //! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. The
+//! ([`Table::fall_back`]), and what no pattern finds stays missing; the
+//! loader saves that carried table and restores it while the code stays the
+//! same ([`Table::restore`]). The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 
 pub mod archive;
+mod carry;
 pub mod catalogue;
 mod entries;
 #[cfg(test)]
@@ -24,6 +27,7 @@ mod resolve;
 mod table;
 mod version;
 
+pub use carry::CarryKey;
 pub use parts::{Part, PartState};
 
 pub use entries::{Constant, Locate, Operand, Symbol};
@@ -153,6 +157,47 @@ mod tests {
         assert_eq!(client.symbol("npc.lookup"), Some(0x46_9c30));
     }
 
+    /// The ids of the newest table of `side` that a build without a table
+    /// could not find: a symbol without a pattern, a constant with neither
+    /// a pattern nor an attribute nor a patterned symbol whose bytes it
+    /// holds, or one the table keeps to its own build.
+    fn found_only_on_their_own_build(tables: &[Table], side: Side) -> Vec<String> {
+        let table = newest(tables, side).unwrap();
+        let patterned = |id: &str| {
+            table
+                .symbols()
+                .iter()
+                .any(|s| s.id() == id && s.pattern().is_some())
+        };
+        let symbols = table
+            .symbols()
+            .iter()
+            .filter(|s| s.pattern().is_none())
+            .map(|s| s.id().to_owned());
+        let constants = table
+            .constants()
+            .iter()
+            .filter(|c| {
+                !c.carried()
+                    || (c.pattern().is_none()
+                        && c.attribute().is_none()
+                        && !c.cell().is_some_and(patterned)
+                        && !c.id().strip_suffix(".bytes").is_some_and(patterned))
+            })
+            .map(|c| c.id().to_owned());
+        symbols.chain(constants).collect()
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
+    fn every_entry_of_the_newest_tables_resolves_on_a_build_without_a_table() {
+        let tables = tables();
+        for side in [Side::Server, Side::Client] {
+            let only = found_only_on_their_own_build(&tables, side);
+            assert!(only.is_empty(), "{side:?}: {only:?}");
+        }
+    }
+
     const TABLE: &str = r#"
         name = "test (2)"
         side = "server"
@@ -204,6 +249,23 @@ mod tests {
         );
     }
 
+    /// A symbol's pinned first bytes are a constant: under `[symbols]` the
+    /// row would read as an address and the byte check would never run.
+    #[test]
+    fn pinned_bytes_among_the_symbols_are_refused() {
+        let text = r#"
+            name = "1.0 client (1)"
+            side = "client"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [symbols]
+            "f.hook" = { rva = 0x1000, pattern = "48 85 D2" }
+            "f.hook.bytes" = 0x5c89_487f_74d2_8548
+            "#;
+        let error = Table::parse(text).unwrap_err();
+        assert!(error.to_string().contains("f.hook.bytes"), "{error}");
+    }
+
     #[test]
     fn a_fallback_keeps_only_what_its_patterns_find() {
         let table = Table::parse(TABLE).unwrap();
@@ -213,7 +275,7 @@ mod tests {
         code[20] = 0xaa;
         code[30] = 0xaa;
         code[40..44].copy_from_slice(&[0x8b, 0x48, 0x01, 0x48]);
-        let resolved = table.fall_back(&code, 0x5000);
+        let resolved = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(resolved.kind(), Kind::Fallback);
         assert!(resolved.checks().is_empty());
         assert_eq!(resolved.symbol("f.found"), Some(0x5000 + 9));
@@ -268,7 +330,7 @@ mod tests {
         code[0x28..0x2c].copy_from_slice(&[0x0f, 0xb6, 0x02, 0x0c]);
         // Past the 0x20 bytes: a copy of the field's code in the next function.
         code[0x32..0x36].copy_from_slice(&[0x8b, 0x41, 0x60, 0x90]);
-        let resolved = table.fall_back(&code, 0x5000);
+        let resolved = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(resolved.constant("g.field"), Some(0x58));
         assert_eq!(resolved.missing(), ["g.far", "g.twice"]);
         assert!(
@@ -311,7 +373,7 @@ mod tests {
         // A call at 0 to 0x20, where the getter reads +0x50 now.
         code[..7].copy_from_slice(&[0xe8, 0x1b, 0, 0, 0, 0x0f, 0x0b]);
         code[0x20..0x25].copy_from_slice(&[0x48, 0x8b, 0x41, 0x50, 0xc3]);
-        let mut resolved = table.fall_back(&code, 0x5000);
+        let mut resolved = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(resolved.symbol("g.get"), Some(0x5020));
         assert_eq!(resolved.constant("g.blob"), Some(0x50));
         assert_eq!(resolved.missing(), ["g.lost", "g.other", "g.slot"]);
@@ -324,7 +386,10 @@ mod tests {
         assert_eq!(resolved.missing(), ["g.lost", "g.other"]);
         code[0x23] = 0x48;
         code[0x24] = 0x90;
-        assert_eq!(table.fall_back(&code, 0x5000).constant("g.blob"), None);
+        assert_eq!(
+            table.fall_back(&code, 0x5000, |_| None).constant("g.blob"),
+            None
+        );
         assert_eq!(table.resolve().constant("g.slot"), Some(7));
         for bad in [
             r#""x" = { value = 1, via = "g.get" }"#,
@@ -344,6 +409,50 @@ age = 1
         }
     }
 
+    /// A constant the game keeps in a data cell counts where the symbol of
+    /// the cell is found and the cell reads; it takes the value read there.
+    #[test]
+    fn a_constant_in_a_cell_is_read_where_its_symbol_is_found() {
+        let text = r#"
+            name = "1.0 server (1)"
+            side = "server"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [symbols]
+            "g.cell" = { rva = 0x9000, pattern = "8B 0D ?? ?? ?? ?? E8", rel = 2 }
+            "g.lost" = { rva = 0x9010, pattern = "77 66 55" }
+            [constants]
+            "g.node" = { value = 0x4475_e8dd, cell = "g.cell" }
+            "g.gone" = { value = 1, cell = "g.lost" }
+            "g.read" = { value = 2, cell = "g.cell" }
+            "#;
+        let table = Table::parse(text).unwrap();
+        let mut code = vec![0xccu8; 64];
+        // mov ecx, [rip + 0x3ffa] at 0: the cell at 0x5000 + 6 + 0x3ffa.
+        code[..7].copy_from_slice(&[0x8b, 0x0d, 0xfa, 0x3f, 0, 0, 0xe8]);
+        let cells = |rva| (rva == 0x9000).then_some(0x4475_e8dd);
+        let resolved = table.fall_back(&code, 0x5000, cells);
+        assert_eq!(resolved.symbol("g.cell"), Some(0x9000));
+        assert_eq!(resolved.constant("g.node"), Some(0x4475_e8dd));
+        assert_eq!(resolved.constant("g.read"), Some(0x4475_e8dd));
+        assert_eq!(resolved.missing(), ["g.gone", "g.lost"]);
+        let unreadable = table.fall_back(&code, 0x5000, |_| None);
+        assert_eq!(
+            unreadable.missing(),
+            ["g.gone", "g.lost", "g.node", "g.read"]
+        );
+        assert_eq!(table.resolve().constant("g.node"), Some(0x4475_e8dd));
+        for bad in [
+            r#"{ value = 1, cell = "g.cell", pattern = "11" }"#,
+            r#"{ value = 1, cell = "g.cell", attribute = "A" }"#,
+            r#"{ value = 1, cell = "g.cell", carried = false }"#,
+            r#"{ value = 1, cell = "g.none" }"#,
+        ] {
+            let text = text.replace(r#"{ value = 1, cell = "g.lost" }"#, bad);
+            assert!(Table::parse(&text).is_err(), "{bad}");
+        }
+    }
+
     /// A constant only its own build holds counts there, and a build the
     /// table is carried to neither finds nor misses it.
     #[test]
@@ -358,7 +467,7 @@ age = 1
             "g.plain" = 8
             "#;
         let table = Table::parse(text).unwrap();
-        let carried = table.fall_back(&[0xcc; 16], 0x1000);
+        let carried = table.fall_back(&[0xcc; 16], 0x1000, |_| None);
         assert_eq!(carried.constant("g.slot"), None);
         assert_eq!(carried.missing(), ["g.plain"]);
         assert_eq!(carried.uncarried(), ["g.slot"]);
@@ -371,31 +480,6 @@ age = 1
         ] {
             let text = text.replace("{ value = 16, carried = false }", bad);
             assert!(Table::parse(&text).is_err(), "{bad}");
-        }
-    }
-
-    /// The join's slot in the online provider's table is per build: a
-    /// client table carried to any code leaves it out without missing it.
-    #[test]
-    #[cfg_attr(miri, ignore = "parsing every embedded table takes minutes under Miri")]
-    fn a_carried_client_table_never_misses_the_join_slot() {
-        let tables = tables();
-        let clients: Vec<&Table> = tables.iter().filter(|t| t.side() == Side::Client).collect();
-        assert!(!clients.is_empty());
-        for table in clients {
-            let carried = table.fall_back(&[0xcc; 64], 0x1000);
-            let slot = "net.provider_join_slot";
-            assert!(
-                !carried.missing().iter().any(|id| id == slot),
-                "{}",
-                table.name()
-            );
-            assert!(
-                carried.uncarried().iter().any(|id| id == slot),
-                "{}",
-                table.name()
-            );
-            assert_eq!(table.resolve().constant(slot), Some(16), "{}", table.name());
         }
     }
 
@@ -429,13 +513,13 @@ age = 1
         // f.called: E8 rel32 at 56, calling 0x5000 + 61 - 0x10.
         code[56..61].copy_from_slice(&[0xe8, 0xf0, 0xff, 0xff, 0xff]);
         code[61] = 0xc3;
-        let resolved = table.fall_back(&code, 0x5000);
+        let resolved = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(resolved.constant("c.read"), Some(0x52));
         assert_eq!(resolved.constant("c.after"), Some(0x5a));
         assert_eq!(resolved.constant("c.wide"), Some(0x1234));
         assert_eq!(resolved.symbol("f.called"), Some(0x5000 + 61 - 0x10));
         code[62..66].copy_from_slice(&[0x48, 0x8d, 0x55, 0xa0]);
-        let resolved = table.fall_back(&code, 0x5000);
+        let resolved = table.fall_back(&code, 0x5000, |_| None);
         assert_eq!(
             resolved.constant("c.below"),
             Some(0x60),
@@ -581,30 +665,21 @@ age = 1
                     wrong.push(format!("{}: reads {found:x?}", constant.id()));
                 }
             }
-            let resolved = table.fall_back(code, code_rva);
+            let base = image.base();
+            let resolved = table.fall_back(code, code_rva, |rva| image.u32(base + rva));
+            for constant in table.constants().iter().filter(|c| c.cell().is_some()) {
+                let found = resolved.constant(constant.id());
+                if found != Some(constant.value()) {
+                    wrong.push(format!("{}: its cell reads {found:x?}", constant.id()));
+                }
+            }
             assert!(wrong.is_empty(), "{var}:\n{}", wrong.join("\n"));
-            assert!(
-                !resolved
-                    .missing()
-                    .iter()
-                    .any(|id| id == "net.provider_join_slot"),
-                "{var}"
-            );
-            let (symbols, constants) = (resolved.symbols().len(), resolved.constants().len());
-            let floor = match side {
-                Side::Server => COVERED_SERVER,
-                Side::Client => COVERED_CLIENT,
-            };
-            assert!(
-                symbols >= floor.0 && constants >= floor.1,
-                "{var}: patterns cover {symbols} symbols and {constants} constants, fewer than {floor:?}; missing {:?}",
-                resolved.missing()
-            );
+            let missing: Vec<&String> = resolved
+                .missing()
+                .iter()
+                .filter(|id| !resolved.attributes().iter().any(|(slot, _)| slot == *id))
+                .collect();
+            assert!(missing.is_empty(), "{var}: patterns miss {missing:?}");
         }
     }
-
-    /// How many symbols and constants the patterns of each side's table find
-    /// on its own build, at least; raised as patterns are added.
-    const COVERED_SERVER: (usize, usize) = (121, 271);
-    const COVERED_CLIENT: (usize, usize) = (183, 427);
 }

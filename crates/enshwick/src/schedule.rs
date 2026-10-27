@@ -165,8 +165,8 @@ impl Scheduler {
     }
 
     /// Runs `task` about every `period`, the first time a period from now,
-    /// until it returns [`ControlFlow::Break`], which a script's task does by
-    /// returning `false`.
+    /// until it [asks to stop](ControlFlow::Break), which a script's task does
+    /// by returning `false`.
     ///
     /// # Examples
     ///

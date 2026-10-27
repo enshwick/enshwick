@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use enshwick::code::Pattern;
+use enshwick::code::{Pattern, find_each_unique};
 
 use crate::entries::read;
 use crate::reflect::Fingerprint;
@@ -40,6 +40,9 @@ pub struct Table {
     pub(crate) checks: Vec<(String, u64)>,
     pub(crate) symbols: Vec<Symbol>,
     pub(crate) constants: Vec<Constant>,
+    /// The XXH3-128 of the table's text, which a carried table is saved
+    /// under ([`Table::carry_key`]).
+    pub(crate) digest: u128,
 }
 
 #[derive(serde::Deserialize)]
@@ -108,6 +111,7 @@ struct ConstantFull {
     via: Option<String>,
     within: Option<u32>,
     attribute: Option<String>,
+    cell: Option<String>,
     #[serde(default = "carried")]
     carried: bool,
 }
@@ -138,6 +142,39 @@ impl ConstantFull {
             (false, false) => {}
         }
         Ok(Some(operand.plus(self.plus)))
+    }
+
+    /// Refuses a row whose keys contradict each other, or whose `cell`
+    /// names none of `symbols`.
+    fn check(&self, id: &str, symbols: &[Symbol]) -> Result<(), TableError> {
+        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
+        if self.via.is_some() && self.pattern.is_none() {
+            return bad("`via` needs a pattern");
+        }
+        if self.within.is_some() && self.via.is_none() {
+            return bad("`within` needs `via`");
+        }
+        if self.attribute.is_some() && (self.pattern.is_some() || self.via.is_some()) {
+            return bad("`attribute` takes no pattern and no `via`");
+        }
+        if !self.carried
+            && (self.pattern.is_some() || self.via.is_some() || self.attribute.is_some())
+        {
+            return bad("`carried = false` takes no pattern, `via` or `attribute`");
+        }
+        if let Some(cell) = &self.cell {
+            if self.pattern.is_some()
+                || self.via.is_some()
+                || self.attribute.is_some()
+                || !self.carried
+            {
+                return bad("`cell` takes no pattern, `via`, `attribute` or `carried = false`");
+            }
+            if !symbols.iter().any(|s| &s.id == cell) {
+                return bad("`cell` names no symbol of the table");
+            }
+        }
+        Ok(())
     }
 }
 
@@ -201,10 +238,15 @@ impl Table {
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let file: TableFile = toml::from_str(text).map_err(|e| TableError::Toml(e.to_string()))?;
         let guid = parse_guid(&file.guid).ok_or_else(|| TableError::Guid(file.guid.clone()))?;
-        let symbols = file
+        let symbols: Vec<Symbol> = file
             .symbols
             .into_iter()
             .map(|(id, value)| {
+                if id.strip_suffix(".bytes").is_some() {
+                    return Err(TableError::Toml(format!(
+                        "{id}: pinned bytes are a constant, not a symbol"
+                    )));
+                }
                 let (rva, text, locate) = match value {
                     SymbolValue::Plain(rva) => (rva, None, Locate::At(0)),
                     SymbolValue::Full(full) => {
@@ -233,31 +275,13 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, within, attribute, carried) = match value {
+                let (value, text, operand, via, within, attribute, cell, carried) = match value {
                     ConstantValue::Plain(value) => {
-                        (value.value(&id)?, None, None, None, None, None, true)
+                        (value.value(&id)?, None, None, None, None, None, None, true)
                     }
                     ConstantValue::Full(full) => {
                         let operand = full.operand(&id)?;
-                        let bad = |why: &str| Err(TableError::Toml(format!("{id}: {why}")));
-                        if full.via.is_some() && full.pattern.is_none() {
-                            return bad("`via` needs a pattern");
-                        }
-                        if full.within.is_some() && full.via.is_none() {
-                            return bad("`within` needs `via`");
-                        }
-                        if full.attribute.is_some()
-                            && (full.pattern.is_some() || full.via.is_some())
-                        {
-                            return bad("`attribute` takes no pattern and no `via`");
-                        }
-                        if !full.carried
-                            && (full.pattern.is_some()
-                                || full.via.is_some()
-                                || full.attribute.is_some())
-                        {
-                            return bad("`carried = false` takes no pattern, `via` or `attribute`");
-                        }
+                        full.check(&id, &symbols)?;
                         (
                             full.value.value(&id)?,
                             full.pattern,
@@ -265,6 +289,7 @@ impl Table {
                             full.via,
                             full.within,
                             full.attribute,
+                            full.cell,
                             full.carried,
                         )
                     }
@@ -277,11 +302,13 @@ impl Table {
                     via,
                     within,
                     attribute,
+                    cell,
                     carried,
                 })
             })
             .collect::<Result<_, TableError>>()?;
         Ok(Self {
+            digest: twox_hash::XxHash3_128::oneshot(text.as_bytes()),
             name: file.name,
             side: file.side,
             fingerprint: Fingerprint::new(guid, file.age),
@@ -402,15 +429,53 @@ impl Table {
     /// any; a constant counts when the code that uses it is still found
     /// once, and takes the value read from that code where its operand
     /// say; a constant read [`Constant::via`] a symbol counts when that
-    /// symbol counts and its code there matches. Everything else is
+    /// symbol counts and its code there matches; a constant in a
+    /// [`Constant::cell`] counts when the cell's symbol counts and `cell`
+    /// reads the `u32` at its RVA, and takes that value. Everything else is
     /// [`Resolved::missing`], the slots of [`Constant::attribute`]s among
     /// them until the loader supplies them, except the constants that are
     /// not [`Constant::carried`], which are [`Resolved::uncarried`]. The
     /// checks do not apply.
     #[must_use]
-    pub fn fall_back(&self, code: &[u8], code_rva: u64) -> Resolved {
-        let found_symbols = search(&self.symbols, |s| {
-            let rva = s.find(code, code_rva)?;
+    pub fn fall_back(
+        &self,
+        code: &[u8],
+        code_rva: u64,
+        cell: impl Fn(u64) -> Option<u32> + Sync,
+    ) -> Resolved {
+        let carried: Vec<&Constant> = self.constants.iter().filter(|c| c.carried).collect();
+        let patterns: Vec<&Pattern> = self
+            .symbols
+            .iter()
+            .filter_map(|s| s.pattern.as_ref())
+            .chain(
+                carried
+                    .iter()
+                    .filter(|c| c.searched_alone())
+                    .filter_map(|c| c.pattern.as_ref()),
+            )
+            .collect();
+        let mut starts = find_each_unique(&patterns, code)
+            .into_iter()
+            .map(Result::ok);
+        let symbols_at: Vec<(&Symbol, Option<usize>)> = self
+            .symbols
+            .iter()
+            .map(|s| (s, s.pattern.as_ref().and_then(|_| starts.next().flatten())))
+            .collect();
+        let constants_at: Vec<(&Constant, Option<usize>)> = carried
+            .iter()
+            .map(|&c| {
+                (
+                    c,
+                    c.searched_alone()
+                        .then(|| starts.next().flatten())
+                        .flatten(),
+                )
+            })
+            .collect();
+        let found_symbols = search(&symbols_at, |&(s, start)| {
+            let rva = s.locate(code, code_rva, start?)?;
             let bytes_ok = self
                 .constant_value(&format!("{}.bytes", s.id))
                 .is_none_or(|want| expected_bytes(code, code_rva, rva, want, s));
@@ -424,9 +489,7 @@ impl Table {
                 None => missing.push(symbol.id.clone()),
             }
         }
-        let (carried, uncarried): (Vec<&Constant>, Vec<&Constant>) =
-            self.constants.iter().partition(|c| c.carried);
-        let found_constants = search(&carried, |c| {
+        let found_constants = search(&constants_at, |&(c, start)| {
             if let Some(symbol) = c.id.strip_suffix(".bytes") {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == symbol)?;
                 let value = read(code, rva.checked_sub(code_rva)?, 8)?;
@@ -436,7 +499,11 @@ impl Table {
                 let (_, rva) = symbols.iter().find(|(id, _)| id == via)?;
                 return c.find_at(code, rva.checked_sub(code_rva)?);
             }
-            c.find(code)
+            if let Some(at) = &c.cell {
+                let (_, rva) = symbols.iter().find(|(id, _)| id == at)?;
+                return cell(*rva).map(u64::from);
+            }
+            c.read(code, u64::try_from(start?).ok()?)
         });
         let mut constants = Vec::new();
         for (constant, found) in carried.iter().zip(found_constants) {
@@ -445,6 +512,16 @@ impl Table {
                 None => missing.push(constant.id.clone()),
             }
         }
+        self.carried(symbols, constants, missing)
+    }
+
+    /// The table carried with what its patterns found.
+    pub(crate) fn carried(
+        &self,
+        symbols: Vec<(String, u64)>,
+        constants: Vec<(String, u64)>,
+        mut missing: Vec<String>,
+    ) -> Resolved {
         missing.sort();
         Resolved {
             name: format!("{} (by patterns, for a build without a table)", self.name),
@@ -453,7 +530,12 @@ impl Table {
             symbols,
             constants,
             missing,
-            uncarried: uncarried.iter().map(|c| c.id.clone()).collect(),
+            uncarried: self
+                .constants
+                .iter()
+                .filter(|c| !c.carried)
+                .map(|c| c.id.clone())
+                .collect(),
             attributes: self.attributes(),
             heads: self.heads(),
         }

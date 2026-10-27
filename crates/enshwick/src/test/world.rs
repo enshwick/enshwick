@@ -130,6 +130,46 @@ impl FakeHost {
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
+    /// The accounts on the fake server's ban list, in the order banned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.banned().is_empty());
+    /// ```
+    #[must_use]
+    pub fn banned(&self) -> Vec<crate::PlayerKey> {
+        table::with(Vec::new(), |s| s.banned.clone())
+    }
+
+    /// The accounts whose players the mod removed from the game, by a kick
+    /// or a ban, in order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.removed().is_empty());
+    /// ```
+    #[must_use]
+    pub fn removed(&self) -> Vec<u64> {
+        table::with(Vec::new(), |s| s.removed.clone())
+    }
+
+    /// The accounts on the fake server's allowlist, in the order listed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.allowlisted().is_empty());
+    /// ```
+    #[must_use]
+    pub fn allowlisted(&self) -> Vec<crate::PlayerKey> {
+        table::with(Vec::new(), |s| s.allowlisted.clone())
+    }
+
     /// Stops the world, as between two worlds: the world's reads answer
     /// that none runs.
     ///

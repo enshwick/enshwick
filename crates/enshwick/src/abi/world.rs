@@ -1073,3 +1073,27 @@ impl MapMarkerInfo {
         label: [0; 16],
     };
 }
+
+/// An account action of [`HostApi::account_action`](super::HostApi::account_action),
+/// with the values of the game's own `AccountActionType`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::AccountActionType;
+///
+/// assert_ne!(AccountActionType::BAN, AccountActionType::UN_BAN);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct AccountActionType(pub u8);
+
+impl AccountActionType {
+    /// Removes a player online from the game.
+    pub const KICK: Self = Self(0);
+    /// Puts the account on the ban list, and removes its player when
+    /// online.
+    pub const BAN: Self = Self(1);
+    /// Takes the account off the ban list.
+    pub const UN_BAN: Self = Self(2);
+}

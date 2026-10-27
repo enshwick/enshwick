@@ -120,8 +120,9 @@ impl<T: PartialEq> Seen<T> {
         }
     }
 
-    /// Records one batch and forgets what nobody saw lately; true when the
-    /// known values changed.
+    /// Records one batch; true when the known values changed. Forgetting is
+    /// left to the post-step's [`Seen::expire`], since passes run many times
+    /// a step.
     fn merge(&mut self, batch: impl IntoIterator<Item = (u32, T)>, now: When) -> bool {
         let mut changed = false;
         for (id, value) in batch {
@@ -134,7 +135,7 @@ impl<T: PartialEq> Seen<T> {
                 self.entries.insert(id, (value, now));
             }
         }
-        self.expire(now) || changed
+        changed
     }
 
     /// Forgets what nobody saw lately; true when anything went.
@@ -475,9 +476,10 @@ fn now() -> When {
 
 pub(crate) fn after_step(loader: &Loader) {
     let step = STEP.fetch_add(1, Ordering::Relaxed) + 1;
-    // No pass runs once the last altar is gone, so the post-step forgets.
+    // Only the post-step forgets: passes run many times a step, and none
+    // runs once the last altar is gone.
     if step.is_multiple_of(EXPIRE_EVERY)
-        && let Ok(mut state) = STATE.try_lock()
+        && let Some(mut state) = STATE.try_relock()
     {
         let now = now();
         let state = &mut *state;

@@ -9,16 +9,16 @@ use enshwick::abi::{PlayerInfo, Status};
 use crate::host::Loader;
 use crate::texts;
 
-use super::accounts::{self, Act, Refusal};
+use super::accounts::{self, Act, Refusal, Route};
 use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
-pub(super) fn name(player: &PlayerInfo) -> String {
+pub(crate) fn name(player: &PlayerInfo) -> String {
     let len = usize::from(player.name_len).min(player.name.len());
     accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
 }
 
-pub(super) fn is_admin(player: &PlayerInfo) -> bool {
+pub(crate) fn is_admin(player: &PlayerInfo) -> bool {
     player.permissions & PlayerInfo::CAN_KICK_BAN != 0
 }
 
@@ -118,21 +118,29 @@ pub(crate) fn account(loader: &Loader, act: Act, args: &str) -> String {
         Err(status) => return unread(status),
     };
     let decided = accounts::target(args, &online).and_then(|target| accounts::decide(act, &target));
-    let (key, who) = match decided {
-        Ok(decided) => decided,
+    let decision = match decided {
+        Ok(decision) => decision,
         Err(refusal) => return refused(act, &refusal),
     };
-    let (asked, verb) = match act {
-        Act::Kick => ("console.kick.asked", "kick"),
-        Act::Ban => ("console.ban.asked", "ban"),
-        Act::Unban => ("console.unban.asked", "unban"),
+    let who = &decision.who;
+    let (asked, verb) = match (act, decision.route) {
+        (Act::Kick, _) => ("console.kick.asked", "kick"),
+        (Act::Ban, Route::Handler) => ("console.ban.asked", "ban"),
+        (Act::Ban, Route::BanList) => ("console.ban.listed", "ban"),
+        (Act::Unban, _) => ("console.unban.asked", "unban"),
     };
-    match super::admin::act(loader, act, key) {
+    match super::admin::carry(loader, act, &decision) {
         Ok(()) => {
             crate::log!(INFO, "the console asked the game to {verb} {who}");
-            texts::fill(asked, &[("who", &who)])
+            texts::fill(asked, &[("who", who)])
         }
         Err(Status::MISSING) => texts::fill("console.account.missing", &[]),
+        Err(Status::REFUSED) if decision.route == Route::Handler => {
+            texts::fill("console.account.host", &[("who", who)])
+        }
+        Err(Status::REFUSED) if decision.route == Route::BanList => {
+            texts::fill("console.ban.unlisted", &[("who", who)])
+        }
         Err(status) => unread(status),
     }
 }

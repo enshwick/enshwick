@@ -160,7 +160,7 @@ impl Inventories {
         }
     }
 
-    /// The static data of `item`; `None` for an unknown item, or while no
+    /// The static data of `item`; none for an unknown item, or while no
     /// world runs. Any thread.
     ///
     /// # Examples
@@ -243,7 +243,7 @@ impl Inventories {
         ticket
     }
 
-    /// Every slot of the inventory `root`, as [`Reader::slots`] reads it
+    /// Every slot of the inventory `root`, as a [reader](Reader::slots) reads it
     /// on the server's game thread; empty elsewhere.
     ///
     /// # Examples
@@ -259,7 +259,7 @@ impl Inventories {
         self.read().slots(root)
     }
 
-    /// How many items `item` the inventory `root` holds, as [`Reader::count`]
+    /// How many items `item` the inventory `root` holds, as a [reader](Reader::count)
     /// reads it on the server's game thread; 0 elsewhere.
     ///
     /// # Examples
@@ -375,8 +375,8 @@ impl Inventories {
 
     /// Moves every stack of the inventory `from` into `to`, as the game's
     /// "take all" does; what does not fit stays in the source. The source's
-    /// action bar, equipment and locked slots stay; use [`Op::MoveAll`] in a
-    /// [`Batch`] to include them.
+    /// action bar, equipment and locked slots stay; [a move in a batch](Op::MoveAll)
+    /// can include them.
     ///
     /// # Examples
     ///

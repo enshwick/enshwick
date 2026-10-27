@@ -291,8 +291,7 @@ pub(crate) extern "system" fn account_knowledge(
     revoke: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.account_changes
-            .push((key.get(), id, kind, value, revoke != 0));
+        s.account_changes.push((key, id, kind, value, revoke != 0));
         Status::OK
     })
 }

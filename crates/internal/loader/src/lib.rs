@@ -14,6 +14,7 @@
 mod actions;
 pub mod admission;
 pub mod advertise;
+pub mod allowlist;
 #[cfg(windows)]
 mod altars;
 pub mod archive;
@@ -66,11 +67,7 @@ pub mod features;
 #[cfg(windows)]
 mod fog;
 pub mod fog_image;
-#[cfg_attr(
-    all(not(windows), not(test)),
-    expect(dead_code, reason = "only the game's features run behind fuses")
-)]
-mod fuse;
+pub mod fuse;
 #[cfg(windows)]
 mod game_events;
 #[cfg(windows)]
@@ -93,6 +90,11 @@ mod inventory;
 mod item_data;
 pub mod item_kinds;
 pub mod join;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game hands mods kept text")
+)]
+mod kept_text;
 #[cfg(windows)]
 mod knowledge;
 #[cfg(windows)]
