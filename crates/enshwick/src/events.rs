@@ -137,7 +137,7 @@ macro_rules! with_data {
                 |raw: *const c_void| -> Option<crate::script::Value> {
                     // SAFETY: `EventKind::read` passes on the loader's pointer
                     // for this event with no other thread writing its data, by
-                    // its `# Safety`, which is what `Kind::data` asks for.
+                    // its `# Safety`, which is what `LoaderEvent::data` asks for.
                     unsafe { <$name as LoaderEvent>::data(raw) }.map(crate::script::IntoScript::into_value)
                 },
             ),
@@ -162,8 +162,10 @@ macro_rules! with_data {
                 F: Fn(&$data) + Send + Sync + 'static,
             {
                 load.on_raw_event(Event::$event, move |raw| {
-                    // SAFETY: the loader passes this event's data, valid and
-                    // unwritten for the call.
+                    // SAFETY: this closure is subscribed under
+                    // `Event::$event`, this type's `LoaderEvent::EVENT`, and
+                    // `EventFn` has the loader pass that event's data, null or
+                    // valid with no other thread writing it for the call.
                     if let Some(data) = unsafe { <$name as LoaderEvent>::data(raw) } {
                         handler(&data);
                     }
