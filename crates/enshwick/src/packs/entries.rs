@@ -141,7 +141,7 @@ pub(super) struct ScaleEntry {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub(super) enum ItemsEntry {
-    /// `stackable` or `containers`.
+    /// `stackable`, `containers` or `backpacks`.
     Word(String),
     /// Debug names, GUIDs or content ids.
     Names(Vec<String>),
@@ -153,8 +153,8 @@ pub(super) enum ItemsEntry {
 #[serde(deny_unknown_fields)]
 pub(super) struct ItemChangeEntry {
     /// The items changed: debug names, GUIDs or content ids; or
-    /// `"stackable"`, every item one slot holds more of, or `"containers"`,
-    /// every item that places a container.
+    /// `"stackable"`, every item one slot holds more of, `"containers"`,
+    /// every item that places a container, or `"backpacks"`.
     pub(super) items: Option<ItemsEntry>,
     /// Every vanilla item of these categories, by the game's names, such as
     /// `Materials`.
