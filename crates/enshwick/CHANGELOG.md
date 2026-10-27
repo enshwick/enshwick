@@ -32,10 +32,6 @@ Each entry names the pull request that made the change.
   `set_knowledge`, `grants`, `revokes` and `account_changes` carry
   `KnowledgeId`, and `None` for the world (#615).
 
-### Fixed
-
-- The C header defines `EnshwickNetMessage_SERVER` again (#615).
-
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added

@@ -406,14 +406,20 @@ pub(crate) extern "system" fn knowledge(
     id: crate::abi::KnowledgeId,
     out: *mut KnowledgeInfo,
 ) -> Status {
-    let found = with(None, |s| {
-        s.knowledge
-            .iter()
-            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == Some(entity)))
-            .map(|(_, k)| *k)
+    let (known, found) = with((false, None), |s| {
+        let mut values = s.knowledge.iter().filter(|(_, k)| k.id == id);
+        let known = values.clone().next().is_some();
+        let found = values
+            .find(|(e, k)| k.scope == KnowledgeInfo::WORLD || *e == Some(entity))
+            .map(|(_, k)| *k);
+        (known, found)
     });
     let Some(info) = found else {
-        return Status::MISSING;
+        return if known {
+            Status::REFUSED
+        } else {
+            Status::MISSING
+        };
     };
     // SAFETY: the safe layer passes a headed struct for the call.
     if unsafe { crate::abi::write_headed(out, info) } {
