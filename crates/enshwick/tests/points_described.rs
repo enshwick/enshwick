@@ -65,8 +65,10 @@ mod tests {
     enshwick::declare_mod!(Haggler);
 
     fn start(point: DescribedPoint) -> enshwick::test::Installed {
-        *POINT.lock().unwrap() = Some(point);
+        // After the install, which tests take in turn: set earlier, another
+        // test's mod could take this one's point.
         let loader = enshwick::test::FakeHost::new().install();
+        *POINT.lock().unwrap() = Some(point);
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
@@ -108,6 +110,7 @@ mod tests {
     #[test]
     fn a_described_link_serves_the_typed_point() {
         let loader = enshwick::test::FakeHost::new().install();
+        *POINT.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());

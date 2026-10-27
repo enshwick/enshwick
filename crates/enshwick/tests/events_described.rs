@@ -63,8 +63,11 @@ mod tests {
     enshwick::declare_mod!(Watcher);
 
     fn start(size: u32) -> enshwick::test::Installed {
-        *SIZE.lock().unwrap() = size;
+        // After the install, which tests take in turn: set earlier, another
+        // test's size or events could take this one's place.
         let loader = enshwick::test::FakeHost::new().install();
+        *SIZE.lock().unwrap() = size;
+        SEEN.lock().unwrap().clear();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());

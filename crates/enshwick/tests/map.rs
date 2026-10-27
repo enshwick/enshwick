@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::OnceLock;
+    use std::sync::Mutex;
 
     use enshwick::abi::{AltarInfo, Bounds, Header, MapMarkerInfo, PlayerInfo, Status};
     use enshwick::altars::Altars;
@@ -20,8 +20,10 @@ mod tests {
     const TOWN: Guid = Guid::parse("5d2e6a2b-0c3f-4d8e-9a71-3e5f0b1c2d4e");
     const LABEL: Guid = Guid::parse("0b6f4c1a-7e2d-4a90-b3c8-1d2e3f405162");
 
-    static MAP: OnceLock<Map> = OnceLock::new();
-    static ALTARS: OnceLock<Altars> = OnceLock::new();
+    // The map and altars of the mod the running test started: installs take
+    // turns, so each start sets them afresh.
+    static MAP: Mutex<Option<Map>> = Mutex::new(None);
+    static ALTARS: Mutex<Option<Altars>> = Mutex::new(None);
 
     struct Cartographer;
 
@@ -31,8 +33,8 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = MAP.set(load.map()?);
-            let _first = ALTARS.set(load.altars()?);
+            *MAP.lock().unwrap() = Some(load.map()?);
+            *ALTARS.lock().unwrap() = Some(load.altars()?);
             Ok(Self)
         }
     }
@@ -87,10 +89,12 @@ mod tests {
 
     fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, Map) {
         let loader = fake.install();
+        *MAP.lock().unwrap() = None;
+        *ALTARS.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let map = *MAP.get().unwrap();
+        let map = MAP.lock().unwrap().unwrap();
         // The first call of a world starts the loader's read of the scene.
         assert_eq!(map.markers(), Err(WorldError::NotLoaded));
         (loader, map)
@@ -261,7 +265,7 @@ mod tests {
             altar(400, 0, [0; 3], [0; 3]),
         ]);
 
-        let snapshot = map.snapshot(ALTARS.get().copied()).unwrap();
+        let snapshot = map.snapshot(*ALTARS.lock().unwrap()).unwrap();
         assert_eq!(
             snapshot.players,
             [
