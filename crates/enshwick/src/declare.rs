@@ -34,6 +34,10 @@ mod unwind;
 ///   defines, each a [`#[point]`](macro@crate::point) input; their schemas
 ///   go into the manifest, where `cargo enshwick point` reads them to write
 ///   other mods' definitions;
+/// - `events: [Type, ...]`: the [mod events](crate::services) the mod
+///   defines, each an [`#[event]`](macro@crate::event) type; their schemas
+///   go into the manifest, where `cargo enshwick event` reads them for a
+///   Luau mod;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -94,6 +98,7 @@ macro_rules! manifest {
         $(, replaces: [$($replaces:literal),* $(,)?])?
         $(, was: [$($was:literal),* $(,)?])?
         $(, points: [$($point:ty),* $(,)?])?
+        $(, events: [$($event:ty),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -104,6 +109,10 @@ macro_rules! manifest {
         $(,)?
     ) => {{
         const _: () = ::core::assert!($crate::abi::is_valid_id($id), "a mod id is <author>.<name>, each of [a-z0-9-]");
+        $($(const _: () = ::core::assert!(
+            <$event as $crate::services::ModEvent>::DESCRIBED,
+            "an event's schema cannot describe a field's type: derive `Shape` for it",
+        );)*)?
         $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($replaces), "a replaced mod id is <author>.<name> or [a-z0-9-]+");)*)?
         $($(const _: () = ::core::assert!($crate::abi::is_valid_former_id($was), "a former mod id is <author>.<name> or [a-z0-9-]+");)*)?
         static DEPENDENCIES: &[$crate::abi::Dependency] = &[
@@ -168,6 +177,7 @@ macro_rules! manifest {
             $crate::__private::concatcp!(
                 "schema = 1\nmod = \"", $id, "\"\nversion = \"", VERSION, "\"\n",
                 $($(<$point as $crate::points::Point>::SCHEMA,)*)?
+                $($(<$event as $crate::services::ModEvent>::SCHEMA,)*)?
             ),
         );
         #[cfg_attr(windows, unsafe(link_section = ".enshpt"))]

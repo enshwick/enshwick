@@ -16,7 +16,7 @@ use std::fmt::Write as _;
 use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 use serde::Deserialize;
 
-pub use luau::luau;
+pub use luau::{luau, luau_event};
 
 /// The section of a mod DLL that holds its point schemas.
 pub const SECTION: &str = ".enshpt";
@@ -109,6 +109,9 @@ pub struct Schema {
     /// Its points.
     #[serde(default)]
     point: Vec<PointSchema>,
+    /// Its mod events.
+    #[serde(default)]
+    event: Vec<EventSchema>,
     /// The types its points reach.
     #[serde(default, rename = "type")]
     types: Vec<TypeSchema>,
@@ -125,6 +128,16 @@ struct PointSchema {
     doc: String,
     output: String,
     output_layout: String,
+    layout: Vec<String>,
+}
+
+/// One mod event.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct EventSchema {
+    name: String,
+    data: String,
+    doc: String,
     layout: Vec<String>,
 }
 
@@ -246,6 +259,21 @@ impl Schema {
         self.point.iter().map(|p| p.name.as_str())
     }
 
+    /// The names of the mod events it defines.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cargo_enshwick::points::Schema;
+    ///
+    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// assert_eq!(schema.events().count(), 0);
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
+    /// ```
+    pub fn events(&self) -> impl Iterator<Item = &str> {
+        self.event.iter().map(|e| e.name.as_str())
+    }
+
     /// Refuses every value that would leave its place in generated code.
     fn check(&self) -> Result<(), Error> {
         let invalid = |what: &'static str, value: &str| Error::Invalid {
@@ -269,6 +297,14 @@ impl Schema {
             }
             if !(is_type(&point.output) && (!is_named(&point.output) || is_ident(&point.output))) {
                 return Err(invalid("output type", &point.output));
+            }
+        }
+        for event in &self.event {
+            if !is_point_name(&event.name) {
+                return Err(invalid("event name", &event.name));
+            }
+            if !is_ident(&event.data) {
+                return Err(invalid("event data type", &event.data));
             }
         }
         for ty in &self.types {
@@ -546,18 +582,31 @@ fn reached<'a>(
     point: &'a PointSchema,
     input: &'a TypeSchema,
 ) -> Result<Vec<&'a TypeSchema>, Error> {
+    reached_from(
+        schema,
+        &point.name,
+        input
+            .field
+            .iter()
+            .map(|f| f.ty.as_str())
+            .chain([point.output.as_str()])
+            .collect(),
+    )
+}
+
+/// Every named type `pending` reaches, by name, for the point or event
+/// `owner_name`.
+fn reached_from<'a>(
+    schema: &'a Schema,
+    owner_name: &str,
+    mut pending: Vec<&'a str>,
+) -> Result<Vec<&'a TypeSchema>, Error> {
     let mut reached: Vec<&TypeSchema> = Vec::new();
-    let mut pending: Vec<&str> = input
-        .field
-        .iter()
-        .map(|f| f.ty.as_str())
-        .chain([point.output.as_str()])
-        .collect();
     while let Some(type_name) = pending.pop() {
         if !is_named(type_name) || reached.iter().any(|t| t.name == type_name) {
             continue;
         }
-        let found = find(schema, &point.name, type_name)?;
+        let found = find(schema, owner_name, type_name)?;
         pending.extend(found.field.iter().map(|f| f.ty.as_str()));
         reached.push(found);
     }

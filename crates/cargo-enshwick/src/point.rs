@@ -99,3 +99,37 @@ pub(crate) fn run(
         ))
     }
 }
+
+/// Writes the Luau module of the mod event `name`, `<mod id>:<event>`, read
+/// from the owner's DLL or schema file in `from`, to `out` or as the result.
+///
+/// # Errors
+///
+/// When no DLL there defines the event, or its schema does not read.
+pub(crate) fn run_event(name: &str, from: &Path, out: Option<&Path>) -> anyhow::Result<String> {
+    let (owner, _) = name
+        .split_once(':')
+        .with_context(|| format!("{name:?} is no event: <mod id>:<event>"))?;
+    for (dll, text) in schemas(from)? {
+        let schema = Schema::parse(&text).with_context(|| dll.display().to_string())?;
+        if schema.events().any(|e| e == name) {
+            let code = cargo_enshwick::points::luau_event(&schema, name)?;
+            return match out {
+                Some(path) => {
+                    std::fs::write(path, &code).with_context(|| path.display().to_string())?;
+                    Ok(format!(
+                        "wrote {name} of {} {} to {}",
+                        schema.owner(),
+                        schema.version(),
+                        path.display()
+                    ))
+                }
+                None => Ok(code.trim_end().to_owned()),
+            };
+        }
+    }
+    Err(anyhow!(
+        "no DLL in {} defines the event {name} of {owner}",
+        from.display()
+    ))
+}

@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick event <event>` writes a mod event's Luau module from the
+  owner's schema (`cargo_enshwick::points::luau_event`).
 - `cargo enshwick point --luau` writes a point's Luau module for a Luau mod
   (`cargo_enshwick::points::luau`), with each field's place in the owner's
   layout.

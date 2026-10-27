@@ -38,6 +38,8 @@ struct Definition {
     owner: ModIndex,
     name: String,
     fields: Fields,
+    /// The data's size in bytes, which a subscriber reads at most.
+    size: u32,
 }
 
 /// A subscription waiting for the seal.
@@ -46,6 +48,8 @@ struct Pending {
     owner: ModIndex,
     name: String,
     fields: Fields,
+    /// The bytes the subscriber reads.
+    size: u32,
     callback: ModEventFn,
     user: usize,
 }
@@ -200,6 +204,7 @@ impl Registry {
         names: &[&str],
         name: &str,
         fields: Fields,
+        size: u32,
     ) -> Result<u32, String> {
         if !crate::points::is_named_after(name, names) {
             let owner_id = names.first().copied().unwrap_or_default();
@@ -215,6 +220,7 @@ impl Registry {
             owner,
             name: name.to_owned(),
             fields,
+            size,
         });
         Ok(id)
     }
@@ -225,6 +231,7 @@ impl Registry {
         owner: ModIndex,
         name: &str,
         fields: Fields,
+        size: u32,
         callback: ModEventFn,
         user: usize,
     ) {
@@ -232,6 +239,7 @@ impl Registry {
             owner,
             name: name.to_owned(),
             fields,
+            size,
             callback,
             user,
         });
@@ -275,6 +283,16 @@ impl Registry {
                 idle.push((
                     pending.owner,
                     format!("event {}: {owner_id} {version}: {mismatch}", pending.name),
+                ));
+                continue;
+            }
+            if pending.size > definition.size {
+                idle.push((
+                    pending.owner,
+                    format!(
+                        "event {}: it reads {} bytes, {owner_id} {version} sends {}",
+                        pending.name, pending.size, definition.size
+                    ),
                 ));
                 continue;
             }
@@ -591,7 +609,8 @@ mod tests {
                 ModIndex::new(0),
                 &["trading-post"],
                 "trading-post:sold",
-                fields(&["a"])
+                fields(&["a"]),
+                8,
             ),
             Ok(0)
         );
@@ -601,7 +620,8 @@ mod tests {
                     ModIndex::new(0),
                     &["trading-post"],
                     "trading-postx:sold",
-                    fields(&["a"])
+                    fields(&["a"]),
+                    8,
                 )
                 .is_err()
         );
@@ -611,7 +631,8 @@ mod tests {
                     ModIndex::new(0),
                     &["trading-post"],
                     "trading-post:",
-                    fields(&["a"])
+                    fields(&["a"]),
+                    8,
                 )
                 .is_err()
         );
@@ -621,7 +642,8 @@ mod tests {
                     ModIndex::new(0),
                     &["trading-post"],
                     "trading-post:sold",
-                    fields(&["a"])
+                    fields(&["a"]),
+                    8,
                 )
                 .is_err()
         );
@@ -636,7 +658,8 @@ mod tests {
                     ModIndex::new(0),
                     &["trading-post"],
                     "trading-post:sold",
-                    fields(&["a", "b"])
+                    fields(&["a", "b"]),
+                    8,
                 )
                 .is_ok()
         );
@@ -644,6 +667,7 @@ mod tests {
             ModIndex::new(1),
             "trading-post:sold",
             fields(&["a"]),
+            8,
             idle,
             1,
         );
@@ -651,6 +675,7 @@ mod tests {
             ModIndex::new(1),
             "trading-post:sold",
             fields(&["a", "b", "c"]),
+            8,
             idle,
             2,
         );
@@ -658,6 +683,7 @@ mod tests {
             ModIndex::new(1),
             "trading-post:bought",
             fields(&["a"]),
+            8,
             idle,
             3,
         );
@@ -676,5 +702,30 @@ mod tests {
             "{}",
             idle[1].1
         );
+    }
+
+    #[test]
+    fn a_subscriber_reading_past_the_definer_s_data_stays_idle() {
+        let mut registry = Registry::default();
+        registry
+            .define(
+                ModIndex::new(0),
+                &["trading-post"],
+                "trading-post:sold",
+                fields(&["a"]),
+                4,
+            )
+            .unwrap();
+        registry.subscribe(
+            ModIndex::new(1),
+            "trading-post:sold",
+            fields(&["a"]),
+            16,
+            idle,
+            1,
+        );
+        let (slots, idle) = registry.seal(&mods());
+        assert!(slots[0].subscribers.is_empty());
+        assert!(idle[0].1.contains("reads 16 bytes"), "{}", idle[0].1);
     }
 }

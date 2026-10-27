@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::on_described_mod_event` and `Load::define_described_event`
+  (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
+  event described at run time, its data as bytes in the definer's layout;
+  `manifest!(events: [..])` puts the schema of each listed `#[event]` into
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
 - `Items::Backpacks` selects every backpack for a change of `Field::Slots`,
   which now reaches a backpack's own inventory too, for backpacks made
   after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
@@ -108,6 +113,11 @@ Each entry names the pull request that made the change.
   item checks of `World::props_in` and `Transaction::place_block` work from
   world start: the loader finds the item registry without waiting for a
   player to join (#551).
+
+### Fixed
+
+- The loader and the fake leave a mod event subscription idle when it
+  reads more bytes than the definer sends.
 
 ## [1.0.0-alpha.7] - 2026-10-26
 
