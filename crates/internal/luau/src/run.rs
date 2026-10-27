@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use arc_swap::ArcSwapOption;
+use arc_swap::{ArcSwap, ArcSwapOption};
 use enshwick::__private::Relock as _;
 use enshwick::abi::{Event, Level};
 use enshwick::script::{self, EventKind, Opened, Signature, Value};
@@ -134,6 +134,8 @@ pub(crate) struct Inner {
     /// The events subscribed at start, the only ones a reload can serve.
     subscribed: Mutex<Vec<Event>>,
     off: AtomicBool,
+    /// The mod's settings in force, from its `pack.toml` schema.
+    settings: ArcSwap<toml::Table>,
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
     peak: AtomicUsize,
@@ -147,7 +149,7 @@ pub(crate) struct Inner {
 /// use enshwick_luau::{Limits, Scripts};
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), Limits::default())?;
+///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), None, Limits::default())?;
 ///     assert_eq!(runtime.usage().overruns, 0);
 ///     Ok(())
 /// }
@@ -183,7 +185,7 @@ impl Runtime {
     /// use enshwick_luau::{Limits, Scripts};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), Limits::default())?;
+    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), None, Limits::default())?;
     ///     assert!(!runtime.is_off());
     ///     Ok(())
     /// }
@@ -202,7 +204,7 @@ impl Runtime {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let scripts = Scripts::new().with("main.luau", "");
-    ///     let runtime = enshwick_luau::start(load, "you.hello", scripts.clone(), Limits::default())?;
+    ///     let runtime = enshwick_luau::start(load, "you.hello", scripts.clone(), None, Limits::default())?;
     ///     assert!(runtime.runs(&scripts));
     ///     Ok(())
     /// }
@@ -232,7 +234,7 @@ impl Runtime {
     /// use enshwick_luau::{Limits, Scripts};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), Limits::default())?;
+    ///     let runtime = enshwick_luau::start(load, "you.hello", Scripts::new().with("main.luau", ""), None, Limits::default())?;
     ///     let newer = Scripts::new().with("main.luau", "print('again')");
     ///     runtime.reload(newer.clone()).map_err(|e| enshwick::Off::new(e.to_string()))?;
     ///     assert!(runtime.runs(&newer));
@@ -343,6 +345,7 @@ pub fn start(
     load: &mut Load<'_>,
     id: &str,
     scripts: Scripts,
+    settings: Option<enshwick::config::Schema>,
     limits: Limits,
 ) -> Result<Runtime, Off> {
     let host = load.host();
@@ -371,7 +374,20 @@ pub fn start(
         calls: AtomicU64::new(0),
         overruns: Arc::new(AtomicU64::new(0)),
         peak: AtomicUsize::new(0),
+        settings: ArcSwap::from_pointee(toml::Table::new()),
     });
+    if let Some(schema) = settings {
+        let (settings, values) = load.table_config(schema)?;
+        inner.settings.store(Arc::new(values));
+        let weak = Arc::downgrade(&inner);
+        // Subscribed before the script's own handlers, so a handler of
+        // `SettingsChanged` reads the new values.
+        settings.on_change(load, move |values| {
+            if let Some(inner) = weak.upgrade() {
+                inner.settings.store(Arc::new(values));
+            }
+        })?;
+    }
     let vm = inner.run_main(scripts).map_err(Off::new)?;
     let events = vm.events();
     inner.vm.store(Some(vm));
@@ -557,6 +573,18 @@ impl Inner {
             table.set_readonly(true);
             api.raw_set(namespace.name(), table)?;
         }
+        let settings = scope.clone();
+        api.raw_set(
+            "settings",
+            lua.create_function(move |lua, ()| {
+                let inner = settings
+                    .inner
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                let values = inner.settings.load();
+                crate::bridge::toml_to_lua(lua, &toml::Value::Table((**values).clone()))
+            })?,
+        )?;
         let weak = Arc::downgrade(vm);
         api.raw_set(
             "on",

@@ -181,6 +181,7 @@ pub fn definitions() -> String {
         .collect();
     out.push_str(&overloads.join("\n\t\t& "));
     out.push_str(",\n");
+    out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
     for namespace in script::NAMESPACES {
         comment(namespace.doc(), "\t", &mut out);
         let _written = writeln!(out, "\t{}: {{", namespace.name());

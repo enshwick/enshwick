@@ -248,6 +248,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
     let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
         .ok()
         .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
+    let settings = manifest.as_ref().and_then(|(m, _)| m.settings_schema());
     if let Some((manifest, text)) = manifest
         && let Err(problem) = manifest.check(&text, &pack)
     {
@@ -272,6 +273,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
                     load,
                     &id,
                     scripts,
+                    settings,
                     enshwick_luau::Limits::default(),
                 )?);
             }

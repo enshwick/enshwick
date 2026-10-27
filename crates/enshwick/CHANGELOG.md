@@ -16,6 +16,12 @@ Each entry names the pull request that made the change.
 - The `world_quiet` entry answers whether a mod is on the server's game
   thread at a quiet moment while a world runs, where it may read live
   components (ABI 2.90) (#557).
+- `Load::table_config` reads settings described by a `config::Schema` at
+  run time, with the file, checks, stages, Mods screen and join values of a
+  typed `Config`; `config::TableConfig::on_change` follows them, and
+  `Schema::template` writes the file.
+- A pack's `pack.toml` declares settings in `[[setting]]` tables
+  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read.
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the

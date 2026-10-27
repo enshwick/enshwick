@@ -49,6 +49,13 @@
       },
       "default": {}
     },
+    "setting": {
+      "description": "The pack's settings, in the order the Mods screen shows them; a Luau\nmod reads them, as a Rust mod reads its `Config`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PackSetting"
+      }
+    },
     "side": {
       "description": "Where it runs.",
       "$ref": "#/$defs/PackSide"
@@ -64,6 +71,66 @@
     "version"
   ],
   "$defs": {
+    "PackSetting": {
+      "description": "One setting of a pack, a `[[setting]]` table of `pack.toml`.\n\n# Examples\n\n```\nuse enshwick::config::Stage;\nuse enshwick::packs::PackManifest;\n\nlet manifest = PackManifest::parse(r#\"\nid = \"you.greeter\"\nversion = \"1.0.0\"\n\n[[setting]]\nkey = \"greeting\"\ndefault = \"Welcome\"\ndoc = \"What a player who joins reads.\"\n\n[[setting]]\nkey = \"every\"\ndefault = 30\nmin = 1\nstage = \"startup\"\n\"#)?;\nlet schema = manifest.settings_schema().ok_or(\"no settings\")?;\nassert_eq!(schema.fields[1].stage, Stage::Startup);\nassert_eq!(schema.fields[1].min, Some(1.0));\n# Ok::<(), Box<dyn std::error::Error>>(())\n```",
+      "type": "object",
+      "properties": {
+        "choices": {
+          "description": "The values it accepts; empty for any.",
+          "type": "array",
+          "default": [],
+          "items": true
+        },
+        "default": {
+          "description": "The value on first start; its type is the setting's."
+        },
+        "doc": {
+          "description": "What it does, for the file's comments and the Mods screen.",
+          "type": "string",
+          "default": ""
+        },
+        "key": {
+          "description": "The key in the settings file, of `[a-z0-9_]`.",
+          "type": "string"
+        },
+        "max": {
+          "description": "The largest number it accepts.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min": {
+          "description": "The smallest number it accepts.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "stage": {
+          "description": "When a change takes effect: `runtime` unless said.",
+          "$ref": "#/$defs/Stage",
+          "default": "runtime"
+        },
+        "synced": {
+          "description": "A `startup` setting a joined client takes from the server.",
+          "type": "boolean",
+          "default": false
+        },
+        "text": {
+          "description": "The key of its translated label in the pack's `texts.toml`;\n`config.<key>` unless said.",
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "default"
+      ]
+    },
     "PackSide": {
       "description": "Where a pack runs, in `pack.toml`.\n\n# Examples\n\nSee [`PackManifest`].",
       "oneOf": [
@@ -81,6 +148,36 @@
           "description": "Clients only.",
           "type": "string",
           "const": "client"
+        }
+      ]
+    },
+    "Stage": {
+      "description": "When a change to a setting takes effect.\n\n# Examples\n\n```\nuse enshwick::config::Stage;\n\nassert_eq!(Stage::default(), Stage::Runtime);\nassert!(Stage::Restart.needs_restart());\nassert!(!Stage::Startup.needs_restart());\n```",
+      "oneOf": [
+        {
+          "description": "Read when a world loads (or at start, with none); a change takes\neffect when the world loads again, and the running values stay until\nthen.",
+          "type": "string",
+          "const": "startup"
+        },
+        {
+          "description": "Applied while the game runs, through the mod's\n[`on_config_change`](crate::Load::on_config_change).",
+          "type": "string",
+          "const": "runtime"
+        },
+        {
+          "description": "Each player's own: never sent to or taken from a server.",
+          "type": "string",
+          "const": "client"
+        },
+        {
+          "description": "The server's value: a joined client runs with it over its own file.",
+          "type": "string",
+          "const": "sync"
+        },
+        {
+          "description": "Read once as the game starts, for what only a start can set up, such\nas hooks or content: kept in the settings file for every world, and a\nchange waits for the next start.",
+          "type": "string",
+          "const": "restart"
         }
       ]
     }
