@@ -28,47 +28,41 @@
 //! }
 //! ```
 
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::{Load, Off};
 
 /// Time counted by the server's steps, readable from any thread.
 ///
 /// Steps come on the game thread and readers may sit on workers, so the
-/// clock keeps its time in atomics: [`step`](Self::step) and
+/// clock keeps its time in an atomic: [`advance`](Self::advance) and
 /// [`now`](Self::now) never lock.
 ///
 /// # Examples
 ///
 /// ```
-/// use std::time::{Duration, Instant};
+/// use std::time::Duration;
 ///
 /// use enshwick::time::StepClock;
 ///
 /// let clock = StepClock::new();
-/// let start = Instant::now();
-/// clock.step(start);
-/// clock.step(start + Duration::from_millis(16));
-/// // A minute's stall counts as one long step.
-/// clock.step(start + Duration::from_secs(60));
+/// clock.advance(Duration::from_millis(16), 1);
+/// // A minute's stall in one step counts as one long step.
+/// clock.advance(Duration::from_secs(60), 1);
 /// assert_eq!(clock.now(), Duration::from_millis(16) + StepClock::MAX_STEP);
 /// ```
 #[derive(Debug)]
 pub struct StepClock {
-    epoch: OnceLock<Instant>,
-    /// When the last step ran, in nanoseconds after `epoch` plus one; 0
-    /// before the first.
-    last: AtomicU64,
     now: AtomicU64,
 }
 
 impl StepClock {
-    /// The most one step counts for.
+    /// The most one step counts for: a tick that covers `n` steps counts
+    /// `n` times this at most.
     pub const MAX_STEP: Duration = Duration::from_millis(250);
 
-    /// A clock at zero that has seen no step.
+    /// A clock at zero.
     ///
     /// # Examples
     ///
@@ -76,29 +70,22 @@ impl StepClock {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            epoch: OnceLock::new(),
-            last: AtomicU64::new(0),
             now: AtomicU64::new(0),
         }
     }
 
-    /// Counts a step that ran at `at`: the time since the latest step
-    /// before, up to [`MAX_STEP`](Self::MAX_STEP); a step earlier than that
-    /// counts nothing. The first step only starts the clock. [`Load::step_clock`] calls it for the mod's clock.
+    /// Counts `steps` server steps that took `elapsed` together, up to
+    /// [`MAX_STEP`](Self::MAX_STEP) for each: what a
+    /// [`TickData`](crate::abi::TickData) says passed. [`Load::step_clock`]
+    /// calls it for the mod's clock.
     ///
     /// # Examples
     ///
     /// See [`StepClock`].
-    pub fn step(&self, at: Instant) {
-        let epoch = *self.epoch.get_or_init(|| at);
-        let at = u64::try_from(at.saturating_duration_since(epoch).as_nanos())
-            .unwrap_or(u64::MAX)
-            .saturating_add(1);
-        let last = self.last.fetch_max(at, Ordering::Relaxed);
-        if last != 0 && at > last {
-            let max = u64::try_from(Self::MAX_STEP.as_nanos()).unwrap_or(u64::MAX);
-            self.now.fetch_add((at - last).min(max), Ordering::Relaxed);
-        }
+    pub fn advance(&self, elapsed: Duration, steps: u64) {
+        let max = crate::events::nanos(Self::MAX_STEP).saturating_mul(steps);
+        let counted = crate::events::nanos(elapsed).min(max);
+        self.now.fetch_add(counted, Ordering::Relaxed);
     }
 
     /// The time counted so far.
@@ -123,9 +110,10 @@ impl Default for StepClock {
 static CLOCK: crate::fresh::Fresh<StepClock> = crate::fresh::Fresh::new();
 
 impl Load<'_> {
-    /// The mod's [`StepClock`], moved on by every server step: in the
-    /// dedicated server, and on a client while it hosts a game. Every call
-    /// returns the same clock.
+    /// The mod's [`StepClock`], moved on by the server's steps: in the
+    /// dedicated server, and on a client while it hosts a game. It moves in
+    /// jumps of [`Ticked::DEFAULT_EVERY`](crate::events::Ticked::DEFAULT_EVERY)
+    /// and costs nothing in between. Every call returns the same clock.
     ///
     /// # Errors
     ///
@@ -138,9 +126,9 @@ impl Load<'_> {
         if let Some(clock) = CLOCK.get() {
             return Ok(clock);
         }
-        self.on::<crate::events::Ticked>(|_| {
+        self.on::<crate::events::Ticked>(|tick| {
             if let Some(clock) = CLOCK.get() {
-                clock.step(Instant::now());
+                clock.advance(tick.elapsed(), tick.elapsed_steps());
             }
         })?;
         Ok(CLOCK.get_or_init(StepClock::new))
@@ -152,33 +140,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_first_step_starts_the_clock_and_later_ones_count() {
+    fn each_step_counts_its_time_up_to_the_most_a_step_counts() {
         let clock = StepClock::new();
-        let t0 = Instant::now();
-        clock.step(t0);
-        assert_eq!(clock.now(), Duration::ZERO);
-        clock.step(t0 + Duration::from_millis(16));
+        clock.advance(Duration::from_millis(16), 1);
         assert_eq!(clock.now(), Duration::from_millis(16));
-        clock.step(t0 + Duration::from_secs(60));
+        clock.advance(Duration::from_secs(60), 1);
         assert_eq!(clock.now(), Duration::from_millis(16) + StepClock::MAX_STEP);
     }
 
     #[test]
-    fn a_late_step_out_of_order_counts_no_time_twice() {
+    fn several_steps_together_may_count_the_most_of_each() {
         let clock = StepClock::new();
-        let t0 = Instant::now();
-        for ms in [0, 100, 50, 116] {
-            clock.step(t0 + Duration::from_millis(ms));
-        }
-        assert_eq!(clock.now(), Duration::from_millis(116));
+        clock.advance(Duration::from_millis(400), 2);
+        assert_eq!(clock.now(), Duration::from_millis(400));
+        clock.advance(Duration::from_secs(60), 3);
+        assert_eq!(
+            clock.now(),
+            Duration::from_millis(400) + StepClock::MAX_STEP * 3
+        );
     }
 
     #[test]
-    fn a_step_out_of_order_counts_nothing() {
+    fn a_tick_without_steps_counts_nothing() {
         let clock = StepClock::new();
-        let t0 = Instant::now();
-        clock.step(t0 + Duration::from_millis(100));
-        clock.step(t0);
+        clock.advance(Duration::from_millis(50), 0);
         assert_eq!(clock.now(), Duration::ZERO);
     }
 }

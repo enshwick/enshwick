@@ -401,3 +401,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `account_action`         | Kicks, bans or unbans an account; a ban of an account not online goes onto the list; game thread     |
 | `allowlist_set`          | Lists an account on the loader's allowlist or takes it off; dedicated server, any thread             |
 | `allowlist_has`          | Whether the loader's allowlist lists an account; dedicated server, any thread                        |
+| `subscribe_tick`         | Calls a tick handler on the game thread about every period of wall time, every step for 0; init only |
+| `set_tick_every`         | Changes a periodic tick handler's period from the next step; any thread                              |

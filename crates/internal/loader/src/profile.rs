@@ -188,6 +188,53 @@ pub fn decode(marker: u32) -> Option<(usize, Feature)> {
     Some((owner, feature))
 }
 
+/// Mod `owner`'s event handler calls and their ticks so far; `None` while
+/// callbacks are not timed.
+#[must_use]
+pub fn events_reading(owner: ModIndex) -> Option<(u64, u64)> {
+    let at = owner
+        .get()
+        .checked_mul(FEATURES)?
+        .checked_add(Feature::Events as usize)?;
+    let bucket = BUCKETS.get()?.get(at)?;
+    Some((
+        bucket.calls.load(Ordering::Relaxed),
+        bucket.ticks.load(Ordering::Relaxed),
+    ))
+}
+
+/// The time-stamp counter's rate in ticks a second, once measured.
+static TSC_HZ: AtomicU64 = AtomicU64::new(0);
+
+/// Keeps the time-stamp counter's rate, measured off the game thread, for
+/// [`nanos`].
+pub fn keep_tsc_hz(hz: f64) {
+    if hz.is_finite() && hz >= 1.0 {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a positive finite rate, far below u64::MAX"
+        )]
+        TSC_HZ.store(hz as u64, Ordering::Relaxed);
+    }
+}
+
+/// Whether the time-stamp counter's rate is kept.
+#[must_use]
+pub fn tsc_hz_kept() -> bool {
+    TSC_HZ.load(Ordering::Relaxed) != 0
+}
+
+/// `ticks` of the time-stamp counter in nanoseconds; `None` before its rate
+/// is kept.
+#[must_use]
+pub fn nanos(ticks: u64) -> Option<u64> {
+    match TSC_HZ.load(Ordering::Relaxed) {
+        0 => None,
+        hz => u64::try_from(u128::from(ticks) * 1_000_000_000 / u128::from(hz)).ok(),
+    }
+}
+
 #[inline(never)]
 fn timed<R>(bucket: &Bucket, f: impl FnOnce() -> R) -> R {
     let outer = INSIDE.replace(0);
@@ -431,11 +478,13 @@ pub fn render(
                 .iter()
                 .take(items)
                 .map(|i| {
-                    format!(
-                        "{} {} in {} calls",
-                        i.what,
-                        per_second(i.ticks, tsc_hz, window),
-                        i.calls
+                    crate::texts::fill(
+                        "costs.item",
+                        &[
+                            ("what", &i.what),
+                            ("cost", &per_second(i.ticks, tsc_hz, window)),
+                            ("calls", &i.calls.to_string()),
+                        ],
                     )
                 })
                 .collect();

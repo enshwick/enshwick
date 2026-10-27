@@ -205,6 +205,12 @@ pub(crate) fn start(loader: &'static Loader) {
             loop {
                 std::thread::sleep(POLL);
                 crate::crash::reassert();
+                if crate::diag::counting()
+                    && !crate::profile::tsc_hz_kept()
+                    && let Some(hz) = crate::patch::tsc_hz()
+                {
+                    crate::profile::keep_tsc_hz(hz);
+                }
                 let minutes = crate::diag::status_minutes();
                 let due = minutes > 0 && Instant::now() >= next;
                 if REQUESTED.swap(false, Ordering::AcqRel) || due {
@@ -322,29 +328,26 @@ pub(crate) fn costs(loader: &Loader) -> Option<(Vec<crate::profile::Cost>, Durat
     Some((costs, since.elapsed(), base.at.is_some()))
 }
 
-/// The cost lines for the status summary and the chat, with a header.
+/// The cost lines for the status summary and the console, with a header.
 pub(crate) fn cost_lines(loader: &Loader, mods: usize, items: usize) -> Vec<String> {
     let Some((costs, window, reset)) = costs(loader) else {
-        return vec![
-            "per-mod costs need diagnostics = true in mod-configs/enshwick.toml (hook links also diagnostics_timing = true); read at start"
-                .to_owned(),
-        ];
+        return vec![crate::texts::fill("costs.off", &[])];
     };
     let Some(hz) = crate::patch::tsc_hz() else {
-        return vec!["per-mod costs: measuring, ask again in a second".to_owned()];
+        return vec![crate::texts::fill("costs.measuring", &[])];
     };
-    let since = if reset {
-        "since enshwick profile reset"
+    let head = if reset {
+        "costs.since-reset"
     } else {
-        "since start"
+        "costs.since-start"
     };
-    let mut lines = vec![format!(
-        "per-mod costs over {} ({since}), work per second of time:",
-        crate::diag::duration(window)
+    let mut lines = vec![crate::texts::fill(
+        head,
+        &[("window", &crate::diag::duration(window))],
     )];
     let rendered = crate::profile::render(&costs, hz, window, mods, items);
     if rendered.is_empty() {
-        lines.push("no mod has cost anything yet".to_owned());
+        lines.push(crate::texts::fill("costs.none", &[]));
     }
     lines.extend(rendered);
     lines

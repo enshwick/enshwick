@@ -93,10 +93,7 @@ mod tests {
     }
 
     fn tick(loader: &Installed) {
-        let _handled = loader.raise::<Ticked>(&TickData {
-            header: Header::of::<TickData>(),
-            step: 1,
-        });
+        let _handled = loader.raise::<Ticked>(&TickData::new(1));
     }
 
     #[test]

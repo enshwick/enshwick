@@ -13,6 +13,12 @@ Each entry names the pull request that made the change.
   `RECIPE_KIND_TAGS` with `recipe_kind_tags`, the kinds an item takes from
   its tags (#616).
 
+### Changed
+
+- `server.permission_entry_size` masks the permission table's entry count
+  in its pattern, so the row carries over to a build whose table holds more
+  or fewer entries (#617).
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added
