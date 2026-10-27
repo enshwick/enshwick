@@ -9,7 +9,7 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `code::find_each_unique` finds many patterns in one pass over the code,
-  each with the result `Pattern::find_unique` gives.
+  each with the result `Pattern::find_unique` gives (#598).
 
 ### Changed
 

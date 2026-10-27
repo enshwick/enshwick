@@ -10,13 +10,13 @@ Each entry names the pull request that made the change.
 
 - `Table::carry_key`, `Resolved::to_saved` and `Table::restore` save a
   carried table and read it back while the code and the table stay the
-  same.
+  same (#598).
 
 ### Changed
 
 - `Table::fall_back` searches every pattern in one pass over the code:
   about 5 ms instead of 38 ms on a dedicated server, 7 ms instead of 84 ms
-  on a client.
+  on a client (#598).
 
 ## [1.0.0-alpha.8] - 2026-10-27
 
