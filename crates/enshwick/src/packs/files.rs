@@ -4,9 +4,12 @@ use std::path::Path;
 use crate::Off;
 
 use super::{
-    DEFINITIONS_SUFFIX, FILES, MAX_FILE, MAX_SCRIPT_DEPTH, MAX_SCRIPTS, SCRIPT_EXTENSION,
-    SCRIPT_MAIN,
+    DEFINITIONS_SUFFIX, FILES, MAX_FILE, MAX_ICON_FILE, MAX_ICONS, MAX_SCRIPT_DEPTH, MAX_SCRIPTS,
+    SCRIPT_EXTENSION, SCRIPT_MAIN,
 };
+
+/// The folder of a pack's icons, as their names start.
+const ICONS: &str = "icons/";
 
 /// One problem in a pack: where it is and what is wrong.
 ///
@@ -75,7 +78,7 @@ impl From<ParsePackError> for Off {
 /// ```
 /// use enshwick::packs::ReadPackError;
 ///
-/// let large = ReadPackError::TooLarge { file: "items.toml".into() };
+/// let large = ReadPackError::TooLarge { file: "items.toml".into(), limit: 4 << 20 };
 /// assert_eq!(large.to_string(), "items.toml: larger than 4194304 bytes");
 /// ```
 #[derive(Debug, thiserror::Error)]
@@ -89,12 +92,18 @@ pub enum ReadPackError {
         /// Why.
         source: std::io::Error,
     },
-    /// A file is larger than [`MAX_FILE`].
-    #[error("{file}: larger than {MAX_FILE} bytes")]
+    /// A file is larger than [`MAX_FILE`], or an icon larger than
+    /// [`MAX_ICON_FILE`].
+    #[error("{file}: larger than {limit} bytes")]
     TooLarge {
         /// The file, as the pack names it.
         file: String,
+        /// The most bytes it may hold.
+        limit: u64,
     },
+    /// The pack holds more than [`MAX_ICONS`] icons.
+    #[error("more than {MAX_ICONS} icons")]
+    TooManyIcons,
     /// The pack holds more than [`MAX_SCRIPTS`] scripts.
     #[error("more than {MAX_SCRIPTS} scripts")]
     TooManyScripts,
@@ -143,12 +152,13 @@ impl PackFiles {
     /// every PNG under `dir/icons`, and when it has a [`SCRIPT_MAIN`] every
     /// script up to [`MAX_SCRIPT_DEPTH`] folders deep but definitions files;
     /// linked folders are not followed. Each file is at most [`MAX_FILE`]
-    /// bytes.
+    /// bytes, and each of at most [`MAX_ICONS`] icons at most
+    /// [`MAX_ICON_FILE`].
     ///
     /// # Errors
     ///
     /// [`ReadPackError`] naming the file or folder that could not be read,
-    /// a file larger than [`MAX_FILE`], or for too many scripts.
+    /// a file larger than it may be, or for too many scripts or icons.
     ///
     /// # Examples
     ///
@@ -167,9 +177,15 @@ impl PackFiles {
                 source,
             };
             let meta = std::fs::metadata(path).map_err(io)?;
-            if meta.len() > MAX_FILE {
+            let limit = if name.starts_with(ICONS) {
+                MAX_ICON_FILE
+            } else {
+                MAX_FILE
+            };
+            if meta.len() > limit {
                 return Err(ReadPackError::TooLarge {
                     file: name.to_owned(),
+                    limit,
                 });
             }
             let bytes = std::fs::read(path).map_err(io)?;
@@ -183,13 +199,18 @@ impl PackFiles {
             }
         }
         if let Ok(entries) = std::fs::read_dir(dir.join("icons")) {
+            let mut icons = 0usize;
             for entry in entries.filter_map(Result::ok) {
                 let path = entry.path();
                 let png = path
                     .extension()
                     .is_some_and(|e| e.eq_ignore_ascii_case("png"));
                 if let (true, Some(file)) = (png, path.file_name().and_then(|f| f.to_str())) {
-                    read(&path, &format!("icons/{file}"), &mut files)?;
+                    icons += 1;
+                    if icons > MAX_ICONS {
+                        return Err(ReadPackError::TooManyIcons);
+                    }
+                    read(&path, &format!("{ICONS}{file}"), &mut files)?;
                 }
             }
         }

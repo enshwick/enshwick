@@ -16,6 +16,10 @@ use crate::{Load, Off};
 
 use super::{Blob, Guid, Id, types};
 
+/// The widest and tallest PNG an icon may be, in pixels; a larger one does
+/// not decode.
+pub const MAX_SIDE: u32 = 2048;
+
 /// An item's own icon, for [`NewItem::icon`](super::items::NewItem::icon).
 ///
 /// # Examples
@@ -190,7 +194,10 @@ pub fn decode_png(png: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     use zune_core::colorspace::ColorSpace;
     use zune_core::options::DecoderOptions;
 
+    const SIDE: usize = MAX_SIDE as usize;
     let options = DecoderOptions::default()
+        .set_max_width(SIDE)
+        .set_max_height(SIDE)
         .png_set_strip_to_8bit(true)
         .png_set_add_alpha_channel(true);
     let mut decoder = zune_png::PngDecoder::new_with_options(ZCursor::new(png), options);
@@ -510,5 +517,65 @@ mod tests {
         let (rgba, w, h) = decode_png(png).unwrap();
         assert_eq!((w, h), (1, 1));
         assert_eq!(rgba, [255, 0, 0, 255]);
+    }
+
+    /// A grey PNG `width` by `height`, its pixels stored without compression.
+    fn stored_png(width: u32, height: u32) -> Vec<u8> {
+        fn crc(bytes: &[u8]) -> u32 {
+            let mut crc = u32::MAX;
+            for &b in bytes {
+                crc ^= u32::from(b);
+                for _ in 0..8 {
+                    crc = (crc >> 1) ^ (0xedb8_8320 & 0u32.wrapping_sub(crc & 1));
+                }
+            }
+            !crc
+        }
+        fn chunk(png: &mut Vec<u8>, kind: [u8; 4], data: &[u8]) {
+            png.extend_from_slice(&u32::try_from(data.len()).unwrap().to_be_bytes());
+            let start = png.len();
+            png.extend_from_slice(&kind);
+            png.extend_from_slice(data);
+            let sum = crc(&png[start..]);
+            png.extend_from_slice(&sum.to_be_bytes());
+        }
+        let row = 1 + usize::try_from(width).unwrap();
+        let raw: Vec<u8> = (0..height)
+            .flat_map(|_| core::iter::once(0).chain(core::iter::repeat_n(0x80, row - 1)))
+            .collect();
+        let mut zlib = vec![0x78, 0x01];
+        let blocks: Vec<&[u8]> = raw.chunks(0xffff).collect();
+        for (i, block) in blocks.iter().enumerate() {
+            let len = u16::try_from(block.len()).unwrap();
+            zlib.push(u8::from(i + 1 == blocks.len()));
+            zlib.extend_from_slice(&len.to_le_bytes());
+            zlib.extend_from_slice(&(!len).to_le_bytes());
+            zlib.extend_from_slice(block);
+        }
+        let (mut a, mut b) = (1u32, 0u32);
+        for &byte in &raw {
+            a = (a + u32::from(byte)) % 65521;
+            b = (b + a) % 65521;
+        }
+        zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+        let mut header = Vec::new();
+        header.extend_from_slice(&width.to_be_bytes());
+        header.extend_from_slice(&height.to_be_bytes());
+        header.extend_from_slice(&[8, 0, 0, 0, 0]);
+        let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
+        chunk(&mut png, *b"IHDR", &header);
+        chunk(&mut png, *b"IDAT", &zlib);
+        chunk(&mut png, *b"IEND", &[]);
+        png
+    }
+
+    #[test]
+    fn a_png_up_to_the_icon_bound_decodes_and_a_larger_one_does_not() {
+        let (rgba, w, h) = decode_png(&stored_png(MAX_SIDE, 2)).unwrap();
+        assert_eq!((w, h), (MAX_SIDE, 2));
+        assert_eq!(rgba.len(), 4 * 2 * usize::try_from(MAX_SIDE).unwrap());
+        assert!(decode_png(&stored_png(2, MAX_SIDE)).is_some());
+        assert!(decode_png(&stored_png(MAX_SIDE + 1, 2)).is_none());
+        assert!(decode_png(&stored_png(2, MAX_SIDE + 1)).is_none());
     }
 }
