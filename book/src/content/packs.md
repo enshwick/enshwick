@@ -318,15 +318,17 @@ items it covers.
 The game cuts every stack above an item's stack size when a world loads and
 deletes the rest. So a world saved with a pack that raised a stack size
 depends on that pack. The first time such a world loads, the pack sets a
-[hold](../state.md#holds): if the world is opened again without the pack, the game
-stops before the world loads and the log says which pack and items:
+[hold](../state.md#holds) on that world: if the world is opened again without
+the pack, the game stops before the world loads and the log says which pack
+and items. Other worlds open without the pack as usual.
 
 ```text
-error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world mygame-1a2b3c4d) and the mod does not run: the game stops before the world loads
 ```
 
 To remove such a pack safely, split every stack larger than the game's size
-first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
+first, then delete `mod-data/<id>/worlds/<key>/hold.txt`, the file the log
+names. When several packs raise one
 item, each of them holds. A pack that only lowers stack sizes sets no hold.
 Beside the holds, the loader keeps every raised size a world was saved
 with and never serves less, so a lower size never cuts a saved stack: see

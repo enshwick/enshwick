@@ -173,6 +173,10 @@ fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
 /// The file a [`Hold`] keeps in its mod's data folder.
 pub const HOLD_FILE: &str = "hold.txt";
 
+/// The folder in a mod's data folder that keeps one folder per world, named
+/// by the world's key.
+pub const WORLDS_DIR: &str = "worlds";
+
 /// A hold on the game for a world the vanilla game cannot open safely, such
 /// as one with more altars than the game groups.
 ///
@@ -181,7 +185,9 @@ pub const HOLD_FILE: &str = "hold.txt";
 /// the game vanilla), or the mod is missing, skipped or off, it logs the
 /// reason and stops the game before the world loads. The hold is a file,
 /// `mod-data/<id>/hold.txt`, holding the reason; a player who accepts the
-/// risk deletes it.
+/// risk deletes it. A hold of one world, [`Hold::for_world`], stops the
+/// game only as that world loads, where the loader runs; a build it leaves
+/// vanilla stops for every hold, since no world is known there.
 ///
 /// # Examples
 ///
@@ -216,6 +222,28 @@ impl Hold {
         Self {
             path: dir.join(HOLD_FILE),
         }
+    }
+
+    /// The hold of the mod whose data folder is `dir` on the world whose key
+    /// is `world`, from [`World::key`](crate::world::World::key):
+    /// `mod-data/<id>/worlds/<key>/hold.txt`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::state::{Hold, world_holds};
+    ///
+    /// let data = std::env::temp_dir().join("enshwick-world-hold-doc");
+    /// let hold = Hold::for_world(&data.join("you.lanterns"), "world0-aa");
+    /// hold.set("the world has 20 lit lanterns")?;
+    /// assert_eq!(world_holds(&data, "world0-aa").len(), 1);
+    /// assert!(world_holds(&data, "world1-bb").is_empty());
+    /// hold.clear()?;
+    /// # Ok::<(), enshwick::state::StoreError>(())
+    /// ```
+    #[must_use]
+    pub fn for_world(dir: &Path, world: &str) -> Self {
+        Self::new(&dir.join(WORLDS_DIR).join(world))
     }
 
     /// Sets the hold with `reason`, one line the loader logs; written to a
@@ -293,6 +321,56 @@ pub fn holds(mod_data: &Path) -> Vec<(String, String)> {
         .collect();
     found.sort();
     found
+}
+
+/// Every hold on the world whose key is `world` under the `mod-data` folder
+/// `mod_data`, as `(mod id, reason)`, ordered by id.
+///
+/// # Examples
+///
+/// See [`Hold::for_world`].
+#[must_use]
+pub fn world_holds(mod_data: &Path, world: &str) -> Vec<(String, String)> {
+    let Ok(entries) = std::fs::read_dir(mod_data) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(String, String)> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let id = entry.file_name().into_string().ok()?;
+            let reason = Hold::for_world(&entry.path(), world).reason()?;
+            Some((id, reason))
+        })
+        .collect();
+    found.sort();
+    found
+}
+
+/// The key of every world some mod under `mod_data` holds, sorted, each
+/// once.
+///
+/// # Examples
+///
+/// ```
+/// let data = std::env::temp_dir().join("enshwick-no-world-holds");
+/// assert!(enshwick::state::held_worlds(&data).is_empty());
+/// ```
+#[must_use]
+pub fn held_worlds(mod_data: &Path) -> Vec<String> {
+    let Ok(mods) = std::fs::read_dir(mod_data) else {
+        return Vec::new();
+    };
+    let mut worlds: Vec<String> = mods
+        .filter_map(Result::ok)
+        .filter_map(|entry| std::fs::read_dir(entry.path().join(WORLDS_DIR)).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .filter(|world| world.path().join(HOLD_FILE).is_file())
+        .filter_map(|world| world.file_name().into_string().ok())
+        .collect();
+    worlds.sort();
+    worlds.dedup();
+    worlds
 }
 
 /// A value kept per world, in `mod-data/<id>/worlds/<key>/<name>.toml`,
@@ -406,7 +484,7 @@ where
         }
         Ok(Self {
             slot: std::sync::Arc::new(std::sync::Mutex::new(WorldSlot {
-                worlds: dir.join("worlds"),
+                worlds: dir.join(WORLDS_DIR),
                 name: name.to_owned(),
                 open: None,
             })),
@@ -563,6 +641,35 @@ mod tests {
     #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize)]
     struct Count {
         n: u32,
+    }
+
+    #[test]
+    fn a_world_s_hold_holds_that_world_alone() {
+        let data = std::env::temp_dir().join(format!("enshwick-world-hold-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let lanterns = data.join("you.lanterns");
+        Hold::for_world(&lanterns, "world0-aa")
+            .set("20 lit lanterns")
+            .unwrap();
+        Hold::for_world(&data.join("you.altars"), "world1-bb")
+            .set("17 altars")
+            .unwrap();
+        Hold::new(&data.join("you.stacks"))
+            .set("raised stacks")
+            .unwrap();
+        assert_eq!(
+            world_holds(&data, "world0-aa"),
+            vec![("you.lanterns".to_owned(), "20 lit lanterns".to_owned())]
+        );
+        assert!(world_holds(&data, "world2-cc").is_empty());
+        assert_eq!(held_worlds(&data), ["world0-aa", "world1-bb"]);
+        assert_eq!(
+            holds(&data),
+            vec![("you.stacks".to_owned(), "raised stacks".to_owned())]
+        );
+        Hold::for_world(&lanterns, "world0-aa").clear().unwrap();
+        assert_eq!(held_worlds(&data), ["world1-bb"]);
+        let _gone = std::fs::remove_dir_all(&data);
     }
 
     #[test]
