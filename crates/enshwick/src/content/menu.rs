@@ -177,6 +177,79 @@ pub fn list_recipes(layout: &MenuLayout, bundle: &[u8], entries: &[MenuEntry]) -
     Some(blob.into_bytes())
 }
 
+/// The UI bundle with each recipe of `moves` taken out of every workshop's
+/// crafting menu but its new workshop's, where it goes last in the first
+/// set unless it is listed there already.
+///
+/// A recipe whose new workshop has no menu is only taken out; `None` when
+/// the bundle does not read with `layout`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
+/// use enshwick::content::workshops::WorkshopId;
+/// use enshwick::content::{Guid, types};
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     let layout = MenuLayout::resolve(load)?;
+///     let planks = Guid::parse("45390726-8a83-4538-91a2-db2a633c8eac");
+///     let kiln = WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"));
+///     let bundle = UI_BUNDLE.key(types::FB_UI_BUNDLE)?;
+///     load.serve(bundle, bundle, move |base| move_recipes(&layout, base, &[(planks, kiln)]))
+/// }
+/// ```
+#[must_use]
+pub fn move_recipes(
+    layout: &MenuLayout,
+    bundle: &[u8],
+    moves: &[(Guid, WorkshopId)],
+) -> Option<Vec<u8>> {
+    let mut blob = Blob::new(bundle);
+    let (workshops, _) = blob.array(layout.collection + layout.workshops)?;
+    let mut entries = Vec::new();
+    for &(recipe, workshop) in moves {
+        let id = recipe.id();
+        let mut listed = false;
+        for tree in 0..tree_count(layout, &blob)? {
+            let home = blob.read_u32(workshops + tree * 4)? == workshop.id();
+            for group in groups(layout, &blob, tree)? {
+                for set in elements(&blob, group + layout.sets, layout.set)? {
+                    let field = set + layout.entries;
+                    let (start, count) = blob.array(field)?;
+                    let ids: Vec<u32> = (0..usize::try_from(count).ok()?)
+                        .map(|i| blob.read_u32(start + i * 4))
+                        .collect::<Option<_>>()?;
+                    if home {
+                        listed |= ids.contains(&id);
+                        continue;
+                    }
+                    if !ids.contains(&id) {
+                        continue;
+                    }
+                    let kept: Vec<u8> = ids
+                        .iter()
+                        .filter(|&&other| other != id)
+                        .flat_map(|other| other.to_le_bytes())
+                        .collect();
+                    let at = blob.append(&kept, 4);
+                    if !blob.set_array(field, at, u32::try_from(kept.len() / 4).ok()?) {
+                        return None;
+                    }
+                }
+            }
+        }
+        if !listed {
+            entries.push(MenuEntry {
+                recipe,
+                after: None,
+                workshop: Some(workshop),
+            });
+        }
+    }
+    list_recipes(layout, &blob.into_bytes(), &entries)
+}
+
 /// Where a recipe goes in the crafting menu.
 enum Place {
     /// In the set at `set` of the group at `group`, by offset in the blob,
@@ -469,6 +542,27 @@ mod tests {
 
     fn bench() -> WorkshopId {
         WorkshopId::new(Guid::parse("5b828914-9b48-40f8-b541-72e9b942cee6"))
+    }
+
+    #[test]
+    fn a_moved_recipe_leaves_every_other_menu_and_joins_its_station_s() {
+        let kiln = bench().id();
+        let base = bundle(&[
+            (7, &[&[&[1, CHEST.id(), 2]], &[&[CHEST.id()]]]),
+            (kiln, &[&[&[3]]]),
+            (9, &[&[&[4]]]),
+        ]);
+        let built = move_recipes(&LAYOUT, &base, &[(CHEST, bench())]).unwrap();
+        assert_eq!(
+            read(&built),
+            [
+                (7, vec![vec![vec![1, 2]], vec![vec![]]]),
+                (kiln, vec![vec![vec![3, CHEST.id()]]]),
+                (9, vec![vec![vec![4]]]),
+            ]
+        );
+        let again = move_recipes(&LAYOUT, &built, &[(CHEST, bench())]).unwrap();
+        assert_eq!(read(&again), read(&built));
     }
 
     #[test]

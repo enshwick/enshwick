@@ -785,3 +785,34 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
         assert!(error.starts_with("pack.toml:4"), "{error}");
     }
 }
+
+#[test]
+fn a_recipe_change_moves_recipes_to_a_station() {
+    let forge = Guid([5; 16]);
+    let (torch, recipe) = (Guid([1; 16]), Guid([3; 16]));
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(forge, "Prop_Production_T1_Forge"), (torch, "Tool_Torch01")],
+        &[(recipe, "Tool_Torch01_T0_PK", torch)],
+    );
+    let station = vanilla.workshop(forge).unwrap();
+    let text =
+        "[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\nstation = \"Prop_Production_T1_Forge\"\n";
+    let pack = Pack::parse_with("you.forge", &recipes(text), Some(&vanilla)).unwrap();
+    assert_eq!(
+        pack.changes(),
+        [(
+            Change::station(recipe, station),
+            "recipes.toml:1 (Tool_Torch01_T0_PK)".to_owned()
+        )]
+    );
+    let errors = Pack::parse_with(
+        "you.forge",
+        &recipes("[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\nstation = \"Tool_Torch01\"\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:1:1: change 1: Tool_Torch01 is no crafting station"
+    );
+}
