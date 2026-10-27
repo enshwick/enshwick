@@ -333,27 +333,44 @@ pub(super) fn remove(loader: &Loader, entity: u32) -> Result<(), Status> {
 
 /// Keeps players from the prop `entity` until its destroy: the loader's
 /// interaction filter refuses opening it, moving items in or out, sorting
-/// and dismantling it, and its Quick Stash setting is off, so area deposits
-/// skip it. [`Status::MISSING`] when a hook the filter needs did not link
-/// or its fuse is off, or the setting does not resolve. On the game thread
-/// at a quiet moment.
+/// and dismantling it; a magic chest, the only container Quick Stash
+/// fills, also has its Quick Stash switch set off, as a player sets it.
+/// [`Status::MISSING`] when a hook the filter needs did not link or its
+/// fuse is off, or a magic chest's switch does not resolve. On the game
+/// thread at a quiet moment.
 pub(super) fn hold(loader: &Loader, entity: u32) -> Result<(), Status> {
     let stock = type_of(loader, catalogue::CRAFTING_STOCK)?;
-    let deposit_at = offset(loader, catalogue::CRAFTING_STOCK_DEPOSIT)?;
+    let magic = data(loader, entity, stock).is_some();
+    let switch = if magic {
+        Some(stash_switch(loader, entity).ok_or(Status::MISSING)?)
+    } else {
+        None
+    };
     let holds = crate::transactions::holds();
     holds.hold(entity, crate::interactions::filter_off())?;
-    if let Some(data) = data(loader, entity, stock) {
-        // SAFETY: `data` is the entity's live `InventoryCraftingStock`,
-        // with its Quick Stash byte at the reflected offset; read on the
-        // game thread at a quiet moment, when no system runs.
-        let before: u8 = unsafe { enshwick::raw::read_at(data, deposit_at) };
+    if let Some(before) = switch {
         holds.note_deposit(entity, before);
-        set_deposit(loader, entity, 0);
+        set_deposit(loader, entity, STASH_OFF);
     }
     Ok(())
 }
 
-/// Lets players reach the prop `entity` again, its Quick Stash setting as
+/// The Quick Stash switch a hold sets: set by a player, to off.
+pub(super) const STASH_OFF: [u8; 2] = [1, 0];
+
+/// The Quick Stash switch of `entity`: whether a player set it, and to
+/// what; `None` without one or on a build without its reads. On the game
+/// thread.
+fn stash_switch(loader: &Loader, entity: u32) -> Option<[u8; 2]> {
+    let switch = type_of(loader, catalogue::STASH_SWITCH).ok()?;
+    let set_at = offset(loader, catalogue::STASH_SWITCH_SET).ok()?;
+    let on_at = offset(loader, catalogue::STASH_SWITCH_ON).ok()?;
+    let set = field::<u8>(loader, entity, switch, set_at)?;
+    let on = field::<u8>(loader, entity, switch, on_at)?;
+    Some([set, on])
+}
+
+/// Lets players reach the prop `entity` again, its Quick Stash switch as
 /// it was. On the game thread at a quiet moment.
 pub(super) fn release(loader: &Loader, entity: u32) {
     if let Some(before) = crate::transactions::holds().release(entity) {
@@ -361,26 +378,31 @@ pub(super) fn release(loader: &Loader, entity: u32) {
     }
 }
 
-/// Writes `value` into the Quick Stash setting of `entity`, when it has
-/// one; nothing off the game thread or inside a step, where systems may
-/// read it.
-pub(crate) fn set_deposit(loader: &Loader, entity: u32, value: u8) {
+/// Writes `value` into the Quick Stash switch of `entity`, whether a
+/// player set it and to what, when it has one; nothing off the game
+/// thread or inside a step, where systems may read it.
+pub(crate) fn set_deposit(loader: &Loader, entity: u32, value: [u8; 2]) {
     if crate::world::server().is_err() {
         return;
     }
-    let (Ok(stock), Ok(deposit_at)) = (
-        type_of(loader, catalogue::CRAFTING_STOCK),
-        offset(loader, catalogue::CRAFTING_STOCK_DEPOSIT),
+    let (Ok(switch), Ok(set_at), Ok(on_at)) = (
+        type_of(loader, catalogue::STASH_SWITCH),
+        offset(loader, catalogue::STASH_SWITCH_SET),
+        offset(loader, catalogue::STASH_SWITCH_ON),
     ) else {
         return;
     };
-    if let Some(data) = data(loader, entity, stock) {
-        // SAFETY: `data` is the entity's live `InventoryCraftingStock`, with
-        // its Quick Stash byte at the reflected offset; `world::server`
-        // checked the game thread at a quiet moment, outside any step's
-        // systems, so neither the game's own writer, the player's switch
-        // action, nor a reader runs.
-        unsafe { enshwick::raw::write_at(data.cast_mut(), deposit_at, value) };
+    if let Some(data) = data(loader, entity, switch) {
+        // SAFETY: `data` is the entity's live `DynamicInventoryCraftingStock`,
+        // with its bool "set by a player" at the reflected offset;
+        // `world::server` checked the game thread at a quiet moment, outside
+        // any step's systems, so neither the game's own writer, the player's
+        // switch action, nor a reader runs.
+        unsafe { enshwick::raw::write_at(data.cast_mut(), set_at, value[0]) };
+        // SAFETY: as just checked, the entity's live switch, with its bool
+        // value at the reflected offset, written on the game thread at a
+        // quiet moment.
+        unsafe { enshwick::raw::write_at(data.cast_mut(), on_at, value[1]) };
     }
 }
 

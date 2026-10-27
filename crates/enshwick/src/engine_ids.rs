@@ -497,5 +497,9 @@ ids! {
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     INVENTORY_CRAFTING_STOCK = "inventory_crafting_stock";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
-    INVENTORY_CRAFTING_STOCK_CAN_RECEIVE_AREA_DEPOSIT = "inventory_crafting_stock.can_receive_area_deposit";
+    DYNAMIC_INVENTORY_CRAFTING_STOCK = "dynamic_inventory_crafting_stock";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE_IS_SET = "dynamic_inventory_crafting_stock.override_is_set";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE = "dynamic_inventory_crafting_stock.override";
 }

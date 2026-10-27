@@ -23,8 +23,9 @@ struct Hold {
     world: u64,
     /// The step by which its destroy has landed; `None` while only held.
     landed: Option<u64>,
-    /// Its Quick Stash setting before the hold turned it off.
-    deposit: Option<u8>,
+    /// Its Quick Stash switch before the hold set it: whether a player set
+    /// it, and to what.
+    deposit: Option<[u8; 2]>,
 }
 
 /// The props held, and whether the interaction filter that keeps players
@@ -116,9 +117,9 @@ impl PropHolds {
         !fuse_off && self.linked.load(Ordering::Acquire) && self.is_held(entity)
     }
 
-    /// Notes the Quick Stash setting `before` of the held `entity`, which
+    /// Notes the Quick Stash switch `before` of the held `entity`, which
     /// its release puts back.
-    pub fn note_deposit(&self, entity: u32, before: u8) {
+    pub fn note_deposit(&self, entity: u32, before: [u8; 2]) {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         for hold in held.iter_mut() {
@@ -128,9 +129,9 @@ impl PropHolds {
         }
     }
 
-    /// Lets players reach `entity` again; the Quick Stash setting to put
+    /// Lets players reach `entity` again; the Quick Stash switch to put
     /// back, if the hold changed it in this world.
-    pub fn release(&self, entity: u32) -> Option<u8> {
+    pub fn release(&self, entity: u32) -> Option<[u8; 2]> {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         let index = held.iter().position(|hold| hold.entity == entity)?;
@@ -139,9 +140,9 @@ impl PropHolds {
         gone.deposit.filter(|_| gone.world == world)
     }
 
-    /// Lets every held prop go; the Quick Stash settings to put back, by
+    /// Lets every held prop go; the Quick Stash switches to put back, by
     /// entity, for those of this world still standing.
-    pub fn release_all(&self) -> Vec<(u32, u8)> {
+    pub fn release_all(&self) -> Vec<(u32, [u8; 2])> {
         let world = self.world.load(Ordering::Acquire);
         let mut held = self.held.relock();
         let back = held
@@ -153,9 +154,9 @@ impl PropHolds {
         back
     }
 
-    /// The Quick Stash settings the holds turned off, by entity, for a
-    /// save to keep as they were.
-    pub fn deposits(&self) -> Vec<(u32, u8)> {
+    /// The Quick Stash switches the holds set, by entity, as they were, for
+    /// a save to keep them so.
+    pub fn deposits(&self) -> Vec<(u32, [u8; 2])> {
         let world = self.world.load(Ordering::Acquire);
         self.held
             .relock()
@@ -253,11 +254,11 @@ mod tests {
         let holds = linked();
         assert!(holds.quiet());
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, 1);
+        holds.note_deposit(7, [1, 1]);
         assert!(!holds.quiet());
         assert!(holds.is_held(7));
-        assert_eq!(holds.deposits(), [(7, 1)]);
-        assert_eq!(holds.release(7), Some(1));
+        assert_eq!(holds.deposits(), [(7, [1, 1])]);
+        assert_eq!(holds.release(7), Some([1, 1]));
         assert!(holds.quiet());
         assert!(!holds.is_held(7));
     }
@@ -284,7 +285,7 @@ mod tests {
     fn a_destroyed_prop_stays_held_until_its_destroy_has_landed() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, 1);
+        holds.note_deposit(7, [1, 1]);
         holds.after_step(10);
         holds.destroying(7);
         holds.after_step(11);
@@ -302,7 +303,7 @@ mod tests {
     fn a_world_end_forgets_holds_so_a_reused_id_meets_none() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, 1);
+        holds.note_deposit(7, [1, 1]);
         holds.forget();
         assert!(!holds.is_held(7));
         holds.hold(7, false).unwrap();
@@ -313,9 +314,9 @@ mod tests {
     fn releasing_all_gives_back_what_to_restore() {
         let holds = linked();
         holds.hold(7, false).unwrap();
-        holds.note_deposit(7, 1);
+        holds.note_deposit(7, [1, 1]);
         holds.hold(8, false).unwrap();
-        assert_eq!(holds.release_all(), [(7, 1)]);
+        assert_eq!(holds.release_all(), [(7, [1, 1])]);
         assert!(holds.quiet());
     }
 }

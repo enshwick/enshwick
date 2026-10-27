@@ -1531,8 +1531,22 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::ecs::InventoryCraftingStock"),
     ),
     (
-        "inventory_crafting_stock.can_receive_area_deposit",
-        offset("keen::ecs::InventoryCraftingStock", "canReceiveAreaDeposit"),
+        "dynamic_inventory_crafting_stock",
+        Fact::Type("keen::ecs::DynamicInventoryCraftingStock"),
+    ),
+    (
+        "dynamic_inventory_crafting_stock.override_is_set",
+        offset(
+            "keen::ecs::DynamicInventoryCraftingStock",
+            "canReceiveAreaDepositOverrideIsSet",
+        ),
+    ),
+    (
+        "dynamic_inventory_crafting_stock.override",
+        offset(
+            "keen::ecs::DynamicInventoryCraftingStock",
+            "canReceiveAreaDepositOverride",
+        ),
     ),
 ];
 

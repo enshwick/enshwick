@@ -292,7 +292,8 @@ trigger's settings.
 
 A removal takes two steps. In the first the loader checks the prop and
 keeps players from it: they cannot open it, move items in or out, sort it
-or dismantle it, and Quick Stash skips it. In the second it checks the
+or dismantle it, and a magic chest's Quick Stash switch is set off for
+the while, then put back as the player left it. In the second it checks the
 prop again and only then asks the game to remove it. If anything landed
 in it meanwhile, the removal fails with `HoldsState` and the prop stays,
 open to players again.

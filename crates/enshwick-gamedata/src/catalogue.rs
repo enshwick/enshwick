@@ -237,10 +237,15 @@ pub const ACTIVE_NPC_STATE_SAVED: &str = "active_npc_state_saved";
 pub const ITEM_FLAG_IS_NPC: &str = "item_flag.is_npc";
 /// The id of the bit of an item's flags that marks an animal.
 pub const ITEM_FLAG_IS_ANIMAL: &str = "item_flag.is_animal";
-/// The id of a container's Quick Stash settings.
+/// The id of the component that lets Quick Stash put items into a
+/// container: magic chests have it, plain boxes do not.
 pub const CRAFTING_STOCK: &str = "inventory_crafting_stock";
-/// The id of the byte that lets Quick Stash put items into a container.
-pub const CRAFTING_STOCK_DEPOSIT: &str = "inventory_crafting_stock.can_receive_area_deposit";
+/// The id of a container's per-chest Quick Stash switch a player sets.
+pub const STASH_SWITCH: &str = "dynamic_inventory_crafting_stock";
+/// The id of the switch's byte that tells a player set it.
+pub const STASH_SWITCH_SET: &str = "dynamic_inventory_crafting_stock.override_is_set";
+/// The id of the switch's byte: 0 keeps Quick Stash out while it is set.
+pub const STASH_SWITCH_ON: &str = "dynamic_inventory_crafting_stock.override";
 /// The id of the component that names the item an entity was placed from.
 pub const USED_ITEM: &str = "used_item";
 /// The id of an entity's place in the world.
