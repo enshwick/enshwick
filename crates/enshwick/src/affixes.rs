@@ -445,7 +445,7 @@ impl Load<'_> {
         let scheduler = self.scheduler()?;
         let pending: Arc<Crafts> = Arc::default();
         let requests = Arc::clone(&pending);
-        self.on_game::<CraftRecipeEvent>(move |craft| {
+        self.on::<CraftRecipeEvent>(move |craft| {
             let held: HashSet<ItemInstance> =
                 instances(&inventories.read().slots(craft.crafting_operator_id)).collect();
             requests

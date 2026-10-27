@@ -397,7 +397,7 @@ pub fn start(
         }
     }
     let event_types = load
-        .event_types()
+        .game_event_types()
         .map(|types| types.iter().map(|t| (t.name(), t.size())).collect())
         .unwrap_or_default();
     let inner = Arc::new_cyclic(|me| Inner {

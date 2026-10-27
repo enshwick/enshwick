@@ -8,7 +8,7 @@ any other.
 
 ## Typed events
 
-[`load.on_game::<E>(|event| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
+[`load.on::<E>(|event| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 runs a handler on every event of kind `E`:
 
 ```rust
@@ -16,12 +16,12 @@ use enshwick::game_events::{EntityDiedEvent, LevelUpEvent};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    load.on_game::<EntityDiedEvent>(move |died| {
+    load.on::<EntityDiedEvent>(move |died| {
         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
         }
     })?;
-    load.on_game::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
+    load.on::<LevelUpEvent>(|up| enshwick::info!("entity {} reached level {}", up.player_entity_id.0, up.level))
 }
 ```
 
@@ -62,7 +62,7 @@ you read once, at init; each `Field` reads its value for the running build:
 use enshwick::ecs::Entity;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let pushed = load.event_type("keen::ecs::ApplyPushBackEvent")?;
+    let pushed = load.game_event_type("keen::ecs::ApplyPushBackEvent")?;
     let target = pushed.field::<Entity>(load, "targetId")?;
     load.on_raw_game_event(pushed, move |event| {
         if let Some(target) = event.get(target) {
@@ -80,7 +80,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - Field types are the integers, `f32`, `f64`, `bool` and `Entity`.
 
 `load.on_every_raw_game_event(|event| ...)` receives every event of every type,
-for finding out what the game raises, and `load.event_types()` lists every
+for finding out what the game raises, and `load.game_event_types()` lists every
 event type the running build reflects, with its name, hash and size; the
 [probe](https://github.com/enshwick/devtools-mods/tree/main/enshwick-probe)
 uses both to count events by name. Each event is copied for the mod, so leave
@@ -90,8 +90,7 @@ it to development builds.
 use std::collections::HashMap;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let names: HashMap<u32, &str> = load
-        .event_types()?
+    let names: HashMap<u32, &str> = load.game_event_types()?
         .into_iter()
         .map(|ty| (ty.hash(), ty.name()))
         .collect();
@@ -124,6 +123,6 @@ come from the built-in server while it hosts a game, as server events do.
 
 [`FakeHost`](testing.md) records the types a mod asked for in
 `game_event_types()`, and `raise_game_event(type_hash, bytes)` hands an event
-to the mod's handlers. `event_type(name, hash, size)` gives the fake build an
-event type that `load.event_types()` lists and `load.event_type` resolves;
+to the mod's handlers. `game_event_type(name, hash, size)` gives the fake build an
+event type that `load.game_event_types()` lists and `load.game_event_type` resolves;
 give it the offsets the mod resolves with `field_offset`.

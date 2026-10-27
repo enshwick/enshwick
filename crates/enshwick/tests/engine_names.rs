@@ -27,7 +27,7 @@ mod tests {
         ("world/entities.rs", "entities", COMPONENT),
     ];
 
-    const EVENT: &str = "`Load::event_type` takes any reflected event type by name";
+    const EVENT: &str = "`Load::game_event_type` takes any reflected event type by name";
     const FIELD: &str = "`Load::field_offset` and `type_size` read any reflected type";
     const COMPONENT: &str = "`World::component_type` and `writable_type` take any component";
     const FAKE: &str = "the fake host answers the low level names a mod asks for";

@@ -9,7 +9,7 @@
 //! [`Load::open_stat`]; every mod that opens one id shares its values.
 //!
 //! [`Modifier`]s come from three sources: items an entity wears (their
-//! [`ItemStats`]), buffs it has ([`Load::buff_modifiers`]) and modifiers a
+//! [`ItemStats`]), buffs it has ([`Load::add_buff_modifiers`]) and modifiers a
 //! mod keeps on it ([`Stats::set`]). The server sums them with [`aggregate`]
 //! after each step in which a source changed, keeps the values, and raises
 //! [`Load::on_stats_changed`] for each value that moved; [`Stats::value`]
@@ -500,10 +500,14 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let fire = load.open_stat(builtin::RESISTANCE_FIRE)?;
-    ///     load.buff_modifiers(BuffTypeId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
+    ///     load.add_buff_modifiers(BuffTypeId(0x89cb_0b34), &[Modifier::new(fire, Op::Add, 0.2)])
     /// }
     /// ```
-    pub fn buff_modifiers(&mut self, buff: BuffTypeId, modifiers: &[Modifier]) -> Result<(), Off> {
+    pub fn add_buff_modifiers(
+        &mut self,
+        buff: BuffTypeId,
+        modifiers: &[Modifier],
+    ) -> Result<(), Off> {
         let host = self.host();
         let data: Vec<StatModifierData> = modifiers.iter().map(|m| m.to_data()).collect();
         let status = (host.api().stat_buff)(
