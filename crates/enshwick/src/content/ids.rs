@@ -11,7 +11,7 @@ use super::ResourceType;
 /// use enshwick::content::Guid;
 ///
 /// const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
-/// assert_eq!(CHEST.id(), 1_302_084_846);
+/// assert_eq!(enshwick::ItemId::from_guid(CHEST).get(), 1_302_084_846);
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Shape)]
@@ -79,14 +79,15 @@ impl Guid {
         shaped.then(|| Self::parse(text))
     }
 
-    /// The game's 32-bit id for this GUID: FNV-1a over its memory bytes, as
-    /// items and recipes are numbered.
+    /// FNV-1a 32 over the memory bytes, the number the game gives the
+    /// resource with this GUID; [`ItemId::from_guid`](crate::ItemId::from_guid)
+    /// and its siblings type it.
     ///
     /// # Examples
     ///
     /// See [`Guid`].
     #[must_use]
-    pub const fn id(self) -> u32 {
+    pub const fn fnv1a(self) -> u32 {
         let mut hash: u32 = 0x811c_9dc5;
         let mut i = 0;
         while i < 16 {
@@ -285,7 +286,7 @@ pub const fn is_id(id: &str) -> bool {
 /// const LOCKER: Id = Id::new("you.lockers:locker");
 /// assert_eq!(LOCKER.name(), "you.lockers:locker");
 /// assert_eq!(LOCKER.guid(), Guid::named("you.lockers:locker"));
-/// assert_eq!(Guid::from(LOCKER).id(), LOCKER.id());
+/// assert_eq!(Guid::from(LOCKER), LOCKER.guid());
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Id {
@@ -362,16 +363,6 @@ impl Id {
     #[must_use]
     pub const fn guid(self) -> Guid {
         self.guid
-    }
-
-    /// Its game id, [`Guid::id`] of its GUID.
-    ///
-    /// # Examples
-    ///
-    /// See [`Id`].
-    #[must_use]
-    pub const fn id(self) -> u32 {
-        self.guid.id()
     }
 
     /// [`Guid::key`] of its GUID.

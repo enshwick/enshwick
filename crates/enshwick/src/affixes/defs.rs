@@ -369,27 +369,7 @@ impl AffixDef {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AffixId(u32);
 
-impl AffixId {
-    /// The affix this process numbers `index`.
-    ///
-    /// # Examples
-    ///
-    /// See [`AffixId`].
-    #[must_use]
-    pub const fn new(index: u32) -> Self {
-        Self(index)
-    }
-
-    /// This process's number for the affix.
-    ///
-    /// # Examples
-    ///
-    /// See [`AffixId`].
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
+crate::abi::id_conversions!(AffixId(u32));
 
 /// The stored name of an affix: the FNV-1a 32 hash of its full id.
 ///

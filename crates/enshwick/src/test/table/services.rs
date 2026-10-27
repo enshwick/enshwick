@@ -178,7 +178,7 @@ pub(crate) extern "system" fn declare_content(
     with(Status::MISSING, |s| {
         let clash = s.content_ids.iter().any(|known| {
             *known != id
-                && crate::content::Guid::try_named(known).is_some_and(|g| g.id() == guid.id())
+                && crate::content::Guid::try_named(known).is_some_and(|g| g.fnv1a() == guid.fnv1a())
         });
         if clash {
             return Status::REFUSED;

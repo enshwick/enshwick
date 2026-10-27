@@ -346,7 +346,7 @@ unsafe extern "system" fn check(registers: *mut Registers, _user: *mut c_void) {
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
             player: enshwick::Entity(player),
-            id,
+            id: enshwick::abi::KnowledgeId::new(id),
             kind,
             scope: definition.map_or(KnowledgeInput::NO_SCOPE, |d| d.scope),
             reserved: 0,
@@ -466,7 +466,7 @@ mod tests {
         let mut call = KnowledgeInput {
             header: Header::of::<KnowledgeInput>(),
             player: enshwick::Entity(1),
-            id: 2,
+            id: enshwick::abi::KnowledgeId::new(2),
             kind: KnowledgeInfo::BOOL,
             scope: KnowledgeInfo::PLAYER,
             reserved: 0,

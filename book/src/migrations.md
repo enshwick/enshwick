@@ -128,16 +128,17 @@ id as it is:
 
 ```rust
 use enshwick::content::{Guid, Id};
+use enshwick::ItemId;
 use enshwick::migrations::current_id;
 
 const LOCKER: Id = Id::new("you.lockers:locker");
 
-fn is_locker(item: u32) -> bool {
-    current_id(item) == LOCKER.id()
+fn is_locker(item: ItemId) -> bool {
+    current_id(item) == ItemId::from_guid(LOCKER.guid())
 }
 
-assert!(is_locker(LOCKER.id()));
-assert!(!is_locker(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d").id()));
+assert!(is_locker(ItemId::from_guid(LOCKER.guid())));
+assert!(!is_locker(ItemId::from_guid(Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d"))));
 ```
 
 Moving a mod's items from hand-picked GUIDs to [content ids](content.md#content-ids)

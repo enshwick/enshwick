@@ -401,7 +401,7 @@ pub(crate) fn value(loader: &Loader, entity: Entity, id: u32) -> Result<Knowledg
     };
     Ok(KnowledgeInfo {
         header: Header::of::<KnowledgeInfo>(),
-        id,
+        id: enshwick::abi::KnowledgeId::new(id),
         // SAFETY: `def` is the definition `definition` found in the live
         // blob; its kind sits at the reflected `type` field.
         kind: unsafe { read(def, layout.def_kind) },
@@ -620,7 +620,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         let data = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
             entity,
-            id,
+            id: enshwick::abi::KnowledgeId::new(id),
             value,
         };
         loader.emit(Event::KNOWLEDGE_CHANGED, None, (&raw const data).cast());
@@ -631,7 +631,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
             let quest = QuestData {
                 header: Header::of::<QuestData>(),
                 entity,
-                quest: id,
+                quest: enshwick::abi::KnowledgeId::new(id),
             };
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());
         }

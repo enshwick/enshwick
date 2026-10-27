@@ -219,12 +219,14 @@ pub fn add_recipe_to(
     )?;
     let (start, _) = registry.array(layout.recipes)?;
     let at = start + usize::try_from(index).ok()? * layout.recipe;
-    let id = recipe.id.id().to_le_bytes();
+    let id = crate::RecipeId::from_guid(recipe.id.guid())
+        .get()
+        .to_le_bytes();
     let mut output = vec![0u8; layout.stack_size];
     output.get_mut(..16)?.copy_from_slice(&recipe.output.0);
     output
         .get_mut(layout.stack_item..layout.stack_item + 4)?
-        .copy_from_slice(&recipe.output.id().to_le_bytes());
+        .copy_from_slice(&recipe.output.fnv1a().to_le_bytes());
     output
         .get_mut(layout.stack_count..layout.stack_count + 4)?
         .copy_from_slice(&recipe.output_count.to_le_bytes());

@@ -317,7 +317,7 @@ unsafe fn override_skill(node: u32, bits: *const u64, tree: *const u8) -> u8 {
     let vanilla = unsafe { SKILL_NEXT.get()(node, bits, tree) };
     let check = SkillCheck {
         header: Header::of::<SkillCheck>(),
-        node,
+        node: enshwick::abi::SkillNode::new(node),
         gate,
         unlocked: u8::from(vanilla != 0),
         reserved: [0; 3],

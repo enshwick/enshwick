@@ -37,7 +37,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
         let mut item = Blob::new(chest);
         // Offsets for illustration: a real mod reads them from reflection.
-        let written = item.write(0, &LOCKER.id().to_le_bytes()) && item.write(4, &LOCKER.0);
+        let written = item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes()) && item.write(4, &LOCKER.0);
         written.then(|| item.into_bytes())
     })
 }

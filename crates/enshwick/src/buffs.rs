@@ -63,7 +63,7 @@ impl BuffTypeId {
     /// See [`BuffTypeId`].
     #[must_use]
     pub const fn from_guid(guid: [u8; 16]) -> Self {
-        Self(crate::content::Guid(guid).id())
+        Self(crate::content::Guid(guid).fnv1a())
     }
 
     /// The id of a buff type a mod serves under the content id `id`
