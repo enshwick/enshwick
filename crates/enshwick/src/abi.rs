@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 91;
+pub const ABI_MINOR: u16 = 93;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.

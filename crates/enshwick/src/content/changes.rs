@@ -100,6 +100,12 @@ pub enum Field {
     /// The weight of an item among the ones a fill table picks from, 0 to
     /// 1000000; the entry is the item.
     Weight,
+    /// The workshop a recipe is made at, by the game's id for it,
+    /// [`WorkshopId::id`](crate::content::workshops::WorkshopId::id); the
+    /// entry is a recipe, and the value is only ever set, by
+    /// [`Change::station`]. The crafting menu lists the recipe at its new
+    /// station alone; it takes effect when the game starts.
+    Station,
 }
 
 impl Field {
@@ -121,6 +127,7 @@ impl Field {
         Self::Count,
         Self::SpawnProbability,
         Self::Weight,
+        Self::Station,
     ];
 
     /// The name a data pack writes, such as `max_stack`.
@@ -151,6 +158,7 @@ impl Field {
             Self::Count => "count",
             Self::SpawnProbability => "spawn_probability",
             Self::Weight => "weight",
+            Self::Station => "station",
         }
     }
 
@@ -176,7 +184,11 @@ impl Field {
             | Self::EnergyOutput
             | Self::ComfortAmount => Entry::Item,
             Self::StackSize | Self::Count | Self::SpawnProbability | Self::Weight => Entry::Loot,
-            Self::Output | Self::Cost | Self::Ingredient | Self::CraftingDuration => Entry::Recipe,
+            Self::Output
+            | Self::Cost
+            | Self::Ingredient
+            | Self::CraftingDuration
+            | Self::Station => Entry::Recipe,
         }
     }
 
@@ -192,6 +204,7 @@ impl Field {
             Self::Armor | Self::EnergyOutput | Self::Weight => (0.0, 1_000_000.0),
             Self::SpawnProbability => (0.0, 1.0),
             Self::ComfortAmount => (0.0, 1000.0),
+            Self::Station => (0.0, 4_294_967_295.0),
         }
     }
 
@@ -215,7 +228,8 @@ impl Field {
             | Self::EnergyOutput
             | Self::ComfortAmount
             | Self::StackSize
-            | Self::Count => true,
+            | Self::Count
+            | Self::Station => true,
             Self::CraftingDuration
             | Self::DamageMod
             | Self::SpeedMod
@@ -259,6 +273,9 @@ impl Field {
                 field: self,
                 value: v,
             }),
+            Value::Times(_) if matches!(self, Self::Station) => {
+                Err(ValueError::SetOnly { field: self })
+            }
             Value::Times(f) if matches!(self, Self::Slots) && f < 1.0 => {
                 Err(ValueError::Shrinks { field: self })
             }
@@ -344,6 +361,7 @@ impl Field {
             Self::Count => DataField::LOOT_COUNT,
             Self::SpawnProbability => DataField::LOOT_SPAWN_PROBABILITY,
             Self::Weight => DataField::LOOT_WEIGHT,
+            Self::Station => DataField::RECIPE_STATION,
         }
     }
 
@@ -460,6 +478,12 @@ pub enum ValueError {
         /// The field.
         field: Field,
     },
+    /// A factor for a field that takes only a set.
+    #[error("{field} takes only a set, never a factor")]
+    SetOnly {
+        /// The field.
+        field: Field,
+    },
     /// A set for a field that takes only a factor.
     #[error("{field} takes only a factor: {{ times = x }}")]
     FactorOnly {
@@ -478,7 +502,9 @@ pub enum ValueError {
     },
     /// A field whose change alters a resource's length, which a change set
     /// after init cannot.
-    #[error("{field} is no field a mod sets after init: its change alters a recipe's length")]
+    #[error(
+        "{field} is no field a mod sets after init: its change alters a recipe's length or the menus built at start"
+    )]
     NotLive {
         /// The field.
         field: Field,
@@ -568,6 +594,27 @@ impl Change {
             item: Some(item),
             value,
         }
+    }
+
+    /// The change that moves the recipe `recipe` to the workshop
+    /// `workshop`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    /// use enshwick::content::workshops::WorkshopId;
+    ///
+    /// let kiln = WorkshopId::new(Guid([9; 16]));
+    /// let change = Change::station(Guid([1; 16]), kiln);
+    /// assert_eq!(change.field, Field::Station);
+    /// assert_eq!(change.value, Value::Set(f64::from(kiln.id())));
+    /// assert!(change.check().is_ok());
+    /// ```
+    #[must_use]
+    pub fn station(recipe: Guid, workshop: crate::content::workshops::WorkshopId) -> Self {
+        Self::new(recipe, Field::Station, Value::Set(f64::from(workshop.id())))
     }
 
     /// The change of how many of `item` the recipe `recipe` takes.

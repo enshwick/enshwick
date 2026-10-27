@@ -132,7 +132,7 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
-| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
+| `slots` | how many slots the container the item places holds, or the backpack it is, never fewer than it has | 8 to 128, in steps of 8 |
 | `damage_mod` | a weapon's damage factor | 0 to 100 |
 | `speed_mod` | a weapon's attack speed factor | 0 to 10 |
 | `armor` | every armour value of the item, scaled only: `{ times = x }` | a factor |
@@ -170,11 +170,14 @@ max_stack = 999
 | `category = [...]` | every item of these categories, by the game's names: `Customization`, `Equipment`, `Weapons`, `Tools`, `Instrument`, `FishingRod`, `BuildTools`, `Consumables`, `Ammunition`, `Materials`, `Blueprints`, `Currency`, `Collectibles`, `AnimalFood`, `PetFood`, `WeaponGem`, `ColorPalette` |
 | `items = "stackable"` | every item one slot already holds more than one of |
 | `items = "containers"` | every item that places a container |
+| `items = "backpacks"` | every backpack, an item worn in the game's `Backpack` slot |
 
 A selection changes only `max_stack` and `slots`. A stack size reaches only
 items that stack and keep no state of their own, such as durability, so
 weapons and armour stay at one; slots reach only items that place a
-container. An item the pack also names in `items` keeps that change alone,
+container or are backpacks. A backpack's size reaches only backpacks made
+after the change: one a player has keeps the size it was made with, which
+the save holds. An item the pack also names in `items` keeps that change alone,
 so the last table above sets Wood Logs to 999 while other materials take
 four times their size. A change gives `items` or `category`, never both. The
 pack's log says how many items each selection reached.
@@ -223,6 +226,7 @@ where it is defined, so naming one here is a problem.
 | `cost` | how many of each ingredient it takes | 1 to 65535 |
 | `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
 | `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+| `station` | the crafting station it is made at, named by the station's item | a vanilla station |
 
 `cost` applies first, then `ingredients`, so a named ingredient wins over the
 cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
@@ -249,10 +253,25 @@ time = { times = 0.5 }
 | `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
 | `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
 
-A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A selection changes `output_count`, `cost`, `time` and `station`, never
+`ingredients`.
 A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
 the pack also names in `recipes` or `output` keeps that change alone, and
 the pack's log says how many recipes each selection reached.
+
+`station` moves a recipe to another crafting station, such as charcoal
+from the kiln to the smelter:
+
+```toml
+[[change]]
+recipes = ["Material_T1_Factory_03_Charcoal"]
+station = "Prop_Production_T2_Smelter"
+```
+
+The player's crafting menu then lists the recipe at the new station alone.
+A move takes effect when the game starts, also in a development reload, and
+needs the game's data at hand to find the station. Two packs that move one
+recipe are a conflict like two sets: the later in load order wins.
 
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check

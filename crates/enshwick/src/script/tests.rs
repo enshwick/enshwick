@@ -186,3 +186,36 @@ fn a_call_names_the_argument_of_the_wrong_type() {
         .unwrap_err();
     assert!(error.to_string().contains("takes 2 arguments"), "{error}");
 }
+
+#[test]
+fn typed_game_events_have_unique_names_apart_from_loader_events() {
+    let mut names: Vec<&str> = game_events().map(GameEventKind::name).collect();
+    names.sort_unstable();
+    names.dedup();
+    assert_eq!(names.len(), game_events().count());
+    assert!(
+        names
+            .iter()
+            .all(|n| !n.is_empty() && !events().any(|e| e.name() == *n))
+    );
+}
+
+#[test]
+fn a_mask_is_the_names_of_its_bits() {
+    use crate::game_events::DamageTypeMask;
+    let mask = DamageTypeMask::MAGICAL_FIRE | DamageTypeMask::POISON;
+    let value = mask.into_value();
+    assert!(matches!(&value, Value::List(names) if names.len() == 2));
+    assert_eq!(DamageTypeMask::from_value(value).unwrap(), mask);
+}
+
+#[test]
+fn a_game_value_is_its_name_and_an_unnamed_one_its_number() {
+    use crate::game_events::ExperienceSourceType;
+    assert!(matches!(ExperienceSourceType::Combat.into_value(), Value::String(s) if s == "Combat"));
+    let other = ExperienceSourceType::Other(9);
+    assert_eq!(
+        ExperienceSourceType::from_value(other.into_value()).unwrap(),
+        other
+    );
+}

@@ -61,6 +61,7 @@ pub fn change_recipes_in(
 ) -> Option<(Vec<u8>, usize)> {
     let mut blob = Blob::new(registry);
     let (start, count) = blob.array(layout.recipes)?;
+    let stations = workshop_guids(layout, &blob, start, usize::try_from(count).ok()?)?;
     let mut edited = 0;
     for index in 0..usize::try_from(count).ok()? {
         let at = start + index * layout.recipe;
@@ -85,6 +86,9 @@ pub fn change_recipes_in(
                 .any(|(field, _)| *field == Field::CraftingDuration)
         {
             touched |= change_time(&mut blob, at + duration, guid, changes)?;
+        }
+        if keys.iter().any(|(field, _)| *field == Field::Station) {
+            touched |= change_station(layout, &mut blob, at, guid, &stations, changes)?;
         }
         edited += usize::from(touched);
     }
@@ -242,6 +246,95 @@ fn change_time(
     Some(new != nanos && blob.write(at, &new.to_le_bytes()))
 }
 
+/// Every workshop some recipe of the registry `registry` is made at, each
+/// once; `None` when it does not read with `layout`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::recipes::{RecipeLayout, recipe_workshops};
+///
+/// fn stations(layout: &RecipeLayout, registry: &[u8]) -> usize {
+///     recipe_workshops(layout, registry).map_or(0, |workshops| workshops.len())
+/// }
+/// ```
+#[must_use]
+pub fn recipe_workshops(
+    layout: &RecipeLayout,
+    registry: &[u8],
+) -> Option<Vec<crate::content::workshops::WorkshopId>> {
+    let blob = Blob::new(registry);
+    let (start, count) = blob.array(layout.recipes)?;
+    let found = workshop_guids(layout, &blob, start, usize::try_from(count).ok()?)?;
+    Some(
+        found
+            .into_iter()
+            .map(|(_, guid)| crate::content::workshops::WorkshopId::new(Guid(guid)))
+            .collect(),
+    )
+}
+
+/// The GUID of every workshop some of the `count` recipes from `start` are
+/// made at, by the workshop's game id.
+fn workshop_guids(
+    layout: &RecipeLayout,
+    blob: &Blob,
+    start: usize,
+    count: usize,
+) -> Option<Vec<(u32, [u8; 16])>> {
+    let mut found: Vec<(u32, [u8; 16])> = Vec::new();
+    for index in 0..count {
+        let at = start + index * layout.recipe;
+        let id = blob.read_u32(at + layout.workshop)?;
+        if found.iter().any(|(known, _)| *known == id) {
+            continue;
+        }
+        let guid = blob
+            .bytes()
+            .get(at + layout.workshop_guid..at + layout.workshop_guid + 16)?
+            .try_into()
+            .ok()?;
+        found.push((id, guid));
+    }
+    Some(found)
+}
+
+/// Moves the recipe at `at` to the workshop its station change names, one
+/// of `stations`; a workshop no recipe is made at leaves it where it is,
+/// with a warning.
+fn change_station(
+    layout: &RecipeLayout,
+    blob: &mut Blob,
+    at: usize,
+    recipe: Guid,
+    stations: &[(u32, [u8; 16])],
+    changes: &dyn RecipeChanges,
+) -> Option<bool> {
+    let current = blob.read_u32(at + layout.workshop)?;
+    let Some(new) = changes.value(recipe, Field::Station, None, f64::from(current)) else {
+        return Some(false);
+    };
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "Field::resolve keeps a station a whole number from 0 to u32::MAX"
+    )]
+    let new = new as u32;
+    if new == current {
+        return Some(false);
+    }
+    let Some((_, guid)) = stations.iter().find(|(id, _)| *id == new) else {
+        crate::warn!(
+            "recipe {recipe} stays at its workshop: no recipe is made at workshop {new}, so the game has no such station"
+        );
+        return Some(false);
+    };
+    Some(
+        blob.write(at + layout.workshop_guid, guid)
+            && blob.write(at + layout.workshop, &new.to_le_bytes()),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -349,6 +442,35 @@ mod tests {
         let (recipes, _) = blob.array(8).unwrap();
         let at = recipes + DURATION;
         i64::from_le_bytes(blob.bytes()[at..at + 8].try_into().unwrap()) / 1_000_000_000
+    }
+
+    #[test]
+    fn a_station_change_moves_the_recipe_to_a_workshop_another_recipe_names() {
+        let kiln = [9u8; 16];
+        let kiln_id = Guid(kiln).id();
+        let mut blob = Blob::new(&registry());
+        let (first, _) = blob.array(8).unwrap();
+        let mut other = vec![0u8; 0xa8];
+        other[..16].copy_from_slice(&WOOD.0);
+        other[0x14..0x24].copy_from_slice(&kiln);
+        other[0x24..0x28].copy_from_slice(&kiln_id.to_le_bytes());
+        let mut both = blob.bytes()[first..first + 0xa8].to_vec();
+        both.extend_from_slice(&other);
+        let at = blob.append(&both, 8);
+        assert!(blob.set_array(8, at, 2));
+        let registry = blob.into_bytes();
+        let moved = |to: u32| {
+            let mut table: HashMap<_, Vec<Value>> = HashMap::new();
+            table.insert((Field::Station, None), vec![Value::Set(f64::from(to))]);
+            let (bytes, edited) =
+                change_recipes_in(&LAYOUT, Some(DURATION), &registry, &Table(table)).unwrap();
+            let blob = Blob::new(&bytes);
+            let (recipes, _) = blob.array(8).unwrap();
+            let guid: [u8; 16] = bytes[recipes + 0x14..recipes + 0x24].try_into().unwrap();
+            (edited, guid, blob.read_u32(recipes + 0x24).unwrap())
+        };
+        assert_eq!(moved(kiln_id), (1, kiln, kiln_id));
+        assert_eq!(moved(kiln_id ^ 1), (0, [0; 16], 0));
     }
 
     #[test]

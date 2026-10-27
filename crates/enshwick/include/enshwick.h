@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 91
+#define ENSHWICK_ABI_MINOR 93
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -692,6 +692,8 @@ typedef uint32_t EnshwickDataField;
 // The weight of an item in fill tables; the entry is the item. Since
 // minor 82.
 #define EnshwickDataField_LOOT_WEIGHT 16
+// The workshop a recipe is made at, by its game id. Since minor 93.
+#define EnshwickDataField_RECIPE_STATION 17
 
 // Which vanilla items a `DataChange` reaches.
 typedef uint32_t EnshwickDataSelect;
@@ -709,6 +711,8 @@ typedef uint32_t EnshwickDataSelect;
 // Every recipe made at the workshop whose GUID is
 // `DataChange::entry`. Since minor 91.
 #define EnshwickDataSelect_WORKSHOP 5
+// Every backpack. Since minor 92.
+#define EnshwickDataSelect_BACKPACKS 6
 
 // One change of a vanilla value, as
 // `HostApi::change_data` takes it. The
