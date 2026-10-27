@@ -51,7 +51,7 @@ Each entry names the pull request that made the change.
   growth, a production queue, assigned survivors, written text) is never
   removed or taken away by an undo unless the mod opts in:
   `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
-  records and `transaction_entities` are ABI minor 90 (#PR).
+  records and `transaction_entities` are ABI minor 90 (#552).
 
 ### Changed
 
