@@ -301,6 +301,10 @@ declare enshwick: {
 	extend: (point: { name: string }, handler: (input: any, answer: any) -> any) -> (),
 	--- What a point's handler returns to refuse, on a refusable point.
 	refuse: {},
+	--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
+	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
+	--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.
+	define_event: (event: { name: string }) -> { send: (data: any) -> () },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
 	settings: () -> { [string]: any },
 	--- The mod's log file, one line per call.

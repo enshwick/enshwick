@@ -19,6 +19,8 @@ pub(crate) enum Subscription {
     Raw(RawSpec),
     /// Another mod's extension point, by its name.
     Point(String),
+    /// A mod event, by its name.
+    ModEvent(String),
 }
 
 /// A game event type and the fields a script reads from it.
@@ -115,7 +117,7 @@ impl Subscription {
                 .map_or_else(|| format!("event {}", event.0), |k| k.name().to_owned()),
             Self::Game(name) => (*name).to_owned(),
             Self::Raw(spec) => spec.type_name.clone(),
-            Self::Point(name) => name.clone(),
+            Self::Point(name) | Self::ModEvent(name) => name.clone(),
         }
     }
 

@@ -223,8 +223,58 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     });
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
-    expand_layout(&item, name, None, &quote!(ModEvent))
+    let schema = event_schema(&item, name.as_ref());
+    expand_declaration(&item, name, &schema, &quote!(services::ModEvent))
         .unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
+/// hashes, then the `[[type]]` tables of its data. A field whose type a
+/// schema cannot describe fails the build only where `manifest!` lists the
+/// event, since the text is built there.
+fn event_schema(item: &syn::ItemStruct, name: Option<&syn::LitStr>) -> proc_macro2::TokenStream {
+    let shape = quote!(::enshwick::Shape);
+    let event = quote!(::enshwick::services::ModEvent);
+    let ident = &item.ident;
+    let data = ident.unraw().to_string();
+    let head = format!(
+        "[[event]]\nname = {}\ndata = {}\ndoc = {}\nlayout = [",
+        toml_string(&name.map(syn::LitStr::value).unwrap_or_default()),
+        toml_string(&data),
+        toml_string(&schema_doc(&item.attrs)),
+    );
+    let mut parts = vec![quote!(#head)];
+    let mut fields = Vec::new();
+    let mut nested = Vec::new();
+    let mut described = vec![quote!(true)];
+    for (i, field) in item.fields.iter().enumerate() {
+        let Some(field_ident) = &field.ident else {
+            continue;
+        };
+        let ty = &field.ty;
+        let label = field_ident.unraw().to_string();
+        let separator = if i == 0 { "\"" } else { ", \"" };
+        parts.push(quote!(#separator, <#ident as #event>::LAYOUT[#i].hash, "\""));
+        described.push(quote!(!<#ty as #shape>::SCHEMA_NAME.is_empty()));
+        let entry = format!(
+            "[[type.field]]\nname = {}\ndoc = {}\ntype = \"",
+            toml_string(&label),
+            toml_string(&schema_doc(&field.attrs))
+        );
+        fields.push(quote!(#entry, <#ty as #shape>::SCHEMA_NAME, "\"\n"));
+        nested.push(quote!(<#ty as #shape>::SCHEMA_TYPES));
+    }
+    let table = format!(
+        "]\n[[type]]\nname = {}\ndoc = {}\nkind = \"struct\"\n",
+        toml_string(&data),
+        toml_string(&schema_doc(&item.attrs))
+    );
+    quote! {
+        const DESCRIBED: bool = #(#described)&&*;
+        const SCHEMA: &'static str = ::enshwick::__private::concatcp!(
+            #(#parts,)* #table, #(#fields,)* #(#nested,)*
+        );
+    }
 }
 
 /// Declares an extension point: makes the input struct `repr(C)` and

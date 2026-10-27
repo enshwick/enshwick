@@ -77,8 +77,12 @@ pub(crate) struct OpenRequest {
     pub(crate) user: usize,
 }
 
-/// A mod event handler: name, layout, handler and the mod's pointer.
-pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, ModEventFn, usize);
+/// A defined mod event: name, layout and the size of its data.
+pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
+
+/// A mod event handler: name, layout, the bytes it reads, handler and the
+/// mod's pointer.
+pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, ModEventFn, usize);
 
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
@@ -103,11 +107,11 @@ pub(crate) struct State {
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<super::FakeService>,
     /// Mod events the mod defined: name and layout, by id.
-    pub(crate) defined_events: Vec<(String, Vec<(String, u64)>)>,
+    pub(crate) defined_events: Vec<DefinedEvent>,
     /// Mod event handlers: name, layout, handler, pointer.
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
-    pub(crate) sent_events: Vec<String>,
+    pub(crate) sent_events: Vec<(String, Vec<u8>)>,
     /// The migrations the mod declared.
     pub(crate) migrations: Option<super::FakeMigrations>,
     /// Content ids the mod declared, in order.

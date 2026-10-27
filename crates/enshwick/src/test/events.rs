@@ -182,7 +182,25 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn sent_events(&self) -> Vec<String> {
-        table::with(Vec::new(), |s| s.sent_events.clone())
+        table::with(Vec::new(), |s| {
+            s.sent_events.iter().map(|(name, _)| name.clone()).collect()
+        })
+    }
+
+    /// The bytes of each event the mod sent, in order, as many as its
+    /// definition says.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.sent_event_data().is_empty());
+    /// ```
+    #[must_use]
+    pub fn sent_event_data(&self) -> Vec<Vec<u8>> {
+        table::with(Vec::new(), |s| {
+            s.sent_events.iter().map(|(_, data)| data.clone()).collect()
+        })
     }
 
     /// Sends the mod event `E`, as the mod that defines it would, to every
@@ -213,8 +231,9 @@ impl Installed {
                 .filter(|sub| {
                     sub.0 == E::NAME
                         && crate::services::compare(&table::view(&sub.1), &offered).is_ok()
+                        && sub.2 as usize <= size_of::<E>()
                 })
-                .map(|sub| (sub.2, sub.3))
+                .map(|sub| (sub.3, sub.4))
                 .collect()
         });
         for &(callback, user) in &handlers {

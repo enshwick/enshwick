@@ -107,7 +107,7 @@ pub(crate) extern "system" fn define_event(
         if s.defined_events.iter().any(|d| d.0 == name) {
             return None;
         }
-        s.defined_events.push((name, fields));
+        s.defined_events.push((name, fields, spec.layout.size));
         u32::try_from(s.defined_events.len() - 1).ok()
     });
     match id {
@@ -130,8 +130,13 @@ pub(crate) extern "system" fn subscribe_event(
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        s.mod_event_subscriptions
-            .push((name, fields, callback, user.expose_provenance()));
+        s.mod_event_subscriptions.push((
+            name,
+            fields,
+            spec.layout.size,
+            callback,
+            user.expose_provenance(),
+        ));
         Status::OK
     })
 }
@@ -139,13 +144,24 @@ pub(crate) extern "system" fn subscribe_event(
 pub(crate) extern "system" fn send_event(
     _me: ModHandle,
     event: u32,
-    _data: *const c_void,
+    data: *const c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
-        let Some(name) = s.defined_events.get(event as usize).map(|d| d.0.clone()) else {
+        let Some((name, size)) = s
+            .defined_events
+            .get(event as usize)
+            .map(|d| (d.0.clone(), d.2))
+        else {
             return Status::BAD_ARGS;
         };
-        s.sent_events.push(name);
+        let bytes = if data.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: the safe layer sends the defined event's data, its
+            // defined size, alive for the call.
+            unsafe { core::slice::from_raw_parts(data.cast::<u8>(), size as usize) }.to_vec()
+        };
+        s.sent_events.push((name, bytes));
         Status::OK
     })
 }

@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::on_described_mod_event` and `Load::define_described_event`
+  (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
+  event described at run time, its data as bytes in the definer's layout;
+  `manifest!(events: [..])` puts the schema of each listed `#[event]` into
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
 - `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
   copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
   read what the player has uncovered, as a `FogState` and `FogImage`; the
@@ -137,6 +142,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The loader and the fake leave a mod event subscription idle when it
+  reads more bytes than the definer sends.
 - `World::component` and `World::get` read the static half of a component
   type, such as `FuelSetup`, as the template's set-up values; they gave the
   data of its dynamic half, `DynamicFuelSetup`, before (#568).

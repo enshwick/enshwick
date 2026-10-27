@@ -98,6 +98,19 @@ enum Command {
         #[arg(long)]
         luau: bool,
     },
+    /// Writes the Luau module of another mod's event, read from the owner's
+    /// DLL without running it, for a Luau mod to subscribe with.
+    Event {
+        /// The event, `<mod id>:<event>`.
+        name: String,
+        /// The owner's DLL, a folder with its DLL in it or in its `mods/`,
+        /// or a schema file (`.toml`) the owner published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the module is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Writes the Luau definitions of the API, which luau-lsp reads, for
     /// the loader this tool was built with.
     Luau {
@@ -208,6 +221,7 @@ fn main() -> ExitCode {
         } => point::run(&name, &from, out.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
+        Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
         Command::Types {
             names,
             from,
