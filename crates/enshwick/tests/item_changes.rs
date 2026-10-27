@@ -24,6 +24,10 @@ mod tests {
                 &ItemsChange::new(Items::Containers, Field::Slots, Value::Set(48.0)),
                 "chests",
             )?;
+            load.change_items(
+                &ItemsChange::new(Items::Backpacks, Field::Slots, Value::Times(2.0)),
+                "backpacks",
+            )?;
             let refused = ItemsChange::new(Items::Stackable, Field::DamageMod, Value::Times(2.0));
             if load.change_items(&refused, "damage").is_ok() {
                 return Err(enshwick::Off::new(
@@ -55,6 +59,7 @@ mod tests {
                     "stacks".to_owned()
                 ),
                 (Items::Containers, Field::Slots, "chests".to_owned()),
+                (Items::Backpacks, Field::Slots, "backpacks".to_owned()),
             ]
         );
         assert!(loader.changes().is_empty());
