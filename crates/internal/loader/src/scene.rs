@@ -72,6 +72,7 @@ fn layout(loader: &Loader) -> Option<SceneLayout> {
         components: field(names::TEMPLATE_COMPONENTS)?,
         marker_id: field(names::MAP_MARKER_ID)?,
         marker_type: field(names::MAP_MARKER_TYPE)?,
+        marker_size: size(names::MAP_MARKER)?,
     })
     .filter(SceneLayout::is_sound)
 }
@@ -163,7 +164,8 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
             drop(state);
             let work = move || {
                 let began = Instant::now();
-                let found = read(layout, key);
+                let found = std::panic::catch_unwind(|| read(layout, key))
+                    .unwrap_or(Err(SceneFailure::Panicked));
                 match &found {
                     Ok(markers) => crate::log!(
                         DEBUG,

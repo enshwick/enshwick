@@ -36,6 +36,8 @@ pub struct SceneLayout {
     pub marker_id: usize,
     /// `MapMarker.markerType`.
     pub marker_type: usize,
+    /// The size of a `MapMarker`.
+    pub marker_size: usize,
 }
 
 /// An entity a chunk places: its template and where, in metres.
@@ -97,7 +99,7 @@ impl SceneLayout {
     /// let layout = SceneLayout {
     ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
     ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
-    ///     components: 16, marker_id: 0, marker_type: 16,
+    ///     components: 16, marker_id: 0, marker_type: 16, marker_size: 40,
     /// };
     /// assert!(layout.is_sound());
     /// assert!(!SceneLayout { entry_size: 0, ..layout }.is_sound());
@@ -109,7 +111,13 @@ impl SceneLayout {
                 .is_some_and(|end| end <= self.entry_size)
         };
         let furthest = self.position.iter().copied().max().unwrap_or(0);
+        let in_marker = |at: usize| {
+            at.checked_add(GUID_SIZE)
+                .is_some_and(|end| end <= self.marker_size)
+        };
         self.entry_size > 0
+            && in_marker(self.marker_id)
+            && in_marker(self.marker_type)
             && fits(self.entry_template, 2)
             && self
                 .entry_transform
@@ -129,7 +137,7 @@ impl SceneLayout {
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
 ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
-///     components: 16, marker_id: 0, marker_type: 16,
+///     components: 16, marker_id: 0, marker_type: 16, marker_size: 40,
 /// };
 /// assert_eq!(placements(&layout, &[0; 16]), Some(Vec::new()));
 /// assert_eq!(placements(&layout, &[0; 3]), None);
@@ -178,7 +186,7 @@ pub struct Unreadable;
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
 ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
-///     components: 16, marker_id: 0, marker_type: 16,
+///     components: 16, marker_id: 0, marker_type: 16, marker_size: 40,
 /// };
 /// assert_eq!(marker(&layout, &[0; 24], 0x8af0_70c5), Ok(None));
 /// assert!(marker(&layout, &[0; 3], 0x8af0_70c5).is_err());
@@ -199,7 +207,10 @@ pub fn marker(
         let offset = isize::try_from(i32_at(template, variant + 4)?).ok()?;
         let data = (variant + 4).checked_add_signed(offset)?;
         let size = usize::try_from(u32_at(template, variant + 8)?).ok()?;
-        let need = layout.marker_id.max(layout.marker_type) + GUID_SIZE;
+        let need = layout
+            .marker_id
+            .max(layout.marker_type)
+            .checked_add(GUID_SIZE)?;
         if size < need || data.checked_add(size)? > template.len() {
             return None;
         }
@@ -251,6 +262,8 @@ impl SceneKey {
 pub enum SceneFailure {
     /// The reflected types the parse needs are not all there.
     Layout,
+    /// The read panicked.
+    Panicked,
     /// The game's archive is not open.
     Archive,
     /// The archive lacks the scene's global chunk.
@@ -267,6 +280,7 @@ impl core::fmt::Display for SceneFailure {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(match self {
             Self::Layout => "the reflected scene types are missing",
+            Self::Panicked => "the read panicked",
             Self::Archive => "the game's archive is not open",
             Self::Chunk => "the archive lacks the scene's global chunk",
             Self::ChunkUnreadable => "the scene's global chunk does not read",
@@ -301,7 +315,7 @@ pub struct Skipped {
 /// let layout = SceneLayout {
 ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
 ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
-///     components: 16, marker_id: 0, marker_type: 16,
+///     components: 16, marker_id: 0, marker_type: 16, marker_size: 40,
 /// };
 /// let (markers, skipped) = collect(&layout, &[], 0x8af0_70c5, |_| None)?;
 /// assert!(markers.is_empty() && skipped.missing == 0);
@@ -432,6 +446,7 @@ mod tests {
         components: 0x10,
         marker_id: 0,
         marker_type: 0x10,
+        marker_size: 40,
     };
     const MARKER: u32 = 0x8af0_70c5;
 
@@ -549,6 +564,25 @@ mod tests {
             ..LAYOUT
         };
         assert_eq!(placements(&short, &data), None);
+    }
+
+    #[test]
+    fn a_layout_whose_marker_guids_leave_the_marker_is_refused() {
+        assert!(LAYOUT.is_sound());
+        assert!(
+            !SceneLayout {
+                marker_size: 31,
+                ..LAYOUT
+            }
+            .is_sound()
+        );
+        assert!(
+            !SceneLayout {
+                marker_id: usize::MAX,
+                ..LAYOUT
+            }
+            .is_sound()
+        );
     }
 
     #[test]

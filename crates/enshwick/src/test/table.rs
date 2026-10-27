@@ -341,8 +341,11 @@ pub(crate) struct WorldEdits {
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
     /// Whether the world has stopped, as between two worlds.
     pub(crate) stopped: bool,
-    /// Whether the scene's map markers are still being read.
+    /// Whether the scene's map markers are held as still being read.
     pub(crate) markers_pending: bool,
+    /// Whether the mod asked for the scene's map markers in this world,
+    /// which starts their read.
+    pub(crate) markers_asked: bool,
 }
 
 /// Waits for the table to be free, then answers from `host`.

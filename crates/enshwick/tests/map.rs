@@ -90,7 +90,10 @@ mod tests {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        (loader, *MAP.get().unwrap())
+        let map = *MAP.get().unwrap();
+        // The first call of a world starts the loader's read of the scene.
+        assert_eq!(map.markers(), Err(WorldError::NotLoaded));
+        (loader, map)
     }
 
     #[test]

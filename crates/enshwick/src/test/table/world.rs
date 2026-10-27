@@ -735,7 +735,9 @@ pub(crate) extern "system" fn map_markers(
         return Status::WRONG_THREAD;
     }
     let Some(markers) = with(None, |s| {
-        (!s.edits.stopped).then(|| (!s.edits.markers_pending).then(|| s.host.map_markers.clone()))
+        let first = !core::mem::replace(&mut s.edits.markers_asked, true);
+        (!s.edits.stopped)
+            .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
         return Status::MISSING;
     };

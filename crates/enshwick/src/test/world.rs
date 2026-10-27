@@ -141,8 +141,9 @@ impl Installed {
         table::with((), |s| s.edits.stopped = true);
     }
 
-    /// Has the scene's map markers still being read while `pending`, as
-    /// the loader answers after the first call for a scene.
+    /// Has the scene's map markers still being read while `pending`; as the
+    /// loader does, the fake answers the first call of a world that way
+    /// whatever this says.
     ///
     /// # Examples
     ///
