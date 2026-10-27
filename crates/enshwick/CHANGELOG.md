@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `code::find_each_unique` finds many patterns in one pass over the code,
+  each with the result `Pattern::find_unique` gives (#598).
 - `World::account_action` asks the game to kick, ban or unban an account
   (`AccountAction`); a ban of an account that is not online goes straight
   onto the server's ban list (`HostApi::account_action`,

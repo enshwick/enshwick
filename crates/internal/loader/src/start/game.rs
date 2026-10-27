@@ -197,7 +197,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             .read(range.start, range.end - range.start)
             .map(|bytes| (bytes, range.start - base))
     });
-    let Some(mut build) = builds::select(&tables, side, fingerprint, code) else {
+    let Some(mut build) = builds::select(&tables, side, fingerprint, code, Some(data_dir)) else {
         crate::log!(
             ERROR,
             "unknown game build {}/{}; the game runs vanilla until Enshwick has its build table ({})",

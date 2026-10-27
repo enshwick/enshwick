@@ -123,7 +123,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
     let mut build = if patterns {
         code.and_then(|code| builds::by_patterns(&tables, side, code))
     } else {
-        builds::select(&tables, side, fingerprint, code)
+        builds::select(&tables, side, fingerprint, code, None)
     }
     .ok_or(DryRunError::NoTable)?;
     if let Some(exe_dir) = exe.parent() {

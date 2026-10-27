@@ -413,6 +413,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 name = "enshwick"
 version = "1.0.0-alpha.8"
 dependencies = [
+ "aho-corasick",
  "bcdec_rs",
  "bytemuck",
  "const-sha1",
@@ -496,6 +497,7 @@ dependencies = [
  "serde",
  "thiserror",
  "toml 1.1.8+spec-1.1.0",
+ "twox-hash",
 ]
 
 [[package]]
@@ -1456,6 +1458,12 @@ dependencies = [
  "tracing-core",
  "tracing-log",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
 name = "typed-path"

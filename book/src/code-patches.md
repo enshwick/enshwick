@@ -70,7 +70,8 @@ them at arming anyway.
 
 [`code::Pattern`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/code.rs)
 parses and searches patterns on any slice, which helps test them against a
-copy of the bytes in a unit test:
+copy of the bytes in a unit test. `code::find_each_unique` searches for many
+patterns in one pass over the code:
 
 ```rust
 use enshwick::code::Pattern;
