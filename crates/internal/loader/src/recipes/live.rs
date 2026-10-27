@@ -209,7 +209,7 @@ fn content_names() -> FxHashMap<u32, String> {
     crate::ids::with(|ids| {
         ids.content()
             .into_iter()
-            .filter_map(|(name, _)| Some((Guid::try_named(name)?.id(), name.to_owned())))
+            .filter_map(|(name, _)| Some((Guid::try_named(name)?.fnv1a(), name.to_owned())))
             .collect()
     })
 }

@@ -87,7 +87,7 @@ storage, ...), `item` (the item id, 0 for none), `count` and `pide`
 (`None` for items without an entity). `is_empty()` is true when
 `item` or `count` is 0.
 
-Item ids are [`Guid::id`](content/items.md#guids-and-item-ids) of the
+Item ids are [`ItemId::from_guid`](content/items.md#guids-and-item-ids) of the
 item's GUID.
 
 [`item_info(item)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)

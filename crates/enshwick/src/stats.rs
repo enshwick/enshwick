@@ -65,12 +65,12 @@ pub const ITEM_KIND: &str = "enshwick:stats";
 /// use enshwick::content::Guid;
 /// use enshwick::stats::{StatKey, key_of};
 ///
-/// assert_eq!(key_of("enshwick:health_max"), StatKey(Guid::named("enshwick:health_max").id()));
+/// assert_eq!(key_of("enshwick:health_max"), StatKey(Guid::named("enshwick:health_max").fnv1a()));
 /// assert_ne!(key_of("a:b"), StatKey(0));
 /// ```
 #[must_use]
 pub const fn key_of(id: &str) -> StatKey {
-    StatKey(crate::content::Guid::hashed(id).id())
+    StatKey(crate::content::Guid::hashed(id).fnv1a())
 }
 
 /// The platform's built-in stat kinds, which it applies to the game on the

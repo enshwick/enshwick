@@ -546,7 +546,12 @@ impl Load<'_> {
         text: &str,
     ) -> Result<(), Off> {
         let api = self.host().api();
-        let status = (api.add_text)(self.host().handle(), tag.id(), language.0, Str::new(text));
+        let status = (api.add_text)(
+            self.host().handle(),
+            tag.fnv1a(),
+            language.0,
+            Str::new(text),
+        );
         crate::load::ok(status, (), || "add text".to_owned())
     }
 
@@ -570,7 +575,7 @@ impl Load<'_> {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.serve(LOCKER.key(types::ITEM_INFO)?, CHEST.key(types::ITEM_INFO)?, |chest| {
     ///         let mut item = Blob::new(chest);
-    ///         item.write(0, &LOCKER.id().to_le_bytes());
+    ///         item.write(0, &enshwick::ItemId::from_guid(LOCKER).get().to_le_bytes());
     ///         item.write(4, &LOCKER.0);
     ///         Some(item.into_bytes())
     ///     })

@@ -746,7 +746,7 @@ fn loot_patches(
         .loot_items()
         .into_iter()
         .chain(scoped.iter().map(|(_, item)| *item))
-        .map(|item| (item.id(), item))
+        .map(|item| (item.fnv1a(), item))
         .collect();
     let alone: Vec<Guid> = scoped.iter().map(|(table, _)| *table).collect();
     let _first = sealed.loot_items.set(merged.loot_items());

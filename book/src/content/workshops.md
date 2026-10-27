@@ -132,7 +132,7 @@ use enshwick::content::workshops::WorkshopId;
 
 let workbench = WorkshopId::new(Guid::parse("965d3192-0287-49a2-ad51-a716139571a6"));
 assert_eq!(workbench.id(), 1_302_892_403);
-assert_eq!(workbench.id(), workbench.guid().id());
+assert_eq!(workbench.id(), workbench.guid().fnv1a());
 ```
 
 Copies made at the new workshop count against its own room, not against the

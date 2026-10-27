@@ -203,7 +203,7 @@ fn change_inputs(
                 added.get_mut(..16)?.copy_from_slice(&item.0);
                 added
                     .get_mut(layout.stack_item..layout.stack_item + 4)?
-                    .copy_from_slice(&item.id().to_le_bytes());
+                    .copy_from_slice(&item.fnv1a().to_le_bytes());
                 set(&mut added, new)?;
                 inputs.push(added);
             }
@@ -386,7 +386,7 @@ mod tests {
     fn stack(item: Guid, count: u32, size: usize) -> Vec<u8> {
         let mut bytes = vec![0u8; size];
         bytes[..16].copy_from_slice(&item.0);
-        bytes[0x10..0x14].copy_from_slice(&item.id().to_le_bytes());
+        bytes[0x10..0x14].copy_from_slice(&item.fnv1a().to_le_bytes());
         bytes[0x14..0x18].copy_from_slice(&count.to_le_bytes());
         bytes
     }
@@ -447,7 +447,7 @@ mod tests {
     #[test]
     fn a_station_change_moves_the_recipe_to_a_workshop_another_recipe_names() {
         let kiln = [9u8; 16];
-        let kiln_id = Guid(kiln).id();
+        let kiln_id = Guid(kiln).fnv1a();
         let mut blob = Blob::new(&registry());
         let (first, _) = blob.array(8).unwrap();
         let mut other = vec![0u8; 0xa8];

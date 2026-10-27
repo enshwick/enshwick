@@ -13,6 +13,29 @@ Each entry names the pull request that made the change.
   the game's Decorative crafting group, so `Recipes::Kind`,
   `Rate::RecipeOutput` and `RecipeView::kind` pick decorations by the
   game's own grouping (#616).
+- Every id type prints as its number (`Display`): `Entity`, `ItemId`,
+  `PlayerKey`, `RecipeId`, `AffixId`, `SkillNode` and `KnowledgeId` go
+  into a log line as they are (#615).
+- `KnowledgeId` names a knowledge value: a recipe's, a quest's or any
+  other the world or a player keeps; a `RecipeId` converts into it
+  (ABI 3.2) (#615).
+- `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
+  give the game's id of a GUID with its type, in a constant too (#615).
+
+### Changed
+
+- Breaking: `Guid::id` is `Guid::fnv1a`, the bare hash, and `Id::id` is
+  gone; `ItemId::from_guid(id.guid())` and its siblings take their place.
+  `World::used_item` returns an `ItemId`, and `migrations::current_id`
+  takes and returns one (#615).
+- Breaking: the knowledge calls, `KnowledgeChanged`, `QuestCompleted` and
+  their ABI structs take `KnowledgeId`; `Knowledge::quests` returns them.
+  `SkillNode` is an ABI type, and `abi::SkillCheck::node` and
+  `HostApi::skill_override` take it (#615).
+- Breaking: the fake host's `survivor_lookup` takes a `SurvivorId` and
+  `Option<Entity>` for no entity and returns the mod's `Answer`;
+  `set_knowledge`, `grants`, `revokes` and `account_changes` carry
+  `KnowledgeId`, and `None` for the world (#615).
 
 ### Removed
 

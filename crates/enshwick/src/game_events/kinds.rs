@@ -130,7 +130,7 @@ impl crate::events::Kind for HitEvent {
 ///     let world = load.world()?;
 ///     load.on::<EntityDiedEvent>(move |died| {
 ///         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-///             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id.0);
+///             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id);
 ///         }
 ///     })
 /// }
