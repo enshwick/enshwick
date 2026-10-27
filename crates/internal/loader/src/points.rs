@@ -690,29 +690,31 @@ fn conflict_lines(points: &[Sealed], mods: &impl Names) -> Vec<String> {
             continue;
         }
         let order: Vec<&str> = running().map(|l| mods.name(l.owner.get()).0).collect();
-        let mut line = format!(
-            "point {}: {}, each may change the answer",
-            point.declared.name,
-            order.join(" then ")
-        );
+        let mut parts = vec![crate::texts::fill(
+            "points.conflict",
+            &[
+                ("point", &point.declared.name),
+                (
+                    "mods",
+                    &order.join(&crate::texts::fill("conflicts.then", &[])),
+                ),
+            ],
+        )];
         for link in &*point.links {
             let undid = link.undid.load(Ordering::Relaxed);
             if undid > 0 {
                 let whom = link.undid_whom.load(Ordering::Relaxed);
-                let times = match undid {
-                    1 => "once".to_owned(),
-                    2 => "twice".to_owned(),
-                    n => format!("{n} times"),
-                };
-                let _w = write!(
-                    line,
-                    "; {} changed the answer {} had set, {times}",
-                    mods.name(link.owner.get()).0,
-                    mods.name(whom).0
-                );
+                parts.push(crate::texts::fill(
+                    "points.undid",
+                    &[
+                        ("mod", mods.name(link.owner.get()).0),
+                        ("whom", mods.name(whom).0),
+                        ("count", &undid.to_string()),
+                    ],
+                ));
             }
         }
-        lines.push(line);
+        lines.push(parts.join("; "));
     }
     lines
 }
@@ -755,7 +757,7 @@ fn screen_lines(
             if l.is_on() && !mods.off(index) {
                 p.declared.name.clone()
             } else {
-                format!("{} (off)", p.declared.name)
+                crate::texts::fill("points.off", &[("point", &p.declared.name)])
             }
         })
         .collect();
@@ -763,7 +765,7 @@ fn screen_lines(
         inert
             .iter()
             .filter(|n| n.owner == ModIndex::new(index))
-            .map(|n| format!("{} (off)", n.point)),
+            .map(|n| crate::texts::fill("points.off", &[("point", &n.point)])),
     );
     (defines, extends)
 }

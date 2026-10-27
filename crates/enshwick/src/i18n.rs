@@ -66,7 +66,7 @@ impl Host {
 /// game in, such as an item's or a survivor's name; a text missing there
 /// comes in English, as the game shows it.
 ///
-/// `id` is a text tag's game id, [`Guid::id`](crate::content::Guid::id) of
+/// `id` is a text tag's game id, [`Guid::fnv1a`](crate::content::Guid::fnv1a) of
 /// the tag an item's or a template's data names. The text is read from the
 /// game's archive and stays valid for the process. `None` for a tag the
 /// game lacks, and always on a server, whose archive holds no texts.
@@ -139,12 +139,22 @@ impl Host {
 pub struct Language(pub u32);
 
 macro_rules! languages {
-    ($($name:ident = $id:literal, $code:literal, $doc:literal;)*) => {
+    ($($name:ident = $id:literal, $code:literal, $parent:ident, $doc:literal;)*) => {
         impl Language {
             $(#[doc = $doc] pub const $name: Self = Self($id);)*
 
             /// Every language the game knows, the fallback first.
             pub const ALL: &[Self] = &[$(Self::$name),*];
+
+            /// The language a text missing in this one is looked up in
+            /// next: the main variety of a regional language, else the
+            /// fallback.
+            const fn parent(self) -> Self {
+                match self.0 {
+                    $($id => Self::$parent,)*
+                    _ => Self::FALLBACK,
+                }
+            }
 
             /// The language's code in text files, such as `uk` or `pt-br`.
             ///
@@ -176,42 +186,85 @@ macro_rules! languages {
     };
 }
 
+// Each language with the one its missing texts come from next.
 languages! {
-    FALLBACK = 0, "en", "English, and every language without a text of its own.";
-    EN_US = 1, "en-us", "English (United States).";
-    EN_GB = 2, "en-gb", "English (United Kingdom).";
-    DE_DE = 3, "de", "German.";
-    NL_NL = 4, "nl", "Dutch.";
-    FR_FR = 5, "fr", "French.";
-    IT_IT = 6, "it", "Italian.";
-    ES_ES = 7, "es", "Spanish (Spain).";
-    ES_MX = 8, "es-mx", "Spanish (Mexico).";
-    RU_RU = 9, "ru", "Russian.";
-    PL_PL = 10, "pl", "Polish.";
-    JA_JP = 11, "ja", "Japanese.";
-    ID_ID = 12, "id", "Indonesian.";
-    KO_KR = 13, "ko", "Korean.";
-    MS_MY = 14, "ms", "Malay.";
-    PT_PT = 15, "pt", "Portuguese (Portugal).";
-    PT_BR = 16, "pt-br", "Portuguese (Brazil).";
-    TH_TH = 17, "th", "Thai.";
-    TR_TR = 18, "tr", "Turkish.";
-    VI_VN = 19, "vi", "Vietnamese.";
-    ZH_CN = 20, "zh-cn", "Chinese (Simplified).";
-    ZH_TW = 21, "zh-tw", "Chinese (Traditional).";
-    FR_CA = 22, "fr-ca", "French (Canada).";
-    ES_419 = 23, "es-419", "Spanish (Latin America).";
-    BG_BG = 24, "bg", "Bulgarian.";
-    CS_CZ = 25, "cs", "Czech.";
-    DA_DK = 26, "da", "Danish.";
-    FI_FI = 27, "fi", "Finnish.";
-    EL_GR = 28, "el", "Greek.";
-    HU_HU = 29, "hu", "Hungarian.";
-    NO_NO = 30, "no", "Norwegian.";
-    NB_NO = 31, "nb", "Norwegian (Bokmål).";
-    RO_RO = 32, "ro", "Romanian.";
-    SV_SE = 33, "sv", "Swedish.";
-    UK_UA = 34, "uk", "Ukrainian.";
+    FALLBACK = 0, "en", FALLBACK, "English, and every language without a text of its own.";
+    EN_US = 1, "en-us", FALLBACK, "English (United States).";
+    EN_GB = 2, "en-gb", FALLBACK, "English (United Kingdom).";
+    DE_DE = 3, "de", FALLBACK, "German.";
+    NL_NL = 4, "nl", FALLBACK, "Dutch.";
+    FR_FR = 5, "fr", FALLBACK, "French.";
+    IT_IT = 6, "it", FALLBACK, "Italian.";
+    ES_ES = 7, "es", FALLBACK, "Spanish (Spain).";
+    ES_MX = 8, "es-mx", ES_419, "Spanish (Mexico).";
+    RU_RU = 9, "ru", FALLBACK, "Russian.";
+    PL_PL = 10, "pl", FALLBACK, "Polish.";
+    JA_JP = 11, "ja", FALLBACK, "Japanese.";
+    ID_ID = 12, "id", FALLBACK, "Indonesian.";
+    KO_KR = 13, "ko", FALLBACK, "Korean.";
+    MS_MY = 14, "ms", FALLBACK, "Malay.";
+    PT_PT = 15, "pt", FALLBACK, "Portuguese (Portugal).";
+    PT_BR = 16, "pt-br", PT_PT, "Portuguese (Brazil).";
+    TH_TH = 17, "th", FALLBACK, "Thai.";
+    TR_TR = 18, "tr", FALLBACK, "Turkish.";
+    VI_VN = 19, "vi", FALLBACK, "Vietnamese.";
+    ZH_CN = 20, "zh-cn", FALLBACK, "Chinese (Simplified).";
+    ZH_TW = 21, "zh-tw", FALLBACK, "Chinese (Traditional).";
+    FR_CA = 22, "fr-ca", FR_FR, "French (Canada).";
+    ES_419 = 23, "es-419", ES_ES, "Spanish (Latin America).";
+    BG_BG = 24, "bg", FALLBACK, "Bulgarian.";
+    CS_CZ = 25, "cs", FALLBACK, "Czech.";
+    DA_DK = 26, "da", FALLBACK, "Danish.";
+    FI_FI = 27, "fi", FALLBACK, "Finnish.";
+    EL_GR = 28, "el", FALLBACK, "Greek.";
+    HU_HU = 29, "hu", FALLBACK, "Hungarian.";
+    NO_NO = 30, "no", FALLBACK, "Norwegian.";
+    NB_NO = 31, "nb", NO_NO, "Norwegian (Bokmål).";
+    RO_RO = 32, "ro", FALLBACK, "Romanian.";
+    SV_SE = 33, "sv", FALLBACK, "Swedish.";
+    UK_UA = 34, "uk", FALLBACK, "Ukrainian.";
+}
+
+impl Language {
+    /// The languages the game's settings offer a player, the set a mod
+    /// translates into: English as [`Language::FALLBACK`], which the game's
+    /// English (`en-us`) reads, then the others in the menu's order (client
+    /// build 426).
+    pub const OFFERED: &[Self] = &[
+        Self::FALLBACK,
+        Self::DE_DE,
+        Self::FR_FR,
+        Self::IT_IT,
+        Self::ES_ES,
+        Self::RU_RU,
+        Self::PL_PL,
+        Self::JA_JP,
+        Self::KO_KR,
+        Self::PT_BR,
+        Self::TH_TH,
+        Self::TR_TR,
+        Self::ZH_CN,
+        Self::ZH_TW,
+        Self::UK_UA,
+    ];
+
+    /// The languages a text for this one is looked up in, in order: this
+    /// language, the main variety of a regional one (`es-mx`, `es-419`,
+    /// `es`), and [`Language::FALLBACK`] last.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::Language;
+    ///
+    /// let order: Vec<Language> = Language::PT_BR.lookup_order().collect();
+    /// assert_eq!(order, [Language::PT_BR, Language::PT_PT, Language::FALLBACK]);
+    /// ```
+    pub fn lookup_order(self) -> impl Iterator<Item = Self> {
+        core::iter::successors(Some(self), |language| {
+            (*language != Self::FALLBACK).then(|| language.parent())
+        })
+    }
 }
 
 /// The key of the mod's own name in its texts: the Mods screen, the join
@@ -304,20 +357,20 @@ impl Texts {
         }
     }
 
-    /// The text of `key` in `language`, else in English.
+    /// The text of `key` in `language`, else in the next language of its
+    /// [`lookup_order`](Language::lookup_order), English last.
     ///
     /// # Examples
     ///
     /// See [`Texts`].
     #[must_use]
     pub fn get(&self, key: &str, language: Language) -> Option<&str> {
-        let find = |language| {
+        language.lookup_order().find_map(|language| {
             self.by_language
                 .get(&language)
                 .and_then(|entries| entries.get(key))
                 .map(String::as_str)
-        };
-        find(language).or_else(|| find(Language::FALLBACK))
+        })
     }
 
     /// The text of `key` in `language` with each `{name}` in it replaced by
@@ -426,6 +479,49 @@ impl Texts {
             .iter()
             .copied()
             .filter(|language| self.by_language.contains_key(language))
+    }
+
+    /// Each of `languages` paired with each key some language has a text
+    /// for and it lacks, in the order of `languages`, then by key; a text of
+    /// its main variety counts (`pt` for `pt-br`), English only for
+    /// [`Language::FALLBACK`] itself. A mod's test checks its texts against
+    /// [`Language::OFFERED`] with it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::i18n::{Language, Texts};
+    ///
+    /// let texts = Texts::parse("[en]\na = \"A\"\n[uk]\na = \"А\"\n")?;
+    /// assert_eq!(texts.missing_in(&[Language::UK_UA, Language::DE_DE]), [(Language::DE_DE, "a")]);
+    /// // In a mod's test: assert_eq!(texts.missing_in(Language::OFFERED), []);
+    /// # Ok::<(), enshwick::Off>(())
+    /// ```
+    #[must_use]
+    pub fn missing_in(&self, languages: &[Language]) -> Vec<(Language, &str)> {
+        let keys: std::collections::BTreeSet<&str> = self
+            .by_language
+            .values()
+            .flat_map(|entries| entries.keys().map(String::as_str))
+            .collect();
+        let has = |language: Language, key: &str| {
+            language
+                .lookup_order()
+                .take_while(|l| *l != Language::FALLBACK || language == Language::FALLBACK)
+                .any(|l| {
+                    self.by_language
+                        .get(&l)
+                        .is_some_and(|e| e.contains_key(key))
+                })
+        };
+        languages
+            .iter()
+            .flat_map(|&language| {
+                keys.iter()
+                    .filter(move |key| !has(language, key))
+                    .map(move |&key| (language, key))
+            })
+            .collect()
     }
 
     /// Each language paired with each key another language has a text for
@@ -571,6 +667,64 @@ mod tests {
         }
         assert_eq!(Language::from_code("PT-BR"), Some(Language::PT_BR));
         assert_eq!(Language::from_code("xx"), None);
+    }
+
+    #[test]
+    fn a_regional_language_falls_back_to_its_main_variety_before_english() {
+        let texts = Texts::parse(
+            "[en]\na = \"A\"\nb = \"B\"\n[es]\na = \"Ae\"\nb = \"Be\"\n[es-419]\na = \"Al\"\n[pt]\na = \"Ap\"\n",
+        )
+        .unwrap();
+        assert_eq!(texts.get("a", Language::ES_MX), Some("Al"));
+        assert_eq!(texts.get("b", Language::ES_MX), Some("Be"));
+        assert_eq!(texts.get("a", Language::PT_BR), Some("Ap"));
+        assert_eq!(texts.get("b", Language::PT_BR), Some("B"));
+        assert_eq!(texts.get("a", Language::ZH_TW), Some("A"));
+        assert_eq!(texts.get("a", Language(99)), Some("A"));
+    }
+
+    #[test]
+    fn missing_texts_are_named_per_language_and_a_main_variety_counts() {
+        let texts = Texts::parse(
+            "[en]\na = \"A\"\nb = \"B\"\n[pt]\na = \"Ap\"\nb = \"Bp\"\n[de]\na = \"Ad\"\n",
+        )
+        .unwrap();
+        let wanted = [
+            Language::FALLBACK,
+            Language::PT_BR,
+            Language::DE_DE,
+            Language::UK_UA,
+        ];
+        assert_eq!(
+            texts.missing_in(&wanted),
+            [
+                (Language::DE_DE, "b"),
+                (Language::UK_UA, "a"),
+                (Language::UK_UA, "b")
+            ]
+        );
+    }
+
+    #[test]
+    fn every_offered_language_has_a_code_and_english_is_the_fallback() {
+        assert_eq!(Language::OFFERED.first(), Some(&Language::FALLBACK));
+        assert!(!Language::OFFERED.contains(&Language::EN_US));
+        for language in Language::OFFERED {
+            assert!(!language.code().is_empty());
+        }
+    }
+
+    #[test]
+    fn every_language_s_lookup_order_ends_at_the_fallback_once() {
+        for &language in Language::ALL.iter().chain(&[Language(99)]) {
+            let order: Vec<Language> = language.lookup_order().collect();
+            assert_eq!(order.first(), Some(&language));
+            assert_eq!(order.last(), Some(&Language::FALLBACK));
+            assert_eq!(
+                order.iter().filter(|l| **l == Language::FALLBACK).count(),
+                1
+            );
+        }
     }
 
     #[test]

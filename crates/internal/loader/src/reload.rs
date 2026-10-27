@@ -51,6 +51,8 @@ const RELOADABLE: &[&str] = &[
     "settings",
     "data_dir",
     "subscribe",
+    "subscribe_tick",
+    "set_tick_every",
     "mods",
     "hosting",
     "config_schema",
@@ -463,6 +465,8 @@ mod tests {
         for call in [
             "hook",
             "subscribe",
+            "subscribe_tick",
+            "set_tick_every",
             "log",
             "settings",
             "ui_frame",

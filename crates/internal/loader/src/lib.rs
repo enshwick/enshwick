@@ -227,6 +227,7 @@ mod terrain;
 mod texts;
 #[cfg(windows)]
 mod textures;
+pub mod ticks;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build writes the game's voxels")
