@@ -252,7 +252,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
                 pack.ids().len(),
                 pack.drops().len(),
                 pack.changes().len(),
-                pack.selections().len()
+                pack.selections().len() + pack.recipe_selections().len()
             ),
         );
         with(|packs| {
@@ -339,6 +339,7 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             ModIndex::new(index),
             pack.changes().to_vec(),
             pack.selections().to_vec(),
+            pack.recipe_selections().to_vec(),
         ) {
             Ok(rebuilt) => {
                 crate::log::write(
@@ -346,7 +347,9 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
                     id,
                     &format!(
                         "data pack reloaded: {} changes of values, {rebuilt} resources built again",
-                        pack.changes().len() + pack.selections().len()
+                        pack.changes().len()
+                            + pack.selections().len()
+                            + pack.recipe_selections().len()
                     ),
                 );
                 taken = true;

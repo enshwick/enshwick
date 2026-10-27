@@ -148,6 +148,7 @@ mod tests {
             .map(|p| match p {
                 Pending::One(d) => d.change.value,
                 Pending::Each { change, .. } => change.value,
+                Pending::Recipes { change, .. } => change.value,
             })
             .collect();
         assert_eq!(values, vec![Value::Set(99.0), Value::Times(3.0), UNSET]);

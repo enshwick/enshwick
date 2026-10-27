@@ -46,6 +46,14 @@
             "$ref": "#/$defs/ValueEntry"
           }
         },
+        "kind": {
+          "description": "Every vanilla recipe whose output is of these kinds:\n`building-block`, `roof`, `overgrowth`, `terrain` or `other`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "output": {
           "description": "Every vanilla recipe that makes one of these items.",
           "type": "array",
@@ -83,6 +91,14 @@
               "type": "null"
             }
           ]
+        },
+        "workshop": {
+          "description": "Every vanilla recipe made at these crafting stations, named by their\nitems.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false

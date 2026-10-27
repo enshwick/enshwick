@@ -45,6 +45,40 @@ impl RecipeKind {
         Self::Terrain,
     ];
 
+    /// The kind's name in a data pack, such as `building-block`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// assert_eq!(RecipeKind::BuildingBlock.name(), "building-block");
+    /// ```
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::BuildingBlock => "building-block",
+            Self::Roof => "roof",
+            Self::Overgrowth => "overgrowth",
+            Self::Terrain => "terrain",
+            Self::Other => "other",
+        }
+    }
+
+    /// The kind [`RecipeKind::name`] calls `name`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::recipes::RecipeKind;
+    ///
+    /// assert_eq!(RecipeKind::named("roof"), Some(RecipeKind::Roof));
+    /// ```
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|kind| kind.name() == name)
+    }
+
     /// The loader's code for this kind.
     ///
     /// # Examples
@@ -94,5 +128,18 @@ impl From<crate::abi::RecipeKind> for RecipeKind {
 impl From<RecipeKind> for crate::abi::RecipeKind {
     fn from(kind: RecipeKind) -> Self {
         kind.code()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_kind_reads_back_from_its_name() {
+        for kind in RecipeKind::ALL {
+            assert_eq!(RecipeKind::named(kind.name()), Some(*kind));
+        }
+        assert_eq!(RecipeKind::named("Roof"), None);
     }
 }
