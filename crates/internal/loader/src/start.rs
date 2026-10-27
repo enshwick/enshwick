@@ -149,6 +149,9 @@ pub(crate) fn start(
         .collect();
     let plan = resolve::resolve(&candidates, game.side);
     skip(&libraries, &candidates, &plan);
+    if let Some(w) = watching.as_mut() {
+        w.check("", Stage::Skip);
+    }
     carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;

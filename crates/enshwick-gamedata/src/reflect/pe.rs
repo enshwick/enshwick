@@ -193,6 +193,8 @@ const OPTIONAL_DIRECTORY_COUNT: usize = 108;
 const DEBUG_DIRECTORY_INDEX: u32 = 6;
 /// The base relocation directory, the data directory before the debug one.
 const OPTIONAL_RELOC_DIRECTORY: usize = 112 + 5 * 8;
+/// The base relocation directory's index among the data directories.
+const RELOC_DIRECTORY_INDEX: u32 = 5;
 /// A base relocation block's header: the page's RVA and the block's size.
 const RELOC_BLOCK: u64 = 8;
 /// `IMAGE_REL_BASED_DIR64`: a whole 64-bit address to move with the image.
@@ -262,9 +264,18 @@ impl<'a> Image<'a> {
         let debug_rva = directory(OPTIONAL_DEBUG_DIRECTORY);
         let debug_size = directory(OPTIONAL_DEBUG_DIRECTORY + 4);
         image.fingerprint = image.codeview(u64::from(debug_rva), u64::from(debug_size));
+        let has_relocations = optional_size >= OPTIONAL_RELOC_DIRECTORY + 8
+            && u32_at(bytes, optional + OPTIONAL_DIRECTORY_COUNT)
+                .is_some_and(|count| count > RELOC_DIRECTORY_INDEX);
+        let reloc = |at: usize| {
+            has_relocations
+                .then(|| u32_at(bytes, optional + at))
+                .flatten()
+                .map_or(0, u64::from)
+        };
         image.relocations = (
-            u64::from(directory(OPTIONAL_RELOC_DIRECTORY)),
-            u64::from(directory(OPTIONAL_RELOC_DIRECTORY + 4)),
+            reloc(OPTIONAL_RELOC_DIRECTORY),
+            reloc(OPTIONAL_RELOC_DIRECTORY + 4),
         );
         Ok(image)
     }
@@ -541,7 +552,7 @@ mod tests {
         let optional = 0x40 + 24;
         bytes[0x40 + 20..0x40 + 22].copy_from_slice(&0xF0u16.to_le_bytes());
         bytes[optional..optional + 2].copy_from_slice(&0x20bu16.to_le_bytes());
-        bytes[optional + 108..optional + 112].copy_from_slice(&16u32.to_le_bytes());
+        bytes[optional + 108..optional + 112].copy_from_slice(&6u32.to_le_bytes());
         let reloc = optional + 112 + 5 * 8;
         bytes[reloc..reloc + 4].copy_from_slice(&0x400u32.to_le_bytes());
         bytes[reloc + 4..reloc + 8].copy_from_slice(&12u32.to_le_bytes());

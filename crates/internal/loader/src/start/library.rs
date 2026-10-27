@@ -325,20 +325,26 @@ fn discover(
         })
         .collect::<Vec<_>>();
     for path in files {
+        let file = path
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default();
         if crate::others::is_mod_file(&path) == Some(false) {
-            if run == Run::Game
-                && let Some(file) = load_native(&path)
-            {
+            if run == Run::Game {
+                let native = load_native(&path);
                 loaded(&file);
-                others.push(OtherDll {
-                    file,
-                    origin: Origin::Mods,
-                    loaded: true,
-                });
+                if let Some(file) = native {
+                    others.push(OtherDll {
+                        file,
+                        origin: Origin::Mods,
+                        loaded: true,
+                    });
+                }
             }
-        } else if let Some(library) = load(&path) {
-            loaded(&library.file);
-            mods.push(library);
+        } else {
+            let library = load(&path);
+            loaded(&file);
+            mods.extend(library);
         }
     }
     (mods, others)

@@ -1,8 +1,8 @@
 //! Game code changed around the API, put down to the mod that changed it.
 //!
 //! A copy of the game's `.text`, taken as the loader starts, is compared
-//! after each mod loads, initialises and gets ready. The copy lives only while the loader starts; the changes found stay for
-//! the conflict report.
+//! after each mod loads, initialises and gets ready. The copy lives only
+//! while the loader starts; the changes found stay for the conflict report.
 
 use std::fmt::Write as _;
 
@@ -14,6 +14,8 @@ const CHUNK: usize = 4096;
 /// More ranges than this between the image on disk and the code in memory
 /// mean the file holds packed or encrypted code, not changes.
 const PACKED_RANGES: usize = 512;
+/// Changed bytes past one in this many of the code also mean packed code.
+const PACKED_SHARE: usize = 100;
 
 /// When a change was found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,6 +27,9 @@ pub enum Stage {
     Load,
     /// In a mod's `init`.
     Init,
+    /// While the loader unloaded the DLLs it skips, such as an older copy of
+    /// a mod: by one of their detach routines.
+    Skip,
     /// After every `init`, before the loader armed its hooks: by a thread of
     /// some mod or another program.
     BeforeArming,
@@ -39,6 +44,7 @@ impl Stage {
         match self {
             Self::BeforeStart => "before enshwick started",
             Self::Load => "while it loaded",
+            Self::Skip => "while enshwick unloaded the DLLs it skips",
             Self::Init => "in its init",
             Self::BeforeArming => "after every init, before enshwick armed its hooks",
             Self::Ready => "in its ready",
@@ -57,6 +63,18 @@ pub struct CodeChange {
     pub by: String,
     /// When.
     pub stage: Stage,
+}
+
+impl CodeChange {
+    /// Who changed it, in words.
+    #[must_use]
+    pub fn who(&self) -> &str {
+        if self.by.is_empty() {
+            "another program"
+        } else {
+            &self.by
+        }
+    }
 }
 
 /// The ranges where `old` and `new` differ, as offset and length; ranges
@@ -98,34 +116,41 @@ pub fn diff(old: &[u8], new: &[u8]) -> Vec<(usize, usize)> {
 #[derive(Debug)]
 pub struct Watch {
     copy: Vec<u8>,
+    /// Ranges the loader itself writes while it starts, as offset and
+    /// length, such as the stub's hold on the server's entry point.
+    ignored: Vec<(usize, usize)>,
     changes: Vec<CodeChange>,
 }
 
 impl Watch {
-    /// Starts from the code as it is `now`.
+    /// Starts from the code as it is `now`, leaving out the `ignored`
+    /// ranges.
     #[must_use]
-    pub fn new(now: &[u8]) -> Self {
+    pub fn new(now: &[u8], ignored: &[(usize, usize)]) -> Self {
         Self {
             copy: now.to_vec(),
+            ignored: ignored.to_vec(),
             changes: Vec::new(),
         }
     }
 
     /// Starts from `disk`, the code as the image on disk holds it once
     /// relocated, and puts what differs `now` down to programs that ran
-    /// before the loader; `None` when they differ in so many places that the
-    /// file's code is packed rather than changed.
+    /// before the loader; `None` when they differ so much that the file's
+    /// code is packed or encrypted rather than changed.
     #[must_use]
-    pub fn from_disk(disk: &[u8], now: &[u8]) -> Option<Self> {
+    pub fn from_disk(disk: Vec<u8>, now: &[u8], ignored: &[(usize, usize)]) -> Option<Self> {
         if disk.len() != now.len() {
             return None;
         }
-        let ranges = diff(disk, now);
-        if ranges.len() > PACKED_RANGES {
+        let ranges = diff(&disk, now);
+        let changed: usize = ranges.iter().map(|&(_, len)| len).sum();
+        if ranges.len() > PACKED_RANGES || changed > now.len() / PACKED_SHARE {
             return None;
         }
         let mut watch = Self {
-            copy: disk.to_vec(),
+            copy: disk,
+            ignored: ignored.to_vec(),
             changes: Vec::new(),
         };
         watch.note(now, &ranges, "", Stage::BeforeStart);
@@ -133,11 +158,12 @@ impl Watch {
     }
 
     /// Compares the code `now` with the copy and puts each new change down to
-    /// `by` at `stage`; the number of ranges found.
+    /// `by` at `stage`; the number of changes noted.
     pub fn check(&mut self, now: &[u8], by: &str, stage: Stage) -> usize {
+        let before = self.changes.len();
         let ranges = diff(&self.copy, now);
         self.note(now, &ranges, by, stage);
-        ranges.len()
+        self.changes.len() - before
     }
 
     /// Takes the code `now` as the copy without noting anything: the
@@ -162,15 +188,48 @@ impl Watch {
 
     fn note(&mut self, now: &[u8], ranges: &[(usize, usize)], by: &str, stage: Stage) {
         for &(offset, len) in ranges {
+            let parts: Vec<(usize, usize)> = outside(offset, len, &self.ignored)
+                .into_iter()
+                .filter_map(|(at, n)| {
+                    let (mut start, mut end) = (at, at + n);
+                    while start < end && self.copy[start] == now[start] {
+                        start += 1;
+                    }
+                    while end > start && self.copy[end - 1] == now[end - 1] {
+                        end -= 1;
+                    }
+                    (start < end).then_some((start, end - start))
+                })
+                .collect();
             self.copy[offset..offset + len].copy_from_slice(&now[offset..offset + len]);
-            self.changes.push(CodeChange {
-                offset,
-                len,
-                by: by.to_owned(),
-                stage,
-            });
+            for (offset, len) in parts {
+                self.changes.push(CodeChange {
+                    offset,
+                    len,
+                    by: by.to_owned(),
+                    stage,
+                });
+            }
         }
     }
+}
+
+/// The parts of the range at `offset`, `len` bytes long, that no range of
+/// `ignored` covers.
+fn outside(offset: usize, len: usize, ignored: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    let mut parts = vec![(offset, offset + len)];
+    for &(skip, skip_len) in ignored {
+        let skip_end = skip + skip_len;
+        parts = parts
+            .into_iter()
+            .flat_map(|(start, end)| {
+                [(start, end.min(skip)), (start.max(skip_end), end)]
+                    .into_iter()
+                    .filter(|(a, b)| a < b)
+            })
+            .collect();
+    }
+    parts.into_iter().map(|(a, b)| (a, b - a)).collect()
 }
 
 /// Moves the 64-bit addresses in a section's bytes as Windows does for an
@@ -245,12 +304,7 @@ pub fn report(changes: &[CodeChange], place: impl Fn(usize) -> String) -> Vec<St
                 if i > 0 {
                     line.push_str(", then by ");
                 }
-                let who = if change.by.is_empty() {
-                    "another program"
-                } else {
-                    change.by.as_str()
-                };
-                let _w = write!(line, "{who} {}", change.stage.describe());
+                let _w = write!(line, "{} {}", change.who(), change.stage.describe());
             }
             line
         })
@@ -268,7 +322,7 @@ mod tests {
     #[test]
     fn each_change_goes_to_the_mod_that_made_it() {
         let mut now = code(3 * CHUNK);
-        let mut watch = Watch::new(&now);
+        let mut watch = Watch::new(&now, &[]);
         now[100..105].copy_from_slice(&[0xE9; 5]);
         assert_eq!(watch.check(&now, "speed.dll", Stage::Load), 1);
         assert_eq!(watch.check(&now, "other.dll", Stage::Load), 0);
@@ -296,7 +350,7 @@ mod tests {
     #[test]
     fn absorbed_changes_are_never_put_down_to_a_mod() {
         let mut now = code(CHUNK);
-        let mut watch = Watch::new(&now);
+        let mut watch = Watch::new(&now, &[]);
         now[10] = 0xCC;
         watch.absorb(&now);
         assert_eq!(watch.check(&now, "you.mod", Stage::Ready), 0);
@@ -323,7 +377,7 @@ mod tests {
         let disk = code(CHUNK);
         let mut now = disk.clone();
         now[50] ^= 1;
-        let watch = Watch::from_disk(&disk, &now).expect("few changes");
+        let watch = Watch::from_disk(disk.clone(), &now, &[]).expect("few changes");
         assert_eq!(
             watch.changes(),
             [CodeChange {
@@ -343,8 +397,39 @@ mod tests {
             .enumerate()
             .map(|(i, b)| if i % (2 * JOIN_GAP) == 0 { !b } else { *b })
             .collect();
-        assert!(Watch::from_disk(&disk, &now).is_none());
-        assert!(Watch::from_disk(&disk, &disk[1..]).is_none());
+        assert!(Watch::from_disk(disk.clone(), &now, &[]).is_none());
+        assert!(Watch::from_disk(disk.clone(), &disk[1..], &[]).is_none());
+        let encrypted: Vec<u8> = disk.iter().map(|b| !b).collect();
+        assert!(Watch::from_disk(disk, &encrypted, &[]).is_none());
+    }
+
+    #[test]
+    fn the_loader_s_own_writes_are_never_put_down_to_anyone() {
+        let disk = code(CHUNK);
+        let mut now = disk.clone();
+        now[100..114].copy_from_slice(&[0xFF; 14]);
+        let entry = [(100, 14)];
+        let mut watch = Watch::from_disk(disk.clone(), &now, &entry).expect("few changes");
+        assert!(watch.changes().is_empty());
+        now[100..114].copy_from_slice(&disk[100..114]);
+        now[120] ^= 1;
+        assert_eq!(watch.check(&now, "you.mod", Stage::Ready), 1);
+        assert_eq!(
+            watch.changes(),
+            [CodeChange {
+                offset: 120,
+                len: 1,
+                by: "you.mod".into(),
+                stage: Stage::Ready
+            }]
+        );
+    }
+
+    #[test]
+    fn a_change_around_an_ignored_range_keeps_both_ends() {
+        assert_eq!(outside(0, 30, &[(10, 5)]), [(0, 10), (15, 15)]);
+        assert_eq!(outside(10, 5, &[(0, 30)]), []);
+        assert_eq!(outside(0, 4, &[(10, 5)]), [(0, 4)]);
     }
 
     #[test]

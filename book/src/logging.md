@@ -237,15 +237,27 @@ hand, passes none of the checks above. The loader finds such changes anyway:
 it keeps a copy of the game's code section while it starts and compares it
 after each DLL in `mods/` loads, after each mod's `init` and after each
 `ready`. A change found is put down to the DLL or mod that ran last, logged as
-a warning in the loader's log and listed with the conflicts. The copy starts
-from the executable on disk, so code changed before the loader started shows
-as `by another program before enshwick started`; when the file's code does
-not read as the code in memory, the copy starts when the loader does.
+a warning in the loader's log and listed with the conflicts:
 
+| Line ends with | The change came |
+| --- | --- |
+| `by another program before enshwick started` | before the loader, from a DLL in `mods/chain/` or another program |
+| `by a.dll while it loaded` | while that DLL loaded, from its own start-up code |
+| `by another program while enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
+| `by you.mod in its init` or `in its ready` | while that mod's `init` or `ready` ran |
+| `by another program after every init, before enshwick armed its hooks` | between the last `init` and arming, from a thread of some mod or another program |
+
+The copy starts from the executable on disk, so code changed before the
+loader started shows too; when the file's code does not read as the code in
+memory, as for an encrypted executable, the copy starts when the loader does.
 Two names on one line mean two mods wrote the same bytes, and the later one
-won. Changes the loader makes for hooks and code patches through the API are
-never listed. A change a mod makes later, from a thread or a game event, and
-changes to game data rather than code are not seen.
+won.
+
+The loader's own writes are never listed: its hooks and the code patches
+mods ask for through the API, and the jump that holds the server's entry
+point until the loader is ready. A thread's write is put down to whatever
+ran last before the next comparison. Changes made after the last `ready`,
+and changes to game data rather than code, are not seen.
 
 ## Faults
 

@@ -131,10 +131,11 @@ pub fn fields() -> Vec<String> {
 }
 
 /// Notes that mod `owner` wrote a component of type `hash`; a write this
-/// thread noted before costs a lookup and no lock.
+/// thread noted before costs a lookup and no lock, and a thread shutting
+/// down notes nothing.
 pub fn note_write(hash: u32, owner: ModIndex) {
-    let new = WRITTEN.with(|seen| seen.borrow_mut().insert((hash, owner)));
-    if new {
+    let new = WRITTEN.try_with(|seen| seen.borrow_mut().insert((hash, owner)));
+    if new == Ok(true) {
         let mut found = FOUND.relock();
         if !found.writes.contains(&(hash, owner)) {
             found.writes.push((hash, owner));
