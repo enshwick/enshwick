@@ -13,12 +13,12 @@ use super::accounts::{self, Act, Refusal};
 use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
-fn name(player: &PlayerInfo) -> String {
+pub(super) fn name(player: &PlayerInfo) -> String {
     let len = usize::from(player.name_len).min(player.name.len());
     accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
 }
 
-fn is_admin(player: &PlayerInfo) -> bool {
+pub(super) fn is_admin(player: &PlayerInfo) -> bool {
     player.permissions & PlayerInfo::CAN_KICK_BAN != 0
 }
 
@@ -159,6 +159,6 @@ fn refused(act: Act, refusal: &Refusal) -> String {
 }
 
 /// Why the world did not read.
-fn unread(status: Status) -> String {
+pub(super) fn unread(status: Status) -> String {
     texts::fill("console.unread", &[("status", &format!("{status:?}"))])
 }

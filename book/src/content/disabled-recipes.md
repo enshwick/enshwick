@@ -79,7 +79,7 @@ file, finds names and changes the rules:
 ```text
 enshwick recipes find torch01
 Recipes that match "torch01": 1.
-Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, makes Tool_Torch01 (disabled)
+Tool_Torch01_T0_PK (7fa62007-a38e-4790-8591-873055fc3f34) at hand, makes Tool_Torch01 (item 1234) (disabled)
 ```
 
 ## Players who join
