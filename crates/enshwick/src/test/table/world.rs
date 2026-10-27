@@ -724,6 +724,29 @@ pub(crate) extern "system" fn build_rights(
     }
 }
 
+pub(crate) extern "system" fn map_markers(
+    _me: ModHandle,
+    out: *mut crate::abi::MapMarkerInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let Some(markers) = with(None, |s| {
+        let first = !core::mem::replace(&mut s.edits.markers_asked, true);
+        (!s.edits.stopped)
+            .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
+    }) else {
+        return Status::MISSING;
+    };
+    let Some(markers) = markers else {
+        return Status::NOT_LOADED;
+    };
+    crate::test::table::mods::list(&markers, out, entry_size, capacity, count)
+}
+
 pub(crate) extern "system" fn world_persists(
     _me: ModHandle,
     min: *const [f64; 3],

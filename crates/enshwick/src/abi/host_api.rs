@@ -10,14 +10,14 @@ use crate::abi::{
     ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
     EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
     Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec,
+    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
+    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
+    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
+    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    TerrainEdit, TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1372,5 +1372,22 @@ pub struct HostApi {
         min: *const [f64; 3],
         max: *const [f64; 3],
         kept: *mut u8,
+    ) -> Status,
+    /// Up to `capacity` map markers of the scene the server runs and how
+    /// many there are: what the scene's global chunk places, read from the
+    /// game's archive once per scene on a thread of the loader's;
+    /// [`Status::NOT_LOADED`] until that read is done. Entries are `entry_size` bytes apart,
+    /// the caller's `size_of::<MapMarkerInfo>()`, at least a [`Header`]
+    /// ([`Status::BAD_ARGS`] below it); a null `out` asks only for the
+    /// count, and a null `count` is not written. On the server's game
+    /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
+    /// inside a step); [`Status::MISSING`] while no world runs or when the
+    /// scene does not read on this build. Since minor 97.
+    pub map_markers: extern "system" fn(
+        me: ModHandle,
+        out: *mut MapMarkerInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
     ) -> Status,
 }

@@ -280,6 +280,37 @@ pub const INVENTORY_SETUP_INITIALIZED: &str = "inventory_setup.initialized";
 pub const INVENTORY: &str = "inventory";
 /// The id of a stack in an inventory, its `u32` item first.
 pub const ITEM_STACK: &str = "item_stack";
+/// The id of a map marker's type, `MapMarker`.
+pub const MAP_MARKER: &str = "map_marker";
+/// The id of a map marker's label text tag, `markerId`, a GUID.
+pub const MAP_MARKER_ID: &str = "map_marker.marker_id";
+/// The id of a map marker's type reference, `markerType`, a GUID.
+pub const MAP_MARKER_TYPE: &str = "map_marker.marker_type";
+/// The id of a scene chunk's resource type, which lists what it spawns.
+pub const SCENE_CHUNK: &str = "scene_chunk";
+/// The id of a scene chunk's template references, a blob array of GUIDs.
+pub const SCENE_CHUNK_TEMPLATES: &str = "scene_chunk.templates";
+/// The id of a scene chunk's spawn entries, a blob array of
+/// [`SCENE_SPAWN_ENTRY`].
+pub const SCENE_CHUNK_ENTITIES: &str = "scene_chunk.entities";
+/// The id of a scene chunk's spawn entry type, whose size is its stride.
+pub const SCENE_SPAWN_ENTRY: &str = "scene_spawn_entry";
+/// The id of a spawn entry's template index, a `u16`.
+pub const SCENE_SPAWN_TEMPLATE: &str = "scene_spawn_entry.template_index";
+/// The id of a spawn entry's packed transform.
+pub const SCENE_SPAWN_TRANSFORM: &str = "scene_spawn_entry.transform";
+/// The ids of a packed transform's position halves, low then high word of
+/// x, y and z, each a `u16`.
+pub const SCENE_TRANSFORM_POSITION: [&str; 6] = [
+    "scene_transform.position_x0",
+    "scene_transform.position_x1",
+    "scene_transform.position_y0",
+    "scene_transform.position_y1",
+    "scene_transform.position_z0",
+    "scene_transform.position_z1",
+];
+/// The id of a template resource's components, a blob array of variants.
+pub const TEMPLATE_COMPONENTS: &str = "template.components";
 
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";

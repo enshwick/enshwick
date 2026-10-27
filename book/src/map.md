@@ -29,14 +29,18 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Markers
 
-`map.markers()` lists every entity with a `MapMarker`, by entity:
+`map.markers()` lists every marker the scene places, in the scene's order:
 towns, ruins, dungeons, Flame shrines, quest areas and the like. Each
-`MapMarker` has its entity, its position in metres, its type and the text
-tag of its label. `map.markers_in(a, b)` keeps those in the box between two
-corners, edges included. Both walk every marker, so call them now and then,
-not every step. They fail with a [`WorldError`](world.md#writing-components):
-`WrongThread` off the game thread, `Missing` while no world runs, and
-`Refused` for a corner that is not finite.
+`MapMarker` has its position in metres, its type and the text tag of its
+label. The loader reads them from the game's data once per scene, apart
+from the game thread, so they are there with no player near and later calls
+are cheap. Until that read is done, a second or two after the first call,
+they fail with `NotLoaded`: ask again later.
+`map.markers_in(a, b)` keeps those in the box between two corners, edges
+included. They fail with a [`WorldError`](world.md#writing-components):
+`WrongThread` off the game thread, `Missing` while no world runs or when
+the scene does not read on the game build, and `Refused` for a corner that
+is not finite.
 
 A marker's type is a `MapMarkerTypeId`, the key of the game's marker type
 registry. The registry is game data and grows with the game, so the API

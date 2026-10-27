@@ -65,10 +65,11 @@ use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget}
 use world::{
     actions, build_rights, chat, component, component_write, destroy, emit, entities,
     entity_template, event_types, feature, forget_game_settings, game_event, game_settings,
-    hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
-    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
-    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    voxel_read, weather_at, weather_fronts, world_key, world_persists, world_quiet,
+    hosting, keep_game_settings, map_markers, notify, player, players, rename_filter, run_console,
+    save_world, server_world, set_game_settings, set_label, set_time_of_day, set_time_speed,
+    set_weather, spawn, status, teleport, terrain_edit, terrain_materials, time_of_day,
+    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_persists,
+    world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -348,6 +349,11 @@ pub(crate) struct WorldEdits {
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
     /// Whether the world has stopped, as between two worlds.
     pub(crate) stopped: bool,
+    /// Whether the scene's map markers are held as still being read.
+    pub(crate) markers_pending: bool,
+    /// Whether the mod asked for the scene's map markers in this world,
+    /// which starts their read.
+    pub(crate) markers_asked: bool,
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -626,6 +632,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_markers,
     fog_open,
     fog_read,
+    map_markers,
     config_check,
     texts,
     content_serve,
