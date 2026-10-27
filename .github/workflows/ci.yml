@@ -13,8 +13,10 @@ on:
     branches: [main]
   # The merge queue checks each group of pull requests on top of main.
   merge_group:
+  # GitHub delays scheduled runs for hours and drops many: four tries a
+  # night, and the gate lets the first through.
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "17 1,3,5,7 * * *"
   workflow_dispatch:
     inputs:
       nightly:
@@ -31,7 +33,43 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A scheduled run goes ahead unless a nightly lane already ran or runs
+  # within the last 20 hours.
+  gate:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          since=$(date -u -d '20 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          ran=false
+          for id in $(gh run list -R "$REPO" --workflow ci.yml --created ">=$since" \
+              --limit 100 --json databaseId,event \
+              -q ".[] | select(.event == \"schedule\" or .event == \"workflow_dispatch\") | .databaseId"); do
+            [ "$id" = "$RUN_ID" ] && continue
+            if gh run view "$id" -R "$REPO" --json jobs -q '.jobs[]
+                | select(.name == "nightly / nightly")
+                | select(.status != "completed" or .conclusion == "success")
+                | .name' | grep -q .; then
+              ran=true
+              echo "the nightly lane ran in run $id"
+              break
+            fi
+          done
+          echo "run=$([ "$ran" = true ] && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
   rust:
+    needs: gate
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.gate.outputs.run == 'true') }}
     # main: the organization runners run only workflows from main.
     uses: enshwick/.github/.github/workflows/rust-ci.yml@main # zizmor: ignore[unpinned-uses]
     permissions:
@@ -49,7 +87,8 @@ jobs:
       ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
 
   nightly:
-    if: github.event_name == 'schedule' || inputs.nightly
+    needs: gate
+    if: ${{ !cancelled() && ((github.event_name == 'schedule' && needs.gate.outputs.run == 'true') || inputs.nightly) }}
     uses: enshwick/.github/.github/workflows/rust-nightly.yml@main # zizmor: ignore[unpinned-uses]
     permissions:
       contents: read
