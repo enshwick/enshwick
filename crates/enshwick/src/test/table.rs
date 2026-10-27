@@ -60,7 +60,7 @@ use services::{
 use transactions::{
     transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
 };
-use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
+use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
     actions, build_rights, chat, component, component_write, destroy, emit, entities,
     entity_template, event_types, feature, forget_game_settings, game_event, game_settings,
@@ -183,6 +183,8 @@ pub(crate) struct State {
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
     /// The terrain edits and transactions the mod asked for.
     pub(crate) edits: WorldEdits,
+    /// Whether the mod opened the fog of war.
+    pub(crate) fog_opened: bool,
     pub(crate) config_schema: Option<String>,
     /// Frame callbacks: callback and pointer.
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
@@ -350,7 +352,7 @@ pub(crate) struct WorldEdits {
 /// Waits for the table to be free, then answers from `host`.
 #[expect(
     clippy::too_many_lines,
-    reason = "the fake's whole state, a line per field"
+    reason = "one line per part of the fake's state, which only grows"
 )]
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
@@ -409,6 +411,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         forecasts: Vec::new(),
         terrain: None,
         edits: WorldEdits::default(),
+        fog_opened: false,
         config_schema: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
@@ -620,6 +623,8 @@ pub(crate) static TABLE: HostApi = HostApi {
     ui_dialog,
     ui_hud,
     ui_markers,
+    fog_open,
+    fog_read,
     config_check,
     texts,
     content_serve,

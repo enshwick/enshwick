@@ -141,6 +141,7 @@ reason of the form `<what>: <why>`, such as
 | 7    | `WRONG_THREAD`  | Called from a thread the function does not serve                           | `called off the thread it serves`  |
 | 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
 | 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
+| 10   | `STATIC_HALF`   | The static half of a component type: template data, never written          | `template data, never written`     |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -366,6 +367,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
 | `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
-| `serve_call`             | Serves a call, a described service named after the mod, with its input and answer; init only         | 94          |
-| `find_call`              | Asks for another mod's call by name and major, matched field by field after init; init only          | 94          |
-| `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 94          |
+| `fog_open`               | Has the loader copy the client's fog of war for the mod; client, init only                           | 94          |
+| `fog_read`               | Copies a box of the client's fog of war and its size and version; any thread                         | 94          |
+| `serve_call`             | Serves a call, a described service named after the mod, with its input and answer; init only         | 95          |
+| `find_call`              | Asks for another mod's call by name and major, matched field by field after init; init only          | 95          |
+| `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 95          |

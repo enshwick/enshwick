@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 94
+#define ENSHWICK_ABI_MINOR 95
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -1006,6 +1006,31 @@ typedef struct EnshwickExperiencePass {
   void *token;
 } EnshwickExperiencePass;
 
+// The size, scale and version of the client's fog of war, which
+// `HostApi::fog_read` writes.
+//
+// The fog is one image of a byte per pixel, the coverage from 0 (hidden)
+// to 255 (uncovered), row 0 at the world's high z edge and x growing with
+// world x.
+typedef struct EnshwickFogInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The image's width in pixels.
+  uint32_t width;
+  // The image's height in pixels.
+  uint32_t height;
+  // The metres one pixel covers along each axis.
+  float metres_per_pixel;
+  // The world's z size the fog covers, in metres: pixel row
+  // `(size_z - z) / metres_per_pixel`.
+  float size_z;
+  // Grows whenever pixels of the copy changed.
+  uint64_t version;
+  // Counts the fogs the loader has seen, one per world the client
+  // enters; a new one starts from the save of that world.
+  uint64_t session;
+} EnshwickFogInfo;
+
 // A game event handed to a `GameEventFn`, from the ECS event streams
 // of the server's systems.
 typedef struct EnshwickGameEventData {
@@ -1075,6 +1100,11 @@ typedef uint32_t EnshwickStatus;
 // the height the loader takes. A mod built before minor 87 reads it as
 // an unknown failure. Since minor 87.
 #define EnshwickStatus_OUTSIDE_WORLD 9
+// The component type is the static half of its ECS type: the set-up
+// values the entity's template holds and every entity of that template
+// shares, which a write would change for all of them. A mod built
+// before minor 94 reads it as an unknown failure. Since minor 94.
+#define EnshwickStatus_STATIC_HALF 10
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -2702,7 +2732,9 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*type_hash)(struct EnshwickStr type_name, uint32_t *out);
   // A read-only pointer to `entity`'s component of type `type_hash`, valid
   // until the game thread moves on; on the server's game thread only.
-  // Since minor 3.
+  // For the static half of an ECS type, such as `FuelSetup`, it is the
+  // set-up data the entity's template holds (since minor 94; the
+  // dynamic half's data before). Since minor 3.
   EnshwickStatus (*component)(EnshwickModHandle me,
                               uint32_t entity,
                               uint32_t type_hash,
@@ -2982,8 +3014,10 @@ typedef struct EnshwickHostApi {
   // loader marks the component changed, as the game's own writes do, so
   // the game sends it to clients and saves it. `Status::REFUSED` for a
   // copy the game keeps for clients (`Network*`, `Client*`), which it
-  // overwrites; `Status::MISSING` when the entity lacks the component.
-  // On the server's game thread only. Since minor 22.
+  // overwrites; `Status::STATIC_HALF` for the static half of an ECS
+  // type, the template's set-up data (since minor 94);
+  // `Status::MISSING` when the entity lacks the component. On the
+  // server's game thread only. Since minor 22.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
                                     uint32_t entity,
                                     uint32_t type_hash,
@@ -3834,12 +3868,33 @@ typedef struct EnshwickHostApi {
   // inside a step, `Status::MISSING` while no world runs. Since
   // minor 90.
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
+  // Asks the loader to keep a copy of the client's fog of war for this
+  // mod. Client only (`Status::MISSING` on a dedicated server).
+  // Allowed during `enshwick_mod_init` only. Since minor 94.
+  EnshwickStatus (*fog_open)(EnshwickModHandle me);
+  // Writes the fog's `FogInfo` to `info`, then copies the box of
+  // `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
+  // most `capacity` bytes; a box of no pixels copies nothing. Any thread.
+  // `Status::MISSING` while the client is in no world, when this build
+  // lacks the fog, or after the loader stopped copying it; `Status::REFUSED` for a mod that did not
+  // open it; `Status::OUTSIDE_WORLD` for a box past the image;
+  // `Status::BAD_ARGS` for a null `info`, or a null or short `out`
+  // for a box of pixels. The loader may refresh the copy meanwhile:
+  // compare `version`. Since minor 94.
+  EnshwickStatus (*fog_read)(EnshwickModHandle me,
+                             struct EnshwickFogInfo *info,
+                             uint32_t x,
+                             uint32_t y,
+                             uint32_t width,
+                             uint32_t height,
+                             uint8_t *out,
+                             uint32_t capacity);
   // Serves the call `spec` describes with `callback` and `user`, named
   // `<id>:<call>` after the serving mod or one of its former ids;
   // `Status::REFUSED` for another name, or a name and major served
   // twice, `Status::BAD_ARGS` for a spec that does not read. Allowed
   // during `enshwick_mod_init` only: `Status::TOO_LATE` once every mod
-  // is initialised. Since minor 94.
+  // is initialised. Since minor 95.
   EnshwickStatus (*serve_call)(EnshwickModHandle me,
                                const struct EnshwickCallSpec *spec,
                                EnshwickCallFn callback,
@@ -3851,7 +3906,7 @@ typedef struct EnshwickHostApi {
   // `Status::REFUSED` when the mod asked for the name and major already
   // with another spec, `Status::BAD_ARGS` for a spec that does not read
   // or a null `out`. Allowed during `enshwick_mod_init` only:
-  // `Status::TOO_LATE` once every mod is initialised. Since minor 94.
+  // `Status::TOO_LATE` once every mod is initialised. Since minor 95.
   EnshwickStatus (*find_call)(EnshwickModHandle me,
                               const struct EnshwickCallSpec *spec,
                               uint32_t *out);
@@ -3861,7 +3916,7 @@ typedef struct EnshwickHostApi {
   // is unmatched or before every mod is initialised, `Status::REFUSED`
   // when the serving mod or its handler is off, `Status::BAD_ARGS` for
   // a null pointer or an id the mod was not given, or what the handler
-  // answers. Any thread. Since minor 94.
+  // answers. Any thread. Since minor 95.
   EnshwickStatus (*call)(EnshwickModHandle me, uint32_t id, const void *input, void *output);
 } EnshwickHostApi;
 

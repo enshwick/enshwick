@@ -42,6 +42,7 @@ macro_rules! headed {
             EventSpec,
             EventTypeInfo,
             ExperiencePass,
+            FogInfo,
             GameEventData,
             Interaction,
             InventoryRequest,

@@ -1,4 +1,4 @@
-# Every hour, on the organization runners: the public Steam builds of the
+# Every 15 minutes: the public Steam builds of the
 # dedicated server and the client, and an issue for each build that no table
 # in crates/enshwick-gamedata/tables names. A new server build also gets its
 # table ported by `cargo enshwick pin` in a pull request. Never on pull
@@ -7,7 +7,10 @@ name: game-build-watch
 
 on:
   schedule:
-    - cron: "11 * * * *"
+    # Every 15 minutes: GitHub delays scheduled runs by hours and drops
+    # many, and a run that finds nothing new costs a few seconds on a
+    # GitHub-hosted runner.
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch:
 
 permissions: {}

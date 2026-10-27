@@ -27,7 +27,10 @@
 //! }
 //! ```
 
+mod fog;
 mod snapshot;
+
+pub use fog::{FogError, FogImage, FogOfWar, FogState};
 
 pub use snapshot::{
     MAP_SNAPSHOT_FORMAT, MapAltar, MapPlayer, MapPoint, MapSnapshot, SnapshotError,

@@ -58,6 +58,7 @@ impl Off {
             Status::WRONG_THREAD => "called off the thread it serves",
             Status::NOT_LOADED => "not loaded yet",
             Status::OUTSIDE_WORLD => "outside the world",
+            Status::STATIC_HALF => "template data, never written",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))
@@ -217,6 +218,20 @@ impl Load<'_> {
     /// See [`Map`](crate::map::Map).
     pub fn map(&mut self) -> Result<crate::map::Map, Off> {
         crate::map::Map::resolve(self)
+    }
+
+    /// The client's fog of war, which the loader copies for the mod from
+    /// now on; a mod asks for it during `init`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a dedicated server, which has no fog, or after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`FogOfWar`](crate::map::FogOfWar).
+    pub fn fog_of_war(&mut self) -> Result<crate::map::FogOfWar, Off> {
+        crate::map::FogOfWar::open(self)
     }
 
     /// Inventory reads and transactions in the game server, dedicated or

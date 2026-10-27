@@ -16,7 +16,7 @@ Each entry names the pull request that made the change.
   `Load::serve_described_call` do the same with bytes, for a runtime that
   knows a call from its schema. The loader matches callers by name, major,
   fields and sizes once every mod is initialised (`HostApi::serve_call`,
-  `find_call`, `call`, `CallSpec`, ABI minor 94). The fake serves and calls
+  `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
   them (`Installed::serve_call`, `call`, `served_calls`). A call's input
   and answer have no padding, which `Shape::PADDING_FREE` reports.
 - `Load::on_described_mod_event` and `Load::define_described_event`
@@ -24,6 +24,10 @@ Each entry names the pull request that made the change.
   event described at run time, its data as bytes in the definer's layout;
   `manifest!(events: [..])` puts the schema of each listed `#[event]` into
   the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
+- `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
+  copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
+  read what the player has uncovered, as a `FogState` and `FogImage`; the
+  `fog_open` and `fog_read` entries and `FogInfo` (ABI 2.94) (#564).
 - `Change::in_table` changes an item's count, chance or weight in one fill
   table alone, after its changes of every table; `Vanilla::loot_table`
   finds the table a container template rolls, with how many containers
@@ -126,6 +130,10 @@ Each entry names the pull request that made the change.
   (`items = "containers"`), through the selections `Load::change_items`
   makes; `Pack::selections` lists them, and `ItemCategoryMask::NAMES` and
   `ItemCategoryMask::named` take the game's category names (#558).
+- `Status::STATIC_HALF` (ABI minor 94), `WorldError::StaticHalf` and
+  `FakeHost::static_half`: a write to the static half of a component
+  type, the set-up data every entity of a template shares, is refused
+  (#568).
 
 ### Changed
 
@@ -149,6 +157,9 @@ Each entry names the pull request that made the change.
   mod id.
 - The loader and the fake leave a mod event subscription idle when it
   reads more bytes than the definer sends.
+- `World::component` and `World::get` read the static half of a component
+  type, such as `FuelSetup`, as the template's set-up values; they gave the
+  data of its dynamic half, `DynamicFuelSetup`, before (#568).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 

@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 94;
+pub const ABI_MINOR: u16 = 95;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -476,6 +476,11 @@ impl Status {
     /// the height the loader takes. A mod built before minor 87 reads it as
     /// an unknown failure. Since minor 87.
     pub const OUTSIDE_WORLD: Self = Self(9);
+    /// The component type is the static half of its ECS type: the set-up
+    /// values the entity's template holds and every entity of that template
+    /// shares, which a write would change for all of them. A mod built
+    /// before minor 94 reads it as an unknown failure. Since minor 94.
+    pub const STATIC_HALF: Self = Self(10);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -688,9 +693,12 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 166 * 8);
-    assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 163 * 8);
-    assert!(core::mem::offset_of!(HostApi, call) == 24 + 165 * 8);
+    assert!(size_of::<HostApi>() == 24 + 168 * 8);
+    assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 163 * 8);
+    assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 164 * 8);
+    assert!(size_of::<FogInfo>() == 8 + 16 + 16);
+    assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 165 * 8);
+    assert!(core::mem::offset_of!(HostApi, call) == 24 + 167 * 8);
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);
     assert!(core::mem::offset_of!(HostApi, world_quiet) == 24 + 162 * 8);
