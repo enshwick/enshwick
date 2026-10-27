@@ -223,6 +223,7 @@ where it is defined, so naming one here is a problem.
 | `cost` | how many of each ingredient it takes | 1 to 65535 |
 | `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
 | `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+| `station` | the crafting station it is made at, named by the station's item | a vanilla station |
 
 `cost` applies first, then `ingredients`, so a named ingredient wins over the
 cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
@@ -249,10 +250,25 @@ time = { times = 0.5 }
 | `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
 | `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
 
-A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A selection changes `output_count`, `cost`, `time` and `station`, never
+`ingredients`.
 A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
 the pack also names in `recipes` or `output` keeps that change alone, and
 the pack's log says how many recipes each selection reached.
+
+`station` moves a recipe to another crafting station, such as charcoal
+from the kiln to the smelter:
+
+```toml
+[[change]]
+recipes = ["Material_T1_Factory_03_Charcoal"]
+station = "Prop_Production_T2_Smelter"
+```
+
+The player's crafting menu then lists the recipe at the new station alone.
+A move takes effect when the game starts, also in a development reload, and
+needs the game's data at hand to find the station. Two packs that move one
+recipe are a conflict like two sets: the later in load order wins.
 
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check

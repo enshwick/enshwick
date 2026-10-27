@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Field::Station` and `Change::station` move a vanilla recipe to another
+  workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
+  the recipe's workshop and lists it in the client's crafting menu at the
+  new station alone, from the next start; a data pack's `recipes.toml`
+  takes `station = "<station item>"`. `menu::move_recipes` and
+  `recipe_workshops` do the same for a mod's own patches (#PR).
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's

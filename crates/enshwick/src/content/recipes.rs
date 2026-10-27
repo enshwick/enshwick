@@ -18,7 +18,7 @@ pub use add::{
     NewRecipe, RECIPE_REGISTRY, RESERVED_FOR_SINGLE, RecipeLayout, WORKSHOP_RECIPES, add_recipe_to,
     workshop_limit,
 };
-pub use change::{RecipeChanges, change_recipes_in};
+pub use change::{RecipeChanges, change_recipes_in, recipe_workshops};
 pub use derive::{
     Derived, RecipeEdit, RecipeView, derive_recipes_in, derived_guid, modify_recipes_in,
 };

@@ -458,6 +458,11 @@ fn recipe_fields(
             fields.push((Field::Ingredient, Some((item, name.clone())), value(*v)));
         }
     }
+    let station = e
+        .station
+        .as_ref()
+        .and_then(|name| station(reader, text, at, number, name));
+    fields.extend(station.map(|v| (Field::Station, None, v)));
     if e.recipes.is_empty() && e.output.is_empty() {
         reader.error(
             file,
@@ -466,7 +471,7 @@ fn recipe_fields(
             format!("change {number}: names no recipe; give recipes or output"),
         );
     }
-    if fields.is_empty() && e.ingredients.is_empty() {
+    if fields.is_empty() && e.ingredients.is_empty() && e.station.is_none() {
         let names: Vec<&str> = Field::ALL
             .iter()
             .filter(|f| f.entry() == Entry::Recipe && **f != Field::Ingredient)
@@ -560,7 +565,7 @@ fn select_recipes(
         );
         return Vec::new();
     }
-    let fields: Vec<(Field, Value)> = [
+    let mut fields: Vec<(Field, Value)> = [
         (Field::Output, e.output_count),
         (Field::Cost, e.cost),
         (Field::CraftingDuration, e.time),
@@ -568,11 +573,19 @@ fn select_recipes(
     .into_iter()
     .filter_map(|(field, v)| v.map(|v| (field, value(v))))
     .collect();
-    if fields.is_empty() {
-        let names: Vec<&str> = [Field::Output, Field::Cost, Field::CraftingDuration]
-            .iter()
-            .map(|f| f.name())
-            .collect();
+    if let Some(name) = &e.station {
+        fields.extend(station(reader, text, at, number, name).map(|v| (Field::Station, v)));
+    }
+    if fields.is_empty() && e.station.is_none() {
+        let names: Vec<&str> = [
+            Field::Output,
+            Field::Cost,
+            Field::CraftingDuration,
+            Field::Station,
+        ]
+        .iter()
+        .map(|f| f.name())
+        .collect();
         fail(
             reader,
             format!("changes nothing; give {}", names.join(", ")),
@@ -625,4 +638,28 @@ fn select_recipes(
         }
     }
     out
+}
+
+/// The station value of the crafting station whose item `name` names, from
+/// the game's data; problems are noted at change `number`.
+fn station(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    number: usize,
+    name: &str,
+) -> Option<Value> {
+    let found = match reader.vanilla {
+        None => Err(format!(
+            "station {name:?} needs the game's data at hand to find its workshop"
+        )),
+        Some(vanilla) => match vanilla.item(name).and_then(|item| vanilla.workshop(item)) {
+            Ok(workshop) => Ok(Change::station(Guid([0; 16]), workshop).value),
+            Err(VanillaError::NotAStation(_)) => Err(format!("{name} is no crafting station")),
+            Err(why) => Err(why.to_string()),
+        },
+    };
+    found
+        .map_err(|why| reader.error(RECIPES_FILE, text, at, format!("change {number}: {why}")))
+        .ok()
 }

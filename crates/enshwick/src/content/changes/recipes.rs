@@ -284,7 +284,12 @@ mod tests {
     #[test]
     fn only_fields_of_a_whole_recipe_are_selected() {
         for field in Field::ALL {
-            let change = RecipesChange::new(Recipes::Workshop(KILN), *field, Value::Times(1.0));
+            let value = if *field == Field::Station {
+                Value::Set(0.0)
+            } else {
+                Value::Times(1.0)
+            };
+            let change = RecipesChange::new(Recipes::Workshop(KILN), *field, value);
             let whole = field.entry() == Entry::Recipe && *field != Field::Ingredient;
             assert_eq!(change.check().is_ok(), whole, "{field}");
         }
