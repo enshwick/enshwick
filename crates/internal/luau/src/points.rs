@@ -56,7 +56,7 @@ impl Primitive {
         })
     }
 
-    const fn size(self) -> usize {
+    pub(crate) const fn size(self) -> usize {
         match self {
             Self::U8 | Self::I8 | Self::Bool => 1,
             Self::U16 | Self::I16 => 2,
@@ -81,30 +81,38 @@ fn bad(why: impl core::fmt::Display) -> mlua::Error {
     ))
 }
 
+/// Why a description's read does not read, for a point, an event or a call
+/// alike.
+fn described(why: impl core::fmt::Display) -> mlua::Error {
+    mlua::Error::runtime(format!(
+        "the description: {why}; write it again with the cargo enshwick command that wrote it"
+    ))
+}
+
 /// The [`Read`] the description value `value` gives, for a value of `size`
 /// bytes at most.
-fn read_of(value: &LuaValue, depth: u32) -> mlua::Result<Read> {
+pub(crate) fn read_of(value: &LuaValue, depth: u32) -> mlua::Result<Read> {
     if depth > 16 {
-        return Err(bad("types nest too deep"));
+        return Err(described("types nest too deep"));
     }
     match value {
         LuaValue::String(name) => {
             let name = name.to_str()?;
             Primitive::parse(&name)
                 .map(Read::Primitive)
-                .ok_or_else(|| bad(format!("no primitive {name:?}")))
+                .ok_or_else(|| described(format!("no primitive {name:?}")))
         }
         LuaValue::Table(table) => {
             if let Some(variants) = table.get::<Option<Vec<i64>>>("variants")? {
                 let Read::Primitive(repr) = read_of(&table.get("repr")?, depth + 1)? else {
-                    return Err(bad("an enum's repr is an integer"));
+                    return Err(described("an enum's repr is an integer"));
                 };
                 return Ok(Read::Enum(repr, variants));
             }
             let fields: Table = table.get("fields")?;
             Ok(Read::Struct(fields_of(&fields, depth + 1)?))
         }
-        _ => Err(bad("a read is a name or a struct")),
+        _ => Err(described("a read is a name or a struct")),
     }
 }
 
@@ -122,7 +130,7 @@ fn fields_of(fields: &Table, depth: u32) -> mlua::Result<Vec<(String, usize, Rea
 }
 
 /// The size of a value read as `read`, from its fields' offsets.
-fn size_of_read(read: &Read) -> usize {
+pub(crate) fn size_of_read(read: &Read) -> usize {
     match read {
         Read::Primitive(p) | Read::Enum(p, _) => p.size(),
         Read::Struct(fields) => fields
@@ -275,7 +283,7 @@ pub(crate) fn encode(
     bytes: &mut [u8],
     offset: usize,
 ) -> mlua::Result<()> {
-    let wrong = |what: &str| mlua::Error::runtime(format!("the answer: expected {what}"));
+    let wrong = |what: &str| mlua::Error::runtime(format!("expected {what}"));
     match read {
         Read::Struct(fields) => {
             let LuaValue::Table(table) = value else {
@@ -284,7 +292,7 @@ pub(crate) fn encode(
             for (name, at, inner) in fields {
                 let at = offset
                     .checked_add(*at)
-                    .ok_or_else(|| wrong("a value that fits the answer"))?;
+                    .ok_or_else(|| wrong("a value that fits its type"))?;
                 encode(&table.raw_get(name.as_str())?, inner, bytes, at)?;
             }
             Ok(())
@@ -292,7 +300,7 @@ pub(crate) fn encode(
         Read::Primitive(p) => {
             let out = bytes
                 .get_mut(offset..offset.saturating_add(p.size()))
-                .ok_or_else(|| wrong("a value that fits the answer"))?;
+                .ok_or_else(|| wrong("a value that fits its type"))?;
             encode_primitive(value, *p, out)
         }
         Read::Enum(p, variants) => {
@@ -307,7 +315,7 @@ pub(crate) fn encode(
             }
             let out = bytes
                 .get_mut(offset..offset.saturating_add(p.size()))
-                .ok_or_else(|| wrong("a value that fits the answer"))?;
+                .ok_or_else(|| wrong("a value that fits its type"))?;
             encode_primitive(value, *p, out)
         }
     }
@@ -316,7 +324,7 @@ pub(crate) fn encode(
 /// The Luau value `value` written as the primitive `p` into `out`, its
 /// bytes.
 fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Result<()> {
-    let wrong = |what: &str| mlua::Error::runtime(format!("the answer: expected {what}"));
+    let wrong = |what: &str| mlua::Error::runtime(format!("expected {what}"));
     let number = || match value {
         #[expect(
             clippy::cast_precision_loss,
