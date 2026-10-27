@@ -72,6 +72,7 @@ chapters! {
     Releasing => "releasing.md",
     Servers => "servers.md",
     AbiReference => "abi-reference.md",
+    ModsInC => "mods-in-c.md",
     Faq => "faq.md",
 }
 
