@@ -21,7 +21,7 @@ Each entry names the pull request that made the change.
 - The crate docs say to depend on the crate from crates.io and carry a
   module map, the feature table and the target; docs.rs builds every
   feature. The Luau definitions describe events, codes and permission bits
-  in plain words, without Rust paths.
+  in plain words, without Rust paths (#604).
 - Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
   rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
