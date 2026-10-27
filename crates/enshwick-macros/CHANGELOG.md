@@ -9,7 +9,7 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - A `#[script]` method whose closure parameter lends its argument (`&T`)
-  hands the script a copy instead of failing to compile.
+  hands the script a copy instead of failing to compile (#581).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 
