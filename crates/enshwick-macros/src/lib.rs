@@ -224,8 +224,14 @@ pub fn event(args: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let schema = event_schema(&item, name.as_ref());
-    expand_declaration(&item, name, &schema, &quote!(services::ModEvent))
-        .unwrap_or_else(|e| e.to_compile_error().into())
+    let padding = padding_free_assert(&item, "a mod event's data");
+    match expand_declaration(&item, name, &schema, &quote!(services::ModEvent)) {
+        Ok(declared) => {
+            let declared = proc_macro2::TokenStream::from(declared);
+            quote!(#declared #padding).into()
+        }
+        Err(e) => e.to_compile_error().into(),
+    }
 }
 
 /// The `SCHEMA` of a mod event: its `[[event]]` table with the layout
@@ -343,9 +349,44 @@ pub fn point(args: TokenStream, item: TokenStream) -> TokenStream {
             type Output = #output;
             #schema
         };
-        expand_declaration(&item, name, &extra, &quote!(points::Point))
+        let declared = proc_macro2::TokenStream::from(expand_declaration(
+            &item,
+            name,
+            &extra,
+            &quote!(points::Point),
+        )?);
+        let padding = padding_free_assert(&item, "a point's input");
+        Ok(quote! {
+            #declared
+            #padding
+            const _: () = assert!(
+                <#output as ::enshwick::Shape>::PADDING_FREE,
+                "a point's answer has padding, which another language would read uninitialised: add the bytes as fields",
+            );
+        }
+        .into())
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
+}
+
+/// Asserts at build time that `item`, the struct a macro declares, has no
+/// padding: each field's type is padding-free and the fields fill the
+/// struct. A described side, a script or a mod that knows the type from its
+/// schema, reads every byte of it.
+fn padding_free_assert(item: &syn::ItemStruct, what: &str) -> proc_macro2::TokenStream {
+    let ident = &item.ident;
+    let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
+    let shape = quote!(::enshwick::Shape);
+    let message = format!(
+        "{what} has padding, which another language would read uninitialised: add the bytes as fields"
+    );
+    quote! {
+        const _: () = assert!(
+            true #(&& <#types as #shape>::PADDING_FREE)*
+                && 0 #(+ ::core::mem::size_of::<#types>())* == ::core::mem::size_of::<#ident>(),
+            #message,
+        );
+    }
 }
 
 /// Declares a call, a described service: makes the input struct

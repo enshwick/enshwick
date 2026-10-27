@@ -116,5 +116,57 @@
 ///     load.code()
 /// }
 /// ```
+///
+/// A point's input with padding, which a described link would read
+/// uninitialised:
+///
+/// ```compile_fail
+/// #[enshwick::point(name = "you.post:price", mode = Override, output = u32)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Price {
+///     pub item: u32,
+///     pub player: u64,
+/// }
+/// ```
+///
+/// A point's answer with padding:
+///
+/// ```compile_fail
+/// /// An offer.
+/// #[repr(C)]
+/// #[derive(Clone, Copy, Debug, enshwick::Shape)]
+/// pub struct Offer {
+///     pub cheap: bool,
+///     pub coins: u32,
+/// }
+///
+/// #[enshwick::point(name = "you.post:best", mode = Override, output = Offer)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Best {
+///     pub item: u32,
+/// }
+/// ```
+///
+/// A mod event's data with padding:
+///
+/// ```compile_fail
+/// #[enshwick::event(name = "you.post:sold")]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Sold {
+///     pub item: u32,
+///     pub player: u64,
+/// }
+/// ```
+///
+/// A call's input with padding:
+///
+/// ```compile_fail
+/// #[enshwick::call(name = "you.post:rent", output = u64)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct Rent {
+///     pub item: u32,
+///     pub player: u64,
+/// }
+/// ```
 #[expect(dead_code, reason = "the doc comment carries the cases")]
 struct Refused;

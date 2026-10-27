@@ -225,6 +225,23 @@ pub(crate) fn decode(
             }
             Ok(LuaValue::Table(table))
         }
+        Read::Enum(p @ (Primitive::U64 | Primitive::I64), _) => {
+            let Some(raw) = offset.checked_add(8).and_then(|end| bytes.get(offset..end)) else {
+                return Ok(LuaValue::Nil);
+            };
+            let mut word = [0u8; 8];
+            word.copy_from_slice(raw);
+            #[expect(
+                clippy::cast_precision_loss,
+                reason = "an enum's variants are numbers in Luau, exact up to 2^53"
+            )]
+            let number = if *p == Primitive::U64 {
+                u64::from_le_bytes(word) as f64
+            } else {
+                i64::from_le_bytes(word) as f64
+            };
+            Ok(LuaValue::Number(number))
+        }
         Read::Enum(p, _) => decode(lua, bytes, offset, &Read::Primitive(*p)),
         Read::Primitive(p) => {
             let Some(raw) = offset
@@ -305,18 +322,20 @@ pub(crate) fn encode(
         }
         Read::Enum(p, variants) => {
             let listed = match value {
-                LuaValue::Integer(i) => variants.contains(i),
+                LuaValue::Integer(i) => Some(*i),
                 #[expect(clippy::cast_possible_truncation, reason = "compared only when whole")]
-                LuaValue::Number(n) => n.fract() == 0.0 && variants.contains(&(*n as i64)),
-                _ => false,
-            };
-            if !listed {
-                return Err(wrong("one of the enum's values"));
+                LuaValue::Number(n) if n.fract() == 0.0 => Some(*n as i64),
+                _ => None,
             }
+            .filter(|v| variants.contains(v))
+            .ok_or_else(|| wrong("one of the enum's values"))?;
             let out = bytes
                 .get_mut(offset..offset.saturating_add(p.size()))
                 .ok_or_else(|| wrong("a value that fits its type"))?;
-            encode_primitive(value, *p, out)
+            // A variant is a value of the repr, so its low bytes are the
+            // repr's, whatever its width and sign.
+            out.copy_from_slice(&listed.to_le_bytes()[..p.size()]);
+            Ok(())
         }
     }
 }
@@ -527,6 +546,24 @@ mod tests {
         let read = Read::Enum(Primitive::U8, vec![0, 2]);
         assert!(encode(&LuaValue::Number(2.0), &read, &mut bytes, 0).is_ok());
         assert!(encode(&LuaValue::Number(1.0), &read, &mut bytes, 0).is_err());
+    }
+
+    #[test]
+    fn a_64_bit_enum_is_a_number_both_ways() {
+        let lua = Lua::new();
+        for (p, variants, value) in [
+            (Primitive::U64, vec![1, 1 << 40], 1i64 << 40),
+            (Primitive::I64, vec![-3, 7], -3),
+        ] {
+            let read = Read::Enum(p, variants);
+            let mut bytes = [0u8; 8];
+            #[expect(clippy::cast_precision_loss, reason = "the values are exact in f64")]
+            let number = LuaValue::Number(value as f64);
+            encode(&number, &read, &mut bytes, 0).unwrap();
+            assert_eq!(bytes, value.to_le_bytes(), "{p:?}");
+            assert_eq!(decode(&lua, &bytes, 0, &read).unwrap(), number, "{p:?}");
+            assert!(encode(&LuaValue::Number(2.0), &read, &mut bytes, 0).is_err());
+        }
     }
 
     fn description(lua: &Lua, mode: &str, read: &str, hash: u64) -> Table {

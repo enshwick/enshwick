@@ -459,6 +459,24 @@ mod tests {
     }
 
     #[test]
+    fn a_pointer_sized_enum_reads_as_its_64_bit_integer() {
+        for (repr, read) in [("usize", "u64"), ("isize", "i64")] {
+            let text = format!(
+                "schema = 1\nmod = \"you.post\"\nversion = \"1.0.0\"\n[[event]]\nname = \"you.post:sold\"\ndata = \"Sold\"\ndoc = \"A sale.\"\nlayout = [\"1\"]\n[[type]]\nname = \"Sold\"\ndoc = \"A sale.\"\nkind = \"struct\"\n[[type.field]]\nname = \"tier\"\ndoc = \"The tier.\"\ntype = \"Tier\"\n[[type]]\nname = \"Tier\"\ndoc = \"A tier.\"\nkind = \"enum\"\nrepr = \"{repr}\"\n[[type.variant]]\nname = \"Low\"\ndoc = \"Low.\"\nvalue = 1\n[[type.variant]]\nname = \"High\"\ndoc = \"High.\"\nvalue = 2\n"
+            );
+            let schema = Schema::parse(&text).unwrap();
+            let module = luau_event(&schema, "you.post:sold").unwrap();
+            assert!(module.contains("size = 8,"), "{module}");
+            assert!(
+                module.contains(&format!(
+                    "read = {{ repr = \"{read}\", variants = {{ 1, 2 }} }}"
+                )),
+                "{module}"
+            );
+        }
+    }
+
+    #[test]
     fn the_trading_post_s_price_lays_out_as_rust_does() {
         let schema = Schema::parse(include_str!(
             "../../../../examples/trading-post/points.toml"

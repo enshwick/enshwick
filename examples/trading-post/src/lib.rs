@@ -57,6 +57,8 @@ impl Deal {
 pub struct Price {
     /// The item, 0 to 63.
     pub item: u32,
+    /// How many items the player trades.
+    pub count: u32,
     /// The player's account key.
     pub player: u64,
     /// The player's character.
@@ -114,6 +116,7 @@ impl Mod for TradingPost {
                 )]
                 [Value::Number(item)] => sell(&Price {
                     item: *item as u32,
+                    count: 1,
                     player: request.player.key,
                     character: request.player.entity,
                     deal: Deal::SELL,
@@ -138,6 +141,7 @@ mod tests {
     fn selling(item: u32) -> Price {
         Price {
             item,
+            count: 1,
             player: 7,
             character: Entity(10),
             deal: Deal::SELL,

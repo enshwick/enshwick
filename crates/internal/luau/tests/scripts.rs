@@ -675,6 +675,7 @@ mod tests {
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Price {
         pub(crate) item: u32,
+        pub(crate) count: u32,
         pub(crate) player: u64,
     }
 
@@ -689,12 +690,14 @@ mod tests {
                 refusable = true,
                 input = {{ size = 16, fields = {{
                     {{ name = "item", offset = 0, read = "u32", hash = "{}" }},
+                    {{ name = "count", offset = 4, read = "u32", hash = "{}" }},
                     {{ name = "player", offset = 8, read = "u64", hash = "{}" }},
                 }} }},
                 output = {{ size = 4, hash = "{}", read = "u32" }},
             }})"#,
             hash(0),
             hash(1),
+            hash(2),
             Price::OUTPUT[0].hash
         )
     }
@@ -716,7 +719,16 @@ mod tests {
         );
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
-        let ask = |item, player| loader.ask_point(&Price { item, player }, 10);
+        let ask = |item, player| {
+            loader.ask_point(
+                &Price {
+                    item,
+                    count: 1,
+                    player,
+                },
+                10,
+            )
+        };
         assert_eq!(ask(1, u64::MAX), Decision::Changed(20));
         assert_eq!(ask(9, 1), Decision::Refused);
         assert_eq!(ask(1, 1), Decision::Kept(10));
@@ -734,7 +746,14 @@ mod tests {
         );
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(
-            loader.ask_point(&Price { item: 1, player: 1 }, 10),
+            loader.ask_point(
+                &Price {
+                    item: 1,
+                    count: 1,
+                    player: 1
+                },
+                10
+            ),
             Decision::Kept(10)
         );
         assert!(
@@ -747,16 +766,18 @@ mod tests {
     #[enshwick::event(name = "you.trading-post:sold")]
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Sold {
-        pub(crate) item: u32,
         pub(crate) player: u64,
+        pub(crate) item: u32,
         pub(crate) cheap: bool,
+        pub(crate) tier: u8,
+        pub(crate) count: u16,
     }
 
     /// A description a script writes for itself: no offsets and no hashes,
     /// which the runtime works out as Rust lays the struct out.
     const SOLD: &str = r#"{ name = "you.trading-post:sold", fields = {
-        { name = "item", read = "u32" },
         { name = "player", read = "u64" },
+        { name = "item", read = "u32" },
         { name = "cheap", read = "bool" },
     } }"#;
 
@@ -776,9 +797,11 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(
             loader.send_mod_event(&Sold {
-                item: 7,
                 player: u64::MAX,
-                cheap: true
+                item: 7,
+                cheap: true,
+                tier: 1,
+                count: 2
             }),
             1
         );
