@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
+  with their bases, and markers, plain data for a process outside the game;
+  `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
+  format (`MAP_SNAPSHOT_FORMAT`) (#PR).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type

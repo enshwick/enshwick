@@ -27,8 +27,15 @@
 //! }
 //! ```
 
+mod snapshot;
+
+pub use snapshot::{
+    MAP_SNAPSHOT_FORMAT, MapAltar, MapPlayer, MapPoint, MapSnapshot, SnapshotError,
+};
+
 use crate::Host;
 use crate::abi::Status;
+use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
 use crate::ecs::Entity;
 use crate::engine_ids as ids;
@@ -321,6 +328,88 @@ impl Map {
         let fixed = unsafe { crate::raw::read_at::<[i64; 3]>(data, waypoint.position_at) };
         Ok(Some(crate::ecs::metres(fixed)))
     }
+}
+
+impl Map {
+    /// What the map shows now as a [`MapSnapshot`]: every player with
+    /// position and waypoint, the Flame Altars of `altars` with their
+    /// bases, and every marker. Without `altars` the snapshot has none; on
+    /// a game build without waypoints no player has one.
+    /// The engine walks every marker, so take one now and then, not every
+    /// step.
+    ///
+    /// # Errors
+    ///
+    /// As [`Map::markers`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::ops::ControlFlow;
+    /// use std::time::Duration;
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let map = load.map()?;
+    ///     let altars = load.altars()?;
+    ///     load.scheduler()?.every(Duration::from_secs(5), move || {
+    ///         if let Ok(bytes) = map.snapshot(Some(altars)).map(|s| s.to_bytes()) {
+    ///             enshwick::debug!("snapshot of {} bytes", bytes.map_or(0, |b| b.len()));
+    ///         }
+    ///         ControlFlow::Continue(())
+    ///     });
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn snapshot(self, altars: Option<Altars>) -> Result<MapSnapshot, WorldError> {
+        let world = self.0.world;
+        let markers = self
+            .markers()?
+            .into_iter()
+            .map(|marker| MapPoint {
+                position: marker.position,
+                marker_type: marker.marker_type.map(MapMarkerTypeId::get),
+                label: marker.label.map(Guid::id),
+            })
+            .collect();
+        let mut online = world.players();
+        online.sort_unstable_by_key(|player| player.slot);
+        let mut players = Vec::with_capacity(online.len());
+        for player in online {
+            let waypoint = match self.waypoint(player.entity) {
+                Err(WorldError::Missing) => None,
+                found => found?,
+            };
+            players.push(MapPlayer {
+                key: player.key,
+                position: world.position(player.entity),
+                waypoint,
+                name: player.name,
+            });
+        }
+        Ok(MapSnapshot {
+            players,
+            altars: altars.map(snapshot_altars).unwrap_or_default(),
+            markers,
+        })
+    }
+}
+
+/// The altars of `altars`, by entity, each with its base's number.
+fn snapshot_altars(altars: Altars) -> Vec<MapAltar> {
+    let mut list = altars.list();
+    list.sort_unstable_by_key(|altar| altar.entity.0);
+    let bases = crate::altars::bases_of(&list);
+    list.iter()
+        .map(|altar| MapAltar {
+            position: altar.position,
+            level: altar.level,
+            zone: [altar.zone.min, altar.zone.max],
+            base: bases
+                .iter()
+                .position(|base| base.altars.contains(&altar.entity))
+                .and_then(|index| u32::try_from(index).ok()),
+        })
+        .collect()
 }
 
 /// `guid`, unless it is all zero, which the game writes for none.
