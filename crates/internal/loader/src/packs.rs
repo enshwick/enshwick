@@ -319,7 +319,9 @@ pub(crate) fn forget(id: &str) {
 }
 
 /// The files of every running pack, for the watcher: `(record index,
-/// path)`.
+/// path)`. A Luau mod's scripts are listed from its folder as it is now, so
+/// a script added while the game runs is watched too; a folder that does
+/// not list keeps the scripts it ran with.
 pub(crate) fn watched(loader: &Loader) -> Vec<(usize, PathBuf)> {
     loader
         .mods
@@ -332,12 +334,15 @@ pub(crate) fn watched(loader: &Loader) -> Vec<(usize, PathBuf)> {
                     .map(|p| (index, p.dir.clone(), p.scripts.clone()))
             })
         })
-        .flat_map(|(index, dir, scripts)| {
-            enshwick::packs::FILES
+        .flat_map(|(index, dir, ran)| {
+            let scripts = enshwick::packs::script_files(&dir)
+                .unwrap_or_else(|_| ran.iter().map(|name| dir.join(name)).collect());
+            let files: Vec<PathBuf> = enshwick::packs::FILES
                 .iter()
-                .map(|file| (*file).to_owned())
+                .map(|file| dir.join(file))
                 .chain(scripts)
-                .map(move |file| (index, dir.join(file)))
+                .collect();
+            files.into_iter().map(move |path| (index, path))
         })
         .collect()
 }

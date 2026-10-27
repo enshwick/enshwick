@@ -132,20 +132,23 @@ pub(crate) fn start(loader: &'static Loader) {
             seen: None,
         })
         .collect();
-    // A pack's data files; the dedicated server applies what it can of a
-    // change at once, and with `dev_reload` on the client too.
-    let mut packs: Vec<(usize, PathBuf, Stamp)> =
-        if loader.side == Side::SERVER || crate::reload::copies() {
-            crate::packs::watched(loader)
-                .into_iter()
-                .map(|(index, path)| {
-                    let seen = stamp(&path);
-                    (index, path, seen)
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+    // A pack's data files and scripts; the dedicated server applies what it
+    // can of a change at once, and with `dev_reload` on the client too.
+    let watch_packs = loader.side == Side::SERVER || crate::reload::copies();
+    let pack_files = || -> Vec<(usize, PathBuf, Stamp)> {
+        crate::packs::watched(loader)
+            .into_iter()
+            .map(|(index, path)| {
+                let seen = stamp(&path);
+                (index, path, seen)
+            })
+            .collect()
+    };
+    let mut packs = if watch_packs {
+        pack_files()
+    } else {
+        Vec::new()
+    };
     let started = std::thread::Builder::new()
         .name("enshwick-settings".into())
         .spawn(move || {
@@ -176,18 +179,13 @@ pub(crate) fn start(loader: &'static Loader) {
                         changed(loader, Some(file.owner.get()));
                     }
                 }
-                let mut touched: Vec<usize> = Vec::new();
-                for (index, path, seen) in &mut packs {
-                    let now = stamp(path);
-                    if now != *seen {
-                        *seen = now;
-                        if !touched.contains(index) {
-                            touched.push(*index);
-                        }
+                if watch_packs {
+                    let now = pack_files();
+                    let touched = crate::pack_watch::touched(&packs, &now);
+                    packs = now;
+                    for index in touched {
+                        crate::packs::changed(loader, index);
                     }
-                }
-                for index in touched {
-                    crate::packs::changed(loader, index);
                 }
                 crate::recipes::poll(loader);
             }

@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `packs::script_files` lists the scripts `PackFiles::read_dir` would read,
+  without reading them. The loader lists a Luau mod's scripts each time it
+  looks, so a script added, removed or renamed while the game runs reloads
+  the mod with `dev_reload` as an edited one does.
 - A Luau mod calls another mod's call with `enshwick.caller(description)`,
   from the module `cargo enshwick call --luau` writes; the input's fields
   are numbers, booleans, entities and GUIDs, each checked against its

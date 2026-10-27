@@ -310,10 +310,11 @@ inside a step stay in Rust: a Luau mod sees their results through events.
 
 ## Change scripts while the game runs
 
-With `dev_reload = true` in the loader's settings, the loader watches a Luau
-mod's scripts that exist when the game starts; a script added later is not
-watched, but a change to `main.luau` or another watched script reloads it
-too. When one changes, it runs `main.luau` again in a new VM: handlers of
+With `dev_reload = true` in the loader's settings, the loader looks at a Luau
+mod's folder every second: a script added, removed, renamed or changed, in
+any subfolder the mod may hold scripts in, counts as a change. A new mod
+folder waits for the next start. On a change the loader runs `main.luau`
+again in a new VM: handlers of
 events subscribed at start move to the new scripts, and tasks of the old ones
 stop. A handler of an event the old scripts did not subscribe runs from the
 next start, and the log says so. When the new scripts fail, the old ones keep
