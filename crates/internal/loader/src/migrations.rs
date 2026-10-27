@@ -136,8 +136,10 @@ pub enum RecordError {
     Io(#[from] std::io::Error),
 }
 
-/// Where a settings text stops being TOML: its line, the key written there
-/// and the parser's reason, never the text itself, which may hold a secret.
+/// Where a settings text stops being TOML, told without any value from it.
+///
+/// It names the line, the key that line starts with when it starts outside
+/// every string, and the parser's reason, which holds no text of the file.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error(
     "line {line}{}: {reason}",
@@ -150,29 +152,36 @@ pub struct SyntaxError {
 }
 
 impl SyntaxError {
-    /// The place of `error` in `text`, which it was parsed from.
-    fn new(text: &str, error: &toml_edit::TomlError) -> Self {
+    /// The place of `error` in the settings file `text` it was parsed from.
+    fn in_document(text: &str, error: &toml_edit::TomlError) -> Self {
+        let mut found = Self::in_value(text, error);
+        found.key = error.span().and_then(|span| key_of_line(text, span.start));
+        found
+    }
+
+    /// The place of `error` in `text`, one value: no key to name.
+    fn in_value(text: &str, error: &toml_edit::TomlError) -> Self {
         let start = error.span().map_or(0, |span| span.start);
-        let before = text.get(..start).unwrap_or(text);
-        let line = before.matches('\n').count() + 1;
-        let key = text
-            .lines()
-            .nth(line - 1)
-            .and_then(|row| row.split_once('='))
-            .map(|(key, _)| key.trim())
-            .filter(|key| {
-                !key.is_empty()
-                    && key
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' '))
-            })
-            .map(str::to_owned);
+        let before = text.as_bytes().get(..start).unwrap_or(text.as_bytes());
         Self {
-            line,
-            key,
+            line: before.split(|&b| b == b'\n').count(),
+            key: None,
             reason: error.message().trim_end().to_owned(),
         }
     }
+}
+
+/// The plain key the line holding byte `at` of `text` starts with; `None`
+/// unless the text before that line is a whole document, which proves the
+/// line does not start inside a string, an array or an inline table.
+fn key_of_line(text: &str, at: usize) -> Option<String> {
+    let head = text.get(..at)?;
+    let line_start = head.rfind('\n').map_or(0, |i| i + 1);
+    text[..line_start].parse::<DocumentMut>().ok()?;
+    let (key, _) = text[line_start..].split_once('=')?;
+    let key = key.trim();
+    let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' ');
+    (!key.is_empty() && key.chars().all(plain)).then(|| key.to_owned())
 }
 
 /// Why a migration step failed.
@@ -400,7 +409,7 @@ pub fn apply_settings(
 ) -> Result<String, MigrationError> {
     let mut doc: DocumentMut = text
         .parse()
-        .map_err(|e| MigrationError::Settings(SyntaxError::new(text, &e)))?;
+        .map_err(|e| MigrationError::Settings(SyntaxError::in_document(text, &e)))?;
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
             MigrationStep::TAKE_SETTING => take(&mut doc, &step.from, &step.to, source)?,
@@ -428,7 +437,7 @@ pub fn apply_settings(
                 let mut parsed: toml_edit::Value =
                     new.parse().map_err(|e| MigrationError::SettingValue {
                         key: step.from.clone(),
-                        reason: SyntaxError::new(&new, &e),
+                        reason: SyntaxError::in_value(&new, &e),
                     })?;
                 *parsed.decor_mut() = value.decor().clone();
                 *value = parsed;
@@ -439,7 +448,7 @@ pub fn apply_settings(
     let migrated = doc.to_string();
     migrated
         .parse::<DocumentMut>()
-        .map_err(|e| MigrationError::Unreadable(SyntaxError::new(&migrated, &e)))?;
+        .map_err(|e| MigrationError::Unreadable(SyntaxError::in_document(&migrated, &e)))?;
     Ok(migrated)
 }
 
@@ -461,7 +470,7 @@ fn take(
     };
     let other: DocumentMut = text.parse().map_err(|e| MigrationError::OtherSettings {
         id: id.to_owned(),
-        reason: SyntaxError::new(&text, &e),
+        reason: SyntaxError::in_document(&text, &e),
     })?;
     let mut item = other.as_item();
     for part in key.split('.') {
