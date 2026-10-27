@@ -47,8 +47,14 @@ pub(crate) const RECORD_TEMPLATE: Constant = Constant::new("ecs.record_template"
 pub(crate) const REGISTRY_TYPE_MAP: Constant = Constant::new("ecs.registry_type_map");
 pub(crate) const REGISTRY_TYPE_MAP_FALLBACK: Constant =
     Constant::new("ecs.registry_type_map_fallback");
+pub(crate) const REGISTRY_TYPE_COUNT: Constant = Constant::new("ecs.registry_type_count");
+pub(crate) const REGISTRY_TYPE_RECORDS: Constant = Constant::new("ecs.registry_type_records");
+pub(crate) const REGISTRY_TYPE_RECORD_SIZE: Constant =
+    Constant::new("ecs.registry_type_record_size");
 pub(crate) const ROW_ENTITY: Symbol = Symbol::new("ecs.row_entity");
 pub(crate) const SLOT_ROOT: Symbol = Symbol::new("ecs.slot_root");
 pub(crate) const SPAWN_REQUEST: Symbol = Symbol::new("ecs.spawn_request");
 pub(crate) const TEMPLATE_GUID: Symbol = Symbol::new("ecs.template_guid");
 pub(crate) const TYPE_INDEX: Symbol = Symbol::new("ecs.type_index");
+pub(crate) const TYPE_INFO_HASH: Constant = Constant::new("ecs.type_info_hash");
+pub(crate) const TYPE_RECORD_STATIC: Constant = Constant::new("ecs.type_record_static");

@@ -30,6 +30,10 @@ pub(crate) struct Declared {
     pub(crate) mode: PointMode,
     /// Whether a link may refuse.
     pub(crate) refuse: bool,
+    /// The bytes of the input the declaration spans.
+    pub(crate) input_size: u32,
+    /// The answer's size in bytes.
+    pub(crate) output_size: u32,
 }
 
 /// A defined point.
@@ -359,6 +363,14 @@ fn refusal(link: &Pending, definition: &Definition, mods: &impl Mods) -> Option<
                 "{id} {version} declares it {}, this mod {}; both mods must compile one declaration",
                 describe(have.mode, have.refuse),
                 describe(want.mode, want.refuse)
+            ),
+            Level::WARN,
+        ));
+    }
+    if want.output_size != have.output_size || want.input_size > have.input_size {
+        return Some((
+            format!(
+                "the input or the answer is larger here than at {id} {version}, or the answer's size differs; both mods must compile one declaration"
             ),
             Level::WARN,
         ));

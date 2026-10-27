@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 92
+#define ENSHWICK_ABI_MINOR 95
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -692,6 +692,8 @@ typedef uint32_t EnshwickDataField;
 // The weight of an item in fill tables; the entry is the item. Since
 // minor 82.
 #define EnshwickDataField_LOOT_WEIGHT 16
+// The workshop a recipe is made at, by its game id. Since minor 93.
+#define EnshwickDataField_RECIPE_STATION 17
 
 // Which vanilla items a `DataChange` reaches.
 typedef uint32_t EnshwickDataSelect;
@@ -709,6 +711,8 @@ typedef uint32_t EnshwickDataSelect;
 // Every recipe made at the workshop whose GUID is
 // `DataChange::entry`. Since minor 91.
 #define EnshwickDataSelect_WORKSHOP 5
+// Every backpack. Since minor 92.
+#define EnshwickDataSelect_BACKPACKS 6
 
 // One change of a vanilla value, as
 // `HostApi::change_data` takes it. The
@@ -1056,11 +1060,16 @@ typedef uint32_t EnshwickStatus;
 // the height the loader takes. A mod built before minor 87 reads it as
 // an unknown failure. Since minor 87.
 #define EnshwickStatus_OUTSIDE_WORLD 9
+// The component type is the static half of its ECS type: the set-up
+// values the entity's template holds and every entity of that template
+// shares, which a write would change for all of them. A mod built
+// before minor 94 reads it as an unknown failure. Since minor 94.
+#define EnshwickStatus_STATIC_HALF 10
 // The entity named is no prop: not placed from an item, or a creature
 // such as an animal, a pet or a survivor, which only the general
-// entity calls reach. A mod built before minor 92 reads it as an
-// unknown failure. Since minor 92.
-#define EnshwickStatus_NOT_A_PROP 10
+// entity calls reach. A mod built before minor 95 reads it as an
+// unknown failure. Since minor 95.
+#define EnshwickStatus_NOT_A_PROP 11
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -2555,9 +2564,9 @@ typedef struct EnshwickTransactionOp {
 // A building block placed: `data` points at a `BlockPlace`. Since
 // minor 89.
 #define EnshwickTransactionOp_BLOCK 4
-// A prop placed: `data` points at a `PropPlace`. Since minor 92.
+// A prop placed: `data` points at a `PropPlace`. Since minor 95.
 #define EnshwickTransactionOp_PLACE_PROP 5
-// A prop removed: `data` points at a `PropRemove`. Since minor 92.
+// A prop removed: `data` points at a `PropRemove`. Since minor 95.
 #define EnshwickTransactionOp_REMOVE_PROP 6
 
 // Where a transaction stands, written by
@@ -2590,11 +2599,11 @@ typedef struct EnshwickTransactionInfo {
   uint32_t reserved;
   // When a prop's state stopped it, or stopped its last undo, the kinds
   // of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
-  // Since minor 92.
+  // Since minor 95.
   uint32_t holds;
   // The props it placed and still holds, which
   // `HostApi::transaction_entities`
-  // lists. Since minor 92.
+  // lists. Since minor 95.
   uint32_t created;
 } EnshwickTransactionInfo;
 // Queued, or written in part: the loader spreads a large one over the
@@ -2715,7 +2724,9 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*type_hash)(struct EnshwickStr type_name, uint32_t *out);
   // A read-only pointer to `entity`'s component of type `type_hash`, valid
   // until the game thread moves on; on the server's game thread only.
-  // Since minor 3.
+  // For the static half of an ECS type, such as `FuelSetup`, it is the
+  // set-up data the entity's template holds (since minor 94; the
+  // dynamic half's data before). Since minor 3.
   EnshwickStatus (*component)(EnshwickModHandle me,
                               uint32_t entity,
                               uint32_t type_hash,
@@ -2995,8 +3006,10 @@ typedef struct EnshwickHostApi {
   // loader marks the component changed, as the game's own writes do, so
   // the game sends it to clients and saves it. `Status::REFUSED` for a
   // copy the game keeps for clients (`Network*`, `Client*`), which it
-  // overwrites; `Status::MISSING` when the entity lacks the component.
-  // On the server's game thread only. Since minor 22.
+  // overwrites; `Status::STATIC_HALF` for the static half of an ECS
+  // type, the template's set-up data (since minor 94);
+  // `Status::MISSING` when the entity lacks the component. On the
+  // server's game thread only. Since minor 22.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
                                     uint32_t entity,
                                     uint32_t type_hash,
@@ -3853,7 +3866,7 @@ typedef struct EnshwickHostApi {
   // after the one that placed it. `out` may be null with `capacity` 0 to
   // learn the number. `Status::BAD_ARGS` for a null `count`;
   // `Status::MISSING` for an id this mod did not get or one the loader
-  // forgot. Any thread. Since minor 92.
+  // forgot. Any thread. Since minor 95.
   EnshwickStatus (*transaction_entities)(EnshwickModHandle me,
                                          uint64_t id,
                                          uint32_t *out,
@@ -3866,7 +3879,7 @@ typedef struct EnshwickHostApi {
   // a corner that is not finite or a `max` below `min`;
   // `Status::MISSING` while no world is loaded or on a build without
   // the zone list. On the server's game thread at a quiet moment only:
-  // `Status::WRONG_THREAD` elsewhere or inside a step. Since minor 92.
+  // `Status::WRONG_THREAD` elsewhere or inside a step. Since minor 95.
   EnshwickStatus (*world_persists)(EnshwickModHandle me,
                                    const double (*min)[3],
                                    const double (*max)[3],

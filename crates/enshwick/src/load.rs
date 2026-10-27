@@ -58,6 +58,7 @@ impl Off {
             Status::WRONG_THREAD => "called off the thread it serves",
             Status::NOT_LOADED => "not loaded yet",
             Status::OUTSIDE_WORLD => "outside the world",
+            Status::STATIC_HALF => "template data, never written",
             Status::NOT_A_PROP => "not a prop",
             _ => "failed",
         };

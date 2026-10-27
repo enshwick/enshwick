@@ -11,7 +11,8 @@ use crate::content::recipes::RecipeKind;
 use crate::content::vanilla::VanillaError;
 
 use super::entries::{
-    ItemChangeEntry, ItemsEntry, ItemsFile, LootFile, RecipeChangeEntry, RecipesFile, ValueEntry,
+    ItemChangeEntry, ItemsEntry, ItemsFile, LootChangeEntry, LootFile, RecipeChangeEntry,
+    RecipesFile, ValueEntry,
 };
 use super::files::PackError;
 use super::pack::Reader;
@@ -108,8 +109,9 @@ pub(super) fn item_changes(
             (Some(ItemsEntry::Word(word)), None) => match word.as_str() {
                 "stackable" => Ok((Items::Stackable, word.clone())),
                 "containers" => Ok((Items::Containers, word.clone())),
+                "backpacks" => Ok((Items::Backpacks, word.clone())),
                 _ => Err(format!(
-                    "items {word:?} is no selection; give a list of items, \"stackable\" or \"containers\""
+                    "items {word:?} is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\""
                 )),
             },
             (None, Some(categories)) => category(categories).map(|mask| {
@@ -215,21 +217,129 @@ pub(super) fn loot_changes(
     loot_file: &LootFile,
     text: &str,
 ) -> Vec<(Change, String)> {
+    let fields = |e: &LootChangeEntry| {
+        vec![
+            (Field::StackSize, e.stack_size),
+            (Field::Count, e.count),
+            (Field::SpawnProbability, e.spawn_probability),
+            (Field::Weight, e.weight),
+        ]
+    };
     let entries: Vec<ChangeEntry<'_>> = loot_file
         .change
         .iter()
+        .filter(|entry| entry.get_ref().table.is_empty())
         .map(|entry| {
             let e = entry.get_ref();
-            let fields = vec![
-                (Field::StackSize, e.stack_size),
-                (Field::Count, e.count),
-                (Field::SpawnProbability, e.spawn_probability),
-                (Field::Weight, e.weight),
-            ];
-            (entry.span().start, e.items.as_slice(), fields)
+            (entry.span().start, e.items.as_slice(), fields(e))
         })
         .collect();
-    changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text)
+    let mut out = changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text);
+    let mut seen: HashMap<(Guid, Guid, Field), usize> = HashMap::new();
+    for (index, entry) in loot_file.change.iter().enumerate() {
+        let e = entry.get_ref();
+        if e.table.is_empty() {
+            continue;
+        }
+        let at = entry.span().start;
+        let line = PackError::at(LOOT_FILE, text, at, "").line;
+        let number = index + 1;
+        for (change, source) in table_changes(reader, text, (at, line, number), e, &fields(e)) {
+            let key = (
+                change.entry,
+                change.item.unwrap_or(change.entry),
+                change.field,
+            );
+            if let Some(&first) = seen.get(&key) {
+                reader.error(
+                    LOOT_FILE,
+                    text,
+                    at,
+                    format!(
+                        "change {number}: {} {source} is changed at line {first} already",
+                        change.field
+                    ),
+                );
+                continue;
+            }
+            seen.insert(key, line);
+            out.push((change, source));
+        }
+    }
+    out
+}
+
+/// The checked changes change `e` gives the items it names in the fill
+/// tables of the containers it names, each with its source; problems are
+/// noted at the change, whose start, line and number `at` holds.
+fn table_changes(
+    reader: &mut Reader<'_>,
+    text: &str,
+    (at, line, number): (usize, usize, usize),
+    e: &LootChangeEntry,
+    fields: &[(Field, Option<ValueEntry>)],
+) -> Vec<(Change, String)> {
+    let file = LOOT_FILE;
+    let fail = |reader: &mut Reader<'_>, why: String| {
+        reader.error(file, text, at, format!("change {number}: {why}"));
+    };
+    let given: Vec<(Field, Value)> = fields
+        .iter()
+        .filter_map(|(field, v)| v.map(|v| (*field, value(v))))
+        .collect();
+    if given.iter().any(|(field, _)| *field == Field::StackSize) {
+        fail(
+            reader,
+            "stack_size belongs to random loot, which has no tables".to_owned(),
+        );
+        return Vec::new();
+    }
+    if given.is_empty() {
+        fail(
+            reader,
+            "changes nothing; give count, spawn_probability, weight".to_owned(),
+        );
+        return Vec::new();
+    }
+    if e.items.is_empty() {
+        fail(reader, "items names no item".to_owned());
+        return Vec::new();
+    }
+    let mut tables = Vec::new();
+    for name in &e.table {
+        let found = match reader.vanilla {
+            None => Err(format!(
+                "table {name:?} needs the game's data at hand to find the container's table"
+            )),
+            Some(vanilla) => vanilla.loot_table(name).map_err(|why| why.to_string()),
+        };
+        match found {
+            Ok(table) => {
+                let label = match table.containers {
+                    0 | 1 => format!("in {name}"),
+                    n => format!("in {name}, a table {n} containers share"),
+                };
+                tables.push((table.table, label));
+            }
+            Err(why) => fail(reader, why),
+        }
+    }
+    let mut out = Vec::new();
+    for item_name in &e.items {
+        let Some((item, _)) = reader.reference(file, text, at, item_name, "item", "") else {
+            continue;
+        };
+        for (table, label) in &tables {
+            for &(field, value) in &given {
+                let change = Change::in_table(*table, item, field, value);
+                match change.check() {
+                    Ok(()) => out.push((change, format!("{file}:{line} ({label})"))),
+                    Err(why) => fail(reader, why.to_string()),
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The checked changes of one file's `[[change]]` tables of `kind`: each
@@ -458,6 +568,11 @@ fn recipe_fields(
             fields.push((Field::Ingredient, Some((item, name.clone())), value(*v)));
         }
     }
+    let station = e
+        .station
+        .as_ref()
+        .and_then(|name| station(reader, text, at, number, name));
+    fields.extend(station.map(|v| (Field::Station, None, v)));
     if e.recipes.is_empty() && e.output.is_empty() {
         reader.error(
             file,
@@ -466,7 +581,7 @@ fn recipe_fields(
             format!("change {number}: names no recipe; give recipes or output"),
         );
     }
-    if fields.is_empty() && e.ingredients.is_empty() {
+    if fields.is_empty() && e.ingredients.is_empty() && e.station.is_none() {
         let names: Vec<&str> = Field::ALL
             .iter()
             .filter(|f| f.entry() == Entry::Recipe && **f != Field::Ingredient)
@@ -560,7 +675,7 @@ fn select_recipes(
         );
         return Vec::new();
     }
-    let fields: Vec<(Field, Value)> = [
+    let mut fields: Vec<(Field, Value)> = [
         (Field::Output, e.output_count),
         (Field::Cost, e.cost),
         (Field::CraftingDuration, e.time),
@@ -568,11 +683,19 @@ fn select_recipes(
     .into_iter()
     .filter_map(|(field, v)| v.map(|v| (field, value(v))))
     .collect();
-    if fields.is_empty() {
-        let names: Vec<&str> = [Field::Output, Field::Cost, Field::CraftingDuration]
-            .iter()
-            .map(|f| f.name())
-            .collect();
+    if let Some(name) = &e.station {
+        fields.extend(station(reader, text, at, number, name).map(|v| (Field::Station, v)));
+    }
+    if fields.is_empty() && e.station.is_none() {
+        let names: Vec<&str> = [
+            Field::Output,
+            Field::Cost,
+            Field::CraftingDuration,
+            Field::Station,
+        ]
+        .iter()
+        .map(|f| f.name())
+        .collect();
         fail(
             reader,
             format!("changes nothing; give {}", names.join(", ")),
@@ -625,4 +748,28 @@ fn select_recipes(
         }
     }
     out
+}
+
+/// The station value of the crafting station whose item `name` names, from
+/// the game's data; problems are noted at change `number`.
+fn station(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    number: usize,
+    name: &str,
+) -> Option<Value> {
+    let found = match reader.vanilla {
+        None => Err(format!(
+            "station {name:?} needs the game's data at hand to find its workshop"
+        )),
+        Some(vanilla) => match vanilla.item(name).and_then(|item| vanilla.workshop(item)) {
+            Ok(workshop) => Ok(Change::station(Guid([0; 16]), workshop).value),
+            Err(VanillaError::NotAStation(_)) => Err(format!("{name} is no crafting station")),
+            Err(why) => Err(why.to_string()),
+        },
+    };
+    found
+        .map_err(|why| reader.error(RECIPES_FILE, text, at, format!("change {number}: {why}")))
+        .ok()
 }

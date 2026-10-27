@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 92;
+pub const ABI_MINOR: u16 = 95;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -476,11 +476,16 @@ impl Status {
     /// the height the loader takes. A mod built before minor 87 reads it as
     /// an unknown failure. Since minor 87.
     pub const OUTSIDE_WORLD: Self = Self(9);
+    /// The component type is the static half of its ECS type: the set-up
+    /// values the entity's template holds and every entity of that template
+    /// shares, which a write would change for all of them. A mod built
+    /// before minor 94 reads it as an unknown failure. Since minor 94.
+    pub const STATIC_HALF: Self = Self(10);
     /// The entity named is no prop: not placed from an item, or a creature
     /// such as an animal, a pet or a survivor, which only the general
-    /// entity calls reach. A mod built before minor 92 reads it as an
-    /// unknown failure. Since minor 92.
-    pub const NOT_A_PROP: Self = Self(10);
+    /// entity calls reach. A mod built before minor 95 reads it as an
+    /// unknown failure. Since minor 95.
+    pub const NOT_A_PROP: Self = Self(11);
 
     /// Whether this is [`Status::OK`].
     ///

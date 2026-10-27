@@ -529,7 +529,7 @@ fn a_category_change_selects_its_items_where_the_loader_reads_them() {
 #[test]
 fn stackable_items_and_containers_are_selected_by_a_word() {
     use crate::content::changes::{Items, ItemsChange};
-    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n";
+    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n\n[[change]]\nitems = \"backpacks\"\nslots = 32\n";
     let pack = Pack::parse("you.stacks", &files(items)).unwrap();
     assert_eq!(
         pack.selections(),
@@ -541,6 +541,10 @@ fn stackable_items_and_containers_are_selected_by_a_word() {
             (
                 ItemsChange::new(Items::Containers, Field::Slots, Value::Times(2.0)),
                 "items.toml:5 (containers)".to_owned()
+            ),
+            (
+                ItemsChange::new(Items::Backpacks, Field::Slots, Value::Set(32.0)),
+                "items.toml:9 (backpacks)".to_owned()
             ),
         ]
     );
@@ -565,7 +569,7 @@ fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
         ),
         (
             "[[change]]\nitems = \"chests\"\nslots = 48\n",
-            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\" or \"containers\"",
+            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\"",
         ),
         (
             "[[change]]\ncategory = []\nmax_stack = 50\n",
@@ -780,4 +784,77 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
         assert!(error.contains(problem), "{error}");
         assert!(error.starts_with("pack.toml:4"), "{error}");
     }
+}
+
+#[test]
+fn a_loot_change_of_one_container_changes_its_table_alone() {
+    let corpses = Guid([7; 16]);
+    let vanilla = crate::content::vanilla::tests::game_with_tables(&[
+        ("LootContainer_Enemy_Corpse_Vukah", corpses),
+        ("LootContainer_Enemy_Wildlife_Vuka_Melee", corpses),
+    ]);
+    let text = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootContainer_Enemy_Corpse_Vukah\"]\ncount = {{ times = 2 }}\n"
+    );
+    let loot = PackFiles::new().with(LOOT_FILE, text);
+    let pack = Pack::parse_with("you.loot", &loot, Some(&vanilla)).unwrap();
+    assert_eq!(
+        pack.changes(),
+        [(
+            Change::in_table(corpses, Guid::parse(CHEST), Field::Count, Value::Times(2.0)),
+            "loot.toml:1 (in LootContainer_Enemy_Corpse_Vukah, a table 2 containers share)"
+                .to_owned()
+        )]
+    );
+    let stack = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootContainer_Enemy_Corpse_Vukah\"]\nstack_size = 2\n"
+    );
+    let errors = Pack::parse_with(
+        "you.loot",
+        &PackFiles::new().with(LOOT_FILE, stack),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "loot.toml:1:1: change 1: stack_size belongs to random loot, which has no tables"
+    );
+    let offline =
+        format!("[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootChest_Gold\"]\ncount = 2\n");
+    let errors = Pack::parse("you.loot", &PackFiles::new().with(LOOT_FILE, offline)).unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data at hand"),
+        "{errors}"
+    );
+}
+
+#[test]
+fn a_recipe_change_moves_recipes_to_a_station() {
+    let forge = Guid([5; 16]);
+    let (torch, recipe) = (Guid([1; 16]), Guid([3; 16]));
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(forge, "Prop_Production_T1_Forge"), (torch, "Tool_Torch01")],
+        &[(recipe, "Tool_Torch01_T0_PK", torch)],
+    );
+    let station = vanilla.workshop(forge).unwrap();
+    let text =
+        "[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\nstation = \"Prop_Production_T1_Forge\"\n";
+    let pack = Pack::parse_with("you.forge", &recipes(text), Some(&vanilla)).unwrap();
+    assert_eq!(
+        pack.changes(),
+        [(
+            Change::station(recipe, station),
+            "recipes.toml:1 (Tool_Torch01_T0_PK)".to_owned()
+        )]
+    );
+    let errors = Pack::parse_with(
+        "you.forge",
+        &recipes("[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\nstation = \"Tool_Torch01\"\n"),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "recipes.toml:1:1: change 1: Tool_Torch01 is no crafting station"
+    );
 }

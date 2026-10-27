@@ -257,8 +257,8 @@ fn has(loader: &Loader, entity: u32, hash: u32) -> bool {
     crate::world::component(loader, Entity(entity), hash).is_ok()
 }
 
-/// The data of `entity`'s own component of type `hash`, its dynamic half,
-/// in its row: `None` when it has none. On the game thread.
+/// The data of `entity`'s component of type `hash`, as the loader's
+/// component read gives it: `None` when it has none. On the game thread.
 fn inline(loader: &Loader, entity: u32, hash: u32) -> Result<Option<*const u8>, Status> {
     match crate::world::component(loader, Entity(entity), hash) {
         Ok(data) => Ok(Some(data.cast())),
@@ -267,8 +267,11 @@ fn inline(loader: &Loader, entity: u32, hash: u32) -> Result<Option<*const u8>, 
     }
 }
 
-/// The value of type `T` at `at` in `entity`'s own component of type
-/// `hash`, its dynamic half; `None` when it has none. On the game thread.
+/// The value of type `T` at `at` in `entity`'s component of type `hash`:
+/// its own data, or for the static half of an ECS type, such as a
+/// `FuelSetup`, the set-up data its template holds, as the loader's
+/// component read chooses by the hash; `None` when it has none. On the
+/// game thread.
 fn field<T: enshwick::raw::AnyBitPattern>(
     loader: &Loader,
     entity: u32,
@@ -278,31 +281,10 @@ fn field<T: enshwick::raw::AnyBitPattern>(
     let Some(data) = inline(loader, entity, hash)? else {
         return Ok(None);
     };
-    // SAFETY: `data` is the entity's live component of type `hash`, in its
-    // row, and the caller passes the reflected offset of a `T` field of
-    // that dynamic half, from `Facts`; read on the game thread, which alone
-    // writes it.
-    Ok(Some(unsafe { enshwick::raw::read_at(data, at) }))
-}
-
-/// The value of type `T` at `at` in the static half of `entity`'s
-/// component type `hash`, the values its template sets up, such as a
-/// `FuelSetup`; `None` when it has none. On the game thread.
-fn static_field<T: enshwick::raw::AnyBitPattern>(
-    loader: &Loader,
-    entity: u32,
-    hash: u32,
-    at: usize,
-) -> Result<Option<T>, Status> {
-    let data: *const u8 = match crate::world::static_component(loader, Entity(entity), hash) {
-        Ok(data) => data.cast(),
-        Err(Status::MISSING) if !has(loader, entity, hash) => return Ok(None),
-        Err(reason) => return Err(reason),
-    };
-    // SAFETY: `data` is the live static half of the entity's component type
-    // `hash`, and the caller passes the reflected offset of a `T` field of
-    // that static half, from `Facts`; read on the game thread; nothing
-    // writes it after the template is set up.
+    // SAFETY: `data` is the entity's live component of type `hash`, or its
+    // template's set-up data for a static half, and the caller passes the
+    // reflected offset of a `T` field of that type, from `Facts`; read on
+    // the game thread, which alone writes it.
     Ok(Some(unsafe { enshwick::raw::read_at(data, at) }))
 }
 
@@ -472,12 +454,12 @@ fn state(loader: &Loader, facts: &Facts, entity: u32) -> Result<StateReads, Stat
     };
     let fuel = match field::<i32>(loader, entity, facts.fuel, facts.fuel_charges)? {
         Some(charges) => {
-            let most = static_field::<i32>(loader, entity, facts.fuel_setup, facts.fuel_most)?;
-            let start = static_field::<f32>(loader, entity, facts.fuel_setup, facts.fuel_start)?;
+            let most = field::<i32>(loader, entity, facts.fuel_setup, facts.fuel_most)?;
+            let start = field::<f32>(loader, entity, facts.fuel_setup, facts.fuel_start)?;
             let mut refills = false;
             for &at in &facts.fuel_refills {
-                refills |= static_field::<u8>(loader, entity, facts.fuel_setup, at)?
-                    .is_some_and(|on| on != 0);
+                refills |=
+                    field::<u8>(loader, entity, facts.fuel_setup, at)?.is_some_and(|on| on != 0);
             }
             fuel_held(charges, most.zip(start), refills)
         }

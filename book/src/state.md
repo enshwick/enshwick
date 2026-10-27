@@ -123,6 +123,24 @@ The log names the mod and its reason. A player who accepts the risk deletes
 `mod-data/<id>/hold.txt` to open the world anyway. `hold.reason()` reads the
 reason back while the hold is set.
 
+A hold that concerns one world only takes that world's key, from
+[`World::key`](world.md):
+
+```rust
+use enshwick::state::Hold;
+
+fn hold_world(load: &mut enshwick::Load<'_>, world: &str) -> Result<(), enshwick::Off> {
+    Hold::for_world(&load.data_dir()?, world).set("the world has 20 altar zones")?;
+    Ok(())
+}
+```
+
+It is the file `mod-data/<id>/worlds/<key>/hold.txt`. While the loader runs,
+it stops the game only as that world starts to load without the mod, before
+the save is read; other worlds open as usual. On a game build the loader
+does not know, it cannot tell which world loads, so every world's hold stops
+the game at start.
+
 ## The loader's own data
 
 The loader keeps its data in `mod-data/enshwick/`. `migrations.toml` there

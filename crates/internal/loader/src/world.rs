@@ -29,7 +29,6 @@ use crate::server_pin::{Place, ServerCell};
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
-    pinned::ecs::COMPONENT_READ_STATIC.id(),
     pinned::ecs::ENTITY_MAP.id(),
     pinned::ecs::ENTITY_MAP_CAPACITY.id(),
     pinned::ecs::ENTITY_RECORDS.id(),
@@ -236,17 +235,12 @@ type ReadComponent = unsafe extern "system" fn(
     entity: u32,
 );
 type EntitySlot = unsafe extern "system" fn(map: *const u8, entity: *const u32) -> u32;
-type ReadStatic =
-    unsafe extern "system" fn(world: *const u8, index: *const u16, entity: u32) -> *const u8;
 
 /// The game functions and offsets the reads use, from the build table.
 #[derive(Debug, Clone, Copy)]
 struct Layout {
     type_index: TypeIndex,
     read_component: ReadComponent,
-    /// The game's read of a component type's static half, the values the
-    /// template sets up, on builds whose table has it.
-    read_static: Option<ReadStatic>,
     entity_slot: EntitySlot,
     server_world: usize,
     entity_world: usize,
@@ -303,16 +297,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // function with the `EntitySlot` signature on this build, in the
             // image, which stays mapped.
             let entity_slot = unsafe { core::mem::transmute::<usize, EntitySlot>(entity_slot) };
-            let read_static = function(pinned::ecs::COMPONENT_READ_STATIC).map(|address| {
-                // SAFETY: the table's `ecs.component_read_static` is the
-                // address of the game function with the `ReadStatic`
-                // signature on this build, in the image, which stays mapped.
-                unsafe { core::mem::transmute::<usize, ReadStatic>(address) }
-            });
             Some(Layout {
                 type_index,
                 read_component,
-                read_static,
                 entity_slot,
                 server_world: constant(pinned::server::WORLD)?,
                 entity_world: constant(pinned::world::ENTITIES)?,
@@ -384,9 +371,18 @@ fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
     (world != 0).then(|| world + layout.entity_world)
 }
 
-/// The server's entity world and the registry's index of the component
-/// type `hash`, when the caller is on the game thread.
-pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
+/// Where a component type is in the server's world: its entity world, the
+/// world's component registry and the registry's index of the type.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TypeAt {
+    pub(crate) world: usize,
+    registry: usize,
+    pub(crate) index: *const u16,
+}
+
+/// Where the component type `hash` is, when the caller is on the game
+/// thread.
+pub(crate) fn type_at(loader: &Loader, hash: u32) -> Result<TypeAt, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: `world` is the entity world, non-zero (checked by
@@ -415,67 +411,70 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
         })
         .find(|index| !index.is_null())
         .ok_or(Status::MISSING)?;
-    Ok((world, index))
+    Ok(TypeAt {
+        world,
+        registry,
+        index,
+    })
 }
 
-/// A component's data pointer, or why not.
+/// The server's entity world and the registry's index of the component
+/// type `hash`, when the caller is on the game thread.
+pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
+    type_at(loader, hash).map(|at| (at.world, at.index))
+}
+
+/// Whether `hash`, found at `at`, names the static half of its ECS type,
+/// the template's set-up data; false on a build whose table lacks the
+/// registry's layout.
+pub(crate) fn names_static(loader: &Loader, at: &TypeAt, hash: u32) -> bool {
+    crate::static_halves::halves(loader).is_some_and(|halves| {
+        // SAFETY: `at` came from `type_at` on the game thread, so its
+        // registry is the live world's non-zero component registry and its
+        // index the non-null type index found for `hash`.
+        unsafe { halves.is_static(at.registry, at.index, hash) }
+    })
+}
+
+/// A component's data pointer, or why not: for the static half of an ECS
+/// type, the set-up data the entity's template holds, which nothing may
+/// write; otherwise the entity's own data.
 pub(crate) fn component(
     loader: &Loader,
     entity: Entity,
     hash: u32,
 ) -> Result<*const c_void, Status> {
-    match read_raw(loader, entity, hash)? {
-        (0, _) => Err(Status::MISSING),
-        (data, _) => Ok(core::ptr::with_exposed_provenance(data)),
-    }
-}
-
-/// The game's raw component read: the data address and the row stride, 0
-/// for a component the entity does not keep inline.
-fn read_raw(loader: &Loader, entity: Entity, hash: u32) -> Result<(usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let (world, index) = type_index(loader, hash)?;
+    let at = type_at(loader, hash)?;
+    if names_static(loader, &at, hash) {
+        let halves = crate::static_halves::halves(loader).ok_or(Status::MISSING)?;
+        // SAFETY: `at.world` is the live entity world and `at.index` the
+        // type index of `hash`, whose type has a static half (`names_static`
+        // returned true), on the game thread (checked by `reader` inside
+        // `type_at`).
+        return unsafe { halves.read(at.world, at.index, entity.0) }.map(<*const u8>::cast);
+    }
     let mut out = [0usize; 2];
     // SAFETY: `read_component` is the table's `ecs.component_read_raw`;
-    // `out` is two writable words on this stack, `world` the non-zero entity
-    // world and `index` the non-null registry index `type_index` returned,
-    // on the game thread (checked by `reader` inside `type_index`).
+    // `out` is two writable words on this stack, `at.world` the non-zero
+    // entity world and `at.index` the non-null registry index `type_at`
+    // returned, on the game thread (checked by `reader` inside `type_at`).
     unsafe {
         (layout.read_component)(
             &raw mut out,
-            core::ptr::with_exposed_provenance(world),
-            index,
+            core::ptr::with_exposed_provenance(at.world),
+            at.index,
             entity.0,
         );
     };
-    Ok((out[0], out[1]))
-}
-
-/// The static half of `entity`'s component type `hash`: the values its
-/// template sets up, such as a `FuelSetup`, which the game keeps beside
-/// the dynamic half the raw read returns for the same type; read-only.
-/// [`Status::MISSING`] when it has none or on a build without the read.
-pub(crate) fn static_component(
-    loader: &Loader,
-    entity: Entity,
-    hash: u32,
-) -> Result<*const c_void, Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let read_static = layout.read_static.ok_or(Status::MISSING)?;
-    let (world, index) = type_index(loader, hash)?;
-    // SAFETY: `read_static` is the table's `ecs.component_read_static`;
-    // `world` is the non-zero entity world and `index` the non-null
-    // registry index `type_index` returned, on the game thread (checked by
-    // `reader` inside `type_index`).
-    let data = unsafe { read_static(core::ptr::with_exposed_provenance(world), index, entity.0) };
-    if data.is_null() {
-        return Err(Status::MISSING);
+    match out[0] {
+        0 => Err(Status::MISSING),
+        data => Ok(core::ptr::with_exposed_provenance(data)),
     }
-    Ok(data.cast())
 }
 
-/// The live record of `entity`; on the game thread.
-fn record(loader: &Loader, entity: Entity) -> Result<usize, Status> {
+/// An entity's template GUID.
+pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is the
@@ -511,17 +510,9 @@ fn record(loader: &Loader, entity: Entity) -> Result<usize, Status> {
     if record == 0 {
         return Err(Status::MISSING);
     }
-    Ok(record)
-}
-
-/// An entity's template GUID.
-pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
-    let layout = layout(loader).ok_or(Status::MISSING)?;
-    let record = record(loader, entity)?;
-    // SAFETY: `record` is the entity's non-zero live record (checked by
-    // `record`); the table's `ecs.record_template` offset holds its template
-    // GUID pointer; read on the game thread (checked by `reader` inside
-    // `record`).
+    // SAFETY: `record` is a non-zero (`record == 0` returns first) live record;
+    // the table's `ecs.record_template` offset holds its template GUID pointer;
+    // read on the game thread (checked by `reader`).
     let guid: usize = unsafe { read(record, layout.record_template) };
     if guid == 0 {
         return Err(Status::MISSING);

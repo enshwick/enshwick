@@ -60,7 +60,9 @@ end)
 
 | Name | What |
 | --- | --- |
-| `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md), with its data as a table; only at the top level of `main.luau` |
+| `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md) or typed [game event](#game-events), with its data as a table; only at the top level of `main.luau` |
+| `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
+| `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
@@ -93,6 +95,69 @@ reaches Luau and the definitions with no other change.
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
+
+## Game events
+
+`enshwick.on` takes the name of a typed [game event](game-events.md) as
+well, such as `HitEvent` or `EntityDiedEvent`. The handler gets the event's
+fields as `game_events::HitEvent` has them, a mask as the list of its bit
+names, a game value as its name. A value the API does not name arrives as
+`Other(<number>)`, a name of ours with the game's number in it:
+
+```luau
+enshwick.on("HitEvent", function(hit)
+    if hit.health_change < 0 and hit.root_source_id then
+        enshwick.log.info(`{hit.root_source_id} hit {hit.target_id}`)
+    end
+end)
+```
+
+Any other game event is read by its reflected type and the fields the script
+names, each with how to read it: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`,
+`u64`, `i64`, `f32`, `f64`, `bool` or `entity`, the 64-bit ones as strings.
+`enshwick.game_event_types()` lists every type of the running build with
+its size. A field the type lacks on this build leaves the mod off at start,
+with the reason in the log.
+
+```luau
+enshwick.on_game_type("keen::ecs::EntityDiedEvent", { deadEntityId = "entity" }, function(event)
+    enshwick.log.info(`entity {event.deadEntityId} died`)
+end)
+```
+
+Game events run on the server's game thread before the step's systems, as
+for a Rust mod; on a client, only while it hosts a game.
+
+## Extending another mod
+
+A Luau mod links into another mod's [extension point](extending.md) as a
+Rust mod does. `cargo enshwick point <owner>:<point> --from <owner's DLL>
+--luau --out points/<point>.luau` writes the point's module: the types it
+reaches, its named values, and each field's place with the layout hash the
+owner's build wrote. The loader links only when every hash matches the
+owner's, the input the module reads is no larger than the owner's and the
+answer has the owner's size. A script changes an answer only of a number,
+`boolean`, entity or GUID type, whose hash the runtime checks against the
+type the module names; on another answer type it may observe the point. The handler gets the input and the answer so
+far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
+refusable point:
+
+```luau
+local price = require("./points/price")
+
+enshwick.extend(price, function(input: price.Price, answer: number)
+    if input.deal == price.Deal.SELL then
+        return answer * 2
+    end
+    return nil
+end)
+```
+
+The handler runs on the thread that asks the point, under the same budget
+as an event handler. An error or an answer of the wrong type turns the mod
+off, and the answer stays as it was. An owner version with another layout
+leaves the link idle, with the reason in the log, until the module is
+written again.
 
 ## Settings
 

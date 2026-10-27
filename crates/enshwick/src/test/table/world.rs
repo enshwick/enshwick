@@ -276,6 +276,9 @@ pub(crate) extern "system" fn component_write(
         if s.host.refused_writes.contains(&type_hash) {
             return Err(Status::REFUSED);
         }
+        if s.host.static_halves.contains(&type_hash) {
+            return Err(Status::STATIC_HALF);
+        }
         let address = s
             .host
             .components

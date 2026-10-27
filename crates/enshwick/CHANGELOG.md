@@ -8,6 +8,33 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Change::in_table` changes an item's count, chance or weight in one fill
+  table alone, after its changes of every table; `Vanilla::loot_table`
+  finds the table a container template rolls, with how many containers
+  share it; a data pack's `loot.toml` takes `table = [...]` with the
+  containers' template names. `FillTableLayout` and `template_table` read
+  a template's name and table (#570).
+- `Hold::for_world` holds the game for one world only
+  (`mod-data/<id>/worlds/<key>/hold.txt`): the loader stops the game as
+  that world starts to load without the mod, before its save is read, and
+  on a build it leaves vanilla at start; `world_holds`, `held_worlds` and
+  `WORLDS_DIR` read them. A data pack that raised a stack size now holds
+  the worlds saved with it, not the whole data folder (#563).
+- `Field::Station` and `Change::station` move a vanilla recipe to another
+  workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
+  the recipe's workshop and lists it in the client's crafting menu at the
+  new station alone, from the next start; a data pack's `recipes.toml`
+  takes `station = "<station item>"`. `menu::move_recipes` and
+  `recipe_workshops` do the same for a mod's own patches (#567).
+- `Items::Backpacks` selects every backpack for a change of `Field::Slots`,
+  which now reaches a backpack's own inventory too, for backpacks made
+  after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
+  `items = "backpacks"`, and `ItemTraits::backpack_slots` reads a
+  backpack's size (#566).
+- `Load::extend_described_point` links into an extension point described at
+  run time (`points::DescribedPoint`, `DescribedField`), the input and the
+  answer as bytes in the owner's layout, as a script's schema gives them;
+  the loader checks the layout hashes as for a typed link.
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
@@ -19,6 +46,9 @@ Each entry names the pull request that made the change.
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
   format (`MAP_SNAPSHOT_FORMAT`) (#560).
+- `script::game_events` lists every typed game event for script languages
+  (`GameEventKind`); the game event structs, masks and values convert for
+  scripts (a mask as its bit names, a value as its name).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type
@@ -80,6 +110,10 @@ Each entry names the pull request that made the change.
   (`items = "containers"`), through the selections `Load::change_items`
   makes; `Pack::selections` lists them, and `ItemCategoryMask::NAMES` and
   `ItemCategoryMask::named` take the game's category names (#558).
+- `Status::STATIC_HALF` (ABI minor 94), `WorldError::StaticHalf` and
+  `FakeHost::static_half`: a write to the static half of a component
+  type, the set-up data every entity of a template shares, is refused
+  (#568).
 - `Transaction::place_prop`, `remove_prop` and
   `remove_prop_discarding_state` place and remove props inside a
   transaction, with undo; `World::transaction_entities` lists the props a
@@ -88,12 +122,12 @@ Each entry names the pull request that made the change.
   logic wiring, a logic trigger) is never
   removed or taken away by an undo unless the mod opts in:
   `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
-  records and `transaction_entities` are ABI minor 92 (#552).
+  records and `transaction_entities` are ABI minor 95 (#552).
 - `World::persists` tells whether a save keeps changes in a box: the
   game saves a world only inside its bases' zones, so props, blocks and
   terrain changed elsewhere are gone after a restart, a mod's as a
-  player's. `HostApi::world_persists` is ABI minor 92 (#552).
-- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 92): creatures
+  player's. `HostApi::world_persists` is ABI minor 95 (#552).
+- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 95): creatures
   placed from items (animals, pets, survivors) and flame altars are no
   props; prop removal refuses them in either mode (#552).
 
@@ -116,6 +150,12 @@ Each entry names the pull request that made the change.
   items (animals, pets, survivors) and flame altars, which are no props,
   and answer `WorldError::Missing` on a game build without their marks
   (#552).
+
+### Fixed
+
+- `World::component` and `World::get` read the static half of a component
+  type, such as `FuelSetup`, as the template's set-up values; they gave the
+  data of its dynamic half, `DynamicFuelSetup`, before (#568).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 

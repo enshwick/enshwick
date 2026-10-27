@@ -311,6 +311,11 @@ pub enum WorldError {
     /// above the height the loader takes.
     #[error("outside the world")]
     OutsideWorld,
+    /// The component type is the static half of its ECS type, such as
+    /// `FuelSetup`: the set-up values every entity of the template shares,
+    /// which the world reads but never writes.
+    #[error("the template's set-up data, which is never written")]
+    StaticHalf,
     /// The prop holds state a player would lose: items, growth, a
     /// production queue, assigned survivors, written text, fuel, logic
     /// wiring or a logic trigger's settings; [`HeldState`] names each
@@ -333,6 +338,7 @@ impl WorldError {
             Status::WRONG_THREAD => Err(Self::WrongThread),
             Status::NOT_LOADED => Err(Self::NotLoaded),
             Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
+            Status::STATIC_HALF => Err(Self::StaticHalf),
             Status::NOT_A_PROP => Err(Self::NotAProp),
             Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
             Status::MISSING => Err(missing),
@@ -479,7 +485,10 @@ impl World {
     }
 
     /// A pointer to `entity`'s component of type `ty`, valid until the game
-    /// thread returns to the game; `None` when the entity has none.
+    /// thread returns to the game; `None` when the entity has none. For the
+    /// static half of an ECS type, such as `FuelSetup` beside its dynamic
+    /// `DynamicFuelSetup`, it is the set-up data the entity's template
+    /// holds, shared by every entity of the template and read-only.
     ///
     /// # Examples
     ///
@@ -523,7 +532,9 @@ impl World {
     /// [`WorldError::Gone`] for an entity not in the world,
     /// [`WorldError::Lacks`] when it lacks the component,
     /// [`WorldError::Refused`] for a type the loader will not write,
-    /// [`WorldError::WrongThread`] off the game thread and
+    /// [`WorldError::StaticHalf`] for the static half of an ECS type, the
+    /// template's set-up data, [`WorldError::WrongThread`] off the game
+    /// thread and
     /// [`WorldError::Missing`] on a build without writes.
     ///
     /// # Examples

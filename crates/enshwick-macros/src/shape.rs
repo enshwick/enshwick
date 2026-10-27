@@ -101,6 +101,12 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
                     "a shared struct is `#[repr(C)]` or `#[repr(transparent)]`",
                 ));
             }
+            if reprs.iter().any(|r| r == "packed" || r == "align") {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "a shared struct is plain `#[repr(C)]`: other languages lay it out from its fields, so `packed` and `align` are refused",
+                ));
+            }
             let newtype = matches!(&data.fields, Fields::Unnamed(f) if f.unnamed.len() == 1);
             if !values.is_empty() && !newtype {
                 return Err(syn::Error::new_spanned(

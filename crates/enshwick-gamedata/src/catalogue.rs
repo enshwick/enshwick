@@ -81,6 +81,13 @@ pub const ITEM_CATEGORY: &str = "item_info.category";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of the offset of the template of an item's own entity, a GUID, in
+/// an item's static data; a backpack's inventory sits there.
+pub const ITEM_PID_ENTITY: &str = "item_info.pid_entity";
+
+/// The id of the `Backpack` member of the game's equipment slots.
+pub const EQUIPMENT_SLOT_BACKPACK: &str = "equipment_slot.backpack";
+
 /// The id of the flag, a byte, that says an item places building voxels.
 pub const ITEM_BUILDING_VOXEL: &str = "item_info.building_voxel";
 /// The id of the voxel material an item places, a `u8`: 0x80 and up for a
