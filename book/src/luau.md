@@ -110,7 +110,7 @@ key = "announce_minutes"
 default = 30
 min = 1
 max = 1440
-stage = "startup"
+stage = "restart"
 doc = "How often the log counts the players online, in minutes."
 ```
 

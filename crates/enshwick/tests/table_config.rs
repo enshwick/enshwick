@@ -21,6 +21,11 @@ mod tests {
                     .with_range(Some(1.0), Some(16.0))
                     .with_doc("How many.", ""),
                 Field::new("rule", Stage::Sync, &false).with_doc("The world's rule.", ""),
+                Field::new("level", Stage::Sync, &1)
+                    .with_range(Some(1.0), Some(5.0))
+                    .with_doc("The world's level.", ""),
+                Field::new("cache", Stage::Restart, &16).with_doc("Kept at start.", ""),
+                Field::new("colour", Stage::Client, "red").with_doc("This player's own.", ""),
             ],
         )
     }
@@ -116,5 +121,33 @@ mod tests {
         loader.set_server_synced(Some("{ rule = true }"));
         let _handled = loader.raise::<events::SettingsChanged>(&());
         assert_eq!(value("rule").as_bool(), Some(true));
+    }
+
+    #[test]
+    fn a_restart_value_holds_through_every_world() {
+        let (loader, _) = start(Some("cache = 16\n"));
+        loader.set_settings("cache = 32\n");
+        let _handled = loader.raise::<events::SettingsReplaced>(&());
+        assert_eq!(value("cache").as_integer(), Some(16));
+        let _handled = loader.raise::<events::SettingsChanged>(&());
+        assert_eq!(value("cache").as_integer(), Some(16));
+    }
+
+    #[test]
+    fn a_client_value_is_never_reported_to_a_server() {
+        let (loader, _) = start(Some("colour = \"blue\"\n"));
+        let reported = loader.reported_synced();
+        assert!(
+            reported.iter().all(|r| !r.contains("colour")),
+            "{reported:?}"
+        );
+    }
+
+    #[test]
+    fn server_values_out_of_range_are_refused_and_the_file_s_apply() {
+        let (loader, _) = start(Some("level = 2\n"));
+        loader.set_server_synced(Some("{ level = 9 }"));
+        let _handled = loader.raise::<events::SettingsChanged>(&());
+        assert_eq!(value("level").as_integer(), Some(2));
     }
 }
