@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 
 use crate::Off;
-use crate::content::changes::{Change, Entry};
+use crate::content::changes::{Change, Entry, ItemsChange};
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
 use crate::content::vanilla::Vanilla;
@@ -77,6 +77,7 @@ pub struct Pack {
     pub(super) workshops: Vec<PackWorkshop>,
     pub(super) drops: Vec<Drop>,
     pub(super) changes: Vec<(Change, String)>,
+    pub(super) selections: Vec<(ItemsChange, String)>,
     pub(super) texts: String,
     pub(super) hash: u32,
 }
@@ -392,6 +393,7 @@ impl Pack {
             workshops: Vec::new(),
             drops: Vec::new(),
             changes: Vec::new(),
+            selections: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -404,7 +406,8 @@ impl Pack {
         );
         pack.recipes = recipes(&mut reader, &recipes_file, &recipes_text);
         pack.drops = drops(&mut reader, &loot_file, &loot_text, &pack.items);
-        pack.changes = super::changes::item_changes(&mut reader, &items_file, &items_text);
+        (pack.changes, pack.selections) =
+            super::changes::item_changes(&mut reader, &items_file, &items_text);
         pack.changes.extend(super::changes::loot_changes(
             &mut reader,
             &loot_file,
@@ -485,6 +488,27 @@ impl Pack {
         &self.changes
     }
 
+    /// The pack's changes of every vanilla item a selection picks, each with
+    /// its source: the file and line, then the selection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::changes::Items;
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", "[[change]]\nitems = \"stackable\"\nmax_stack = { times = 2 }\n");
+    /// let pack = Pack::parse("you.stacks", &files)?;
+    /// let (change, source) = &pack.selections()[0];
+    /// assert_eq!(change.items, Items::Stackable);
+    /// assert_eq!(source, "items.toml:1 (stackable)");
+    /// # Ok::<(), enshwick::packs::ParsePackError>(())
+    /// ```
+    #[must_use]
+    pub fn selections(&self) -> &[(ItemsChange, String)] {
+        &self.selections
+    }
+
     /// Whether the pack adds or changes anything players' games read: items,
     /// workshops, recipes, texts or changes of values beside loot. Such a pack runs on
     /// the server and every player alike, so it keeps `join` on.
@@ -512,6 +536,7 @@ impl Pack {
                 .changes
                 .iter()
                 .all(|(change, _)| change.field.entry() == Entry::Loot)
+            && self.selections.is_empty()
             && self.texts.trim().is_empty())
     }
 
@@ -538,6 +563,7 @@ impl Pack {
             && self.recipes == other.recipes
             && self.workshops == other.workshops
             && self.changes == other.changes
+            && self.selections == other.selections
             && self.texts == other.texts
     }
 

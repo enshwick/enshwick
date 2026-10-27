@@ -248,10 +248,11 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
             Level::INFO,
             &id,
             &format!(
-                "data pack: {} ids, {} loot drops, {} changes",
+                "data pack: {} ids, {} loot drops, {} changes, {} selections",
                 pack.ids().len(),
                 pack.drops().len(),
-                pack.changes().len()
+                pack.changes().len(),
+                pack.selections().len()
             ),
         );
         with(|packs| {
@@ -334,14 +335,18 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
     });
     let mut taken = same;
     if !same && values && dev {
-        match crate::data_changes::reload(ModIndex::new(index), pack.changes().to_vec()) {
+        match crate::data_changes::reload(
+            ModIndex::new(index),
+            pack.changes().to_vec(),
+            pack.selections().to_vec(),
+        ) {
             Ok(rebuilt) => {
                 crate::log::write(
                     Level::INFO,
                     id,
                     &format!(
                         "data pack reloaded: {} changes of values, {rebuilt} resources built again",
-                        pack.changes().len()
+                        pack.changes().len() + pack.selections().len()
                     ),
                 );
                 taken = true;

@@ -12,13 +12,16 @@
 //! --all` runs the full suite, the Windows tests included when Docker runs.
 //!
 //! `cargo xtask bundle` writes the dev bundle testers unpack into the game
-//! folder ([`bundle`]).
+//! folder ([`bundle`]). `cargo xtask header` rewrites the ABI's C header,
+//! which the check holds to the ABI module and its golden layout
+//! ([`header`]).
 
 mod affected;
 mod book;
 mod bundle;
 #[cfg(feature = "compat")]
 mod compat;
+mod header;
 mod ranges;
 mod wine;
 
@@ -30,7 +33,7 @@ use std::time::Instant;
 
 use affected::{Package, Scope};
 
-const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | bundle [--out <dir>] [--local] | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
+const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git ref>] [--part host|windows-lint|windows-tests]... [--list-windows-tests] | bundle [--out <dir>] [--local] | header | compat <exe> [--mods <path>...] [--report <file>] [--patterns]";
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
@@ -58,6 +61,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         "check" => {}
         "bundle" => return bundle::run(rest),
         "wine-run" => return wine::run_one(rest),
+        "header" if rest.is_empty() => return header::run(&workspace_root()),
         _ => return Err(USAGE.to_owned()),
     }
     let mut all = false;
@@ -87,7 +91,7 @@ fn run(args: &[String]) -> Result<bool, String> {
         parts
     };
     let packages = packages()?;
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let root = workspace_root();
     let mut problems: Vec<String> = ranges::check(&root, &packages)
         .into_iter()
         .map(|problem| format!("manifest range: {problem}"))
@@ -129,6 +133,15 @@ fn run(args: &[String]) -> Result<bool, String> {
         }
         return Ok(true);
     }
+    if parts.contains(&Part::Host) && touches(&scope, header::PACKAGE) {
+        let problems = header::check(&root);
+        for problem in &problems {
+            say(&format!("C header: {problem}"));
+        }
+        if !problems.is_empty() {
+            return Ok(false);
+        }
+    }
     let checked = check(&scope, &packages, all, &parts);
     if !(checked && parts.contains(&Part::WindowsTests)) {
         return Ok(checked);
@@ -138,6 +151,19 @@ fn run(args: &[String]) -> Result<bool, String> {
         return Ok(true);
     }
     Ok(wine::run(&windows_tests, windows))
+}
+
+/// The workspace root, two levels above this crate.
+fn workspace_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// Whether `scope` checks the code of `package`.
+fn touches(scope: &Scope, package: &str) -> bool {
+    match scope {
+        Scope::All => true,
+        Scope::Some { code, .. } => code.iter().any(|name| name == package),
+    }
 }
 
 /// A part of the check, so CI can run the parts as parallel jobs.
