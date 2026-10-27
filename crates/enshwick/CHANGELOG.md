@@ -15,6 +15,12 @@ Each entry names the pull request that made the change.
   onto the server's ban list (`HostApi::account_action`,
   `AccountActionType`). The fake keeps a ban list
   (`Installed::banned`, `removed`) (#586).
+- With `allowlist = true` in the loader's settings, a dedicated server lets
+  in only the accounts `mod-data/enshwick/allowlist.txt` lists, and its
+  administrators; the console's `enshwick allowlist add|remove` and
+  `World::set_allowlisted` change the list, `World::allowlisted` reads it
+  (`HostApi::allowlist_set`, `HostApi::allowlist_has`, ABI 3.1). The
+  fake keeps the list (`Installed::allowlisted`) (#602).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 

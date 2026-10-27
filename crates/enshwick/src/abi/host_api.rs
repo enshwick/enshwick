@@ -1359,4 +1359,26 @@ pub struct HostApi {
     /// [`Status::WRONG_THREAD`] elsewhere.
     pub account_action:
         extern "system" fn(me: ModHandle, action: AccountActionType, account: u64) -> Status,
+    /// Puts `account` on the loader's allowlist when `listed` is 1, or takes
+    /// it off when 0: the accounts a dedicated server with the loader's
+    /// `allowlist` setting on lets join, beside its administrators. The
+    /// list is the file `mod-data/enshwick/allowlist.txt`, written at once
+    /// whether the setting is on or not; it applies from the next join.
+    /// `Status::OK` also when the list already says so;
+    /// [`Status::BAD_ARGS`] for account 0 or `listed` above 1;
+    /// [`Status::REFUSED`] when the file is not written;
+    /// [`Status::MISSING`] outside a dedicated server. Any thread, also
+    /// while another call or the console changes the list: changes take
+    /// turns and the file is replaced whole. A panic in the loader returns
+    /// [`Status::REFUSED`]. Since minor 1.
+    pub allowlist_set: extern "system" fn(me: ModHandle, account: u64, listed: u8) -> Status,
+    /// Writes 1 to `listed` when the loader's allowlist lists `account`, 0
+    /// when not or when the file never read, whether the `allowlist`
+    /// setting is on or not. `listed` is the caller's, writable for one
+    /// byte for the call, and written only on [`Status::OK`].
+    /// [`Status::BAD_ARGS`] for account 0 or a null `listed`;
+    /// [`Status::MISSING`] outside a dedicated server. Any thread, also
+    /// while the list changes. A panic in the loader returns
+    /// [`Status::REFUSED`]. Since minor 1.
+    pub allowlist_has: extern "system" fn(me: ModHandle, account: u64, listed: *mut u8) -> Status,
 }

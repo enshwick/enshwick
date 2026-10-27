@@ -64,4 +64,61 @@ impl World {
             key,
         ))
     }
+
+    /// Puts the account `key` on the loader's allowlist, or takes it off
+    /// when `listed` is false. With the server's `allowlist` setting on,
+    /// only listed accounts and administrators may join; the list keeps
+    /// its accounts with the setting off too, and a change applies from
+    /// the next join. Any thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for account 0 or when the list's file is
+    /// not written; [`WorldError::Missing`] outside a dedicated server.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::World;
+    ///
+    /// fn let_in(world: &World, key: u64) {
+    ///     if let Err(why) = world.set_allowlisted(key, true) {
+    ///         enshwick::warn!("{key:016x} not listed: {why}");
+    ///     }
+    /// }
+    /// ```
+    pub fn set_allowlisted(self, key: u64, listed: bool) -> Result<(), WorldError> {
+        WorldError::from_status((self.0.host.api().allowlist_set)(
+            self.0.host.handle(),
+            key,
+            u8::from(listed),
+        ))
+    }
+
+    /// Whether the loader's allowlist lists the account `key`, the
+    /// server's `allowlist` setting on or not. Any thread.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::Refused`] for account 0; [`WorldError::Missing`]
+    /// outside a dedicated server.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::world::World;
+    ///
+    /// fn may_join(world: &World, key: u64) -> bool {
+    ///     world.allowlisted(key).unwrap_or(false)
+    /// }
+    /// ```
+    pub fn allowlisted(self, key: u64) -> Result<bool, WorldError> {
+        let mut listed = 0u8;
+        WorldError::from_status((self.0.host.api().allowlist_has)(
+            self.0.host.handle(),
+            key,
+            &raw mut listed,
+        ))?;
+        Ok(listed == 1)
+    }
 }

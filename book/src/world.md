@@ -274,6 +274,31 @@ ends. The game never removes an administrator online, so a kick or a ban of
 one, and a kick of an account not online, return `WorldError::Refused`.
 Call it on the server's game thread between steps.
 
+### The allowlist
+
+With `allowlist = true` in `mod-configs/enshwick.toml`, a dedicated server
+lets in only the accounts its allowlist lists, and its administrators; the
+loader removes any other player as the player enters the world, and a player
+the game gives no account. The game has
+no such list, so the loader keeps it in `mod-data/enshwick/allowlist.txt`,
+one account per line, with `#` notes.
+
+`set_allowlisted(key, true)` lists an account and `set_allowlisted(key,
+false)` takes it off; `allowlisted(key)` tells whether the list holds it. Both
+work on any thread and with the setting off, and a change applies from the
+next join. Outside a dedicated server they return `WorldError::Missing`.
+
+```rust
+use enshwick::world::{World, WorldError};
+
+fn invite(world: &World, key: u64) -> Result<(), WorldError> {
+    if !world.allowlisted(key)? {
+        world.set_allowlisted(key, true)?;
+    }
+    Ok(())
+}
+```
+
 ## Build rights
 
 `world.can_build(&player, a, b)` tells whether the server lets a player edit
