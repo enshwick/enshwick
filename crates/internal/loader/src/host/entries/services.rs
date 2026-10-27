@@ -249,6 +249,8 @@ pub(crate) unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::poin
         output,
         mode: spec.mode,
         refuse: spec.flags.contains(api_frame::PointFlags::REFUSE),
+        input_size: spec.input.size,
+        output_size: spec.output.size,
     })
 }
 

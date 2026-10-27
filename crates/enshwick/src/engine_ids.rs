@@ -160,6 +160,7 @@ ids! {
     ITEM_REGISTRY_NAMES = "item_registry.names";
     TEMPLATE = "template";
     TEMPLATE_COMPONENTS = "template.components";
+    TEMPLATE_NAME = "template.name";
     TEMPLATE_COLLECTION = "template_collection";
     TEMPLATE_COLLECTION_TEMPLATES = "template_collection.templates";
     FUEL_SETUP = "fuel_setup";
@@ -287,6 +288,7 @@ ids! {
     NPC = "npc";
     ANIMAL = "animal";
     LOOT_FILL = "loot_fill";
+    LOOT_FILL_DEFAULT_INVENTORY = "loot_fill.table";
     RESOURCE_NODE = "resource_node";
     GAME_SETTINGS = "game_settings";
     GAME_SETTINGS_PLAYER_HEALTH_FACTOR = "game_settings.player_health_factor";

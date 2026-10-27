@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 93
+#define ENSHWICK_ABI_MINOR 94
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -692,6 +692,8 @@ typedef uint32_t EnshwickDataField;
 // The weight of an item in fill tables; the entry is the item. Since
 // minor 82.
 #define EnshwickDataField_LOOT_WEIGHT 16
+// The workshop a recipe is made at, by its game id. Since minor 93.
+#define EnshwickDataField_RECIPE_STATION 17
 
 // Which vanilla items a `DataChange` reaches.
 typedef uint32_t EnshwickDataSelect;
@@ -3835,7 +3837,7 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
   // Asks the loader to keep a copy of the client's fog of war for this
   // mod. Client only (`Status::MISSING` on a dedicated server).
-  // Allowed during `enshwick_mod_init` only. Since minor 93.
+  // Allowed during `enshwick_mod_init` only. Since minor 94.
   EnshwickStatus (*fog_open)(EnshwickModHandle me);
   // Writes the fog's `FogInfo` to `info`, then copies the box of
   // `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
@@ -3845,7 +3847,7 @@ typedef struct EnshwickHostApi {
   // open it; `Status::OUTSIDE_WORLD` for a box past the image;
   // `Status::BAD_ARGS` for a null `info`, or a null or short `out`
   // for a box of pixels. The loader may refresh the copy meanwhile:
-  // compare `version`. Since minor 93.
+  // compare `version`. Since minor 94.
   EnshwickStatus (*fog_read)(EnshwickModHandle me,
                              struct EnshwickFogInfo *info,
                              uint32_t x,

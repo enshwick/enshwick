@@ -20,6 +20,7 @@
 
 mod bridge;
 mod files;
+mod points;
 mod run;
 mod subscribe;
 

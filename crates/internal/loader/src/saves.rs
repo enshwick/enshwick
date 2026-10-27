@@ -227,13 +227,24 @@ unsafe fn read_path(layout: &Layout, path: *mut u8) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-/// Keeps the key of `path` when it names a world save.
+/// Keeps the key of `path` when it names a world save; a key that names
+/// the world `side` runs from now on stops the game when a hold on that
+/// world is unmet, before its save is read.
 fn remember(path: &str, side: Side) {
     let Some(key) = key_of(path) else {
         return;
     };
     let key = intern(&key, path);
-    KEYS.relock().note(side, key);
+    let changed = {
+        let mut keys = KEYS.relock();
+        let before = keys.pick(side);
+        keys.note(side, key);
+        let now = keys.pick(side);
+        now.is_some() && now != before
+    };
+    if changed && let Some(loader) = crate::host::loader() {
+        crate::holds::enforce_world(loader, key);
+    }
 }
 
 /// Every world key seen, kept once for the process: a menu that builds the

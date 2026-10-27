@@ -6,7 +6,7 @@ use crate::Off;
 use crate::engine_ids as ids;
 
 use super::changes::Field;
-use super::{Blob, EngineFacts};
+use super::{Blob, EngineFacts, Guid};
 
 /// Where the fields a loot table edit touches sit on the running build,
 /// resolved by the loader.
@@ -88,6 +88,83 @@ impl LootLayout {
             weight: at(ids::LOOT_FILL_STACK_WEIGHT)?,
         })
     }
+}
+
+/// Where a container's template names itself and the fill table it rolls,
+/// resolved by the loader or a tool.
+///
+/// # Examples
+///
+/// See [`FillTableLayout::resolve`] and [`template_table`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FillTableLayout {
+    /// A template's name.
+    pub name: usize,
+    /// A template's components.
+    pub components: usize,
+    /// The type hash of the component that names a fill table.
+    pub fill: u32,
+    /// The fill table's GUID inside that component.
+    pub table: usize,
+}
+
+impl FillTableLayout {
+    /// The layout `facts` give.
+    ///
+    /// # Errors
+    ///
+    /// The first [`Off`] a fact returns, when the build lacks it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let layout = enshwick::content::loot_tables::FillTableLayout::resolve(load)?;
+    ///     enshwick::info!("a template's fill table at +{:#x}", layout.table);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn resolve(facts: &(impl EngineFacts + ?Sized)) -> Result<Self, Off> {
+        Ok(Self {
+            name: facts.offset(ids::TEMPLATE_NAME)?,
+            components: facts.offset(ids::TEMPLATE_COMPONENTS)?,
+            fill: facts.hash(ids::LOOT_FILL)?,
+            table: facts.offset(ids::LOOT_FILL_DEFAULT_INVENTORY)?,
+        })
+    }
+}
+
+/// The name of the container `template` and the GUID of the fill table it
+/// rolls; `None` for a template that rolls none or does not read.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::Guid;
+/// use enshwick::content::loot_tables::{FillTableLayout, template_table};
+///
+/// fn table_of(layout: &FillTableLayout, template: &[u8]) -> Option<Guid> {
+///     template_table(layout, template).map(|(_name, table)| table)
+/// }
+/// ```
+#[must_use]
+pub fn template_table(layout: &FillTableLayout, template: &[u8]) -> Option<(String, Guid)> {
+    let blob = Blob::new(template);
+    let fill =
+        *super::containers::template_components(&blob, layout.components, layout.fill)?.first()?;
+    let table: [u8; 16] = template
+        .get(fill + layout.table..fill + layout.table + 16)?
+        .try_into()
+        .ok()?;
+    if table == [0; 16] {
+        return None;
+    }
+    let (at, len) = blob.array(layout.name)?;
+    let name = template.get(at..at + usize::try_from(len).ok()?)?;
+    let name = String::from_utf8_lossy(name)
+        .trim_end_matches('\0')
+        .to_owned();
+    Some((name, Guid(table)))
 }
 
 /// The value in force of `field` for the item with game id `item`, from
@@ -290,7 +367,7 @@ pub fn change_fill_table(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::content::changes::Value;
 
@@ -314,6 +391,45 @@ mod tests {
     };
     const WOOD: u32 = 722_268_629;
     const STONE: u32 = 631_520_303;
+
+    pub(crate) const FILL: FillTableLayout = FillTableLayout {
+        name: 0,
+        components: 0x10,
+        fill: 0x33f6_8834,
+        table: 0,
+    };
+
+    /// A container template named `name` whose fill table is `table`.
+    pub(crate) fn container(name: &str, table: Guid) -> Vec<u8> {
+        let mut blob = Blob::new(&[0u8; 0x18]);
+        let name_at = blob.append(name.as_bytes(), 1);
+        assert!(blob.set_array(0, name_at, u32::try_from(name.len()).unwrap()));
+        let list_at = blob.append(&[0u8; 12], 4);
+        let data_at = blob.append(&[table.0.to_vec(), vec![0; 4]].concat(), 4);
+        let offset = u32::try_from(data_at - (list_at + 4)).unwrap();
+        let variant = [
+            FILL.fill.to_le_bytes(),
+            offset.to_le_bytes(),
+            20u32.to_le_bytes(),
+        ]
+        .concat();
+        assert!(blob.write(list_at, &variant));
+        assert!(blob.set_array(0x10, list_at, 1));
+        blob.into_bytes()
+    }
+
+    #[test]
+    fn a_container_names_itself_and_its_fill_table() {
+        let table = Guid([4; 16]);
+        assert_eq!(
+            template_table(&FILL, &container("LootContainer_Enemy_Corpse_Vukah", table)),
+            Some(("LootContainer_Enemy_Corpse_Vukah".to_owned(), table))
+        );
+        assert_eq!(
+            template_table(&FILL, &container("Prop_Storage_16", Guid([0; 16]))),
+            None
+        );
+    }
 
     fn double(field: Field) -> impl Fn(u32, Field, f64) -> Option<f64> {
         move |item, asked, base| {

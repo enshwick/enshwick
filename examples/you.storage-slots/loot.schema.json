@@ -139,6 +139,14 @@
             }
           ]
         },
+        "table": {
+          "description": "The containers whose fill tables alone change, by their templates'\nnames, such as `LootContainer_Enemy_Corpse_Vukah`; every table when\nleft out.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "weight": {
           "description": "The item's weight among the ones a fill table picks from.",
           "anyOf": [

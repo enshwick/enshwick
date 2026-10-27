@@ -1285,7 +1285,7 @@ pub struct HostApi {
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Asks the loader to keep a copy of the client's fog of war for this
     /// mod. Client only ([`Status::MISSING`] on a dedicated server).
-    /// Allowed during `enshwick_mod_init` only. Since minor 93.
+    /// Allowed during `enshwick_mod_init` only. Since minor 94.
     pub fog_open: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the fog's [`FogInfo`] to `info`, then copies the box of
     /// `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
@@ -1295,7 +1295,7 @@ pub struct HostApi {
     /// open it; [`Status::OUTSIDE_WORLD`] for a box past the image;
     /// [`Status::BAD_ARGS`] for a null `info`, or a null or short `out`
     /// for a box of pixels. The loader may refresh the copy meanwhile:
-    /// compare `version`. Since minor 93.
+    /// compare `version`. Since minor 94.
     pub fog_read: extern "system" fn(
         me: ModHandle,
         info: *mut FogInfo,

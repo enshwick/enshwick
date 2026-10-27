@@ -133,6 +133,10 @@ name = "item_changes"
 required-features = ["test"]
 
 [[test]]
+name = "loot_table_changes"
+required-features = ["test"]
+
+[[test]]
 name = "recipe_changes"
 required-features = ["test"]
 
@@ -290,6 +294,10 @@ required-features = ["test"]
 
 [[test]]
 name = "task_workers"
+required-features = ["test"]
+
+[[test]]
+name = "points_described"
 required-features = ["test"]
 
 [[test]]
