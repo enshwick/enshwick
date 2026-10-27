@@ -670,4 +670,77 @@ mod tests {
             loader.logs()
         );
     }
+
+    #[enshwick::point(name = "you.trading-post:price", mode = Override, output = u32, refusable)]
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct Price {
+        pub(crate) item: u32,
+        pub(crate) player: u64,
+    }
+
+    /// The description `cargo enshwick point --luau` writes for `Price`.
+    fn price_module() -> String {
+        use enshwick::points::Point;
+        let hash = |i: usize| Price::LAYOUT[i].hash;
+        format!(
+            r#"return table.freeze({{
+                name = "you.trading-post:price",
+                mode = "override",
+                refusable = true,
+                input = {{ size = 16, fields = {{
+                    {{ name = "item", offset = 0, read = "u32", hash = "{}" }},
+                    {{ name = "player", offset = 8, read = "u64", hash = "{}" }},
+                }} }},
+                output = {{ size = 4, hash = "{}", read = "u32" }},
+            }})"#,
+            hash(0),
+            hash(1),
+            Price::OUTPUT[0].hash
+        )
+    }
+
+    #[test]
+    fn a_script_extends_another_mod_s_point() {
+        use enshwick::points::Decision;
+        let (loader, status) = run_full(
+            r#"local price = require("./points/price")
+            enshwick.extend(price, function(input, answer)
+                if input.item == 9 then return enshwick.refuse end
+                if input.player == "18446744073709551615" then return answer * 2 end
+                return nil
+            end)"#,
+            Limits::default(),
+            Scripts::new().with("points/price.luau", price_module()),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
+        let ask = |item, player| loader.ask_point(&Price { item, player }, 10);
+        assert_eq!(ask(1, u64::MAX), Decision::Changed(20));
+        assert_eq!(ask(9, 1), Decision::Refused);
+        assert_eq!(ask(1, 1), Decision::Kept(10));
+    }
+
+    #[test]
+    fn an_answer_of_the_wrong_type_turns_the_mod_off_and_keeps_the_answer() {
+        use enshwick::points::Decision;
+        let (loader, status) = run_full(
+            r#"enshwick.extend(require("./points/price"), function() return "lots" end)"#,
+            Limits::default(),
+            Scripts::new().with("points/price.luau", price_module()),
+            None,
+            FakeHost::new(),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert_eq!(
+            loader.ask_point(&Price { item: 1, player: 1 }, 10),
+            Decision::Kept(10)
+        );
+        assert!(
+            loader.faults()[0].contains("expected a number"),
+            "{:?}",
+            loader.faults()
+        );
+    }
 }

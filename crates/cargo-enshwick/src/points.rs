@@ -9,10 +9,14 @@
 //! point reaches and checks its own layout against the hashes the owner's
 //! build wrote.
 
+mod luau;
+
 use std::fmt::Write as _;
 
 use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 use serde::Deserialize;
+
+pub use luau::luau;
 
 /// The section of a mod DLL that holds its point schemas.
 pub const SECTION: &str = ".enshpt";
