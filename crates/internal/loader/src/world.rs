@@ -12,6 +12,7 @@ use core::cell::Cell;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
@@ -22,6 +23,8 @@ use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use crate::server_pin::ServerCell;
+pub(crate) use crate::server_pin::ServerPin;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -51,8 +54,12 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::world::STEP.id(),
 ];
 
-/// The server object, seen by the post-step hook.
-pub(crate) static SERVER: AtomicUsize = AtomicUsize::new(0);
+/// The server object, seen by the post-step hook, and the pins of readers
+/// off its game thread.
+static SERVER: ServerCell = ServerCell::new();
+/// How long a hosted game's end waits for readers off the game thread to
+/// leave its server; each reads for microseconds.
+const PIN_WAIT: Duration = Duration::from_millis(250);
 /// The game thread's id, seen by the post-step hook.
 pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
 /// The server's entity world, seen by the post-step hook.
@@ -61,7 +68,7 @@ static SERVER_WORLD: AtomicUsize = AtomicUsize::new(0);
 /// Records the server seen after a step on `thread`, and its entity world
 /// from `world_offset` and `entities`.
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
-    SERVER.store(server, Ordering::Release);
+    SERVER.publish(server);
     GAME_THREAD.store(thread, Ordering::Release);
     let world = if server == 0 {
         0
@@ -76,10 +83,23 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     SERVER_WORLD.store(entity_world, Ordering::Release);
 }
 
-/// Forgets the server of a hosted game that stopped.
+/// Forgets the server of a hosted game that stopped; on its game thread,
+/// which frees the server only on later updates (client 426). Waits up to
+/// [`PIN_WAIT`] for readers off the game thread to leave it.
 pub(crate) fn release() {
+    let deadline = Instant::now() + PIN_WAIT;
+    let left = SERVER.retire(|| {
+        std::thread::yield_now();
+        Instant::now() < deadline
+    });
+    if !left {
+        crate::log!(
+            WARN,
+            "a reader still held the hosted server after {} ms; it ends anyway",
+            PIN_WAIT.as_millis()
+        );
+    }
     SERVER_WORLD.store(0, Ordering::Release);
-    SERVER.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
     crate::stats::forget();
 }
@@ -154,7 +174,14 @@ fn quiet() -> bool {
 
 /// Whether a server has been seen and not released.
 pub(crate) fn hosting() -> bool {
-    SERVER.load(Ordering::Acquire) != 0
+    SERVER.current() != 0
+}
+
+/// A pin on the running server for a reader on any thread: the server's
+/// memory and what it holds stay while the pin is held; `None` while no
+/// server runs or once a hosted game's end began.
+pub(crate) fn pin() -> Option<ServerPin<'static>> {
+    SERVER.pin()
 }
 
 /// The running server's entity world, 0 for none.
@@ -265,7 +292,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 
 /// The server, when the caller is on the game thread.
 pub(crate) fn reader() -> Result<usize, Status> {
-    let server = SERVER.load(Ordering::Acquire);
+    let server = SERVER.current();
     if server == 0 {
         return Err(Status::MISSING);
     }

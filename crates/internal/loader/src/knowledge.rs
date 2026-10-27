@@ -235,10 +235,12 @@ fn store(layout: &Layout) -> Result<(usize, usize), Status> {
 }
 
 /// The game object and its knowledge store of `server`, the running server
-/// from [`crate::world::server`] or [`crate::world::SERVER`].
+/// from [`crate::world::server`] on the game thread or a
+/// [`crate::world::pin`] held elsewhere.
 fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
-    // SAFETY: callers pass the running server, non-zero and live while its
-    // world runs; its game object pointer sits at the build table's
+    // SAFETY: callers pass the running server, non-zero, on its game thread
+    // or while they hold a pin on it, which keeps its memory until the pin
+    // drops; its game object pointer sits at the build table's
     // `server.player_infos` offset.
     let game: usize = unsafe { read(server, layout.game) };
     if game == 0 {
