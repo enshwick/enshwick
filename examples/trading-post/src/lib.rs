@@ -5,12 +5,12 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use enshwick::Entity;
 use enshwick::actions::{Action, Arg, Outcome, Value};
 use enshwick::i18n::Texts;
 use enshwick::points::OwnedPoint;
 use enshwick::services::Emitter;
 use enshwick::state::ModLocal;
+use enshwick::{Entity, PlayerKey};
 use enshwick::{Load, Mod, Off};
 use enshwick_example_trading_post_api::{Prices, Sold};
 
@@ -59,8 +59,8 @@ pub struct Price {
     pub item: u32,
     /// How many items the player trades.
     pub count: u32,
-    /// The player's account key.
-    pub player: u64,
+    /// The player's account.
+    pub player: PlayerKey,
     /// The player's character.
     pub character: Entity,
     /// Whether the player buys or sells.
@@ -117,7 +117,7 @@ impl Mod for TradingPost {
                 [Value::Number(item)] => sell(&Price {
                     item: *item as u32,
                     count: 1,
-                    player: request.player.key.get(),
+                    player: request.player.key,
                     character: request.player.entity,
                     deal: Deal::SELL,
                 }),
@@ -132,9 +132,9 @@ enshwick::declare_mod!(TradingPost);
 
 #[cfg(test)]
 mod tests {
-    use enshwick::Entity;
     use enshwick::abi::Status;
     use enshwick::points::Verdict;
+    use enshwick::{Entity, PlayerKey};
 
     use super::{Deal, Price};
 
@@ -142,7 +142,7 @@ mod tests {
         Price {
             item,
             count: 1,
-            player: 7,
+            player: PlayerKey::new(7),
             character: Entity(10),
             deal: Deal::SELL,
         }

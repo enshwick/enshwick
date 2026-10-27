@@ -400,7 +400,13 @@ const PRIMITIVES: [&str; 11] = [
     "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "bool",
 ];
 /// The API's own types a schema names by their schema names.
-const BUILT_IN: [&str; 2] = ["enshwick.entity", "enshwick.guid"];
+const BUILT_IN: [&str; 5] = [
+    "enshwick.entity",
+    "enshwick.guid",
+    "enshwick.item_id",
+    "enshwick.player_key",
+    "enshwick.recipe_id",
+];
 
 /// Whether `text` is a plain Rust identifier.
 fn is_ident(text: &str) -> bool {
@@ -456,6 +462,9 @@ fn rust_type(name: &str) -> String {
     match name {
         "enshwick.entity" => "enshwick::Entity".to_owned(),
         "enshwick.guid" => "enshwick::content::Guid".to_owned(),
+        "enshwick.item_id" => "enshwick::ItemId".to_owned(),
+        "enshwick.player_key" => "enshwick::PlayerKey".to_owned(),
+        "enshwick.recipe_id" => "enshwick::RecipeId".to_owned(),
         other => other.to_owned(),
     }
 }

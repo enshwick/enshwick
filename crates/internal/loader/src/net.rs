@@ -66,7 +66,7 @@ struct Channel {
 #[derive(Debug, Default)]
 struct State {
     /// On the server: peers by account key that said hello. On a client:
-    /// the server, [`NetMessage::SERVER.get()`], once it answered.
+    /// the server, [`NetMessage::SERVER`], once it answered.
     peers: FxHashMap<u64, Peer>,
     /// Lines waiting for the client's chat queue.
     outbox: VecDeque<String>,
@@ -540,7 +540,7 @@ pub(crate) fn forget_peer(key: u64) {
 }
 
 /// Whether `peer` takes messages: on the server, a player's client that said
-/// hello; on a client, the server once it answered ([`NetMessage::SERVER.get()`]).
+/// hello; on a client, the server once it answered ([`NetMessage::SERVER`]).
 pub(crate) fn ready(peer: u64) -> bool {
     state(|s| s.peers.contains_key(&peer))
 }
@@ -557,7 +557,7 @@ pub(crate) fn clients() -> Vec<u64> {
 }
 
 /// Sends `data` on `channel` from mod `owner`: to the server for
-/// [`NetMessage::SERVER.get()`], else from the server to the player with account
+/// [`NetMessage::SERVER`], else from the server to the player with account
 /// key `peer`, or to every client that said hello for 0.
 pub(crate) fn send(
     loader: &Loader,

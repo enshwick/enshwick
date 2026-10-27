@@ -161,7 +161,7 @@ mod tests {
         let loader = enshwick::test::FakeHost::new()
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
-            .host_key(7)
+            .host_key(enshwick::PlayerKey::new(7))
             .player(player(10, 7, 0))
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.

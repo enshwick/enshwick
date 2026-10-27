@@ -51,12 +51,12 @@ impl FakeHost {
     /// let loader = enshwick::test::FakeHost::new()
     ///     .side(Side::CLIENT)
     ///     .hosting(true)
-    ///     .host_key(7)
+    ///     .host_key(enshwick::PlayerKey::new(7))
     ///     .install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn host_key(mut self, key: u64) -> Self {
+    pub fn host_key(mut self, key: crate::PlayerKey) -> Self {
         self.host_key = Some(key);
         self
     }

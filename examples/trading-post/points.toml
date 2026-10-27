@@ -9,7 +9,7 @@ input = "Price"
 doc = "The price of an item at the trading post, in coins: the trading post's own price first. A refusal means the trading post does not deal. Asked on the thread that runs the player's action."
 output = "u32"
 output_layout = "14918346923295848190"
-layout = ["5938679357011966802", "7604414857998727637", "13802279309206419564", "14235528068787574632", "5934430442850884261"]
+layout = ["5938679357011966802", "7604414857998727637", "17322428248776750865", "14235528068787574632", "5934430442850884261"]
 [[type]]
 name = "Price"
 doc = "The price of an item at the trading post, in coins: the trading post's own price first. A refusal means the trading post does not deal. Asked on the thread that runs the player's action."
@@ -24,8 +24,8 @@ doc = "How many items the player trades."
 type = "u32"
 [[type.field]]
 name = "player"
-doc = "The player's account key."
-type = "u64"
+doc = "The player's account."
+type = "enshwick.player_key"
 [[type.field]]
 name = "character"
 doc = "The player's character."

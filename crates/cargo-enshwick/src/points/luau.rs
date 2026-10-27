@@ -20,8 +20,10 @@ fn primitive(name: &str) -> Option<Shape> {
     let (size, align) = match name {
         "u8" | "i8" | "bool" => (1, 1),
         "u16" | "i16" => (2, 2),
-        "u32" | "i32" | "f32" | "enshwick.entity" => (4, 4),
-        "u64" | "i64" | "f64" | "usize" | "isize" => (8, 8),
+        "u32" | "i32" | "f32" | "enshwick.entity" | "enshwick.item_id" | "enshwick.recipe_id" => {
+            (4, 4)
+        }
+        "u64" | "i64" | "f64" | "usize" | "isize" | "enshwick.player_key" => (8, 8),
         "enshwick.guid" => (16, 1),
         _ => return None,
     };
@@ -82,7 +84,8 @@ impl Writer<'_> {
             let read = match name {
                 "enshwick.entity" => "entity",
                 "enshwick.guid" => "guid",
-                "usize" => "u64",
+                "enshwick.item_id" | "enshwick.recipe_id" => "u32",
+                "enshwick.player_key" | "usize" => "u64",
                 "isize" => "i64",
                 other => other,
             };
@@ -160,7 +163,9 @@ impl Writer<'_> {
 fn luau_type(schema: &Schema, name: &str) -> String {
     match name {
         "bool" => "boolean".to_owned(),
-        "u64" | "i64" | "usize" | "isize" | "enshwick.guid" => "string".to_owned(),
+        "u64" | "i64" | "usize" | "isize" | "enshwick.guid" | "enshwick.player_key" => {
+            "string".to_owned()
+        }
         _ if !is_named(name) => "number".to_owned(),
         named => match schema.types.iter().find(|t| t.name == named) {
             Some(ty) if ty.kind == Kind::Struct => named.to_owned(),

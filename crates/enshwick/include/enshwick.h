@@ -1753,6 +1753,8 @@ typedef struct EnshwickNetMessage {
   // Zero.
   uint32_t reserved_tail;
 } EnshwickNetMessage;
+// The server, as a peer: what a client hears from and sends to.
+#define EnshwickNetMessage_SERVER UINT64_MAX
 
 // A mod's handler for messages on its channel: the message and the pointer
 // given at registration. It must not unwind.

@@ -809,7 +809,7 @@ pub(crate) extern "system" fn account_action(
             .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
         match action {
             AccountActionType::UN_BAN => s.banned.retain(|&banned| banned != account),
-            _ if admin || s.host.host_key == Some(account.get()) => return Status::REFUSED,
+            _ if admin || s.host.host_key == Some(account) => return Status::REFUSED,
             AccountActionType::KICK if online.is_none() => return Status::REFUSED,
             _ => {
                 if action == AccountActionType::BAN && !s.banned.contains(&account) {

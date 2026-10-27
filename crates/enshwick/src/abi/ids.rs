@@ -85,7 +85,8 @@ impl Entity {
     crate::Script,
 )]
 #[serde(transparent)]
-pub struct ItemId(pub(super) u32);
+#[shape(api = "item_id")]
+pub struct ItemId(pub u32);
 
 /// A player's account by the number the game keeps for it, the same in every
 /// session, to remember a player across reconnects and restarts.
@@ -118,7 +119,8 @@ pub struct ItemId(pub(super) u32);
     crate::Script,
 )]
 #[serde(transparent)]
-pub struct PlayerKey(pub(super) u64);
+#[shape(api = "player_key")]
+pub struct PlayerKey(pub u64);
 
 /// A crafting recipe of the game by its recipe id, to grant, refuse or watch
 /// the crafting of one recipe.
@@ -151,7 +153,8 @@ pub struct PlayerKey(pub(super) u64);
     crate::Script,
 )]
 #[serde(transparent)]
-pub struct RecipeId(pub(super) u32);
+#[shape(api = "recipe_id")]
+pub struct RecipeId(pub u32);
 
 /// `new`, `get` and the `From` conversions both ways of an id newtype.
 macro_rules! id_conversions {
@@ -204,7 +207,7 @@ macro_rules! id_conversions {
     )*};
 }
 
-id_conversions!(ItemId(u32), PlayerKey(u64), RecipeId(u32));
+id_conversions!(Entity(u32), ItemId(u32), PlayerKey(u64), RecipeId(u32));
 
 const _: () = {
     assert!(size_of::<Entity>() == size_of::<u32>() && align_of::<Entity>() == align_of::<u32>());
