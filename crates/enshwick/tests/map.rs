@@ -183,6 +183,17 @@ mod tests {
     }
 
     #[test]
+    fn markers_wait_while_the_loader_reads_the_scene() {
+        let fake = marker(fake(), [1.0, 2.0, 3.0], LABEL, TOWN);
+        let (loader, map) = start(fake);
+
+        loader.read_map_markers(true);
+        assert_eq!(map.markers(), Err(WorldError::NotLoaded));
+        loader.read_map_markers(false);
+        assert_eq!(map.markers().map(|markers| markers.len()), Ok(1));
+    }
+
+    #[test]
     fn markers_fail_while_no_world_runs_or_off_the_game_thread() {
         let fake = marker(fake(), [1.0, 2.0, 3.0], LABEL, TOWN);
         let (loader, map) = start(fake);

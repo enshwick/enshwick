@@ -1312,8 +1312,11 @@ pub struct HostApi {
     ) -> Status,
     /// Up to `capacity` map markers of the scene the server runs and how
     /// many there are: what the scene's global chunk places, read from the
-    /// game's archive once per scene. Entries are `entry_size` bytes apart,
-    /// the caller's `size_of::<MapMarkerInfo>()`. On the server's game
+    /// game's archive once per scene on a thread of the loader's;
+    /// [`Status::NOT_LOADED`] until that read is done. Entries are `entry_size` bytes apart,
+    /// the caller's `size_of::<MapMarkerInfo>()`, at least a [`Header`]
+    /// ([`Status::BAD_ARGS`] below it); a null `out` asks only for the
+    /// count, and a null `count` is not written. On the server's game
     /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
     /// inside a step); [`Status::MISSING`] while no world runs or when the
     /// scene does not read on this build. Since minor 95.

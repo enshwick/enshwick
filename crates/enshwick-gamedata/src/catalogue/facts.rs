@@ -1419,6 +1419,60 @@ pub const FACTS: &[(&str, Fact)] = &[
         "player_waypoint.waypoint_position",
         offset("keen::ecs::PlayerWaypoint", "waypointPosition"),
     ),
+    ("map_marker", Fact::Type("keen::ecs::MapMarker")),
+    (
+        "map_marker.marker_id",
+        offset("keen::ecs::MapMarker", "markerId"),
+    ),
+    (
+        "map_marker.marker_type",
+        offset("keen::ecs::MapMarker", "markerType"),
+    ),
+    ("scene_chunk", Fact::Type("keen::SceneEntityChunkResource")),
+    (
+        "scene_chunk.templates",
+        offset("keen::SceneEntityChunkResource", "templates"),
+    ),
+    (
+        "scene_chunk.entities",
+        offset("keen::SceneEntityChunkResource", "entities"),
+    ),
+    (
+        "scene_spawn_entry",
+        Fact::Type("keen::SceneEntityChunkSpawnEntry"),
+    ),
+    (
+        "scene_spawn_entry.template_index",
+        offset("keen::SceneEntityChunkSpawnEntry", "templateIndex"),
+    ),
+    (
+        "scene_spawn_entry.transform",
+        offset("keen::SceneEntityChunkSpawnEntry", "transform"),
+    ),
+    (
+        "scene_transform.position_x0",
+        offset("keen::SceneEntityTransform", "positionX0"),
+    ),
+    (
+        "scene_transform.position_x1",
+        offset("keen::SceneEntityTransform", "positionX1"),
+    ),
+    (
+        "scene_transform.position_y0",
+        offset("keen::SceneEntityTransform", "positionY0"),
+    ),
+    (
+        "scene_transform.position_y1",
+        offset("keen::SceneEntityTransform", "positionY1"),
+    ),
+    (
+        "scene_transform.position_z0",
+        offset("keen::SceneEntityTransform", "positionZ0"),
+    ),
+    (
+        "scene_transform.position_z1",
+        offset("keen::SceneEntityTransform", "positionZ1"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.

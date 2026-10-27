@@ -32,8 +32,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 `map.markers()` lists every marker the scene places, in the scene's order:
 towns, ruins, dungeons, Flame shrines, quest areas and the like. Each
 `MapMarker` has its position in metres, its type and the text tag of its
-label. The loader reads them from the game's data once per scene, so they
-are there with no player near and later calls are cheap.
+label. The loader reads them from the game's data once per scene, apart
+from the game thread, so they are there with no player near and later calls
+are cheap. Until that read is done, a second or two after the first call,
+they fail with `NotLoaded`: ask again later.
 `map.markers_in(a, b)` keeps those in the box between two corners, edges
 included. They fail with a [`WorldError`](world.md#writing-components):
 `WrongThread` off the game thread, `Missing` while no world runs or when

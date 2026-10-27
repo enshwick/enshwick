@@ -735,9 +735,12 @@ pub(crate) extern "system" fn map_markers(
         return Status::WRONG_THREAD;
     }
     let Some(markers) = with(None, |s| {
-        (!s.edits.stopped).then(|| s.host.map_markers.clone())
+        (!s.edits.stopped).then(|| (!s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
         return Status::MISSING;
+    };
+    let Some(markers) = markers else {
+        return Status::NOT_LOADED;
     };
     crate::test::table::mods::list(&markers, out, entry_size, capacity, count)
 }

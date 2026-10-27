@@ -85,8 +85,41 @@ fn array(data: &[u8], field: usize, element: usize) -> Option<(usize, usize)> {
     (end <= data.len()).then_some((start, count))
 }
 
-/// Every entity the chunk resource `chunk` places; `None` when it does not
-/// read as one.
+impl SceneLayout {
+    /// Whether the layout can be one the game has: an entry holds its
+    /// template index and every position half, and a marker its two GUIDs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::scene_markers::SceneLayout;
+    ///
+    /// let layout = SceneLayout {
+    ///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
+    ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
+    ///     components: 16, marker_id: 0, marker_type: 16,
+    /// };
+    /// assert!(layout.is_sound());
+    /// assert!(!SceneLayout { entry_size: 0, ..layout }.is_sound());
+    /// ```
+    #[must_use]
+    pub fn is_sound(&self) -> bool {
+        let fits = |at: usize, width: usize| {
+            at.checked_add(width)
+                .is_some_and(|end| end <= self.entry_size)
+        };
+        let furthest = self.position.iter().copied().max().unwrap_or(0);
+        self.entry_size > 0
+            && fits(self.entry_template, 2)
+            && self
+                .entry_transform
+                .checked_add(furthest)
+                .is_some_and(|at| fits(at, 2))
+    }
+}
+
+/// Every entity the chunk resource `chunk` places; `None` when the layout
+/// is not sound or the chunk does not read as one.
 ///
 /// # Examples
 ///
@@ -103,6 +136,9 @@ fn array(data: &[u8], field: usize, element: usize) -> Option<(usize, usize)> {
 /// ```
 #[must_use]
 pub fn placements(layout: &SceneLayout, chunk: &[u8]) -> Option<Vec<Placement>> {
+    if !layout.is_sound() {
+        return None;
+    }
     let (templates, template_count) = array(chunk, layout.templates, GUID_SIZE)?;
     let (entities, entity_count) = array(chunk, layout.entities, layout.entry_size)?;
     let mut placed = Vec::with_capacity(entity_count);
@@ -123,8 +159,16 @@ pub fn placements(layout: &SceneLayout, chunk: &[u8]) -> Option<Vec<Placement>> 
     Some(placed)
 }
 
+/// A template resource that does not read as one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Unreadable;
+
 /// The `MapMarker` of the template resource `template`, found by its type
-/// hash `marker`; `None` for a template without one or that does not read.
+/// hash `marker`; `Ok(None)` for a template without one.
+///
+/// # Errors
+///
+/// [`Unreadable`] for a template whose components or marker do not read.
 ///
 /// # Examples
 ///
@@ -136,27 +180,240 @@ pub fn placements(layout: &SceneLayout, chunk: &[u8]) -> Option<Vec<Placement>> 
 ///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
 ///     components: 16, marker_id: 0, marker_type: 16,
 /// };
-/// assert_eq!(marker(&layout, &[0; 24], 0x8af0_70c5), None);
+/// assert_eq!(marker(&layout, &[0; 24], 0x8af0_70c5), Ok(None));
+/// assert!(marker(&layout, &[0; 3], 0x8af0_70c5).is_err());
 /// ```
-#[must_use]
-pub fn marker(layout: &SceneLayout, template: &[u8], marker: u32) -> Option<MarkerData> {
-    let (start, count) = array(template, layout.components, VARIANT_SIZE)?;
-    (0..count)
+pub fn marker(
+    layout: &SceneLayout,
+    template: &[u8],
+    marker: u32,
+) -> Result<Option<MarkerData>, Unreadable> {
+    let (start, count) = array(template, layout.components, VARIANT_SIZE).ok_or(Unreadable)?;
+    let Some(variant) = (0..count)
         .map(|index| start + index * VARIANT_SIZE)
         .find(|&variant| u32_at(template, variant) == Some(marker))
-        .and_then(|variant| {
-            let offset = isize::try_from(i32_at(template, variant + 4)?).ok()?;
-            let data = (variant + 4).checked_add_signed(offset)?;
-            let size = usize::try_from(u32_at(template, variant + 8)?).ok()?;
-            let need = layout.marker_id.max(layout.marker_type) + GUID_SIZE;
-            if size < need || data.checked_add(size)? > template.len() {
-                return None;
-            }
-            Some(MarkerData {
-                label: bytes(template, data + layout.marker_id)?,
-                marker_type: bytes(template, data + layout.marker_type)?,
-            })
+    else {
+        return Ok(None);
+    };
+    let read = || {
+        let offset = isize::try_from(i32_at(template, variant + 4)?).ok()?;
+        let data = (variant + 4).checked_add_signed(offset)?;
+        let size = usize::try_from(u32_at(template, variant + 8)?).ok()?;
+        let need = layout.marker_id.max(layout.marker_type) + GUID_SIZE;
+        if size < need || data.checked_add(size)? > template.len() {
+            return None;
+        }
+        Some(MarkerData {
+            label: bytes(template, data + layout.marker_id)?,
+            marker_type: bytes(template, data + layout.marker_type)?,
         })
+    };
+    read().map(Some).ok_or(Unreadable)
+}
+
+/// More chunks than any scene has: a count past it is a misread.
+pub const MAX_CHUNKS: u64 = 1 << 20;
+
+/// A scene's global chunk: its scene GUID and chunk part, the last of the
+/// scene's chunks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SceneKey {
+    /// The scene's GUID, in memory order.
+    pub scene: [u8; 16],
+    /// The global chunk's part.
+    pub part: u32,
+}
+
+impl SceneKey {
+    /// The global chunk of `scene` with `count` chunks; `None` for a zero
+    /// GUID or a count no scene has.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::scene_markers::SceneKey;
+    ///
+    /// assert_eq!(SceneKey::new([7; 16], 1601).map(|key| key.part), Some(1600));
+    /// assert_eq!(SceneKey::new([0; 16], 1601), None);
+    /// ```
+    #[must_use]
+    pub fn new(scene: [u8; 16], count: u64) -> Option<Self> {
+        if scene == [0; 16] || count == 0 || count > MAX_CHUNKS {
+            return None;
+        }
+        let part = u32::try_from(count - 1).ok()?;
+        Some(Self { scene, part })
+    }
+}
+
+/// The step at which a scene's markers did not read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SceneFailure {
+    /// The reflected types the parse needs are not all there.
+    Layout,
+    /// The game's archive is not open.
+    Archive,
+    /// The archive lacks the scene's global chunk.
+    Chunk,
+    /// The global chunk does not read as one.
+    ChunkUnreadable,
+    /// The chunk places entities, but none of their templates read.
+    Templates,
+    /// No thread could be started to read the scene.
+    Thread,
+}
+
+impl core::fmt::Display for SceneFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Layout => "the reflected scene types are missing",
+            Self::Archive => "the game's archive is not open",
+            Self::Chunk => "the archive lacks the scene's global chunk",
+            Self::ChunkUnreadable => "the scene's global chunk does not read",
+            Self::Templates => "none of the global chunk's templates read",
+            Self::Thread => "no thread could be started to read the scene",
+        })
+    }
+}
+
+/// Templates a scene names that the marker read skipped.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Skipped {
+    /// Templates the archive lacks.
+    pub missing: usize,
+    /// Templates that do not read.
+    pub unreadable: usize,
+}
+
+/// The markers among `placed`, each with its template's marker, reading
+/// each distinct template once with `template`.
+///
+/// # Errors
+///
+/// [`SceneFailure::Templates`] when entities are placed and none of their
+/// templates read.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::scene_markers::{SceneLayout, collect};
+///
+/// let layout = SceneLayout {
+///     templates: 0, entities: 8, entry_size: 20, entry_template: 0,
+///     entry_transform: 2, position: [0, 2, 4, 6, 8, 10],
+///     components: 16, marker_id: 0, marker_type: 16,
+/// };
+/// let (markers, skipped) = collect(&layout, &[], 0x8af0_70c5, |_| None)?;
+/// assert!(markers.is_empty() && skipped.missing == 0);
+/// # Ok::<(), enshwick_loader::scene_markers::SceneFailure>(())
+/// ```
+pub fn collect(
+    layout: &SceneLayout,
+    placed: &[Placement],
+    marker_hash: u32,
+    mut template: impl FnMut([u8; 16]) -> Option<Vec<u8>>,
+) -> Result<(Vec<(Placement, MarkerData)>, Skipped), SceneFailure> {
+    let mut seen: rustc_hash::FxHashMap<[u8; 16], Option<MarkerData>> =
+        rustc_hash::FxHashMap::default();
+    let mut skipped = Skipped::default();
+    let mut read = 0usize;
+    let mut markers = Vec::new();
+    for placement in placed {
+        let found = *seen.entry(placement.template).or_insert_with(|| {
+            let Some(bytes) = template(placement.template) else {
+                skipped.missing += 1;
+                return None;
+            };
+            if let Ok(found) = marker(layout, &bytes, marker_hash) {
+                read += 1;
+                found
+            } else {
+                skipped.unreadable += 1;
+                None
+            }
+        });
+        if let Some(data) = found {
+            markers.push((*placement, data));
+        }
+    }
+    if !placed.is_empty() && read == 0 {
+        return Err(SceneFailure::Templates);
+    }
+    Ok((markers, skipped))
+}
+
+/// A scene's markers, or why they did not read.
+pub type SceneRead<T> = Result<std::sync::Arc<[T]>, SceneFailure>;
+
+/// The markers of the last scene asked for, or why they did not read,
+/// kept until the scene changes; a read runs apart from the caller.
+#[derive(Debug)]
+pub struct SceneMarkers<T> {
+    held: Option<(SceneKey, Option<SceneRead<T>>)>,
+}
+
+/// What a [`SceneMarkers::lookup`] found.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Lookup<T> {
+    /// The scene's markers, or why they did not read.
+    Ready(SceneRead<T>),
+    /// A read of the scene is under way.
+    Pending,
+    /// The scene is new: the caller starts its read and calls
+    /// [`SceneMarkers::finish`] with it.
+    Start,
+}
+
+impl<T> SceneMarkers<T> {
+    /// Nothing read yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self { held: None }
+    }
+
+    /// The markers of `key`; for a scene not held yet, it is held as being
+    /// read from now on, and only this call answers [`Lookup::Start`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick_loader::scene_markers::{Lookup, SceneKey, SceneMarkers};
+    ///
+    /// let mut cache = SceneMarkers::new();
+    /// let key = SceneKey::new([1; 16], 2).unwrap();
+    /// assert_eq!(cache.lookup(key), Lookup::Start);
+    /// assert_eq!(cache.lookup(key), Lookup::Pending);
+    /// assert!(cache.finish(key, Ok(vec![5u8])));
+    /// assert!(matches!(cache.lookup(key), Lookup::Ready(Ok(markers)) if markers.len() == 1));
+    /// ```
+    pub fn lookup(&mut self, key: SceneKey) -> Lookup<T> {
+        match &self.held {
+            Some((held, Some(found))) if *held == key => Lookup::Ready(found.clone()),
+            Some((held, None)) if *held == key => Lookup::Pending,
+            _ => {
+                self.held = Some((key, None));
+                Lookup::Start
+            }
+        }
+    }
+
+    /// Keeps the read of `key`, unless the scene changed meanwhile; whether
+    /// it was kept.
+    pub fn finish(&mut self, key: SceneKey, read: Result<Vec<T>, SceneFailure>) -> bool {
+        match &mut self.held {
+            Some((held, slot @ None)) if *held == key => {
+                *slot = Some(read.map(std::sync::Arc::from));
+                true
+            }
+            _ => false,
+        }
+    }
+}
+
+impl<T> Default for SceneMarkers<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -258,15 +515,15 @@ mod tests {
         let with = template(&[(0x1234, vec![9; 4]), (MARKER, body)]);
         assert_eq!(
             marker(&LAYOUT, &with, MARKER),
-            Some(MarkerData {
+            Ok(Some(MarkerData {
                 label: [3; 16],
                 marker_type: [4; 16]
-            })
+            }))
         );
         let without = template(&[(0x1234, vec![9; 4])]);
-        assert_eq!(marker(&LAYOUT, &without, MARKER), None);
+        assert_eq!(marker(&LAYOUT, &without, MARKER), Ok(None));
         let short = template(&[(MARKER, vec![1; 20])]);
-        assert_eq!(marker(&LAYOUT, &short, MARKER), None);
+        assert_eq!(marker(&LAYOUT, &short, MARKER), Err(Unreadable));
     }
 
     proptest! {
@@ -275,5 +532,110 @@ mod tests {
             let _placed = placements(&LAYOUT, &data);
             let _marker = marker(&LAYOUT, &data, MARKER);
         }
+    }
+
+    #[test]
+    fn a_layout_with_no_room_for_its_fields_is_refused_before_any_count_is_trusted() {
+        let mut data = vec![0u8; 0x20];
+        data[0x18..0x1c].copy_from_slice(&8i32.to_le_bytes());
+        data[0x1c..0x20].copy_from_slice(&u32::MAX.to_le_bytes());
+        let empty = SceneLayout {
+            entry_size: 0,
+            ..LAYOUT
+        };
+        assert_eq!(placements(&empty, &data), None);
+        let short = SceneLayout {
+            entry_size: 11,
+            ..LAYOUT
+        };
+        assert_eq!(placements(&short, &data), None);
+    }
+
+    #[test]
+    fn a_scene_key_takes_the_last_chunk_of_a_count_a_scene_can_have() {
+        assert_eq!(
+            SceneKey::new([1; 16], 1),
+            Some(SceneKey {
+                scene: [1; 16],
+                part: 0
+            })
+        );
+        assert_eq!(
+            SceneKey::new([1; 16], MAX_CHUNKS).map(|key| u64::from(key.part)),
+            Some(MAX_CHUNKS - 1)
+        );
+        assert_eq!(SceneKey::new([1; 16], MAX_CHUNKS + 1), None);
+        assert_eq!(SceneKey::new([1; 16], 0), None);
+        assert_eq!(SceneKey::new([0; 16], 5), None);
+    }
+
+    #[test]
+    fn a_failure_is_kept_for_its_scene_and_a_new_scene_reads_again() {
+        let mut cache: SceneMarkers<u8> = SceneMarkers::new();
+        let first = SceneKey::new([1; 16], 2).unwrap();
+        let second = SceneKey::new([2; 16], 2).unwrap();
+        assert_eq!(cache.lookup(first), Lookup::Start);
+        assert!(cache.finish(first, Err(SceneFailure::Chunk)));
+        assert_eq!(cache.lookup(first), Lookup::Ready(Err(SceneFailure::Chunk)));
+        assert_eq!(cache.lookup(second), Lookup::Start);
+        assert!(cache.finish(second, Ok(vec![1, 2])));
+        assert!(matches!(cache.lookup(second), Lookup::Ready(Ok(m)) if m.len() == 2));
+    }
+
+    #[test]
+    fn a_read_of_a_scene_left_meanwhile_is_dropped() {
+        let mut cache: SceneMarkers<u8> = SceneMarkers::new();
+        let first = SceneKey::new([1; 16], 2).unwrap();
+        let second = SceneKey::new([2; 16], 2).unwrap();
+        assert_eq!(cache.lookup(first), Lookup::Start);
+        assert_eq!(cache.lookup(second), Lookup::Start);
+        assert!(!cache.finish(first, Ok(vec![1])));
+        assert_eq!(cache.lookup(second), Lookup::Pending);
+    }
+
+    #[test]
+    fn templates_are_read_once_and_skips_are_counted() {
+        let mut body = vec![3u8; 16];
+        body.extend([4u8; 16]);
+        let with = template(&[(MARKER, body)]);
+        let without = template(&[(0x1234, vec![9; 4])]);
+        let place = |t: u8| Placement {
+            template: [t; 16],
+            position: [0.0; 3],
+        };
+        let placed = [place(1), place(2), place(1), place(3), place(4)];
+        let mut reads = 0;
+        let (markers, skipped) = collect(&LAYOUT, &placed, MARKER, |guid| {
+            reads += 1;
+            match guid[0] {
+                1 => Some(with.clone()),
+                2 => Some(without.clone()),
+                3 => Some(vec![0; 3]),
+                _ => None,
+            }
+        })
+        .unwrap();
+        assert_eq!(markers.len(), 2);
+        assert_eq!(
+            skipped,
+            Skipped {
+                missing: 1,
+                unreadable: 1
+            }
+        );
+        assert_eq!(reads, 4);
+    }
+
+    #[test]
+    fn a_chunk_whose_templates_never_read_fails() {
+        let placed = [Placement {
+            template: [1; 16],
+            position: [0.0; 3],
+        }];
+        assert_eq!(
+            collect(&LAYOUT, &placed, MARKER, |_| None),
+            Err(SceneFailure::Templates)
+        );
+        assert!(collect(&LAYOUT, &[], MARKER, |_| None).is_ok());
     }
 }

@@ -341,6 +341,8 @@ pub(crate) struct WorldEdits {
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
     /// Whether the world has stopped, as between two worlds.
     pub(crate) stopped: bool,
+    /// Whether the scene's map markers are still being read.
+    pub(crate) markers_pending: bool,
 }
 
 /// Waits for the table to be free, then answers from `host`.

@@ -210,11 +210,13 @@ impl Map {
     }
 
     /// Every marker of the scene the server runs, in the scene's order.
-    /// The loader reads them from the game's data once per scene, so a
-    /// call after the first is cheap.
+    /// The loader reads them from the game's data once per scene, apart
+    /// from the game thread, so a call after that is cheap.
     ///
     /// # Errors
     ///
+    /// [`WorldError::NotLoaded`] while the loader still reads the scene,
+    /// a second or two after the first call: ask again later;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Missing`] while no world runs or when the scene
     /// does not read on this game build.
