@@ -788,7 +788,9 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
         crate::code::recipes_served(current, current_len);
         crate::recipes::registry_built(current, current_len);
     }
-    if let Some(loader) = LOADED.get() {
+    if crate::log::enabled(enshwick::abi::Level::DEBUG, crate::settings::LOADER_ID)
+        && let Some(loader) = LOADED.get()
+    {
         let by: Vec<&str> = applied
             .iter()
             .filter_map(|&owner| {
@@ -800,7 +802,7 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
             })
             .collect();
         crate::log!(
-            INFO,
+            DEBUG,
             "served resource {:08x}:{} built by {}, {current_len} bytes",
             entry.key.type_hash,
             hex(&entry.key.guid),

@@ -97,7 +97,8 @@ The rules:
 - when every patch fails, the resource reads as missing;
 - the patches of a mod already turned off are skipped.
 
-The loader's log names each built resource and the mods that built it:
+At the `debug` level the loader's log names each built resource and the mods
+that built it:
 `served resource <type>:<guid> built by you.lockers, you.lanterns, <n> bytes`.
 The [status summary](../logging.md) counts what mods serve, what was built
 and what failed.

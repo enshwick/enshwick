@@ -13,12 +13,12 @@ use super::accounts::{self, Act, Refusal, Route};
 use super::answers::{self, Loaded, Online, Seen};
 
 /// A player's name as the client sent it, safe for one line.
-pub(super) fn name(player: &PlayerInfo) -> String {
+pub(crate) fn name(player: &PlayerInfo) -> String {
     let len = usize::from(player.name_len).min(player.name.len());
     accounts::shown(&String::from_utf8_lossy(&player.name[..len]))
 }
 
-pub(super) fn is_admin(player: &PlayerInfo) -> bool {
+pub(crate) fn is_admin(player: &PlayerInfo) -> bool {
     player.permissions & PlayerInfo::CAN_KICK_BAN != 0
 }
 
@@ -132,6 +132,12 @@ pub(crate) fn account(loader: &Loader, act: Act, args: &str) -> String {
             texts::fill(asked, &[("who", who)])
         }
         Err(Status::MISSING) => texts::fill("console.account.missing", &[]),
+        Err(Status::REFUSED) if decision.route == Route::Handler => {
+            texts::fill("console.account.host", &[("who", who)])
+        }
+        Err(Status::REFUSED) if decision.route == Route::BanList => {
+            texts::fill("console.ban.unlisted", &[("who", who)])
+        }
         Err(status) => unread(status),
     }
 }
