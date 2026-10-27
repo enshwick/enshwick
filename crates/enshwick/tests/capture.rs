@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::OnceLock;
+    use std::sync::Mutex;
 
     use enshwick::ItemId;
     use enshwick::abi::Status;
@@ -25,7 +25,9 @@ mod tests {
     ];
     const STILL: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-    static WORLD: OnceLock<World> = OnceLock::new();
+    /// The world of the mod the running test started: installs take turns,
+    /// so each start sets it afresh.
+    static WORLD: Mutex<Option<World>> = Mutex::new(None);
 
     struct Surveyor;
 
@@ -35,7 +37,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = WORLD.set(load.world()?);
+            *WORLD.lock().unwrap() = Some(load.world()?);
             Ok(Self)
         }
     }
@@ -99,10 +101,12 @@ mod tests {
 
     fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, World) {
         let loader = fake.install();
+        *WORLD.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Surveyor)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        (loader, *WORLD.get().unwrap())
+        let world = WORLD.lock().unwrap().take().unwrap();
+        (loader, world)
     }
 
     fn rock(i: usize) -> Voxel {
