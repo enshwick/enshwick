@@ -5,11 +5,10 @@ Three typed hooks cover how characters grow, from
 
 ## Skills
 
-`load.on_skill(node, handler)` answers the game's checks of one skill node;
-`load.skill_node(skill)` gives the node of a `Skill` the platform names on the
-running game build.
-The handler gets a `SkillCheck` with the node, the `SkillGate` that asks and
-the game's own answer, and returns `Some(true)` to unlock the node for that
+`load.on_skill(skill, handler)` answers the game's checks of one `Skill` the
+platform names; the loader finds its node on the running game build.
+The handler gets a `SkillCheck` with the `SkillGate` that asks and the game's
+own answer, and returns `Some(true)` to unlock the skill for that
 check, `Some(false)` to lock it, or `None` for the game's answer. The platform
 names the gates it knows, such as `SkillGate::FlyMode`, so a mod can open one
 feature without touching the skill tree. It runs on both sides.
@@ -18,8 +17,7 @@ feature without touching the skill tree. It runs on both sides.
 use enshwick::progress::{Skill, SkillGate};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let node = load.skill_node(Skill::AirborneArchitect)?;
-    load.on_skill(node, |check| (check.gate == SkillGate::FlyMode).then_some(true))
+    load.on_skill(Skill::AirborneArchitect, |check| (check.gate == SkillGate::FlyMode).then_some(true))
 }
 ```
 

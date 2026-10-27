@@ -8,36 +8,6 @@ use crate::locks::Relock;
 use super::{CHECK_WHY, Kept, Load, Off, RESTART, STARTED, keep, with_server};
 
 impl Load<'_> {
-    /// The mod's settings: its file in `mod-configs/`, created from `defaults` when
-    /// missing, parsed into `T`.
-    ///
-    /// `defaults` is the commented TOML a player sees on first start; `T`
-    /// should accept it as is.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the file cannot be read or does not parse into `T`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// #[derive(serde::Deserialize)]
-    /// struct Settings {
-    ///     altars_per_flame_level: Vec<u8>,
-    /// }
-    ///
-    /// const DEFAULTS: &str = "# Altars per Flame level.\naltars_per_flame_level = [2, 4, 8]\n";
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<Settings, enshwick::Off> {
-    ///     load.settings(DEFAULTS)
-    /// }
-    /// ```
-    pub fn settings<T: serde::de::DeserializeOwned>(&mut self, defaults: &str) -> Result<T, Off> {
-        let text = self.host.settings_text(defaults)?;
-        toml::from_str(&text)
-            .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))
-    }
-
     /// The mod's typed settings: `mod-configs/<id>.toml`, written from
     /// [`Config::template`] when missing, parsed and checked with
     /// [`Config::validate`].

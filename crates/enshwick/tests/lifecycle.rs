@@ -42,8 +42,10 @@ mod tests {
         unsafe { next.get()(value) / 2 }
     }
 
-    #[derive(serde::Deserialize)]
+    /// Test settings.
+    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     struct Settings {
+        /// A limit.
         limit: u32,
     }
 
@@ -65,7 +67,7 @@ mod tests {
         }
 
         fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
-            let settings: Settings = load.settings("limit = 1\n")?;
+            let settings: Settings = load.config()?;
             assert_eq!(load.symbol("npc.lookup")?, 0x1_4020_2e80);
             assert!(load.symbol("nope").is_err());
             // SAFETY: the fake's symbol is a function of the hook's type.
@@ -124,7 +126,7 @@ mod tests {
         assert_eq!(loader.handle(), ModHandle(1));
         assert_eq!(Test::instance().map(|t| t.limit), Some(7));
         assert_eq!(enshwick::host().map(|h| h.build().side), Some(Side::SERVER));
-        let listed = enshwick::mods();
+        let listed = enshwick::mods::all();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].file, "mods/enshwick/enshwick.dll");
         let hooks = loader.hooks();

@@ -7,33 +7,33 @@ use crate::services::{Emitter, ModEvent};
 use super::{Load, Off, event_spec, hand_over, ok};
 
 impl Load<'_> {
-    /// Calls `handler` on every event of kind `E` with its typed data, on the
-    /// thread that raises it. A panic in `handler` turns the mod off.
+    /// Calls `handler` on every event `E` with its typed data: a loader event
+    /// of [`events`](crate::events) on the thread that raises it, or a typed
+    /// game event of [`game_events`](crate::game_events) on the server's game
+    /// thread. A panic in `handler` turns the mod off.
     ///
     /// # Errors
     ///
-    /// [`Off`] when the loader does not know the event.
+    /// [`Off`] when the loader does not know the event, after `init` for a
+    /// game event, or when this build lacks a field of a game event.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::events::{PlayerJoined, WorldSaved};
+    /// use enshwick::game_events::EntityDiedEvent;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on::<PlayerJoined>(|player| enshwick::info!("entity {} joined", player.entity))?;
-    ///     load.on::<WorldSaved>(|()| enshwick::info!("saved"))
+    ///     load.on::<WorldSaved>(|()| enshwick::info!("saved"))?;
+    ///     load.on::<EntityDiedEvent>(|died| enshwick::debug!("{:?} died", died.dead_entity_id))
     /// }
     /// ```
     pub fn on<E: crate::events::Kind>(
         &mut self,
         handler: impl Fn(&E::Data) + Send + Sync + 'static,
     ) -> Result<(), Off> {
-        self.on_raw_event(E::EVENT, move |raw| {
-            // SAFETY: the loader passes this event's data, valid for the call.
-            if let Some(data) = unsafe { E::data(raw) } {
-                handler(&data);
-            }
-        })
+        E::subscribe(self, handler)
     }
 
     /// Calls `handler` on every `event` for this mod with the event's data,
@@ -76,7 +76,10 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`EventType`](crate::game_events::EventType).
-    pub fn event_type(&self, name: &'static str) -> Result<crate::game_events::EventType, Off> {
+    pub fn game_event_type(
+        &self,
+        name: &'static str,
+    ) -> Result<crate::game_events::EventType, Off> {
         crate::game_events::EventType::resolve(self, name)
     }
 
@@ -101,24 +104,6 @@ impl Load<'_> {
         F: Fn(&crate::game_events::RawGameEvent<'_>) + Send + Sync + 'static,
     {
         self.game_events(ty.hash(), ty.name(), handler)
-    }
-
-    /// Calls `handler` on every game event of kind `E`, typed; see
-    /// [`game_events`](crate::game_events). A panic in `handler` turns the
-    /// mod off.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after `init`, or when this build lacks a field of the event.
-    ///
-    /// # Examples
-    ///
-    /// See [`EntityDiedEvent`](crate::game_events::EntityDiedEvent).
-    pub fn on_game<E: crate::game_events::Kind>(
-        &mut self,
-        handler: impl Fn(&E) + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        E::subscribe(self, handler)
     }
 
     /// Calls `handler` on every game event of every type, for finding out
