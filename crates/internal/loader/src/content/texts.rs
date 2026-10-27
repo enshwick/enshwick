@@ -83,7 +83,8 @@ impl Handed {
     }
 }
 
-/// The text of `id` for `language`: its own, else any-language, else English.
+/// The text of `id` for `language`: its own, else the next language of its
+/// lookup order's, else English.
 pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     if let Some(text) = crate::notices::text(id) {
         return Some(text);
@@ -93,8 +94,9 @@ pub(super) fn text_for(id: u32, language: u32) -> Option<Handed> {
     }
     let texts = TEXTS.get()?.get(&id)?;
     let pick = |wanted: u32| texts.iter().find(|(l, _)| *l == wanted).map(|(_, t)| *t);
-    pick(language)
-        .or_else(|| pick(0))
+    enshwick::i18n::Language(language)
+        .lookup_order()
+        .find_map(|language| pick(language.0))
         .or_else(|| pick(ENGLISH))
         .map(Handed::of)
 }

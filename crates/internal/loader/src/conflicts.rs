@@ -9,7 +9,6 @@
 
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::fmt::Write as _;
 use std::sync::Mutex;
 
 use enshwick::abi::Status;
@@ -18,6 +17,7 @@ use rustc_hash::FxHashSet;
 use crate::code_watch::CodeChange;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::texts;
 
 /// How the mods on one feature share it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,14 +31,17 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// How the mods share it, in words.
+    /// How the mods share it, in the reader's language.
     #[must_use]
-    pub fn describe(self) -> &'static str {
-        match self {
-            Self::Chained => "chained in load order, each may refuse or change",
-            Self::FirstAnswers => "asked in load order, the first answer decides",
-            Self::Exclusive => "one mod holds it",
-        }
+    pub fn describe(self) -> String {
+        texts::fill(
+            match self {
+                Self::Chained => "conflicts.chained",
+                Self::FirstAnswers => "conflicts.first-answers",
+                Self::Exclusive => "conflicts.exclusive",
+            },
+            &[],
+        )
     }
 }
 
@@ -171,10 +174,9 @@ pub fn write_report(
         .iter()
         .map(|(hash, owners)| {
             let owners: Vec<String> = owners.iter().map(|o| name(*o)).collect();
-            format!(
-                "component {}: written by {}, the last write wins",
-                type_name(*hash),
-                owners.join(", ")
+            texts::fill(
+                "conflicts.component",
+                &[("type", &type_name(*hash)), ("mods", &owners.join(", "))],
             )
         })
         .collect()
@@ -213,48 +215,7 @@ pub fn report(
     resources: &[(String, Vec<String>)],
     name: impl Fn(ModIndex) -> String,
 ) -> Vec<String> {
-    let mut lines = Vec::new();
-    for hook in hooks {
-        let owners: Vec<&str> = hook.links.iter().map(|l| l.owner.as_str()).collect();
-        let distinct = {
-            let mut o = owners.clone();
-            o.sort_unstable();
-            o.dedup();
-            o.len()
-        };
-        if distinct < 2 && hook.refused.is_empty() {
-            continue;
-        }
-        let order: Vec<String> = hook
-            .links
-            .iter()
-            .map(|l| {
-                let mut notes = vec![format!("priority {}", l.priority)];
-                if l.exclusive {
-                    notes.push("exclusive".to_owned());
-                }
-                if l.caller_frame {
-                    notes.push("reads the caller frame".to_owned());
-                }
-                format!("{} ({})", l.owner, notes.join(", "))
-            })
-            .collect();
-        let mut line = format!("hook {}: {}", hook.name, order.join(" then "));
-        if distinct >= 2 {
-            line.push_str(", chained: each link calls on or replaces the rest");
-        }
-        for (asked, holder) in &hook.refused {
-            match holder {
-                Some(holder) => {
-                    let _w = write!(line, "; {asked} refused, {holder} holds it exclusively");
-                }
-                None => {
-                    let _w = write!(line, "; {asked} refused a second link");
-                }
-            }
-        }
-        lines.push(line);
-    }
+    let mut lines: Vec<String> = hooks.iter().filter_map(hook_line).collect();
     let mut features: Vec<&str> = claims.iter().map(|c| c.feature.as_ref()).collect();
     features.dedup();
     let mut seen: Vec<&str> = Vec::new();
@@ -280,27 +241,97 @@ pub fn report(
             continue;
         }
         let mode = on.first().map_or(Mode::Chained, |c| c.mode);
-        let mut line = match mode {
-            Mode::Exclusive => format!(
-                "{feature}: {} holds it",
-                granted.first().map_or("no mod", String::as_str)
+        let mut parts = vec![match mode {
+            Mode::Exclusive => {
+                let holder = granted
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| texts::fill("conflicts.no-mod", &[]));
+                texts::fill(
+                    "conflicts.feature.held",
+                    &[("feature", feature), ("holder", &holder)],
+                )
+            }
+            _ => texts::fill(
+                "conflicts.feature",
+                &[
+                    ("feature", feature),
+                    ("mods", &granted.join(", ")),
+                    ("mode", &mode.describe()),
+                ],
             ),
-            _ => format!("{feature}: {}, {}", granted.join(", "), mode.describe()),
-        };
+        }];
         if !refused.is_empty() {
-            let _w = write!(line, "; refused: {}", refused.join(", "));
+            parts.push(texts::fill(
+                "conflicts.feature.refused",
+                &[("mods", &refused.join(", "))],
+            ));
         }
-        lines.push(line);
+        lines.push(parts.join("; "));
     }
     for (key, owners) in resources {
         if owners.len() >= 2 {
-            lines.push(format!(
-                "{key}: patched by {}, each on the one before",
-                owners.join(" then ")
+            lines.push(texts::fill(
+                "conflicts.resource",
+                &[("resource", key), ("mods", &owners.join(&then()))],
             ));
         }
     }
     lines
+}
+
+/// The report's line on `hook`; `None` when one mod alone links it and
+/// nobody was refused.
+fn hook_line(hook: &Hooked) -> Option<String> {
+    let mut owners: Vec<&str> = hook.links.iter().map(|l| l.owner.as_str()).collect();
+    owners.sort_unstable();
+    owners.dedup();
+    let shared = owners.len() >= 2;
+    if !shared && hook.refused.is_empty() {
+        return None;
+    }
+    let order: Vec<String> = hook
+        .links
+        .iter()
+        .map(|l| {
+            let priority = l.priority.to_string();
+            let mut notes = vec![texts::fill(
+                "conflicts.priority",
+                &[("priority", &priority)],
+            )];
+            if l.exclusive {
+                notes.push(texts::fill("conflicts.link.exclusive", &[]));
+            }
+            if l.caller_frame {
+                notes.push(texts::fill("conflicts.link.caller-frame", &[]));
+            }
+            format!("{} ({})", l.owner, notes.join(", "))
+        })
+        .collect();
+    let head = if shared {
+        "conflicts.hook.chained"
+    } else {
+        "conflicts.hook"
+    };
+    let mut parts = vec![texts::fill(
+        head,
+        &[("hook", &hook.name), ("links", &order.join(&then()))],
+    )];
+    for (asked, holder) in &hook.refused {
+        parts.push(match holder {
+            Some(holder) => texts::fill(
+                "conflicts.refused.held",
+                &[("mod", asked), ("holder", holder)],
+            ),
+            None => texts::fill("conflicts.refused.second", &[("mod", asked)]),
+        });
+    }
+    Some(parts.join("; "))
+}
+
+/// What stands between two mods in running order, such as ` then `.
+fn then() -> String {
+    texts::fill("conflicts.then", &[])
 }
 
 #[cfg(test)]
