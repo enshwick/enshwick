@@ -263,9 +263,10 @@ online it does not run at all, and requests wait until they time out after
 
 The loader runs requests from a [mid-function hook](mid-function-hooks.md)
 in that per-player loop. It arms the hook when a mod asks for inventories,
-and on every dedicated server, whose console gives items. Each pass costs
-the stub's [few nanoseconds](mid-function-hooks.md#cost) and two reads
-while no request waits, so at most one pass per player per step.
+and on every dedicated server, whose console gives items. It runs once per
+online player each step; while no request waits, a pass costs the stub's
+[few nanoseconds](mid-function-hooks.md#cost), three atomic loads and one
+read of game memory.
 
 ## On a hosting client
 

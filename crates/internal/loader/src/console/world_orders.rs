@@ -120,6 +120,14 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
     if players.is_empty() {
         return texts::fill("console.give.nobody", &[]);
     }
+    match known_item(loader, give.item) {
+        Ok(true) => {}
+        Ok(false) => {
+            return texts::fill("console.give.unknown", &[("item", &give.item.to_string())]);
+        }
+        Err(Status::MISSING) => return texts::fill("console.give.missing", &[]),
+        Err(status) => return tools::unread(status),
+    }
     let mut asked = Vec::new();
     for player in &players {
         let who = format!("{} ({:016x})", tools::name(player), player.key);
@@ -166,6 +174,13 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
             ("who", &asked.join(", ")),
         ],
     )
+}
+
+/// Whether the game's item registry holds `item`; the game's inventory
+/// add is never handed an id it would have to guess at.
+fn known_item(loader: &Loader, item: u32) -> Result<bool, Status> {
+    let access = crate::world::access(&"console give").ok_or(Status::MISSING)?;
+    Ok(crate::inventory::item_info_at(loader, &access, item)?.is_some())
 }
 
 /// Spawns `spawn.count` entities from its template, a step apart along x.
@@ -248,6 +263,9 @@ fn teleport(loader: &Loader, order: &orders::Teleport<'_>) -> String {
         position: enshwick::ecs::fixed(order.to),
         orientation: [0.0, 0.0, 0.0, 1.0],
     };
+    if crate::world::fixed_position(loader, Entity(player.entity)).is_none() {
+        return texts::fill("console.order.nowhere", &[("who", &tools::name(&player))]);
+    }
     let who = format!("{} ({:016x})", tools::name(&player), player.key);
     match crate::emits::teleport(loader, &request) {
         Ok(()) => {

@@ -131,6 +131,10 @@ A player is named by name, or by account: the 16 hex digits
 share is refused, with their accounts. The game never kicks or bans an
 administrator, nor a player who is not online.
 
+Places for `spawn` and `teleport` lie within 100 km of the origin on each
+axis; a place farther out gets the usage line. In a game a client hosts,
+`give` works only while a mod has asked for inventories.
+
 No mod may take the id `enshwick`.
 
 ## Worked examples
