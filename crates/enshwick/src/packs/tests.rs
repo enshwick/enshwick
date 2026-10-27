@@ -578,6 +578,88 @@ fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
     }
 }
 
+#[test]
+fn a_recipe_change_selects_by_kind_or_workshop() {
+    use crate::content::changes::{Recipes, RecipesChange};
+    use crate::content::recipes::RecipeKind;
+    let forge = Guid([5; 16]);
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(forge, "Prop_Production_T1_Forge")],
+        &[],
+    );
+    let station = vanilla.workshop(forge).unwrap();
+    let text = "[[change]]\nkind = [\"roof\", \"building-block\"]\ncost = { times = 0.5 }\n\n\
+                [[change]]\nworkshop = [\"Prop_Production_T1_Forge\"]\ntime = 0\n";
+    let pack = Pack::parse_with("you.cheap", &recipes(text), Some(&vanilla)).unwrap();
+    assert!(pack.changes().is_empty());
+    assert_eq!(
+        pack.recipe_selections(),
+        [
+            (
+                RecipesChange::new(
+                    Recipes::Kind(RecipeKind::Roof),
+                    Field::Cost,
+                    Value::Times(0.5)
+                ),
+                "recipes.toml:1 (kind roof)".to_owned()
+            ),
+            (
+                RecipesChange::new(
+                    Recipes::Kind(RecipeKind::BuildingBlock),
+                    Field::Cost,
+                    Value::Times(0.5)
+                ),
+                "recipes.toml:1 (kind building-block)".to_owned()
+            ),
+            (
+                RecipesChange::new(
+                    Recipes::Workshop(station),
+                    Field::CraftingDuration,
+                    Value::Set(0.0)
+                ),
+                "recipes.toml:5 (workshop Prop_Production_T1_Forge)".to_owned()
+            ),
+        ]
+    );
+    assert!(pack.reaches_players());
+}
+
+#[test]
+fn a_recipe_selection_that_cannot_hold_is_a_problem_at_its_change() {
+    let (vanilla, ..) = vanilla_torch();
+    let cases = [
+        (
+            "[[change]]\nkind = [\"roofs\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: no recipe kind \"roofs\"; near: roof",
+        ),
+        (
+            "[[change]]\nkind = [\"roof\"]\nrecipes = [\"Tool_Torch01_T0_PK\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: give one of recipes or output, kind, workshop",
+        ),
+        (
+            "[[change]]\nkind = [\"roof\"]\ningredients = { Material_T1_Wood_Logs = 0 }\n",
+            "recipes.toml:1:1: change 1: ingredients is no field a selection of recipes changes",
+        ),
+        (
+            "[[change]]\nworkshop = [\"Tool_Torch01\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: Tool_Torch01 is no crafting station",
+        ),
+    ];
+    for (text, error) in cases {
+        let errors = Pack::parse_with("you.cheap", &recipes(text), Some(&vanilla)).unwrap_err();
+        assert_eq!(errors.to_string(), error, "{text}");
+    }
+    let errors = Pack::parse(
+        "you.cheap",
+        &recipes("[[change]]\nworkshop = [\"Prop_Production_T1_Forge\"]\ncost = 2\n"),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data at hand"),
+        "{errors}"
+    );
+}
+
 /// A folder of its own under the system's temporary folder, removed when
 /// dropped.
 struct Folder(std::path::PathBuf);

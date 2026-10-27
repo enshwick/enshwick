@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::change_recipes` changes the output count, cost or time of every
+  vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
+  makes, `Recipes::Workshop` by where it is made, read from the game's
+  data by the loader (`DataSelect::RECIPE_KIND`, `DataSelect::WORKSHOP`,
+  ABI minor 91); a data pack's `recipes.toml` takes `kind = [...]` and
+  `workshop = [...]` for the same, and `RecipeKind::name` gives the names
+  (#562).
 - `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
