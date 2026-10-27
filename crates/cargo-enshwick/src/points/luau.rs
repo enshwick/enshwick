@@ -78,7 +78,7 @@ impl Writer<'_> {
     fn read(&self, name: &str, depth: u32) -> Result<String, Error> {
         if primitive(name).is_some() {
             let read = match name {
-                "enshwick.entity" => "u32",
+                "enshwick.entity" => "entity",
                 "enshwick.guid" => "guid",
                 "usize" => "u64",
                 "isize" => "i64",
@@ -91,7 +91,16 @@ impl Writer<'_> {
         }
         let ty = find(self.schema, self.point, name)?;
         match ty.kind {
-            Kind::Values | Kind::Enum => self.read(&ty.repr, depth + 1),
+            Kind::Values => self.read(&ty.repr, depth + 1),
+            Kind::Enum => {
+                let variants: Vec<String> =
+                    ty.variant.iter().map(|v| v.value.to_string()).collect();
+                Ok(format!(
+                    "{{ repr = {}, variants = {{ {} }} }}",
+                    self.read(&ty.repr, depth + 1)?,
+                    variants.join(", ")
+                ))
+            }
             Kind::Newtype => {
                 let inner = ty
                     .field

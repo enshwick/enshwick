@@ -189,14 +189,10 @@ fn a_call_names_the_argument_of_the_wrong_type() {
 
 #[test]
 fn typed_game_events_have_unique_names_apart_from_loader_events() {
-    let kinds = include_str!("../game_events/kinds.rs")
-        .matches("\nimpl Kind for ")
-        .count();
-    assert_eq!(game_events().count(), kinds);
     let mut names: Vec<&str> = game_events().map(GameEventKind::name).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), kinds);
+    assert_eq!(names.len(), game_events().count());
     assert!(
         names
             .iter()

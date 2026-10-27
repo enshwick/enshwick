@@ -48,6 +48,8 @@ fn access() -> Declared {
         output: fields(&["output"]),
         mode: PointMode::OVERRIDE,
         refuse: true,
+        input_size: 0,
+        output_size: 0,
     }
 }
 
@@ -147,6 +149,27 @@ fn a_link_named_by_a_former_id_finds_the_renamed_owner() {
     let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
     assert!(inert.is_empty(), "{inert:?}");
     assert_eq!(points[0].links.len(), 1);
+}
+
+#[test]
+fn a_link_reading_past_the_owner_s_input_or_answer_is_refused() {
+    let sized = |input_size, output_size| Declared {
+        input_size,
+        output_size,
+        ..access()
+    };
+    for (input, output) in [(24, 4), (16, 8)] {
+        let mut registry = Registry::default();
+        registry
+            .define(ModIndex::new(0), &["you.trading-post"], sized(16, 4))
+            .unwrap();
+        let mut wide = link(ModIndex::new(1), set(7));
+        wide.declared = sized(input, output);
+        registry.attach(wide).unwrap();
+        let (points, inert, _) = registry.seal(&Renamed, |_, _| false);
+        assert!(points[0].links.is_empty(), "{input} {output}");
+        assert_eq!(inert.len(), 1);
+    }
 }
 
 #[test]
