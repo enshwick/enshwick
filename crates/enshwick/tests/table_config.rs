@@ -116,7 +116,7 @@ mod tests {
         let (loader, _) = start(Some("rule = false\n"));
         assert_eq!(
             loader.reported_synced().last().map(String::as_str),
-            Some("{ rule = false }")
+            Some("{ level = 1, rule = false }")
         );
         loader.set_server_synced(Some("{ rule = true }"));
         let _handled = loader.raise::<events::SettingsChanged>(&());
