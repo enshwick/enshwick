@@ -146,11 +146,14 @@ pub(crate) fn carry(loader: &Loader, act: Act, decision: &Decision) -> Result<()
 /// # Errors
 ///
 /// [`Status::BAD_ARGS`] for account 0; [`Status::REFUSED`] for an
-/// administrator online, unless unbanned, and for a kick of an account not
-/// online; as [`carry`] otherwise.
+/// administrator online or a hosted game's host, unless unbanned, and for a
+/// kick of an account not online; as [`carry`] otherwise.
 pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
     if account == 0 {
         return Err(Status::BAD_ARGS);
+    }
+    if act != Act::Unban && crate::admission::host() == Some(account) {
+        return Err(Status::REFUSED);
     }
     let online: Vec<Online> = crate::world::players(loader)?
         .iter()

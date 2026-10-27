@@ -1352,8 +1352,10 @@ pub struct HostApi {
     /// account not online goes straight onto the list, which the dedicated
     /// server writes to `bannedAccounts` of `enshrouded_server.json`.
     /// [`Status::REFUSED`] for a kick or a ban of an administrator online,
-    /// whom the game never removes, and for a kick of an account not online;
-    /// [`Status::BAD_ARGS`] for account 0 or an action this loader does not
+    /// whom the game never removes, for a kick or a ban of a hosted game's
+    /// host, for a kick of an account not online, and for a ban of an account
+    /// not online that the game's list does not take; an account on the
+    /// list already is no error. [`Status::BAD_ARGS`] for account 0 or an action this loader does not
     /// know; [`Status::MISSING`] while no server runs or on a build that
     /// lacks the action. On the server's game thread between steps only:
     /// [`Status::WRONG_THREAD`] elsewhere.
