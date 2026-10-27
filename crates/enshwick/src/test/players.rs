@@ -40,6 +40,27 @@ impl FakeHost {
         self
     }
 
+    /// The account of the hosted game's host, whom account actions never
+    /// kick or ban.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::Side;
+    ///
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .side(Side::CLIENT)
+    ///     .hosting(true)
+    ///     .host_key(7)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn host_key(mut self, key: u64) -> Self {
+        self.host_key = Some(key);
+        self
+    }
+
     /// The entity world of the running server, which a system context of
     /// that world holds; 0 for none.
     ///

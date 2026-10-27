@@ -126,8 +126,12 @@ pub(crate) fn act(loader: &Loader, act: Act, account: u64) -> Result<(), Status>
 ///
 /// # Errors
 ///
-/// As [`act`] and [`super::ban_list::add`].
+/// [`Status::REFUSED`] for a kick or a ban of a hosted game's host; as
+/// [`act`] and [`super::ban_list::add`] otherwise.
 pub(crate) fn carry(loader: &Loader, act: Act, decision: &Decision) -> Result<(), Status> {
+    if act != Act::Unban && crate::admission::host() == Some(decision.key) {
+        return Err(Status::REFUSED);
+    }
     match decision.route {
         Route::Handler => {
             self::act(loader, act, decision.key)?;
@@ -151,9 +155,6 @@ pub(crate) fn carry(loader: &Loader, act: Act, decision: &Decision) -> Result<()
 pub(crate) fn account_action(loader: &Loader, act: Act, account: u64) -> Result<(), Status> {
     if account == 0 {
         return Err(Status::BAD_ARGS);
-    }
-    if act != Act::Unban && crate::admission::host() == Some(account) {
-        return Err(Status::REFUSED);
     }
     let online: Vec<Online> = crate::world::players(loader)?
         .iter()

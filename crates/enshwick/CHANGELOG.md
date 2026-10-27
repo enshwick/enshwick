@@ -23,7 +23,8 @@ Each entry names the pull request that made the change.
 - `World::account_action` refuses a kick or a ban of a hosted game's host,
   succeeds for a ban of an account on the ban list already, and refuses a
   ban the game's list does not take instead of answering that the action
-  is missing; the console says so in its own words.
+  is missing; the console says so in its own words. The fake takes the
+  host with `FakeHost::host_key` (#606).
 - Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
   rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
