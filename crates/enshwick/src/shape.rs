@@ -23,6 +23,9 @@ use core::ptr::NonNull;
 /// - [`SHAPE`](Shape::SHAPE) changes whenever the type's layout or the
 ///   meaning of its values changes: every field with its offset, every
 ///   variant with its discriminant, every named value.
+/// - [`PADDING_FREE`](Shape::PADDING_FREE) is `true` only when every byte
+///   of every value is initialised, with no padding anywhere inside it,
+///   nested types included.
 ///
 /// # Examples
 ///
