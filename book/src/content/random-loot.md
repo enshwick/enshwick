@@ -15,10 +15,10 @@ const RING: Id = Id::new("my-mod:ring");
 const AMULET: Id = Id::new("my-mod:amulet");
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses()))?;
-    load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.02, Source::locked_chests()))?;
+    load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.10, Source::bosses()))?;
+    load.add_loot(Drop::new(enshwick::ItemId::from_guid(STAFF.guid()), 0.02, Source::locked_chests()))?;
     load.add_loot(
-        Drop::one_of(&[enshwick::ItemId::new(RING.id()), enshwick::ItemId::new(AMULET.id())], 0.01, Source::kinds(Kinds::CORPSES))
+        Drop::one_of(&[enshwick::ItemId::from_guid(RING.guid()), enshwick::ItemId::from_guid(AMULET.guid())], 0.01, Source::kinds(Kinds::CORPSES))
             .count(1, 2),
     )
 }
@@ -42,7 +42,7 @@ A [`Drop`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lo
 holds the items, the chance, the count and the source:
 
 - `Drop::new(item, chance, from)` gives one item, `item` being the game id
-  [`Guid::id`](items.md) returns;
+  [`ItemId::from_guid`](items.md#guids-and-item-ids) gives;
 - `Drop::one_of(items, chance, from)` gives one of several items, each as
   likely; `chance` is that of any of them;
 - `.count(min, max)` gives `min` to `max` items per hit, each count in

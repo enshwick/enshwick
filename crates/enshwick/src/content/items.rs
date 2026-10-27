@@ -32,7 +32,7 @@ pub const METER_TEMPLATE_BASE: Guid = Guid::parse("39246eb2-1b9f-4881-8c60-e0e4f
 ///
 /// let chest = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
 /// if let Some(tag) = vanilla_name_tag(chest) {
-///     enshwick::info!("the chest's name is text {:#010x}", tag.id());
+///     enshwick::info!("the chest's name is text {:#010x}", tag.fnv1a());
 /// }
 /// ```
 #[must_use]
@@ -64,7 +64,7 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
     if crate::host()?.build().side == crate::abi::Side::SERVER {
         return None;
     }
-    crate::i18n::game_text_in(vanilla_name_tag(item)?.id(), language)
+    crate::i18n::game_text_in(vanilla_name_tag(item)?.fnv1a(), language)
 }
 
 /// A new item for [`Load::add_item`].
@@ -407,7 +407,7 @@ const VARIANT: usize = 12;
 /// );
 /// let vanilla = [0u8; 0x90];
 /// let clone = clone_item(&layout, &vanilla, &item, item.id.guid()).ok_or("too short")?;
-/// assert_eq!(clone[..4], item.id.id().to_le_bytes());
+/// assert_eq!(clone[..4], enshwick::ItemId::from_guid(item.id.guid()).get().to_le_bytes());
 /// assert_eq!(clone[4..20], item.id.guid().0);
 /// # Ok::<(), &str>(())
 /// ```
@@ -415,7 +415,7 @@ const VARIANT: usize = 12;
 pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) -> Option<Vec<u8>> {
     let mut info = Blob::new(like);
     let mut written =
-        info.write(layout.id, &guid.id().to_le_bytes()) && info.write(layout.object, &guid.0);
+        info.write(layout.id, &guid.fnv1a().to_le_bytes()) && info.write(layout.object, &guid.0);
     if let Some(name) = item.name {
         written &= info.write(layout.name, &name.0);
     }
@@ -444,7 +444,7 @@ pub fn clone_item(layout: &ItemLayout, like: &[u8], item: &NewItem, guid: Guid) 
                 row.get_mut(at..at + bytes.len())
                     .map(|target| target.copy_from_slice(bytes))
             };
-            put(label, &stat.loca_id.id().to_le_bytes())?;
+            put(label, &stat.loca_id.fnv1a().to_le_bytes())?;
             put(format, &[number_format])?;
             put(value, &stat.value.to_le_bytes())?;
             put(signed, &[u8::from(is_signed)])?;
@@ -575,11 +575,11 @@ pub fn list_item(
         .0
         .iter()
         .map(|r| Guid(*r))
-        .find(|other| other.id() == guid.id() && *other != guid)
+        .find(|other| other.fnv1a() == guid.fnv1a() && *other != guid)
     {
         crate::warn!(
             "item {debug_name} ({guid}) has the game id {:#010x} of item {other}; it needs another id",
-            guid.id()
+            guid.fnv1a()
         );
         return None;
     }
@@ -749,7 +749,7 @@ mod tests {
             ..NewItem::new(NEW_ID, CHEST)
         };
         let clone = clone_item(&LAYOUT, &chest, &item, NEW).unwrap();
-        assert_eq!(&clone[..4], &NEW.id().to_le_bytes());
+        assert_eq!(&clone[..4], &NEW.fnv1a().to_le_bytes());
         assert_eq!(&clone[4..20], &NEW.0);
         assert_eq!(&clone[0x48..0x58], &NAME.0);
         assert_eq!(clone[0x70], 9);
@@ -810,10 +810,10 @@ mod tests {
         let (rows, count) = clone.array(0x90).unwrap();
         assert_eq!(count, 3);
         assert_eq!(clone.read_u32(rows), Some(7));
-        assert_eq!(clone.read_u32(rows + 0x28), Some(NAME.id()));
+        assert_eq!(clone.read_u32(rows + 0x28), Some(NAME.fnv1a()));
         assert_eq!(clone.read_u32(rows + 0x28 + 8), Some(3));
         assert_eq!(clone.bytes()[rows + 0x28 + 0x24], 0);
-        assert_eq!(clone.read_u32(rows + 0x50), Some(CHEST.id()));
+        assert_eq!(clone.read_u32(rows + 0x50), Some(CHEST.fnv1a()));
         assert_eq!(
             clone.read_u32(rows + 0x50 + 8),
             Some((-2i32).cast_unsigned())

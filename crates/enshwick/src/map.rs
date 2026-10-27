@@ -81,7 +81,7 @@ impl MapMarkerTypeId {
     /// See [`MapMarkerTypeId`].
     #[must_use]
     pub const fn from_guid(reference: Guid) -> Self {
-        Self(reference.id())
+        Self(reference.fnv1a())
     }
 
     /// The registry key.
@@ -360,7 +360,7 @@ impl Map {
             .map(|marker| MapPoint {
                 position: marker.position,
                 marker_type: marker.marker_type.map(MapMarkerTypeId::get),
-                label: marker.label.map(Guid::id),
+                label: marker.label.map(Guid::fnv1a),
             })
             .collect();
         let mut online = world.players();

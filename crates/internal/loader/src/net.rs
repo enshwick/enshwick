@@ -102,11 +102,7 @@ fn state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 /// [`state`] for a per-frame path: `None`, without waiting, while another
 /// thread holds the state.
 fn try_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
-    let mut guard = match STATE.try_lock() {
-        Ok(guard) => guard,
-        Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-        Err(std::sync::TryLockError::WouldBlock) => return None,
-    };
+    let mut guard = STATE.try_relock()?;
     Some(f(guard.get_or_insert_with(State::default)))
 }
 

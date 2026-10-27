@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId};
+use crate::abi::{Entity, Header, ItemId, SkillNode};
 
 /// A player about to interact with an entity, as
 /// [`HostApi::interaction_filter`](super::HostApi::interaction_filter) hands it
@@ -84,7 +84,7 @@ pub type InteractionFn =
 /// ```
 /// use enshwick::abi::{Header, SkillCheck};
 ///
-/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: 0x4475_e8dd, gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
+/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::world::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
 /// assert_eq!(check.gate, SkillCheck::FLY_MODE);
 /// ```
 #[repr(C)]
@@ -93,7 +93,7 @@ pub struct SkillCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The skill node.
-    pub node: u32,
+    pub node: SkillNode,
     /// The gate that asks, one of the constants on this type.
     pub gate: u32,
     /// 1 when the character unlocked it.

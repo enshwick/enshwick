@@ -82,6 +82,7 @@ mod stat_kinds;
 mod static_halves;
 mod stats;
 mod step_clock;
+mod survivor_lookup;
 mod symbols;
 mod table_config;
 mod task_workers;

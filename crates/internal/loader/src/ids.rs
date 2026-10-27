@@ -99,7 +99,7 @@ pub(crate) fn declare_content(names: &[&str], name: &str) -> Result<Guid, String
             "content id {name} lies outside the mod's namespace {owner}:"
         ));
     }
-    with(|ids| ids.declare(owner, Space::Content, name, guid.id()))?;
+    with(|ids| ids.declare(owner, Space::Content, name, guid.fnv1a()))?;
     Ok(guid)
 }
 

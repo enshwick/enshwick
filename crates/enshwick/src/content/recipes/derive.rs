@@ -380,7 +380,7 @@ pub fn derive_recipes_in(
     for (index, ((_, derived, guid), (inputs, output))) in picked.iter().zip(changes).enumerate() {
         let derived = *derived;
         let at = start + (usize::try_from(first).ok()? + index) * layout.recipe;
-        let id = guid.id().to_le_bytes();
+        let id = guid.fnv1a().to_le_bytes();
         let input_count = u32::try_from(inputs.len() / layout.input_size.max(1)).ok()?;
         let inputs_at = blob.append(&inputs, 8);
         let output_at = blob.append(&output, 8);

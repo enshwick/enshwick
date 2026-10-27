@@ -159,7 +159,7 @@ impl FakeHost {
     /// ```
     #[must_use]
     pub fn disabled_recipe(mut self, recipe: crate::content::Guid) -> Self {
-        self.disabled_recipes.insert(recipe.id());
+        self.disabled_recipes.insert(recipe.fnv1a());
         self
     }
 
@@ -185,7 +185,7 @@ impl FakeHost {
         item: crate::content::Guid,
         kind: crate::content::recipes::RecipeKind,
     ) -> Self {
-        self.recipe_kinds.insert(item.id(), kind.into());
+        self.recipe_kinds.insert(item.fnv1a(), kind.into());
         self
     }
 }

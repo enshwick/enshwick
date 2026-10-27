@@ -91,7 +91,7 @@ pub(crate) fn served(loader: &Loader, orphans: &[(Guid, Guid)]) -> Option<(Vec<S
         (DESCRIPTION, "stand-in.description"),
     ] {
         for (language, text) in crate::texts::translations(key) {
-            let _added = crate::content::add_text(tag.id(), language.0, text);
+            let _added = crate::content::add_text(tag.guid().fnv1a(), language.0, text);
         }
     }
     Some((items, registry))

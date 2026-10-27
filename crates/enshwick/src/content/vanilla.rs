@@ -589,7 +589,7 @@ impl Vanilla {
         (0..usize::try_from(count).unwrap_or(0))
             .map(|i| start + i * layout.entry)
             .find(|&at| {
-                blob.read_u32(at + layout.entry_item) == Some(item.id())
+                blob.read_u32(at + layout.entry_item) == Some(item.fnv1a())
                     && registry.get(at + layout.entry_npc) == Some(&0)
             })
             .and_then(|at| registry.get(at..at + layout.entry))
@@ -882,7 +882,7 @@ pub(crate) mod tests {
             let mut entry = vec![0u8; 56];
             entry[0] = npc;
             entry[4..20].copy_from_slice(&workshop.0);
-            entry[28..32].copy_from_slice(&item.id().to_le_bytes());
+            entry[28..32].copy_from_slice(&item.fnv1a().to_le_bytes());
             entries.extend_from_slice(&entry);
         }
         let at = workshops.append(&entries, 4);

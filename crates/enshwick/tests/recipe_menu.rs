@@ -82,7 +82,7 @@ mod tests {
         {
             let at = first + i * 0xa8;
             assert!(blob.write(at, &guid.0));
-            assert!(blob.write(at + 0x10, &guid.id().to_le_bytes()));
+            assert!(blob.write(at + 0x10, &guid.fnv1a().to_le_bytes()));
             assert!(blob.write(at + 0x24, &CARPENTER.to_le_bytes()));
             let mut stack = vec![0u8; 0x18];
             stack[..16].copy_from_slice(&output.0);
@@ -99,7 +99,7 @@ mod tests {
     /// with the plank and the chest.
     fn bundle() -> Vec<u8> {
         let mut blob = Blob::new(&[0u8; 0x60]);
-        let ids: Vec<u8> = [PLANK_RECIPE.id(), CHEST_RECIPE.id(), 5]
+        let ids: Vec<u8> = [PLANK_RECIPE.fnv1a(), CHEST_RECIPE.fnv1a(), 5]
             .iter()
             .flat_map(|id| id.to_le_bytes())
             .collect();
@@ -269,23 +269,23 @@ mod tests {
         let key = UI_BUNDLE.key_by_hash(BUNDLE);
         let built = loader.build_resource(&key, &bundle()).unwrap();
         let bench = WorkshopId::new(BENCH.guid()).id();
-        let plank = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).id();
-        let chest = derived_guid(CHEST_RECIPE, fnv1a(b"menu")).id();
+        let plank = derived_guid(PLANK_RECIPE, fnv1a(b"menu")).fnv1a();
+        let chest = derived_guid(CHEST_RECIPE, fnv1a(b"menu")).fnv1a();
         assert_eq!(
             menu(&built),
             [
                 (
                     CARPENTER,
                     vec![vec![vec![
-                        PLANK_RECIPE.id(),
+                        PLANK_RECIPE.fnv1a(),
                         plank,
-                        CHEST_RECIPE.id(),
+                        CHEST_RECIPE.fnv1a(),
                         chest,
-                        SAFE_RECIPE.guid().id(),
+                        SAFE_RECIPE.guid().fnv1a(),
                         5
                     ]]]
                 ),
-                (bench, vec![vec![vec![LOCKER_RECIPE.guid().id()]]]),
+                (bench, vec![vec![vec![LOCKER_RECIPE.guid().fnv1a()]]]),
             ]
         );
     }
