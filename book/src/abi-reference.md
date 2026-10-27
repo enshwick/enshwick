@@ -142,6 +142,7 @@ reason of the form `<what>: <why>`, such as
 | 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
 | 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
 | 10   | `STATIC_HALF`   | The static half of a component type: template data, never written          | `template data, never written`     |
+| 11   | `NOT_A_PROP`    | The entity is no prop: a creature, a flame altar or not placed             | `not a prop`                       |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -362,7 +363,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
 | `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |
-| `transaction_commit`     | Queues terrain edits, voxel writes, erases and blocks as one transaction, with undo; any thread      | 87          |
+| `transaction_commit`     | Queues terrain, voxels, erases, blocks and props as one transaction, with undo; any thread           | 87          |
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
@@ -372,3 +373,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `serve_call`             | Serves a call, a described service named after the mod, with its input and answer; init only         | 95          |
 | `find_call`              | Asks for another mod's call by name and major, matched field by field after init; init only          | 95          |
 | `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 95          |
+| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 96          |
+| `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 96          |

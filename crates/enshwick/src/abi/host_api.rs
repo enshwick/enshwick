@@ -1345,4 +1345,32 @@ pub struct HostApi {
         input: *const c_void,
         output: *mut c_void,
     ) -> Status,
+    /// Writes the entities of the props transaction `id` of this mod placed
+    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and their number to `count`; a prop is in the world from the step
+    /// after the one that placed it. `out` may be null with `capacity` 0 to
+    /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot. Any thread. Since minor 96.
+    pub transaction_entities: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        out: *mut u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes to `kept` 1 when a save keeps changes in the box from `min`
+    /// to `max`, in metres, and 0 when not: the game saves a world only
+    /// inside its bases' zones, so the box must lie wholly inside one, half
+    /// a metre in from its edges. [`Status::BAD_ARGS`] for a null pointer,
+    /// a corner that is not finite or a `max` below `min`;
+    /// [`Status::MISSING`] while no world is loaded or on a build without
+    /// the zone list. On the server's game thread at a quiet moment only:
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. Since minor 96.
+    pub world_persists: extern "system" fn(
+        me: ModHandle,
+        min: *const [f64; 3],
+        max: *const [f64; 3],
+        kept: *mut u8,
+    ) -> Status,
 }

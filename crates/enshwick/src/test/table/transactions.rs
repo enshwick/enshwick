@@ -1,8 +1,8 @@
 //! The fake loader's transactions: commits, undos and statuses.
 
 use crate::abi::{
-    BlockPlace, Header, ModHandle, Status, TerrainEdit, TransactionInfo, TransactionOp, Voxel,
-    VoxelRegion, VoxelWrite,
+    BlockPlace, Header, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
+    TransactionOp, Voxel, VoxelRegion, VoxelWrite,
 };
 use crate::test::table::{put, with};
 use crate::test::{FakeChange, FakeTransaction};
@@ -69,6 +69,18 @@ fn commit(
         }
         let host = &s.host;
         for change in &changes {
+            if let FakeChange::PlaceProp(prop) = change {
+                if host.no_prop_items.contains(&prop.item) {
+                    return Status::NOT_A_PROP;
+                }
+                let places = host
+                    .items
+                    .get(&prop.item)
+                    .is_some_and(|item| item.placed_entity != [0; 16]);
+                if !places {
+                    return Status::BAD_ARGS;
+                }
+            }
             if let FakeChange::Block(block) = change {
                 let known = host.blueprints.contains_key(&block.shape)
                     && host
@@ -85,6 +97,10 @@ fn commit(
             FakeChange::Voxels { min, size, .. } | FakeChange::Erase { min, size } => {
                 crate::test::world::outside(host.extent, *min, *size)
             }
+            FakeChange::PlaceProp(prop) => host.extent.is_some_and(|end| {
+                (0..3).any(|axis| prop.position[axis] * 2.0 >= f64::from(end[axis]))
+            }),
+            FakeChange::RemoveProp(_) => false,
             FakeChange::Block(block) => host.extent.is_some_and(|end| {
                 (0..3).any(|axis| block.position[axis] * 2.0 >= f64::from(end[axis]))
             }),
@@ -106,6 +122,8 @@ fn commit(
             owner: me,
             actor,
             changes,
+            created: Vec::new(),
+            removed: Vec::new(),
             info: TransactionInfo {
                 header: Header::of::<TransactionInfo>(),
                 state: TransactionInfo::PENDING,
@@ -115,6 +133,8 @@ fn commit(
                 bricks: 0,
                 refusal: 0,
                 reserved: 0,
+                holds: 0,
+                created: 0,
             },
         });
         put(id, next)
@@ -173,6 +193,24 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
                 min: region.min,
                 size: region.size,
             })
+        }
+        TransactionOp::PLACE_PROP => {
+            // SAFETY: the caller guarantees `op.data` for a prop op.
+            let prop = unsafe {
+                crate::abi::read_headed(op.data.cast::<PropPlace>(), size_of::<PropPlace>())
+            }?;
+            let finite = prop.position.iter().all(|v| v.is_finite() && *v >= 0.0)
+                && prop.orientation.iter().all(|v| v.is_finite())
+                && prop.reserved == 0;
+            finite.then_some(FakeChange::PlaceProp(prop))
+        }
+        TransactionOp::REMOVE_PROP => {
+            // SAFETY: the caller guarantees `op.data` for a removal op.
+            let remove = unsafe {
+                crate::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
+            }?;
+            (remove.entity != 0 && remove.flags & !PropRemove::DISCARD_STATE == 0)
+                .then_some(FakeChange::RemoveProp(remove))
         }
         TransactionOp::BLOCK => {
             // SAFETY: the caller guarantees `op.data` for a block op.
@@ -238,13 +276,14 @@ pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status
         else {
             return Status::REFUSED;
         };
+        let props = !transaction.created.is_empty() || !transaction.removed.is_empty();
         let info = &mut transaction.info;
         match info.state {
             TransactionInfo::PENDING if info.applied == 0 => info.state = TransactionInfo::UNDONE,
             TransactionInfo::UNDOING => {}
             TransactionInfo::PENDING => info.state = TransactionInfo::UNDOING,
             TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
-                if info.bricks > 0 =>
+                if info.bricks > 0 || props =>
             {
                 if claimed + info.bricks > BRICKS_MAX {
                     return Status::REFUSED;
@@ -254,8 +293,29 @@ pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status
             _ => return Status::REFUSED,
         }
         info.reason = Status::OK;
+        info.holds = 0;
         Status::OK
     })
+}
+
+pub(crate) extern "system" fn transaction_entities(
+    me: ModHandle,
+    id: u64,
+    out: *mut u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let found = with(None, |s| {
+        s.edits
+            .transactions
+            .iter()
+            .find(|t| t.id == id && t.owner == me)
+            .map(|t| t.created.clone())
+    });
+    let Some(created) = found else {
+        return Status::MISSING;
+    };
+    crate::test::table::put_list(&created, out, capacity, count)
 }
 
 pub(crate) extern "system" fn transaction_status(

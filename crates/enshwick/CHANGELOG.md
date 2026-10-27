@@ -134,6 +134,22 @@ Each entry names the pull request that made the change.
   `FakeHost::static_half`: a write to the static half of a component
   type, the set-up data every entity of a template shares, is refused
   (#568).
+- `Transaction::place_prop`, `remove_prop` and
+  `remove_prop_discarding_state` place and remove props inside a
+  transaction, with undo; `World::transaction_entities` lists the props a
+  transaction placed. A prop that holds state a player would lose (items,
+  growth, a production queue, assigned survivors, written text, fuel,
+  logic wiring, a logic trigger) is never
+  removed or taken away by an undo unless the mod opts in:
+  `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
+  records and `transaction_entities` are ABI minor 96 (#552).
+- `World::persists` tells whether a save keeps changes in a box: the
+  game saves a world only inside its bases' zones, so props, blocks and
+  terrain changed elsewhere are gone after a restart, a mod's as a
+  player's. `HostApi::world_persists` is ABI minor 96 (#552).
+- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 96): creatures
+  placed from items (animals, pets, survivors) and flame altars are no
+  props; prop removal refuses them in either mode (#552).
 
 ### Changed
 
@@ -150,6 +166,10 @@ Each entry names the pull request that made the change.
   item checks of `World::props_in` and `Transaction::place_block` work from
   world start: the loader finds the item registry without waiting for a
   player to join (#551).
+- `World::props_in` and `World::capture` leave out creatures placed from
+  items (animals, pets, survivors) and flame altars, which are no props,
+  and answer `WorldError::Missing` on a game build without their marks
+  (#552).
 
 ### Fixed
 

@@ -1,11 +1,11 @@
 //! Host functions for transactions of the world: commits, statuses and undos.
 
 use enshwick::abi::{
-    BlockPlace, ModHandle, Status, TerrainEdit, TransactionInfo, TransactionOp, VoxelRegion,
-    VoxelWrite,
+    BlockPlace, ModHandle, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo,
+    TransactionOp, VoxelRegion, VoxelWrite,
 };
 
-use crate::host::memory::{put, put_headed};
+use crate::host::memory::{put, put_headed, put_list};
 use crate::host::{caller_index, entry};
 use crate::transactions::{Change, Erase, Paste};
 
@@ -134,8 +134,53 @@ unsafe fn change(loader: &crate::host::Loader, op: &TransactionOp) -> Result<Cha
             .ok_or(Status::BAD_ARGS)?;
             crate::transactions::resolve(loader, &block).map(|block| Change::Block(Box::new(block)))
         }
+        #[cfg(windows)]
+        TransactionOp::PLACE_PROP => {
+            // SAFETY: the caller guarantees `op.data` for a prop op.
+            let prop = unsafe {
+                enshwick::abi::read_headed(op.data.cast::<PropPlace>(), size_of::<PropPlace>())
+            }
+            .ok_or(Status::BAD_ARGS)?;
+            crate::transactions::resolve_prop(loader, &prop).map(Change::PlaceProp)
+        }
+        TransactionOp::REMOVE_PROP => {
+            // SAFETY: the caller guarantees `op.data` for a removal op.
+            let remove = unsafe {
+                enshwick::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
+            }
+            .ok_or(Status::BAD_ARGS)?;
+            if remove.entity == 0 || remove.flags & !PropRemove::DISCARD_STATE != 0 {
+                return Err(Status::BAD_ARGS);
+            }
+            Ok(Change::RemoveProp {
+                entity: remove.entity,
+                discard_state: remove.flags & PropRemove::DISCARD_STATE != 0,
+            })
+        }
         _ => Err(Status::BAD_ARGS),
     }
+}
+
+pub(crate) extern "system" fn transaction_entities(
+    me: ModHandle,
+    id: u64,
+    out: *mut u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("transaction_entities", || {
+        let owner = match caller_index(me) {
+            Ok((_, owner)) => owner,
+            Err(status) => return status,
+        };
+        let Some(created) = crate::transactions::entities(owner, id) else {
+            return Status::MISSING;
+        };
+        // SAFETY: `HostApi::transaction_entities` has the mod pass `count`
+        // null or a writable `u32`, and `out` null or `capacity` writable
+        // `u32`s, untouched by other threads during the call.
+        unsafe { put_list(&created, out, capacity, count) }
+    })
 }
 
 pub(crate) extern "system" fn transaction_status(
