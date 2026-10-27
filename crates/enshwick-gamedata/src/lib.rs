@@ -6,13 +6,16 @@
 //! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. The
+//! ([`Table::fall_back`]), and what no pattern finds stays missing; the
+//! loader saves that carried table and restores it while the code stays the
+//! same ([`Table::restore`]). The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 
 pub mod archive;
+mod carry;
 pub mod catalogue;
 mod entries;
 #[cfg(test)]
@@ -24,6 +27,7 @@ mod resolve;
 mod table;
 mod version;
 
+pub use carry::CarryKey;
 pub use parts::{Part, PartState};
 
 pub use entries::{Constant, Locate, Operand, Symbol};
@@ -202,6 +206,23 @@ mod tests {
             resolved.head("f.called").is_none(),
             "found through a displacement"
         );
+    }
+
+    /// A symbol's pinned first bytes are a constant: under `[symbols]` the
+    /// row would read as an address and the byte check would never run.
+    #[test]
+    fn pinned_bytes_among_the_symbols_are_refused() {
+        let text = r#"
+            name = "1.0 client (1)"
+            side = "client"
+            guid = "00000000000000000000000000000001"
+            age = 2
+            [symbols]
+            "f.hook" = { rva = 0x1000, pattern = "48 85 D2" }
+            "f.hook.bytes" = 0x5c89_487f_74d2_8548
+            "#;
+        let error = Table::parse(text).unwrap_err();
+        assert!(error.to_string().contains("f.hook.bytes"), "{error}");
     }
 
     #[test]

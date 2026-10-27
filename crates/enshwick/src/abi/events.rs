@@ -58,47 +58,47 @@ impl Event {
     /// the client lacks or runs in another version; no data.
     /// [`HostApi::join_missing`](super::HostApi::join_missing) lists those mods with the versions the
     /// server runs and their pages. Raised on the game thread once the player
-    /// closed the loader's dialog. Client only. Since minor 10.
+    /// closed the loader's dialog. Client only.
     pub const JOIN_REFUSED: Self = Self(11);
     /// The Flame Altars of the server's world changed: one was placed or
     /// removed, moved, raised a level or had its zone built anew; no data.
     /// [`HostApi::altars`](super::HostApi::altars) lists them as they are now. Raised on the game
     /// thread after the step that noticed it, while a mod has opened altars
-    /// ([`HostApi::altars_open`](super::HostApi::altars_open)). Server only. Since minor 15.
+    /// ([`HostApi::altars_open`](super::HostApi::altars_open)). Server only.
     pub const ALTARS_CHANGED: Self = Self(12);
     /// The day began in the server's world: the clock passed the hour day
     /// starts at, or a mod set it into the day; no data. Raised on the game
-    /// thread after the step that noticed it. Server only. Since minor 28.
+    /// thread after the step that noticed it. Server only.
     pub const DAY_STARTED: Self = Self(13);
     /// The night began in the server's world, as [`Event::DAY_STARTED`] the
-    /// day; no data. Server only. Since minor 28.
+    /// day; no data. Server only.
     pub const NIGHT_STARTED: Self = Self(14);
     /// A knowledge value of the server's world or of a connected player
     /// changed: a recipe learnt, a quest step, a place found; data is a
     /// [`KnowledgeData`]. Raised on the game thread after the step that
-    /// applied it. Server only. Since minor 32.
+    /// applied it. Server only.
     pub const KNOWLEDGE_CHANGED: Self = Self(15);
     /// A player completed a quest and got its rewards; data is a
     /// [`QuestData`]. Raised on the game thread after the step. Server
-    /// only. Since minor 32.
+    /// only.
     pub const QUEST_COMPLETED: Self = Self(16);
     /// A chunk of the server's world loaded: players came near, and its
     /// entities exist now; data is a [`ChunkData`]. Raised on the game
-    /// thread after the step. Server only. Since minor 33.
+    /// thread after the step. Server only.
     pub const CHUNK_LOADED: Self = Self(17);
     /// A chunk of the server's world unloaded: no player is near, and its
     /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
-    /// after the step. Server only. Since minor 33.
+    /// after the step. Server only.
     pub const CHUNK_UNLOADED: Self = Self(18);
     /// The settings a mod reads were replaced whole, as a world loads in this
     /// process (its own settings from then on) or stops (the settings file
     /// again); no data. The settings that wait for a start apply too.
-    /// Raised on the server's game thread. Since minor 46.
+    /// Raised on the server's game thread.
     pub const SETTINGS_REPLACED: Self = Self(19);
     /// A player died, from a hit, a fall, the shroud or drowning; data is a
     /// [`PlayerDeathData`]. Raised on the game thread after the step.
     /// Deaths the game keeps no record of, such as freezing or an
-    /// administrator's kill, raise none. Server only. Since minor 60.
+    /// administrator's kill, raise none. Server only.
     pub const PLAYER_DIED: Self = Self(20);
 }
 
@@ -149,7 +149,7 @@ pub struct PlayerDeathData {
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
     /// `HitHistory`, as [`crate::game_events::EntityDiedEvent`] reads it; 0 for other
-    /// causes, or when the history names none. Since minor 62.
+    /// causes, or when the history names none.
     pub killer_entity: u32,
     /// Zero.
     pub reserved_tail: u32,

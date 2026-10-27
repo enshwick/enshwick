@@ -332,8 +332,7 @@ where
 unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
     // SAFETY: `read_headed` needs `summon` null or readable for its header's
     // size with no concurrent writer, which this function's `# Safety`
-    // bullets guarantee; the fields up to the target are there since minor
-    // 16.
+    // bullets guarantee; every loader writes the fields up to the slot.
     let raw = unsafe { crate::abi::read_headed(summon, core::mem::offset_of!(RawSummon, slot)) }?;
     Some(Summon::from_raw(&raw))
 }

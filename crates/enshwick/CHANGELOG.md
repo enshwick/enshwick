@@ -8,16 +8,20 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `code::find_each_unique` finds many patterns in one pass over the code,
+  each with the result `Pattern::find_unique` gives (#598).
 - `World::account_action` asks the game to kick, ban or unban an account
   (`AccountAction`); a ban of an account that is not online goes straight
   onto the server's ban list (`HostApi::account_action`,
-  `AccountActionType`, ABI minor 98). The fake keeps a ban list
+  `AccountActionType`). The fake keeps a ban list
   (`Installed::banned`, `removed`) (#586).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 
 ### Changed
 
+- Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
+  rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3 (#599).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
   `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
   `load.on_game`. `events::Kind` is the one trait `on` takes; the loader
@@ -58,6 +62,10 @@ Each entry names the pull request that made the change.
 
 ### Removed
 
+- Breaking: the retired `HostApi` entries `retired_command`,
+  `altar_zones_control`, `set_altar_zones` and `altar_limit`, with
+  `AltarZoneSize` and `AltarLimitFn`; every later entry moves up. The ABI
+  docs no longer say in which minor of ABI 2 a field came (#599).
 - Breaking: `Load::settings`, which read the settings file into any
   `Deserialize` type past the stages, `sync` and `secret` checks: derive
   `Config` and call `Load::config` (#597).

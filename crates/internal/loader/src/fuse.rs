@@ -6,13 +6,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A feature's switch, read by every detour of the feature.
 #[derive(Debug)]
-pub(crate) struct Fuse {
+pub struct Fuse {
     feature: &'static str,
     off: AtomicBool,
 }
 
 impl Fuse {
-    pub(crate) const fn new(feature: &'static str) -> Self {
+    /// A switch that is on, for the feature the log names `feature`.
+    #[must_use]
+    pub const fn new(feature: &'static str) -> Self {
         Self {
             feature,
             off: AtomicBool::new(false),
@@ -21,14 +23,14 @@ impl Fuse {
 
     /// Whether a panic turned the feature off.
     #[inline]
-    pub(crate) fn is_off(&self) -> bool {
+    pub fn is_off(&self) -> bool {
         self.off.load(Ordering::Relaxed)
     }
 
     /// Runs `work`, the loader's part of `site`: `None` while the feature is
     /// off or when `work` panicked, which turns it off.
     #[inline]
-    pub(crate) fn run<R>(&self, site: &str, work: impl FnOnce() -> R) -> Option<R> {
+    pub fn run<R>(&self, site: &str, work: impl FnOnce() -> R) -> Option<R> {
         if self.is_off() {
             return None;
         }
@@ -41,7 +43,7 @@ impl Fuse {
 
     /// Turns the feature off after a panic at `site`, logged the first time.
     #[cold]
-    pub(crate) fn blow(&self, site: &str) {
+    pub fn blow(&self, site: &str) {
         if !self.off.swap(true, Ordering::Relaxed) {
             crate::log!(
                 ERROR,
