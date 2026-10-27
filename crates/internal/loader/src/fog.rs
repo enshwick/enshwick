@@ -282,7 +282,7 @@ fn copy(layout: &Layout, fog: usize, at: Option<[f32; 2]>, range: f32) {
             let start = (ty as usize * wide + tx as usize) * layout.tile_bytes;
             // SAFETY: `tiles` is the fog's non-null (checked earlier) block
             // of `wide` × `high` tiles of `tile_bytes` each, which `shape`
-            // read from the same object; the plan's tiles lie below those
+            // read from the same object; `plan` clips its tiles to those
             // counts, so `start` plus a tile stays inside the block. Only
             // this thread writes it.
             unsafe { crate::memory::read_bytes(tiles.expose_provenance(), start, tile) };

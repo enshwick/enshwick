@@ -272,7 +272,8 @@ pub enum Plan {
 }
 
 /// The copy a reveal of the fog at `fog` of `shape` makes, when the image
-/// holds `held` and tiles `skipped` were left out by earlier reveals.
+/// holds `held` and tiles `skipped` were left out by earlier reveals; the
+/// tiles always lie inside `shape`.
 ///
 /// # Examples
 ///
@@ -295,10 +296,21 @@ pub fn plan(
     if held != Some((fog, shape)) {
         return Plan::Full;
     }
-    match (revealed, skipped) {
-        (Some(a), Some(b)) => Plan::Tiles(a.union(&b)),
-        (Some(rect), None) | (None, Some(rect)) => Plan::Tiles(rect),
-        (None, None) => Plan::Nothing,
+    let rect = match (revealed, skipped) {
+        (Some(a), Some(b)) => a.union(&b),
+        (Some(rect), None) | (None, Some(rect)) => rect,
+        (None, None) => return Plan::Nothing,
+    };
+    let [wide, high] = shape.tiles();
+    let clip = |axis: Range<u32>, limit: u32| axis.start.min(limit)..axis.end.min(limit);
+    let rect = TileRect {
+        x: clip(rect.x, wide),
+        y: clip(rect.y, high),
+    };
+    if rect.x.is_empty() || rect.y.is_empty() {
+        Plan::Nothing
+    } else {
+        Plan::Tiles(rect)
     }
 }
 
@@ -450,6 +462,14 @@ mod tests {
         assert_eq!(
             plan(held, 1, shape, None, Some(rect(0..1, 5..6))),
             Plan::Tiles(rect(0..1, 5..6))
+        );
+        assert_eq!(
+            plan(held, 1, shape, Some(rect(38..45, 0..1)), None),
+            Plan::Tiles(rect(38..40, 0..1))
+        );
+        assert_eq!(
+            plan(held, 1, shape, Some(rect(41..45, 0..1)), None),
+            Plan::Nothing
         );
     }
 
