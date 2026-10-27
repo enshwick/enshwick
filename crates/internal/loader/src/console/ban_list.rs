@@ -182,7 +182,9 @@ pub(crate) fn holds(loader: &Loader, account: u64) -> Option<bool> {
     // `LIST_ENTRIES` and `LIST_COUNT` (server 399, client 426); only the game
     // thread, this one, changes them.
     let entries: usize = unsafe { crate::memory::read(config, LIST_ENTRIES) };
-    // SAFETY: as for `entries`.
+    // SAFETY: the non-null config holds its list's `u64` count at
+    // `LIST_COUNT` (server 399, client 426), read on the game thread, which
+    // alone changes it.
     let count: u64 = unsafe { crate::memory::read(config, LIST_COUNT) };
     if entries == 0 || count > LIST_MAX {
         return (count == 0).then_some(false);
