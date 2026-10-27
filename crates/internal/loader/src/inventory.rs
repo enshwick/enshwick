@@ -37,6 +37,7 @@ use crate::mid::MidLink;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use crate::world::ServerAccess;
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -359,30 +360,33 @@ fn pick_registry(captured: usize, held: usize) -> (usize, bool) {
 /// The item registry the game's item lookup takes: the one the inventory
 /// system last saw, else the game-systems holder's, which the world sets at
 /// its start, before any player joins (server 399, client 426); 0 while
-/// neither is known.
-fn registry(loader: &Loader) -> usize {
-    pick_registry(REGISTRY.load(Ordering::Acquire), held(loader).unwrap_or(0)).0
+/// neither is known. Both live while `access` is held.
+fn registry(loader: &Loader, access: &ServerAccess<'_>) -> usize {
+    pick_registry(
+        REGISTRY.load(Ordering::Acquire),
+        held(loader, access).unwrap_or(0),
+    )
+    .0
 }
 
-/// The game-systems holder's item registry, once a server runs.
-fn held(loader: &Loader) -> Option<usize> {
-    let server = crate::world::SERVER.load(Ordering::Acquire);
+/// The game-systems holder's item registry of the pinned server.
+fn held(loader: &Loader, access: &ServerAccess<'_>) -> Option<usize> {
     let holder_at = loader.offset(pinned::server::PLAYER_INFOS)?;
     let registry_at = loader.offset(pinned::server::ITEM_REGISTRY)?;
-    if server == 0 {
-        return None;
-    }
-    // SAFETY: `server` is the running server the post-step link captured,
-    // non-zero (checked above); its game-systems holder, set at world
-    // start and kept for the world's life, sits at the table's
-    // `server.player_infos`.
-    let holder: usize = unsafe { crate::memory::read(server, holder_at) };
+    // SAFETY: `access` holds the running server, non-zero. The game frees
+    // it, with its game-systems holder, only in the teardown on its game
+    // thread after set_state(…, 7) (server 399, client 426). At that call
+    // `world::tear_down` stops new pins, waits for every pin to drop and
+    // then forgets the server, so a game-thread access, which ends before
+    // the teardown runs, finds none after it, and one elsewhere is a pin it
+    // waited for. The holder sits at the table's `server.player_infos`.
+    let holder: usize = unsafe { crate::memory::read(access.server(), holder_at) };
     if holder == 0 {
         return None;
     }
-    // SAFETY: `holder` is the non-zero game-systems holder (checked
-    // above), whose item registry sits at the table's
-    // `server.item_registry`.
+    // SAFETY: `holder` is the pinned server's non-zero game-systems holder
+    // (checked above), which `access` keeps alive; its item registry sits at
+    // the table's `server.item_registry`.
     Some(unsafe { crate::memory::read::<usize>(holder, registry_at) })
 }
 
@@ -715,12 +719,16 @@ fn fill(op: &InventoryOp) -> Option<[u8; 16]> {
 }
 
 /// The game's static data of `item`, its `ItemInfo`, which lives as long
-/// as the item registry; `None` for an item the game does not have.
-/// [`Status::MISSING`] while the loader knows no item registry yet, or on a
-/// build without the lookup.
-pub(crate) fn item_info_at(loader: &Loader, item: u32) -> Result<Option<*const u8>, Status> {
+/// as the item registry, so while `access` is held; `None` for an item the
+/// game does not have. [`Status::MISSING`] while the loader knows no item
+/// registry yet, or on a build without the lookup.
+pub(crate) fn item_info_at(
+    loader: &Loader,
+    access: &ServerAccess<'_>,
+    item: u32,
+) -> Result<Option<*const u8>, Status> {
     let executor = executor(loader).ok_or(Status::MISSING)?;
-    let registry = registry(loader);
+    let registry = registry(loader, access);
     if registry == 0 {
         return Err(Status::MISSING);
     }
@@ -730,7 +738,8 @@ pub(crate) fn item_info_at(loader: &Loader, item: u32) -> Result<Option<*const u
     // SAFETY: the game's lookup at the table's `item.info`, a read of the
     // non-zero item registry (checked earlier): the one the inventory system
     // last saw, or the game-systems holder's, which the world keeps from its
-    // start.
+    // start. The game frees both only in the server's teardown, which
+    // waits for `access` to drop; clearing the loader's copy frees nothing.
     let info = unsafe { (executor.item_lookup)(item, registry) };
     Ok((!info.is_null()).then_some(info))
 }
@@ -738,25 +747,27 @@ pub(crate) fn item_info_at(loader: &Loader, item: u32) -> Result<Option<*const u
 /// The static data of `item`, once a world runs.
 pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> {
     let executor = executor(loader).ok_or(Status::MISSING)?;
-    let info = item_info_at(loader, item)?.ok_or(Status::MISSING)?;
+    let access = crate::world::access(&"item lookup").ok_or(Status::MISSING)?;
+    let info = item_info_at(loader, &access, item)?.ok_or(Status::MISSING)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
         id: item,
-        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
-        // (checked earlier), with `maxStackSize` at the reflected offset.
+        // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
+        // earlier), live while `access` is held, with `maxStackSize` at the reflected offset.
         max_stack: unsafe { enshwick::raw::read_at(info, executor.item_max_stack) },
-        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
-        // (checked earlier), with `category` at the reflected offset.
+        // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
+        // earlier), live while `access` is held, with `category` at the reflected offset.
         category: unsafe { enshwick::raw::read_at(info, executor.item_category) },
-        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
-        // (checked earlier), with `rarity` at the reflected offset.
+        // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
+        // earlier), live while `access` is held, with `rarity` at the reflected offset.
         rarity: unsafe { enshwick::raw::read_at(info, executor.item_rarity) },
-        // SAFETY: the lookup returned the item's non-null live `ItemInfo`
-        // (checked earlier), with `flags` at the reflected offset.
+        // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
+        // earlier), live while `access` is held, with `flags` at the reflected offset.
         flags: unsafe { enshwick::raw::read_at(info, executor.item_flags) },
         placed_entity: executor.item_placed_entity.map_or([0; 16], |at| {
-            // SAFETY: the lookup returned the item's non-null live
-            // `ItemInfo` (checked earlier), whose `equipment.placedEntity`
+            // SAFETY: the lookup returned the item's non-null `ItemInfo`
+            // (checked earlier), live while `access` is held, whose
+            // `equipment.placedEntity`
             // at the reflected offset is a 16-byte GUID held inline (server
             // 399, client 426).
             unsafe { enshwick::raw::read_at(info, at) }
@@ -846,7 +857,14 @@ unsafe extern "system" fn row(registers: *mut Registers, _user: *mut c_void) {
     // item registry pointer at the table's `inventory.view_item_registry`.
     let registry = unsafe { read_ptr::<u8>(view, executor.view_item_registry) }.expose_provenance();
     if REGISTRY.swap(registry, Ordering::AcqRel) != registry
-        && pick_registry(registry, crate::host::loader().and_then(held).unwrap_or(0)).1
+        && pick_registry(
+            registry,
+            crate::host::loader()
+                .zip(crate::world::access(&"inventory registry check"))
+                .and_then(|(loader, access)| held(loader, &access))
+                .unwrap_or(0),
+        )
+        .1
     {
         crate::log!(
             WARN,

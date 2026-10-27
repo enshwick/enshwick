@@ -9,6 +9,7 @@ use crate::pinned;
 use crate::transactions::block::{Block, EventLayout, GameBox, MATERIALS, replace_table};
 use crate::transactions::paste::Region;
 use crate::transactions::props::Prop;
+use crate::world::ServerAccess;
 
 /// The game's lookup of a shape's `VoxelBlueprintItem` by its item in a
 /// blueprint registry; null when the item has none (server 399, client
@@ -77,10 +78,11 @@ fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Status> {
 /// [`Status::BAD_ARGS`] for a position or rotation out of range, a shape
 /// without a blueprint or a material item that places no building
 /// material; [`Status::MISSING`] while no world runs or on a build without
-/// the pieces. Any thread: it reads only what the world sets at load (the
-/// item and blueprint registries) and calls the game's pure builder; the
-/// box itself is built again at the step, since a world that ends between
-/// the two frees what it points into.
+/// the pieces. Any thread: under an access to the server, which keeps its
+/// teardown waiting, it reads only what the world sets at load (the item
+/// and blueprint registries) and calls the game's pure builder; the box
+/// itself is built again at the step, since a world that ends between the
+/// two frees what it points into.
 pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, Status> {
     let position_ok = request.position.iter().all(|axis| {
         axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick::abi::Voxel::END)
@@ -89,11 +91,18 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
     if !position_ok || !norm.is_finite() || norm < 1e-6 {
         return Err(Status::BAD_ARGS);
     }
-    let material = building_material(loader, request.material)?;
-    let (game, holder) = game_box(loader, request.shape, request.position, request.rotation)?;
+    let access = crate::world::access(&"block transaction commit").ok_or(Status::MISSING)?;
+    let material = building_material(loader, &access, request.material)?;
+    let (game, holder) = game_box(
+        loader,
+        &access,
+        request.shape,
+        request.position,
+        request.rotation,
+    )?;
     Ok(Block {
         shape: request.shape,
-        feedback: feedback(loader, holder, material),
+        feedback: feedback(loader, &access, holder, material),
         material,
         position: request.position,
         rotation: request.rotation,
@@ -105,7 +114,8 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
 /// [`Status::MISSING`] when it no longer gives the voxels the commit
 /// checked, as after the world changed.
 pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, Status> {
-    let (game, _) = game_box(loader, block.shape, block.position, block.rotation)?;
+    let access = crate::world::access(&"block rebuild").ok_or(Status::MISSING)?;
+    let (game, _) = game_box(loader, &access, block.shape, block.position, block.rotation)?;
     if game.region()? != block.region {
         return Err(Status::MISSING);
     }
@@ -114,9 +124,11 @@ pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, Status>
 
 /// The game's box for the block of `shape` at `position` turned by
 /// `rotation`, and the game-systems holder it was found through; the box
-/// points into the blueprint registry, which lives until the world ends.
+/// points into the blueprint registry, which lives until the world ends,
+/// and the holder lives while `access` is held.
 fn game_box(
     loader: &Loader,
+    access: &ServerAccess<'_>,
     shape: u32,
     position: [f64; 3],
     rotation: [f32; 4],
@@ -129,19 +141,20 @@ fn game_box(
     let registry_at = loader
         .offset(pinned::server::BLUEPRINT_REGISTRY)
         .ok_or(Status::MISSING)?;
-    let server = crate::world::SERVER.load(core::sync::atomic::Ordering::Acquire);
-    if server == 0 {
-        return Err(Status::MISSING);
-    }
-    // SAFETY: `server` is the running server the post-step link captured,
-    // non-zero (checked above); its game-systems holder, set at load and
-    // kept for the world's life, sits at the table's `server.player_infos`.
-    let holder: usize = unsafe { read(server, holder_at) };
+    // SAFETY: `access` holds the running server, non-zero. The game frees
+    // it, with its game-systems holder, only in the teardown on its game
+    // thread after set_state(…, 7) (server 399, client 426). At that call
+    // `world::tear_down` stops new pins, waits for every pin to drop and
+    // then forgets the server, so a game-thread access, which ends before
+    // the teardown runs, finds none after it, and one elsewhere is a pin it
+    // waited for. The holder sits at the table's `server.player_infos`.
+    let holder: usize = unsafe { read(access.server(), holder_at) };
     if holder == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: `holder` is the non-zero game-systems holder (checked above);
-    // its voxel blueprint registry, set at load, sits at the table's
+    // SAFETY: `holder` is the pinned server's non-zero game-systems holder
+    // (checked above), which `access` keeps alive; its voxel blueprint
+    // registry, set at load, sits at the table's
     // `server.blueprint_registry`.
     let registry: usize = unsafe { read(holder, registry_at) };
     if registry == 0 {
@@ -153,7 +166,7 @@ fn game_box(
     let lookup = unsafe { core::mem::transmute::<usize, LookupFn>(lookup) };
     // SAFETY: `lookup` is the game's read-only lookup in the non-zero
     // blueprint registry (checked above), which the world keeps unchanged
-    // after load.
+    // after load and `access` keeps alive.
     let item = unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), shape) };
     if item.is_null() {
         return Err(Status::BAD_ARGS);
@@ -177,15 +190,18 @@ fn game_box(
 
 /// The feedback the game gives `material`, as its place op looks it up;
 /// 0, none, on a build without the lookup or before the registry loads.
-fn feedback(loader: &Loader, holder: usize, material: u8) -> u32 {
+/// `holder` is the game-systems holder of the server `_access` holds, which
+/// keeps it alive for the call.
+fn feedback(loader: &Loader, _access: &ServerAccess<'_>, holder: usize, material: u8) -> u32 {
     let Ok(function) = function(loader, pinned::building::MATERIAL_FEEDBACK) else {
         return 0;
     };
     let Some(registry_at) = loader.offset(pinned::terrain::REGISTRY) else {
         return 0;
     };
-    // SAFETY: `holder` is the non-zero game-systems holder `resolve` read;
-    // its terraforming registry, set at load, sits at the table's
+    // SAFETY: `holder` is the non-zero game-systems holder `resolve` read
+    // through `_access`, which keeps it alive until it drops; its
+    // terraforming registry, set at load, sits at the table's
     // `terrain.registry`.
     let registry: usize = unsafe { read(holder, registry_at) };
     if registry == 0 {
@@ -196,7 +212,8 @@ fn feedback(loader: &Loader, holder: usize, material: u8) -> u32 {
     // image, which stays mapped.
     let lookup = unsafe { core::mem::transmute::<usize, FeedbackFn>(function) };
     // SAFETY: `lookup` reads the non-zero terraforming registry (checked
-    // above), which the world keeps unchanged after load.
+    // above), which the world keeps unchanged after load and `_access` keeps
+    // alive.
     unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), material) }
 }
 
@@ -213,8 +230,8 @@ fn fixed(metres: f64) -> i64 {
 /// The building voxel material `item` places; [`Status::BAD_ARGS`] for an
 /// item the game does not have or that places none, [`Status::MISSING`]
 /// while the loader knows no item registry yet.
-fn building_material(loader: &Loader, item: u32) -> Result<u8, Status> {
-    let info = crate::inventory::item_info_at(loader, item)?.ok_or(Status::BAD_ARGS)?;
+fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<u8, Status> {
+    let info = crate::inventory::item_info_at(loader, access, item)?.ok_or(Status::BAD_ARGS)?;
     let at = |id| {
         catalogue::constant(id, &loader.reflection)
             .and_then(|at| usize::try_from(at).ok())
@@ -222,11 +239,13 @@ fn building_material(loader: &Loader, item: u32) -> Result<u8, Status> {
     };
     let flag_at = at(catalogue::ITEM_BUILDING_VOXEL)?;
     let id_at = at(catalogue::ITEM_PLACE_VOXEL_MATERIAL_ID)?;
-    // SAFETY: `info` is the item's live `ItemInfo` from the game's lookup,
-    // with its `isBuildingVoxel` byte at the reflected path's offset.
+    // SAFETY: `info` is the item's `ItemInfo` from the game's lookup, live
+    // while `access` is held, with its `isBuildingVoxel` byte at the reflected
+    // path's offset.
     let building: u8 = unsafe { enshwick::raw::read_at(info, flag_at) };
-    // SAFETY: `info` is the item's live `ItemInfo` from the game's lookup,
-    // with its `placeVoxelMaterialId` byte at the reflected path's offset.
+    // SAFETY: `info` is the item's `ItemInfo` from the game's lookup, live
+    // while `access` is held, with its `placeVoxelMaterialId` byte at the
+    // reflected path's offset.
     let material: u8 = unsafe { enshwick::raw::read_at(info, id_at) };
     if building == 0 || material < BUILDING_FIRST {
         return Err(Status::BAD_ARGS);

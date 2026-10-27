@@ -8,6 +8,7 @@ use crate::host::Loader;
 use crate::transactions::props::{
     FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_above_start, holds_items, wired,
 };
+use crate::world::ServerAccess;
 
 /// Metres to the game's 32.32 fixed point.
 const FIXED_ONE: f64 = 4_294_967_296.0;
@@ -41,8 +42,8 @@ type ItemProp = ([u8; 16], Option<LocalBox>, bool);
 /// a flame altar, which founds a base (its `requiresAltarSlot`),
 /// [`Status::MISSING`] while the loader knows no item registry or this
 /// build lacks those reads.
-fn item_prop(loader: &Loader, item: u32) -> Result<ItemProp, Status> {
-    let info = crate::inventory::item_info_at(loader, item)?.ok_or(Status::BAD_ARGS)?;
+fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<ItemProp, Status> {
+    let info = crate::inventory::item_info_at(loader, access, item)?.ok_or(Status::BAD_ARGS)?;
     let flags_at = offset(loader, catalogue::ITEM_FLAGS)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its `u32` flags at
     // the reflected offset.
@@ -102,7 +103,7 @@ fn fixed(metres: f64) -> i64 {
 /// and logic flag. [`Status::BAD_ARGS`] for a position or orientation out
 /// of range or an item that places nothing, [`Status::NOT_A_PROP`] for one
 /// that places a creature or a flame altar. Any thread: it reads only the
-/// item registry, which the world sets at its start.
+/// item registry, through a pin on the server off its game thread.
 pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Status> {
     let position_ok = request.position.iter().all(|axis| {
         axis.is_finite() && *axis >= 0.0 && *axis < f64::from(enshwick::abi::Voxel::END)
@@ -111,7 +112,8 @@ pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Stat
     if !position_ok || !norm.is_finite() || norm < 1e-6 || request.reserved != 0 {
         return Err(Status::BAD_ARGS);
     }
-    let (template, local_box, logic) = item_prop(loader, request.item)?;
+    let access = crate::world::access(&"prop transaction commit").ok_or(Status::MISSING)?;
+    let (template, local_box, logic) = item_prop(loader, &access, request.item)?;
     Ok(Prop {
         template,
         item: request.item,
@@ -278,7 +280,8 @@ pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), Status> 
         return Err(Status::NOT_A_PROP);
     }
     let item = crate::world::used_item(loader, Entity(entity)).ok_or(Status::NOT_A_PROP)?;
-    let (placed, local_box, logic) = match item_prop(loader, item) {
+    let access = crate::world::access(&"prop read").ok_or(Status::MISSING)?;
+    let (placed, local_box, logic) = match item_prop(loader, &access, item) {
         Ok(found) => found,
         Err(Status::BAD_ARGS) => return Err(Status::NOT_A_PROP),
         Err(reason) => return Err(reason),
