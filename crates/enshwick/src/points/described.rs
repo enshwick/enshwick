@@ -171,12 +171,14 @@ impl Load<'_> {
     /// the link by `order`. `link` gets the input's bytes, `input_size` of
     /// them, and the answer so far.
     ///
+    /// At the seal the loader leaves the link idle, with the reason in the
+    /// log, when a hash differs, the description reads past the owner's
+    /// input or its answer has another size.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the loader refuses the link, as after `init` or for a
-    /// second link of this mod on the point, and at the seal when the
-    /// description reads past the owner's input or its answer has another
-    /// size.
+    /// second link of this mod on the point.
     ///
     /// # Safety
     ///

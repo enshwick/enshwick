@@ -226,6 +226,7 @@ where it is defined, so naming one here is a problem.
 | `cost` | how many of each ingredient it takes | 1 to 65535 |
 | `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
 | `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+| `station` | the crafting station it is made at, named by the station's item | a vanilla station |
 
 `cost` applies first, then `ingredients`, so a named ingredient wins over the
 cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
@@ -252,10 +253,25 @@ time = { times = 0.5 }
 | `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
 | `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
 
-A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A selection changes `output_count`, `cost`, `time` and `station`, never
+`ingredients`.
 A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
 the pack also names in `recipes` or `output` keeps that change alone, and
 the pack's log says how many recipes each selection reached.
+
+`station` moves a recipe to another crafting station, such as charcoal
+from the kiln to the smelter:
+
+```toml
+[[change]]
+recipes = ["Material_T1_Factory_03_Charcoal"]
+station = "Prop_Production_T2_Smelter"
+```
+
+The player's crafting menu then lists the recipe at the new station alone.
+A move takes effect when the game starts, also in a development reload, and
+needs the game's data at hand to find the station. Two packs that move one
+recipe are a conflict like two sets: the later in load order wins.
 
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check
@@ -302,15 +318,17 @@ items it covers.
 The game cuts every stack above an item's stack size when a world loads and
 deletes the rest. So a world saved with a pack that raised a stack size
 depends on that pack. The first time such a world loads, the pack sets a
-[hold](../state.md#holds): if the world is opened again without the pack, the game
-stops before the world loads and the log says which pack and items:
+[hold](../state.md#holds) on that world: if the world is opened again without
+the pack, the game stops before the world loads and the log says which pack
+and items. Other worlds open without the pack as usual.
 
 ```text
-error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world mygame-1a2b3c4d) and the mod does not run: the game stops before the world loads
 ```
 
 To remove such a pack safely, split every stack larger than the game's size
-first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
+first, then delete `mod-data/<id>/worlds/<key>/hold.txt`, the file the log
+names. When several packs raise one
 item, each of them holds. A pack that only lowers stack sizes sets no hold.
 Beside the holds, the loader keeps every raised size a world was saved
 with and never serves less, so a lower size never cuts a saved stack: see

@@ -13,6 +13,18 @@ Each entry names the pull request that made the change.
   event described at run time, its data as bytes in the definer's layout;
   `manifest!(events: [..])` puts the schema of each listed `#[event]` into
   the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
+- `Hold::for_world` holds the game for one world only
+  (`mod-data/<id>/worlds/<key>/hold.txt`): the loader stops the game as
+  that world starts to load without the mod, before its save is read, and
+  on a build it leaves vanilla at start; `world_holds`, `held_worlds` and
+  `WORLDS_DIR` read them. A data pack that raised a stack size now holds
+  the worlds saved with it, not the whole data folder (#563).
+- `Field::Station` and `Change::station` move a vanilla recipe to another
+  workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
+  the recipe's workshop and lists it in the client's crafting menu at the
+  new station alone, from the next start; a data pack's `recipes.toml`
+  takes `station = "<station item>"`. `menu::move_recipes` and
+  `recipe_workshops` do the same for a mod's own patches (#567).
 - `Items::Backpacks` selects every backpack for a change of `Field::Slots`,
   which now reaches a backpack's own inventory too, for backpacks made
   after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
