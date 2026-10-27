@@ -286,8 +286,8 @@ impl Constant {
     }
 
     /// Whether a build without its own table takes the value over; `false`
-    /// for a value only this build holds, such as a function table slot,
-    /// which such a build neither finds nor misses.
+    /// for a value only this build holds, which such a build neither finds
+    /// nor misses.
     #[must_use]
     pub const fn carried(&self) -> bool {
         self.carried

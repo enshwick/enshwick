@@ -663,6 +663,12 @@ age = 1
             }
             let base = image.base();
             let resolved = table.fall_back(code, code_rva, |rva| image.u32(base + rva));
+            for constant in table.constants().iter().filter(|c| c.cell().is_some()) {
+                let found = resolved.constant(constant.id());
+                if found != Some(constant.value()) {
+                    wrong.push(format!("{}: its cell reads {found:x?}", constant.id()));
+                }
+            }
             assert!(wrong.is_empty(), "{var}:\n{}", wrong.join("\n"));
             let missing: Vec<&String> = resolved
                 .missing()
