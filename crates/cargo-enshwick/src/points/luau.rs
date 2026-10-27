@@ -346,6 +346,93 @@ pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
     Ok(out)
 }
 
+/// Whether a call's input field of the type `ty` may be filled by a
+/// script: its hash comes from the field alone and every value a script can
+/// write is valid. A value type's or an enum's hash would come from the
+/// module's own text, which a script can forge.
+fn is_script_input(ty: &str) -> bool {
+    super::PRIMITIVES.contains(&ty) || super::BUILT_IN.contains(&ty)
+}
+
+/// The Luau definition of the call `name` of `schema`: a module that exports
+/// the types its input and answer reach and the named values, and returns
+/// the description `enshwick.caller` asks for the call with.
+///
+/// # Errors
+///
+/// [`Error`] when the schema lacks the call or a type it names, its input
+/// is no struct of its layout's fields, or an input field is of a type
+/// other than a number, a bool, an entity or a GUID.
+///
+/// # Examples
+///
+/// ```
+/// use cargo_enshwick::points::{Schema, luau_call};
+///
+/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// assert!(luau_call(&schema, "you.stalls:rent").is_err());
+/// # Ok::<(), cargo_enshwick::points::Error>(())
+/// ```
+pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
+    let call = schema
+        .call
+        .iter()
+        .find(|c| c.name == name)
+        .ok_or_else(|| Error::NoCall {
+            owner: schema.owner.clone(),
+            name: name.to_owned(),
+        })?;
+    let name = call.name.as_str();
+    let input = find(schema, name, &call.input)?;
+    if input.kind != Kind::Struct || input.field.len() != call.layout.len() {
+        return Err(Error::BadInput(name.to_owned()));
+    }
+    if let Some(field) = input.field.iter().find(|f| !is_script_input(&f.ty)) {
+        return Err(Error::ScriptInput {
+            call: name.to_owned(),
+            field: field.name.clone(),
+            ty: field.ty.clone(),
+        });
+    }
+    let writer = Writer {
+        schema,
+        point: name,
+    };
+    let mut out = format!(
+        "--!strict\n-- The call `{name}` v{} of {} {}.\n-- Written by `cargo enshwick call {name} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime calls by the layout below.\n",
+        call.major, schema.owner, schema.version, schema.owner
+    );
+    let mut types = reached_from(
+        schema,
+        name,
+        input
+            .field
+            .iter()
+            .map(|f| f.ty.as_str())
+            .chain([call.output.as_str()])
+            .collect(),
+    )?;
+    types.push(input);
+    let values = types_and_values(schema, &types, &mut out);
+    let output_hash: u64 = call
+        .output_layout
+        .parse()
+        .map_err(|_| Error::BadHash(name.to_owned()))?;
+    let fields = writer.fields(input, Some(&call.layout), 1)?;
+    out.push('\n');
+    comment(&mut out, "", &call.doc);
+    let _ = writeln!(
+        out,
+        "return table.freeze({{\n\tname = {name:?},\n\tmajor = {},\n\tinput = {{ size = {}, fields = {{\n\t\t{},\n\t}} }},\n\toutput = {{ size = {}, hash = \"{output_hash}\", read = {} }},\n{values}}})",
+        call.major,
+        call.input_size,
+        fields.join(",\n\t\t"),
+        call.output_size,
+        writer.read(&call.output, 0)?,
+    );
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

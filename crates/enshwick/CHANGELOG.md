@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A Luau mod calls another mod's call with `enshwick.caller(description)`,
+  from the module `cargo enshwick call --luau` writes; the input's fields
+  are numbers, booleans, entities and GUIDs, each checked against its
+  layout hash (#577).
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread
