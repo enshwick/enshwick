@@ -1,0 +1,44 @@
+---
+source: crates/cargo-enshwick/src/types/tests.rs
+expression: "luau::render(&catalogue, &chosen, \"enshrouded_server.exe sample\")"
+---
+-- The game's own types, written by `cargo enshwick types` from the
+-- reflection data of `enshrouded_server.exe sample`. Write it again for another game build.
+
+-- `keen::EquipmentSlotType`
+export type EquipmentSlotType = "Invalid" | "Roof" | "MagicalFog"
+
+-- `keen::HashKey32`
+export type HashKey32 = {
+    value: number,
+}
+
+-- `keen::ItemId`
+export type ItemId = HashKey32
+
+-- `keen::Packed`
+export type Packed = {
+    wide: number,
+}
+
+-- `keen::ai::State`
+export type Ai_State = {}
+
+-- `keen::ecs::GameEvent`
+export type GameEvent = {
+    time: number,
+    flags: number,
+}
+
+-- `keen::ecs::HitEvent`
+export type HitEvent = GameEvent & {
+    damage: number,
+    item: ItemId,
+    slots: {number},
+    isCritical: boolean,
+    type: EquipmentSlotType,
+    lost: unknown,
+}
+
+-- `keen::fish::State`
+export type Fish_State = {}

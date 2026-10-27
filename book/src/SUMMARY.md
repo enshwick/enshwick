@@ -46,6 +46,7 @@
 # Reaching into the game
 
 - [Finding the game](finding-the-game.md)
+- [The game's own types](game-types.md)
 - [Hooks](hooks.md)
 - [Mid-function hooks](mid-function-hooks.md)
 - [Code patches](code-patches.md)

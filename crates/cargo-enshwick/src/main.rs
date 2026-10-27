@@ -15,6 +15,7 @@ mod new;
 mod pack;
 mod pin;
 mod point;
+mod types;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -89,6 +90,24 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Writes Rust and Luau definitions of the game's own types, read from
+    /// the reflection data of a game executable: for structs the API does
+    /// not wrap. Prints the Rust module when no file is named.
+    Types {
+        /// The types, by full name such as `keen::ecs::Health`, or a
+        /// namespace ending in `::`; every runtime type when none is named.
+        /// The types they need come with them.
+        names: Vec<String>,
+        /// The game executable, or the game folder holding it.
+        #[arg(long)]
+        from: PathBuf,
+        /// The Rust module to write, such as `src/game.rs`.
+        #[arg(long)]
+        rust: Option<PathBuf>,
+        /// The Luau definitions to write, such as `game.d.luau`.
+        #[arg(long)]
+        luau: Option<PathBuf>,
+    },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
         /// The content ids.
@@ -148,6 +167,12 @@ fn main() -> ExitCode {
         Command::Id { names } => ids(&names),
         Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
         Command::Pack(command) => pack::run(&command),
+        Command::Types {
+            names,
+            from,
+            rust,
+            luau,
+        } => types::run(&from, &names, rust.as_deref(), luau.as_deref()),
     };
     match outcome {
         Ok(done) => {

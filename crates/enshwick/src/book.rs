@@ -46,6 +46,7 @@ chapters! {
     State => "state.md",
     Services => "services.md",
     FindingTheGame => "finding-the-game.md",
+    GameTypes => "game-types.md",
     Hooks => "hooks.md",
     MidFunctionHooks => "mid-function-hooks.md",
     CodePatches => "code-patches.md",
