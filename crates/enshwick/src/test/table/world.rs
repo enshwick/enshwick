@@ -813,3 +813,40 @@ pub(crate) extern "system" fn account_action(
         Status::OK
     })
 }
+
+pub(crate) extern "system" fn allowlist_set(_me: ModHandle, account: u64, listed: u8) -> Status {
+    if account == 0 || listed > 1 {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if s.host.side != Side::SERVER {
+            return Status::MISSING;
+        }
+        let at = s.allowlisted.iter().position(|&k| k == account);
+        match (listed == 1, at) {
+            (true, None) => s.allowlisted.push(account),
+            (false, Some(at)) => {
+                s.allowlisted.remove(at);
+            }
+            _ => {}
+        }
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn allowlist_has(
+    _me: ModHandle,
+    account: u64,
+    listed: *mut u8,
+) -> Status {
+    if account == 0 || listed.is_null() {
+        return Status::BAD_ARGS;
+    }
+    let has = with(None, |s| {
+        (s.host.side == Side::SERVER).then(|| s.allowlisted.contains(&account))
+    });
+    match has {
+        Some(has) => put(listed, u8::from(has)),
+        None => Status::MISSING,
+    }
+}
