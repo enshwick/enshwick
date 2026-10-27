@@ -74,6 +74,7 @@ end)
 | `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
+| `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
 | `enshwick.scheduler` | `next_tick`, `after` and `every` run a function on the game thread; an `every` task stops when it returns `false` |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
@@ -104,6 +105,32 @@ reaches Luau and the definitions with no other change.
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
+
+## Inventories
+
+`enshwick.inventory` reads and changes inventories on the server, as
+[`Inventories`](inventories.md) does in Rust. `slots` and `count` read at
+once; `give`, `take`, `destroy_slot`, `move_slot` and `move_all` run in the
+game's next inventory step and hand the outcome to a function:
+
+```luau
+local GIFT = 3073 -- an item id from the game's data
+
+enshwick.on("PlayerJoined", function(player)
+    local held = enshwick.inventory.count(player.entity, GIFT)
+    enshwick.inventory.give(player.entity, GIFT, 10, function(outcome)
+        if outcome.done ~= "Committed" then
+            enshwick.log.warn(`no gift for {player.entity}: {outcome.done}`)
+        end
+    end)
+    enshwick.log.info(`{player.entity} held {held} before the gift`)
+end)
+```
+
+`outcome.done` is `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or
+`Refused`, and each entry of `outcome.ops` has the operation's `error` by
+name and the count it fell short by. A slot is a `string` key, as `slots`
+returns it in `at`.
 
 ## Game events
 

@@ -5,6 +5,7 @@ use crate::abi::{InventoryOpResult, InventoryResult};
 use crate::engine_enum::Values;
 use crate::engine_ids as ids;
 use crate::locks::Relock;
+use crate::script::{Choice, Error as ScriptError, FromScript, IntoScript, Ty, Typed, Value};
 
 use super::ops::BatchError;
 
@@ -72,7 +73,7 @@ pub(super) type OpErrors = Values<OpError, 2>;
 /// # Examples
 ///
 /// See [`Outcome`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct OpResult {
     /// Why it failed; `None` when it ran without an error.
     pub error: Option<OpError>,
@@ -126,7 +127,7 @@ impl OpResult {
 ///     }
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, crate::Script)]
 pub struct Outcome {
     /// How it ended.
     pub done: Done,
@@ -272,4 +273,129 @@ pub(super) unsafe extern "system" fn deliver(result: *const InventoryResult, use
             pending.complete(&outcome);
         },
     );
+}
+
+/// A script reads how a batch ended as the variant's name; `Refused` drops
+/// its reason.
+impl Typed for Done {
+    const TY: &'static Ty = &Ty::Choice(&Choice::new(
+        "Done",
+        "How a request ended.",
+        &[
+            (
+                "Committed",
+                "Every operation succeeded and the transaction was committed.",
+            ),
+            (
+                "RolledBack",
+                "An operation failed or fell short; nothing changed.",
+            ),
+            (
+                "Unavailable",
+                "This game build lacks a piece, or the loader's hook is not in place; nothing changed.",
+            ),
+            (
+                "TimedOut",
+                "The game did not run its inventory system in time; nothing changed.",
+            ),
+            (
+                "Refused",
+                "The batch was refused before it reached the game.",
+            ),
+        ],
+    ));
+}
+
+impl IntoScript for Done {
+    fn into_value(self) -> Value {
+        Value::String(
+            match self {
+                Self::Committed => "Committed",
+                Self::RolledBack => "RolledBack",
+                Self::Unavailable => "Unavailable",
+                Self::TimedOut => "TimedOut",
+                Self::Refused(_) => "Refused",
+            }
+            .to_owned(),
+        )
+    }
+}
+
+impl FromScript for Done {
+    fn from_value(value: Value) -> Result<Self, ScriptError> {
+        let name = String::from_value(value)?;
+        Ok(match name.as_str() {
+            "Committed" => Self::Committed,
+            "RolledBack" => Self::RolledBack,
+            "Unavailable" => Self::Unavailable,
+            "TimedOut" => Self::TimedOut,
+            _ => {
+                return Err(ScriptError::new(format!(
+                    "{name:?} is not one of \"Committed\", \"RolledBack\", \"Unavailable\", \"TimedOut\""
+                )));
+            }
+        })
+    }
+}
+
+/// A script reads an op's error as the variant's name; `Other` drops the
+/// game's code.
+impl Typed for OpError {
+    const TY: &'static Ty = &Ty::Choice(&Choice::new(
+        "OpError",
+        "Why an operation failed.",
+        &[
+            (
+                "NotRun",
+                "An operation before it failed, so it did not run.",
+            ),
+            ("InvalidState", "The item did not fit or does not exist."),
+            (
+                "OutOfMemory",
+                "The op log is full or more than 16 inventories are touched.",
+            ),
+            ("Other", "A code the API does not name."),
+        ],
+    ));
+}
+
+impl IntoScript for OpError {
+    fn into_value(self) -> Value {
+        Value::String(
+            match self {
+                Self::NotRun => "NotRun",
+                Self::InvalidState => "InvalidState",
+                Self::OutOfMemory => "OutOfMemory",
+                Self::Other(_) => "Other",
+            }
+            .to_owned(),
+        )
+    }
+}
+
+impl FromScript for OpError {
+    fn from_value(value: Value) -> Result<Self, ScriptError> {
+        let name = String::from_value(value)?;
+        Ok(match name.as_str() {
+            "NotRun" => Self::NotRun,
+            "InvalidState" => Self::InvalidState,
+            "OutOfMemory" => Self::OutOfMemory,
+            _ => {
+                return Err(ScriptError::new(format!(
+                    "{name:?} is not one of \"NotRun\", \"InvalidState\", \"OutOfMemory\""
+                )));
+            }
+        })
+    }
+}
+
+/// A script waits for the done callback; the ticket reaches it as nothing.
+impl Typed for Ticket {
+    const TY: &'static Ty = &Ty::Nil;
+}
+
+impl IntoScript for Ticket {
+    fn into_value(self) -> Value {
+        Value::Nil
+    }
 }

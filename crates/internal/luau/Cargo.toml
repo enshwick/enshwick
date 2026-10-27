@@ -29,4 +29,7 @@ workspace = true
 name = "calls"
 
 [[test]]
+name = "inventory"
+
+[[test]]
 name = "scripts"

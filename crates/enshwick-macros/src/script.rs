@@ -238,10 +238,30 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
     let ty = &*typed.ty;
     if let Some((inputs, output)) = closure_bound(ty) {
         let names: Vec<Ident> = (0..inputs.len()).map(|n| format_ident!("p{n}")).collect();
+        // A closure that lends its argument, `&T`, hands the script a copy.
+        let owned: Vec<Type> = inputs
+            .iter()
+            .map(|input| match input {
+                Type::Reference(r) => (*r.elem).clone(),
+                other => other.clone(),
+            })
+            .collect();
+        let values: Vec<TokenStream> = inputs
+            .iter()
+            .zip(&names)
+            .map(|(input, name)| {
+                let owned = if matches!(input, Type::Reference(_)) {
+                    quote!(::core::clone::Clone::clone(#name))
+                } else {
+                    quote!(#name)
+                };
+                quote!(#script::IntoScript::into_value(#owned))
+            })
+            .collect();
         return Ok(Parameter {
             describe: quote! {
                 #script::Param::new(#param, &#script::Ty::Function(&#script::Signature::new(
-                    &[#(#script::Param::new("", <#inputs as #script::Typed>::TY)),*],
+                    &[#(#script::Param::new("", <#owned as #script::Typed>::TY)),*],
                     <#output as #script::Answer>::TY,
                 )))
             },
@@ -250,7 +270,7 @@ fn parameter(index: usize, typed: &PatType) -> syn::Result<Parameter> {
                     let callback: #script::Callback = ::enshwick::__private::argument(&mut args, #param)?;
                     move |#(#names: #inputs),*| -> #output {
                         <#output as #script::Answer>::from_answer(
-                            callback.call(::std::vec![#(#script::IntoScript::into_value(#names)),*]),
+                            callback.call(::std::vec![#(#values),*]),
                         )
                     }
                 };

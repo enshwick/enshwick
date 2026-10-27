@@ -78,6 +78,9 @@ Both return a
 | `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`; `None` for an item without durability. |
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
+`Inventories::slots` and `Inventories::count` read the same as `read()` does,
+without the `Reader`; a [Luau mod](luau.md#inventories) reads through them.
+
 A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
 storage, ...), `item` (the item id, 0 for none), `count` and `pide`
