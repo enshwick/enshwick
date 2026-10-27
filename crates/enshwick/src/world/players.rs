@@ -1,5 +1,5 @@
+use crate::Entity;
 use crate::abi::Str;
-use crate::ecs::Entity;
 
 use super::{Notice, Player, World, blank_info, online};
 
@@ -70,9 +70,9 @@ impl World {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     load.on::<BuildingPlaced>(move |placed| {
-    ///         if let Some(player) = world.player(enshwick::ecs::Entity(placed.player)) {
+    ///         if let Some(player) = world.player(enshwick::Entity(placed.player)) {
     ///             let label = format!("Built by {}", player.name);
-    ///             let _labelled = world.set_label(enshwick::ecs::Entity(placed.entity), &label);
+    ///             let _labelled = world.set_label(enshwick::Entity(placed.entity), &label);
     ///         }
     ///     })
     /// }

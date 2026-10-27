@@ -6,9 +6,9 @@ mod tests {
     use std::sync::OnceLock;
     use std::time::Duration;
 
+    use enshwick::Entity;
     use enshwick::abi::{BuffTypeInfo, Header, Status};
     use enshwick::buffs::{Apply, BuffSlotType, BuffTypeId, Buffs};
-    use enshwick::ecs::Entity;
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 

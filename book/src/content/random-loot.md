@@ -86,7 +86,7 @@ collection GUID. `Source::matches` tells whether a
 comes from a source, which a unit test can check without the game:
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::loot::{Kinds, Roll, Source};
 
 let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };

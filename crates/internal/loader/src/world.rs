@@ -15,8 +15,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
+use enshwick::Entity;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::chains::Next;
 use crate::host::Loader;

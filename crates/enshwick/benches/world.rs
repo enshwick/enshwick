@@ -4,8 +4,8 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use enshwick::Entity;
 use enshwick::abi::Status;
-use enshwick::ecs::Entity;
 use enshwick::state::ModLocal;
 use enshwick::test::FakeHost;
 use enshwick::world::World;

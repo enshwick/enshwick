@@ -6,9 +6,9 @@
 mod tests {
     use std::sync::{Mutex, OnceLock};
 
+    use enshwick::Entity;
     use enshwick::abi::{BuffTypeInfo, Header, Status};
     use enshwick::buffs::{Apply, BuffTypeId, Buffs};
-    use enshwick::ecs::Entity;
     use enshwick::item_data::ItemInstance;
     use enshwick::stats::{
         ItemStats, Lasting, Modifier, Op, Origin, Stat, StatChange, StatDef, Stats, builtin,

@@ -1,7 +1,7 @@
 //! Props in the game: resolving a placement, reading what a prop holds, spawning, finding and removing it.
 
+use enshwick::Entity;
 use enshwick::abi::{Header, PropPlace, SpawnRequest, Status};
-use enshwick::ecs::Entity;
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;

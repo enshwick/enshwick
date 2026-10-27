@@ -1,8 +1,8 @@
 use std::cell::Cell;
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{BedCheck, Header};
-use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, read_ptr_at};
 
 use crate::locks::Relock;

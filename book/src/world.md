@@ -8,7 +8,7 @@ queries, build rights, labels, chat lines, destroy requests and saves. It is
 `Copy`; get it during `init` and move it into handlers and tasks.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::PlayerJoined;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -53,7 +53,7 @@ type is not reflected on the running build. Its `hash()` is the hash
 takes inside systems.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::BuildingPlaced;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -81,7 +81,7 @@ use enshwick::events::PlayerJoined;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     load.on::<PlayerJoined>(move |joined| {
-        let entity = enshwick::ecs::Entity(joined.entity);
+        let entity = enshwick::Entity(joined.entity);
         if let (Some(vitals), Some(progress)) = (world.vitals(entity), world.progress(entity)) {
             enshwick::info!("level {} with {} health", progress.level, vitals.health.current);
         }
@@ -290,7 +290,7 @@ on a game build without the checks, the answer is `Unchecked`, and the edit
 is refused.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::world::BuildRefusal;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -324,7 +324,7 @@ when the entity is gone.
 name, or `None` when the world cannot tell.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::events::BuildingPlaced;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

@@ -4,10 +4,10 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::Entity;
     use enshwick::abi::{AltarInfo, Bounds, Header, MapMarkerInfo, PlayerInfo, Status};
     use enshwick::altars::Altars;
     use enshwick::content::Guid;
-    use enshwick::ecs::Entity;
     use enshwick::map::{
         Map, MapAltar, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
     };

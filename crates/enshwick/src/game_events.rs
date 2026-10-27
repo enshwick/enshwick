@@ -18,8 +18,8 @@ mod values;
 
 use core::marker::PhantomData;
 
+use crate::Entity;
 use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 pub use kinds::{
@@ -148,7 +148,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
@@ -175,7 +175,7 @@ impl EventType {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let hit = load.game_event_type("keen::ecs::HitEvent")?;

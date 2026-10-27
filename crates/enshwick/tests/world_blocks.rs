@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status, TerrainMaterialInfo, TransactionInfo};
-    use enshwick::ecs::Entity;
     use enshwick::test::FakeChange;
     use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     use enshwick::world::{

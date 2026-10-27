@@ -21,8 +21,8 @@ mod vitals;
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
-use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
@@ -92,7 +92,7 @@ impl WritableType {
     /// # Examples
     ///
     /// ```
-    /// fn readable(world: &enshwick::world::World, flags: enshwick::world::WritableType, entity: enshwick::ecs::Entity) -> bool {
+    /// fn readable(world: &enshwick::world::World, flags: enshwick::world::WritableType, entity: enshwick::Entity) -> bool {
     ///     world.component(entity, flags.ty()).is_some()
     /// }
     /// ```
@@ -194,7 +194,7 @@ impl Player {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::world::Player;
     ///
     /// let player = Player { entity: Entity(2), slot: 0, key: 7, permissions: 0, name: "Émile".into() };
@@ -244,7 +244,7 @@ impl Placed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::world::Placed;
     ///
     /// let chest = Placed { entity: Entity(7), position: [3.0, 0.0, 4.0] };
@@ -376,7 +376,7 @@ fn blank_info() -> PlayerInfo {
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let world = load.world()?;
 ///     load.on::<PlayerJoined>(move |joined| {
-///         let entity = enshwick::ecs::Entity(joined.entity);
+///         let entity = enshwick::Entity(joined.entity);
 ///         if let Some(player) = world.player(entity) {
 ///             enshwick::info!("{} joined, admin: {}", player.name, player.is_admin());
 ///         }
@@ -636,7 +636,7 @@ impl World {
     ///         let [Value::Number(id)] = request.args else {
     ///             return Outcome::refused("Name an entity");
     ///         };
-    ///         let entity = enshwick::ecs::Entity(*id as u32);
+    ///         let entity = enshwick::Entity(*id as u32);
     ///         let before = world.get(entity, value);
     ///         match world.set(entity, value, 11) {
     ///             Ok(()) => Outcome::done(format!("Faction {before:?} -> 11")),
@@ -719,7 +719,7 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn unnamed(world: &enshwick::world::World, chest: Entity) -> bool {
     ///     world.has_label(chest) == Some(false)

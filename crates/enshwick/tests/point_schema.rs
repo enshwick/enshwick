@@ -1,6 +1,6 @@
 //! A point's schema: what `cargo enshwick point` reads from its owner.
 
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 /// What a player does at a stall.
 #[repr(transparent)]

@@ -15,7 +15,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let knowledge = load.knowledge();
     let world = load.world()?;
     load.on::<QuestCompleted>(move |done| {
-        let entity = enshwick::ecs::Entity(done.entity);
+        let entity = enshwick::Entity(done.entity);
         let total = knowledge.quests().into_iter().filter(|&q| knowledge.completed(entity, q)).count();
         if let Some(player) = world.player(entity) {
             world.broadcast(&format!("{} completed a quest ({total} so far)", player.name));

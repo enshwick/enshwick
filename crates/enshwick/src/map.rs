@@ -37,11 +37,11 @@ pub use snapshot::{
     MAP_SNAPSHOT_FORMAT, MapAltar, MapPlayer, MapPoint, MapSnapshot, SnapshotError,
 };
 
+use crate::Entity;
 use crate::Host;
 use crate::abi::{MapMarkerInfo, Status};
 use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
-use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::world::{ComponentType, World, WorldError};
 use crate::{Load, Off};

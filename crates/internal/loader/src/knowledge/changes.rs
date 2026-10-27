@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;

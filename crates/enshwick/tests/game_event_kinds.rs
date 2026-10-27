@@ -6,8 +6,8 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::events::Kind;
     use enshwick::game_events::{
         AcceptOfferedInteractionEvent, AttackCategoryMask, BuildingPickUpEvent, BuildingPlaceEvent,

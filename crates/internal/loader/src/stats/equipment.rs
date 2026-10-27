@@ -4,7 +4,7 @@
 
 use std::sync::OnceLock;
 
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::raw::read_at;
 
 use crate::host::Loader;

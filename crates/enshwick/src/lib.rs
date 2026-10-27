@@ -97,7 +97,6 @@ pub mod i18n;
 pub mod interactions;
 pub mod inventory;
 pub mod item_data;
-mod item_id;
 pub mod knowledge;
 mod load;
 mod locks;
@@ -132,6 +131,7 @@ pub mod voxels;
 pub mod weather;
 pub mod world;
 
+pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],
 /// [`script::IntoScript`] and, when every field is shown,
@@ -344,7 +344,6 @@ pub use enshwick_macros::script;
 pub use enshwick_macros::service;
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
-pub use item_id::ItemId;
 pub use load::{Load, Mod, Off};
 pub use shape::Shape;
 

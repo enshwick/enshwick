@@ -815,6 +815,13 @@ typedef struct EnshwickDependency {
   EnshwickRelation relation;
 } EnshwickDependency;
 
+// An entity id, as the engine numbers entities: a character, a prop, an item
+// with its own entity, anything the world holds.
+//
+// The engine's id 0 stands for no entity; the safe API hands it over as
+// `None` in an `Option<Entity>`, never as an `Entity`.
+typedef uint32_t EnshwickEntity;
+
 // Flags of `HostApi::entity_data_open`.
 typedef uint32_t EnshwickEntityDataFlags;
 // The server keeps the values to itself.
@@ -3926,6 +3933,10 @@ typedef struct EnshwickHostApi {
                                 uint32_t *count);
 } EnshwickHostApi;
 
+// An item of the game by the number its item data gives it, as a prop's
+// `UsedItem` names the item the prop was placed from.
+typedef uint32_t EnshwickItemId;
+
 // The data of `Event::KNOWLEDGE_CHANGED`.
 typedef struct EnshwickKnowledgeData {
   // Size and version of this struct.
@@ -4031,6 +4042,10 @@ typedef struct EnshwickPlayerDeathData {
 // Out of breath, under water.
 #define EnshwickPlayerDeathData_SUFFOCATED 3
 
+// A player's account by the number the game keeps for it, the same in every
+// session, to remember a player across reconnects and restarts.
+typedef uint64_t EnshwickPlayerKey;
+
 // A prop a transaction places, as a player places one from an item, for
 // `TransactionOp::PLACE_PROP`.
 typedef struct EnshwickPropPlace {
@@ -4068,6 +4083,10 @@ typedef struct EnshwickQuestData {
   // The quest's id, a player knowledge id.
   uint32_t quest;
 } EnshwickQuestData;
+
+// A crafting recipe of the game by its recipe id, to grant, refuse or watch
+// the crafting of one recipe.
+typedef uint32_t EnshwickRecipeId;
 
 // The data of `Event::TICKED`.
 typedef struct EnshwickTickData {

@@ -1,5 +1,5 @@
+use crate::Entity;
 use crate::abi::ItemData;
-use crate::ecs::Entity;
 
 /// A slot: a sub-inventory entity and a slot index in it, as the game packs
 /// it, `entity | index << 32`.
@@ -7,7 +7,7 @@ use crate::ecs::Entity;
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::SlotRef;
 ///
 /// let slot = SlotRef::new(Entity(0x41), 3);
@@ -83,7 +83,7 @@ impl InventoryCategory {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 ///
 /// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: 0, count: 0, pide: None };

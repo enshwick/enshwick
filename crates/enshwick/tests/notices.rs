@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, PlayerInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::net::Peer;
     use enshwick::world::{Notice, World};
     use enshwick::{Load, Mod, Off};

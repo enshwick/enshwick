@@ -22,8 +22,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::Interaction as RawInteraction;
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 /// What a player does with the target.

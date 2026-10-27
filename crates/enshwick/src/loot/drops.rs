@@ -11,7 +11,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::ecs::{Components, Entity};
+use crate::Entity;
+use crate::ecs::Components;
 use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
@@ -99,7 +100,7 @@ pub struct Roll {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::loot::{Source, Kinds, Roll};
 ///
 /// let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };

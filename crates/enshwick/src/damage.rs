@@ -31,8 +31,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::DamageCheck;
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 /// A damage type, as the game sorts a hit's damage.

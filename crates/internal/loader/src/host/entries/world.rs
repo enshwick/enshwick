@@ -1,8 +1,8 @@
 //! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
+use enshwick::Entity;
 use enshwick::abi as api_frame;
 use enshwick::abi::{Level, ModHandle, Side, Status, Str};
-use enshwick::ecs::Entity;
 
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};

@@ -5,8 +5,8 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::{Load, Mod, Off};
 
     const DIED: u32 = 0x0042;

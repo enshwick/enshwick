@@ -5,8 +5,8 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use enshwick::Entity;
 use enshwick::actions::{Action, Arg, Outcome, Value};
-use enshwick::ecs::Entity;
 use enshwick::i18n::Texts;
 use enshwick::points::OwnedPoint;
 use enshwick::services::Emitter;
@@ -132,8 +132,8 @@ enshwick::declare_mod!(TradingPost);
 
 #[cfg(test)]
 mod tests {
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::points::Verdict;
 
     use super::{Deal, Price};

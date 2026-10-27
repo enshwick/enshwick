@@ -2,8 +2,8 @@
 
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, PlayerInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;

@@ -13,8 +13,8 @@
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::Status;
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::locks::Relock;

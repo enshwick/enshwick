@@ -1,6 +1,6 @@
 //! A call's schema: what `cargo enshwick call` reads from its server.
 
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 /// What a player does at a stall.
 #[repr(transparent)]

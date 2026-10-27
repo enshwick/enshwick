@@ -55,8 +55,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
-use crate::ecs::Entity;
 use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
@@ -99,7 +99,7 @@ pub enum Scope {
 /// ```
 /// use enshwick::knowledge::KnowledgeType;
 ///
-/// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity, recipe: u32) -> bool {
+/// fn crafted(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: u32) -> bool {
 ///     knowledge
 ///         .get(player, recipe)
 ///         .is_some_and(|known| known.r#type == KnowledgeType::Flags && known.has_flag(1))
@@ -329,7 +329,7 @@ impl Knowledge {
     /// ```
     /// use enshwick::knowledge::Revoke;
     ///
-    /// fn unlearn(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity, recipe: u32) {
+    /// fn unlearn(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity, recipe: u32) {
     ///     let _taken = knowledge.revoke(player, recipe, Revoke::Unflag(1));
     /// }
     /// ```
@@ -439,7 +439,7 @@ impl Knowledge {
     /// # Examples
     ///
     /// ```
-    /// fn done(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::ecs::Entity) -> usize {
+    /// fn done(knowledge: &enshwick::knowledge::Knowledge, player: enshwick::Entity) -> usize {
     ///     knowledge.quests().into_iter().filter(|&quest| knowledge.completed(player, quest)).count()
     /// }
     /// ```

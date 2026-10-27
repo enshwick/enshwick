@@ -446,7 +446,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::item_data::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
@@ -611,7 +611,7 @@ impl Installed {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::progress::Experience;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();

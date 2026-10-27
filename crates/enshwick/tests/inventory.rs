@@ -8,10 +8,10 @@ mod tests {
     use std::sync::atomic::AtomicU32;
     use std::sync::{Mutex, OnceLock};
 
+    use enshwick::Entity;
     use enshwick::abi::{
         InventoryOp, InventoryOpResult, InventoryResult, ItemData, Status, TickData,
     };
-    use enshwick::ecs::Entity;
     use enshwick::events::Ticked;
     use enshwick::inventory::{
         Bar, Batch, BatchError, Done, Fill, Inventories, InventoryCategory, Op, Outcome, SlotRef,

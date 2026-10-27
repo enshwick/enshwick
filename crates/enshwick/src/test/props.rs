@@ -1,9 +1,9 @@
 //! The fake's props: what stands in its world, the state each holds, and how transactions change them.
 
 use super::{FakeHost, FakeTransaction, Installed, table};
+use crate::Entity;
 use crate::ItemId;
 use crate::abi::{PropRemove, Status, TransactionInfo};
-use crate::ecs::Entity;
 use crate::test::FakeChange;
 use crate::world::HeldState;
 
@@ -39,7 +39,7 @@ impl FakeHost {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0, 40.0, 50.0]).install();
     /// assert_eq!(loader.props().len(), 1);
@@ -66,7 +66,7 @@ impl FakeHost {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// let _loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// ```
@@ -152,7 +152,7 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// let loader = enshwick::test::FakeHost::new().item_triggers(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// loader.change_trigger_settings(Entity(40));
@@ -167,7 +167,7 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// let loader = enshwick::test::FakeHost::new().item_grows(30).prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// loader.grow_plant(Entity(40));
@@ -184,7 +184,7 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::ItemId;
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::world::HeldState;
     ///
     /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0; 3]).install();

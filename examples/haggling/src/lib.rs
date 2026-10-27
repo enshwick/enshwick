@@ -111,8 +111,8 @@ enshwick::declare_mod!(Haggling);
 
 #[cfg(test)]
 mod tests {
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::points::Decision;
 
     use super::price::{Deal, Price};

@@ -1,4 +1,4 @@
-use crate::ecs::Entity;
+use crate::Entity;
 
 use super::{Meter, Progress, Skill, Vitals, World, WorldError, stats};
 
@@ -14,7 +14,7 @@ impl World {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     load.on::<PlayerJoined>(move |joined| {
-    ///         if let Some(vitals) = world.vitals(enshwick::ecs::Entity(joined.entity)) {
+    ///         if let Some(vitals) = world.vitals(enshwick::Entity(joined.entity)) {
     ///             enshwick::info!("joined with {} of {} health", vitals.health.current, vitals.health.max);
     ///         }
     ///     })
@@ -151,7 +151,7 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// fn spend(world: &enshwick::world::World, pide: enshwick::ecs::Entity) -> bool {
+    /// fn spend(world: &enshwick::world::World, pide: enshwick::Entity) -> bool {
     ///     world.change_item_meter(pide, |charges| charges - 1).is_ok()
     /// }
     /// ```

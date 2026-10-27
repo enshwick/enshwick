@@ -1,10 +1,10 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
+use crate::Entity;
 use crate::abi::{
     BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
     VoxelRegion, VoxelWrite,
 };
-use crate::ecs::Entity;
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
 use crate::{Host, ItemId};
@@ -401,7 +401,7 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn tidy(world: enshwick::world::World, crate_entity: Entity) -> bool {
     ///     world.transaction().remove_prop(crate_entity).commit().is_ok()
@@ -428,7 +428,7 @@ impl Transaction {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn clear_ruin(world: enshwick::world::World, ruined: Entity) -> bool {
     ///     world.transaction().remove_prop_discarding_state(ruined).commit().is_ok()

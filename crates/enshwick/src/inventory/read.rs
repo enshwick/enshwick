@@ -1,7 +1,8 @@
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{Header, InventoryOp, InventoryRequest, ItemData};
-use crate::ecs::{Components, Entity};
+use crate::ecs::Components;
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
@@ -39,7 +40,7 @@ pub(super) struct Layout {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let inventories = load.inventories()?;
@@ -146,7 +147,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::ecs::Entity) -> u32 {
+    /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::Entity) -> u32 {
     ///     // SAFETY: called from a system's hook with its live context, used at once.
     ///     unsafe { inventories.read_in(ctx) }.count(player, 0x0c01)
     /// }
@@ -194,7 +195,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Inventories, Op};
     ///
     /// fn trade(inventories: &Inventories, player: Entity) {
@@ -248,7 +249,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) -> Option<u32> {
+    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Option<u32> {
     ///     inventories.slots(player).into_iter().find(|s| !s.is_empty()).map(|s| s.item)
     /// }
     /// ```
@@ -264,7 +265,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) -> u32 {
+    /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> u32 {
     ///     inventories.count(player, 0x0c01)
     /// }
     /// ```
@@ -286,7 +287,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) {
+    /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
     ///     inventories.give(player, 0x0c01, 10, |outcome| {
     ///         if !outcome.is_committed() {
     ///             enshwick::warn!("no room for the reward");
@@ -318,7 +319,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn charge(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) {
+    /// fn charge(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
     ///     inventories.take(player, 0x0c01, 5, |outcome| enshwick::info!("paid: {}", outcome.is_committed()));
     /// }
     /// ```
@@ -357,7 +358,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn hand_over(inventories: &enshwick::inventory::Inventories, slot: enshwick::inventory::SlotRef, player: enshwick::ecs::Entity) {
+    /// fn hand_over(inventories: &enshwick::inventory::Inventories, slot: enshwick::inventory::SlotRef, player: enshwick::Entity) {
     ///     inventories.move_slot(slot, player, None, |_| {});
     /// }
     /// ```
@@ -412,7 +413,7 @@ impl Inventories {
     ///     const STAFF: u32 = 0x5e01;
     ///     let inventories = load.inventories()?;
     ///     load.on::<PlayerJoined>(move |joined| {
-    ///         let player = enshwick::ecs::Entity(joined.entity);
+    ///         let player = enshwick::Entity(joined.entity);
     ///         let _renewed = inventories.renew(player, &[STAFF], Fill::FULL, |_| {});
     ///     })
     /// }

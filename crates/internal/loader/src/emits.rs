@@ -17,8 +17,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::Entity;
 use enshwick::abi::{Status, TeleportRequest};
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;

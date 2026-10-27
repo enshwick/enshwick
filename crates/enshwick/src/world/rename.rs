@@ -2,8 +2,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{RenameCall, Str, read_headed};
-use crate::ecs::Entity;
 use crate::world::Player;
 use crate::{Load, Off};
 

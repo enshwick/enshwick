@@ -39,8 +39,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::Entity;
 use crate::abi::{AffixRoll, Header, ItemLine, StatRef, Status, Str};
-use crate::ecs::Entity;
 use crate::game_events::CraftRecipeEvent;
 use crate::inventory::Slot;
 use crate::item_data::ItemInstance;

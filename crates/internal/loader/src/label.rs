@@ -12,8 +12,8 @@ use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
-use enshwick::ecs::Entity;
 
 use crate::chains::Next;
 use crate::host::Loader;

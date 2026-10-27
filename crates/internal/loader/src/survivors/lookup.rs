@@ -2,9 +2,9 @@ use core::ffi::c_void;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, Side, SurvivorLookup};
 use enshwick::altars::cell_of_fixed;
-use enshwick::ecs::Entity;
 use enshwick::raw::read_at;
 
 use crate::ecs::Engine;

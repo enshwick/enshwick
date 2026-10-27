@@ -454,7 +454,7 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
 /// The Rust path of a schema type name.
 fn rust_type(name: &str) -> String {
     match name {
-        "enshwick.entity" => "enshwick::ecs::Entity".to_owned(),
+        "enshwick.entity" => "enshwick::Entity".to_owned(),
         "enshwick.guid" => "enshwick::content::Guid".to_owned(),
         other => other.to_owned(),
     }

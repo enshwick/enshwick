@@ -1,5 +1,5 @@
+use crate::Entity;
 use crate::abi::{InventoryOp, InventoryRequest};
-use crate::ecs::Entity;
 
 use super::slots::{Fill, SlotRef};
 use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
@@ -9,7 +9,7 @@ use super::{MAX_INVENTORIES, MAX_OPS, OP_LOG, inventories};
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::Op;
 ///
 /// let loot = Op::MoveAll { from: Entity(40), to: Entity(2), include_special: false };
@@ -241,7 +241,7 @@ pub enum BatchError {
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{Batch, Op};
 ///
 /// // A trade: 5 coins out, a sword in, or neither.
@@ -300,7 +300,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// // As many as fit.
@@ -320,7 +320,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let (corpse, player) = (Entity(40), Entity(2));
@@ -342,7 +342,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let _ = Batch::new().with(Op::MoveAll { from: Entity(40), to: Entity(41), include_special: false }).actor(Entity(2));
@@ -398,7 +398,7 @@ impl Batch {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::inventory::{Batch, Op};
     ///
     /// let mut everything = Batch::new();

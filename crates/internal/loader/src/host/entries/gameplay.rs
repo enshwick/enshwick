@@ -1,8 +1,8 @@
 //! Host functions for altars, survivors, stats, affixes, buffs, knowledge, game rates and the game's checks.
 
+use enshwick::Entity;
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, RateId, Status, Str};
-use enshwick::ecs::Entity;
 
 use crate::host::entries::mods::list;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};

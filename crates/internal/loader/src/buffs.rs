@@ -19,8 +19,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::Entity;
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::memory::{read, write};

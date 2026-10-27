@@ -24,11 +24,11 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{
     AltarInfo, AltarLimit as RawAltarLimit, AltarZone as RawAltarZone, Bounds,
     ZoneCheck as RawZoneCheck,
 };
-use crate::ecs::Entity;
 use crate::{Host, Load, Off};
 
 /// A world-aligned, half-open box of whole 0.5 m cells; axis 1 is up.
@@ -185,7 +185,7 @@ pub fn cell_of_metres(metres: [f64; 3]) -> [i64; 3] {
 ///
 /// ```
 /// use enshwick::altars::{Altar, CellBox};
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 ///
 /// let altar = Altar {
 ///     entity: Entity(4096),
@@ -240,7 +240,7 @@ impl Altar {
 ///
 /// ```
 /// use enshwick::altars::{bases_of, Altar, CellBox};
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 ///
 /// let altar = |entity, x| Altar {
 ///     entity: Entity(entity),

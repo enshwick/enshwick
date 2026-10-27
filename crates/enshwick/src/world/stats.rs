@@ -4,7 +4,7 @@
 //! of its first attribute, the values' offset, flags and count, then the
 //! values in the order of the game's attribute container.
 
-use crate::ecs::Entity;
+use crate::Entity;
 use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError, WritableType};

@@ -23,8 +23,8 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{BuildCheck, CraftCheck};
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 /// A player's craft request, from [`Load::on_craft`].

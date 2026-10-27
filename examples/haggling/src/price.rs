@@ -17,7 +17,7 @@ pub struct Price {
     /// The player's account key.
     pub player: u64,
     /// The player's character.
-    pub character: enshwick::ecs::Entity,
+    pub character: enshwick::Entity,
     /// Whether the player buys or sells.
     pub deal: Deal,
 }

@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::*;
+use crate::Entity;
 use crate::abi::{Header, ModHandle, PlayerData};
-use crate::ecs::Entity;
 use crate::schedule::Scheduler;
 use crate::world::{Notice, Player, World};
 

@@ -4,9 +4,9 @@
 use bytemuck::Zeroable;
 use rustc_hash::FxHashMap;
 
+use crate::Entity;
 use crate::ItemId;
 use crate::abi::{EntityPlace, Header, ItemData};
-use crate::ecs::Entity;
 
 use super::{World, WorldError};
 

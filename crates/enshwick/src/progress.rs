@@ -14,10 +14,10 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{
     Comfort as RawComfort, ExperiencePass, ExperienceRow, SkillCheck as RawSkillCheck,
 };
-use crate::ecs::Entity;
 use crate::{Load, Off};
 
 /// One character's experience before the server applies it, from
@@ -26,7 +26,7 @@ use crate::{Load, Off};
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::progress::Experience;
 ///
 /// let row = Experience { entity: Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };

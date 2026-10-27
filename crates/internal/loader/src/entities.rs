@@ -8,8 +8,8 @@
 
 use std::sync::OnceLock;
 
+use enshwick::Entity;
 use enshwick::abi::{EntityPlace, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::pinned;

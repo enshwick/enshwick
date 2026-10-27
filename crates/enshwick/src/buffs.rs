@@ -37,8 +37,8 @@
 
 use core::time::Duration;
 
+use crate::Entity;
 use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
-use crate::ecs::Entity;
 use crate::world::WorldError;
 use crate::{Host, Load};
 
@@ -161,7 +161,7 @@ pub struct BuffType {
 /// # Examples
 ///
 /// ```
-/// fn longest(buffs: &enshwick::buffs::Buffs, entity: enshwick::ecs::Entity) -> Option<u32> {
+/// fn longest(buffs: &enshwick::buffs::Buffs, entity: enshwick::Entity) -> Option<u32> {
 ///     let on = buffs.of(entity).ok()?;
 ///     on.iter().max_by_key(|buff| buff.remaining).map(|buff| buff.type_id.0)
 /// }
@@ -337,7 +337,7 @@ impl Buffs {
     /// ```
     /// use enshwick::buffs::BuffTypeId;
     ///
-    /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::ecs::Entity) -> bool {
+    /// fn starving(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity) -> bool {
     ///     buffs.has(player, BuffTypeId(0x6ad7_cfc4))
     /// }
     /// ```
@@ -396,7 +396,7 @@ impl Buffs {
     /// ```
     /// use enshwick::buffs::BuffTypeId;
     ///
-    /// fn cure(buffs: &enshwick::buffs::Buffs, player: enshwick::ecs::Entity, poison: BuffTypeId) -> bool {
+    /// fn cure(buffs: &enshwick::buffs::Buffs, player: enshwick::Entity, poison: BuffTypeId) -> bool {
     ///     buffs.remove(player, poison).unwrap_or(false)
     /// }
     /// ```

@@ -9,7 +9,7 @@ The [`entity_data`](https://github.com/enshwick/enshwick/blob/main/crates/enshwi
 module reads and writes it.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::entity_data::Replication;
 
 #[derive(serde::Serialize, serde::Deserialize)]

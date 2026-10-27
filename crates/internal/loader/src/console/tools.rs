@@ -3,8 +3,8 @@
 
 use std::sync::atomic::Ordering;
 
+use enshwick::Entity;
 use enshwick::abi::{PlayerInfo, Status};
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::texts;

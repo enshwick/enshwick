@@ -4,9 +4,9 @@
 mod tests {
     use std::sync::Mutex;
 
+    use enshwick::Entity;
     use enshwick::ItemId;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
     use enshwick::world::{CAPTURE_TILES, Capture, Prop, World, WorldError, WorldTransform};
     use enshwick::{Load, Mod, Off};

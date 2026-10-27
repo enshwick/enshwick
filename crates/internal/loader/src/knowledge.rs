@@ -21,8 +21,8 @@
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Status};
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;

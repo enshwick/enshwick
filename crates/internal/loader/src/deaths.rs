@@ -12,8 +12,8 @@
 
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::Entity;
 use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
-use enshwick::ecs::Entity;
 
 use crate::chains::Next;
 use crate::host::Loader;

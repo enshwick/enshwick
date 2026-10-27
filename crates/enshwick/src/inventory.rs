@@ -16,7 +16,7 @@
 //! slots each, and only items with durability or a level have an entity of
 //! their own, the item's PIDE.
 
-use crate::ecs::Entity;
+use crate::Entity;
 
 /// The most operations in one [`Batch`].
 pub const MAX_OPS: usize = 64;

@@ -12,7 +12,7 @@ The returned
 is `Copy`; keep it anywhere.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let inventories = load.inventories()?;
@@ -44,7 +44,7 @@ the sub-inventory entity and the slot index, packed as the game packs them,
 `entity | index << 32`.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::inventory::SlotRef;
 
 let slot = SlotRef::new(Entity(0x41), 3);
@@ -134,7 +134,7 @@ as one transaction through
 every operation succeeds, or nothing changes.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::inventory::{Batch, Inventories, Op};
 
 const COIN: u32 = 0x0c01;
@@ -186,7 +186,7 @@ cuts a batch into parts that fit, in order, keeping its settings. Each part
 is all or nothing on its own; together they are not.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::inventory::{Batch, Op};
 
 let mut everything = Batch::new();

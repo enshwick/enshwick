@@ -7,7 +7,7 @@ kind with an id `<mod>:<name>` and a value type of the mod's choosing. The
 module reads and writes it.
 
 ```rust
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 use enshwick::item_data::ItemInstance;
 
 #[derive(serde::Serialize, serde::Deserialize)]

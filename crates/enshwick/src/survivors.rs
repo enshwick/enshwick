@@ -23,11 +23,11 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{
     BedCheck as RawBedCheck, HostApi, Summon as RawSummon, SurvivorLookup as RawLookup,
 };
 use crate::content::Guid;
-use crate::ecs::Entity;
 use crate::inventory::{Bar, SlotRef};
 use crate::{Load, Off};
 
@@ -137,7 +137,7 @@ impl Lookup {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     /// use enshwick::survivors::{Answer, Lookup, Purpose};
     ///
     /// fn previous(lookup: &Lookup, entities: &[Entity]) -> Answer {

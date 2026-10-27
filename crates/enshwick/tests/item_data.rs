@@ -5,8 +5,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::ecs::Entity;
     use enshwick::item_data::{ItemData, ItemInstance, SetError};
     use enshwick::{Load, Mod, Off};
 

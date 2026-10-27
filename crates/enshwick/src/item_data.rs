@@ -31,7 +31,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let engravings = load.item_data::<Engraving>("engraving")?;
-//!     let ring = ItemInstance { pide: enshwick::ecs::Entity(900), item: 0x5e01 };
+//!     let ring = ItemInstance { pide: enshwick::Entity(900), item: 0x5e01 };
 //!     let _set = engravings.set(ring, &Engraving { by: "Balthazar".into() });
 //!     let _by = engravings.get(ring).map(|e| e.by);
 //!     Ok(())
@@ -40,8 +40,8 @@
 
 use core::marker::PhantomData;
 
+use crate::Entity;
 use crate::abi::{Status, Str};
-use crate::ecs::Entity;
 use crate::inventory::Slot;
 use crate::{Host, Load, Off};
 
@@ -53,7 +53,7 @@ pub const MAX_VALUE: usize = 512;
 /// # Examples
 ///
 /// ```
-/// use enshwick::ecs::Entity;
+/// use enshwick::Entity;
 /// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
 /// use enshwick::item_data::ItemInstance;
 ///

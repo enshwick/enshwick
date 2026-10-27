@@ -33,8 +33,8 @@
 //! }
 //! ```
 
+use crate::Entity;
 use crate::abi::{Header, SpawnRequest, TeleportRequest};
-use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::world::WorldError;
@@ -355,7 +355,7 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// fn open(effects: &enshwick::effects::Effects, lever: enshwick::ecs::Entity, signal: u32) {
+    /// fn open(effects: &enshwick::effects::Effects, lever: enshwick::Entity, signal: u32) {
     ///     let _sent = effects.set_toggle(lever, signal, true);
     /// }
     /// ```
@@ -378,7 +378,7 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn taunt(effects: &enshwick::effects::Effects, enemy: Entity, player: Entity) {
     ///     let _noticed = effects.add_threat(enemy, player, 100.0);
@@ -522,7 +522,7 @@ impl Effects {
     ///         let [Value::Number(id)] = request.args else {
     ///             return Outcome::refused("Name an entity");
     ///         };
-    ///         let source = enshwick::ecs::Entity(*id as u32);
+    ///         let source = enshwick::Entity(*id as u32);
     ///         let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
     ///             return Outcome::refused("Nothing to copy, or you are nowhere");
     ///         };

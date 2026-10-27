@@ -519,7 +519,7 @@ pub(crate) extern "system" fn affix_roll(
         return Status::BAD_ARGS;
     };
     let item = ItemInstance {
-        pide: crate::ecs::Entity(roll.pide),
+        pide: crate::Entity(roll.pide),
         item: roll.item,
     };
     let next = with(Err(Status::MISSING), |s| {
@@ -575,7 +575,7 @@ pub(crate) extern "system" fn item_lines(
 ) -> Status {
     let lines = with(Vec::new(), |s| {
         let item = ItemInstance {
-            pide: crate::ecs::Entity(pide),
+            pide: crate::Entity(pide),
             item,
         };
         let record = record(s, item);

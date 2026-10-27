@@ -1,4 +1,4 @@
-use crate::ecs::Entity;
+use crate::Entity;
 
 use super::{ComponentType, ContainerKinds, Placed, World, WorldError};
 
@@ -33,7 +33,7 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// fn nearby(world: &enshwick::world::World, player: enshwick::ecs::Entity) -> usize {
+    /// fn nearby(world: &enshwick::world::World, player: enshwick::Entity) -> usize {
     ///     let Some(at) = world.position(player) else { return 0 };
     ///     world.near(at, 20.0, world.transform_type()).len()
     /// }
@@ -103,7 +103,7 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// fn clear(world: &enshwick::world::World, drop: enshwick::ecs::Entity) {
+    /// fn clear(world: &enshwick::world::World, drop: enshwick::Entity) {
     ///     if let Err(why) = world.destroy(drop) {
     ///         enshwick::warn!("entity {} stays: {why}", drop.0);
     ///     }

@@ -4,12 +4,12 @@
 
 use core::ffi::c_void;
 
+use enshwick::Entity;
 use enshwick::abi::{
     Header, InventoryOp, InventoryRequest, InventoryResult, PlayerInfo, SpawnRequest, Status,
     TeleportRequest,
 };
 use enshwick::content::Guid;
-use enshwick::ecs::Entity;
 
 use crate::host::Loader;
 use crate::mod_index::ModIndex;

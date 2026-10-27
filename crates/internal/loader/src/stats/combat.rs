@@ -1,7 +1,7 @@
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::PlayerInfo;
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;

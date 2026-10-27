@@ -43,13 +43,13 @@
 
 use core::ffi::c_void;
 
+use crate::Entity;
 use crate::abi::{
     Header, StatChange as StatChangeData, StatModifierData, StatModify, StatRef, StatSource,
     Status, Str,
 };
 use crate::buffs::BuffTypeId;
 use crate::content::items::StatFormat;
-use crate::ecs::Entity;
 use crate::item_data::{ItemData, ItemInstance, SetError};
 use crate::{Host, Load, Off};
 
@@ -162,7 +162,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn glows(stats: &enshwick::stats::Stats, glow: enshwick::stats::Stat, entity: enshwick::ecs::Entity) -> bool {
+    /// fn glows(stats: &enshwick::stats::Stats, glow: enshwick::stats::Stat, entity: enshwick::Entity) -> bool {
     ///     stats.is_on(entity, glow)
     /// }
     /// ```
@@ -207,7 +207,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn unbless(stats: &enshwick::stats::Stats, health: enshwick::stats::Stat, player: enshwick::ecs::Entity) {
+    /// fn unbless(stats: &enshwick::stats::Stats, health: enshwick::stats::Stat, player: enshwick::Entity) {
     ///     let _removed = stats.remove(player, "bless", health);
     /// }
     /// ```
@@ -293,7 +293,7 @@ impl Stats {
     /// ```
     /// use enshwick::stats::Origin;
     ///
-    /// fn from_items(stats: &enshwick::stats::Stats, player: enshwick::ecs::Entity) -> usize {
+    /// fn from_items(stats: &enshwick::stats::Stats, player: enshwick::Entity) -> usize {
     ///     stats.sources(player, None).iter().filter(|s| matches!(s.origin, Origin::Item(_))).count()
     /// }
     /// ```
@@ -382,7 +382,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn curse(stats: &enshwick::stats::Stats, enemy: enshwick::ecs::Entity) {
+    /// fn curse(stats: &enshwick::stats::Stats, enemy: enshwick::Entity) {
     ///     stats.watch(enemy, true);
     /// }
     /// ```

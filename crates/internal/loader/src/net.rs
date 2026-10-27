@@ -27,8 +27,8 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, NetMessage, NetMessageFn, Status};
-use enshwick::ecs::Entity;
 use rustc_hash::FxHashMap;
 
 use crate::host::{Loader, Registered};

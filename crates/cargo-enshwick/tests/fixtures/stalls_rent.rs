@@ -9,7 +9,7 @@
 #[derive(Clone, Copy, Debug)]
 pub struct Rent {
     /// The player's character.
-    pub character: enshwick::ecs::Entity,
+    pub character: enshwick::Entity,
     /// What the player does.
     pub deal: Deal,
     /// Whether the stall is the player's own.

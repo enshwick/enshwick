@@ -14,7 +14,7 @@
 //! the player joins.
 
 use combat::{combat, expire, follow};
-use enshwick::ecs::Entity;
+use enshwick::Entity;
 
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;

@@ -19,7 +19,7 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::ecs::Entity;
+//! use enshwick::Entity;
 //! use enshwick::entity_data::Replication;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
@@ -39,8 +39,8 @@
 
 use core::marker::PhantomData;
 
+use crate::Entity;
 use crate::abi::{EntityDataFlags, Status, Str};
-use crate::ecs::Entity;
 pub use crate::item_data::{MAX_VALUE, SetError};
 use crate::{Host, Load, Off};
 
@@ -149,7 +149,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use enshwick::ecs::Entity;
+    /// use enshwick::Entity;
     ///
     /// fn forget(owners: &enshwick::entity_data::EntityData<u64>, chest: Entity) {
     ///     let _removed = owners.remove(chest);

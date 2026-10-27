@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
 
+use enshwick::Entity;
 use enshwick::abi::{Header, Summon};
 use enshwick::altars::cell_of_fixed;
-use enshwick::ecs::Entity;
 use enshwick::raw::{read_at, write_at};
 
 use crate::host::Loader;

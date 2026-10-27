@@ -1,7 +1,7 @@
 //! Typed game events: a struct per event with its fields read for the
 //! running build, for [`Load::on`](crate::Load::on).
 
-use crate::ecs::Entity;
+use crate::Entity;
 use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
 use crate::game_events::values::{

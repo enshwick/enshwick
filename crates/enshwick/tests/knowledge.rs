@@ -4,8 +4,8 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::Entity;
     use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
-    use enshwick::ecs::Entity;
     use enshwick::events::KnowledgeChanged;
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeType, Scope};
     use enshwick::world::WorldError;
