@@ -89,9 +89,9 @@ mod tests {
 
     #[test]
     fn a_mod_lives_its_whole_life() {
-        let manifest = enshwick_mod_query();
-        // SAFETY: `enshwick_mod_query` returns the `'static` manifest of `manifest!`.
-        let manifest = unsafe { &*manifest };
+        // SAFETY: `enshwick_mod_query` returns null or the `'static` manifest
+        // of `manifest!`, which no thread writes.
+        let manifest = unsafe { enshwick_mod_query().as_ref() }.expect("the manifest is queried");
         // SAFETY: the id points at a `'static` string literal of `manifest!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);

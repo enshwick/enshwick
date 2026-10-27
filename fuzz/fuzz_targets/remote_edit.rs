@@ -36,7 +36,7 @@ fuzz_target!(|data: &[u8]| {
     if configure::set("fuzz", &schema, text, key, value).is_ok() {
         assert!(!schema.field(key).is_some_and(|f| f.secret));
     }
-    let hidden = remote::without_secrets(&schema, text);
+    let hidden = remote::redacted(&schema, text);
     if let Ok(table) = hidden.parse::<toml::Table>() {
         assert!(!table.contains_key("token"));
     }
