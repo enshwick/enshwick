@@ -23,6 +23,7 @@ use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
 
 use crate::host::Loader;
+use crate::item_kinds::ItemKindLayout;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
@@ -574,14 +575,10 @@ fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
         Vec::new()
     };
     let facts = catalogue::Reflected(&loader.reflection);
-    let at = |id: &str| {
-        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
-    };
-    let (Ok(layout), Some(archive), Some(id_at), Some(slot_at)) = (
+    let (Ok(layout), Some(archive), Some(items)) = (
         RecipeLayout::resolve(&facts),
         crate::archive::game(),
-        at(catalogue::ITEM_ID),
-        at(catalogue::ITEM_SLOT),
+        ItemKindLayout::from_reflection(&loader.reflection),
     ) else {
         return off();
     };
@@ -591,23 +588,18 @@ fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
     else {
         return off();
     };
-    let slots: FxHashMap<u64, RecipeKind> = catalogue::recipe_kind_slots(&loader.reflection)
-        .into_iter()
-        .map(|(value, kind)| {
-            (
-                value,
-                RecipeKind::from(enshwick::abi::RecipeKind::from(kind)),
-            )
-        })
-        .collect();
     let kinds: FxHashMap<u32, RecipeKind> = archive
         .keys_of(crate::catalogue::types::ITEM_INFO)
         .into_iter()
         .filter_map(|key| {
             let bytes = archive.resource(&key)?;
-            let id = u32::from_le_bytes(bytes.get(id_at..id_at + 4)?.try_into().ok()?);
-            let kind = slots.get(&u64::from(*bytes.get(slot_at)?))?;
-            Some((id, *kind))
+            let read = |at: usize, out: &mut [u8]| {
+                if let Some(from) = bytes.get(at..at + out.len()) {
+                    out.copy_from_slice(from);
+                }
+            };
+            let (id, kind) = items.item(bytes.len(), read)?;
+            Some((id, RecipeKind::from(kind)))
         })
         .collect();
     index

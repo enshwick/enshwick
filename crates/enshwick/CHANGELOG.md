@@ -6,6 +6,20 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
+  `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
+  the game's Decorative crafting group, so `Recipes::Kind`,
+  `Rate::RecipeOutput` and `RecipeView::kind` pick decorations by the
+  game's own grouping (#PR).
+
+### Removed
+
+- Breaking: `Load::modify_recipes`, `RecipeEdit` and `modify_recipes_in`;
+  a data change through `Load::change_recipes` or a `Rate::RecipeOutput`
+  changes recipe counts by kind (#PR).
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added

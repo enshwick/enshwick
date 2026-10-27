@@ -7,7 +7,9 @@ use super::super::Guid;
 /// items in later builds.
 ///
 /// The name is enshwick's: the game has no recipe kind; it follows from the
-/// output item's equipment slot.
+/// output item's equipment slot and, for a placed prop, its item tags. A kind
+/// the game names itself takes its name: [`RecipeKind::Decorative`] is the
+/// game's crafting group of that name.
 ///
 /// # Examples
 ///
@@ -23,7 +25,11 @@ pub enum RecipeKind {
     Overgrowth,
     /// A terrain material.
     Terrain,
-    /// Anything else: equipment, props, furniture and decorations among them.
+    /// A placed prop the game files under its Decorative crafting group,
+    /// from the item tag behind that group: decorations and much of the
+    /// furniture.
+    Decorative,
+    /// Anything else: equipment, functional props and materials among them.
     Other,
 }
 
@@ -43,6 +49,7 @@ impl RecipeKind {
         Self::Roof,
         Self::Overgrowth,
         Self::Terrain,
+        Self::Decorative,
     ];
 
     /// The kind's name in a data pack, such as `building-block`.
@@ -61,6 +68,7 @@ impl RecipeKind {
             Self::Roof => "roof",
             Self::Overgrowth => "overgrowth",
             Self::Terrain => "terrain",
+            Self::Decorative => "decorative",
             Self::Other => "other",
         }
     }
@@ -97,6 +105,7 @@ impl RecipeKind {
             Self::Roof => Abi::ROOF,
             Self::Overgrowth => Abi::OVERGROWTH,
             Self::Terrain => Abi::TERRAIN,
+            Self::Decorative => Abi::DECORATIVE,
             Self::Other => Abi::OTHER,
         }
     }
@@ -120,6 +129,7 @@ impl From<crate::abi::RecipeKind> for RecipeKind {
             Abi::ROOF => Self::Roof,
             Abi::OVERGROWTH => Self::Overgrowth,
             Abi::TERRAIN => Self::Terrain,
+            Abi::DECORATIVE => Self::Decorative,
             _ => Self::Other,
         }
     }
@@ -141,5 +151,29 @@ mod tests {
             assert_eq!(RecipeKind::named(kind.name()), Some(*kind));
         }
         assert_eq!(RecipeKind::named("Roof"), None);
+    }
+
+    #[test]
+    fn every_kind_reads_back_from_its_code_and_each_code_is_its_own() {
+        for (i, kind) in RecipeKind::ALL.iter().enumerate() {
+            assert_eq!(RecipeKind::from(kind.code()), *kind);
+            assert!(
+                RecipeKind::ALL[i + 1..]
+                    .iter()
+                    .all(|k| k.code() != kind.code())
+            );
+        }
+    }
+
+    #[test]
+    fn decorative_props_have_a_kind_of_their_own() {
+        assert_eq!(
+            RecipeKind::named("decorative"),
+            Some(RecipeKind::Decorative)
+        );
+        assert_eq!(
+            RecipeKind::Decorative.code(),
+            crate::abi::RecipeKind::DECORATIVE
+        );
     }
 }

@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- Catalogue facts for an item's tags (`item_info.tags`, `item_tag_weight`,
+  `item_tag_weight.tag`), the Decorative item tag and
+  `RECIPE_KIND_TAGS` with `recipe_kind_tags`, the kinds an item takes from
+  its tags (#PR).
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added

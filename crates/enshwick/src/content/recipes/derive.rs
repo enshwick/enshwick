@@ -220,13 +220,12 @@ impl RecipeView<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::recipes::RecipeKind;
+    /// use enshwick::content::recipes::{Derived, RecipeKind};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.modify_recipes(|recipe| {
-    ///         if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
-    ///             recipe.scale_output(2);
-    ///         }
+    ///     load.derive_recipes("you.decor", |recipe| {
+    ///         (recipe.kind() == Some(RecipeKind::Decorative))
+    ///             .then_some(Derived { output: 2, cost: 1, workshop: None })
     ///     })
     /// }
     /// ```
@@ -399,12 +398,9 @@ pub fn derive_recipes_in(
     Some(blob.into_bytes())
 }
 
-/// A recipe in the registry as [`Load::modify_recipes`](crate::Load::modify_recipes) shows it, with its
-/// counts open to change in place.
-///
-/// # Examples
-///
-/// See [`Load::modify_recipes`](crate::Load::modify_recipes).
+/// A recipe in the registry as [`modify_recipes_in`] shows it, with its
+/// output open to change in place; the loader's recipe output rates use it.
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct RecipeEdit<'a> {
     blob: &'a mut Blob,
@@ -415,10 +411,6 @@ pub struct RecipeEdit<'a> {
 
 impl RecipeEdit<'_> {
     /// The recipe as it reads now: GUID, debug name and output.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
     #[must_use]
     pub fn view(&self) -> RecipeView<'_> {
         RecipeView {
@@ -428,26 +420,9 @@ impl RecipeEdit<'_> {
         }
     }
 
-    /// Multiplies the count of each item the recipe makes by `by`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
-    pub fn scale_output(&mut self, by: u32) {
-        self.scale(self.layout.output, self.layout.stack_size, by);
-    }
-
     /// Multiplies the count of each item the recipe makes by `factor`,
     /// rounded half away from zero by [`scale_whole`](crate::rates::scale_whole):
     /// a stack the recipe made still makes at least one.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.modify_recipes(|recipe| recipe.scale_output_by(1.5))
-    /// }
-    /// ```
     pub fn scale_output_by(&mut self, factor: f32) {
         let Some((start, count)) = self.blob.array(self.at + self.layout.output) else {
             return;
@@ -467,55 +442,12 @@ impl RecipeEdit<'_> {
             }
         }
     }
-
-    /// Multiplies the count of each ingredient by `by`.
-    ///
-    /// # Examples
-    ///
-    /// See [`Load::modify_recipes`](crate::Load::modify_recipes).
-    pub fn scale_inputs(&mut self, by: u32) {
-        self.scale(self.layout.input, self.layout.input_size, by);
-    }
-
-    /// Multiplies the stack counts of the array at `field`, whose elements
-    /// are `size` bytes and start with an item stack.
-    fn scale(&mut self, field: usize, size: usize, by: u32) {
-        let Some((start, count)) = self.blob.array(self.at + field) else {
-            return;
-        };
-        for i in 0..count as usize {
-            let at = start + i * size + self.layout.stack_count;
-            let Some(made) = self.blob.read_u32(at) else {
-                return;
-            };
-            let scaled = made.saturating_mul(by);
-            if scaled != made && self.blob.write(at, &scaled.to_le_bytes()) {
-                self.changed = true;
-            }
-        }
-    }
 }
 
 /// The recipe registry with `modify` called on each recipe in turn; the
-/// second value is how many recipes it changed. [`Load::modify_recipes`](crate::Load::modify_recipes)
-/// serves it.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeLayout, modify_recipes_in};
-/// use enshwick::content::types;
-///
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let layout = RecipeLayout::resolve(load)?;
-///     let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
-///     load.serve(registry, registry, move |base| {
-///         let (built, changed) = modify_recipes_in(&layout, base, &|recipe| recipe.scale_output(2))?;
-///         enshwick::info!("{changed} recipes doubled");
-///         Some(built)
-///     })
-/// }
-/// ```
+/// second value is how many recipes it changed. The loader's recipe output
+/// rates serve it.
+#[doc(hidden)]
 #[must_use]
 pub fn modify_recipes_in(
     layout: &RecipeLayout,

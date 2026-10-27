@@ -384,6 +384,7 @@ pub mod __private {
     use crate::abi::{HostApi, Level, ManifestFlags, ModHandle, Status};
     use crate::{Host, Load, Mod};
 
+    pub use crate::content::recipes::derive::{RecipeEdit, modify_recipes_in};
     pub use crate::engine_ids::ALL as ENGINE_IDS;
 
     /// Each experience source with its catalogue id, for the loader's

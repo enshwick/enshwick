@@ -1,19 +1,20 @@
 # Recipes
 
-Two calls add recipes, and one changes them:
+Two calls add recipes:
 
 - [`Load::add_recipe`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   adds one recipe for a new output, copied from the recipe of a vanilla item;
 - [`Load::derive_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
   looks at every recipe in the registry and adds a scaled copy of each one
-  you pick;
-- [`Load::modify_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
-  changes the output and ingredient counts of the recipes you pick, in place.
+  you pick.
 
-All three patch the game's recipe registry, which every mod shares; patches
-from several mods run in turn, so their recipes end up side by side and
-their changes add up. To take recipes out of the game, see
-[Disabling recipes](disabled-recipes.md).
+Both patch the game's recipe registry, which every mod shares; patches
+from several mods run in turn, so their recipes end up side by side. To
+change the counts, cost or time of vanilla recipes, declare a data change
+with
+[`Load::change_recipes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes/recipes.rs)
+([the fields](packs.md)) or set a recipe output [rate](../rates.md). To take
+recipes out of the game, see [Disabling recipes](disabled-recipes.md).
 
 ## A single recipe
 
@@ -106,75 +107,47 @@ GUID, marked with a hash of `salt`, so it stays the same on every start and
 differs between mods that copy the same recipe. Use the mod id as the salt,
 and never change it: saves hold the copies' ids like any other.
 
-## Changing recipes in place
-
-`modify_recipes(modify)` calls `modify` with each recipe in the registry and
-lets it change the recipe's counts in place, with no recipe added:
-
-```rust
-use enshwick::content::recipes::{RecipeEdit, RecipeKind};
-
-fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
-        if recipe.view().kind() == Some(RecipeKind::BuildingBlock) {
-            recipe.scale_output(2);
-        }
-    })
-}
-```
-
-[`RecipeEdit`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/recipes.rs)
-has:
-
-- `view()`, the recipe as a `RecipeView` reads it now;
-- `scale_output(by)`, each output count times `by`;
-- `scale_inputs(by)`, each ingredient count times `by`.
-
-The server and the client serve the same patched registry, so the crafting
-menu shows the new counts; give the mod `side: BOTH` and `join: true`, and
-mark the settings the patch reads `#[config(sync)]` so a joined player runs
-with the server's. When those values change after the registry was built,
-as on joining a server and leaving it, `content::recipes::rebuild_recipes()`
-from the mod's settings handler builds it again and the counts change in
-place ([Rebuilding](resources.md#rebuilding)). Like the other recipe
-patches, `modify` sees the registry as it reaches it, with what mods before
-it added or changed, and mods after it see its changes. The mod's log says
-`<n> recipes changed`.
-
-### Recipe kinds
+## Recipe kinds
 
 `RecipeView::kind()` says what the item a recipe makes is, as the game's
-own item data classes it: `RecipeKind::BuildingBlock`, `Roof`,
-`Overgrowth`, `Terrain`, or `Other` for everything else, furniture and
-decorations among them. Match it with a `_` arm: later versions may add
-kinds. Prefer it to a debug name prefix, which misses recipes whose names
-break the pattern.
+own item data classes it:
 
-The loader learns an item's kind when the game loads the item, and
-answers `None` before that. A dedicated server builds its recipe registry
-before it loads the items, so the first build of a patch sees no kinds
-there. A mod that changes recipes by kind calls
-`content::recipes::rebuild_recipes()` on `events::WorldLoaded`, when the
-items are in, and the rebuild applies the kinds in place
-([Rebuilding](resources.md#rebuilding)):
+| `RecipeKind` | Data pack name | Items |
+| --- | --- | --- |
+| `BuildingBlock` | `building-block` | equipment slot `BlueprintMaterial_Default`: building blocks |
+| `Roof` | `roof` | equipment slot `BlueprintMaterial_Roof`: roof blocks |
+| `Overgrowth` | `overgrowth` | equipment slot `OvergrowthMaterial` |
+| `Terrain` | `terrain` | equipment slot `TerrainMaterial` |
+| `Decorative` | `decorative` | placed props that carry the item tag of the crafting menu's Decorative group: decorations and much of the furniture |
+| `Other` | `other` | everything else: equipment, functional props, materials |
+
+Match it with a `_` arm: later versions may add kinds. Prefer it to a debug
+name prefix, which misses recipes whose names break the pattern. The game
+data files a prop under a menu group by its item tag, so `Decorative`
+follows the game's own grouping rather than a name.
+
+The same kinds pick recipes for a data change, `Recipes::Kind`, and for a
+recipe output rate, `Rate::RecipeOutput`:
 
 ```rust
-use enshwick::content::recipes::{RecipeKind, rebuild_recipes};
-use enshwick::events::WorldLoaded;
+use enshwick::content::changes::{Field, Recipes, RecipesChange, Value};
+use enshwick::content::recipes::RecipeKind;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.modify_recipes(|recipe| {
-        if recipe.view().kind() == Some(RecipeKind::Roof) {
-            recipe.scale_output(2);
-        }
-    })?;
-    load.on::<WorldLoaded>(|()| {
-        if let Err(off) = rebuild_recipes() {
-            enshwick::warn!("roofs keep their counts: {off}");
-        }
-    })
+    let decor = RecipesChange::new(
+        Recipes::Kind(RecipeKind::Decorative),
+        Field::Cost,
+        Value::Times(0.5),
+    );
+    load.change_recipes(&decor, "cheaper decorations")
 }
 ```
+
+The loader classes the vanilla recipes for data changes from the game's
+archive, so they apply from the first build on every side. `kind()` learns
+an item's kind when the game loads the item and answers `None` before that.
+A dedicated server builds its recipe registry before it loads the items, so
+`derive_recipes` sees no kinds there on its first build.
 
 ## The crafting menu
 
@@ -242,11 +215,3 @@ The vanilla workshops are shared by every mod. A mod that adds many recipes
 should give them a [workshop of its own](workshops.md) or an NPC of its own
 rather than crowd the vanilla ones; that also keeps it working where the
 limit holds.
-
-## A worked example
-
-[`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates/blob/main/src/lib.rs)
-doubles the output of the vanilla recipes for building blocks, overgrowth
-and decor with one `modify_recipes` call. It picks categories by debug name,
-and reads the multiplier and the categories from join values, which a client
-takes from the server on joining.
