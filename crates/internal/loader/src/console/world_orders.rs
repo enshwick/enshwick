@@ -107,6 +107,14 @@ unsafe extern "system" fn given(result: *const InventoryResult, user: *mut c_voi
 /// Queues `give` for each player it names, one request each, so one full
 /// inventory refuses only its own.
 fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
+    match known_item(loader, give.item) {
+        Ok(true) => {}
+        Ok(false) => {
+            return texts::fill("console.give.unknown", &[("item", &give.item.to_string())]);
+        }
+        Err(Status::MISSING) => return texts::fill("console.give.missing", &[]),
+        Err(status) => return tools::unread(status),
+    }
     let players = match give.to {
         Recipients::Everyone => match crate::world::players(loader) {
             Ok(players) => players.into_iter().filter(|p| p.entity != 0).collect(),
@@ -119,14 +127,6 @@ fn give(loader: &Loader, give: &orders::Give<'_>) -> String {
     };
     if players.is_empty() {
         return texts::fill("console.give.nobody", &[]);
-    }
-    match known_item(loader, give.item) {
-        Ok(true) => {}
-        Ok(false) => {
-            return texts::fill("console.give.unknown", &[("item", &give.item.to_string())]);
-        }
-        Err(Status::MISSING) => return texts::fill("console.give.missing", &[]),
-        Err(status) => return tools::unread(status),
     }
     let mut asked = Vec::new();
     for player in &players {
