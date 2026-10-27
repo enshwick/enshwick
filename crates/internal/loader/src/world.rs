@@ -29,6 +29,7 @@ use crate::server_pin::{Place, ServerCell};
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMPONENT_READ_RAW.id(),
+    pinned::ecs::COMPONENT_READ_SHARED.id(),
     pinned::ecs::ENTITY_MAP.id(),
     pinned::ecs::ENTITY_MAP_CAPACITY.id(),
     pinned::ecs::ENTITY_RECORDS.id(),
@@ -235,12 +236,16 @@ type ReadComponent = unsafe extern "system" fn(
     entity: u32,
 );
 type EntitySlot = unsafe extern "system" fn(map: *const u8, entity: *const u32) -> u32;
+type ReadShared = unsafe extern "system" fn(record: *const u8, index: *const u16) -> *const u8;
 
 /// The game functions and offsets the reads use, from the build table.
 #[derive(Debug, Clone, Copy)]
 struct Layout {
     type_index: TypeIndex,
     read_component: ReadComponent,
+    /// The game's read of a component shared with a template, on builds
+    /// whose table has it.
+    read_shared: Option<ReadShared>,
     entity_slot: EntitySlot,
     server_world: usize,
     entity_world: usize,
@@ -297,9 +302,16 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // function with the `EntitySlot` signature on this build, in the
             // image, which stays mapped.
             let entity_slot = unsafe { core::mem::transmute::<usize, EntitySlot>(entity_slot) };
+            let read_shared = function(pinned::ecs::COMPONENT_READ_SHARED).map(|address| {
+                // SAFETY: the table's `ecs.component_read_shared` is the
+                // address of the game function with the `ReadShared`
+                // signature on this build, in the image, which stays mapped.
+                unsafe { core::mem::transmute::<usize, ReadShared>(address) }
+            });
             Some(Layout {
                 type_index,
                 read_component,
+                read_shared,
                 entity_slot,
                 server_world: constant(pinned::server::WORLD)?,
                 entity_world: constant(pinned::world::ENTITIES)?,
@@ -395,12 +407,55 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
     Ok((world, index))
 }
 
+/// Where a component's data is: in the entity's own row, or shared with
+/// the other entities of its template.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Stored {
+    /// The entity's own data, in its row.
+    Inline(*const c_void),
+    /// Data the entity shares with its template's other entities, which
+    /// the raw read cannot reach; only a shared read can, and nothing may
+    /// write it.
+    Shared,
+}
+
+/// Where `entity`'s component of type `hash` is; [`Status::MISSING`] when
+/// it has none.
+pub(crate) fn stored(loader: &Loader, entity: Entity, hash: u32) -> Result<Stored, Status> {
+    let (data, stride) = read_raw(loader, entity, hash)?;
+    stored_from(data, stride)
+}
+
+/// What the raw read's data address and row stride say: no component for
+/// address 0; data kept in the entity's row for a stride; otherwise data
+/// shared with its template, as the raw read returns its chunk's first
+/// column for those (server 399, client 426).
+fn stored_from(data: usize, stride: usize) -> Result<Stored, Status> {
+    if data == 0 {
+        return Err(Status::MISSING);
+    }
+    Ok(if stride == 0 {
+        Stored::Shared
+    } else {
+        Stored::Inline(core::ptr::with_exposed_provenance(data))
+    })
+}
+
 /// A component's data pointer, or why not.
 pub(crate) fn component(
     loader: &Loader,
     entity: Entity,
     hash: u32,
 ) -> Result<*const c_void, Status> {
+    match read_raw(loader, entity, hash)? {
+        (0, _) => Err(Status::MISSING),
+        (data, _) => Ok(core::ptr::with_exposed_provenance(data)),
+    }
+}
+
+/// The game's raw component read: the data address and the row stride, 0
+/// for a component the entity does not keep inline.
+fn read_raw(loader: &Loader, entity: Entity, hash: u32) -> Result<(usize, usize), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (world, index) = type_index(loader, hash)?;
     let mut out = [0usize; 2];
@@ -416,14 +471,33 @@ pub(crate) fn component(
             entity.0,
         );
     };
-    match out[0] {
-        0 => Err(Status::MISSING),
-        data => Ok(core::ptr::with_exposed_provenance(data)),
-    }
+    Ok((out[0], out[1]))
 }
 
-/// An entity's template GUID.
-pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
+/// The data of `entity`'s component of type `hash` that it shares with
+/// its template's other entities, read-only: writing it would change them
+/// all. Only for a type the entity keeps shared ([`Stored::Shared`]) and
+/// not a tag, for which the game's read returns no data of the type;
+/// [`Status::MISSING`] on a build without the read.
+pub(crate) fn shared(loader: &Loader, entity: Entity, hash: u32) -> Result<*const c_void, Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let read_shared = layout.read_shared.ok_or(Status::MISSING)?;
+    let (_, index) = type_index(loader, hash)?;
+    let record = record(loader, entity)?;
+    // SAFETY: `read_shared` is the table's `ecs.component_read_shared`, a
+    // leaf that takes no lock; `record` is the entity's live record and
+    // `index` the non-null registry index `type_index` returned, on the game
+    // thread (checked by `reader` inside `record`); the caller passes only a
+    // type the entity keeps shared, which the read requires.
+    let data = unsafe { read_shared(core::ptr::with_exposed_provenance(record), index) };
+    if data.is_null() {
+        return Err(Status::MISSING);
+    }
+    Ok(data.cast())
+}
+
+/// The live record of `entity`; on the game thread.
+fn record(loader: &Loader, entity: Entity) -> Result<usize, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: `entity_slot` is the table's `ecs.entity_slot`; `world` is the
@@ -459,9 +533,17 @@ pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Stat
     if record == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: `record` is a non-zero (`record == 0` returns first) live record;
-    // the table's `ecs.record_template` offset holds its template GUID pointer;
-    // read on the game thread (checked by `reader`).
+    Ok(record)
+}
+
+/// An entity's template GUID.
+pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    let record = record(loader, entity)?;
+    // SAFETY: `record` is the entity's non-zero live record (checked by
+    // `record`); the table's `ecs.record_template` offset holds its template
+    // GUID pointer; read on the game thread (checked by `reader` inside
+    // `record`).
     let guid: usize = unsafe { read(record, layout.record_template) };
     if guid == 0 {
         return Err(Status::MISSING);
@@ -703,5 +785,15 @@ mod tests {
         assert!(!quiet());
         STEPPING.set(0);
         assert!(quiet());
+    }
+
+    #[test]
+    fn a_component_without_a_row_stride_is_shared_with_its_template() {
+        assert_eq!(stored_from(0, 0), Err(Status::MISSING));
+        assert_eq!(stored_from(0x1000, 0), Ok(Stored::Shared));
+        assert_eq!(
+            stored_from(0x1000, 8),
+            Ok(Stored::Inline(core::ptr::with_exposed_provenance(0x1000)))
+        );
     }
 }

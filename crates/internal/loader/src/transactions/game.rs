@@ -114,7 +114,7 @@ impl Voxels for Game<'_> {
     }
 
     fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
-        let entity = props::spawn(self.loader, prop)?;
+        let entity = props::spawn(self.loader, prop, actor)?;
         self.events.prop_placed(self.loader, prop, entity, actor);
         Ok(entity)
     }
@@ -216,11 +216,7 @@ pub(crate) fn saving(saving: bool) {
         return;
     };
     for (entity, before) in super::holds().deposits() {
-        let value = if saving {
-            before
-        } else {
-            props::stash_off(before)
-        };
+        let value = if saving { before } else { props::STASH_OFF };
         props::set_deposit(loader, entity, value);
     }
 }

@@ -43,7 +43,9 @@ struct Initial {
 /// The engine's spawn request.
 #[repr(C)]
 struct Request {
-    reserved: u32,
+    /// The entity that asks for the spawn: the placing player for a prop,
+    /// as the game's own place records it; 0 for none.
+    requester: u32,
     template: [u8; 16],
     reserved_after: u32,
     initial: *const Initial,
@@ -150,16 +152,18 @@ fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
 
 /// Asks the server to spawn an entity of a template; its id.
 pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Status> {
-    spawn_with(loader, request, Vec::new())
+    spawn_with(loader, request, Vec::new(), 0)
 }
 
 /// [`spawn`], the entity starting with `extra` components as well: each a
 /// reflected type's hash and its bytes, as the game's own prop spawn adds
-/// them.
+/// them; asked for by the entity `requester`, 0 for none, which the game
+/// keeps in the new entity's record as its own place does.
 pub(crate) fn spawn_with(
     loader: &Loader,
     request: &SpawnRequest,
     extra: Vec<(u32, Vec<u8>)>,
+    requester: u32,
 ) -> Result<u32, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     crate::world::server()?;
@@ -236,7 +240,7 @@ pub(crate) fn spawn_with(
         })
         .collect();
     let engine_request = Request {
-        reserved: 0,
+        requester,
         template: request.template,
         reserved_after: 0,
         initial: entries.as_ptr(),
@@ -255,7 +259,14 @@ pub(crate) fn spawn_with(
     // earlier check, used on the game thread between steps, where no system
     // writes it; the request and its components stay alive for the call,
     // which copies them.
-    unsafe { (layout.spawn)(buffer, &raw mut entity, 0, &raw const engine_request) };
+    unsafe {
+        (layout.spawn)(
+            buffer,
+            &raw mut entity,
+            requester,
+            &raw const engine_request,
+        )
+    };
     if entity == 0 {
         return Err(Status::REFUSED);
     }

@@ -281,7 +281,7 @@ mod tests {
         state.holds.hold(40, false).unwrap();
         state
             .holds
-            .note_deposit(40, crate::prop_holds::Stash::Switch([1, 1]));
+            .note_deposit(40, crate::prop_holds::Stash([1, 1]));
         guarded(&state, || panic!("in a pass"));
         assert!(!state.holds.is_held(40));
         assert!(state.holds.quiet(), "players reach it again");
