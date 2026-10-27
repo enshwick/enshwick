@@ -153,27 +153,42 @@ pub struct TraitOffsets {
     pub flags: usize,
     /// The GUID of the template the item places.
     pub placed: usize,
+    /// The GUID of the template of the item's own entity, and where its
+    /// equipment slot sits with the slot's `Backpack` value, when the build
+    /// reflects them.
+    pub backpack: Option<(usize, usize, u8)>,
 }
 
 /// What a selection reads of the item whose static data is `bytes`, with
-/// `slots` answering how many slots a placed template's container holds;
-/// `None` when the data is too short.
+/// `slots` answering how many slots a template's container holds; `None`
+/// when the data is too short.
 #[must_use]
 pub fn traits_of(
     bytes: &[u8],
     at: TraitOffsets,
-    slots: impl FnOnce(Guid) -> Option<u8>,
+    slots: impl Fn(Guid) -> Option<u8>,
 ) -> Option<ItemTraits> {
+    let guid = |offset: usize| -> Option<Guid> {
+        let raw: [u8; 16] = bytes.get(offset..offset + 16)?.try_into().ok()?;
+        (raw != [0; 16]).then_some(Guid(raw))
+    };
     let max_stack = u16::from_le_bytes(bytes.get(at.max_stack..at.max_stack + 2)?.try_into().ok()?);
     let category = *bytes.get(at.category)?;
     let flags = u32::from_le_bytes(bytes.get(at.flags..at.flags + 4)?.try_into().ok()?);
-    let placed: [u8; 16] = bytes.get(at.placed..at.placed + 16)?.try_into().ok()?;
-    let slots = (placed != [0; 16]).then(|| slots(Guid(placed))).flatten();
+    bytes.get(at.placed..at.placed + 16)?;
+    let placed = guid(at.placed).and_then(&slots);
+    let backpack_slots = at.backpack.and_then(|(pid, slot, backpack)| {
+        (*bytes.get(slot)? == backpack)
+            .then(|| guid(pid))
+            .flatten()
+            .and_then(&slots)
+    });
     Some(ItemTraits {
         max_stack,
         category,
         flags,
-        slots,
+        slots: placed,
+        backpack_slots,
     })
 }
 
@@ -225,6 +240,7 @@ mod tests {
             category,
             flags: 0,
             slots: None,
+            backpack_slots: None,
         };
         vec![
             (guid(1), stack(20, 9)),
@@ -410,6 +426,7 @@ mod tests {
             category: 0xcc,
             flags: 0x5d8,
             placed: 0x600,
+            backpack: Some((0x540, 0x3d0, 23)),
         };
         let mut bytes = vec![0u8; 0x620];
         bytes[0x14..0x16].copy_from_slice(&999u16.to_le_bytes());
@@ -428,7 +445,36 @@ mod tests {
         bytes[0x600..0x610].copy_from_slice(&[7; 16]);
         let chest = traits_of(&bytes, at, |t| (t == guid(7)).then_some(24)).unwrap();
         assert_eq!(chest.slots, Some(24));
+        assert_eq!(chest.backpack_slots, None);
         assert_eq!(traits_of(&bytes[..0x20], at, |_| None), None);
+    }
+
+    #[test]
+    fn a_backpack_s_slots_come_from_its_own_entity() {
+        let at = TraitOffsets {
+            max_stack: 0x14,
+            category: 0xcc,
+            flags: 0x5d8,
+            placed: 0x600,
+            backpack: Some((0x540, 0x3d0, 23)),
+        };
+        let mut bytes = vec![0u8; 0x620];
+        bytes[0x540..0x550].copy_from_slice(&[8; 16]);
+        let slots = |t: Guid| (t == guid(8)).then_some(16);
+        assert_eq!(traits_of(&bytes, at, slots).unwrap().backpack_slots, None);
+        bytes[0x3d0] = 23;
+        let backpack = traits_of(&bytes, at, slots).unwrap();
+        assert_eq!((backpack.slots, backpack.backpack_slots), (None, Some(16)));
+        let unreflected = TraitOffsets {
+            backpack: None,
+            ..at
+        };
+        assert_eq!(
+            traits_of(&bytes, unreflected, slots)
+                .unwrap()
+                .backpack_slots,
+            None
+        );
     }
 
     #[test]

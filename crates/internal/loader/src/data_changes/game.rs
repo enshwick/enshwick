@@ -221,12 +221,20 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let at = |id: &str| {
         catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
     };
+    let backpack = at(catalogue::ITEM_PID_ENTITY)
+        .zip(at(catalogue::ITEM_SLOT))
+        .zip(
+            catalogue::constant(catalogue::EQUIPMENT_SLOT_BACKPACK, &loader.reflection)
+                .and_then(|value| u8::try_from(value).ok()),
+        )
+        .map(|((pid, slot), value)| (pid, slot, value));
     let offsets = (|| {
         Some(TraitOffsets {
             max_stack: at(catalogue::ITEM_MAX_STACK)?,
             category: at(catalogue::ITEM_CATEGORY)?,
             flags: at(catalogue::ITEM_FLAGS)?,
             placed: at(catalogue::ITEM_PLACED_ENTITY)?,
+            backpack,
         })
     })();
     let (Some(offsets), Some(archive)) = (offsets, crate::archive::game()) else {
@@ -857,8 +865,11 @@ fn container_patches(
         return Vec::new();
     }
     let facts = catalogue::Reflected(&loader.reflection);
-    let placed = catalogue::constant(catalogue::ITEM_PLACED_ENTITY, &loader.reflection)
-        .and_then(|at| usize::try_from(at).ok());
+    let at = |id: &str| {
+        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let placed = at(catalogue::ITEM_PLACED_ENTITY);
+    let own = at(catalogue::ITEM_PID_ENTITY);
     let (Ok(layout), Some(placed), Some(archive)) = (
         ContainerLayout::resolve(&facts),
         placed,
@@ -872,15 +883,24 @@ fn container_patches(
     };
     let mut templates: Vec<(Guid, Vec<Guid>)> = Vec::new();
     for item in items {
-        let template = archive
-            .resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO))
-            .and_then(|info| info.get(placed..placed + 16)?.try_into().ok())
-            .map(Guid)
-            .filter(|template| template.0 != [0; 16]);
+        let info = archive.resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO));
+        let holds = |template: &Guid| {
+            archive
+                .resource(&template.key_by_hash(crate::catalogue::types::TEMPLATE))
+                .is_some_and(|data| container_slots(&layout, &data).is_some())
+        };
+        let template = info.as_deref().and_then(|info| {
+            [Some(placed), own]
+                .into_iter()
+                .flatten()
+                .filter_map(|at| info.get(at..at + 16)?.try_into().ok().map(Guid))
+                .filter(|template| template.0 != [0; 16])
+                .find(holds)
+        });
         let Some(template) = template else {
             crate::log!(
                 WARN,
-                "container slots of {item} are not changed: it is no vanilla item that places a container"
+                "container slots of {item} are not changed: it is no vanilla item that places a container or carries one"
             );
             continue;
         };

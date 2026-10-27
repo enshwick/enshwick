@@ -529,7 +529,7 @@ fn a_category_change_selects_its_items_where_the_loader_reads_them() {
 #[test]
 fn stackable_items_and_containers_are_selected_by_a_word() {
     use crate::content::changes::{Items, ItemsChange};
-    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n";
+    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n\n[[change]]\nitems = \"backpacks\"\nslots = 32\n";
     let pack = Pack::parse("you.stacks", &files(items)).unwrap();
     assert_eq!(
         pack.selections(),
@@ -541,6 +541,10 @@ fn stackable_items_and_containers_are_selected_by_a_word() {
             (
                 ItemsChange::new(Items::Containers, Field::Slots, Value::Times(2.0)),
                 "items.toml:5 (containers)".to_owned()
+            ),
+            (
+                ItemsChange::new(Items::Backpacks, Field::Slots, Value::Set(32.0)),
+                "items.toml:9 (backpacks)".to_owned()
             ),
         ]
     );
@@ -565,7 +569,7 @@ fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
         ),
         (
             "[[change]]\nitems = \"chests\"\nslots = 48\n",
-            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\" or \"containers\"",
+            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\"",
         ),
         (
             "[[change]]\ncategory = []\nmax_stack = 50\n",

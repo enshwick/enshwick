@@ -228,8 +228,8 @@ impl Vanilla {
         self
     }
 
-    /// How many slots the container the vanilla item `item` places holds;
-    /// `None` when it places none.
+    /// How many slots the container the vanilla item `item` places holds,
+    /// or the backpack it is; `None` when it places or carries none.
     ///
     /// # Errors
     ///
@@ -254,19 +254,19 @@ impl Vanilla {
             .ok_or(VanillaError::Unreadable("container layout"))?;
         let info = (self.read)(item.key_by_hash(self.hashes.item))
             .ok_or(VanillaError::Unreadable("item data"))?;
-        let at = self.workshops.placed_entity;
-        let Some(template) = info
-            .get(at..at + 16)
-            .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
-            .map(Guid)
-            .filter(|template| template.0 != [0; 16])
-        else {
-            return Ok(None);
-        };
-        let Some(data) = (self.read)(template.key_by_hash(self.hashes.template)) else {
-            return Ok(None);
-        };
-        Ok(container_slots(layout, &data))
+        let slots = [self.workshops.placed_entity, self.items.pid_entity]
+            .into_iter()
+            .filter_map(|at| {
+                info.get(at..at + 16)
+                    .and_then(|bytes| <[u8; 16]>::try_from(bytes).ok())
+                    .map(Guid)
+                    .filter(|template| template.0 != [0; 16])
+            })
+            .find_map(|template| {
+                let data = (self.read)(template.key_by_hash(self.hashes.template))?;
+                container_slots(layout, &data)
+            });
+        Ok(slots)
     }
 
     /// The same, with the recipe layout `facts` give, when they give it.
@@ -677,12 +677,24 @@ pub(crate) mod tests {
     /// [`game`] with the item `chest`, named `name`, which places a
     /// container of `slots` slots.
     pub(crate) fn game_with_chest(chest: Guid, name: &str, slots: u8) -> Vanilla {
+        game_with_container(chest, name, slots, 0x3c0)
+    }
+
+    /// A game with the backpack `backpack`, named `name`, of `slots` slots
+    /// in the template of its own entity.
+    pub(crate) fn game_with_backpack(backpack: Guid, name: &str, slots: u8) -> Vanilla {
+        game_with_container(backpack, name, slots, ITEMS.pid_entity)
+    }
+
+    /// A game with `item`, named `name`, whose template at `at` in its data
+    /// holds a container of `slots` slots.
+    fn game_with_container(chest: Guid, name: &str, slots: u8, at: usize) -> Vanilla {
         use super::super::containers::tests::{LAYOUT as CONTAINERS, chest as template};
 
         let placed = Guid([0x77; 16]);
         let mut data = game_data(&[(chest, name)]);
         let mut info = vec![0u8; 0x400];
-        info[0x3c0..0x3d0].copy_from_slice(&placed.0);
+        info[at..at + 16].copy_from_slice(&placed.0);
         data.insert(chest.key_by_hash(HASHES.item), info);
         data.insert(placed.key_by_hash(HASHES.template), template(slots));
         Vanilla::with_parts(
@@ -745,6 +757,13 @@ pub(crate) mod tests {
             game(&[]).container_slots(chest),
             Err(VanillaError::Unreadable("container layout"))
         );
+    }
+
+    #[test]
+    fn a_backpack_s_slots_are_read_from_its_own_entity() {
+        let backpack = Guid([2; 16]);
+        let vanilla = game_with_backpack(backpack, "Equipment_Backpack_T1", 16);
+        assert_eq!(vanilla.container_slots(backpack), Ok(Some(16)));
     }
 
     #[test]

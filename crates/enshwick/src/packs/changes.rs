@@ -108,8 +108,9 @@ pub(super) fn item_changes(
             (Some(ItemsEntry::Word(word)), None) => match word.as_str() {
                 "stackable" => Ok((Items::Stackable, word.clone())),
                 "containers" => Ok((Items::Containers, word.clone())),
+                "backpacks" => Ok((Items::Backpacks, word.clone())),
                 _ => Err(format!(
-                    "items {word:?} is no selection; give a list of items, \"stackable\" or \"containers\""
+                    "items {word:?} is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\""
                 )),
             },
             (None, Some(categories)) => category(categories).map(|mask| {
