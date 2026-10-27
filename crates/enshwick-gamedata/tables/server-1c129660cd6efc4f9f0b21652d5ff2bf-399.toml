@@ -456,6 +456,10 @@ revision = 1
 "knowledge.record_log" = { value = 0x58, pattern = "66 48 0F 7E C1 EB 1A 48 8B 44 39 ?? 48 8B 4C 39 ?? 48 89 4C 24 ??", at = 11, size = 1 }
 "knowledge.record_log_count" = { value = 0x60, pattern = "48 8B 44 39 ?? 48 8B 4C 39 ?? 48 89 4C 24 ?? 48 89 44 24 ??", at = 9, size = 1 }
 "knowledge.log_entry_size" = { value = 0x10, pattern = "80 78 ?? 02 75 0E 48 83 C0 ?? 48 FF 4C 24 ?? 48 89 44 24 ??", at = 9, size = 1 }
+# A log entry's u32 id and u32 value, from the stack slots the writer
+# fills before it appends the entry.
+"knowledge.log_entry_id" = { value = 0x0, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 24 C6 44 24 2C 00 49 3B 56 ??" }
+"knowledge.log_entry_value" = { value = 0x4, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 ?? C6 44 24 2C 00 49 3B 56 ??", at = 15, size = 1, plus = -32 }
 "knowledge.queue" = { value = 0x1d0, pattern = "48 89 87 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 15, size = 4 }
 "knowledge.journal" = { value = 0x1e8, pattern = "49 8B CF E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 11, size = 4 }
 "knowledge.journal_blob" = { value = 0x48, via = "knowledge.journal_blob_get", pattern = "48 8B 41 ?? C3", at = 3, size = 1 }
