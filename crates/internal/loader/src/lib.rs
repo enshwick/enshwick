@@ -63,6 +63,9 @@ pub mod errors;
 #[cfg(windows)]
 mod events;
 pub mod features;
+#[cfg(windows)]
+mod fog;
+pub mod fog_image;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the game's features run behind fuses")
@@ -194,6 +197,8 @@ mod spawns;
 mod standins;
 #[cfg(windows)]
 mod start;
+#[cfg(windows)]
+mod static_halves;
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};
 #[cfg(windows)]

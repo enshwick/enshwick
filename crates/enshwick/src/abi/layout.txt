@@ -1,4 +1,4 @@
-abi 2.94
+abi 2.95
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -245,6 +245,14 @@ ExperienceRow size 20 align 4
 Fingerprint size 20 align 4
     guid at 0 size 16
     age at 16 size 4
+FogInfo size 40 align 8
+    header at 0 size 8
+    width at 8 size 4
+    height at 12 size 4
+    metres_per_pixel at 16 size 4
+    size_z at 20 size 4
+    version at 24 size 8
+    session at 32 size 8
 GameEventData size 24 align 8
     header at 0 size 8
     type_hash at 8 size 4
@@ -262,7 +270,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1352 align 8
+HostApi size 1368 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -428,9 +436,11 @@ HostApi size 1352 align 8
     transaction_status at 1304 size 8
     transaction_commit_for at 1312 size 8
     world_quiet at 1320 size 8
-    serve_call at 1328 size 8
-    find_call at 1336 size 8
-    call at 1344 size 8
+    fog_open at 1328 size 8
+    fog_read at 1336 size 8
+    serve_call at 1344 size 8
+    find_call at 1352 size 8
+    call at 1360 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

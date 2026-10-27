@@ -371,9 +371,18 @@ fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
     (world != 0).then(|| world + layout.entity_world)
 }
 
-/// The server's entity world and the registry's index of the component
-/// type `hash`, when the caller is on the game thread.
-pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
+/// Where a component type is in the server's world: its entity world, the
+/// world's component registry and the registry's index of the type.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TypeAt {
+    pub(crate) world: usize,
+    registry: usize,
+    pub(crate) index: *const u16,
+}
+
+/// Where the component type `hash` is, when the caller is on the game
+/// thread.
+pub(crate) fn type_at(loader: &Loader, hash: u32) -> Result<TypeAt, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let world = entity_world(layout, reader()?).ok_or(Status::MISSING)?;
     // SAFETY: `world` is the entity world, non-zero (checked by
@@ -402,27 +411,59 @@ pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u1
         })
         .find(|index| !index.is_null())
         .ok_or(Status::MISSING)?;
-    Ok((world, index))
+    Ok(TypeAt {
+        world,
+        registry,
+        index,
+    })
 }
 
-/// A component's data pointer, or why not.
+/// The server's entity world and the registry's index of the component
+/// type `hash`, when the caller is on the game thread.
+pub(crate) fn type_index(loader: &Loader, hash: u32) -> Result<(usize, *const u16), Status> {
+    type_at(loader, hash).map(|at| (at.world, at.index))
+}
+
+/// Whether `hash`, found at `at`, names the static half of its ECS type,
+/// the template's set-up data; false on a build whose table lacks the
+/// registry's layout.
+pub(crate) fn names_static(loader: &Loader, at: &TypeAt, hash: u32) -> bool {
+    crate::static_halves::halves(loader).is_some_and(|halves| {
+        // SAFETY: `at` came from `type_at` on the game thread, so its
+        // registry is the live world's non-zero component registry and its
+        // index the non-null type index found for `hash`.
+        unsafe { halves.is_static(at.registry, at.index, hash) }
+    })
+}
+
+/// A component's data pointer, or why not: for the static half of an ECS
+/// type, the set-up data the entity's template holds, which nothing may
+/// write; otherwise the entity's own data.
 pub(crate) fn component(
     loader: &Loader,
     entity: Entity,
     hash: u32,
 ) -> Result<*const c_void, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
-    let (world, index) = type_index(loader, hash)?;
+    let at = type_at(loader, hash)?;
+    if names_static(loader, &at, hash) {
+        let halves = crate::static_halves::halves(loader).ok_or(Status::MISSING)?;
+        // SAFETY: `at.world` is the live entity world and `at.index` the
+        // type index of `hash`, whose type has a static half (`names_static`
+        // returned true), on the game thread (checked by `reader` inside
+        // `type_at`).
+        return unsafe { halves.read(at.world, at.index, entity.0) }.map(<*const u8>::cast);
+    }
     let mut out = [0usize; 2];
     // SAFETY: `read_component` is the table's `ecs.component_read_raw`;
-    // `out` is two writable words on this stack, `world` the non-zero entity
-    // world and `index` the non-null registry index `type_index` returned,
-    // on the game thread (checked by `reader` inside `type_index`).
+    // `out` is two writable words on this stack, `at.world` the non-zero
+    // entity world and `at.index` the non-null registry index `type_at`
+    // returned, on the game thread (checked by `reader` inside `type_at`).
     unsafe {
         (layout.read_component)(
             &raw mut out,
-            core::ptr::with_exposed_provenance(world),
-            index,
+            core::ptr::with_exposed_provenance(at.world),
+            at.index,
             entity.0,
         );
     };
