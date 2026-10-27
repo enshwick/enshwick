@@ -7,17 +7,40 @@
 //! initialised; a mod that fails or panics is turned off and the game runs
 //! vanilla where it acted.
 //!
-//! [`abi`] is the binary contract with the loader; the rest of the crate is
-//! the safe layer over it. With the `test` feature, `test` is a fake loader
-//! for a mod's unit tests:
+//! Depend on this crate from crates.io; `cargo enshwick new` writes the
+//! lines. The derive and attribute macros come from `enshwick-macros`, which
+//! this crate re-exports:
 //!
 //! ```toml
+//! [dependencies]
+//! enshwick = "<version>"
+//!
 //! [dev-dependencies]
-//! enshwick = { git = "https://github.com/enshwick/enshwick", tag = "enshwick-v<version>", features = ["test"] }
+//! enshwick = { version = "<version>", features = ["test"] }
 //! ```
 //!
-//! The derive and attribute macros come from `enshwick-macros`, an
-//! internal crate this one re-exports: depend on this crate only.
+//! A mod builds for `x86_64-pc-windows-msvc`, the game's target. The crate
+//! also builds on other hosts, so a mod's tests run against the fake loader
+//! anywhere.
+//!
+//! # Modules
+//!
+//! | Area | Modules |
+//! | --- | --- |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`migrations`] |
+//! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
+//! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
+//! | The server's world | [`world`], [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`map`], [`terrain`], [`voxels`], [`weather`] |
+//! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`], [`actions`], [`console`] |
+//! | Game rules | [`damage`], [`loot`], [`rates`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
+//! | Content | [`content`], [`packs`] |
+//! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
+//! | Interface and scripts | [`ui`], [`script`](mod@script) |
+//! | Tests | `test`, with the `test` feature |
+//!
+//! # Features
+//!
+#![doc = document_features::document_features!()]
 //!
 //! # Examples
 //!

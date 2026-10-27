@@ -10,6 +10,7 @@
 use std::collections::VecDeque;
 use std::fmt::Write as _;
 use std::io::Write as _;
+use std::ops::Range;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
@@ -33,8 +34,41 @@ const KEPT_BYTES: u64 = 8 << 20;
 /// Earlier runs kept beside the current one.
 const KEPT_RUNS: usize = 2;
 
-/// One line: its level, its source and the line as written.
-type Line = (Level, String, String);
+/// One line as written, with its level and where its source sits in it, so
+/// the source costs no copy of its own.
+#[derive(Debug)]
+struct Line {
+    level: Level,
+    text: String,
+    source: Range<usize>,
+}
+
+impl Line {
+    fn new(millis: u64, level: Level, source: &str, message: &str) -> Self {
+        let secs = millis / 1000;
+        let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+        let name = level.name();
+        let mut text = String::with_capacity(32 + source.len() + message.len());
+        let _time = write!(
+            text,
+            "{h:02}:{m:02}:{s:02}.{:03}Z {name:<5} [",
+            millis % 1000
+        );
+        let start = text.len();
+        text.push_str(source);
+        let source = start..text.len();
+        let _message = writeln!(text, "] {message}");
+        Self {
+            level,
+            text,
+            source,
+        }
+    }
+
+    fn source(&self) -> &str {
+        self.text.get(self.source.clone()).unwrap_or_default()
+    }
+}
 
 static LINES: OnceLock<SyncSender<Line>> = OnceLock::new();
 /// What the channel to the writer has carried.
@@ -101,33 +135,34 @@ pub fn open(dir: &Path) {
             };
             let mut files: rustc_hash::FxHashMap<String, Option<std::fs::File>> =
                 rustc_hash::FxHashMap::default();
-            for (level, source, line) in receive {
+            for line in receive {
                 let dropped = COUNTS.dropped.swap(0, Ordering::Relaxed);
                 if dropped > 0 {
-                    let note = format_line(
+                    let note = Line::new(
                         now(),
                         Level::WARN,
                         LOADER_ID,
                         &format!("{dropped} log lines were dropped: they came faster than the disk took them"),
                     );
-                    let _all = all.write_all(note.as_bytes());
-                    keep((Level::WARN, LOADER_ID.to_owned(), note));
+                    let _all = all.write_all(note.text.as_bytes());
+                    keep(note);
                 }
-                keep((level, source.clone(), line.clone()));
-                COUNTS.taken.fetch_add(1, Ordering::Release);
-                let _all = all.write_all(line.as_bytes()).and_then(|()| all.flush());
-                let file = files.entry(source).or_insert_with_key(|source| {
+                let _all = all.write_all(line.text.as_bytes()).and_then(|()| all.flush());
+                let source = line.source();
+                if !files.contains_key(source) {
                     let path = if source == LOADER_ID {
                         dir.join("loader.log")
                     } else {
                         mods.join(format!("{source}.log"))
                     };
-                    std::fs::File::create(path).ok()
-                });
-                // Flush per line: after a crash the last lines are the useful ones.
-                if let Some(file) = file {
-                    let _own = file.write_all(line.as_bytes()).and_then(|()| file.flush());
+                    files.insert(source.to_owned(), std::fs::File::create(path).ok());
                 }
+                // Flush per line: after a crash the last lines are the useful ones.
+                if let Some(Some(file)) = files.get_mut(source) {
+                    let _own = file.write_all(line.text.as_bytes()).and_then(|()| file.flush());
+                }
+                keep(line);
+                COUNTS.taken.fetch_add(1, Ordering::Release);
             }
         });
     if started.is_ok() {
@@ -253,12 +288,7 @@ pub fn write(level: Level, source: &str, message: &str) {
     if !enabled(level, source) {
         return;
     }
-    let line = (
-        level,
-        source.to_owned(),
-        format_line(now(), level, source, message),
-    );
-    match lines.try_send(line) {
+    match lines.try_send(Line::new(now(), level, source, message)) {
         Ok(()) => {
             COUNTS.sent.fetch_add(1, Ordering::Relaxed);
         }
@@ -301,9 +331,9 @@ pub fn recent(source: Option<&str>, level: Level, count: usize) -> Vec<String> {
     let mut found: Vec<String> = recent
         .iter()
         .rev()
-        .filter(|(l, s, _)| *l <= level && source.is_none_or(|source| source == s))
+        .filter(|line| line.level <= level && source.is_none_or(|source| source == line.source()))
         .take(count)
-        .map(|(_, _, line)| line.trim_end().to_owned())
+        .map(|line| line.text.trim_end().to_owned())
         .collect();
     found.reverse();
     found
@@ -313,19 +343,6 @@ fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
-}
-
-fn format_line(millis: u64, level: Level, source: &str, message: &str) -> String {
-    let secs = millis / 1000;
-    let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let level = level.name();
-    let mut line = String::with_capacity(32 + source.len() + message.len());
-    let _formatted = writeln!(
-        line,
-        "{h:02}:{m:02}:{s:02}.{:03}Z {level:<5} [{source}] {message}",
-        millis % 1000
-    );
-    line
 }
 
 /// Logs a line from the loader itself; formats it only when its level is
@@ -349,17 +366,21 @@ mod tests {
         for i in 0..RECENT + 10 {
             let level = if i % 2 == 0 { Level::INFO } else { Level::WARN };
             let source = if i % 3 == 0 { "a" } else { "b" };
-            keep((level, source.to_owned(), format!("line {i}\n")));
+            keep(Line::new(0, level, source, &format!("line {i}")));
         }
         assert_eq!(RECENT_LINES.relock().len(), RECENT);
+        let message = |line: &String| line.rsplit_once("] ").unwrap().1.to_owned();
         let last = RECENT + 9;
         assert_eq!(
-            recent(None, Level::DEBUG, 2),
+            recent(None, Level::DEBUG, 2)
+                .iter()
+                .map(message)
+                .collect::<Vec<_>>(),
             [format!("line {}", last - 1), format!("line {last}")]
         );
         let warnings = recent(Some("b"), Level::WARN, 3);
         assert_eq!(warnings.len(), 3);
-        assert!(warnings.iter().all(|line| {
+        assert!(warnings.iter().map(message).all(|line| {
             let i: usize = line.trim_start_matches("line ").parse().unwrap();
             i % 2 == 1 && !i.is_multiple_of(3)
         }));
@@ -441,7 +462,12 @@ mod tests {
 
     #[test]
     fn a_line_names_its_time_level_and_source() {
-        let line = format_line(3_723_004, Level::WARN, "you.lockers", "opened 3 lockers");
-        assert_eq!(line, "01:02:03.004Z warn  [you.lockers] opened 3 lockers\n");
+        let line = Line::new(3_723_004, Level::WARN, "you.lockers", "opened [3] lockers");
+        assert_eq!(
+            line.text,
+            "01:02:03.004Z warn  [you.lockers] opened [3] lockers\n"
+        );
+        assert_eq!(line.source(), "you.lockers");
+        assert_eq!(line.level, Level::WARN);
     }
 }

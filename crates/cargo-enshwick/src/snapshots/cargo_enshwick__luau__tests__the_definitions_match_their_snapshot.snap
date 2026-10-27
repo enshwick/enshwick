@@ -30,7 +30,7 @@ export type Block = {
 	material: number,
 }
 
---- The data of `Event::BUILDING_PLACED` and `Event::BUILDING_REMOVED`.
+--- The data of the `BuildingPlaced` and `BuildingRemoved` events.
 export type BuildingData = {
 	--- The placed entity; for a removal, the entity as it was.
 	entity: number,
@@ -38,7 +38,7 @@ export type BuildingData = {
 	player: number,
 	--- The item placed, which the entity keeps as its `UsedItem`; 0 for a removal.
 	item: number,
-	--- `BuildingData::PLACED`, `BuildingData::PICKED_UP` or `BuildingData::TORN_DOWN`.
+	--- What happened: 0 placed, 1 picked up, 2 torn down.
 	kind: number,
 	--- 1 when undo or redo replayed the action.
 	replay: number,
@@ -70,7 +70,7 @@ export type BuildingTearDownEvent = {
 	block: Block,
 }
 
---- The data of `Event::CHUNK_LOADED` and `Event::CHUNK_UNLOADED`.
+--- The data of the `ChunkLoaded` and `ChunkUnloaded` events.
 export type ChunkData = {
 	--- The chunk's index in the world's grid: `z * width + x`.
 	index: number,
@@ -169,7 +169,7 @@ export type ItemInfo = {
 	category: number,
 }
 
---- The data of `Event::KNOWLEDGE_CHANGED`.
+--- The data of the `KnowledgeChanged` event.
 export type KnowledgeData = {
 	--- The player's character, or 0 for the world's knowledge.
 	entity: number,
@@ -197,7 +197,7 @@ export type LootInteractionEvent = {
 	loot_all: boolean,
 }
 
---- How a notice reached a player, from `World::notify`.
+--- How a notice reached a player, from `notify`.
 export type Notice = "OnScreen" | "Chat"
 
 --- Why an operation failed.
@@ -205,7 +205,7 @@ export type OpError = "NotRun" | "InvalidState" | "OutOfMemory" | "Other"
 
 --- The result of one operation.
 export type OpResult = {
-	--- Why it failed; `None` when it ran without an error.
+	--- Why it failed; none when it ran without an error.
 	error: OpError?,
 	--- How much of the count the operation could not do.
 	remaining: number,
@@ -227,13 +227,13 @@ export type Player = {
 	slot: number,
 	--- The same for the same account in every session.
 	key: string,
-	--- Permission bits, `PlayerInfo::CAN_*`.
+	--- The server's permission bits for the player, as player events list them.
 	permissions: number,
 	--- The name the client sent; untrusted, may repeat between players.
 	name: string,
 }
 
---- The data of `Event::PLAYER_JOINED` and `Event::PLAYER_LEFT`.
+--- The data of the `PlayerJoined` and `PlayerLeft` events.
 export type PlayerData = {
 	--- The server's player slot, 0 to 15, while the player is connected.
 	slot: number,
@@ -243,13 +243,13 @@ export type PlayerData = {
 	key: string,
 }
 
---- The data of `Event::PLAYER_DIED`.
+--- The data of the `PlayerDied` event.
 export type PlayerDeathData = {
 	--- The player's character; 0 when the account left in the same step.
 	entity: number,
-	--- `PlayerDeathData::HIT`, `PlayerDeathData::FALL`, `PlayerDeathData::SHROUD` or `PlayerDeathData::SUFFOCATED`.
+	--- What killed the player: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
 	cause: number,
-	--- The account, as `PlayerInfo::key`.
+	--- The account, the same number in every session.
 	key: string,
 	--- Where, in metres.
 	position: vector,
@@ -259,11 +259,11 @@ export type PlayerDeathData = {
 	deadly_shroud: number,
 	--- 1 when the player drowned.
 	drowned: number,
-	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other causes, or when the history names none. Since minor 62.
+	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none.
 	killer_entity: number,
 }
 
---- The data of `Event::QUEST_COMPLETED`.
+--- The data of the `QuestCompleted` event.
 export type QuestData = {
 	--- The player's character.
 	entity: number,
@@ -293,7 +293,7 @@ export type Slot = {
 	pide: number?,
 }
 
---- The data of `Event::TICKED`.
+--- The data of the `Ticked` event.
 export type TickData = {
 	--- Steps since the loader started counting, from 1.
 	step: string,
@@ -384,7 +384,7 @@ declare enshwick: {
 		tell: (player: Player, text: string) -> (),
 		--- Shows `text` on `player`'s screen, as the game shows its own "can't do that" messages, or tells it in chat when the player's client lacks Enshwick to show it; says which. The game shows 255 bytes; keep it to a line. On the game thread; elsewhere it goes to chat.
 		notify: (player: Player, text: string) -> Notice,
-		--- `World::notify` for every connected player.
+		--- Sends a notice to every connected player, as `notify` does to one.
 		notify_all: (text: string) -> (),
 		--- Every connected player with a character in the world.
 		players: () -> {Player},
@@ -397,16 +397,16 @@ declare enshwick: {
 		next_tick: (task: () -> ()) -> (),
 		--- Runs `task` after the first step at least `delay` from now.
 		after: (delay: number, task: () -> ()) -> (),
-		--- Runs `task` about every `period`, the first time a period from now, until it returns `ControlFlow::Break`, which a script's task does by returning `false`.
+		--- Runs `task` about every `period`, the first time a period from now, until it asks to stop, which a script's task does by returning `false`.
 		every: (period: number, task: () -> boolean?) -> (),
 	},
 	--- Inventories on the server: their slots and counts, and items given, taken and moved.
 	inventory: {
-		--- The static data of `item`; `None` for an unknown item, or while no world runs. Any thread.
+		--- The static data of `item`; none for an unknown item, or while no world runs. Any thread.
 		item_info: (item: number) -> ItemInfo?,
-		--- Every slot of the inventory `root`, as `Reader::slots` reads it on the server's game thread; empty elsewhere.
+		--- Every slot of the inventory `root`, as a reader reads it on the server's game thread; empty elsewhere.
 		slots: (root: number) -> {Slot},
-		--- How many items `item` the inventory `root` holds, as `Reader::count` reads it on the server's game thread; 0 elsewhere.
+		--- How many items `item` the inventory `root` holds, as a reader reads it on the server's game thread; 0 elsewhere.
 		count: (root: number, item: number) -> number,
 		--- Gives `count` new items `item` to the inventory `to`, all or nothing, with the game's pickup message.
 		give: (to: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
@@ -416,7 +416,7 @@ declare enshwick: {
 		destroy_slot: (slot: string, done: (arg1: Outcome) -> ()) -> (),
 		--- Moves the stack in `slot`, or `amount` of it, into the inventory `to`; what does not fit stays in the source.
 		move_slot: (slot: string, to: number, amount: number?, done: (arg1: Outcome) -> ()) -> (),
-		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; use `Op::MoveAll` in a `Batch` to include them.
+		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; a move in a batch can include them.
 		move_all: (from: number, to: number, done: (arg1: Outcome) -> ()) -> (),
 	},
 }

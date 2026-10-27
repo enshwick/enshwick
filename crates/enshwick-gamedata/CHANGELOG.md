@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Table::carry_key`, `Resolved::to_saved` and `Table::restore` save a
+  carried table and read it back while the code and the table stay the
+  same (#598).
 - A constant row may name a `cell`, the symbol of the data the game keeps
   the value in; `Constant::cell` returns it (#603).
 - Every table reads `skill.airborne_architect` from the cell the fly mode
@@ -16,6 +19,9 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `Table::fall_back` searches every pattern in one pass over the code:
+  about 5 ms instead of 38 ms on a dedicated server, 7 ms instead of 84 ms
+  on a client (#598).
 - Breaking: `Table::fall_back` takes a reader of the `u32` the image holds
   at an RVA, for constants in cells (#603).
 

@@ -35,7 +35,7 @@ impl RateId {
 
     /// How many items a recipe makes, for the recipes whose output is of
     /// `kind`: one id per [`RecipeKind`](super::RecipeKind) code, above
-    /// every other rate's. A loader older than minor 79 refuses them.
+    /// every other rate's.
     ///
     /// # Examples
     ///

@@ -68,8 +68,15 @@ impl Symbol {
     /// without a pattern or a unique match.
     #[must_use]
     pub fn find(&self, code: &[u8], code_rva: u64) -> Option<u64> {
-        let pattern = self.pattern.as_ref()?;
-        let start = u64::try_from(pattern.find_unique(code).ok()?).ok()?;
+        let start = self.pattern.as_ref()?.find_unique(code).ok()?;
+        self.locate(code, code_rva, start)
+    }
+
+    /// The symbol's address relative to the image base from its pattern's
+    /// match at `start` in `code`, the code section that starts at
+    /// `code_rva`.
+    pub(crate) fn locate(&self, code: &[u8], code_rva: u64, start: usize) -> Option<u64> {
+        let start = u64::try_from(start).ok()?;
         let base = code_rva.checked_add(start)?;
         match self.locate {
             Locate::At(at) => base.checked_add(at),
@@ -328,7 +335,14 @@ impl Constant {
         self.read(code, found)
     }
 
-    fn read(&self, code: &[u8], start: u64) -> Option<u64> {
+    /// Whether the pattern alone finds the value: neither read [`Self::via`]
+    /// a symbol nor a symbol's expected bytes.
+    pub(crate) fn searched_alone(&self) -> bool {
+        self.pattern.is_some() && self.via.is_none() && self.id.strip_suffix(".bytes").is_none()
+    }
+
+    /// The value from the pattern's match at `start` in `code`.
+    pub(crate) fn read(&self, code: &[u8], start: u64) -> Option<u64> {
         match self.operand {
             Some(operand) => operand.read(code, start),
             None => Some(self.value),

@@ -14,10 +14,12 @@ autotests = false
 
 [dependencies]
 enshwick-macros = { path = "../enshwick-macros", version = "=1.0.0-alpha.8" }
+aho-corasick.workspace = true
 bcdec_rs.workspace = true
 bytemuck.workspace = true
 const-sha1.workspace = true
 const_format.workspace = true
+document-features.workspace = true
 zune-core.workspace = true
 zune-png.workspace = true
 fastrand.workspace = true
@@ -40,9 +42,9 @@ syn = { version = "=3.0.9", default-features = false, features = ["full", "parsi
 serde = { workspace = true, features = ["derive"] }
 
 [features]
-# `enshwick::test`: a fake loader for a mod's unit tests.
+## `test`: a fake loader for a mod's unit tests.
 test = []
-# `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
+## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
@@ -57,6 +59,8 @@ workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-pc-windows-msvc"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]
 name = "hook_dispatch"
@@ -75,3 +79,8 @@ harness = false
 [[bench]]
 name = "rates"
 harness = false
+
+[[bench]]
+name = "tick"
+harness = false
+required-features = ["test"]

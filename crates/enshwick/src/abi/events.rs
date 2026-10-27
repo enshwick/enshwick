@@ -58,51 +58,51 @@ impl Event {
     /// the client lacks or runs in another version; no data.
     /// [`HostApi::join_missing`](super::HostApi::join_missing) lists those mods with the versions the
     /// server runs and their pages. Raised on the game thread once the player
-    /// closed the loader's dialog. Client only. Since minor 10.
+    /// closed the loader's dialog. Client only.
     pub const JOIN_REFUSED: Self = Self(11);
     /// The Flame Altars of the server's world changed: one was placed or
     /// removed, moved, raised a level or had its zone built anew; no data.
     /// [`HostApi::altars`](super::HostApi::altars) lists them as they are now. Raised on the game
     /// thread after the step that noticed it, while a mod has opened altars
-    /// ([`HostApi::altars_open`](super::HostApi::altars_open)). Server only. Since minor 15.
+    /// ([`HostApi::altars_open`](super::HostApi::altars_open)). Server only.
     pub const ALTARS_CHANGED: Self = Self(12);
     /// The day began in the server's world: the clock passed the hour day
     /// starts at, or a mod set it into the day; no data. Raised on the game
-    /// thread after the step that noticed it. Server only. Since minor 28.
+    /// thread after the step that noticed it. Server only.
     pub const DAY_STARTED: Self = Self(13);
     /// The night began in the server's world, as [`Event::DAY_STARTED`] the
-    /// day; no data. Server only. Since minor 28.
+    /// day; no data. Server only.
     pub const NIGHT_STARTED: Self = Self(14);
     /// A knowledge value of the server's world or of a connected player
     /// changed: a recipe learnt, a quest step, a place found; data is a
     /// [`KnowledgeData`]. Raised on the game thread after the step that
-    /// applied it. Server only. Since minor 32.
+    /// applied it. Server only.
     pub const KNOWLEDGE_CHANGED: Self = Self(15);
     /// A player completed a quest and got its rewards; data is a
     /// [`QuestData`]. Raised on the game thread after the step. Server
-    /// only. Since minor 32.
+    /// only.
     pub const QUEST_COMPLETED: Self = Self(16);
     /// A chunk of the server's world loaded: players came near, and its
     /// entities exist now; data is a [`ChunkData`]. Raised on the game
-    /// thread after the step. Server only. Since minor 33.
+    /// thread after the step. Server only.
     pub const CHUNK_LOADED: Self = Self(17);
     /// A chunk of the server's world unloaded: no player is near, and its
     /// entities are gone; data is a [`ChunkData`]. Raised on the game thread
-    /// after the step. Server only. Since minor 33.
+    /// after the step. Server only.
     pub const CHUNK_UNLOADED: Self = Self(18);
     /// The settings a mod reads were replaced whole, as a world loads in this
     /// process (its own settings from then on) or stops (the settings file
     /// again); no data. The settings that wait for a start apply too.
-    /// Raised on the server's game thread. Since minor 46.
+    /// Raised on the server's game thread.
     pub const SETTINGS_REPLACED: Self = Self(19);
     /// A player died, from a hit, a fall, the shroud or drowning; data is a
     /// [`PlayerDeathData`]. Raised on the game thread after the step.
     /// Deaths the game keeps no record of, such as freezing or an
-    /// administrator's kill, raise none. Server only. Since minor 60.
+    /// administrator's kill, raise none. Server only.
     pub const PLAYER_DIED: Self = Self(20);
 }
 
-/// The data of [`Event::PLAYER_DIED`].
+/// The data of the [`PlayerDied`](crate::events::PlayerDied) event.
 ///
 /// # Examples
 ///
@@ -131,10 +131,11 @@ pub struct PlayerDeathData {
     pub header: Header,
     /// The player's character; 0 when the account left in the same step.
     pub entity: u32,
-    /// [`PlayerDeathData::HIT`], [`PlayerDeathData::FALL`],
-    /// [`PlayerDeathData::SHROUD`] or [`PlayerDeathData::SUFFOCATED`].
+    /// What killed the player: 0 [a hit](PlayerDeathData::HIT), 1
+    /// [a fall](PlayerDeathData::FALL), 2 [the shroud](PlayerDeathData::SHROUD),
+    /// 3 [suffocation](PlayerDeathData::SUFFOCATED).
     pub cause: u32,
-    /// The account, as [`PlayerInfo::key`].
+    /// The account, [the same number](PlayerInfo::key) in every session.
     pub key: u64,
     /// Where, in metres.
     pub position: [f32; 3],
@@ -148,8 +149,8 @@ pub struct PlayerDeathData {
     /// Zero.
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
-    /// `HitHistory`, as [`crate::game_events::EntityDiedEvent`] reads it; 0 for other
-    /// causes, or when the history names none. Since minor 62.
+    /// `HitHistory`, as [`EntityDiedEvent`](crate::game_events::EntityDiedEvent) reads it; 0 for other
+    /// causes, or when the history names none.
     pub killer_entity: u32,
     /// Zero.
     pub reserved_tail: u32,
@@ -168,7 +169,7 @@ impl PlayerDeathData {
     pub const SUFFOCATED: u32 = 3;
 }
 
-/// The data of [`Event::KNOWLEDGE_CHANGED`].
+/// The data of the [`KnowledgeChanged`](crate::events::KnowledgeChanged) event.
 ///
 /// # Examples
 ///
@@ -193,7 +194,7 @@ pub struct KnowledgeData {
 
 impl_headed!(KnowledgeData);
 
-/// The data of [`Event::QUEST_COMPLETED`].
+/// The data of the [`QuestCompleted`](crate::events::QuestCompleted) event.
 ///
 /// # Examples
 ///
@@ -296,7 +297,8 @@ impl KnowledgeInput {
 pub type KnowledgeInputFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
-/// The data of [`Event::CHUNK_LOADED`] and [`Event::CHUNK_UNLOADED`].
+/// The data of the [`ChunkLoaded`](crate::events::ChunkLoaded) and
+/// [`ChunkUnloaded`](crate::events::ChunkUnloaded) events.
 ///
 /// # Examples
 ///
@@ -324,7 +326,8 @@ pub struct ChunkData {
 
 impl_headed!(ChunkData);
 
-/// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
+/// The data of the [`BuildingPlaced`](crate::events::BuildingPlaced) and
+/// [`BuildingRemoved`](crate::events::BuildingRemoved) events.
 ///
 /// # Examples
 ///
@@ -355,8 +358,8 @@ pub struct BuildingData {
     /// The item placed, which the entity keeps as its `UsedItem`; 0 for a
     /// removal.
     pub item: u32,
-    /// [`BuildingData::PLACED`], [`BuildingData::PICKED_UP`] or
-    /// [`BuildingData::TORN_DOWN`].
+    /// What happened: 0 [placed](BuildingData::PLACED), 1
+    /// [picked up](BuildingData::PICKED_UP), 2 [torn down](BuildingData::TORN_DOWN).
     pub kind: u8,
     /// 1 when undo or redo replayed the action.
     pub replay: u8,
@@ -415,7 +418,13 @@ pub struct PlayerInfo {
     pub entity: u32,
     /// The same number for the same account in every session.
     pub key: u64,
-    /// The server's permission bits for the player, `PlayerInfo::CAN_*`.
+    /// The server's permission bits for the player: 1
+    /// [kick and ban](PlayerInfo::CAN_KICK_BAN), 2
+    /// [open inventories](PlayerInfo::CAN_ACCESS_INVENTORIES), 4
+    /// [edit the base](PlayerInfo::CAN_EDIT_BASE), 8
+    /// [edit the world](PlayerInfo::CAN_EDIT_WORLD), 16
+    /// [extend the base](PlayerInfo::CAN_EXTEND_BASE), 32
+    /// [receive experience](PlayerInfo::CAN_RECEIVE_EXP).
     pub permissions: u8,
     /// Bytes of `name` in use.
     pub name_len: u8,
@@ -440,7 +449,7 @@ impl PlayerInfo {
     pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
 }
 
-/// The data of [`Event::TICKED`].
+/// The data of the [`Ticked`](crate::events::Ticked) event.
 ///
 /// # Examples
 ///
@@ -461,7 +470,8 @@ pub struct TickData {
 
 impl_headed!(TickData);
 
-/// The data of [`Event::PLAYER_JOINED`] and [`Event::PLAYER_LEFT`].
+/// The data of the [`PlayerJoined`](crate::events::PlayerJoined) and
+/// [`PlayerLeft`](crate::events::PlayerLeft) events.
 ///
 /// # Examples
 ///

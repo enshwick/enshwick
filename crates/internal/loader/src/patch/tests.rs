@@ -100,12 +100,19 @@ impl Page {
     }
 
     fn counter(&self) -> &'static Counter {
-        // SAFETY: `TIMED_THUNK` bytes and a slot are under `PAGE`, so
-        // word `TIMED_THUNK / 8 + 1` lies inside the page at `self.base`.
-        let counter = unsafe { self.base.add(TIMED_THUNK / 8 + 1) }.cast::<Counter>();
-        // SAFETY: the words are aligned in the committed, zeroed page,
-        // which the test never frees, a `Counter` fits after the slot,
-        // and a zeroed `Counter` is valid.
+        let at = (TIMED_THUNK + size_of::<usize>()).next_multiple_of(align_of::<Counter>());
+        assert!(at + size_of::<Counter>() <= PAGE);
+        // SAFETY: the counter ends inside the page at `self.base`, checked
+        // by the assertion before it, and starts past the thunk and its slot.
+        let counter = unsafe { self.base.add(at / 8) };
+        #[expect(
+            clippy::cast_ptr_alignment,
+            reason = "the page is page-aligned and `at` a multiple of the counter's alignment"
+        )]
+        let counter = counter.cast::<Counter>();
+        // SAFETY: the page is page-aligned and `at` a multiple of the
+        // counter's alignment; the page is committed, zeroed and never freed
+        // by the test, and a zeroed `Counter` is valid.
         unsafe { &*counter }
     }
 
