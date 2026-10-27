@@ -75,3 +75,8 @@ harness = false
 [[bench]]
 name = "rates"
 harness = false
+
+[[bench]]
+name = "tick"
+harness = false
+required-features = ["test"]

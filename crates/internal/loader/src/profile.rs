@@ -117,8 +117,11 @@ impl Feature {
     ];
 }
 
-/// One mod's calls of one feature.
+/// One mod's calls of one feature, alone on its cache lines like
+/// [`Counter`](crate::chains::Counter), since one mod's features run on
+/// different threads.
 #[derive(Debug, Default)]
+#[repr(align(128))]
 struct Bucket {
     calls: AtomicU64,
     ticks: AtomicU64,
