@@ -65,8 +65,24 @@ back and refuses any other format. A snapshot carries a marker's label as a
 text id only, since a dedicated server has no texts. Take one every few
 seconds, not every step: it walks every marker.
 
+## The fog of war on the client
+
+`load.fog_of_war()` asks the loader to copy the client's fog of war for
+the mod, during `init`; on a dedicated server it fails, since only the
+player's machine has the fog. The loader copies it as the game uncovers it,
+so `FogOfWar` reads from any thread.
+
+`fog.state()` returns a `FogState`: the image's size in pixels, the metres
+one pixel covers, the world's z size, a `version` that grows whenever pixels
+may have changed, and a `session` that changes with each world the client
+enters. `state.pixel_of(position)` finds the pixel of a place in metres:
+row 0 is the world's high z edge, and x grows with world x. `fog.read(min,
+size)` copies a box of pixels as a `FogImage`, one byte each from 0 (hidden)
+to 255 (uncovered), and `fog.coverage(position)` reads one place. Before
+the client enters a world, or on a game build without the fog, they fail
+with `FogError::Missing`.
+
 ## What a server does not have
 
-What a player has uncovered of the map, the markers a player places by hand
-and the map's image live only on that player's machine. A server never sees
-them.
+The markers a player places by hand and the map's image live only on the
+player's machine, and so does the fog of war. A server never sees them.

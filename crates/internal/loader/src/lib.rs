@@ -60,6 +60,9 @@ pub mod errors;
 #[cfg(windows)]
 mod events;
 pub mod features;
+#[cfg(windows)]
+mod fog;
+pub mod fog_image;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the game's features run behind fuses")

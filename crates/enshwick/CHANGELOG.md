@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
+  copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
+  read what the player has uncovered, as a `FogState` and `FogImage`; the
+  `fog_open` and `fog_read` entries and `FogInfo` (ABI 2.91) (#PR).
 - `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned

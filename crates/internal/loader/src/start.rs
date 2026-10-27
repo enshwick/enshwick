@@ -115,6 +115,7 @@ fn link_features(loader: &'static Loader) {
     crate::progress::link(loader);
     crate::bases::link(loader);
     crate::ui::link(loader);
+    crate::fog::link(loader);
 }
 
 pub(crate) fn start(

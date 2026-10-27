@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 90
+#define ENSHWICK_ABI_MINOR 91
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -977,6 +977,32 @@ typedef struct EnshwickExperiencePass {
   // The argument of `need_for`.
   void *token;
 } EnshwickExperiencePass;
+
+// The size, scale and version of the client's fog of war, which
+// `HostApi::fog_read` writes.
+//
+// The fog is one image of a byte per pixel, the coverage from 0 (hidden)
+// to 255 (uncovered), row 0 at the world's high z edge and x growing with
+// world x.
+typedef struct EnshwickFogInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The image's width in pixels.
+  uint32_t width;
+  // The image's height in pixels.
+  uint32_t height;
+  // The metres one pixel covers along each axis.
+  float metres_per_pixel;
+  // The world's z size the fog covers, in metres: pixel row
+  // `(size_z - z) / metres_per_pixel`.
+  float size_z;
+  // How many tiles the loader has copied since the fog appeared; it
+  // grows whenever pixels may have changed.
+  uint64_t version;
+  // Counts the fogs the loader has seen, one per world the client
+  // enters; a new one starts from the save of that world.
+  uint64_t session;
+} EnshwickFogInfo;
 
 // A game event handed to a `GameEventFn`, from the ECS event streams
 // of the server's systems.
@@ -3797,6 +3823,27 @@ typedef struct EnshwickHostApi {
   // inside a step, `Status::MISSING` while no world runs. Since
   // minor 90.
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
+  // Asks the loader to keep a copy of the client's fog of war for this
+  // mod. Client only (`Status::MISSING` on a dedicated server).
+  // Allowed during `enshwick_mod_init` only. Since minor 91.
+  EnshwickStatus (*fog_open)(EnshwickModHandle me);
+  // Writes the fog's `FogInfo` to `info`, then copies the box of
+  // `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
+  // most `capacity` bytes; a box of no pixels copies nothing. Any thread.
+  // `Status::MISSING` before the client has entered a world or when
+  // this build lacks the fog; `Status::REFUSED` for a mod that did not
+  // open it; `Status::OUTSIDE_WORLD` for a box past the image;
+  // `Status::BAD_ARGS` for a null `info`, or a null or short `out`
+  // for a box of pixels. The loader may refresh the copy meanwhile:
+  // compare `version`. Since minor 91.
+  EnshwickStatus (*fog_read)(EnshwickModHandle me,
+                             struct EnshwickFogInfo *info,
+                             uint32_t x,
+                             uint32_t y,
+                             uint32_t width,
+                             uint32_t height,
+                             uint8_t *out,
+                             uint32_t capacity);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.

@@ -98,3 +98,55 @@ pub(crate) extern "system" fn ui_dialog(
         crate::ui::mod_dialog(loader, index, &dialog, callback, user)
     })
 }
+
+pub(crate) extern "system" fn fog_open(me: ModHandle) -> Status {
+    entry("fog_open", || match caller_index(me) {
+        Ok((loader, index)) => crate::fog::open(loader, index),
+        Err(status) => status,
+    })
+}
+
+pub(crate) extern "system" fn fog_read(
+    me: ModHandle,
+    info: *mut api_frame::FogInfo,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    out: *mut u8,
+    capacity: u32,
+) -> Status {
+    entry("fog_read", || {
+        let index = match caller_index(me) {
+            Ok((_, index)) => index,
+            Err(status) => return status,
+        };
+        if info.is_null() {
+            return Status::BAD_ARGS;
+        }
+        let wanted = width != 0 && height != 0;
+        let Ok(len) = usize::try_from(capacity) else {
+            return Status::BAD_ARGS;
+        };
+        let out: &mut [u8] = if !wanted {
+            &mut []
+        } else if out.is_null() {
+            return Status::BAD_ARGS;
+        } else {
+            // SAFETY: `HostApi::fog_read` has the mod pass `capacity`
+            // writable bytes at a non-null (checked earlier) `out`, untouched
+            // by the mod during the call.
+            unsafe { core::slice::from_raw_parts_mut(out, len) }
+        };
+        let mut found = api_frame::FogInfo::EMPTY;
+        let status = crate::fog::read(index, &mut found, [x, y], [width, height], out);
+        if status == Status::REFUSED || status == Status::MISSING {
+            return status;
+        }
+        // SAFETY: `HostApi::fog_read` has the mod pass `info` pointing at
+        // its version of `FogInfo` (non-null, checked earlier), writable for
+        // the size its header states and untouched by the mod meanwhile.
+        let written = unsafe { put_headed(info, found) };
+        if written.is_ok() { status } else { written }
+    })
+}
