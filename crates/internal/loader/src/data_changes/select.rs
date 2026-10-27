@@ -5,6 +5,7 @@
 use enshwick::abi::ChangeId;
 use enshwick::content::Guid;
 use enshwick::content::changes::{Field, ItemTraits, ItemsChange};
+use rustc_hash::FxHashSet;
 
 use super::{Conflict, Declared};
 use crate::mod_index::ModIndex;
@@ -42,11 +43,21 @@ pub struct Picked {
     pub count: usize,
 }
 
-/// Every change of `pending` as changes of one entry each, in load order:
-/// a selection becomes a change of each item of `items` it picks, in its
-/// own place; with how many items each selection picked.
+/// Every change of `pending` as changes of one entry each, in load order,
+/// with how many items each selection picked.
+///
+/// A selection becomes a change of each item of `items` it picks, in its
+/// own place, but for an item the same mod changes by name, which keeps
+/// that change alone.
 #[must_use]
 pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Declared>, Vec<Picked>) {
+    let named: FxHashSet<(ModIndex, Guid, Field)> = pending
+        .iter()
+        .filter_map(|p| match p {
+            Pending::One(one) => Some((one.owner, one.change.entry, one.change.field)),
+            Pending::Each { .. } => None,
+        })
+        .collect();
     let mut declared = Vec::new();
     let mut picked = Vec::new();
     for change in pending {
@@ -62,7 +73,10 @@ pub fn expand(pending: Vec<Pending>, items: &[(Guid, ItemTraits)]) -> (Vec<Decla
                 declared.extend(
                     items
                         .iter()
-                        .filter(|(_, traits)| change.items.picks(change.field, traits))
+                        .filter(|(item, traits)| {
+                            change.items.picks(change.field, traits)
+                                && !named.contains(&(owner, *item, change.field))
+                        })
                         .map(|(item, _)| Declared {
                             owner,
                             change: change.of(*item),
@@ -220,6 +234,29 @@ mod tests {
         );
         assert_eq!(picked.len(), 1);
         assert_eq!(picked[0].count, 2);
+    }
+
+    #[test]
+    fn an_item_a_mod_names_itself_keeps_that_change_over_its_selection() {
+        let pending = vec![
+            each(0, Items::Stackable, Field::MaxStackSize, Value::Times(4.0)),
+            one(0, guid(1), Value::Set(999.0)),
+            one(1, guid(2), Value::Set(10.0)),
+        ];
+        let (declared, picked) = expand(pending, &items());
+        let order: Vec<(usize, Guid, Value)> = declared
+            .iter()
+            .map(|d| (d.owner.get(), d.change.entry, d.change.value))
+            .collect();
+        assert_eq!(
+            order,
+            vec![
+                (0, guid(2), Value::Times(4.0)),
+                (0, guid(1), Value::Set(999.0)),
+                (1, guid(2), Value::Set(10.0)),
+            ]
+        );
+        assert_eq!(picked[0].count, 1);
     }
 
     #[test]

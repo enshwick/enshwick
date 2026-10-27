@@ -209,6 +209,9 @@ impl Load<'_> {
         for (change, source) in &pack.changes {
             self.change(change, source)?;
         }
+        for (change, source) in &pack.selections {
+            self.change_items(change, source)?;
+        }
         let group = group(&pack.namespace);
         for drop in &pack.drops {
             self.add_loot_in(group, drop.clone())?;

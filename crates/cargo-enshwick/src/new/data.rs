@@ -106,6 +106,12 @@ const ITEMS_TOML: &str = r#"#:schema ./items.schema.json
 # [[change]]
 # items = ["Material_T1_Wood_Logs", "Material_T1_Resin"]
 # max_stack = { times = 4 }
+
+# Every item of some categories, every item that stacks ("stackable") or
+# every item that places a container ("containers"):
+# [[change]]
+# category = ["Materials"]
+# max_stack = { times = 2 }
 "#;
 
 const RECIPES_TOML: &str = r#"#:schema ./recipes.schema.json

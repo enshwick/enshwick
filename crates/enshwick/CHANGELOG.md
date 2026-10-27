@@ -44,9 +44,18 @@ Each entry names the pull request that made the change.
   player's rights for every change before it writes, and a refusal shows
   as `TransactionStatus::NotAllowed`; the op kinds, records and
   `transaction_commit_for` are ABI minor 89 (#551).
+- A data pack's `items.toml` changes the stack size or container slots of
+  every vanilla item of some categories (`category = ["Materials"]`), every
+  item that stacks (`items = "stackable"`) or every container
+  (`items = "containers"`), through the selections `Load::change_items`
+  makes; `Pack::selections` lists them, and `ItemCategoryMask::NAMES` and
+  `ItemCategoryMask::named` take the game's category names (#558).
 
 ### Changed
 
+- An item a mod or pack changes by name keeps that change over its own
+  selection of the same field, so a selection can leave out exceptions
+  (#558).
 - `Terrain::{add,dig,flatten}` write nothing and fail with
   `WorldError::NotLoaded` unless the whole area the edit can reach is
   loaded; the game would compute such an edit against air and merge it
