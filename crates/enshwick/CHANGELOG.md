@@ -85,6 +85,10 @@ Each entry names the pull request that made the change.
   (`items = "containers"`), through the selections `Load::change_items`
   makes; `Pack::selections` lists them, and `ItemCategoryMask::NAMES` and
   `ItemCategoryMask::named` take the game's category names (#558).
+- `Status::STATIC_HALF` (ABI minor 93), `WorldError::StaticHalf` and
+  `FakeHost::static_half`: a write to the static half of a component
+  type, the set-up data every entity of a template shares, is refused
+  (#568).
 
 ### Changed
 
@@ -101,6 +105,12 @@ Each entry names the pull request that made the change.
   item checks of `World::props_in` and `Transaction::place_block` work from
   world start: the loader finds the item registry without waiting for a
   player to join (#551).
+
+### Fixed
+
+- `World::component` and `World::get` read the static half of a component
+  type, such as `FuelSetup`, as the template's set-up values; they gave the
+  data of its dynamic half, `DynamicFuelSetup`, before (#568).
 
 ## [1.0.0-alpha.7] - 2026-10-26
 
