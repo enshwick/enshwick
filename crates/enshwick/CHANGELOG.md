@@ -16,6 +16,9 @@ Each entry names the pull request that made the change.
   (ABI 3.2) (#615).
 - `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
   give the game's id of a GUID with its type, in a constant too (#615).
+- `KnowledgeId` and `SkillNode` have a `Shape`, so services, events and
+  points carry them; a Luau script changes an answer of any id type
+  (#PR).
 
 ### Changed
 
