@@ -18,7 +18,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
         let waypoints = world
             .players()
             .iter()
-            .filter(|player| map.waypoint(player.entity).is_some())
+            .filter(|player| matches!(map.waypoint(player.entity), Ok(Some(_))))
             .count();
         enshwick::info!("{markers} markers, {waypoints} waypoints set");
         ControlFlow::Continue(())
@@ -50,7 +50,8 @@ The label is a text tag. A client reads its text with
 
 `map.waypoint(player)` returns where a player's waypoint is, the one every
 player in the game sees, in metres; `None` while it is off. The server keeps
-it only while the player plays, never in the save.
+it only while the player plays, never in the save. It fails like
+`markers()`, and with `Missing` on a game build without waypoints.
 
 ## What a server does not have
 

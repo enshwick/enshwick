@@ -17,7 +17,7 @@
 //!     let world = load.world()?;
 //!     load.scheduler()?.every(Duration::from_secs(10), move || {
 //!         for player in world.players() {
-//!             if let Some(at) = map.waypoint(player.entity) {
+//!             if let Ok(Some(at)) = map.waypoint(player.entity) {
 //!                 enshwick::info!("{} marks {at:?}", player.name);
 //!             }
 //!         }
@@ -27,7 +27,9 @@
 //! }
 //! ```
 
-use crate::content::Guid;
+use crate::Host;
+use crate::abi::Status;
+use crate::content::{EngineFacts, Guid};
 use crate::ecs::Entity;
 use crate::engine_ids as ids;
 use crate::world::{ComponentType, World, WorldError};
@@ -43,7 +45,7 @@ use crate::{Load, Off};
 /// use enshwick::map::MapMarkerTypeId;
 ///
 /// let reference = Guid::parse("5d2e6a2b-0c3f-4d8e-9a71-3e5f0b1c2d4e");
-/// assert_eq!(MapMarkerTypeId::of(reference).get(), reference.id());
+/// assert_eq!(MapMarkerTypeId::from_guid(reference).get(), 0xc807_9fa5);
 /// assert_eq!(MapMarkerTypeId::new(7).get(), 7);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -61,13 +63,13 @@ impl MapMarkerTypeId {
     }
 
     /// The type a marker's `markerType` reference names, keyed as the
-    /// registry keys it.
+    /// registry keys it: [`Guid::id`] of the reference.
     ///
     /// # Examples
     ///
     /// See [`MapMarkerTypeId`].
     #[must_use]
-    pub const fn of(reference: Guid) -> Self {
+    pub const fn from_guid(reference: Guid) -> Self {
         Self(reference.id())
     }
 
@@ -103,9 +105,9 @@ pub struct MapMarker {
     pub position: [f64; 3],
     /// Its type; `None` for a marker without one.
     pub marker_type: Option<MapMarkerTypeId>,
-    /// The text tag of its label, which
-    /// [`game_text`](crate::i18n::game_text) reads by
-    /// [`Guid::id`] on a client; `None` for a marker without one.
+    /// The text tag of its label, the game's `markerId`, which
+    /// [`game_text`](crate::i18n::game_text) reads by [`Guid::id`] on a
+    /// client; `None` for a marker without one.
     pub label: Option<Guid>,
 }
 
@@ -124,6 +126,7 @@ pub struct Map(&'static Resolved);
 /// The map's component types and field offsets, resolved once per mod life.
 #[derive(Debug)]
 struct Resolved {
+    host: Host,
     world: World,
     marker: ComponentType,
     label_at: usize,
@@ -141,17 +144,32 @@ struct Waypoint {
 
 static RESOLVED: crate::state::ModLocal<Resolved> = crate::state::ModLocal::new();
 
-fn offset(load: &Load<'_>, id: &str) -> Result<usize, Off> {
-    let value = load.constant(id)?;
-    usize::try_from(value).map_err(|_| Off::new(format!("offset {id} out of range")))
+/// The offset of field `id` of type `ty`, refused unless `width` bytes
+/// from there lie inside the type, so every read of the field stays in
+/// the component.
+fn field(load: &Load<'_>, ty: &str, id: &str, width: usize) -> Result<usize, Off> {
+    let at = load.offset(id)?;
+    let size = load.size(ty)?;
+    if at.checked_add(width).is_some_and(|end| end <= size) {
+        Ok(at)
+    } else {
+        Err(Off::new(format!(
+            "{id} at {at} does not hold {width} bytes in {ty} of {size}"
+        )))
+    }
 }
 
 impl Waypoint {
     fn resolve(load: &Load<'_>, world: World) -> Result<Self, Off> {
         Ok(Self {
             ty: world.component_type(load, ids::PLAYER_WAYPOINT)?,
-            enabled_at: offset(load, ids::PLAYER_WAYPOINT_ENABLED)?,
-            position_at: offset(load, ids::PLAYER_WAYPOINT_POSITION)?,
+            enabled_at: field(load, ids::PLAYER_WAYPOINT, ids::PLAYER_WAYPOINT_ENABLED, 1)?,
+            position_at: field(
+                load,
+                ids::PLAYER_WAYPOINT,
+                ids::PLAYER_WAYPOINT_POSITION,
+                24,
+            )?,
         })
     }
 }
@@ -163,15 +181,28 @@ impl Map {
         }
         let world = load.world()?;
         let resolved = Resolved {
+            host: load.host(),
             world,
             marker: world.component_type(load, ids::MAP_MARKER)?,
-            label_at: offset(load, ids::MAP_MARKER_LABEL)?,
-            type_at: offset(load, ids::MAP_MARKER_TYPE)?,
+            label_at: field(load, ids::MAP_MARKER, ids::MAP_MARKER_MARKER_ID, 16)?,
+            type_at: field(load, ids::MAP_MARKER, ids::MAP_MARKER_MARKER_TYPE, 16)?,
             waypoint: Waypoint::resolve(load, world)
                 .inspect_err(|off| crate::debug!("waypoint reads off: {off}"))
                 .ok(),
         };
         Ok(Self(RESOLVED.get_or_init(|| resolved)))
+    }
+
+    /// `entity`'s component of type `ty`, `None` when it has none.
+    fn live(self, entity: Entity, ty: ComponentType) -> Result<Option<*const u8>, WorldError> {
+        let host = self.0.host;
+        let mut out: *const core::ffi::c_void = core::ptr::null();
+        let status = (host.api().component)(host.handle(), entity.0, ty.hash(), &raw mut out);
+        match status {
+            Status::MISSING => Ok(None),
+            status => WorldError::from_status(status)
+                .map(|()| Some(out.cast::<u8>()).filter(|data| !data.is_null())),
+        }
     }
 
     /// Every marker in the world, by entity. The engine walks every entity
@@ -220,53 +251,69 @@ impl Map {
             .iter()
             .map(|place| (Entity(place.entity), crate::ecs::metres(place.position)))
             .filter(|&(_, at)| keep(at))
-            .filter_map(|(entity, position)| {
-                let data = world.component(entity, resolved.marker)?.cast::<u8>();
-                // SAFETY: `component` returned the entity's live MapMarker,
-                // valid until the game thread moves on and read at once; the
-                // loader's offsets of `markerId` and `markerType` lie inside
-                // it, each a 16-byte GUID (reflection, server 399).
+            .filter_map(
+                |(entity, position)| match self.live(entity, resolved.marker) {
+                    Ok(Some(data)) => Some(Ok((entity, position, data))),
+                    Ok(None) => None,
+                    Err(why) => Some(Err(why)),
+                },
+            )
+            .map(|found| {
+                let (entity, position, data) = found?;
+                // SAFETY: `data` is the entity's live MapMarker, which the
+                // loader hands out only on the game thread outside a step,
+                // so no system writes it during this read; `resolve` checked
+                // that 16 bytes from `label_at` lie inside the type's size.
                 let label = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.label_at) };
-                // SAFETY: `data` is the entity's live MapMarker from
-                // `component`, read before the game thread moves on;
-                // `markerType` is a 16-byte GUID at the loader's offset,
-                // inside the component (reflection, server 399).
+                // SAFETY: `data` is the entity's live MapMarker, handed out
+                // only on the game thread outside a step, so nothing writes
+                // it now; `resolve` checked that 16 bytes from `type_at` lie
+                // inside the type's size.
                 let reference = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.type_at) };
-                Some(MapMarker {
+                Ok(MapMarker {
                     entity,
                     position,
-                    marker_type: set(reference).map(MapMarkerTypeId::of),
+                    marker_type: set(reference).map(MapMarkerTypeId::from_guid),
                     label: set(label),
                 })
             })
-            .collect();
+            .collect::<Result<_, WorldError>>()?;
         markers.sort_unstable_by_key(|marker| marker.entity.0);
         Ok(markers)
     }
 
     /// Where `player` has set the waypoint all players see, in metres;
-    /// `None` while it is off, for an entity without one, or on a game
-    /// build without it. The server keeps it only while the player plays.
+    /// `None` while it is off or for an entity without one. The server
+    /// keeps it only while the player plays.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::WrongThread`] off the server's game thread or inside a
+    /// step; [`WorldError::Missing`] before a world runs or on a game build
+    /// without waypoints.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    #[must_use]
-    pub fn waypoint(self, player: Entity) -> Option<[f64; 3]> {
-        let waypoint = self.0.waypoint.as_ref()?;
-        let data = self.0.world.component(player, waypoint.ty)?.cast::<u8>();
-        // SAFETY: `component` returned the player's live PlayerWaypoint,
-        // valid until the game thread moves on and read at once; `enabled`
-        // is one byte at the loader's offset, read as a byte, never a bool.
+    pub fn waypoint(self, player: Entity) -> Result<Option<[f64; 3]>, WorldError> {
+        let waypoint = self.0.waypoint.as_ref().ok_or(WorldError::Missing)?;
+        let Some(data) = self.live(player, waypoint.ty)? else {
+            return Ok(None);
+        };
+        // SAFETY: `data` is the player's live PlayerWaypoint, handed out only
+        // on the game thread outside a step, so nothing writes it now;
+        // `resolve` checked that the byte at `enabled_at` lies inside the
+        // type's size. It is read as a byte, never as a bool.
         let enabled = unsafe { crate::raw::read_at::<u8>(data, waypoint.enabled_at) };
         if enabled == 0 {
-            return None;
+            return Ok(None);
         }
-        // SAFETY: the same live PlayerWaypoint; `waypointPosition` is a
-        // WorldPosition, three i64 in 32.32 fixed point, at the loader's
-        // offset (reflection, server 399).
+        // SAFETY: `data` is the player's live PlayerWaypoint, handed out only
+        // on the game thread outside a step, so nothing writes it now;
+        // `resolve` checked that 24 bytes from `position_at`, the three i64
+        // of `waypointPosition` in 32.32 fixed point, lie inside the type.
         let fixed = unsafe { crate::raw::read_at::<[i64; 3]>(data, waypoint.position_at) };
-        Some(crate::ecs::metres(fixed))
+        Ok(Some(crate::ecs::metres(fixed)))
     }
 }
 

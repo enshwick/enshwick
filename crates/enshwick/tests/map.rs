@@ -74,14 +74,22 @@ mod tests {
         fake.component(entity, WAYPOINT, &bytes)
     }
 
-    fn fake() -> enshwick::test::FakeHost {
+    /// The world's own types and the map's markers, as on a build without
+    /// waypoints.
+    fn markers_only() -> enshwick::test::FakeHost {
         enshwick::test::FakeHost::new()
             .type_hash("current_transform", TRANSFORM)
             .type_hash("used_item", USED_ITEM)
             .type_hash("map_marker", MARKER)
-            .type_hash("player_waypoint", WAYPOINT)
+            .type_size("map_marker", 40)
             .constant("map_marker.marker_id", 0)
             .constant("map_marker.marker_type", 0x10)
+    }
+
+    fn fake() -> enshwick::test::FakeHost {
+        markers_only()
+            .type_hash("player_waypoint", WAYPOINT)
+            .type_size("player_waypoint", 32)
             .constant("player_waypoint.enabled", 0)
             .constant("player_waypoint.waypoint_position", 8)
     }
@@ -113,7 +121,7 @@ mod tests {
                 MapMarker {
                     entity: Entity(7),
                     position: [100.0, 20.0, -50.0],
-                    marker_type: Some(MapMarkerTypeId::of(TOWN)),
+                    marker_type: Some(MapMarkerTypeId::from_guid(TOWN)),
                     label: Some(LABEL),
                 },
             ]
@@ -122,18 +130,22 @@ mod tests {
 
     #[test]
     fn a_marker_type_is_keyed_as_the_game_keys_its_registry() {
-        assert_eq!(MapMarkerTypeId::of(TOWN).get(), TOWN.id());
+        // FNV-1a 32 over the GUID's bytes in memory order, Data1 to Data3
+        // little-endian; over the text order it would be 0xf546_8b09.
+        assert_eq!(MapMarkerTypeId::from_guid(TOWN).get(), 0xc807_9fa5);
     }
 
     #[test]
     fn markers_in_a_box_leave_out_the_rest() {
         let fake = marker(fake(), 7, [100.0, 20.0, -50.0], LABEL, TOWN);
         let fake = marker(fake, 8, [10.0, 5.0, 10.0], LABEL, TOWN);
+        let fake = marker(fake, 9, [20.0, 0.0, 0.0], LABEL, TOWN);
+        let fake = marker(fake, 10, [20.0, 0.0, 20.5], LABEL, TOWN);
         let (_loader, map) = start(fake);
 
         let inside = map.markers_in([20.0, 10.0, 20.0], [0.0, 0.0, 0.0]).unwrap();
-        assert_eq!(inside.len(), 1);
-        assert_eq!(inside[0].entity, Entity(8));
+        let entities: Vec<Entity> = inside.iter().map(|marker| marker.entity).collect();
+        assert_eq!(entities, [Entity(8), Entity(9)]);
         assert_eq!(
             map.markers_in([f64::NAN, 0.0, 0.0], [1.0; 3]),
             Err(WorldError::Refused)
@@ -146,8 +158,38 @@ mod tests {
         let fake = waypoint(fake, 41, 0, [1.0, 1.0, 1.0]);
         let (_loader, map) = start(fake);
 
-        assert_eq!(map.waypoint(Entity(40)), Some([12.5, 3.0, -7.25]));
-        assert_eq!(map.waypoint(Entity(41)), None);
-        assert_eq!(map.waypoint(Entity(42)), None);
+        assert_eq!(map.waypoint(Entity(40)), Ok(Some([12.5, 3.0, -7.25])));
+        assert_eq!(map.waypoint(Entity(41)), Ok(None));
+        assert_eq!(map.waypoint(Entity(42)), Ok(None));
+    }
+
+    #[test]
+    fn a_build_without_waypoints_keeps_the_markers() {
+        let fake = marker(markers_only(), 7, [1.0, 2.0, 3.0], LABEL, TOWN);
+        let (_loader, map) = start(fake);
+
+        assert_eq!(map.markers().unwrap().len(), 1);
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
+    }
+
+    #[test]
+    fn a_build_without_markers_turns_the_map_off() {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", TRANSFORM)
+            .type_hash("used_item", USED_ITEM)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_ne!(status, Status::OK);
+        assert!(MAP.get().is_none());
+    }
+
+    #[test]
+    fn a_field_past_its_type_turns_the_map_off() {
+        let loader = fake().type_size("map_marker", 0x18).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_ne!(status, Status::OK);
+        assert!(MAP.get().is_none());
     }
 }
