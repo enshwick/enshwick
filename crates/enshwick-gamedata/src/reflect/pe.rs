@@ -179,6 +179,7 @@ pub struct Image<'a> {
     base: u64,
     sections: Vec<Section>,
     fingerprint: Option<Fingerprint>,
+    relocations: (u64, u64),
 }
 
 const PE_OFFSET: usize = 0x3c;
@@ -190,6 +191,12 @@ const OPTIONAL_DEBUG_DIRECTORY: usize = 112 + 6 * 8;
 const OPTIONAL_DIRECTORY_COUNT: usize = 108;
 /// The debug directory's index among the data directories.
 const DEBUG_DIRECTORY_INDEX: u32 = 6;
+/// The base relocation directory, the data directory before the debug one.
+const OPTIONAL_RELOC_DIRECTORY: usize = 112 + 5 * 8;
+/// A base relocation block's header: the page's RVA and the block's size.
+const RELOC_BLOCK: u64 = 8;
+/// `IMAGE_REL_BASED_DIR64`: a whole 64-bit address to move with the image.
+const RELOC_DIR64: u16 = 10;
 const DEBUG_ENTRY: u64 = 28;
 const DEBUG_TYPE_CODEVIEW: u32 = 2;
 
@@ -241,6 +248,7 @@ impl<'a> Image<'a> {
             base: base.unwrap_or(preferred),
             sections,
             fingerprint: None,
+            relocations: (0, 0),
         };
         let has_debug = optional_size >= OPTIONAL_DEBUG_DIRECTORY + 8
             && u32_at(bytes, optional + OPTIONAL_DIRECTORY_COUNT)
@@ -254,6 +262,10 @@ impl<'a> Image<'a> {
         let debug_rva = directory(OPTIONAL_DEBUG_DIRECTORY);
         let debug_size = directory(OPTIONAL_DEBUG_DIRECTORY + 4);
         image.fingerprint = image.codeview(u64::from(debug_rva), u64::from(debug_size));
+        image.relocations = (
+            u64::from(directory(OPTIONAL_RELOC_DIRECTORY)),
+            u64::from(directory(OPTIONAL_RELOC_DIRECTORY + 4)),
+        );
         Ok(image)
     }
 
@@ -388,6 +400,58 @@ impl<'a> Image<'a> {
         u16_at(self.read(va, 2)?, 0)
     }
 
+    /// The RVAs of the 64-bit addresses Windows moves when it maps the image
+    /// away from its preferred base, from the base relocation directory;
+    /// empty without one.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// assert!(!image.relocations().is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn relocations(&self) -> Vec<u64> {
+        let (rva, size) = self.relocations;
+        let mut fixups = Vec::new();
+        let mut at = 0;
+        while at + RELOC_BLOCK <= size {
+            let Some(header) = self
+                .base
+                .checked_add(rva + at)
+                .and_then(|va| self.read(va, RELOC_BLOCK))
+            else {
+                break;
+            };
+            let (Some(page), Some(block)) = (u32_at(header, 0), u32_at(header, 4)) else {
+                break;
+            };
+            let block = u64::from(block);
+            if block < RELOC_BLOCK || at + block > size {
+                break;
+            }
+            let entries = self
+                .base
+                .checked_add(rva + at + RELOC_BLOCK)
+                .and_then(|va| self.read(va, block - RELOC_BLOCK))
+                .unwrap_or_default();
+            for entry in entries.as_chunks::<2>().0 {
+                let entry = u16::from_le_bytes(*entry);
+                if entry >> 12 == RELOC_DIR64 {
+                    fixups.push(u64::from(page) + u64::from(entry & 0x0fff));
+                }
+            }
+            at += block;
+        }
+        fixups
+    }
+
     fn codeview(&self, rva: u64, size: u64) -> Option<Fingerprint> {
         // A real directory holds a handful of entries.
         (0..(size / DEBUG_ENTRY).min(64)).find_map(|entry| {
@@ -468,5 +532,23 @@ mod tests {
             Image::parse(&header(0x200), Layout::File, None).err(),
             Some(ImageError::NotX64)
         );
+    }
+
+    #[test]
+    fn dir64_relocations_are_read_and_padding_is_skipped() {
+        let mut bytes = header(0x200);
+        bytes.resize(0x600, 0);
+        let optional = 0x40 + 24;
+        bytes[0x40 + 20..0x40 + 22].copy_from_slice(&0xF0u16.to_le_bytes());
+        bytes[optional..optional + 2].copy_from_slice(&0x20bu16.to_le_bytes());
+        bytes[optional + 108..optional + 112].copy_from_slice(&16u32.to_le_bytes());
+        let reloc = optional + 112 + 5 * 8;
+        bytes[reloc..reloc + 4].copy_from_slice(&0x400u32.to_le_bytes());
+        bytes[reloc + 4..reloc + 8].copy_from_slice(&12u32.to_le_bytes());
+        bytes[0x400..0x404].copy_from_slice(&0x1000u32.to_le_bytes());
+        bytes[0x404..0x408].copy_from_slice(&12u32.to_le_bytes());
+        bytes[0x408..0x40a].copy_from_slice(&0xA008u16.to_le_bytes());
+        let image = Image::parse(&bytes, Layout::Mapped, Some(0x1_4000_0000)).expect("a header");
+        assert_eq!(image.relocations(), [0x1008]);
     }
 }

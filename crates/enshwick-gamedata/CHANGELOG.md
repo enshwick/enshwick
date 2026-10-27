@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Image::relocations` lists the 64-bit addresses Windows moves when it
+  maps an image away from its preferred base (#PR).
+
 ## [1.0.0-alpha.7] - 2026-10-26
 
 ### Added

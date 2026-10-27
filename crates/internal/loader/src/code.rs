@@ -122,12 +122,112 @@ pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
     })
 }
 
+/// Where the game's code section starts, from the image base.
+fn text_start(base: u64) -> Option<usize> {
+    text(base)?.0.checked_sub(usize::try_from(base).ok()?)
+}
+
 /// The game's code section as bytes.
 pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     let (start, len) = text(base)?;
     // SAFETY: `text` found the `.text` section of the game executable's own
     // headers: `len` bytes from `start`, mapped readable for the process.
     Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
+}
+
+/// The game's code while the loader starts: the copy each mod's load, init
+/// and ready is compared against.
+#[derive(Debug)]
+pub(crate) struct Watching {
+    watch: crate::code_watch::Watch,
+    text: &'static [u8],
+    /// Where `.text` starts, from the image base.
+    rva: usize,
+}
+
+impl Watching {
+    /// Starts from the image on disk when it reads, so changes made before
+    /// the loader count too, or else from the code as it is now; `None`
+    /// when the code section cannot be found.
+    pub(crate) fn start(base: u64) -> Option<Self> {
+        let text = text_bytes(base)?;
+        let rva = text_start(base)?;
+        let watch = disk_text(base, rva, text.len())
+            .and_then(|disk| crate::code_watch::Watch::from_disk(&disk, text))
+            .unwrap_or_else(|| {
+                crate::log!(
+                    INFO,
+                    "game code is compared from now on: the executable on disk does not read as the code in memory"
+                );
+                crate::code_watch::Watch::new(text)
+            });
+        let watching = Self { watch, text, rva };
+        watching.log_from(0);
+        Some(watching)
+    }
+
+    /// Compares the code now and puts what changed down to `by` at `stage`.
+    pub(crate) fn check(&mut self, by: &str, stage: crate::code_watch::Stage) {
+        let before = self.watch.changes().len();
+        if self.watch.check(self.text, by, stage) > 0 {
+            self.log_from(before);
+        }
+    }
+
+    /// Takes the code now as it should be: the loader's hooks and the
+    /// patches mods asked for were just written.
+    pub(crate) fn absorb(&mut self) {
+        self.watch.absorb(self.text);
+    }
+
+    /// Ends the watch and keeps what it found for the conflict report.
+    pub(crate) fn finish(self) {
+        crate::conflicts::set_code_changes(self.rva, self.watch.into_changes());
+    }
+
+    fn log_from(&self, first: usize) {
+        for change in &self.watch.changes()[first..] {
+            let who = if change.by.is_empty() {
+                "another program"
+            } else {
+                change.by.as_str()
+            };
+            crate::log!(
+                WARN,
+                "{who} changed game code at game+{:#x}, {} bytes, outside the API {}",
+                self.rva + change.offset,
+                change.len,
+                change.stage.describe()
+            );
+        }
+    }
+}
+
+/// The game's `.text` as the executable on disk holds it, relocated to
+/// `base` and `len` bytes long as mapped; `None` when the file does not read
+/// or its section starts elsewhere than `rva`.
+fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
+    use enshwick_gamedata::reflect::{Image, Layout};
+    let bytes = std::fs::read(std::env::current_exe().ok()?).ok()?;
+    let image = Image::parse(&bytes, Layout::File, None).ok()?;
+    let section = image.section(".text")?;
+    if usize::try_from(section.rva()).ok()? != rva {
+        return None;
+    }
+    let range = image.range(section);
+    let raw = range
+        .end
+        .saturating_sub(range.start)
+        .min(u64::try_from(len).ok()?);
+    let mut text = image.read(range.start, raw)?.to_vec();
+    text.resize(len, 0);
+    crate::code_watch::relocate(
+        &mut text,
+        section.rva(),
+        image.relocations(),
+        base.wrapping_sub(image.base()),
+    );
+    Some(text)
 }
 
 /// Registers `patch` within `text`; refused once sealed, outside the code,
@@ -155,13 +255,29 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
         return Status::BAD_ARGS;
     }
     let mut pending = PENDING.relock();
-    let clash = patches.iter().enumerate().any(|(i, patch)| {
+    let clash = patches.iter().enumerate().find_map(|(i, patch)| {
         pending
             .iter()
             .chain(&patches[..i])
-            .any(|p| overlaps(p.span(), patch.span()))
+            .find(|p| overlaps(p.span(), patch.span()))
+            .map(|held| (held.owner, held.address, patch))
     });
-    if clash {
+    if let Some((holder, address, patch)) = clash {
+        if holder != patch.owner {
+            let feature = format!("code patch at {address:#x}");
+            crate::conflicts::note(
+                feature.clone(),
+                holder,
+                crate::conflicts::Mode::Exclusive,
+                Status::OK,
+            );
+            crate::conflicts::note(
+                feature,
+                patch.owner,
+                crate::conflicts::Mode::Exclusive,
+                Status::REFUSED,
+            );
+        }
         return Status::REFUSED;
     }
     pending.extend(patches);

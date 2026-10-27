@@ -81,6 +81,7 @@ pub(crate) fn load_copy(path: &Path) -> Option<Loaded> {
 pub(super) fn libraries(
     mods_dir: &Path,
     run: Run,
+    loaded: &mut dyn FnMut(&str),
 ) -> (Vec<Library>, Vec<Candidate>, Vec<OtherDll>) {
     let list_file = mods_dir
         .join(crate::settings::LOADER_ID)
@@ -115,7 +116,7 @@ pub(super) fn libraries(
             init: crate::packs::init,
             ready: crate::packs::ready,
         });
-    let (found, mut others) = discover(mods_dir, &list, run);
+    let (found, mut others) = discover(mods_dir, &list, run, loaded);
     if run == Run::Game {
         others.extend(chained(mods_dir));
         others.extend(beside(mods_dir));
@@ -301,7 +302,12 @@ pub(super) fn unload(library: &Library) {
 /// Enshwick interface, and in a game the DLLs without it, told apart by
 /// their export tables before they load, which stay loaded and run on their
 /// own.
-fn discover(mods_dir: &Path, list: &modlist::ModList, run: Run) -> (Vec<Library>, Vec<OtherDll>) {
+fn discover(
+    mods_dir: &Path,
+    list: &modlist::ModList,
+    run: Run,
+    loaded: &mut dyn FnMut(&str),
+) -> (Vec<Library>, Vec<OtherDll>) {
     let mut mods = Vec::new();
     let mut others = Vec::new();
     let files = dlls(mods_dir)
@@ -323,6 +329,7 @@ fn discover(mods_dir: &Path, list: &modlist::ModList, run: Run) -> (Vec<Library>
             if run == Run::Game
                 && let Some(file) = load_native(&path)
             {
+                loaded(&file);
                 others.push(OtherDll {
                     file,
                     origin: Origin::Mods,
@@ -330,6 +337,7 @@ fn discover(mods_dir: &Path, list: &modlist::ModList, run: Run) -> (Vec<Library>
                 });
             }
         } else if let Some(library) = load(&path) {
+            loaded(&library.file);
             mods.push(library);
         }
     }

@@ -302,14 +302,14 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
 /// Reports each set another mod overrides in both mods' logs and the
 /// conflict report.
 fn report(loader: &Loader, conflicts: &[Conflict]) {
+    let mut lines = Vec::new();
     for (conflict, more) in grouped(conflicts) {
-        let line = conflict.describe(|m| id(loader, m));
-        let line = if more == 0 {
-            line
-        } else {
-            format!("{line}, and the same for {more} more items")
-        };
+        let mut line = conflict.describe(|m| id(loader, m));
+        if more > 0 {
+            line = format!("{line}, and the same for {more} more items");
+        }
         let level = if conflict.intended {
+            line.push_str(", on purpose: it requires that mod");
             Level::INFO
         } else {
             Level::WARN
@@ -317,23 +317,9 @@ fn report(loader: &Loader, conflicts: &[Conflict]) {
         for owner in [conflict.winner.owner, conflict.overridden.owner] {
             crate::log::write(level, &id(loader, owner), &line);
         }
-        let feature = match conflict.key.item {
-            Some(item) => format!("{} {item} of {}", conflict.key.field, conflict.key.entry),
-            None => format!("{} of {}", conflict.key.field, conflict.key.entry),
-        };
-        crate::conflicts::note(
-            feature.clone(),
-            conflict.overridden.owner,
-            crate::conflicts::Mode::Exclusive,
-            Status::REFUSED,
-        );
-        crate::conflicts::note(
-            feature,
-            conflict.winner.owner,
-            crate::conflicts::Mode::Exclusive,
-            Status::OK,
-        );
+        lines.push(line);
     }
+    crate::conflicts::set_fields(lines);
 }
 
 /// The items whose own values some change of `merged` changes: every item
