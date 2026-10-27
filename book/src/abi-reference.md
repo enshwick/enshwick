@@ -385,3 +385,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `account_action`         | Kicks, bans or unbans an account; a ban of an account not online goes onto the list; game thread     |
 | `allowlist_set`          | Lists an account on the loader's allowlist or takes it off; dedicated server, any thread             |
 | `allowlist_has`          | Whether the loader's allowlist lists an account; dedicated server, any thread                        |
+| `map_frame`              | The map's origin, size and cell size in metres, read once per scene; game thread, quiet              |

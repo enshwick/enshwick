@@ -1074,6 +1074,43 @@ impl MapMarkerInfo {
     };
 }
 
+/// The frame of the map of the scene the server runs, as
+/// [`HostApi::map_frame`](super::HostApi::map_frame) writes it: where the
+/// map starts and how far it reaches, in metres on the world's x and z.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::MapFrameInfo;
+///
+/// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
+/// assert_eq!(frame.size[0] / frame.metres_per_cell, 1280.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct MapFrameInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The map's corner of lowest x and z, in metres, x then z.
+    pub origin: [f64; 2],
+    /// How far the map reaches from `origin`, in metres, x then z.
+    pub size: [f64; 2],
+    /// The metres one cell of the game's map covers on each axis.
+    pub metres_per_cell: f64,
+}
+
+impl_headed!(MapFrameInfo);
+
+impl MapFrameInfo {
+    /// A frame with nothing known, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        origin: [0.0; 2],
+        size: [0.0; 2],
+        metres_per_cell: 0.0,
+    };
+}
+
 /// An account action of [`HostApi::account_action`](super::HostApi::account_action),
 /// with the values of the game's own `AccountActionType`.
 ///

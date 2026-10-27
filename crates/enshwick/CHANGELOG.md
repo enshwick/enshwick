@@ -17,8 +17,15 @@ Each entry names the pull request that made the change.
 - `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
   give the game's id of a GUID with its type, in a constant too (#615).
 
+- `Map::frame` returns a `MapFrame`: where the scene's map starts, how far
+  it reaches and the size of its cells, in metres, read from the game's
+  data once per scene like the markers (ABI 3.3, `HostApi::map_frame` and
+  `MapFrameInfo`); the fake host serves one with `FakeHost::map_frame`.
+
 ### Changed
 
+- Breaking: `MapSnapshot` carries the map's `frame`, and
+  `MAP_SNAPSHOT_FORMAT` is 2.
 - Breaking: `Guid::id` is `Guid::fnv1a`, the bare hash, and `Id::id` is
   gone; `ItemId::from_guid(id.guid())` and its siblings take their place.
   `World::used_item` returns an `ItemId`, and `migrations::current_id`

@@ -2,15 +2,17 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::MapFrame;
+
 /// The format of [`MapSnapshot::to_bytes`]; it changes whenever a field of a
 /// snapshot changes, and a reader refuses any other.
-pub const MAP_SNAPSHOT_FORMAT: u16 = 1;
+pub const MAP_SNAPSHOT_FORMAT: u16 = 2;
 
 /// What the game server shows on a map at one moment, as plain data for a
 /// process outside the game such as a web map beside a dedicated server.
 ///
-/// It holds the players, the Flame Altars and the markers, in Enshwick's own
-/// format, not the game's.
+/// It holds the players, the Flame Altars, the markers and the map's frame,
+/// in Enshwick's own format, not the game's.
 ///
 /// It carries no texts, since a dedicated server has none: a marker's label
 /// is the id of its text tag, which a reader with the game's texts looks up.
@@ -37,8 +39,10 @@ pub struct MapSnapshot {
     pub players: Vec<MapPlayer>,
     /// The Flame Altars, by entity.
     pub altars: Vec<MapAltar>,
-    /// The world's map markers, by entity.
+    /// The world's map markers, in the scene's order.
     pub markers: Vec<MapPoint>,
+    /// The map's frame; `None` for a scene without one.
+    pub frame: Option<MapFrame>,
 }
 
 /// A player in a [`MapSnapshot`].
@@ -216,15 +220,27 @@ mod tests {
                 label,
             },
         );
+        let frame = (
+            prop::array::uniform2(-1.0e5..1.0e5f64),
+            prop::array::uniform2(1.0..1.0e5f64),
+            1.0..64.0f64,
+        )
+            .prop_map(|(origin, size, metres_per_cell)| MapFrame {
+                origin,
+                size,
+                metres_per_cell,
+            });
         (
             prop::collection::vec(player, 0..8),
             prop::collection::vec(altar, 0..8),
             prop::collection::vec(point, 0..32),
+            prop::option::of(frame),
         )
-            .prop_map(|(players, altars, markers)| MapSnapshot {
+            .prop_map(|(players, altars, markers, frame)| MapSnapshot {
                 players,
                 altars,
                 markers,
+                frame,
             })
     }
 
@@ -264,6 +280,11 @@ mod tests {
                 marker_type: Some(5),
                 label: None,
             }],
+            frame: Some(MapFrame {
+                origin: [0.0, 0.0],
+                size: [10240.0, 10240.0],
+                metres_per_cell: 8.0,
+            }),
         };
         let bytes = snapshot.to_bytes().unwrap();
         let hex = bytes.iter().fold(String::new(), |mut hex, byte| {

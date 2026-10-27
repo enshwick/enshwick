@@ -64,8 +64,8 @@ use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget}
 use world::{
     account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
     component_write, destroy, emit, entities, entity_template, event_types, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_markers,
-    notify, player, players, rename_filter, run_console, save_world, server_world,
+    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, map_frame,
+    map_markers, notify, player, players, rename_filter, run_console, save_world, server_world,
     set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather, spawn, status,
     teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control, voxel_read,
     weather_at, weather_fronts, world_key, world_persists, world_quiet,
@@ -356,9 +356,29 @@ pub(crate) struct WorldEdits {
     pub(crate) stopped: bool,
     /// Whether the scene's map markers are held as still being read.
     pub(crate) markers_pending: bool,
-    /// Whether the mod asked for the scene's map markers in this world,
-    /// which starts their read.
-    pub(crate) markers_asked: bool,
+    /// The reads of the scene the mod asked for in this world; the first
+    /// ask of each starts it.
+    pub(crate) scene_asked: Vec<SceneRead>,
+}
+
+/// A read of the scene's data the loader runs once per world.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SceneRead {
+    /// The map markers.
+    Markers,
+    /// The map's frame.
+    Frame,
+}
+
+impl WorldEdits {
+    /// Notes that the mod asked for `read`; whether this was its first ask.
+    pub(crate) fn first_ask(&mut self, read: SceneRead) -> bool {
+        let first = !self.scene_asked.contains(&read);
+        if first {
+            self.scene_asked.push(read);
+        }
+        first
+    }
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -706,4 +726,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     account_action,
     allowlist_set,
     allowlist_has,
+    map_frame,
 };

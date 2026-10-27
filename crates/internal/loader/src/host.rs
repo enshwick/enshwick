@@ -65,8 +65,8 @@ use entries::ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, u
 use entries::world::{
     account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
     component_write, destroy, emit, entities, entity_template, feature, forget_game_settings,
-    game_event, game_settings, hosting, keep_game_settings, map_markers, notify, player, players,
-    rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
+    game_event, game_settings, hosting, keep_game_settings, map_frame, map_markers, notify, player,
+    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
     set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
     terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
     world_key, world_persists, world_quiet,
@@ -788,6 +788,7 @@ pub(crate) static API: HostApi = HostApi {
     account_action,
     allowlist_set,
     allowlist_has,
+    map_frame,
 };
 
 /// The loader and the calling mod, when the mod is on.

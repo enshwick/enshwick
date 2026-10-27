@@ -327,6 +327,18 @@ pub const SCENE_TRANSFORM_POSITION: [&str; 6] = [
 ];
 /// The id of a template resource's components, a blob array of variants.
 pub const TEMPLATE_COMPONENTS: &str = "template.components";
+/// The id of a scene's resource type, keyed by the scene's GUID.
+pub const SCENE_RESOURCE: &str = "scene_resource";
+/// The id of a scene resource's flag for a biome map, a byte.
+pub const SCENE_HAS_BIOME_MAP: &str = "scene_resource.has_biome_map";
+/// The id of a scene's biome map resource type, keyed by the scene's GUID.
+pub const BIOME_MAP: &str = "biome_map";
+/// The id of a biome map's world origin, two `i32`, x then z.
+pub const BIOME_MAP_WORLD_ORIGIN: &str = "biome_map.world_origin";
+/// The id of a biome map's world size in cells, two `u32`, x then z.
+pub const BIOME_MAP_WORLD_SIZE: &str = "biome_map.world_size";
+/// The id of a biome map's metres per cell, a `u32`.
+pub const BIOME_MAP_MAP_SCALE: &str = "biome_map.map_scale";
 
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";

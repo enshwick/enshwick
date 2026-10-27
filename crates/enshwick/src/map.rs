@@ -1,5 +1,5 @@
-//! The world's map as the server knows it: its markers and each player's
-//! waypoint.
+//! The world's map as the server knows it: its markers, its frame and
+//! each player's waypoint.
 //!
 //! A marker is a `MapMarker` the world comes with: a town, a ruin, a
 //! dungeon, a Flame shrine, a quest area, as the scene's own data places
@@ -39,7 +39,7 @@ pub use snapshot::{
 
 use crate::Entity;
 use crate::Host;
-use crate::abi::{MapMarkerInfo, Status};
+use crate::abi::{MapFrameInfo, MapMarkerInfo, Status};
 use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
 use crate::engine_ids as ids;
@@ -119,6 +119,56 @@ pub struct MapMarker {
     /// [`game_text`](crate::i18n::game_text) reads by [`Guid::id`] on a
     /// client; `None` for a marker without one.
     pub label: Option<Guid>,
+}
+
+/// Where the map of the world starts and how far it reaches, in metres on
+/// the world's x and z axes. The name is Enshwick's own: the game keeps
+/// these facts with the scene's biome map.
+///
+/// A map image or grid drawn over the world puts its corner at `origin` and
+/// spans `size`; the game's own map divides it into cells of
+/// `metres_per_cell` on each side.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::map::MapFrame;
+///
+/// let frame = MapFrame { origin: [0.0, 0.0], size: [10240.0, 10240.0], metres_per_cell: 8.0 };
+/// let cells = frame.size.map(|metres| metres / frame.metres_per_cell);
+/// assert_eq!(cells, [1280.0, 1280.0]);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MapFrame {
+    /// The map's corner of lowest x and z, in metres, x then z.
+    pub origin: [f64; 2],
+    /// How far the map reaches from `origin`, in metres, x then z.
+    pub size: [f64; 2],
+    /// The metres one cell of the game's map covers on each axis.
+    pub metres_per_cell: f64,
+}
+
+impl MapFrame {
+    /// The frame `info` describes, refused unless every value is finite and
+    /// the size and cell are above zero.
+    fn from_info(info: &MapFrameInfo) -> Option<Self> {
+        let finite = info
+            .origin
+            .iter()
+            .chain(&info.size)
+            .chain([&info.metres_per_cell])
+            .all(|value| value.is_finite());
+        let positive = info
+            .size
+            .iter()
+            .chain([&info.metres_per_cell])
+            .all(|&value| value > 0.0);
+        (finite && positive).then_some(Self {
+            origin: info.origin,
+            size: info.size,
+            metres_per_cell: info.metres_per_cell,
+        })
+    }
 }
 
 /// The map's reads on the game server, dedicated or hosted by the client.
@@ -283,6 +333,36 @@ impl Map {
             .collect())
     }
 
+    /// The frame of the map of the scene the server runs: where the map
+    /// starts, how far it reaches and the size of its cells, in metres. The
+    /// loader reads it from the game's data once per scene, apart from the
+    /// game thread, as it reads the markers.
+    ///
+    /// # Errors
+    ///
+    /// [`WorldError::NotLoaded`] while the loader still reads the scene:
+    /// ask again later; [`WorldError::WrongThread`] off the server's game
+    /// thread or inside a step; [`WorldError::Missing`] while no world
+    /// runs, for a scene without a map, or when the scene does not read on
+    /// this game build.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::map::Map;
+    ///
+    /// fn cells(map: Map) -> Option<[f64; 2]> {
+    ///     let frame = map.frame().ok()?;
+    ///     Some(frame.size.map(|metres| metres / frame.metres_per_cell))
+    /// }
+    /// ```
+    pub fn frame(self) -> Result<MapFrame, WorldError> {
+        let host = self.0.host;
+        let mut info = MapFrameInfo::EMPTY;
+        WorldError::from_status((host.api().map_frame)(host.handle(), &raw mut info))?;
+        MapFrame::from_info(&info).ok_or(WorldError::Missing)
+    }
+
     /// Where `player` has set the waypoint all players see, in metres;
     /// `None` while it is off or for an entity without one. The server
     /// keeps it only while the player plays.
@@ -325,9 +405,10 @@ impl Map {
 impl Map {
     /// What the map shows now as a [`MapSnapshot`]: every player with
     /// position and waypoint, the Flame Altars of `altars` with their
-    /// bases, and every marker. Without `altars` the snapshot has none; on
+    /// bases, every marker and the map's frame. Without `altars` the
+    /// snapshot has none; without a frame its `frame` is `None`; on
     /// a game build without waypoints no player has one.
-    /// The engine walks every marker, so take one now and then, not every
+    /// The loader reads every marker, so take one now and then, not every
     /// step.
     ///
     /// # Errors
@@ -354,8 +435,13 @@ impl Map {
     /// ```
     pub fn snapshot(self, altars: Option<Altars>) -> Result<MapSnapshot, WorldError> {
         let world = self.0.world;
-        let markers = self
-            .markers()?
+        let frame = match self.frame() {
+            Err(WorldError::Missing) => Ok(None),
+            found => found.map(Some),
+        };
+        let markers = self.markers();
+        let frame = frame?;
+        let markers = markers?
             .into_iter()
             .map(|marker| MapPoint {
                 position: marker.position,
@@ -382,6 +468,7 @@ impl Map {
             players,
             altars: altars.map(snapshot_altars).unwrap_or_default(),
             markers,
+            frame,
         })
     }
 }

@@ -113,6 +113,25 @@ impl FakeHost {
         self
     }
 
+    /// The frame of the scene's map, as the loader reads it from the game's
+    /// archive for [`Map::frame`](crate::map::Map::frame); without one the
+    /// scene has no frame.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::MapFrameInfo;
+    ///
+    /// let frame = MapFrameInfo { size: [10240.0; 2], metres_per_cell: 8.0, ..MapFrameInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new().map_frame(frame).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn map_frame(mut self, frame: crate::abi::MapFrameInfo) -> Self {
+        self.map_frame = Some(frame);
+        self
+    }
+
     /// The template GUID of `entity`, in file order.
     ///
     /// # Examples
@@ -183,9 +202,9 @@ impl Installed {
         table::with((), |s| s.edits.stopped = true);
     }
 
-    /// Has the scene's map markers still being read while `pending`; as the
-    /// loader does, the fake answers the first call of a world that way
-    /// whatever this says.
+    /// Has the scene's map markers and map frame still being read while
+    /// `pending`; as the loader does, the fake answers the first call of
+    /// each in a world that way whatever this says.
     ///
     /// # Examples
     ///
