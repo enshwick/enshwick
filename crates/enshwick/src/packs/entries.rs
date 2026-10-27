@@ -216,6 +216,11 @@ pub(super) struct RecipeChangeEntry {
 pub(super) struct LootChangeEntry {
     /// The items whose loot changes: debug names, GUIDs or content ids.
     pub(super) items: Vec<String>,
+    /// The containers whose fill tables alone change, by their templates'
+    /// names, such as `LootContainer_Enemy_Corpse_Vukah`; every table when
+    /// left out.
+    #[serde(default)]
+    pub(super) table: Vec<String>,
     /// The stack size random loot rolls, at least and at most alike.
     pub(super) stack_size: Option<ValueEntry>,
     /// The count container fill tables give, at least and at most alike.

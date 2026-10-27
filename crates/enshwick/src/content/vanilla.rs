@@ -14,6 +14,7 @@ use crate::abi::ResourceKey;
 
 use super::containers::{ContainerLayout, container_slots};
 use super::items::{ITEM_REGISTRY, ItemLayout};
+use super::loot_tables::{FillTableLayout, template_table};
 use super::recipes::{RECIPE_REGISTRY, RecipeLayout};
 use super::workshops::{
     Station, WORKSHOP_REGISTRY, WorkshopId, WorkshopLayout, clone_template, stations,
@@ -78,6 +79,15 @@ pub enum VanillaError {
         /// The recipes that carry it.
         recipes: Vec<Guid>,
     },
+    /// No vanilla container template of the name rolls a fill table; `near`
+    /// lists names that look like it.
+    #[error("no vanilla container {name:?} rolls a loot table{}", near_list(near))]
+    NoLootTable {
+        /// The name asked for.
+        name: String,
+        /// Names that look like it, at most five.
+        near: Vec<String>,
+    },
     /// The item is no crafting station a mod can clone: the game lists no
     /// workshop for it, its workshop is a survivor's, or its template lacks
     /// the crafting components.
@@ -127,6 +137,32 @@ pub struct Vanilla {
     recipe_list: OnceLock<Option<Recipes>>,
     /// The container layout, when the build reflects it.
     containers: Option<ContainerLayout>,
+    /// Where templates name the fill table they roll, when the build
+    /// reflects it.
+    fill: Option<FillTableLayout>,
+    fill_tables: OnceLock<Option<FillTables>>,
+}
+
+/// The fill tables containers roll: each container template's by its name,
+/// and how many templates roll each table.
+#[derive(Debug, Default)]
+struct FillTables {
+    by_name: Names,
+    shared: BTreeMap<[u8; 16], usize>,
+}
+
+/// The fill table a vanilla container rolls, from
+/// [`Vanilla::loot_table`].
+///
+/// # Examples
+///
+/// See [`Vanilla::loot_table`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LootTable {
+    /// The table's GUID, a `DefaultInventoryResource`.
+    pub table: Guid,
+    /// How many container templates roll it, this one among them.
+    pub containers: usize,
 }
 
 /// The vanilla recipes: by debug name, and each with the item it makes.
@@ -152,6 +188,7 @@ struct Hashes {
     item_registry: u32,
     template: u32,
     workshop_registry: u32,
+    template_collection: u32,
 }
 
 impl Hashes {
@@ -161,6 +198,7 @@ impl Hashes {
             item_registry: facts.hash(types::ITEM_REGISTRY_RESOURCE.id())?,
             template: facts.hash(types::TEMPLATE_RESOURCE.id())?,
             workshop_registry: facts.hash(types::WORKSHOP_REGISTRY_RESOURCE.id())?,
+            template_collection: facts.hash(types::TEMPLATE_COLLECTION_RESOURCE.id())?,
         })
     }
 }
@@ -194,7 +232,8 @@ impl Vanilla {
             read,
         )
         .with_recipe_facts(facts)
-        .with_containers(ContainerLayout::resolve(facts).ok()))
+        .with_containers(ContainerLayout::resolve(facts).ok())
+        .with_fill_tables(FillTableLayout::resolve(facts).ok()))
     }
 
     fn with_parts(
@@ -212,6 +251,8 @@ impl Vanilla {
             recipes: None,
             recipe_list: OnceLock::new(),
             containers: None,
+            fill: None,
+            fill_tables: OnceLock::new(),
         }
     }
 
@@ -226,6 +267,72 @@ impl Vanilla {
     fn with_containers(mut self, layout: Option<ContainerLayout>) -> Self {
         self.containers = layout;
         self
+    }
+
+    /// The same, reading the fill tables containers roll through `layout`.
+    fn with_fill_tables(mut self, layout: Option<FillTableLayout>) -> Self {
+        self.fill = layout;
+        self
+    }
+
+    /// The fill table the vanilla container template named `name` rolls,
+    /// such as `LootContainer_Enemy_Corpse_Vukah`, with how many templates
+    /// share it: a change of the table reaches all of them. The first call
+    /// reads every template once.
+    ///
+    /// # Errors
+    ///
+    /// [`VanillaError::NoLootTable`] with the names that look like it, and
+    /// [`VanillaError::Unreadable`] when the templates do not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::vanilla::Vanilla;
+    ///
+    /// if let Some(vanilla) = Vanilla::game() {
+    ///     let vukah = vanilla.loot_table("LootContainer_Enemy_Corpse_Vukah")?;
+    ///     assert!(vukah.containers >= 1);
+    /// }
+    /// # Ok::<(), enshwick::content::vanilla::VanillaError>(())
+    /// ```
+    pub fn loot_table(&self, name: &str) -> Result<LootTable, VanillaError> {
+        let tables = self
+            .fill_tables
+            .get_or_init(|| self.read_fill_tables())
+            .as_ref()
+            .ok_or(VanillaError::Unreadable("container templates"))?;
+        match tables.by_name.get(name).and_then(|tables| tables.first()) {
+            Some(table) => Ok(LootTable {
+                table: *table,
+                containers: tables.shared.get(&table.0).copied().unwrap_or(1),
+            }),
+            None => Err(VanillaError::NoLootTable {
+                name: name.to_owned(),
+                near: near(&tables.by_name, name),
+            }),
+        }
+    }
+
+    fn read_fill_tables(&self) -> Option<FillTables> {
+        let layout = self.fill?;
+        let collection = (self.read)(
+            super::workshops::TEMPLATE_COLLECTION.key_by_hash(self.hashes.template_collection),
+        )?;
+        let blob = Blob::new(&collection);
+        let (start, count) = blob.array(self.workshops.templates)?;
+        let mut tables = FillTables::default();
+        for at in (0..usize::try_from(count).ok()?).map(|i| start + i * 16) {
+            let guid: [u8; 16] = collection.get(at..at + 16)?.try_into().ok()?;
+            let Some(template) = (self.read)(Guid(guid).key_by_hash(self.hashes.template)) else {
+                continue;
+            };
+            if let Some((name, table)) = template_table(&layout, &template) {
+                *tables.shared.entry(table.0).or_default() += 1;
+                tables.by_name.entry(name).or_default().push(table);
+            }
+        }
+        Some(tables)
     }
 
     /// How many slots the container the vanilla item `item` places holds;
@@ -552,6 +659,7 @@ pub(crate) mod tests {
         item_registry: 2,
         template: 3,
         workshop_registry: 4,
+        template_collection: 5,
     };
 
     /// The item layout of build 1269579, as far as the registry goes.
@@ -692,6 +800,62 @@ pub(crate) mod tests {
             move |key| data.get(&key).cloned(),
         )
         .with_containers(Some(CONTAINERS))
+    }
+
+    /// A game whose templates are the containers `containers`: name and
+    /// fill table each.
+    pub(crate) fn game_with_tables(containers: &[(&str, Guid)]) -> Vanilla {
+        use super::super::loot_tables::tests::{FILL, container};
+
+        let mut data = game_data(&[]);
+        let mut guids = Vec::new();
+        for (i, (name, table)) in containers.iter().enumerate() {
+            let template = Guid([0x40 + u8::try_from(i).unwrap(); 16]);
+            data.insert(
+                template.key_by_hash(HASHES.template),
+                container(name, *table),
+            );
+            guids.extend_from_slice(&template.0);
+        }
+        let mut collection = Blob::new(&[0u8; 8]);
+        let at = collection.append(&guids, 8);
+        assert!(collection.set_array(0, at, u32::try_from(containers.len()).unwrap()));
+        data.insert(
+            super::super::workshops::TEMPLATE_COLLECTION.key_by_hash(HASHES.template_collection),
+            collection.into_bytes(),
+        );
+        Vanilla::with_parts(
+            ITEMS,
+            super::super::workshops::tests::LAYOUT,
+            HASHES,
+            move |key| data.get(&key).cloned(),
+        )
+        .with_fill_tables(Some(FILL))
+    }
+
+    #[test]
+    fn a_container_s_loot_table_is_found_by_its_name_with_its_sharers() {
+        let (corpses, chest) = (Guid([1; 16]), Guid([2; 16]));
+        let vanilla = game_with_tables(&[
+            ("LootContainer_Enemy_Corpse_Vukah", corpses),
+            ("LootContainer_Enemy_Wildlife_Vuka_Melee", corpses),
+            ("LootChest_Gold", chest),
+        ]);
+        assert_eq!(
+            vanilla.loot_table("LootContainer_Enemy_Corpse_Vukah"),
+            Ok(LootTable {
+                table: corpses,
+                containers: 2
+            })
+        );
+        assert_eq!(vanilla.loot_table("LootChest_Gold").unwrap().containers, 1);
+        assert!(
+            vanilla
+                .loot_table("LootChest_Gld")
+                .unwrap_err()
+                .to_string()
+                .contains("near: LootChest_Gold")
+        );
     }
 
     /// The archive of [`game`], by key.

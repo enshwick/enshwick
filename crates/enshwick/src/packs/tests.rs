@@ -781,3 +781,45 @@ fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
         assert!(error.starts_with("pack.toml:4"), "{error}");
     }
 }
+
+#[test]
+fn a_loot_change_of_one_container_changes_its_table_alone() {
+    let corpses = Guid([7; 16]);
+    let vanilla = crate::content::vanilla::tests::game_with_tables(&[
+        ("LootContainer_Enemy_Corpse_Vukah", corpses),
+        ("LootContainer_Enemy_Wildlife_Vuka_Melee", corpses),
+    ]);
+    let text = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootContainer_Enemy_Corpse_Vukah\"]\ncount = {{ times = 2 }}\n"
+    );
+    let loot = PackFiles::new().with(LOOT_FILE, text);
+    let pack = Pack::parse_with("you.loot", &loot, Some(&vanilla)).unwrap();
+    assert_eq!(
+        pack.changes(),
+        [(
+            Change::in_table(corpses, Guid::parse(CHEST), Field::Count, Value::Times(2.0)),
+            "loot.toml:1 (in LootContainer_Enemy_Corpse_Vukah, a table 2 containers share)"
+                .to_owned()
+        )]
+    );
+    let stack = format!(
+        "[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootContainer_Enemy_Corpse_Vukah\"]\nstack_size = 2\n"
+    );
+    let errors = Pack::parse_with(
+        "you.loot",
+        &PackFiles::new().with(LOOT_FILE, stack),
+        Some(&vanilla),
+    )
+    .unwrap_err();
+    assert_eq!(
+        errors.to_string(),
+        "loot.toml:1:1: change 1: stack_size belongs to random loot, which has no tables"
+    );
+    let offline =
+        format!("[[change]]\nitems = [\"{CHEST}\"]\ntable = [\"LootChest_Gold\"]\ncount = 2\n");
+    let errors = Pack::parse("you.loot", &PackFiles::new().with(LOOT_FILE, offline)).unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data at hand"),
+        "{errors}"
+    );
+}

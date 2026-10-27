@@ -11,7 +11,8 @@ use crate::content::recipes::RecipeKind;
 use crate::content::vanilla::VanillaError;
 
 use super::entries::{
-    ItemChangeEntry, ItemsEntry, ItemsFile, LootFile, RecipeChangeEntry, RecipesFile, ValueEntry,
+    ItemChangeEntry, ItemsEntry, ItemsFile, LootChangeEntry, LootFile, RecipeChangeEntry,
+    RecipesFile, ValueEntry,
 };
 use super::files::PackError;
 use super::pack::Reader;
@@ -215,21 +216,129 @@ pub(super) fn loot_changes(
     loot_file: &LootFile,
     text: &str,
 ) -> Vec<(Change, String)> {
+    let fields = |e: &LootChangeEntry| {
+        vec![
+            (Field::StackSize, e.stack_size),
+            (Field::Count, e.count),
+            (Field::SpawnProbability, e.spawn_probability),
+            (Field::Weight, e.weight),
+        ]
+    };
     let entries: Vec<ChangeEntry<'_>> = loot_file
         .change
         .iter()
+        .filter(|entry| entry.get_ref().table.is_empty())
         .map(|entry| {
             let e = entry.get_ref();
-            let fields = vec![
-                (Field::StackSize, e.stack_size),
-                (Field::Count, e.count),
-                (Field::SpawnProbability, e.spawn_probability),
-                (Field::Weight, e.weight),
-            ];
-            (entry.span().start, e.items.as_slice(), fields)
+            (entry.span().start, e.items.as_slice(), fields(e))
         })
         .collect();
-    changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text)
+    let mut out = changes_of(reader, LOOT_FILE, Entry::Loot, &entries, text);
+    let mut seen: HashMap<(Guid, Guid, Field), usize> = HashMap::new();
+    for (index, entry) in loot_file.change.iter().enumerate() {
+        let e = entry.get_ref();
+        if e.table.is_empty() {
+            continue;
+        }
+        let at = entry.span().start;
+        let line = PackError::at(LOOT_FILE, text, at, "").line;
+        let number = index + 1;
+        for (change, source) in table_changes(reader, text, (at, line, number), e, &fields(e)) {
+            let key = (
+                change.entry,
+                change.item.unwrap_or(change.entry),
+                change.field,
+            );
+            if let Some(&first) = seen.get(&key) {
+                reader.error(
+                    LOOT_FILE,
+                    text,
+                    at,
+                    format!(
+                        "change {number}: {} {source} is changed at line {first} already",
+                        change.field
+                    ),
+                );
+                continue;
+            }
+            seen.insert(key, line);
+            out.push((change, source));
+        }
+    }
+    out
+}
+
+/// The checked changes change `e` gives the items it names in the fill
+/// tables of the containers it names, each with its source; problems are
+/// noted at the change, whose start, line and number `at` holds.
+fn table_changes(
+    reader: &mut Reader<'_>,
+    text: &str,
+    (at, line, number): (usize, usize, usize),
+    e: &LootChangeEntry,
+    fields: &[(Field, Option<ValueEntry>)],
+) -> Vec<(Change, String)> {
+    let file = LOOT_FILE;
+    let fail = |reader: &mut Reader<'_>, why: String| {
+        reader.error(file, text, at, format!("change {number}: {why}"));
+    };
+    let given: Vec<(Field, Value)> = fields
+        .iter()
+        .filter_map(|(field, v)| v.map(|v| (*field, value(v))))
+        .collect();
+    if given.iter().any(|(field, _)| *field == Field::StackSize) {
+        fail(
+            reader,
+            "stack_size belongs to random loot, which has no tables".to_owned(),
+        );
+        return Vec::new();
+    }
+    if given.is_empty() {
+        fail(
+            reader,
+            "changes nothing; give count, spawn_probability, weight".to_owned(),
+        );
+        return Vec::new();
+    }
+    if e.items.is_empty() {
+        fail(reader, "items names no item".to_owned());
+        return Vec::new();
+    }
+    let mut tables = Vec::new();
+    for name in &e.table {
+        let found = match reader.vanilla {
+            None => Err(format!(
+                "table {name:?} needs the game's data at hand to find the container's table"
+            )),
+            Some(vanilla) => vanilla.loot_table(name).map_err(|why| why.to_string()),
+        };
+        match found {
+            Ok(table) => {
+                let label = match table.containers {
+                    0 | 1 => format!("in {name}"),
+                    n => format!("in {name}, a table {n} containers share"),
+                };
+                tables.push((table.table, label));
+            }
+            Err(why) => fail(reader, why),
+        }
+    }
+    let mut out = Vec::new();
+    for item_name in &e.items {
+        let Some((item, _)) = reader.reference(file, text, at, item_name, "item", "") else {
+            continue;
+        };
+        for (table, label) in &tables {
+            for &(field, value) in &given {
+                let change = Change::in_table(*table, item, field, value);
+                match change.check() {
+                    Ok(()) => out.push((change, format!("{file}:{line} ({label})"))),
+                    Err(why) => fail(reader, why.to_string()),
+                }
+            }
+        }
+    }
+    out
 }
 
 /// The checked changes of one file's `[[change]]` tables of `kind`: each

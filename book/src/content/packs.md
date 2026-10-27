@@ -392,6 +392,22 @@ fill tables are the fixed lists a container names. A change reaches every
 fill table that lists the item. Only the server rolls loot, so a pack of
 loot changes alone may run `side = "server"` and turn `join` off.
 
+`table` narrows a change to the fill tables of some containers, named by
+their templates, and needs the game's data at hand:
+
+```toml
+[[change]]
+items = ["Material_T1_Resin"]
+table = ["LootContainer_Enemy_Corpse_Vukah"]
+count = { times = 2 }
+```
+
+Containers often share one table: the Vukah corpse and the Vukah warrior
+roll the same one, so the change above reaches both, and the change's
+source in the conflict report and the logs says how many containers share
+it. A change of one table applies after the item's changes of every table.
+`stack_size` belongs to random loot, which has no tables.
+
 A pack changes the table itself, before any roll, and each factor after it
 applies once. For items the game scales, the world's resource drop setting
 times the [resource drop rate](../rates.md) scales the pack's least and
