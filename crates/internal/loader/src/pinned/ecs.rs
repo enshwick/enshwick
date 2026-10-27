@@ -47,6 +47,7 @@ pub(crate) const RECORD_TEMPLATE: Constant = Constant::new("ecs.record_template"
 pub(crate) const REGISTRY_TYPE_MAP: Constant = Constant::new("ecs.registry_type_map");
 pub(crate) const REGISTRY_TYPE_MAP_FALLBACK: Constant =
     Constant::new("ecs.registry_type_map_fallback");
+pub(crate) const REGISTRY_TYPE_COUNT: Constant = Constant::new("ecs.registry_type_count");
 pub(crate) const REGISTRY_TYPE_RECORDS: Constant = Constant::new("ecs.registry_type_records");
 pub(crate) const REGISTRY_TYPE_RECORD_SIZE: Constant =
     Constant::new("ecs.registry_type_record_size");

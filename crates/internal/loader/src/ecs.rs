@@ -628,17 +628,19 @@ impl Components {
             (!index.is_null()).then_some(index)
         })?;
         if let Some(halves) = &self.halves
-            // SAFETY: `world` is the running system's live, non-null entity
-            // world and `index` the non-null type index the lookup found for
-            // `hash`; the caller guarantees the system's thread.
-            && unsafe { halves.is_static(world.expose_provenance(), index, hash) }
+            && !registry.is_null()
+            // SAFETY: `registry` is the running system's live entity world's
+            // non-null component registry and `index` the non-null type index
+            // the lookup found for `hash`; the caller guarantees the system's
+            // thread.
+            && unsafe { halves.is_static(registry.expose_provenance(), index, hash) }
         {
             // SAFETY: `world` is the running system's live entity world and
             // `index` the type index of `hash`, whose type has a static half
             // (`is_static` returned true); the caller guarantees the
             // system's thread.
             let data = unsafe { halves.read(world.expose_provenance(), index, entity) };
-            return (!data.is_null()).then_some(Found::Static(data));
+            return data.ok().map(Found::Static);
         }
         let mut out = [0usize; 2];
         // SAFETY: `index` is the non-null type index the lookup found and
