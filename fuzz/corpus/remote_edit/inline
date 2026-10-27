@@ -1,0 +1,4 @@
+limit = 4
+token = "x"
+group = { flag = true, secret = "y", inner = { key = "z" } }
+ÿgroup.flagÿfalseÿ{ limit = 4 }

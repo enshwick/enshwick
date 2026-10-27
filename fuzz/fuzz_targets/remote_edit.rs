@@ -5,7 +5,7 @@
 
 #![no_main]
 
-use enshwick::config::{Field, Schema, Stage};
+use enshwick::config::{Field, Schema, Stage, value_at};
 use enshwick_fuzz::text_fields;
 use enshwick_loader::{configure, remote};
 use libfuzzer_sys::fuzz_target;
@@ -22,6 +22,8 @@ fn schema() -> Schema {
             Field::new("token", Stage::Runtime, "").with_secret(true),
             Field::new("group.flag", Stage::Runtime, &true),
             Field::new("group.list", Stage::Runtime, &[1, 2, 3]),
+            Field::new("group.secret", Stage::Runtime, "").with_secret(true),
+            Field::new("group.inner.key", Stage::Runtime, "").with_secret(true),
         ],
     )
 }
@@ -36,9 +38,11 @@ fuzz_target!(|data: &[u8]| {
     if configure::set("fuzz", &schema, text, key, value).is_ok() {
         assert!(!schema.field(key).is_some_and(|f| f.secret));
     }
-    let hidden = remote::without_secrets(&schema, text);
+    let hidden = remote::redacted(&schema, text);
     if let Ok(table) = hidden.parse::<toml::Table>() {
-        assert!(!table.contains_key("token"));
+        for field in schema.fields.iter().filter(|f| f.secret) {
+            assert!(value_at(&table, &field.key).is_none(), "{}", field.key);
+        }
     }
     drop(remote::values_text(values));
 });

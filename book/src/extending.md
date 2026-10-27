@@ -76,6 +76,7 @@ definition from [the schema](#getting-a-points-definition) in `price`:
 #     #[derive(Clone, Copy, Debug)]
 #     pub struct Price {
 #         pub item: u32,
+#         pub count: u32,
 #         pub player: u64,
 #         pub character: enshwick::ecs::Entity,
 #         pub deal: Deal,
@@ -207,7 +208,10 @@ type and the answer's are numbers, `bool`, `enshwick::ecs::Entity`,
 [`#[derive(Shape)]`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/lib.rs);
 the doc comments of the point and its fields go into the schema too, each up
 to its first heading, so an `# Examples` section, whose code compiles only in
-the owner, stays out of other mods' definitions.
+the owner, stays out of other mods' definitions. The input and the answer have
+no padding, since a [Luau mod](luau.md#extending-another-mod) reads them as
+bytes: the build fails on a gap, and its bytes become fields of their own, as
+for a [call](calls.md).
 
 ```rust
 use std::sync::OnceLock;
@@ -284,6 +288,7 @@ loader. The example's test:
 #     #[derive(Clone, Copy, Debug)]
 #     pub struct Price {
 #         pub item: u32,
+#         pub count: u32,
 #         pub player: u64,
 #         pub character: enshwick::ecs::Entity,
 #         pub deal: Deal,
@@ -296,6 +301,7 @@ use price::{Deal, Price};
 fn a_regular_gets_more(loader: &enshwick::test::Installed) {
     let price = Price {
         item: 1,
+        count: 1,
         player: 0x00ab_cdef_0123_4567,
         character: Entity(10),
         deal: Deal::SELL,

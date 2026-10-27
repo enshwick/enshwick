@@ -129,6 +129,11 @@ mod notices;
 mod others;
 #[cfg(windows)]
 mod pacing;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build watches pack files")
+)]
+mod pack_watch;
 #[cfg(windows)]
 mod packs;
 #[cfg(windows)]

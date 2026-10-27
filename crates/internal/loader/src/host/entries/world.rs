@@ -1,9 +1,10 @@
 //! Host functions for the world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{Level, ModHandle, Side, Status, Str};
+use enshwick::abi::{AccountActionType, Level, ModHandle, Side, Status, Str};
 use enshwick::ecs::Entity;
 
+use crate::console::accounts::Act;
 use crate::host::memory::{put, put_headed, put_headed_list, text};
 use crate::host::{caller, caller_index, calling, entry, loader};
 use crate::locks::Relock;
@@ -759,6 +760,25 @@ pub(crate) extern "system" fn world_persists(
                 unsafe { kept.write(u8::from(saved)) };
                 Status::OK
             }
+            Err(status) => status,
+        }
+    })
+}
+
+pub(crate) extern "system" fn account_action(
+    me: ModHandle,
+    action: AccountActionType,
+    account: u64,
+) -> Status {
+    entry("account_action", || {
+        let act = match action {
+            AccountActionType::KICK => Act::Kick,
+            AccountActionType::BAN => Act::Ban,
+            AccountActionType::UN_BAN => Act::Unban,
+            _ => return Status::BAD_ARGS,
+        };
+        match caller(me).and_then(|loader| crate::console::account_action(loader, act, account)) {
+            Ok(()) => Status::OK,
             Err(status) => status,
         }
     })

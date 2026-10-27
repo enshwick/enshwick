@@ -111,8 +111,11 @@ mod clamping {
             .collect();
         assert_eq!(warned.len(), 3, "{warned:?}");
         assert!(
-            warned.iter().any(|l| l.contains("per_level[2] = 40")),
+            warned
+                .iter()
+                .any(|l| l == "settings: per_level[2] is outside 1 to 32; 32 applies"),
             "{warned:?}"
         );
+        assert!(!warned.iter().any(|l| l.contains("40")), "{warned:?}");
     }
 }

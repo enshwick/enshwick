@@ -2,13 +2,15 @@
 
 #[cfg(test)]
 mod tests {
-    use std::sync::OnceLock;
+    use std::sync::Mutex;
 
     use enshwick::abi::{FogInfo, Side, Status};
     use enshwick::map::{FogError, FogOfWar};
     use enshwick::{Load, Mod, Off};
 
-    static FOG: OnceLock<FogOfWar> = OnceLock::new();
+    /// The fog of the mod the running test started: installs take turns,
+    /// so each start sets it afresh.
+    static FOG: Mutex<Option<FogOfWar>> = Mutex::new(None);
 
     struct Minimap;
 
@@ -18,7 +20,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let _first = FOG.set(load.fog_of_war()?);
+            *FOG.lock().unwrap() = Some(load.fog_of_war()?);
             Ok(Self)
         }
     }
@@ -43,23 +45,28 @@ mod tests {
         (info, pixels)
     }
 
-    fn start(fake: enshwick::test::FakeHost) -> (enshwick::test::Installed, Status) {
+    /// The started loader, its status and the fog the mod got, if any.
+    fn start(
+        fake: enshwick::test::FakeHost,
+    ) -> (enshwick::test::Installed, Status, Option<FogOfWar>) {
         let loader = fake.install();
+        *FOG.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Minimap)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        (loader, status)
+        let fog = FOG.lock().unwrap().take();
+        (loader, status, fog)
     }
 
     #[test]
     fn a_box_of_the_fog_reads_row_by_row() {
         let (info, pixels) = small();
-        let (_loader, status) = start(
+        let (_loader, status, fog) = start(
             enshwick::test::FakeHost::new()
                 .side(Side::CLIENT)
                 .fog(info, pixels),
         );
         assert_eq!(status, Status::OK);
-        let fog = *FOG.get().unwrap();
+        let fog = fog.unwrap();
 
         let state = fog.state().unwrap();
         assert_eq!((state.width, state.height, state.version), (4, 3, 5));
@@ -73,12 +80,12 @@ mod tests {
     #[test]
     fn coverage_flips_z_against_the_world_size() {
         let (info, pixels) = small();
-        let (_loader, _status) = start(
+        let (_loader, _status, fog) = start(
             enshwick::test::FakeHost::new()
                 .side(Side::CLIENT)
                 .fog(info, pixels),
         );
-        let fog = *FOG.get().unwrap();
+        let fog = fog.unwrap();
 
         assert_eq!(fog.coverage([1.0, 0.0, 23.0]), Ok(Some(0)));
         assert_eq!(fog.coverage([25.0, 0.0, 1.0]), Ok(Some(23)));
@@ -87,8 +94,8 @@ mod tests {
 
     #[test]
     fn the_fog_is_missing_until_the_client_enters_a_world() {
-        let (loader, _status) = start(enshwick::test::FakeHost::new().side(Side::CLIENT));
-        let fog = *FOG.get().unwrap();
+        let (loader, _status, fog) = start(enshwick::test::FakeHost::new().side(Side::CLIENT));
+        let fog = fog.unwrap();
         assert_eq!(fog.state(), Err(FogError::Missing));
 
         let (info, pixels) = small();
@@ -98,8 +105,8 @@ mod tests {
 
     #[test]
     fn a_dedicated_server_has_no_fog() {
-        let (_loader, status) = start(enshwick::test::FakeHost::new());
+        let (_loader, status, fog) = start(enshwick::test::FakeHost::new());
         assert_ne!(status, Status::OK);
-        assert!(FOG.get().is_none());
+        assert!(fog.is_none());
     }
 }

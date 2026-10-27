@@ -71,8 +71,9 @@ impl From<String> for MigrationError {
 }
 
 impl From<toml::de::Error> for MigrationError {
+    /// The key and the type `error` expected, never the value it found.
     fn from(error: toml::de::Error) -> Self {
-        Self(error.message().to_owned())
+        Self(crate::config::reason(None, &error))
     }
 }
 
@@ -236,7 +237,8 @@ impl Migration {
         map: impl Fn(&mut toml::Table) -> Result<(), MigrationError> + Send + Sync + 'static,
     ) -> Self {
         let map: Map = Box::new(move |text| {
-            let mut table: toml::Table = toml::from_str(text)?;
+            let mut table: toml::Table = toml::from_str(text)
+                .map_err(|e| MigrationError(crate::config::reason(Some(text), &e)))?;
             map(&mut table)?;
             toml::to_string(&table).map_err(|e| MigrationError(e.to_string()))
         });
@@ -388,7 +390,9 @@ impl Migrations {
 
 /// A TOML value from its text, as the loader hands a setting over.
 pub(crate) fn parse_value(text: &str) -> Result<toml::Value, MigrationError> {
-    let mut table: toml::Table = toml::from_str(&format!("v = {text}"))?;
+    let text = format!("v = {text}");
+    let mut table: toml::Table = toml::from_str(&text)
+        .map_err(|e| MigrationError(crate::config::reason(Some(&text), &e)))?;
     table.remove("v").ok_or_else(|| "no value".into())
 }
 
@@ -733,5 +737,28 @@ mod tests {
                 .check()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn a_map_that_fails_to_read_a_value_never_names_it() {
+        #[derive(Debug, serde::Deserialize)]
+        #[expect(dead_code, reason = "only read to fail")]
+        struct Pin {
+            pin: u32,
+        }
+
+        let error =
+            super::MigrationError::from(toml::from_str::<Pin>("pin = \"hunter2\"").unwrap_err());
+        assert_eq!(error.to_string(), "key pin: expected u32");
+    }
+
+    #[test]
+    fn a_value_that_is_no_toml_says_why_without_itself() {
+        let why = parse_value("\"hunter2").unwrap_err().to_string();
+        assert!(
+            why.starts_with("line 1: ") && !why.contains("hunter2"),
+            "{why}"
+        );
+        assert!(!why.contains("does not fit"), "{why}");
     }
 }

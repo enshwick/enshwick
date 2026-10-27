@@ -180,7 +180,7 @@ pub use enshwick_macros::Script;
 /// #[derive(Clone, Copy, Debug, Shape)]
 /// #[repr(transparent)]
 /// #[shape(values(BUY, SELL))]
-/// pub struct Deal(pub u8);
+/// pub struct Deal(pub u32);
 ///
 /// impl Deal {
 ///     pub const BUY: Self = Self(0);

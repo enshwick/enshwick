@@ -337,8 +337,8 @@ mod tests {
     #[crate::event(name = "you.my-mod:direct")]
     #[derive(Clone, Copy, Debug)]
     struct Direct {
-        best: Option<u32>,
-        pair: [u8; 2],
+        best: u32,
+        pair: [u16; 2],
     }
 
     macro_rules! through {
@@ -351,7 +351,7 @@ mod tests {
             }
         };
     }
-    through!(Option<u32>, [u8; 2]);
+    through!(u32, [u16; 2]);
 
     #[test]
     fn a_type_passed_through_a_macro_hashes_alike() {

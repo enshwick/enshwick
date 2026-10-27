@@ -13,6 +13,7 @@ mod tests {
     #[derive(Clone, Copy, Debug)]
     pub(crate) struct Price {
         pub(crate) item: u32,
+        pub(crate) count: u32,
         pub(crate) player: u64,
     }
 
@@ -64,8 +65,10 @@ mod tests {
     enshwick::declare_mod!(Haggler);
 
     fn start(point: DescribedPoint) -> enshwick::test::Installed {
-        *POINT.lock().unwrap() = Some(point);
+        // After the install, which tests take in turn: set earlier, another
+        // test's mod could take this one's point.
         let loader = enshwick::test::FakeHost::new().install();
+        *POINT.lock().unwrap() = Some(point);
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
@@ -75,7 +78,14 @@ mod tests {
     fn serves_nothing(point: DescribedPoint) {
         let loader = start(point);
         assert_eq!(
-            loader.ask_point(&Price { item: 7, player: 1 }, 10),
+            loader.ask_point(
+                &Price {
+                    item: 7,
+                    count: 1,
+                    player: 1
+                },
+                10
+            ),
             Decision::Kept(10)
         );
     }
@@ -100,11 +110,21 @@ mod tests {
     #[test]
     fn a_described_link_serves_the_typed_point() {
         let loader = enshwick::test::FakeHost::new().install();
+        *POINT.lock().unwrap() = None;
         // SAFETY: both functions are the exports of this file's `declare_mod!(Haggler)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(loader.attached_points(), ["you.trading-post:price"]);
-        let ask = |item| loader.ask_point(&Price { item, player: 1 }, 10);
+        let ask = |item| {
+            loader.ask_point(
+                &Price {
+                    item,
+                    count: 1,
+                    player: 1,
+                },
+                10,
+            )
+        };
         assert_eq!(ask(7), Decision::Changed(5));
         assert_eq!(ask(9), Decision::Refused);
         assert_eq!(ask(1), Decision::Kept(10));

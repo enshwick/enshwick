@@ -4,20 +4,21 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
-    AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
-    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
-    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec,
-    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
-    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
-    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
-    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
-    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
-    TerrainEdit, TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
+    AltarLimitFilterFn, AltarLimitFn, AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn,
+    BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame,
+    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange,
+    DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
+    ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
+    LoopWaitSites, MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
+    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1390,4 +1391,19 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
+    /// Asks the game for the account action `action` on `account`, as its
+    /// administrators' account actions do: [`AccountActionType::KICK`]
+    /// removes a player online, [`AccountActionType::BAN`] puts the account
+    /// on the server's ban list and removes its player when online,
+    /// [`AccountActionType::UN_BAN`] takes it off the list. A ban of an
+    /// account not online goes straight onto the list, which the dedicated
+    /// server writes to `bannedAccounts` of `enshrouded_server.json`.
+    /// [`Status::REFUSED`] for a kick or a ban of an administrator online,
+    /// whom the game never removes, and for a kick of an account not online;
+    /// [`Status::BAD_ARGS`] for account 0 or an action this loader does not
+    /// know; [`Status::MISSING`] while no server runs or on a build that
+    /// lacks the action. On the server's game thread between steps only:
+    /// [`Status::WRONG_THREAD`] elsewhere. Since minor 98.
+    pub account_action:
+        extern "system" fn(me: ModHandle, action: AccountActionType, account: u64) -> Status,
 }

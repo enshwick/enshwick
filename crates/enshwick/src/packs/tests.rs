@@ -705,6 +705,24 @@ fn a_pack_folder_reads_its_scripts_but_not_their_definitions() {
 }
 
 #[test]
+fn script_files_lists_what_read_dir_reads_as_scripts() {
+    let folder = Folder::new("listed");
+    folder.write("pack.toml", "id = \"you.greeter\"\nversion = \"1.0.0\"\n");
+    assert!(script_files(&folder.0).unwrap().is_empty(), "no main.luau");
+    folder.write("main.luau", "print('hi')");
+    folder.write("lib/greet.luau", "return 1");
+    folder.write("types/enshwick.d.luau", "declare enshwick: {}");
+    let mut listed = script_files(&folder.0).unwrap();
+    listed.sort();
+    assert_eq!(
+        listed,
+        [folder.0.join("lib/greet.luau"), folder.0.join("main.luau")]
+    );
+    let read = PackFiles::read_dir(&folder.0).unwrap();
+    assert_eq!(read.scripts().count(), listed.len());
+}
+
+#[test]
 fn a_changed_script_changes_the_pack_s_hash() {
     let folder = Folder::new("hash");
     folder.write("pack.toml", "id = \"you.greeter\"\nversion = \"1.0.0\"\n");

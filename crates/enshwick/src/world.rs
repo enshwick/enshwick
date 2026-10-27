@@ -6,6 +6,7 @@
 //! elsewhere. On a client the server is the built-in one, while it hosts a
 //! game.
 
+mod accounts;
 mod build;
 mod capture;
 mod containers;
@@ -27,6 +28,7 @@ use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
 use crate::{Host, Load, Off};
 
+pub use accounts::AccountAction;
 pub use build::{BuildRefusal, PlayerPermissions};
 pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
