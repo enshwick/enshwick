@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Header, PlayerKey};
 
 /// A message on a mod's channel, handed to the handler registered with
 /// [`HostApi::net_channel`](super::HostApi::net_channel).
@@ -35,7 +35,7 @@ pub struct NetMessage {
     pub reserved: u32,
     /// Who sent it: a player's account key on the server,
     /// [`NetMessage::SERVER`] on a client.
-    pub peer: u64,
+    pub peer: PlayerKey,
     /// The message, valid for the call.
     pub data: *const u8,
     /// How many bytes `data` holds.
@@ -48,7 +48,7 @@ impl_headed!(NetMessage);
 
 impl NetMessage {
     /// The server, as a peer: what a client hears from and sends to.
-    pub const SERVER: u64 = u64::MAX;
+    pub const SERVER: PlayerKey = PlayerKey::new(u64::MAX);
 }
 
 /// A mod's handler for messages on its channel: the message and the pointer

@@ -68,7 +68,7 @@ mod tests {
                 .iter()
                 .flat_map(|axis| axis.to_le_bytes()),
         );
-        fake.component(entity, WAYPOINT, &bytes)
+        fake.component(Entity(entity), WAYPOINT, &bytes)
     }
 
     /// The world's own types and the map's markers, as on a build without
@@ -230,8 +230,8 @@ mod tests {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot,
-            entity,
-            key: u64::from(entity) * 100,
+            entity: Entity(entity),
+            key: enshwick::PlayerKey::new(u64::from(entity) * 100),
             permissions: 0,
             name_len: u8::try_from(name.len()).unwrap(),
             name: [0; 64],
@@ -243,7 +243,7 @@ mod tests {
     /// An altar at the middle of its zone, whose cells are 0.5 m.
     fn altar(entity: u32, level: u8, min: [i64; 3], max: [i64; 3]) -> AltarInfo {
         let mut info = AltarInfo::EMPTY;
-        info.entity = entity;
+        info.entity = Entity(entity);
         info.level = level;
         info.zone = Bounds { min, max };
         let middle = |axis: usize| f64::from(i32::try_from(min[axis] + max[axis]).unwrap()) * 0.25;
@@ -270,13 +270,13 @@ mod tests {
             snapshot.players,
             [
                 MapPlayer {
-                    key: 4000,
+                    key: enshwick::PlayerKey::new(4000),
                     name: "Bob".to_owned(),
                     position: None,
                     waypoint: Some([12.5, 3.0, -7.25])
                 },
                 MapPlayer {
-                    key: 4100,
+                    key: enshwick::PlayerKey::new(4100),
                     name: "Ann".to_owned(),
                     position: None,
                     waypoint: None

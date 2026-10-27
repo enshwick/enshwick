@@ -327,13 +327,13 @@ unsafe fn refused(text: *const [usize; 2]) -> bool {
     let player = renamer(loader, machine);
     let call = RenameCall {
         header: Header::of::<RenameCall>(),
-        entity,
+        entity: Entity(entity),
         known: u8::from(player.is_some()),
         player: player.unwrap_or(PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: u32::MAX,
-            entity: 0,
-            key: 0,
+            entity: Entity(0),
+            key: enshwick::PlayerKey::new(0),
             permissions: 0,
             name_len: 0,
             name: [0; 64],
@@ -375,7 +375,7 @@ fn renamer(loader: &Loader, machine: u32) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key == enshwick::PlayerKey::new(key))
 }
 
 #[cfg(test)]

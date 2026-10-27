@@ -111,7 +111,7 @@ pub(super) unsafe fn summon(request: *mut u8) -> Option<Asked> {
         template,
         target,
         slot,
-        pide,
+        pide: Entity(pide),
         meter: if pide == 0 {
             [0; 2]
         } else {

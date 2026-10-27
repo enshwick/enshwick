@@ -18,8 +18,8 @@ mod values;
 
 use core::marker::PhantomData;
 
-use crate::Entity;
 use crate::abi::{EventTypeInfo, GameEventData, Header, Str};
+use crate::{Entity, ItemId, PlayerKey, RecipeId};
 use crate::{Load, Off};
 
 pub use kinds::{
@@ -270,7 +270,8 @@ impl EventType {
 }
 
 /// A plain value a [`Field`] reads from an event: an integer, a float, a
-/// `bool` or an [`Entity`]; implemented by those types only.
+/// `bool`, an [`Entity`] or another id of the game ([`ItemId`], [`RecipeId`],
+/// [`PlayerKey`]); implemented by those types only.
 ///
 /// # Examples
 ///
@@ -337,6 +338,24 @@ impl Scalar for Entity {
         self.0.to_bytes(bytes)
     }
 }
+
+macro_rules! id_scalars {
+    ($($id:ty: $int:ty),*) => {$(
+        impl sealed::Sealed for $id {}
+
+        impl Scalar for $id {
+            fn from_bytes(bytes: &[u8]) -> Option<Self> {
+                <$int>::from_bytes(bytes).map(<$id>::new)
+            }
+
+            fn to_bytes(self, bytes: &mut [u8]) -> bool {
+                self.get().to_bytes(bytes)
+            }
+        }
+    )*};
+}
+
+id_scalars!(ItemId: u32, RecipeId: u32, PlayerKey: u64);
 
 /// A field of one reflected type, an event or a component, resolved by name
 /// for the running build.

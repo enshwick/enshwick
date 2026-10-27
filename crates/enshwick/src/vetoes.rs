@@ -14,7 +14,7 @@
 //!
 //! ```
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     const FORBIDDEN_RECIPE: u32 = 0x51;
+//!     const FORBIDDEN_RECIPE: enshwick::RecipeId = enshwick::RecipeId::new(0x51);
 //!     load.on_craft(|craft| craft.recipe != FORBIDDEN_RECIPE)?;
 //!     // Nothing is built below sea level.
 //!     load.on_build(|placement| placement.position[1] >= 0.0)
@@ -23,8 +23,8 @@
 
 use core::ffi::c_void;
 
-use crate::Entity;
 use crate::abi::{BuildCheck, CraftCheck};
+use crate::{Entity, ItemId, RecipeId};
 use crate::{Load, Off};
 
 /// A player's craft request, from [`Load::on_craft`].
@@ -40,7 +40,7 @@ pub struct CraftRequest {
     /// The station, or `None` for crafting by hand.
     pub station: Option<Entity>,
     /// The recipe id.
-    pub recipe: u32,
+    pub recipe: RecipeId,
     /// How many.
     pub amount: u32,
 }
@@ -56,7 +56,7 @@ pub struct Placement {
     /// The building player's character.
     pub player: Entity,
     /// The item placed: a building block, a prop or another placeable.
-    pub item: u32,
+    pub item: ItemId,
     /// Where, in metres.
     pub position: [f64; 3],
 }
@@ -70,8 +70,8 @@ where
         return 1;
     };
     let request = CraftRequest {
-        player: Entity(call.player),
-        station: (call.station != 0).then_some(Entity(call.station)),
+        player: call.player,
+        station: Entity::from_raw(call.station.0),
         recipe: call.recipe,
         amount: call.amount,
     };
@@ -93,7 +93,7 @@ where
         return 1;
     };
     let placement = Placement {
-        player: Entity(call.player),
+        player: call.player,
         item: call.item,
         position: crate::ecs::metres(call.position),
     };

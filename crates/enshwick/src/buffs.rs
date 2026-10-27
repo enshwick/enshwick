@@ -307,20 +307,20 @@ impl Buffs {
         let blank = ActiveBuff {
             header: Header::of::<ActiveBuff>(),
             id: 0,
-            entity: 0,
+            entity: Entity::NONE,
             slot: 0,
             level: 0,
             duration: 0,
             remaining: 0,
         };
         let fill = |out: *mut ActiveBuff, capacity: u32, count: *mut u32| {
-            (self.host.api().buffs)(self.host.handle(), entity.0, out, capacity, count)
+            (self.host.api().buffs)(self.host.handle(), entity, out, capacity, count)
         };
         Ok(list(blank, fill)?
             .iter()
             .map(|buff| Buff {
                 type_id: BuffTypeId(buff.id),
-                buff_entity_id: Entity(buff.entity),
+                buff_entity_id: buff.entity,
                 slot: BuffSlotType::from_slot(u16::try_from(buff.slot).unwrap_or(u16::MAX)),
                 level: (buff.level != 0).then_some(buff.level),
                 life_time: nanos(buff.duration),
@@ -371,7 +371,7 @@ impl Buffs {
         });
         let request = BuffRequest {
             header: Header::of::<BuffRequest>(),
-            entity: entity.0,
+            entity,
             id: id.0,
             level: how.level.map_or(0, u32::from),
             reserved: 0,
@@ -403,7 +403,7 @@ impl Buffs {
     pub fn remove(&self, entity: Entity, id: BuffTypeId) -> Result<bool, WorldError> {
         let mut removed = 0u8;
         WorldError::check(
-            (self.host.api().remove_buff)(self.host.handle(), entity.0, id.0, &raw mut removed),
+            (self.host.api().remove_buff)(self.host.handle(), entity, id.0, &raw mut removed),
             WorldError::Lacks,
         )?;
         Ok(removed != 0)

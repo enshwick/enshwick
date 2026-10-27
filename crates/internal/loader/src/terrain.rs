@@ -342,7 +342,7 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
                 // `config_hardness`.
                 hardness: unsafe { read(config, layout.config_hardness) },
                 reserved: 0,
-                item: enshwick_gamedata::reflect::fnv1a32(&item),
+                item: enshwick::ItemId::new(enshwick_gamedata::reflect::fnv1a32(&item)),
                 // SAFETY: `config` is entry `i < count` of the array the
                 // header points at, `config_size` bytes each; the reflected
                 // `keen::TerrainTerraformingConfig` places its `healthPoints`

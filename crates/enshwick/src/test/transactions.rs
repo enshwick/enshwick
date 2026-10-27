@@ -227,17 +227,21 @@ impl FakeChange {
                 [0, 1, 2].map(|axis| f64::from(min[axis] + size[axis]) / 2.0),
             ),
             Self::PlaceProp(prop) => {
-                super::props::reach(host, prop.item, prop.position, prop.orientation)
+                super::props::reach(host, prop.item.get(), prop.position, prop.orientation)
             }
             Self::RemoveProp(remove) => host
                 .props
                 .iter()
                 .find(|prop| prop.entity == remove.entity)
                 .map_or(([0.0; 3], [0.0; 3]), |prop| {
-                    super::props::reach(host, prop.item, prop.at, prop.orientation)
+                    super::props::reach(host, prop.item.get(), prop.at, prop.orientation)
                 }),
             Self::Block(block) => {
-                let size = host.blueprints.get(&block.shape).copied().unwrap_or([0; 3]);
+                let size = host
+                    .blueprints
+                    .get(&block.shape.get())
+                    .copied()
+                    .unwrap_or([0; 3]);
                 let half = size.map(|voxels| f64::from(voxels) / 4.0);
                 (
                     [0, 1, 2].map(|axis| (block.position[axis] - half[axis]).max(0.0)),
@@ -295,7 +299,7 @@ pub struct FakeTransaction {
     /// Where it stands, as the mod reads it.
     pub info: TransactionInfo,
     /// The entities of the props it placed and still holds.
-    pub(crate) created: Vec<u32>,
+    pub(crate) created: Vec<crate::Entity>,
     /// The props it removed, with the state they held.
     pub(crate) removed: Vec<super::props::FakeProp>,
 }
@@ -315,7 +319,7 @@ impl FakeTransaction {
         let permissions = host
             .players
             .iter()
-            .find(|player| player.entity == self.actor)
+            .find(|player| player.entity == crate::Entity(self.actor))
             .map_or(0, |player| player.permissions);
         self.changes
             .iter()

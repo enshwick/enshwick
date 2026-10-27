@@ -120,15 +120,15 @@ mod tests {
             name: 0,
             duration: 60_000_000_000,
         };
-        loader.set_buffs(&[blessed], &[player.0]);
+        loader.set_buffs(&[blessed], &[player]);
         buffs
             .apply(player, BuffTypeId(BLESSED), Apply::new())
             .unwrap();
         let ring = ItemInstance {
             pide: Entity(900),
-            item: 0x5e01,
+            item: enshwick::ItemId::new(0x5e01),
         };
-        loader.wear(player.0, ring);
+        loader.wear(Entity(player.0), ring);
         stats
             .set_item(
                 ring,

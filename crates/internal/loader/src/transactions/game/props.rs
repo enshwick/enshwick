@@ -114,10 +114,10 @@ pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Stat
         return Err(Status::BAD_ARGS);
     }
     let access = crate::world::access(&"prop transaction commit").ok_or(Status::MISSING)?;
-    let (template, local_box, logic) = item_prop(loader, &access, request.item)?;
+    let (template, local_box, logic) = item_prop(loader, &access, request.item.get())?;
     Ok(Prop {
         template,
-        item: request.item,
+        item: request.item.get(),
         position: request.position.map(fixed),
         orientation: request.orientation,
         local_box,
@@ -339,8 +339,8 @@ pub(super) fn stands(loader: &Loader, prop: &Prop) -> Result<bool, Status> {
     let placed = crate::entities::with_component(loader, used_item)?;
     Ok(placed.iter().any(|place| {
         place.position == prop.position
-            && crate::world::used_item(loader, Entity(place.entity)) == Some(prop.item)
-            && crate::world::template(loader, Entity(place.entity)).ok() == Some(prop.template)
+            && crate::world::used_item(loader, place.entity) == Some(prop.item)
+            && crate::world::template(loader, place.entity).ok() == Some(prop.template)
     }))
 }
 

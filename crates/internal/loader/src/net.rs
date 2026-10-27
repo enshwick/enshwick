@@ -66,7 +66,7 @@ struct Channel {
 #[derive(Debug, Default)]
 struct State {
     /// On the server: peers by account key that said hello. On a client:
-    /// the server, [`NetMessage::SERVER`], once it answered.
+    /// the server, [`NetMessage::SERVER.get()`], once it answered.
     peers: FxHashMap<u64, Peer>,
     /// Lines waiting for the client's chat queue.
     outbox: VecDeque<String>,
@@ -188,7 +188,7 @@ fn deliver(channel: u32, peer: u64, data: &[u8]) {
         header: Header::of::<NetMessage>(),
         channel,
         reserved: 0,
-        peer,
+        peer: enshwick::PlayerKey::new(peer),
         data: data.as_ptr(),
         size: u32::try_from(data.len()).unwrap_or(0),
         reserved_tail: 0,
@@ -232,7 +232,7 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
         crate::log!(WARN, "mod messages: item data records too long to send");
         return;
     };
-    for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER) {
+    for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER.get()) {
         for line in &lines {
             crate::chat::send_frame(peer, line);
         }
@@ -286,7 +286,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
         s.peers
             .keys()
             .copied()
-            .filter(|&k| k != NetMessage::SERVER)
+            .filter(|&k| k != NetMessage::SERVER.get())
             .collect()
     });
     let lines = remote_frames(message);
@@ -303,7 +303,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
 /// Sends a settings message from the client to its server; false while the
 /// server takes no messages.
 pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
-    if !ready(NetMessage::SERVER) {
+    if !ready(NetMessage::SERVER.get()) {
         return false;
     }
     let lines = remote_frames(message);
@@ -458,7 +458,11 @@ pub(crate) fn client_received(text: &str) -> bool {
         // Only the remote settings messages take more than one frame.
         let single = frame.total() == 1;
         if single && frame.part() == control(WELCOME) {
-            let fresh = state(|s| s.peers.insert(NetMessage::SERVER, Peer::new()).is_none());
+            let fresh = state(|s| {
+                s.peers
+                    .insert(NetMessage::SERVER.get(), Peer::new())
+                    .is_none()
+            });
             if fresh {
                 crate::log!(INFO, "mod messages: the server answered");
                 crate::actions::joined();
@@ -479,7 +483,7 @@ pub(crate) fn client_received(text: &str) -> bool {
         } else {
             let whole = state(|s| {
                 s.peers
-                    .get_mut(&NetMessage::SERVER)
+                    .get_mut(&NetMessage::SERVER.get())
                     .and_then(|peer| assemble(peer, frame))
             });
             if let Some((_, data)) = whole
@@ -492,11 +496,11 @@ pub(crate) fn client_received(text: &str) -> bool {
     }
     let message = state(|s| {
         s.peers
-            .get_mut(&NetMessage::SERVER)
+            .get_mut(&NetMessage::SERVER.get())
             .and_then(|peer| assemble(peer, frame))
     });
     if let Some((channel, data)) = message {
-        deliver(channel, NetMessage::SERVER, &data);
+        deliver(channel, NetMessage::SERVER.get(), &data);
     }
     true
 }
@@ -536,7 +540,7 @@ pub(crate) fn forget_peer(key: u64) {
 }
 
 /// Whether `peer` takes messages: on the server, a player's client that said
-/// hello; on a client, the server once it answered ([`NetMessage::SERVER`]).
+/// hello; on a client, the server once it answered ([`NetMessage::SERVER.get()`]).
 pub(crate) fn ready(peer: u64) -> bool {
     state(|s| s.peers.contains_key(&peer))
 }
@@ -547,13 +551,13 @@ pub(crate) fn clients() -> Vec<u64> {
         s.peers
             .keys()
             .copied()
-            .filter(|&k| k != NetMessage::SERVER)
+            .filter(|&k| k != NetMessage::SERVER.get())
             .collect()
     })
 }
 
 /// Sends `data` on `channel` from mod `owner`: to the server for
-/// [`NetMessage::SERVER`], else from the server to the player with account
+/// [`NetMessage::SERVER.get()`], else from the server to the player with account
 /// key `peer`, or to every client that said hello for 0.
 pub(crate) fn send(
     loader: &Loader,
@@ -571,7 +575,7 @@ pub(crate) fn send(
     if data.len() > MAX_MESSAGE {
         return Err(Status::BAD_ARGS);
     }
-    if peer == NetMessage::SERVER {
+    if peer == NetMessage::SERVER.get() {
         return send_to_server(channel, data);
     }
     let serving = crate::world::hosting() || loader.side == enshwick::abi::Side::SERVER;
@@ -587,7 +591,7 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
             s.peers
                 .keys()
                 .copied()
-                .filter(|&k| k != NetMessage::SERVER)
+                .filter(|&k| k != NetMessage::SERVER.get())
                 .collect()
         } else if s.peers.contains_key(&peer) {
             vec![peer]
@@ -616,12 +620,12 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
 
 fn send_to_server(channel: u32, data: &[u8]) -> Result<(), Status> {
     state(|s| {
-        if !s.peers.contains_key(&NetMessage::SERVER) {
+        if !s.peers.contains_key(&NetMessage::SERVER.get()) {
             return Err(Status::MISSING);
         }
         let rate = s
             .sending
-            .entry(NetMessage::SERVER)
+            .entry(NetMessage::SERVER.get())
             .or_insert_with(Peer::new);
         let lines = frames(channel, s.next_message, data).ok_or(Status::BAD_ARGS)?;
         if !rate.admit() || s.outbox.len() + lines.len() > MAX_WAITING {
@@ -642,7 +646,7 @@ pub(crate) fn client_lines() -> Vec<String> {
     crate::lobby::poll();
     try_state(|s| {
         let mut lines = Vec::new();
-        let answered = s.peers.contains_key(&NetMessage::SERVER);
+        let answered = s.peers.contains_key(&NetMessage::SERVER.get());
         let due = s
             .hello_at
             .is_none_or(|at| at.elapsed().as_secs_f64() >= HELLO_EVERY);

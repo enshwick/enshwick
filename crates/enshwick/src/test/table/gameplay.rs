@@ -114,9 +114,13 @@ pub(crate) extern "system" fn summoned(
     })
 }
 
-pub(crate) extern "system" fn summon_item(_me: ModHandle, item: u32, survivor: u32) -> Status {
+pub(crate) extern "system" fn summon_item(
+    _me: ModHandle,
+    item: crate::ItemId,
+    survivor: u32,
+) -> Status {
     with(Status::MISSING, |s| {
-        s.summon_items.push((item, survivor));
+        s.summon_items.push((item.get(), survivor));
         Status::OK
     })
 }
@@ -267,27 +271,28 @@ pub(crate) extern "system" fn build_filter(
 
 pub(crate) extern "system" fn revoke_knowledge(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     id: u32,
     kind: u32,
     value: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.revokes.push((entity, id, kind, value));
+        s.revokes.push((entity.0, id, kind, value));
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn account_knowledge(
     _me: ModHandle,
-    key: u64,
+    key: crate::PlayerKey,
     id: u32,
     kind: u32,
     value: u32,
     revoke: u32,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.account_changes.push((key, id, kind, value, revoke != 0));
+        s.account_changes
+            .push((key.get(), id, kind, value, revoke != 0));
         Status::OK
     })
 }
@@ -327,12 +332,12 @@ pub(crate) extern "system" fn buff_types(
 
 pub(crate) extern "system" fn buffs(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     out: *mut ActiveBuff,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity).cloned()) {
+    match with(None::<Vec<ActiveBuff>>, |s| s.buffs.get(&entity.0).cloned()) {
         Some(on) => put_list(&on, out, capacity, count),
         None => Status::MISSING,
     }
@@ -347,7 +352,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
         let Some(ty) = s.buff_types.iter().find(|ty| ty.id == request.id).copied() else {
             return Status::BAD_ARGS;
         };
-        let Some(on) = s.buffs.get_mut(&request.entity) else {
+        let Some(on) = s.buffs.get_mut(&request.entity.0) else {
             return Status::MISSING;
         };
         let duration = if request.duration == 0 {
@@ -362,7 +367,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
             on.push(ActiveBuff {
                 header: Header::of::<ActiveBuff>(),
                 id: request.id,
-                entity: 0x8000 + u32::try_from(on.len()).unwrap_or(0),
+                entity: crate::Entity(0x8000 + u32::try_from(on.len()).unwrap_or(0)),
                 slot: u32::from(ty.slot),
                 level: request.level,
                 duration,
@@ -375,7 +380,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
 
 pub(crate) extern "system" fn remove_buff(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     id: u32,
     removed: *mut u8,
 ) -> Status {
@@ -383,7 +388,7 @@ pub(crate) extern "system" fn remove_buff(
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
-        let Some(on) = s.buffs.get_mut(&entity) else {
+        let Some(on) = s.buffs.get_mut(&entity.0) else {
             return Status::MISSING;
         };
         let before = on.len();
@@ -397,14 +402,14 @@ pub(crate) extern "system" fn remove_buff(
 
 pub(crate) extern "system" fn knowledge(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     id: u32,
     out: *mut KnowledgeInfo,
 ) -> Status {
     let found = with(None, |s| {
         s.knowledge
             .iter()
-            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == entity))
+            .find(|(e, k)| k.id == id && (k.scope == KnowledgeInfo::WORLD || *e == entity.0))
             .map(|(_, k)| *k)
     });
     let Some(info) = found else {
@@ -420,7 +425,7 @@ pub(crate) extern "system" fn knowledge(
 
 pub(crate) extern "system" fn grant_knowledge(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     id: u32,
     kind: u32,
     value: u32,
@@ -437,7 +442,7 @@ pub(crate) extern "system" fn grant_knowledge(
         if u32::from(info.kind) != kind {
             return Status::BAD_ARGS;
         }
-        s.grants.push((entity, id, kind, value));
+        s.grants.push((entity.0, id, kind, value));
         Status::OK
     })
 }

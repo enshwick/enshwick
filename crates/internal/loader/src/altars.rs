@@ -403,7 +403,7 @@ fn size_zones_with(sizers: &[&Sizer]) {
                 Some(Vanilla {
                     zone: AltarZone {
                         header: Header::of::<AltarZone>(),
-                        altar: id,
+                        altar: enshwick::Entity(id),
                         level: u8::try_from(levels.len()).unwrap_or(u8::MAX),
                         reserved: [0; 3],
                         grow: 0,
@@ -421,7 +421,7 @@ fn size_zones_with(sizers: &[&Sizer]) {
         let filters = sizers.iter().map(|s| (s.callback, s.user()));
         if let Some((grow, height)) = chain(altar.zone, filters) {
             targets.insert(
-                altar.zone.altar,
+                altar.zone.altar.0,
                 (
                     altar.levels,
                     geometry::grown_range(altar.range, altar.turn, grow, height),
@@ -443,7 +443,7 @@ pub(crate) fn list() -> Vec<AltarInfo> {
 
 fn info(id: u32, placed: &Placed, built: Option<&[f32; 3]>, levels: Option<&Sizes>) -> AltarInfo {
     let mut altar = AltarInfo::EMPTY;
-    altar.entity = id;
+    altar.entity = enshwick::Entity(id);
     altar.position = enshwick::ecs::metres(placed.position);
     if let Some(levels) = levels {
         altar.level = u8::try_from(levels.len()).unwrap_or(u8::MAX);

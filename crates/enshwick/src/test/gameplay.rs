@@ -1,5 +1,6 @@
 //! Gameplay answers: damage, knowledge, buffs, altars, survivors, stats and checks.
 
+use crate::Entity;
 use crate::abi::AltarInfo;
 use crate::abi::AltarLimit;
 use crate::abi::AltarZone;
@@ -35,7 +36,7 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let mut altar = AltarInfo::EMPTY;
-    /// altar.entity = 4096;
+    /// altar.entity = enshwick::Entity(4096);
     /// loader.set_altars(&[altar]);
     /// ```
     pub fn set_altars(&self, altars: &[AltarInfo]) {
@@ -55,9 +56,9 @@ impl Installed {
     /// let fall = DamageCheck {
     ///     header: Header::of::<DamageCheck>(),
     ///     cause: DamageCheck::FALL,
-    ///     target: 2,
-    ///     source: 0,
-    ///     attacker: 0,
+    ///     target: enshwick::Entity(2),
+    ///     source: enshwick::Entity(0),
+    ///     attacker: enshwick::Entity(0),
     ///     amounts: [0.0; 13],
     ///     total: 40.0,
     /// };
@@ -86,7 +87,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let quest = KnowledgeInput {
     ///     header: Header::of::<KnowledgeInput>(),
-    ///     player: 2,
+    ///     player: enshwick::Entity(2),
     ///     id: 0x51,
     ///     kind: KnowledgeInfo::BOOL,
     ///     scope: KnowledgeInfo::PLAYER,
@@ -124,13 +125,13 @@ impl Installed {
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let ty = BuffTypeInfo { header: Header::of::<BuffTypeInfo>(), id: 7, slot: 1, flags: 0, name: 0, duration: 60_000_000_000 };
-    /// loader.set_buffs(&[ty], &[2]);
-    /// assert_eq!(loader.buffs_of(2), Some(Vec::new()));
+    /// loader.set_buffs(&[ty], &[enshwick::Entity(2)]);
+    /// assert_eq!(loader.buffs_of(enshwick::Entity(2)), Some(Vec::new()));
     /// ```
-    pub fn set_buffs(&self, types: &[crate::abi::BuffTypeInfo], holders: &[u32]) {
+    pub fn set_buffs(&self, types: &[crate::abi::BuffTypeInfo], holders: &[Entity]) {
         table::with((), |s| {
             s.buff_types = types.to_vec();
-            s.buffs = holders.iter().map(|&e| (e, Vec::new())).collect();
+            s.buffs = holders.iter().map(|&e| (e.0, Vec::new())).collect();
         });
     }
 
@@ -141,8 +142,8 @@ impl Installed {
     ///
     /// See [`Installed::set_buffs`].
     #[must_use]
-    pub fn buffs_of(&self, entity: u32) -> Option<Vec<crate::abi::ActiveBuff>> {
-        table::with(None, |s| s.buffs.get(&entity).cloned())
+    pub fn buffs_of(&self, entity: Entity) -> Option<Vec<crate::abi::ActiveBuff>> {
+        table::with(None, |s| s.buffs.get(&entity.0).cloned())
     }
 
     /// Sets the knowledge the fake knows, `(character, value)`; a world
@@ -224,14 +225,14 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.altar_zone(4096, 2, 60), (0, 60));
+    /// assert_eq!(loader.altar_zone(enshwick::Entity(4096), 2, 60), (0, 60));
     /// ```
     #[must_use]
-    pub fn altar_zone(&self, altar: u32, level: u8, height: i64) -> (i64, i64) {
+    pub fn altar_zone(&self, altar: Entity, level: u8, height: i64) -> (i64, i64) {
         let filters = table::with(Vec::new(), |s| s.zone_sizing.filters.clone());
         let mut zone = AltarZone {
             header: Header::of::<AltarZone>(),
-            altar,
+            altar: Entity(altar.0),
             level,
             reserved: [0; 3],
             grow: 0,
@@ -302,29 +303,29 @@ impl Installed {
     /// use enshwick::abi::SurvivorLookup;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.survivor_lookup(7, 4096, SurvivorLookup::SPAWN, 0, [0; 3], &[]), None);
+    /// assert_eq!(loader.survivor_lookup(7, enshwick::Entity(4096), SurvivorLookup::SPAWN, enshwick::Entity(0), [0; 3], &[]), None);
     /// ```
     #[must_use]
     pub fn survivor_lookup(
         &self,
         survivor: u32,
-        vanilla: u32,
+        vanilla: Entity,
         purpose: u32,
-        entity: u32,
+        entity: Entity,
         cell: [i64; 3],
-        beds: &[(u32, u32)],
-    ) -> Option<u32> {
+        beds: &[(Entity, Entity)],
+    ) -> Option<Entity> {
         /// # Safety
         ///
         /// - `token` points at the `beds` slice of a running
         ///   `survivor_lookup`, alive and unchanged for the call.
-        unsafe extern "system" fn bed_of(token: *mut core::ffi::c_void, entity: u32) -> u32 {
+        unsafe extern "system" fn bed_of(token: *mut core::ffi::c_void, entity: Entity) -> Entity {
             // SAFETY: the caller guarantees `token` points at the `beds` slice
-            // of the running call, an aligned `&[(u32, u32)]` alive for it.
-            let beds = unsafe { &*token.cast::<&[(u32, u32)]>() };
+            // of the running call, an aligned `&[(Entity, Entity)]` alive for it.
+            let beds = unsafe { &*token.cast::<&[(Entity, Entity)]>() };
             beds.iter()
                 .find(|(e, _)| *e == entity)
-                .map_or(0, |(_, bed)| *bed)
+                .map_or(Entity::NONE, |(_, bed)| *bed)
         }
         let (answer, user) = table::with(None, |s| s.survivor_lookup)?;
         let mut beds = beds;
@@ -338,7 +339,7 @@ impl Installed {
             bed_of: Some(bed_of),
             token: (&raw mut beds).cast(),
         };
-        let mut out = 0;
+        let mut out = Entity::NONE;
         let user = core::ptr::with_exposed_provenance_mut(user);
         // SAFETY: a valid call and out pointer; `user` is the mod's pointer.
         let answered = unsafe { answer(&raw const lookup, user, &raw mut out) };
@@ -354,7 +355,7 @@ impl Installed {
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: 1, bed: 2, home: [0; 3], bed_at: [0; 3] };
+    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: 7, entity: enshwick::Entity(1), bed: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
     /// assert!(loader.survivor_bed_check(&check));
     /// ```
     #[must_use]
@@ -379,12 +380,12 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let summon = Summon {
     ///     header: Header::of::<Summon>(),
-    ///     item: 1,
-    ///     ammo: 0,
+    ///     item: enshwick::ItemId::new(1),
+    ///     ammo: enshwick::ItemId::new(0),
     ///     template: [0; 16],
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: 0,
+    ///     pide: enshwick::Entity(0),
     ///     meter: [0; 2],
     ///     consumed: 0,
     ///     reserved: [0; 3],
@@ -418,12 +419,12 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let summon = Summon {
     ///     header: Header::of::<Summon>(),
-    ///     item: 1,
-    ///     ammo: 0,
+    ///     item: enshwick::ItemId::new(1),
+    ///     ammo: enshwick::ItemId::new(0),
     ///     template: [0; 16],
     ///     target: [0; 3],
     ///     slot: 0,
-    ///     pide: 0,
+    ///     pide: enshwick::Entity(0),
     ///     meter: [0; 2],
     ///     consumed: 1,
     ///     reserved: [0; 3],
@@ -450,10 +451,10 @@ impl Installed {
     /// use enshwick::item_data::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// loader.wear(2, ItemInstance { pide: Entity(900), item: 0x5e01 });
+    /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
     /// ```
-    pub fn wear(&self, entity: u32, item: crate::item_data::ItemInstance) {
-        table::with((), |s| s.stats.worn.entry(entity).or_default().push(item));
+    pub fn wear(&self, entity: Entity, item: crate::item_data::ItemInstance) {
+        table::with((), |s| s.stats.worn.entry(entity.0).or_default().push(item));
     }
 
     /// Works out the stat values of every watched entity and runs the mod's
@@ -529,9 +530,9 @@ impl Installed {
     /// let call = Interaction {
     ///     header: Header::of::<Interaction>(),
     ///     kind: Interaction::OPEN,
-    ///     player: 1,
-    ///     target: 2,
-    ///     item: 0,
+    ///     player: enshwick::Entity(1),
+    ///     target: enshwick::Entity(2),
+    ///     item: enshwick::ItemId::new(0),
     ///     known: 0,
     ///     reserved: [0; 3],
     ///     position: [0.0; 3],
@@ -716,7 +717,7 @@ impl Installed {
     /// use enshwick::abi::{CraftCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: 2, station: 0, recipe: 1, amount: 1 };
+    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: enshwick::Entity(2), station: enshwick::Entity(0), recipe: enshwick::RecipeId::new(1), amount: 1 };
     /// assert!(loader.craft(&craft));
     /// ```
     #[must_use]
@@ -737,7 +738,7 @@ impl Installed {
     /// use enshwick::abi::{BuildCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: 2, item: 7, position: [0; 3] };
+    /// let wall = BuildCheck { header: Header::of::<BuildCheck>(), player: enshwick::Entity(2), item: enshwick::ItemId::new(7), position: [0; 3] };
     /// assert!(loader.build(&wall));
     /// ```
     #[must_use]

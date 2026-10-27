@@ -219,7 +219,7 @@ impl Altar {
     fn from_info(info: &AltarInfo) -> Self {
         let count = usize::from(info.level_count).min(info.levels.len());
         Self {
-            entity: Entity(info.entity),
+            entity: info.entity,
             level: info.level,
             tilted: info.tilted != 0,
             position: info.position,
@@ -495,7 +495,7 @@ where
         return;
     };
     let mut zone = AltarZone {
-        altar: Entity(raw.altar),
+        altar: raw.altar,
         level: raw.level,
         grow: raw.grow,
         height: raw.height,

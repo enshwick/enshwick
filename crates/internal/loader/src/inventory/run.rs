@@ -260,7 +260,7 @@ pub(super) unsafe fn apply(
                     txn,
                     op.target as u32,
                     0,
-                    op.item,
+                    op.item.get(),
                     op.count.cast_signed(),
                     &raw const absent,
                     &raw const absent,
@@ -272,7 +272,7 @@ pub(super) unsafe fn apply(
             // SAFETY: the game's consume at the table's `inventory.take`
             // across the sub-inventories, on the caller's live transaction,
             // with our own result record.
-            unsafe { (executor.take)(out, txn, op.target as u32, op.item, 0, op.count) };
+            unsafe { (executor.take)(out, txn, op.target as u32, op.item.get(), 0, op.count) };
         }
         InventoryOp::DESTROY_SLOT => {
             // SAFETY: the game's destroy of one stack at the table's
@@ -297,7 +297,7 @@ pub(super) unsafe fn apply(
                         txn,
                         give.target as u32,
                         op.target,
-                        give.item,
+                        give.item.get(),
                         give.count.cast_signed(),
                         &raw const absent,
                         &raw const absent,

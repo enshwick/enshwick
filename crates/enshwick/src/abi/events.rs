@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header, ItemId, PlayerKey};
 
 /// Something the loader tells subscribed mods about, with
 /// [`HostApi::subscribe`](super::HostApi::subscribe).
@@ -111,15 +111,15 @@ impl Event {
 ///
 /// let fell = PlayerDeathData {
 ///     header: Header::of::<PlayerDeathData>(),
-///     entity: 2,
+///     entity: enshwick::Entity(2),
 ///     cause: PlayerDeathData::FALL,
-///     key: 7,
+///     key: enshwick::PlayerKey::new(7),
 ///     position: [10.0, 50.0, -3.0],
 ///     killer: [0; 16],
 ///     deadly_shroud: 0,
 ///     drowned: 0,
 ///     reserved: 0,
-///     killer_entity: 0,
+///     killer_entity: enshwick::Entity(0),
 ///     reserved_tail: 0,
 /// };
 /// assert_eq!(fell.cause, PlayerDeathData::FALL);
@@ -130,12 +130,12 @@ pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character; 0 when the account left in the same step.
-    pub entity: u32,
+    pub entity: Entity,
     /// [`PlayerDeathData::HIT`], [`PlayerDeathData::FALL`],
     /// [`PlayerDeathData::SHROUD`] or [`PlayerDeathData::SUFFOCATED`].
     pub cause: u32,
     /// The account, as [`PlayerInfo::key`].
-    pub key: u64,
+    pub key: PlayerKey,
     /// Where, in metres.
     pub position: [f32; 3],
     /// For a hit, the template GUID of what dealt it, a creature's or an
@@ -150,7 +150,7 @@ pub struct PlayerDeathData {
     /// For a hit, the attacker of the last hit the player took, from its
     /// `HitHistory`, as [`crate::game_events::EntityDiedEvent`] reads it; 0 for other
     /// causes, or when the history names none.
-    pub killer_entity: u32,
+    pub killer_entity: Entity,
     /// Zero.
     pub reserved_tail: u32,
 }
@@ -175,7 +175,7 @@ impl PlayerDeathData {
 /// ```
 /// use enshwick::abi::{Header, KnowledgeData};
 ///
-/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: 2, id: 0x1d, value: 3 };
+/// let learnt = KnowledgeData { header: Header::of::<KnowledgeData>(), entity: enshwick::Entity(2), id: 0x1d, value: 3 };
 /// assert_eq!(learnt.value, 3);
 /// ```
 #[repr(C)]
@@ -184,7 +184,7 @@ pub struct KnowledgeData {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character, or 0 for the world's knowledge.
-    pub entity: u32,
+    pub entity: Entity,
     /// The knowledge id.
     pub id: u32,
     /// The value now.
@@ -200,8 +200,8 @@ impl_headed!(KnowledgeData);
 /// ```
 /// use enshwick::abi::{Header, QuestData};
 ///
-/// let done = QuestData { header: Header::of::<QuestData>(), entity: 2, quest: 0x51 };
-/// assert_eq!(done.entity, 2);
+/// let done = QuestData { header: Header::of::<QuestData>(), entity: enshwick::Entity(2), quest: 0x51 };
+/// assert_eq!(done.entity, enshwick::Entity(2));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, crate::Script)]
@@ -209,7 +209,7 @@ pub struct QuestData {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character.
-    pub entity: u32,
+    pub entity: Entity,
     /// The quest's id, a player knowledge id.
     pub quest: u32,
 }
@@ -227,7 +227,7 @@ impl_headed!(QuestData);
 ///
 /// let seen = KnowledgeInput {
 ///     header: Header::of::<KnowledgeInput>(),
-///     player: 2,
+///     player: enshwick::Entity(2),
 ///     id: 0x1d,
 ///     kind: KnowledgeInfo::FLAGS,
 ///     scope: KnowledgeInfo::PLAYER,
@@ -244,7 +244,7 @@ pub struct KnowledgeInput {
     /// Size and version of this struct.
     pub header: Header,
     /// The asking player's character.
-    pub player: u32,
+    pub player: Entity,
     /// The knowledge id.
     pub id: u32,
     /// The kind the client names: [`KnowledgeInfo::BOOL`](super::KnowledgeInfo::BOOL),
@@ -333,9 +333,9 @@ impl_headed!(ChunkData);
 ///
 /// let placed = BuildingData {
 ///     header: Header::of::<BuildingData>(),
-///     entity: 4096,
-///     player: 2,
-///     item: 1_302_084_846,
+///     entity: enshwick::Entity(4096),
+///     player: enshwick::Entity(2),
+///     item: enshwick::ItemId::new(1_302_084_846),
 ///     kind: BuildingData::PLACED,
 ///     replay: 0,
 ///     template: [0; 16],
@@ -349,12 +349,12 @@ pub struct BuildingData {
     /// Size and version of this struct.
     pub header: Header,
     /// The placed entity; for a removal, the entity as it was.
-    pub entity: u32,
+    pub entity: Entity,
     /// The acting player's character entity.
-    pub player: u32,
+    pub player: Entity,
     /// The item placed, which the entity keeps as its `UsedItem`; 0 for a
     /// removal.
-    pub item: u32,
+    pub item: ItemId,
     /// [`BuildingData::PLACED`], [`BuildingData::PICKED_UP`] or
     /// [`BuildingData::TORN_DOWN`].
     pub kind: u8,
@@ -396,8 +396,8 @@ impl BuildingData {
 /// let player = PlayerInfo {
 ///     header: Header::of::<PlayerInfo>(),
 ///     slot: 0,
-///     entity: 2,
-///     key: 7,
+///     entity: enshwick::Entity(2),
+///     key: enshwick::PlayerKey::new(7),
 ///     permissions: PlayerInfo::CAN_ACCESS_INVENTORIES,
 ///     name_len: 3,
 ///     name,
@@ -412,9 +412,9 @@ pub struct PlayerInfo {
     /// The server's player slot.
     pub slot: u32,
     /// The player character's entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// The same number for the same account in every session.
-    pub key: u64,
+    pub key: PlayerKey,
     /// The server's permission bits for the player, `PlayerInfo::CAN_*`.
     pub permissions: u8,
     /// Bytes of `name` in use.
@@ -468,8 +468,8 @@ impl_headed!(TickData);
 /// ```
 /// use enshwick::abi::{Header, PlayerData};
 ///
-/// let player = PlayerData { header: Header::of::<PlayerData>(), slot: 0, entity: 7, key: 42 };
-/// assert_eq!(player.entity, 7);
+/// let player = PlayerData { header: Header::of::<PlayerData>(), slot: 0, entity: enshwick::Entity(7), key: enshwick::PlayerKey::new(42) };
+/// assert_eq!(player.entity, enshwick::Entity(7));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable, crate::Script)]
@@ -479,10 +479,10 @@ pub struct PlayerData {
     /// The server's player slot, 0 to 15, while the player is connected.
     pub slot: u32,
     /// The player character's entity id.
-    pub entity: u32,
+    pub entity: Entity,
     /// The same number for the same player account in every session: a hash
     /// the game makes of the online id.
-    pub key: u64,
+    pub key: PlayerKey,
 }
 
 impl_headed!(PlayerData);

@@ -48,7 +48,7 @@ where
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let handler = unsafe { &*user.cast::<F>() };
     let rename = Rename {
-        entity: Entity(call.entity),
+        entity: call.entity,
         player: (call.known != 0).then(|| Player::from_info(&call.player)),
         // SAFETY: the loader's text, valid for the call.
         text: unsafe { text_of(call.text) }.to_owned(),
@@ -109,13 +109,13 @@ mod tests {
         let filter = |rename: &Rename| rename.player.is_some() && rename.text != "no";
         let mut call = RenameCall {
             header: Header::of::<RenameCall>(),
-            entity: 5,
+            entity: Entity(5),
             known: 1,
             player: PlayerInfo {
                 header: Header::of::<PlayerInfo>(),
                 slot: 1,
-                entity: 7,
-                key: 42,
+                entity: Entity(7),
+                key: crate::PlayerKey::new(42),
                 permissions: 0,
                 name_len: 3,
                 name,

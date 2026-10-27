@@ -121,7 +121,7 @@ pub(crate) struct State {
     pub(crate) synced: Vec<String>,
     /// The mod's player actions callback, once registered.
     pub(crate) actions: Option<(crate::abi::ActionFn, usize)>,
-    pub(crate) chat: Vec<(u64, String)>,
+    pub(crate) chat: Vec<(crate::PlayerKey, String)>,
     pub(crate) labels: Vec<(u32, String)>,
     pub(crate) rename_filters: Vec<(RenameCallFn, usize)>,
     pub(crate) inventory_requests: Vec<OpenRequest>,
@@ -147,9 +147,9 @@ pub(crate) struct State {
     /// Channels the mod opened: full name, id, handler and pointer.
     pub(crate) channels: Vec<(String, u32, NetMessageFn, usize)>,
     /// Messages the mod sent: channel id, raw peer and bytes.
-    pub(crate) net_sent: Vec<(u32, u64, Vec<u8>)>,
+    pub(crate) net_sent: Vec<(u32, crate::PlayerKey, Vec<u8>)>,
     /// Notices the mod showed: account key and text.
-    pub(crate) notices: Vec<(u64, String)>,
+    pub(crate) notices: Vec<(crate::PlayerKey, String)>,
     pub(crate) build_filters: Vec<(BuildCheckFn, usize)>,
     /// The clock `time_of_day` writes, settable while installed.
     pub(crate) daytime: Option<DaytimeInfo>,

@@ -43,7 +43,7 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 
 use crate::abi::{NetMessage, Status, Str};
-use crate::{Host, Load, Off};
+use crate::{Host, Load, Off, PlayerKey};
 
 /// The largest message a channel carries, encoded, in bytes.
 pub const MAX_MESSAGE: usize = 4096;
@@ -60,18 +60,18 @@ pub enum Peer {
     /// A player's client, by the account key, as the server sees it; the
     /// key [`Player::key`](crate::world::Player::key) gives. No player has
     /// the key 0, which the loader reads as every client.
-    Player(u64),
+    Player(PlayerKey),
 }
 
 impl Peer {
-    fn to_raw(self) -> u64 {
+    fn to_raw(self) -> PlayerKey {
         match self {
             Self::Server => NetMessage::SERVER,
             Self::Player(key) => key,
         }
     }
 
-    fn from_raw(raw: u64) -> Self {
+    fn from_raw(raw: PlayerKey) -> Self {
         if raw == NetMessage::SERVER {
             Self::Server
         } else {
@@ -143,7 +143,7 @@ impl<M: serde::Serialize> Channel<M> {
     ///
     /// See the [module](self).
     pub fn send(&self, to: Peer, message: &M) -> Result<(), SendError> {
-        if to == Peer::Player(0) {
+        if to == Peer::Player(PlayerKey::new(0)) {
             return Err(SendError::NotReady);
         }
         let bytes = postcard::to_allocvec(message).map_err(|e| SendError::Encode(e.to_string()))?;
@@ -166,7 +166,7 @@ impl<M: serde::Serialize> Channel<M> {
     /// ```
     pub fn broadcast(&self, message: &M) -> Result<(), SendError> {
         let bytes = postcard::to_allocvec(message).map_err(|e| SendError::Encode(e.to_string()))?;
-        send_raw(self.host, self.id, 0, &bytes)
+        send_raw(self.host, self.id, PlayerKey::new(0), &bytes)
     }
 }
 
@@ -180,7 +180,7 @@ impl<M> Channel<M> {
     /// See the [module](self).
     #[must_use]
     pub fn is_ready(&self, peer: Peer) -> bool {
-        if peer == Peer::Player(0) {
+        if peer == Peer::Player(PlayerKey::new(0)) {
             return false;
         }
         let api = self.host.api();
@@ -188,7 +188,7 @@ impl<M> Channel<M> {
     }
 }
 
-fn send_raw(host: Host, id: u32, peer: u64, bytes: &[u8]) -> Result<(), SendError> {
+fn send_raw(host: Host, id: u32, peer: PlayerKey, bytes: &[u8]) -> Result<(), SendError> {
     if bytes.len() > MAX_MESSAGE {
         return Err(SendError::TooLarge);
     }
@@ -286,7 +286,11 @@ mod tests {
 
     #[test]
     fn peers_round_trip_through_their_raw_form() {
-        for peer in [Peer::Server, Peer::Player(7), Peer::Player(0)] {
+        for peer in [
+            Peer::Server,
+            Peer::Player(PlayerKey::new(7)),
+            Peer::Player(PlayerKey::new(0)),
+        ] {
             assert_eq!(Peer::from_raw(peer.to_raw()), peer);
         }
     }

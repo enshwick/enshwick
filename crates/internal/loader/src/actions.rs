@@ -156,7 +156,7 @@ fn player(loader: &Loader, key: u64) -> Option<PlayerInfo> {
     crate::world::players(loader)
         .ok()?
         .into_iter()
-        .find(|p| p.key == key)
+        .find(|p| p.key == enshwick::PlayerKey::new(key))
 }
 
 /// `text`, a sheet, cut until its message fits a control message: players
@@ -328,7 +328,10 @@ pub(crate) fn after_step(loader: &Loader) {
         return;
     };
     for key in keys {
-        let Some(player) = players.iter().find(|p| p.key == key) else {
+        let Some(player) = players
+            .iter()
+            .find(|p| p.key == enshwick::PlayerKey::new(key))
+        else {
             continue;
         };
         let language = server_state(|s| s.clients.entry(key).or_default().language);
@@ -513,7 +516,7 @@ mod tests {
             per_player: true,
             offered: true,
             players: (0..2000)
-                .map(|i| (i, format!("Player {i}"), false))
+                .map(|i| (enshwick::PlayerKey::new(i), format!("Player {i}"), false))
                 .collect(),
             ..Entry::default()
         };

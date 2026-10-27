@@ -217,15 +217,15 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
     };
     PlayerDeathData {
         header: Header::of::<PlayerDeathData>(),
-        entity: entity_of(key),
+        entity: Entity(entity_of(key)),
         cause: u32::from(field::<1>(bytes, layout.cause)[0]),
-        key,
+        key: enshwick::PlayerKey::new(key),
         position: [coordinate(0), coordinate(1), coordinate(2)],
         killer: field(bytes, layout.killer),
         deadly_shroud: field::<1>(bytes, layout.deadly)[0],
         drowned: field::<1>(bytes, layout.drowned)[0],
         reserved: 0,
-        killer_entity: 0,
+        killer_entity: Entity(0),
         reserved_tail: 0,
     }
 }
@@ -245,14 +245,14 @@ pub(crate) fn after_step(loader: &Loader) {
         let mut death = data(layout, bytes, |key| {
             players
                 .iter()
-                .find(|p| p.key == key)
-                .map_or(0, |p| p.entity)
+                .find(|p| p.key == enshwick::PlayerKey::new(key))
+                .map_or(0, |p| p.entity.0)
         });
         if death.cause == PlayerDeathData::HIT
-            && death.entity != 0
+            && death.entity != Entity(0)
             && let Some(history) = history
         {
-            death.killer_entity = history.killer(loader, Entity(death.entity));
+            death.killer_entity = Entity(history.killer(loader, death.entity));
         }
         loader.emit(Event::PLAYER_DIED, None, (&raw const death).cast());
     }
@@ -280,8 +280,8 @@ mod tests {
         bytes[28] = 0xab;
         bytes[45] = 1;
         let death = data(&layout, &bytes, |key| if key == 7 { 2 } else { 0 });
-        assert_eq!(death.entity, 2);
-        assert_eq!(death.key, 7);
+        assert_eq!(death.entity, Entity(2));
+        assert_eq!(death.key, enshwick::PlayerKey::new(7));
         assert_eq!(death.cause, PlayerDeathData::SUFFOCATED);
         assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
         assert_eq!(death.killer[0], 0xab);

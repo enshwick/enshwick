@@ -57,6 +57,7 @@ use core::ffi::c_void;
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
+use crate::PlayerKey;
 use crate::abi::{ActionCall, Str, read_headed};
 use crate::i18n::{Language, Texts};
 use crate::world::Player;
@@ -96,7 +97,7 @@ pub const MAX_PLAYERS: usize = 32;
 
 type Allow = Box<dyn Fn(&Player) -> bool + Send + Sync>;
 type At = Box<dyn Fn(&Ask<'_>) -> Result<Subject, String> + Send + Sync>;
-type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(u64, String)> + Send + Sync>;
+type On = Box<dyn Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync>;
 type Handler = Box<dyn Fn(&Request<'_>) -> Outcome + Send + Sync>;
 
 /// An action as a mod declares it: hand it to [`Actions::add`] with its
@@ -162,13 +163,13 @@ impl Action {
     /// ```
     /// use enshwick::actions::Action;
     ///
-    /// let friends = Action::per_player("friends", "Friends", |_ask, _subject| vec![(7, "Ann".into())]);
+    /// let friends = Action::per_player("friends", "Friends", |_ask, _subject| vec![(enshwick::PlayerKey::new(7), "Ann".into())]);
     /// assert_eq!(friends.id(), "friends");
     /// ```
     #[must_use]
     pub fn per_player<F>(id: &str, label: &str, on: F) -> Self
     where
-        F: Fn(&Ask<'_>, Option<&Subject>) -> Vec<(u64, String)> + Send + Sync + 'static,
+        F: Fn(&Ask<'_>, Option<&Subject>) -> Vec<(PlayerKey, String)> + Send + Sync + 'static,
     {
         let mut action = Self::new(id, label);
         action.on = Some(Box::new(on));

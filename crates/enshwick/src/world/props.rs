@@ -109,7 +109,7 @@ impl World {
         let mut props: Vec<Prop> = self
             .placed_with(self.0.used_item.hash())?
             .iter()
-            .map(|place| (Entity(place.entity), crate::ecs::metres(place.position)))
+            .map(|place| (place.entity, crate::ecs::metres(place.position)))
             .filter(|(_, at)| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
             .filter_map(|(entity, position)| {
                 if no_props
@@ -193,7 +193,7 @@ impl Templates {
             let mut out = ItemData::zeroed();
             out.header = Header::of::<ItemData>();
             let host = world.0.host;
-            if (host.api().item_info)(host.handle(), item.get(), &raw mut out).is_ok() {
+            if (host.api().item_info)(host.handle(), item, &raw mut out).is_ok() {
                 self.found += 1;
                 Some(out.placed_entity).filter(|guid| *guid != [0; 16])
             } else {

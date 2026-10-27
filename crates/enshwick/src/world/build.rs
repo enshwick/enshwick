@@ -91,7 +91,7 @@ impl World {
         }
         let mut check = BuildRights {
             header: Header::of::<BuildRights>(),
-            player: player.entity.0,
+            player: player.entity,
             refusal: BuildRights::ALLOWED,
             min: [0, 1, 2].map(|i| a[i].min(b[i])),
             max: [0, 1, 2].map(|i| a[i].max(b[i])),

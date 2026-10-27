@@ -45,18 +45,18 @@ fn accessors(c: &mut Criterion) {
         .constant("current_transform.transform", 0)
         .constant("world_transform.orientation", 24)
         .constant("item_info.placed_entity", 0x3c0)
-        .item(7, 1, 0)
-        .item_places(7, [7; 16])
-        .component(4096, 2, &7u32.to_le_bytes())
-        .component(4096, 1, &[0; 64]);
+        .item(enshwick::ItemId::new(7), 1, 0)
+        .item_places(enshwick::ItemId::new(7), [7; 16])
+        .component(Entity(4096), 2, &7u32.to_le_bytes())
+        .component(Entity(4096), 1, &[0; 64]);
     for i in 0..PROPS {
         let entity = 10_000 + i;
         let at = [f64::from(i % 64), 0.0, f64::from(i / 64)].map(|axis| axis * 4.0);
         fake = fake
-            .placed(2, entity, at)
-            .template(entity, [7; 16])
-            .component(entity, 2, &7u32.to_le_bytes())
-            .component(entity, 1, &[0; 40]);
+            .placed(2, Entity(entity), at)
+            .template(Entity(entity), [7; 16])
+            .component(Entity(entity), 2, &7u32.to_le_bytes())
+            .component(Entity(entity), 1, &[0; 40]);
     }
     let loader = fake.install();
     // SAFETY: both functions are the exports of this file's `declare_mod!(Bench)`.

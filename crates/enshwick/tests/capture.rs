@@ -62,9 +62,9 @@ mod tests {
         orientation: [f32; 4],
     ) -> enshwick::test::FakeHost {
         thing(fake, entity, item, position, orientation)
-            .item(item, 1, 0)
-            .item_places(item, template_of(item))
-            .template(entity, template_of(item))
+            .item(ItemId::new(item), 1, 0)
+            .item_places(ItemId::new(item), template_of(item))
+            .template(Entity(entity), template_of(item))
     }
 
     /// An entity with a `UsedItem` and a `CurrentTransform`, as a prop has
@@ -81,10 +81,10 @@ mod tests {
             .flat_map(|axis| axis.to_le_bytes())
             .collect();
         transform.extend(orientation.iter().flat_map(|part| part.to_le_bytes()));
-        fake.placed(USED_ITEM, entity, position)
-            .placed(TRANSFORM, entity, position)
-            .component(entity, USED_ITEM, &item.to_le_bytes())
-            .component(entity, TRANSFORM, &transform)
+        fake.placed(USED_ITEM, Entity(entity), position)
+            .placed(TRANSFORM, Entity(entity), position)
+            .component(Entity(entity), USED_ITEM, &item.to_le_bytes())
+            .component(Entity(entity), TRANSFORM, &transform)
     }
 
     fn fake() -> enshwick::test::FakeHost {
@@ -118,11 +118,11 @@ mod tests {
 
     #[test]
     fn props_in_a_box_carry_their_item_and_transform() {
-        let fake = fake().placed(BED, 9, [11.0, 1.0, 11.0]);
+        let fake = fake().placed(BED, Entity(9), [11.0, 1.0, 11.0]);
         let fake = prop(fake, 10, 1_042, [11.0, 1.0, 12.0], TURNED);
         let fake = prop(fake, 11, 77, [10.0, 0.0, 10.0], STILL);
         let fake = prop(fake, 12, 77, [30.0, 0.0, 10.0], STILL);
-        let fake = thing(fake, 13, 77, [12.0, 0.0, 12.0], STILL).template(13, [0x11; 16]);
+        let fake = thing(fake, 13, 77, [12.0, 0.0, 12.0], STILL).template(Entity(13), [0x11; 16]);
         let (_loader, world) = start(fake);
 
         let props = world
@@ -158,9 +158,9 @@ mod tests {
     #[test]
     fn creatures_and_flame_altars_are_no_props() {
         let fake = prop(fake(), 10, 50, [10.0; 3], STILL);
-        let fake = prop(fake, 11, 51, [11.0; 3], STILL).component(11, ANIMAL, &[0; 4]);
-        let fake = prop(fake, 12, 52, [12.0; 3], STILL).component(12, SURVIVOR, &[0; 4]);
-        let fake = prop(fake, 13, 53, [13.0; 3], STILL).component(13, ALTAR, &[0; 4]);
+        let fake = prop(fake, 11, 51, [11.0; 3], STILL).component(Entity(11), ANIMAL, &[0; 4]);
+        let fake = prop(fake, 12, 52, [12.0; 3], STILL).component(Entity(12), SURVIVOR, &[0; 4]);
+        let fake = prop(fake, 13, 53, [13.0; 3], STILL).component(Entity(13), ALTAR, &[0; 4]);
         let (_loader, world) = start(fake);
         let props = world.props_in([0.0; 3], [20.0; 3]).unwrap();
         let entities: Vec<Entity> = props.iter().map(|prop| prop.entity).collect();
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn props_are_missing_before_the_game_knows_its_items() {
-        let fake = thing(fake(), 10, 1, [1.0; 3], STILL).template(10, template_of(1));
+        let fake = thing(fake(), 10, 1, [1.0; 3], STILL).template(Entity(10), template_of(1));
         let (_loader, world) = start(fake);
 
         assert_eq!(world.props_in([0.0; 3], [2.0; 3]), Err(WorldError::Missing));

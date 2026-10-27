@@ -11,25 +11,32 @@ use crate::test::table::{found, put, put_list, text, with};
 
 pub(crate) extern "system" fn component(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     type_hash: u32,
     out: *mut *const c_void,
 ) -> Status {
     let address = with(None, |s| {
-        s.host.components.get(&(entity, type_hash)).map(|c| c.0)
+        s.host.components.get(&(entity.0, type_hash)).map(|c| c.0)
     });
     found(address.map(core::ptr::with_exposed_provenance), out)
 }
 
 pub(crate) extern "system" fn entity_template(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     out: *mut [u8; 16],
 ) -> Status {
-    found(with(None, |s| s.host.templates.get(&entity).copied()), out)
+    found(
+        with(None, |s| s.host.templates.get(&entity.0).copied()),
+        out,
+    )
 }
 
-pub(crate) extern "system" fn player(_me: ModHandle, entity: u32, out: *mut PlayerInfo) -> Status {
+pub(crate) extern "system" fn player(
+    _me: ModHandle,
+    entity: crate::Entity,
+    out: *mut PlayerInfo,
+) -> Status {
     let player = with(None, |s| {
         s.host.players.iter().find(|p| p.entity == entity).copied()
     });
@@ -75,7 +82,7 @@ pub(crate) extern "system" fn actions(
     })
 }
 
-pub(crate) extern "system" fn chat(_me: ModHandle, to: u64, value: Str) -> Status {
+pub(crate) extern "system" fn chat(_me: ModHandle, to: crate::PlayerKey, value: Str) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
         s.chat.push((to, value));
@@ -83,10 +90,14 @@ pub(crate) extern "system" fn chat(_me: ModHandle, to: u64, value: Str) -> Statu
     })
 }
 
-pub(crate) extern "system" fn set_label(_me: ModHandle, entity: u32, value: Str) -> Status {
+pub(crate) extern "system" fn set_label(
+    _me: ModHandle,
+    entity: crate::Entity,
+    value: Str,
+) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
-        s.labels.push((entity, value));
+        s.labels.push((entity.0, value));
         Status::OK
     })
 }
@@ -234,17 +245,17 @@ pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn destroy(_me: ModHandle, entity: u32) -> Status {
+pub(crate) extern "system" fn destroy(_me: ModHandle, entity: crate::Entity) -> Status {
     with(Status::MISSING, |s| {
         if s.host.players.iter().any(|p| p.entity == entity) {
             return Status::REFUSED;
         }
         if !s.host.placed.iter().any(|(_, p)| p.entity == entity)
-            && !s.host.templates.contains_key(&entity)
+            && !s.host.templates.contains_key(&entity.0)
         {
             return Status::MISSING;
         }
-        s.destroyed.push(entity);
+        s.destroyed.push(entity.0);
         Status::OK
     })
 }
@@ -268,7 +279,7 @@ pub(crate) extern "system" fn world_key(_me: ModHandle, out: *mut Str) -> Status
 
 pub(crate) extern "system" fn component_write(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     type_hash: u32,
     out: *mut *mut c_void,
 ) -> Status {
@@ -282,10 +293,10 @@ pub(crate) extern "system" fn component_write(
         let address = s
             .host
             .components
-            .get(&(entity, type_hash))
+            .get(&(entity.0, type_hash))
             .map(|c| c.0)
             .ok_or(Status::MISSING)?;
-        s.writes.push((entity, type_hash));
+        s.writes.push((entity.0, type_hash));
         Ok(address)
     });
     match address {
@@ -317,7 +328,7 @@ pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportR
         return Status::BAD_ARGS;
     };
     with(Status::MISSING, |s| {
-        if !s.host.templates.contains_key(&request.entity)
+        if !s.host.templates.contains_key(&request.entity.0)
             && !s
                 .host
                 .placed
@@ -331,10 +342,10 @@ pub(crate) extern "system" fn teleport(_me: ModHandle, request: *const TeleportR
     })
 }
 
-pub(crate) extern "system" fn notify(_me: ModHandle, key: u64, value: Str) -> Status {
+pub(crate) extern "system" fn notify(_me: ModHandle, key: crate::PlayerKey, value: Str) -> Status {
     let value = text(value);
     with(Status::MISSING, |s| {
-        if !s.host.net_peers.contains(&key) {
+        if !s.host.net_peers.contains(&key.get()) {
             return Status::MISSING;
         }
         s.notices.push((key, value));
@@ -348,7 +359,7 @@ pub(crate) const FIRST_SPAWNED: u32 = 0x10_0000;
 pub(crate) extern "system" fn spawn(
     _me: ModHandle,
     request: *const SpawnRequest,
-    out: *mut u32,
+    out: *mut crate::Entity,
 ) -> Status {
     // SAFETY: the safe layer passes a valid request for the call.
     let Some(request) = (unsafe { request.as_ref() }).copied() else {
@@ -363,7 +374,7 @@ pub(crate) extern "system" fn spawn(
         Some(entity)
     });
     match entity {
-        Some(entity) => put(out, entity),
+        Some(entity) => put(out, crate::Entity(entity)),
         None => Status::MISSING,
     }
 }

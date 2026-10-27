@@ -14,7 +14,7 @@ impl World {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     load.on::<PlayerJoined>(move |joined| {
-    ///         if let Some(vitals) = world.vitals(enshwick::Entity(joined.entity)) {
+    ///         if let Some(vitals) = world.vitals(joined.entity) {
     ///             enshwick::info!("joined with {} of {} health", vitals.health.current, vitals.health.max);
     ///         }
     ///     })

@@ -105,7 +105,7 @@ impl RecipeKind {
     pub(super) fn of(item: Guid) -> Option<Self> {
         let host = crate::host()?;
         let mut out = crate::abi::RecipeKind::OTHER;
-        (host.api().recipe_kind)(host.handle(), item.id(), &raw mut out)
+        (host.api().recipe_kind)(host.handle(), crate::ItemId::new(item.id()), &raw mut out)
             .is_ok()
             .then(|| out.into())
     }

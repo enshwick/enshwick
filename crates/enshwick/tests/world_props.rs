@@ -39,7 +39,7 @@ mod tests {
         let host = triggers
             .iter()
             .fold(enshwick::test::FakeHost::new(), |host, item| {
-                host.item_triggers(item.get())
+                host.item_triggers(*item)
             });
         started_from(host)
     }
@@ -49,9 +49,9 @@ mod tests {
         let loader = host
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
-            .item(CHEST.get(), 1, 0)
-            .item_places(CHEST.get(), [0x3a; 16])
-            .item(PEBBLE.get(), 99, 0)
+            .item(CHEST, 1, 0)
+            .item_places(CHEST, [0x3a; 16])
+            .item(PEBBLE, 99, 0)
             .prop(OLD_CHEST, CHEST, [50.0, 40.0, 50.0])
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Decorator)`.
@@ -63,7 +63,7 @@ mod tests {
             flags: 0,
             hardness: 3,
             reserved: 0,
-            item: 77,
+            item: ItemId::new(77),
             health: 500,
         }]);
         (loader, *WORLD.get().unwrap())
@@ -306,9 +306,9 @@ mod tests {
     fn a_creature_or_an_altar_is_no_prop_to_place_or_remove() {
         let (loader, world) = started_from(
             enshwick::test::FakeHost::new()
-                .item(PET.get(), 1, 0)
-                .item_places(PET.get(), [0x5e; 16])
-                .item_not_a_prop(PET.get())
+                .item(PET, 1, 0)
+                .item_places(PET, [0x5e; 16])
+                .item_not_a_prop(PET)
                 .prop(PET_ENTITY, PET, [60.0, 40.0, 60.0]),
         );
         assert_eq!(
@@ -336,9 +336,9 @@ mod tests {
     #[test]
     fn a_placed_crop_goes_on_undo_until_it_grows() {
         let host = enshwick::test::FakeHost::new()
-            .item(SEED.get(), 1, 0)
-            .item_places(SEED.get(), [0x5d; 16])
-            .item_grows(SEED.get());
+            .item(SEED, 1, 0)
+            .item_places(SEED, [0x5d; 16])
+            .item_grows(SEED);
         let (loader, world) = started_from(host);
         let young = world
             .transaction()
@@ -370,9 +370,9 @@ mod tests {
     #[test]
     fn a_crop_the_transaction_did_not_place_is_not_removed() {
         let host = enshwick::test::FakeHost::new()
-            .item(SEED.get(), 1, 0)
-            .item_places(SEED.get(), [0x5d; 16])
-            .item_grows(SEED.get())
+            .item(SEED, 1, 0)
+            .item_places(SEED, [0x5d; 16])
+            .item_grows(SEED)
             .prop(CROP, SEED, [70.0, 40.0, 70.0]);
         let (loader, world) = started_from(host);
         let id = world.transaction().remove_prop(CROP).commit().unwrap();
@@ -412,12 +412,12 @@ mod tests {
     fn a_player_s_rights_are_checked_for_the_turned_placement_box() {
         const BUILDER: u32 = 2;
         let host = enshwick::test::FakeHost::new()
-            .placement_box(CHEST.get(), [-0.5, 0.0, -5.0], [0.5, 2.0, 5.0])
+            .placement_box(CHEST, [-0.5, 0.0, -5.0], [0.5, 2.0, 5.0])
             .player(PlayerInfo {
                 header: Header::of::<PlayerInfo>(),
                 slot: BUILDER,
-                entity: BUILDER,
-                key: u64::from(BUILDER),
+                entity: Entity(BUILDER),
+                key: enshwick::PlayerKey::new(u64::from(BUILDER)),
                 permissions: PlayerInfo::CAN_EDIT_WORLD,
                 name_len: 0,
                 name: [0; 64],
@@ -462,9 +462,9 @@ mod tests {
         const ALTAR: ItemId = ItemId::new(34);
         let (loader, world) = started_from(
             enshwick::test::FakeHost::new()
-                .item(ALTAR.get(), 1, 0)
-                .item_places(ALTAR.get(), [0xa1; 16])
-                .item_not_a_prop(ALTAR.get()),
+                .item(ALTAR, 1, 0)
+                .item_places(ALTAR, [0xa1; 16])
+                .item_not_a_prop(ALTAR),
         );
         assert_eq!(
             world.transaction().place_prop(ALTAR, here()).commit(),

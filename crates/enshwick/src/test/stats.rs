@@ -196,7 +196,7 @@ fn sources(s: &mut super::table::State, entity: u32, stat: u32) -> Vec<StatSourc
                 stat: line.modifier.stat,
                 value: line.modifier.value,
                 id: item.pide.0,
-                owner: item.item,
+                owner: item.item.get(),
             });
         }
     }
@@ -258,11 +258,11 @@ fn value(s: &mut super::table::State, entity: u32, stat: u32) -> Option<f32> {
 
 pub(crate) extern "system" fn stat_value(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     stat: u32,
     out: *mut f32,
 ) -> Status {
-    match with(None, |s| value(s, entity, stat)) {
+    match with(None, |s| value(s, entity.0, stat)) {
         Some(v) if !out.is_null() => {
             // SAFETY: the match guard refused null; the safe layer passes an
             // aligned `f32` it owns.
@@ -286,7 +286,7 @@ pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatMo
             return Status::REFUSED;
         }
         let stats = state_stats(s);
-        let at = (request.entity, request.key, request.modifier.stat);
+        let at = (request.entity.0, request.key, request.modifier.stat);
         if request.flags & StatModify::REMOVE != 0 {
             stats.modifiers.remove(&at);
         } else {
@@ -295,7 +295,7 @@ pub(crate) extern "system" fn stat_modify(_me: ModHandle, request: *const StatMo
                 .modifiers
                 .insert(at, (m.op, m.value, request.flags, request.duration_ms));
         }
-        stats.watched.insert(request.entity);
+        stats.watched.insert(request.entity.0);
         Status::OK
     })
 }
@@ -339,23 +339,27 @@ pub(crate) extern "system" fn stats_changed(
 
 pub(crate) extern "system" fn stat_sources(
     _me: ModHandle,
-    entity: u32,
+    entity: crate::Entity,
     stat: u32,
     out: *mut StatSource,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
-    let list = with(Vec::new(), |s| sources(s, entity, stat));
+    let list = with(Vec::new(), |s| sources(s, entity.0, stat));
     super::table::put_list(&list, out, capacity, count)
 }
 
-pub(crate) extern "system" fn stat_watch(_me: ModHandle, entity: u32, watch: u8) -> Status {
+pub(crate) extern "system" fn stat_watch(
+    _me: ModHandle,
+    entity: crate::Entity,
+    watch: u8,
+) -> Status {
     with(Status::MISSING, |s| {
         let stats = state_stats(s);
         if watch == 0 {
-            stats.watched.remove(&entity);
+            stats.watched.remove(&entity.0);
         } else {
-            stats.watched.insert(entity);
+            stats.watched.insert(entity.0);
         }
         Status::OK
     })
@@ -369,7 +373,7 @@ pub(crate) fn settle() -> usize {
         let stats = state_stats(s);
         let mut entities: BTreeSet<u32> = stats.watched.clone();
         entities.extend(stats.worn.keys());
-        entities.extend(s.host.players.iter().map(|p| p.entity));
+        entities.extend(s.host.players.iter().map(|p| p.entity.0));
         let kinds = u32::try_from(s.stats.kinds.len()).unwrap_or(0);
         let mut changes = Vec::new();
         for entity in entities {
@@ -392,7 +396,7 @@ pub(crate) fn settle() -> usize {
                     let key = key_of(&s.stats.kinds[stat as usize].id).0;
                     changes.push(StatChange {
                         header: Header::of::<StatChange>(),
-                        entity,
+                        entity: crate::Entity(entity),
                         stat: StatRef { index: stat, key },
                         old,
                         new,
@@ -433,7 +437,7 @@ fn record(s: &super::table::State, item: ItemInstance) -> ItemStats {
         .iter()
         .position(|k| k == crate::stats::ITEM_KIND)
         .and_then(|kind| s.item_values.get(&(u32::try_from(kind).ok()?, item.pide.0)))
-        .filter(|(held, _)| *held == item.item)
+        .filter(|(held, _)| *held == item.item.get())
         .and_then(|(_, bytes)| postcard::from_bytes::<ItemStats>(bytes).ok())
         .unwrap_or_default()
 }
@@ -519,11 +523,11 @@ pub(crate) extern "system" fn affix_roll(
         return Status::BAD_ARGS;
     };
     let item = ItemInstance {
-        pide: crate::Entity(roll.pide),
+        pide: roll.pide,
         item: roll.item,
     };
     let next = with(Err(Status::MISSING), |s| {
-        let category = s.host.items.get(&roll.item).map_or(0, |i| i.category);
+        let category = s.host.items.get(&roll.item.get()).map_or(0, |i| i.category);
         let rules = RollRules::new(roll.min, roll.max)
             .max_rarity(ItemRarity::from_raw(roll.max_rarity).unwrap_or(ItemRarity::Legendary));
         let current = record(s, item);
@@ -555,8 +559,10 @@ pub(crate) extern "system" fn affix_roll(
                 s.item_kinds.push(crate::stats::ITEM_KIND.to_owned());
                 s.item_kinds.len() - 1
             });
-        s.item_values
-            .insert((u32::try_from(at).ok()?, roll.pide), (roll.item, bytes));
+        s.item_values.insert(
+            (u32::try_from(at).ok()?, roll.pide.0),
+            (roll.item.get(), bytes),
+        );
         Some(())
     });
     if stored.is_none() {
@@ -567,17 +573,14 @@ pub(crate) extern "system" fn affix_roll(
 
 pub(crate) extern "system" fn item_lines(
     _me: ModHandle,
-    pide: u32,
-    item: u32,
+    pide: crate::Entity,
+    item: crate::ItemId,
     out: *mut ItemLine,
     capacity: u32,
     count: *mut u32,
 ) -> Status {
     let lines = with(Vec::new(), |s| {
-        let item = ItemInstance {
-            pide: crate::Entity(pide),
-            item,
-        };
+        let item = ItemInstance { pide, item };
         let record = record(s, item);
         item_lines_of(s, &record)
     });

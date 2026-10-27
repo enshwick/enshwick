@@ -29,6 +29,17 @@ typedef struct EnshwickHeader {
   uint16_t abi_minor;
 } EnshwickHeader;
 
+// An entity id, as the engine numbers entities: a character, a prop, an item
+// with its own entity, anything the world holds.
+//
+// The engine's id 0 stands for no entity; the safe API hands it over as
+// `None` in an `Option<Entity>`, never as an `Entity`.
+typedef uint32_t EnshwickEntity;
+
+// A player's account by the number the game keeps for it, the same in every
+// session, to remember a player across reconnects and restarts.
+typedef uint64_t EnshwickPlayerKey;
+
 // A connected player, from `HostApi::player` or `HostApi::players`.
 //
 // Unlike other structs with a `Header`, its layout is frozen and it never
@@ -42,9 +53,9 @@ typedef struct EnshwickPlayerInfo {
   // The server's player slot.
   uint32_t slot;
   // The player character's entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The same number for the same account in every session.
-  uint64_t key;
+  EnshwickPlayerKey key;
   // The server's permission bits for the player, `PlayerInfo::CAN_*`.
   uint8_t permissions;
   // Bytes of `name` in use.
@@ -115,7 +126,7 @@ typedef struct EnshwickActiveBuff {
   // Its type's id.
   uint32_t id;
   // The buff's own entity, which carries its effect.
-  uint32_t entity;
+  EnshwickEntity entity;
   // Where the entity holds it, as `BuffTypeInfo::slot`.
   uint32_t slot;
   // Its level; 0 for none.
@@ -165,14 +176,18 @@ typedef struct EnshwickAffixDefData {
   uint8_t reserved[3];
 } EnshwickAffixDefData;
 
+// An item of the game by the number its item data gives it, as a prop's
+// `UsedItem` names the item the prop was placed from.
+typedef uint32_t EnshwickItemId;
+
 // Rolls affixes onto an item, for `HostApi::affix_roll`.
 typedef struct EnshwickAffixRoll {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The item's entity.
-  uint32_t pide;
+  EnshwickEntity pide;
   // The item id it holds.
-  uint32_t item;
+  EnshwickItemId item;
   // The fewest affixes.
   uint8_t min;
   // The most affixes.
@@ -206,7 +221,7 @@ typedef struct EnshwickAltarInfo {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The altar's entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // Its Flame level; 0 until the engine has reported it.
   uint8_t level;
   // 1 when the altar is tilted off the vertical: its zone is known, its
@@ -252,7 +267,7 @@ typedef struct EnshwickAltarZone {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The altar's entity.
-  uint32_t altar;
+  EnshwickEntity altar;
   // The altar's level.
   uint8_t level;
   // Zero.
@@ -287,9 +302,9 @@ typedef struct EnshwickBedCheck {
   // The survivor's id.
   uint32_t survivor;
   // The survivor's entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The bed.
-  uint32_t bed;
+  EnshwickEntity bed;
   // Where the survivor belongs: its saved spawn cell, or where it stands.
   int64_t home[3];
   // Where the bed stands.
@@ -302,10 +317,10 @@ typedef struct EnshwickBlockPlace {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The shape's item: one with a `VoxelBlueprintItem`.
-  uint32_t shape;
+  EnshwickItemId shape;
   // The material's item: one whose `ChangeVoxelData` places a building
   // material.
-  uint32_t material;
+  EnshwickItemId material;
   // Where the block's middle lies, in metres.
   double position[3];
   // The block's rotation, a quaternion x, y, z, w; the game keeps the
@@ -318,7 +333,7 @@ typedef struct EnshwickBuffRequest {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The entity to give it.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The type's id.
   uint32_t id;
   // Its level, 1 to 255; 0 for none.
@@ -368,9 +383,9 @@ typedef struct EnshwickBuildCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The building player's character.
-  uint32_t player;
+  EnshwickEntity player;
   // The item placed: a building block, a prop or another placeable.
-  uint32_t item;
+  EnshwickItemId item;
   // Where, in 32.32 fixed-point metres.
   int64_t position[3];
 } EnshwickBuildCheck;
@@ -423,7 +438,7 @@ typedef struct EnshwickBuildRights {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character entity.
-  uint32_t player;
+  EnshwickEntity player;
   // `BuildRights::ALLOWED` or why the server refuses, written by the
   // loader.
   uint32_t refusal;
@@ -475,12 +490,12 @@ typedef struct EnshwickBuildingData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The placed entity; for a removal, the entity as it was.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The acting player's character entity.
-  uint32_t player;
+  EnshwickEntity player;
   // The item placed, which the entity keeps as its `UsedItem`; 0 for a
   // removal.
-  uint32_t item;
+  EnshwickItemId item;
   // `BuildingData::PLACED`, `BuildingData::PICKED_UP` or
   // `BuildingData::TORN_DOWN`.
   uint8_t kind;
@@ -602,17 +617,21 @@ typedef struct EnshwickComfort {
   float position[3];
 } EnshwickComfort;
 
+// A crafting recipe of the game by its recipe id, to grant, refuse or watch
+// the crafting of one recipe.
+typedef uint32_t EnshwickRecipeId;
+
 // A player's craft request, handed to the filters registered with
 // `HostApi::craft_filter` before the server crafts.
 typedef struct EnshwickCraftCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The crafting player's character.
-  uint32_t player;
+  EnshwickEntity player;
   // The station, or 0 for crafting by hand.
-  uint32_t station;
+  EnshwickEntity station;
   // The recipe id.
-  uint32_t recipe;
+  EnshwickRecipeId recipe;
   // How many.
   uint32_t amount;
 } EnshwickCraftCheck;
@@ -628,13 +647,13 @@ typedef struct EnshwickDamageCheck {
   // `DamageCheck::ADMIN_KILL`.
   uint32_t cause;
   // The entity that takes the damage.
-  uint32_t target;
+  EnshwickEntity target;
   // What dealt a hit: the attacker, or its projectile; 0 for other
   // causes.
-  uint32_t source;
+  EnshwickEntity source;
   // Who dealt a hit, the root of the impact that hit (the archer for an
   // arrow), or `source` when the game names none; 0 for other causes.
-  uint32_t attacker;
+  EnshwickEntity attacker;
   // A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
   // fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
   // stone 10, metal 11, explosion 12), after the target's resistances
@@ -815,13 +834,6 @@ typedef struct EnshwickDependency {
   EnshwickRelation relation;
 } EnshwickDependency;
 
-// An entity id, as the engine numbers entities: a character, a prop, an item
-// with its own entity, anything the world holds.
-//
-// The engine's id 0 stands for no entity; the safe API hands it over as
-// `None` in an `Option<Entity>`, never as an `Entity`.
-typedef uint32_t EnshwickEntity;
-
 // Flags of `HostApi::entity_data_open`.
 typedef uint32_t EnshwickEntityDataFlags;
 // The server keeps the values to itself.
@@ -835,7 +847,7 @@ typedef uint32_t EnshwickEntityDataFlags;
 // an array of it with no entry size.
 typedef struct EnshwickEntityPlace {
   // The entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // Zero.
   uint32_t reserved;
   // Where it is, in 32.32 fixed-point metres.
@@ -956,7 +968,7 @@ typedef struct EnshwickEventTypeInfo {
 // `ExperiencePass`. Its layout is frozen: it is passed as an array.
 typedef struct EnshwickExperienceRow {
   // The character's entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // Its level.
   uint32_t level;
   // Experience inside the level.
@@ -1221,7 +1233,7 @@ typedef struct EnshwickRenameCall {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The entity being renamed.
-  uint32_t entity;
+  EnshwickEntity entity;
   // 1 when `player` holds the renaming player, 0 when the loader could
   // not tell who sent the rename.
   uint8_t known;
@@ -1306,7 +1318,7 @@ typedef struct EnshwickItemData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The item id: FNV-1a of the item's GUID.
-  uint32_t id;
+  EnshwickItemId id;
   // How many fit one stack.
   uint16_t max_stack;
   // The game's `ItemCategory`: 1 equipment, 2 weapons, 3 tools and so
@@ -1345,7 +1357,7 @@ typedef struct EnshwickInventoryOp {
   // meter starts with; 0 otherwise.
   uint64_t other;
   // The item id of a give or take.
-  uint32_t item;
+  EnshwickItemId item;
   // How many to give or take; for a slot move, how many to move, 0 for the
   // whole stack.
   uint32_t count;
@@ -1382,7 +1394,7 @@ typedef struct EnshwickInventoryRequest {
   uint32_t flags;
   // The player the game credits with the change, for pickup and
   // inventory-full messages; 0 for whichever player the game is serving.
-  uint32_t actor;
+  EnshwickEntity actor;
   // The operations, read during the call.
   const struct EnshwickInventoryOp *ops;
   // How many operations `ops` holds.
@@ -1471,16 +1483,16 @@ typedef struct EnshwickSurvivorLookup {
   // The survivor's id.
   uint32_t survivor;
   // The game's own answer, 0 for none.
-  uint32_t vanilla;
+  EnshwickEntity vanilla;
   // Who asks; one of the constants on this type.
   uint32_t purpose;
   // The entity the asker works on, as its purpose says; 0 for none.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The cell its purpose names.
   int64_t cell[3];
   // The bed an entity sleeps in, 0 for none; valid during the call with
   // `token`.
-  uint32_t (*bed_of)(void *token, uint32_t entity);
+  EnshwickEntity (*bed_of)(void *token, EnshwickEntity entity);
   // The argument of `bed_of`.
   void *token;
 } EnshwickSurvivorLookup;
@@ -1514,7 +1526,7 @@ typedef struct EnshwickSurvivorLookup {
 // registration; returns 1 with the answer in `out`, or 0 for the game's own.
 typedef uint8_t (*EnshwickSurvivorLookupFn)(const struct EnshwickSurvivorLookup *call,
                                             void *user,
-                                            uint32_t *out);
+                                            EnshwickEntity *out);
 
 // A filter of survivors' beds: returns 0 to make the game clear the bed.
 typedef uint8_t (*EnshwickBedCheckFn)(const struct EnshwickBedCheck *check, void *user);
@@ -1526,9 +1538,9 @@ typedef struct EnshwickSummon {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The item used.
-  uint32_t item;
+  EnshwickItemId item;
   // The ammunition it used, 0 for none.
-  uint32_t ammo;
+  EnshwickItemId ammo;
   // The template GUID it places, in file order.
   uint8_t template_[16];
   // The target cell.
@@ -1536,7 +1548,7 @@ typedef struct EnshwickSummon {
   // The slot the used item lies in, `sub-inventory | index << 32`.
   uint64_t slot;
   // The used item's own entity, 0 for an item without one.
-  uint32_t pide;
+  EnshwickEntity pide;
   // The used item's meter as clients see it, current and maximum;
   // `[0, 0]` for an item without one.
   uint16_t meter[2];
@@ -1579,12 +1591,12 @@ typedef struct EnshwickInteraction {
   // What the player does; one of the constants on this type.
   uint32_t kind;
   // The player's character entity.
-  uint32_t player;
+  EnshwickEntity player;
   // The entity they act on: a chest, a placed piece, the inventory a slot
   // belongs to.
-  uint32_t target;
+  EnshwickEntity target;
   // The item the target was placed from (`UsedItem`), 0 when unknown.
-  uint32_t item;
+  EnshwickItemId item;
   // 1 when `item` and `position` were read from the target.
   uint8_t known;
   // Zero.
@@ -1659,7 +1671,7 @@ typedef struct EnshwickTeleportRequest {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The entity to move.
-  uint32_t entity;
+  EnshwickEntity entity;
   // `TeleportRequest::BEST_SPAWN`, `TeleportRequest::ORIENTED` or
   // none.
   uint32_t flags;
@@ -1714,7 +1726,7 @@ typedef struct EnshwickNetMessage {
   uint32_t reserved;
   // Who sent it: a player's account key on the server,
   // `NetMessage::SERVER` on a client.
-  uint64_t peer;
+  EnshwickPlayerKey peer;
   // The message, valid for the call.
   const uint8_t *data;
   // How many bytes `data` holds.
@@ -1722,8 +1734,6 @@ typedef struct EnshwickNetMessage {
   // Zero.
   uint32_t reserved_tail;
 } EnshwickNetMessage;
-// The server, as a peer: what a client hears from and sends to.
-#define EnshwickNetMessage_SERVER UINT64_MAX
 
 // A mod's handler for messages on its channel: the message and the pointer
 // given at registration. It must not unwind.
@@ -1801,8 +1811,8 @@ typedef struct EnshwickTerrainMaterialInfo {
   uint8_t hardness;
   // Zero.
   uint8_t reserved;
-  // The item digging it yields, as an item id.
-  uint32_t item;
+  // The item digging it yields.
+  EnshwickItemId item;
   // The health a voxel of it has against tools.
   int32_t health;
 } EnshwickTerrainMaterialInfo;
@@ -2144,7 +2154,7 @@ typedef struct EnshwickStatModify {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The mod's own key; a modifier with the same mod, key and stat
   // replaces the one before.
   uint32_t key;
@@ -2167,7 +2177,7 @@ typedef struct EnshwickStatChange {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The stat.
   struct EnshwickStatRef stat;
   // The value before.
@@ -2295,7 +2305,7 @@ typedef struct EnshwickKnowledgeInput {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The asking player's character.
-  uint32_t player;
+  EnshwickEntity player;
   // The knowledge id.
   uint32_t id;
   // The kind the client names: `KnowledgeInfo::BOOL`,
@@ -2757,15 +2767,17 @@ typedef struct EnshwickHostApi {
   // For the static half of an ECS type, such as `FuelSetup`, it is the
   // set-up data the entity's template holds.
   EnshwickStatus (*component)(EnshwickModHandle me,
-                              uint32_t entity,
+                              EnshwickEntity entity,
                               uint32_t type_hash,
                               const void **out);
   // The template GUID of `entity`, in file order; on the server's game
   // thread only.
-  EnshwickStatus (*entity_template)(EnshwickModHandle me, uint32_t entity, uint8_t (*out)[16]);
+  EnshwickStatus (*entity_template)(EnshwickModHandle me, EnshwickEntity entity, uint8_t (*out)[16]);
   // The connected player whose character is `entity`; on the server's game
   // thread only.
-  EnshwickStatus (*player)(EnshwickModHandle me, uint32_t entity, struct EnshwickPlayerInfo *out);
+  EnshwickStatus (*player)(EnshwickModHandle me,
+                           EnshwickEntity entity,
+                           struct EnshwickPlayerInfo *out);
   // Up to `capacity` connected players with characters in the world, and
   // how many there are; on the server's game thread only.
   // Every entry is as large as the header of the first one says.
@@ -2833,11 +2845,11 @@ typedef struct EnshwickHostApi {
   // Sends `text` to the chat of the player whose account key is `to`, or of
   // everyone for 0, from any thread; the server posts it after the next
   // step. Lines past 1024 bytes are cut.
-  EnshwickStatus (*chat)(EnshwickModHandle me, uint64_t to, struct EnshwickStr text);
+  EnshwickStatus (*chat)(EnshwickModHandle me, EnshwickPlayerKey to, struct EnshwickStr text);
   // Gives `entity` the name `text`, as a player's rename does: shown on
   // hover, sent to every client and saved with the world; cut at 255
   // bytes, removed when empty. On the server's game thread only.
-  EnshwickStatus (*set_label)(EnshwickModHandle me, uint32_t entity, struct EnshwickStr text);
+  EnshwickStatus (*set_label)(EnshwickModHandle me, EnshwickEntity entity, struct EnshwickStr text);
   // Calls `callback` with `user` before the server applies a player's
   // rename of an entity; any filter returning 0 refuses it. Allowed during
   // `enshwick_mod_init` only.
@@ -2868,7 +2880,9 @@ typedef struct EnshwickHostApi {
   // `out` starts with says the caller's struct reaches;
   // `Status::MISSING` for an unknown item, or while no world runs.
   // Any thread.
-  EnshwickStatus (*item_info)(EnshwickModHandle me, uint32_t item, struct EnshwickItemData *out);
+  EnshwickStatus (*item_info)(EnshwickModHandle me,
+                              EnshwickItemId item,
+                              struct EnshwickItemData *out);
   // Queues `request`, from any thread, for the game's inventory system,
   // which runs it as one transaction: all or nothing. `done` gets the
   // result with `user` on the game thread after a later step, unless the
@@ -2933,7 +2947,7 @@ typedef struct EnshwickHostApi {
   // Files item `item` as a summoning staff of the survivor `survivor`, so
   // the game treats it as that survivor's staff, on both sides. Allowed
   // during `enshwick_mod_init` only.
-  EnshwickStatus (*summon_item)(EnshwickModHandle me, uint32_t item, uint32_t survivor);
+  EnshwickStatus (*summon_item)(EnshwickModHandle me, EnshwickItemId item, uint32_t survivor);
   // Makes `callback` with `user` merge the statuses the client's survivor
   // menu shows for a survivor with several entities. Client only; one mod
   // at a time. Allowed during `enshwick_mod_init` only.
@@ -2997,7 +3011,7 @@ typedef struct EnshwickHostApi {
   // step; `Status::REFUSED` for a player's character,
   // `Status::MISSING` for an entity not in the world. On the server's
   // game thread only.
-  EnshwickStatus (*destroy)(EnshwickModHandle me, uint32_t entity);
+  EnshwickStatus (*destroy)(EnshwickModHandle me, EnshwickEntity entity);
   // Asks the server to save the world now, as its timed saves do;
   // `Event::WORLD_SAVED` follows once the save is on disk. A save under
   // way counts as asked; `Status::REFUSED` while the world may not be
@@ -3018,7 +3032,7 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` when the entity lacks the component. On the
   // server's game thread only.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
-                                    uint32_t entity,
+                                    EnshwickEntity entity,
                                     uint32_t type_hash,
                                     void **out);
   // Raises the game event at `data`, `size` bytes of the reflected type
@@ -3045,7 +3059,7 @@ typedef struct EnshwickHostApi {
   // server's game thread only.
   EnshwickStatus (*spawn)(EnshwickModHandle me,
                           const struct EnshwickSpawnRequest *request,
-                          uint32_t *out);
+                          EnshwickEntity *out);
   // Calls `callback` with `user` on each player's craft request in the
   // server's world, on the game thread before the crafting system reads
   // it; any filter returning 0 refuses it, and nothing is made or taken.
@@ -3076,19 +3090,19 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for too many bytes or another mod's channel.
   EnshwickStatus (*net_send)(EnshwickModHandle me,
                              uint32_t channel,
-                             uint64_t peer,
+                             EnshwickPlayerKey peer,
                              const uint8_t *data,
                              uint32_t size);
   // `Status::OK` when `peer` takes messages: a player's client that
   // runs Enshwick, on the server; the server, for `NetMessage::SERVER`
   // on a client. `Status::MISSING` otherwise. Any thread.
-  EnshwickStatus (*net_ready)(EnshwickModHandle me, uint64_t peer);
+  EnshwickStatus (*net_ready)(EnshwickModHandle me, EnshwickPlayerKey peer);
   // Shows `text`, cut at 255 bytes, on the screen of the player with
   // account key `key`, as the game shows its own "can't do that"
   // messages; `Status::MISSING` when the player's client lacks
   // Enshwick and cannot show it, and nothing is sent. On the server's
   // game thread only.
-  EnshwickStatus (*notify)(EnshwickModHandle me, uint64_t key, struct EnshwickStr text);
+  EnshwickStatus (*notify)(EnshwickModHandle me, EnshwickPlayerKey key, struct EnshwickStr text);
   // Writes the clock of the server's world, as far as the `Header`
   // `out` starts with says the caller's struct reaches. On the server's
   // game thread only.
@@ -3140,7 +3154,7 @@ typedef struct EnshwickHostApi {
   // server's game thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*buffs)(EnshwickModHandle me,
-                          uint32_t entity,
+                          EnshwickEntity entity,
                           struct EnshwickActiveBuff *out,
                           uint32_t capacity,
                           uint32_t *count);
@@ -3155,14 +3169,17 @@ typedef struct EnshwickHostApi {
   // one: it goes in the next step. Writes 1 to `removed` when the entity
   // had it, else 0; `Status::MISSING` for an entity that holds no
   // buffs. On the server's game thread only.
-  EnshwickStatus (*remove_buff)(EnshwickModHandle me, uint32_t entity, uint32_t id, uint8_t *removed);
+  EnshwickStatus (*remove_buff)(EnshwickModHandle me,
+                                EnshwickEntity entity,
+                                uint32_t id,
+                                uint8_t *removed);
   // Writes knowledge `id` of the player whose character is `entity`, or
   // of the world for 0 or for an id of the world's;
   // `Status::MISSING` for an id the game does not know,
   // `Status::REFUSED` for a player not in the game. On the server's
   // game thread only.
   EnshwickStatus (*knowledge)(EnshwickModHandle me,
-                              uint32_t entity,
+                              EnshwickEntity entity,
                               uint32_t id,
                               struct EnshwickKnowledgeInfo *out);
   // Grants knowledge `id`, of `kind`, to the player whose character is
@@ -3175,7 +3192,7 @@ typedef struct EnshwickHostApi {
   // `Status::REFUSED` for a player not in the
   // game or a full queue. On the server's game thread only.
   EnshwickStatus (*grant_knowledge)(EnshwickModHandle me,
-                                    uint32_t entity,
+                                    EnshwickEntity entity,
                                     uint32_t id,
                                     uint32_t kind,
                                     uint32_t value);
@@ -3243,8 +3260,8 @@ typedef struct EnshwickHostApi {
   // what the server sent. Any thread.
   EnshwickStatus (*item_data_get)(EnshwickModHandle me,
                                   uint32_t kind,
-                                  uint32_t pide,
-                                  uint32_t item,
+                                  EnshwickEntity pide,
+                                  EnshwickItemId item,
                                   uint8_t *out,
                                   uint32_t capacity,
                                   uint32_t *len);
@@ -3255,8 +3272,8 @@ typedef struct EnshwickHostApi {
   // Any thread.
   EnshwickStatus (*item_data_set)(EnshwickModHandle me,
                                   uint32_t kind,
-                                  uint32_t pide,
-                                  uint32_t item,
+                                  EnshwickEntity pide,
+                                  EnshwickItemId item,
                                   const uint8_t *data,
                                   uint32_t len);
   // Calls `callback` with `user` once per frame of the client's
@@ -3353,7 +3370,10 @@ typedef struct EnshwickHostApi {
   // when nothing modifies it. Values are worked out on the server after
   // each step a source changed; a client answers defaults. Any thread,
   // without locks.
-  EnshwickStatus (*stat_value)(EnshwickModHandle me, uint32_t entity, uint32_t stat, float *out);
+  EnshwickStatus (*stat_value)(EnshwickModHandle me,
+                               EnshwickEntity entity,
+                               uint32_t stat,
+                               float *out);
   // Sets or removes a modifier the mod keeps on an entity; the value
   // follows after the next step. `Status::REFUSED` on a client alone,
   // or for a saved modifier on an entity that is no player. Any thread.
@@ -3373,7 +3393,7 @@ typedef struct EnshwickHostApi {
   // `entity`, in the order they apply, and how many there are to
   // `count`; every stat for `u32::MAX`. Any thread.
   EnshwickStatus (*stat_sources)(EnshwickModHandle me,
-                                 uint32_t entity,
+                                 EnshwickEntity entity,
                                  uint32_t stat,
                                  struct EnshwickStatSource *out,
                                  uint32_t capacity,
@@ -3381,7 +3401,7 @@ typedef struct EnshwickHostApi {
   // Watches `entity` for the items it wears and the buffs it has, or
   // stops for `watch` 0: players are always watched, and so is every
   // entity a mod keeps a modifier on. Any thread.
-  EnshwickStatus (*stat_watch)(EnshwickModHandle me, uint32_t entity, uint8_t watch);
+  EnshwickStatus (*stat_watch)(EnshwickModHandle me, EnshwickEntity entity, uint8_t watch);
   // Defines the mod event `spec` describes, named `<id>:<name>` after
   // the defining mod, and writes the id `HostApi::send_event` takes;
   // `Status::REFUSED` for a name outside the mod's id or defined
@@ -3419,8 +3439,8 @@ typedef struct EnshwickHostApi {
   // modifiers first and then each affix's, and how many to `count`. On a
   // client, from what the server sent. Any thread.
   EnshwickStatus (*item_lines)(EnshwickModHandle me,
-                               uint32_t pide,
-                               uint32_t item,
+                               EnshwickEntity pide,
+                               EnshwickItemId item,
                                struct EnshwickItemLine *out,
                                uint32_t capacity,
                                uint32_t *count);
@@ -3500,7 +3520,7 @@ typedef struct EnshwickHostApi {
   // a bit past 31, `Status::REFUSED` for a player not in the game or
   // whose save has not loaded yet. On the server's game thread only.
   EnshwickStatus (*revoke_knowledge)(EnshwickModHandle me,
-                                     uint32_t entity,
+                                     EnshwickEntity entity,
                                      uint32_t id,
                                      uint32_t kind,
                                      uint32_t value);
@@ -3513,7 +3533,7 @@ typedef struct EnshwickHostApi {
   // or a kind that is not the id's, `Status::MISSING` while no world
   // runs. On the server's game thread only.
   EnshwickStatus (*account_knowledge)(EnshwickModHandle me,
-                                      uint64_t key,
+                                      EnshwickPlayerKey key,
                                       uint32_t id,
                                       uint32_t kind,
                                       uint32_t value,
@@ -3565,7 +3585,7 @@ typedef struct EnshwickHostApi {
   // Writes 1 to `out` when the recipe with game id `recipe` is disabled
   // in this process now, else 0: on a client joined to a server, by the
   // server's rules. Any thread.
-  EnshwickStatus (*recipe_disabled)(EnshwickModHandle me, uint32_t recipe, uint32_t *out);
+  EnshwickStatus (*recipe_disabled)(EnshwickModHandle me, EnshwickRecipeId recipe, uint32_t *out);
   // Defines the extension point `spec` describes, named
   // `<id>:<point>` after the defining mod, and writes its id and the
   // count of its live links to `out`; `Status::REFUSED` for a name
@@ -3617,7 +3637,7 @@ typedef struct EnshwickHostApi {
   // not loaded the item, which on a dedicated server comes after its
   // recipe registry is first built, and while the loader serves no
   // resource. Any thread.
-  EnshwickStatus (*recipe_kind)(EnshwickModHandle me, uint32_t item, EnshwickRecipeKind *out);
+  EnshwickStatus (*recipe_kind)(EnshwickModHandle me, EnshwickItemId item, EnshwickRecipeKind *out);
   // Reports whether the mod's feature `name` runs on this game build:
   // off for the reason `off`, or on when `off` is empty. The loader
   // logs it and shows it in the status summary and on the Mods screen; a
@@ -3833,7 +3853,7 @@ typedef struct EnshwickHostApi {
   // its first step on the server's game thread, never at the commit.
   // `Status::BAD_ARGS` for an `actor` of 0. Any thread.
   EnshwickStatus (*transaction_commit_for)(EnshwickModHandle me,
-                                           uint32_t actor,
+                                           EnshwickEntity actor,
                                            const struct EnshwickTransactionOp *ops,
                                            uint32_t count,
                                            uint64_t *id);
@@ -3901,7 +3921,7 @@ typedef struct EnshwickHostApi {
   // forgot. Any thread.
   EnshwickStatus (*transaction_entities)(EnshwickModHandle me,
                                          uint64_t id,
-                                         uint32_t *out,
+                                         EnshwickEntity *out,
                                          uint32_t capacity,
                                          uint32_t *count);
   // Writes to `kept` 1 when a save keeps changes in the box from `min`
@@ -3933,16 +3953,12 @@ typedef struct EnshwickHostApi {
                                 uint32_t *count);
 } EnshwickHostApi;
 
-// An item of the game by the number its item data gives it, as a prop's
-// `UsedItem` names the item the prop was placed from.
-typedef uint32_t EnshwickItemId;
-
 // The data of `Event::KNOWLEDGE_CHANGED`.
 typedef struct EnshwickKnowledgeData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character, or 0 for the world's knowledge.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The knowledge id.
   uint32_t id;
   // The value now.
@@ -3998,10 +4014,10 @@ typedef struct EnshwickPlayerData {
   // The server's player slot, 0 to 15, while the player is connected.
   uint32_t slot;
   // The player character's entity id.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The same number for the same player account in every session: a hash
   // the game makes of the online id.
-  uint64_t key;
+  EnshwickPlayerKey key;
 } EnshwickPlayerData;
 
 // The data of `Event::PLAYER_DIED`.
@@ -4009,12 +4025,12 @@ typedef struct EnshwickPlayerDeathData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character; 0 when the account left in the same step.
-  uint32_t entity;
+  EnshwickEntity entity;
   // `PlayerDeathData::HIT`, `PlayerDeathData::FALL`,
   // `PlayerDeathData::SHROUD` or `PlayerDeathData::SUFFOCATED`.
   uint32_t cause;
   // The account, as `PlayerInfo::key`.
-  uint64_t key;
+  EnshwickPlayerKey key;
   // Where, in metres.
   float position[3];
   // For a hit, the template GUID of what dealt it, a creature's or an
@@ -4029,7 +4045,7 @@ typedef struct EnshwickPlayerDeathData {
   // For a hit, the attacker of the last hit the player took, from its
   // `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other
   // causes, or when the history names none.
-  uint32_t killer_entity;
+  EnshwickEntity killer_entity;
   // Zero.
   uint32_t reserved_tail;
 } EnshwickPlayerDeathData;
@@ -4042,17 +4058,13 @@ typedef struct EnshwickPlayerDeathData {
 // Out of breath, under water.
 #define EnshwickPlayerDeathData_SUFFOCATED 3
 
-// A player's account by the number the game keeps for it, the same in every
-// session, to remember a player across reconnects and restarts.
-typedef uint64_t EnshwickPlayerKey;
-
 // A prop a transaction places, as a player places one from an item, for
 // `TransactionOp::PLACE_PROP`.
 typedef struct EnshwickPropPlace {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The item whose placed template the prop is.
-  uint32_t item;
+  EnshwickItemId item;
   // Zero.
   uint32_t reserved;
   // Where it stands, in metres.
@@ -4066,7 +4078,7 @@ typedef struct EnshwickPropRemove {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The prop's entity.
-  uint32_t entity;
+  EnshwickEntity entity;
   // `PropRemove::DISCARD_STATE` or none.
   uint32_t flags;
 } EnshwickPropRemove;
@@ -4079,14 +4091,10 @@ typedef struct EnshwickQuestData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character.
-  uint32_t entity;
+  EnshwickEntity entity;
   // The quest's id, a player knowledge id.
   uint32_t quest;
 } EnshwickQuestData;
-
-// A crafting recipe of the game by its recipe id, to grant, refuse or watch
-// the crafting of one recipe.
-typedef uint32_t EnshwickRecipeId;
 
 // The data of `Event::TICKED`.
 typedef struct EnshwickTickData {

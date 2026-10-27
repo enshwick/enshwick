@@ -480,7 +480,7 @@ impl Effects {
         }
         let request = TeleportRequest {
             header: Header::of::<TeleportRequest>(),
-            entity: entity.0,
+            entity,
             flags,
             position: crate::ecs::fixed(position),
             orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
@@ -549,13 +549,13 @@ impl Effects {
             reserved: 0,
             lifetime_ns: lifetime,
         };
-        let mut entity = 0u32;
+        let mut entity = Entity::NONE;
         WorldError::from_status((api.spawn)(
             self.host.handle(),
             &raw const request,
             &raw mut entity,
         ))?;
-        Ok(Entity(entity))
+        Ok(entity)
     }
 }
 

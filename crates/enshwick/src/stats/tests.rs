@@ -117,7 +117,7 @@ fn a_change_shorter_than_its_first_version_reaches_no_handler() {
     let handler = |change: &StatChange| seen.borrow_mut().push((change.entity, change.new));
     let mut change = StatChangeData {
         header: Header::of::<StatChangeData>(),
-        entity: 2,
+        entity: Entity(2),
         stat: StatRef { index: 0, key: 1 },
         old: 0.0,
         new: 50.0,

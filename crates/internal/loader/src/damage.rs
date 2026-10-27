@@ -186,9 +186,9 @@ fn blank(cause: u32, target: u32) -> DamageCheck {
     DamageCheck {
         header: Header::of::<DamageCheck>(),
         cause,
-        target,
-        source: 0,
-        attacker: 0,
+        target: enshwick::Entity(target),
+        source: enshwick::Entity(0),
+        attacker: enshwick::Entity(0),
         amounts: [0.0; TYPES],
         total: 0.0,
     }
@@ -279,8 +279,8 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
         let attacker = if root == 0 { source } else { root };
-        check.source = source;
-        check.attacker = attacker;
+        check.source = enshwick::Entity(source);
+        check.attacker = enshwick::Entity(attacker);
         check.amounts = amounts;
         crate::stats::on_hit(&mut check.amounts, target, attacker);
         check.total = check

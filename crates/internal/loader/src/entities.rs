@@ -151,7 +151,7 @@ fn place(layout: &Layout, entry: &[u8]) -> EntityPlace {
         entity: entry
             .get(..4)
             .and_then(|b| b.try_into().ok())
-            .map_or(0, u32::from_le_bytes),
+            .map_or(Entity(0), |b| Entity(u32::from_le_bytes(b))),
         reserved: 0,
         position: [word(at), word(at + 8), word(at + 16)],
     }
@@ -168,7 +168,7 @@ pub(crate) fn destroy(loader: &Loader, entity: Entity) -> Result<(), Status> {
     crate::world::template(loader, entity)?;
     if crate::world::players(loader)?
         .iter()
-        .any(|p| p.entity == entity.0)
+        .any(|p| p.entity == entity)
     {
         return Err(Status::REFUSED);
     }

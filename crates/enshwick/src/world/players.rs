@@ -1,5 +1,5 @@
-use crate::Entity;
 use crate::abi::Str;
+use crate::{Entity, PlayerKey};
 
 use super::{Notice, Player, World, blank_info, online};
 
@@ -14,7 +14,7 @@ impl World {
     #[script]
     pub fn player(&self, entity: Entity) -> Option<Player> {
         let mut info = blank_info();
-        let status = (self.0.host.api().player)(self.0.host.handle(), entity.0, &raw mut info);
+        let status = (self.0.host.api().player)(self.0.host.handle(), entity, &raw mut info);
         status.is_ok().then(|| Player::from_info(&info))
     }
 
@@ -24,13 +24,13 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// fn owner_name(world: &enshwick::world::World, owner: u64) -> Option<String> {
+    /// fn owner_name(world: &enshwick::world::World, owner: enshwick::PlayerKey) -> Option<String> {
     ///     world.player_by_key(owner).map(|player| player.name)
     /// }
     /// ```
     #[must_use]
     #[script]
-    pub fn player_by_key(self, key: u64) -> Option<Player> {
+    pub fn player_by_key(self, key: PlayerKey) -> Option<Player> {
         self.players().into_iter().find(|player| player.key == key)
     }
 
@@ -70,16 +70,16 @@ impl World {
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
     ///     load.on::<BuildingPlaced>(move |placed| {
-    ///         if let Some(player) = world.player(enshwick::Entity(placed.player)) {
+    ///         if let Some(player) = world.player(placed.player) {
     ///             let label = format!("Built by {}", player.name);
-    ///             let _labelled = world.set_label(enshwick::Entity(placed.entity), &label);
+    ///             let _labelled = world.set_label(placed.entity, &label);
     ///         }
     ///     })
     /// }
     /// ```
     #[must_use]
     pub fn set_label(self, entity: Entity, text: &str) -> bool {
-        (self.0.host.api().set_label)(self.0.host.handle(), entity.0, Str::new(text)).is_ok()
+        (self.0.host.api().set_label)(self.0.host.handle(), entity, Str::new(text)).is_ok()
     }
 
     /// Sends `text` to every player's chat, after the next step; callable
@@ -94,7 +94,7 @@ impl World {
     /// ```
     #[script]
     pub fn broadcast(self, text: &str) {
-        self.chat(0, text);
+        self.chat(PlayerKey::new(0), text);
     }
 
     /// Sends `text` to `player`'s chat alone, after the next step; callable
@@ -109,7 +109,7 @@ impl World {
     /// ```
     #[script]
     pub fn tell(self, player: &Player, text: &str) {
-        if player.key != 0 {
+        if player.key.get() != 0 {
             self.chat(player.key, text);
         }
     }
@@ -159,7 +159,7 @@ impl World {
         }
     }
 
-    pub(super) fn chat(self, to: u64, text: &str) {
+    pub(super) fn chat(self, to: PlayerKey, text: &str) {
         let _queued = (self.0.host.api().chat)(self.0.host.handle(), to, Str::new(text));
     }
 

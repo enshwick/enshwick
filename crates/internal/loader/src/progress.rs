@@ -534,7 +534,7 @@ unsafe fn experience(loader: &Loader, engine: &Engine, ctx: *mut u64) {
                 let Some((row, old)) = rows
                     .iter()
                     .zip(before.iter())
-                    .find(|(r, _)| r.entity == entity)
+                    .find(|(r, _)| r.entity == enshwick::Entity(entity))
                 else {
                     continue;
                 };
@@ -605,7 +605,7 @@ unsafe fn read_row(
     Some(ExperienceRow {
         // SAFETY: `ctx` is the live query context of `player_level`, used on
         // its thread while it runs (the caller's contract).
-        entity: unsafe { engine.entity(ctx) },
+        entity: enshwick::Entity(unsafe { engine.entity(ctx) }),
         level,
         progress,
         need,

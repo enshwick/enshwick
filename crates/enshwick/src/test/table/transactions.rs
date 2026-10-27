@@ -18,17 +18,17 @@ pub(crate) extern "system" fn transaction_commit(
     count: u32,
     id: *mut u64,
 ) -> Status {
-    commit(me, 0, ops, count, id)
+    commit(me, crate::Entity(0), ops, count, id)
 }
 
 pub(crate) extern "system" fn transaction_commit_for(
     me: ModHandle,
-    actor: u32,
+    actor: crate::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
 ) -> Status {
-    if actor == 0 {
+    if actor.is_none() {
         return Status::BAD_ARGS;
     }
     commit(me, actor, ops, count, id)
@@ -36,7 +36,7 @@ pub(crate) extern "system" fn transaction_commit_for(
 
 fn commit(
     me: ModHandle,
-    actor: u32,
+    actor: crate::Entity,
     ops: *const TransactionOp,
     count: u32,
     id: *mut u64,
@@ -70,22 +70,22 @@ fn commit(
         let host = &s.host;
         for change in &changes {
             if let FakeChange::PlaceProp(prop) = change {
-                if host.no_prop_items.contains(&prop.item) {
+                if host.no_prop_items.contains(&prop.item.get()) {
                     return Status::NOT_A_PROP;
                 }
                 let places = host
                     .items
-                    .get(&prop.item)
+                    .get(&prop.item.get())
                     .is_some_and(|item| item.placed_entity != [0; 16]);
                 if !places {
                     return Status::BAD_ARGS;
                 }
             }
             if let FakeChange::Block(block) = change {
-                let known = host.blueprints.contains_key(&block.shape)
+                let known = host.blueprints.contains_key(&block.shape.get())
                     && host
                         .building_materials
-                        .get(&block.material)
+                        .get(&block.material.get())
                         .is_some_and(|&id| id >= 0x80);
                 if !known {
                     return Status::BAD_ARGS;
@@ -120,7 +120,7 @@ fn commit(
         s.edits.transactions.push(FakeTransaction {
             id: next,
             owner: me,
-            actor,
+            actor: actor.0,
             changes,
             created: Vec::new(),
             removed: Vec::new(),
@@ -209,7 +209,7 @@ unsafe fn change(op: &TransactionOp) -> Option<FakeChange> {
             let remove = unsafe {
                 crate::abi::read_headed(op.data.cast::<PropRemove>(), size_of::<PropRemove>())
             }?;
-            (remove.entity != 0 && remove.flags & !PropRemove::DISCARD_STATE == 0)
+            (!remove.entity.is_none() && remove.flags & !PropRemove::DISCARD_STATE == 0)
                 .then_some(FakeChange::RemoveProp(remove))
         }
         TransactionOp::BLOCK => {
@@ -301,7 +301,7 @@ pub(crate) extern "system" fn transaction_undo(me: ModHandle, id: u64) -> Status
 pub(crate) extern "system" fn transaction_entities(
     me: ModHandle,
     id: u64,
-    out: *mut u32,
+    out: *mut crate::Entity,
     capacity: u32,
     count: *mut u32,
 ) -> Status {

@@ -11,13 +11,13 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::Entity;
 use crate::ecs::Components;
 use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
 use crate::locks::Relock;
 use crate::raw::{read_at, read_ptr_at, write_at, write_bytes_at};
+use crate::{Entity, ItemId};
 use crate::{Load, Next, Off};
 
 /// What a container is, for [`Source::kinds`].
@@ -207,20 +207,21 @@ impl Source {
 ///
 /// ```
 /// use enshwick::content::Id;
+/// use enshwick::ItemId;
 /// use enshwick::loot::{Drop, Source};
 ///
 /// const STAFF: Id = Id::new("my-mod:staff");
 ///
-/// let drop = Drop::new(STAFF.id(), 0.1, Source::bosses()).count(1, 2);
+/// let drop = Drop::new(enshwick::ItemId::new(STAFF.id()), 0.1, Source::bosses()).count(1, 2);
 /// assert_eq!(drop.count, [1, 2]);
-/// let one_of = Drop::one_of(&[STAFF.id(), 7], 0.1, Source::bosses());
+/// let one_of = Drop::one_of(&[ItemId::new(STAFF.id()), ItemId::new(7)], 0.1, Source::bosses());
 /// assert_eq!(one_of.items.len(), 2);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Drop {
     /// The items' game ids, [`Guid::id`](crate::content::Guid::id) of their
     /// GUIDs; a drop that hits gives one of them, each as likely.
-    pub items: Vec<u32>,
+    pub items: Vec<ItemId>,
     /// The chance per roll, from 0 to 1.
     pub chance: f64,
     /// How many, at least and at most; each count in between is as likely.
@@ -262,7 +263,7 @@ impl Drop {
     ///
     /// See [`Drop`].
     #[must_use]
-    pub fn new(item: u32, chance: f64, from: Source) -> Self {
+    pub fn new(item: ItemId, chance: f64, from: Source) -> Self {
         Self::one_of(&[item], chance, from)
     }
 
@@ -273,7 +274,7 @@ impl Drop {
     ///
     /// See [`Drop`].
     #[must_use]
-    pub fn one_of(items: &[u32], chance: f64, from: Source) -> Self {
+    pub fn one_of(items: &[ItemId], chance: f64, from: Source) -> Self {
         Self {
             items: items.to_vec(),
             chance,
@@ -302,7 +303,7 @@ impl Drop {
     /// ```
     /// use enshwick::loot::{Drop, MeterRoll, Source};
     ///
-    /// let drop = Drop::new(0x5e01, 0.1, Source::bosses()).meter(1, 5, 5);
+    /// let drop = Drop::new(enshwick::ItemId::new(0x5e01), 0.1, Source::bosses()).meter(1, 5, 5);
     /// assert_eq!(drop.meter, Some(MeterRoll { min: 1, max: 5, of: 5 }));
     /// ```
     #[must_use]
@@ -313,7 +314,7 @@ impl Drop {
 
     /// Why the game could not take it, if so.
     fn check(&self) -> Result<(), Off> {
-        if self.items.is_empty() || self.items.contains(&0) {
+        if self.items.is_empty() || self.items.contains(&ItemId::new(0)) {
             return Err(Off::new(format!("loot drop {:?}: no item", self.items)));
         }
         if !(0.0..=1.0).contains(&self.chance) {
@@ -350,7 +351,7 @@ impl Drop {
         let between = |min: u16, max: u16| {
             min + u16::try_from(pick(u64::from(max.saturating_sub(min)) + 1)).unwrap_or(0)
         };
-        let item = *self.items.get(pick(self.items.len() as u64))?;
+        let item = self.items.get(pick(self.items.len() as u64))?.get();
         let [min, max] = self.count;
         let fill = self.meter.map(|m| Fill::of(between(m.min, m.max), m.of));
         Some((item, between(min, max), fill))
@@ -817,9 +818,9 @@ impl Load<'_> {
     /// const STAFF: Id = Id::new("my-mod:staff");
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_loot(Drop::new(STAFF.id(), 0.10, Source::bosses()))?;
-    ///     load.add_loot(Drop::new(STAFF.id(), 0.02, Source::locked_chests()))?;
-    ///     load.add_loot(Drop::new(STAFF.id(), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
+    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses()))?;
+    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.02, Source::locked_chests()))?;
+    ///     load.add_loot(Drop::new(enshwick::ItemId::new(STAFF.id()), 0.001, Source::kinds(Kinds::CORPSES)).count(1, 3))
     /// }
     /// ```
     pub fn add_loot(&mut self, drop: Drop) -> Result<(), Off> {
@@ -879,7 +880,7 @@ impl Load<'_> {
 ///
 /// fn set(on: bool) -> Result<(), enshwick::Off> {
 ///     let drops = if on {
-///         vec![Drop::new(STAFF.id(), 0.10, Source::bosses())]
+///         vec![Drop::new(enshwick::ItemId::new(STAFF.id()), 0.10, Source::bosses())]
 ///     } else {
 ///         Vec::new()
 ///     };

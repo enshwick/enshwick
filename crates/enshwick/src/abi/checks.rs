@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header, ItemId};
 
 /// A player about to interact with an entity, as
 /// [`HostApi::interaction_filter`](super::HostApi::interaction_filter) hands it
@@ -19,9 +19,9 @@ use crate::abi::Header;
 /// let call = Interaction {
 ///     header: Header::of::<Interaction>(),
 ///     kind: Interaction::OPEN,
-///     player: 4096,
-///     target: 5000,
-///     item: 0x5e01,
+///     player: enshwick::Entity(4096),
+///     target: enshwick::Entity(5000),
+///     item: enshwick::ItemId::new(0x5e01),
 ///     known: 1,
 ///     reserved: [0; 3],
 ///     position: [1.0, 2.0, 3.0],
@@ -36,12 +36,12 @@ pub struct Interaction {
     /// What the player does; one of the constants on this type.
     pub kind: u32,
     /// The player's character entity.
-    pub player: u32,
+    pub player: Entity,
     /// The entity they act on: a chest, a placed piece, the inventory a slot
     /// belongs to.
-    pub target: u32,
+    pub target: Entity,
     /// The item the target was placed from (`UsedItem`), 0 when unknown.
-    pub item: u32,
+    pub item: ItemId,
     /// 1 when `item` and `position` were read from the target.
     pub known: u8,
     /// Zero.
@@ -161,14 +161,14 @@ pub type ComfortFn = unsafe extern "system" fn(comfort: *const Comfort, user: *m
 /// ```
 /// use enshwick::abi::ExperienceRow;
 ///
-/// let row = ExperienceRow { entity: 4096, level: 3, progress: 10, need: 100, gained: 5 };
+/// let row = ExperienceRow { entity: enshwick::Entity(4096), level: 3, progress: 10, need: 100, gained: 5 };
 /// assert_eq!(row.gained, 5);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ExperienceRow {
     /// The character's entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// Its level.
     pub level: u32,
     /// Experience inside the level.

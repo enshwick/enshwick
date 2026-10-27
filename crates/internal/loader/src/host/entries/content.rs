@@ -61,7 +61,11 @@ pub(crate) extern "system" fn recipe_rule(
     })
 }
 
-pub(crate) extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *mut u32) -> Status {
+pub(crate) extern "system" fn recipe_disabled(
+    me: ModHandle,
+    recipe: enshwick::RecipeId,
+    out: *mut u32,
+) -> Status {
     entry("recipe_disabled", || {
         if let Err(status) = caller(me) {
             return status;
@@ -71,21 +75,21 @@ pub(crate) extern "system" fn recipe_disabled(me: ModHandle, recipe: u32, out: *
         }
         // SAFETY: `out` is non-null, checked just before; the ABI has the mod
         // pass it pointing at a writable, aligned `u32`.
-        unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe))) };
+        unsafe { out.write(u32::from(crate::recipes::is_disabled(recipe.get()))) };
         Status::OK
     })
 }
 
 pub(crate) extern "system" fn recipe_kind(
     me: ModHandle,
-    item: u32,
+    item: enshwick::ItemId,
     out: *mut api_frame::RecipeKind,
 ) -> Status {
     entry("recipe_kind", || {
         if let Err(status) = caller(me) {
             return status;
         }
-        match crate::item_kinds::ITEMS.kind(item) {
+        match crate::item_kinds::ITEMS.kind(item.get()) {
             // SAFETY: `HostApi::recipe_kind` has the mod pass `out` null or
             // pointing at a writable, aligned `RecipeKind` for the call.
             Some(kind) => unsafe { put(out, kind) },
@@ -273,8 +277,8 @@ pub(crate) extern "system" fn entity_data_open(
 pub(crate) extern "system" fn item_data_get(
     me: ModHandle,
     kind: u32,
-    pide: u32,
-    item: u32,
+    pide: enshwick::Entity,
+    item: enshwick::ItemId,
     out: *mut u8,
     capacity: u32,
     len: *mut u32,
@@ -283,7 +287,7 @@ pub(crate) extern "system" fn item_data_get(
         if let Err(status) = caller(me) {
             return status;
         }
-        let value = match crate::item_data::get(kind, pide, item) {
+        let value = match crate::item_data::get(kind, pide.0, item.get()) {
             Ok(value) => value,
             Err(status) => return status,
         };
@@ -307,8 +311,8 @@ pub(crate) extern "system" fn item_data_get(
 pub(crate) extern "system" fn item_data_set(
     me: ModHandle,
     kind: u32,
-    pide: u32,
-    item: u32,
+    pide: enshwick::Entity,
+    item: enshwick::ItemId,
     data: *const u8,
     len: u32,
 ) -> Status {
@@ -327,7 +331,7 @@ pub(crate) extern "system" fn item_data_set(
             // SAFETY: the caller passes `len` bytes at `data` for the call.
             unsafe { core::slice::from_raw_parts(data, len) }
         };
-        match crate::item_data::set(kind, pide, item, value) {
+        match crate::item_data::set(kind, pide.0, item.get(), value) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

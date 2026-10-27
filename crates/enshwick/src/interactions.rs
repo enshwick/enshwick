@@ -14,7 +14,7 @@
 //! use enshwick::interactions::Kind;
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     const LOCKED_CHEST: u32 = 0x5e01;
+//!     const LOCKED_CHEST: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
 //!     // Nobody opens or empties a locked chest.
 //!     load.on_interaction(|i| !(i.item == Some(LOCKED_CHEST) && matches!(i.kind, Kind::Open | Kind::Move)))
 //! }
@@ -22,8 +22,8 @@
 
 use core::ffi::c_void;
 
-use crate::Entity;
 use crate::abi::Interaction as RawInteraction;
+use crate::{Entity, ItemId};
 use crate::{Load, Off};
 
 /// What a player does with the target.
@@ -65,7 +65,7 @@ pub struct Interaction {
     /// The entity acted on.
     pub target: Entity,
     /// The item the target was placed from, when the platform could read it.
-    pub item: Option<u32>,
+    pub item: Option<ItemId>,
     /// Where the target stands, in metres, when the platform could read it.
     pub position: Option<[f64; 3]>,
 }
@@ -88,14 +88,14 @@ where
         RawInteraction::UPGRADE => Kind::Upgrade,
         _ => return 1,
     };
-    if call.player == 0 || call.target == 0 {
+    if call.player.is_none() || call.target.is_none() {
         return 1;
     }
     let known = call.known != 0;
     let interaction = Interaction {
         kind,
-        player: Entity(call.player),
-        target: Entity(call.target),
+        player: call.player,
+        target: call.target,
         item: known.then_some(call.item),
         position: known.then_some(call.position),
     };

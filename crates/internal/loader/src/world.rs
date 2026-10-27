@@ -712,7 +712,7 @@ fn player_at(
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::try_from(index).unwrap_or(u32::MAX),
-        entity: entity.0,
+        entity,
         // SAFETY: `slot` is a player slot `players` found in the server on
         // the game thread; the table's `server.player_slot_key` offset holds
         // its `u64` account key.

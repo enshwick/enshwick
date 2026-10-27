@@ -35,7 +35,7 @@ pub(crate) extern "system" fn net_channel(
 pub(crate) extern "system" fn net_send(
     me: ModHandle,
     channel: u32,
-    peer: u64,
+    peer: enshwick::PlayerKey,
     data: *const u8,
     size: u32,
 ) -> Status {
@@ -56,16 +56,16 @@ pub(crate) extern "system" fn net_send(
             // SAFETY: the caller passes `size` bytes at `data` for the call.
             unsafe { core::slice::from_raw_parts(data, len) }
         };
-        match crate::net::send(loader, index, channel, peer, bytes) {
+        match crate::net::send(loader, index, channel, peer.get(), bytes) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn net_ready(me: ModHandle, peer: u64) -> Status {
+pub(crate) extern "system" fn net_ready(me: ModHandle, peer: enshwick::PlayerKey) -> Status {
     entry("net_ready", || match caller(me) {
-        Ok(_) if crate::net::ready(peer) => Status::OK,
+        Ok(_) if crate::net::ready(peer.get()) => Status::OK,
         Ok(_) => Status::MISSING,
         Err(status) => status,
     })

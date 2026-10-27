@@ -46,7 +46,7 @@ mod tests {
             flags: 0,
             hardness: 3,
             reserved: 0,
-            item: 77,
+            item: enshwick::ItemId::new(77),
             health: 500,
         };
         loader.set_terrain(&[rock]);
@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(materials.len(), 1);
         assert_eq!(
             (materials[0].terrain_material, materials[0].terrain_item),
-            (9, 77)
+            (9, enshwick::ItemId::new(77))
         );
         assert!(!materials[0].can_be_flattened);
 

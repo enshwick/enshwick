@@ -17,13 +17,13 @@ impl FakeHost {
     /// ```
     /// use enshwick::abi::ItemData;
     ///
-    /// let loader = enshwick::test::FakeHost::new().item(0x5e01, 1, ItemData::HAS_PIDE).install();
+    /// let loader = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, ItemData::HAS_PIDE).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
-    pub fn item(mut self, item: u32, max_stack: u16, flags: u32) -> Self {
+    pub fn item(mut self, item: crate::ItemId, max_stack: u16, flags: u32) -> Self {
         self.items.insert(
-            item,
+            item.get(),
             ItemData {
                 header: Header::of::<ItemData>(),
                 id: item,
@@ -43,12 +43,12 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let host = enshwick::test::FakeHost::new().item(0x5e01, 1, 0).item_category(0x5e01, 1);
+    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_category(enshwick::ItemId::new(0x5e01), 1);
     /// let _loader = host.install();
     /// ```
     #[must_use]
-    pub fn item_category(mut self, item: u32, category: u8) -> Self {
-        if let Some(data) = self.items.get_mut(&item) {
+    pub fn item_category(mut self, item: crate::ItemId, category: u8) -> Self {
+        if let Some(data) = self.items.get_mut(&item.get()) {
             data.category = category;
         }
         self
@@ -60,12 +60,12 @@ impl FakeHost {
     /// # Examples
     ///
     /// ```
-    /// let host = enshwick::test::FakeHost::new().item(0x5e01, 1, 0).item_places(0x5e01, [0x3a; 16]);
+    /// let host = enshwick::test::FakeHost::new().item(enshwick::ItemId::new(0x5e01), 1, 0).item_places(enshwick::ItemId::new(0x5e01), [0x3a; 16]);
     /// let _loader = host.install();
     /// ```
     #[must_use]
-    pub fn item_places(mut self, item: u32, template: [u8; 16]) -> Self {
-        if let Some(data) = self.items.get_mut(&item) {
+    pub fn item_places(mut self, item: crate::ItemId, template: [u8; 16]) -> Self {
+        if let Some(data) = self.items.get_mut(&item.get()) {
             data.placed_entity = template;
         }
         self

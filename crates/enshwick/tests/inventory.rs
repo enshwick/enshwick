@@ -94,15 +94,15 @@ mod tests {
             .type_size("item_stack", 12)
             // The corpse: a generic sub-inventory, the skipped global one and
             // a virtual link to another inventory with one more.
-            .component(CORPSE, SETUP, &setup(&[(41, 4), (44, 4), (42, 5)]))
-            .component(42, SETUP, &setup(&[(43, 4)]))
-            .component(41, INVENTORY, &stacks(&[(SWORD, 1, 900), (COIN, 7, 0)]))
-            .component(43, INVENTORY, &stacks(&[(0, 0, 0), (COIN, 5, 0)]))
-            .component(44, INVENTORY, &stacks(&[(COIN, 99, 0)]))
-            .component(41, OWNER, &CORPSE.to_le_bytes())
-            .component(900, DURABILITY, &[40, 0, 160, 0])
-            .component(901, FUEL, &[2, 0, 3, 0])
-            .item(SWORD, 1, ItemData::HAS_PIDE)
+            .component(Entity(CORPSE), SETUP, &setup(&[(41, 4), (44, 4), (42, 5)]))
+            .component(Entity(42), SETUP, &setup(&[(43, 4)]))
+            .component(Entity(41), INVENTORY, &stacks(&[(SWORD, 1, 900), (COIN, 7, 0)]))
+            .component(Entity(43), INVENTORY, &stacks(&[(0, 0, 0), (COIN, 5, 0)]))
+            .component(Entity(44), INVENTORY, &stacks(&[(COIN, 99, 0)]))
+            .component(Entity(41), OWNER, &CORPSE.to_le_bytes())
+            .component(Entity(900), DURABILITY, &[40, 0, 160, 0])
+            .component(Entity(901), FUEL, &[2, 0, 3, 0])
+            .item(enshwick::ItemId::new(SWORD), 1, ItemData::HAS_PIDE)
     }
 
     fn record(outcome: &Outcome) {
@@ -122,11 +122,18 @@ mod tests {
         assert_eq!(slots[0].at, SlotRef::new(Entity(41), 0));
         assert_eq!(
             (slots[0].item, slots[0].pide, slots[0].category),
-            (SWORD, Some(Entity(900)), InventoryCategory::GENERIC)
+            (
+                enshwick::ItemId::new(SWORD),
+                Some(Entity(900)),
+                InventoryCategory::GENERIC
+            )
         );
         assert_eq!(slots[9].at, SlotRef::new(Entity(43), 1));
         assert_eq!(slots.iter().filter(|s| !s.is_empty()).count(), 3);
-        assert_eq!(reader.count(Entity(CORPSE), COIN), 12);
+        assert_eq!(
+            reader.count(Entity(CORPSE), enshwick::ItemId::new(COIN)),
+            12
+        );
         assert_eq!(
             reader.slot(SlotRef::new(Entity(41), 1)).map(|s| s.count),
             Some(7)
@@ -142,10 +149,10 @@ mod tests {
         assert_eq!(reader.meter(Entity(901)), Some(Bar { current: 2, max: 3 }));
         assert!(
             inventories
-                .item_info(SWORD)
+                .item_info(enshwick::ItemId::new(SWORD))
                 .is_some_and(|i| i.has_pide() && i.max_stack_size == 1)
         );
-        assert!(inventories.item_info(COIN).is_none());
+        assert!(inventories.item_info(enshwick::ItemId::new(COIN)).is_none());
 
         let ticket = inventories.move_all(Entity(CORPSE), Entity(PLAYER), record);
         let requests = loader.inventory_requests();
@@ -166,7 +173,7 @@ mod tests {
 
         let filled = Op::Give {
             to: Entity(PLAYER),
-            item: SWORD,
+            item: enshwick::ItemId::new(SWORD),
             count: 1,
             fill: Some(Fill::of(2, 3)),
         };

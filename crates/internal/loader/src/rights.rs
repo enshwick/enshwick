@@ -486,7 +486,7 @@ mod tests {
     fn check(min: [f64; 3], max: [f64; 3]) -> BuildRights {
         BuildRights {
             header: Header::of::<BuildRights>(),
-            player: 2,
+            player: enshwick::Entity(2),
             refusal: 0,
             min,
             max,

@@ -88,7 +88,7 @@ impl Voxels for Game<'_> {
     fn rights(&mut self, actor: u32, min: [f64; 3], max: [f64; 3]) -> Result<u32, Status> {
         let check = BuildRights {
             header: Header::of::<BuildRights>(),
-            player: actor,
+            player: enshwick::Entity(actor),
             refusal: BuildRights::ALLOWED,
             min,
             max,

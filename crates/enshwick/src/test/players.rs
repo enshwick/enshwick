@@ -63,7 +63,7 @@ impl FakeHost {
     /// ```
     /// use enshwick::net::Peer;
     ///
-    /// let loader = enshwick::test::FakeHost::new().net_peer(Peer::Player(7)).install();
+    /// let loader = enshwick::test::FakeHost::new().net_peer(Peer::Player(enshwick::PlayerKey::new(7))).install();
     /// # let _ = loader;
     /// ```
     #[must_use]
@@ -72,7 +72,7 @@ impl FakeHost {
             crate::net::Peer::Server => crate::abi::NetMessage::SERVER,
             crate::net::Peer::Player(key) => key,
         };
-        self.net_peers.insert(raw);
+        self.net_peers.insert(raw.get());
         self
     }
 
@@ -101,8 +101,8 @@ impl FakeHost {
     /// let player = PlayerInfo {
     ///     header: Header::of::<PlayerInfo>(),
     ///     slot: 0,
-    ///     entity: 2,
-    ///     key: 7,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: PlayerInfo::CAN_KICK_BAN,
     ///     name_len: 0,
     ///     name: [0; 64],
@@ -289,8 +289,8 @@ impl Installed {
     /// let player = PlayerInfo {
     ///     header: Header::of::<PlayerInfo>(),
     ///     slot: 0,
-    ///     entity: 2,
-    ///     key: 7,
+    ///     entity: enshwick::Entity(2),
+    ///     key: enshwick::PlayerKey::new(7),
     ///     permissions: 0,
     ///     name_len: 0,
     ///     name: [0; 64],
@@ -374,7 +374,7 @@ impl Installed {
     /// assert!(loader.chat().is_empty());
     /// ```
     #[must_use]
-    pub fn chat(&self) -> Vec<(u64, String)> {
+    pub fn chat(&self) -> Vec<(crate::PlayerKey, String)> {
         table::with(Vec::new(), |s| s.chat.clone())
     }
 
@@ -389,7 +389,7 @@ impl Installed {
     /// assert!(loader.net_sent().is_empty());
     /// ```
     #[must_use]
-    pub fn net_sent(&self) -> Vec<(String, u64, Vec<u8>)> {
+    pub fn net_sent(&self) -> Vec<(String, crate::PlayerKey, Vec<u8>)> {
         table::with(Vec::new(), |s| {
             s.net_sent
                 .iter()
@@ -465,7 +465,7 @@ impl Installed {
     /// assert!(loader.notices().is_empty());
     /// ```
     #[must_use]
-    pub fn notices(&self) -> Vec<(u64, String)> {
+    pub fn notices(&self) -> Vec<(crate::PlayerKey, String)> {
         table::with(Vec::new(), |s| s.notices.clone())
     }
 
@@ -476,20 +476,20 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(loader.rename(4096, None, "Tools"));
+    /// assert!(loader.rename(enshwick::Entity(4096), None, "Tools"));
     /// ```
     #[must_use]
-    pub fn rename(&self, entity: u32, player: Option<&PlayerInfo>, text: &str) -> bool {
+    pub fn rename(&self, entity: crate::Entity, player: Option<&PlayerInfo>, text: &str) -> bool {
         let filters = table::with(Vec::new(), |s| s.rename_filters.clone());
         let call = RenameCall {
             header: Header::of::<RenameCall>(),
-            entity,
+            entity: crate::Entity(entity.0),
             known: u8::from(player.is_some()),
             player: player.copied().unwrap_or(PlayerInfo {
                 header: Header::of::<PlayerInfo>(),
                 slot: u32::MAX,
-                entity: 0,
-                key: 0,
+                entity: crate::Entity(0),
+                key: crate::PlayerKey::new(0),
                 permissions: 0,
                 name_len: 0,
                 name: [0; 64],
@@ -512,8 +512,8 @@ pub(crate) fn console() -> PlayerInfo {
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: u32::MAX,
-        entity: 0,
-        key: 0,
+        entity: crate::Entity(0),
+        key: crate::PlayerKey::new(0),
         permissions: PlayerInfo::CAN_KICK_BAN,
         name_len: 7,
         name,

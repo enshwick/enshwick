@@ -658,7 +658,7 @@ pub(crate) fn submit(
     QUEUE.push(Request {
         owner,
         flags: request.flags,
-        actor: request.actor,
+        actor: request.actor.0,
         ops,
         done,
         user: user.expose_provenance(),
@@ -673,7 +673,7 @@ fn valid(op: &InventoryOp) -> bool {
     match op.kind {
         InventoryOp::GIVE | InventoryOp::TAKE => {
             entity(op.target)
-                && op.item != 0
+                && op.item != enshwick::ItemId::new(0)
                 && op.count != 0
                 && i32::try_from(op.count).is_ok()
                 && (op.kind == InventoryOp::TAKE || fill(op).is_some())
@@ -682,7 +682,7 @@ fn valid(op: &InventoryOp) -> bool {
         InventoryOp::RENEW => {
             op.target & 0xffff_ffff != 0
                 && op.other & 0xffff_ffff != 0
-                && op.item != 0
+                && op.item != enshwick::ItemId::new(0)
                 && op.count != 0
                 && i32::try_from(op.count).is_ok()
                 && fill(&renew_give(op)).is_some()
@@ -756,7 +756,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
     let info = item_info_at(loader, &access, item)?.ok_or(Status::MISSING)?;
     Ok(ItemData {
         header: Header::of::<ItemData>(),
-        id: item,
+        id: enshwick::ItemId::new(item),
         // SAFETY: the lookup returned the item's non-null `ItemInfo` (checked
         // earlier), live while `access` is held, with `maxStackSize` at the reflected offset.
         max_stack: unsafe { enshwick::raw::read_at(info, executor.item_max_stack) },

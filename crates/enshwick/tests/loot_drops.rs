@@ -22,7 +22,11 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let destroyed = load
-                .add_loot(Drop::new(7, 0.5, Source::kinds(Kinds::DESTROYED)))
+                .add_loot(Drop::new(
+                    enshwick::ItemId::new(7),
+                    0.5,
+                    Source::kinds(Kinds::DESTROYED),
+                ))
                 .map_err(|off| off.to_string());
             Ok(Self { destroyed })
         }

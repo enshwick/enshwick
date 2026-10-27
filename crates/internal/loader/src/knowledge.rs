@@ -596,7 +596,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         }
         let data = KnowledgeData {
             header: Header::of::<KnowledgeData>(),
-            entity: entity.0,
+            entity,
             id,
             value,
         };
@@ -607,7 +607,7 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         {
             let quest = QuestData {
                 header: Header::of::<QuestData>(),
-                entity: entity.0,
+                entity,
                 quest: id,
             };
             loader.emit(Event::QUEST_COMPLETED, None, (&raw const quest).cast());

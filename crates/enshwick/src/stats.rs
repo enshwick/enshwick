@@ -43,7 +43,6 @@
 
 use core::ffi::c_void;
 
-use crate::Entity;
 use crate::abi::{
     Header, StatChange as StatChangeData, StatModifierData, StatModify, StatRef, StatSource,
     Status, Str,
@@ -51,6 +50,7 @@ use crate::abi::{
 use crate::buffs::BuffTypeId;
 use crate::content::items::StatFormat;
 use crate::item_data::{ItemData, ItemInstance, SetError};
+use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
 /// The item data kind that holds every item's [`ItemStats`].
@@ -153,7 +153,7 @@ impl Stats {
     pub fn value(&self, entity: Entity, stat: Stat) -> f32 {
         let mut out = 0.0;
         let status =
-            (self.host.api().stat_value)(self.host.handle(), entity.0, stat.index, &raw mut out);
+            (self.host.api().stat_value)(self.host.handle(), entity, stat.index, &raw mut out);
         if status.is_ok() { out } else { 0.0 }
     }
 
@@ -229,7 +229,7 @@ impl Stats {
     ) -> Result<(), ModifyError> {
         let request = StatModify {
             header: Header::of::<StatModify>(),
-            entity: entity.0,
+            entity,
             key: key_hash(key),
             modifier,
             flags,
@@ -305,7 +305,7 @@ impl Stats {
             let mut count = 0u32;
             let status = (self.host.api().stat_sources)(
                 self.host.handle(),
-                entity.0,
+                entity,
                 stat,
                 out.as_mut_ptr(),
                 u32::try_from(out.len()).unwrap_or(u32::MAX),
@@ -326,7 +326,7 @@ impl Stats {
                 let origin = match s.kind {
                     StatSource::ITEM => Origin::Item(ItemInstance {
                         pide: Entity(s.id),
-                        item: s.owner,
+                        item: ItemId::new(s.owner),
                     }),
                     StatSource::BUFF => Origin::Buff(BuffTypeId(s.id)),
                     StatSource::ENTITY => Origin::Mod {
@@ -387,7 +387,7 @@ impl Stats {
     /// }
     /// ```
     pub fn watch(&self, entity: Entity, watch: bool) {
-        let _status = (self.host.api().stat_watch)(self.host.handle(), entity.0, u8::from(watch));
+        let _status = (self.host.api().stat_watch)(self.host.handle(), entity, u8::from(watch));
     }
 }
 
@@ -416,7 +416,7 @@ where
     // shared references.
     let handler = unsafe { &*user.cast::<F>() };
     let change = StatChange {
-        entity: Entity(change.entity),
+        entity: change.entity,
         stat: Stat::from_ref(change.stat),
         old: change.old,
         new: change.new,

@@ -13,7 +13,7 @@ mod tests {
     use enshwick::{Load, Mod, Off};
 
     /// The players each locker lets in: owner key, then the allowed.
-    static ALLOWED: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
+    static ALLOWED: Mutex<Vec<(enshwick::PlayerKey, String)>> = Mutex::new(Vec::new());
     static RUNS: Mutex<Vec<(String, Via)>> = Mutex::new(Vec::new());
 
     const TEXTS: &str = r#"
@@ -99,8 +99,8 @@ mod tests {
         let mut info = PlayerInfo {
             header: Header::of::<PlayerInfo>(),
             slot: 0,
-            entity,
-            key,
+            entity: enshwick::Entity(entity),
+            key: enshwick::PlayerKey::new(key),
             permissions: if admin { PlayerInfo::CAN_KICK_BAN } else { 0 },
             name_len: u8::try_from(name.len()).unwrap(),
             name: [0; 64],
@@ -158,7 +158,12 @@ mod tests {
                 .ask_actions(ActionCall::SHEET, &owner, 0, "", "")
                 .unwrap(),
         );
-        assert!(sheet[0].players.iter().any(|p| p.0 == 7 && p.2));
+        assert!(
+            sheet[0]
+                .players
+                .iter()
+                .any(|p| p.0 == enshwick::PlayerKey::new(7) && p.2)
+        );
 
         // The console form: the console has no character, so no locker is at
         // hand; help lists every action; an unknown id is named.

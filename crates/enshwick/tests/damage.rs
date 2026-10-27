@@ -36,9 +36,9 @@ mod tests {
         DamageCheck {
             header: Header::of::<DamageCheck>(),
             cause,
-            target,
-            source,
-            attacker: 0,
+            target: enshwick::Entity(target),
+            source: enshwick::Entity(source),
+            attacker: enshwick::Entity(0),
             amounts: [0.0; 13],
             total: 0.0,
         }

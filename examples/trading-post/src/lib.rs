@@ -117,7 +117,7 @@ impl Mod for TradingPost {
                 [Value::Number(item)] => sell(&Price {
                     item: *item as u32,
                     count: 1,
-                    player: request.player.key,
+                    player: request.player.key.get(),
                     character: request.player.entity,
                     deal: Deal::SELL,
                 }),

@@ -111,7 +111,7 @@ impl World {
     /// ```
     pub fn destroy(self, entity: Entity) -> Result<(), WorldError> {
         WorldError::check(
-            (self.0.host.api().destroy)(self.0.host.handle(), entity.0),
+            (self.0.host.api().destroy)(self.0.host.handle(), entity),
             WorldError::Gone,
         )
     }

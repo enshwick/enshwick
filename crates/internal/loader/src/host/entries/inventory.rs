@@ -15,11 +15,11 @@ pub(crate) extern "system" fn inventory_open(me: ModHandle) -> Status {
 
 pub(crate) extern "system" fn item_info(
     me: ModHandle,
-    item: u32,
+    item: enshwick::ItemId,
     out: *mut api_frame::ItemData,
 ) -> Status {
     entry("item_info", || {
-        match caller(me).and_then(|loader| crate::inventory::item_info(loader, item)) {
+        match caller(me).and_then(|loader| crate::inventory::item_info(loader, item.get())) {
             // SAFETY: `HostApi::item_info` has the mod pass `out` null or
             // pointing at its version of `ItemData`, writable for the size its
             // header states, that no other thread touches during the call.

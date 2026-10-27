@@ -21,10 +21,10 @@ mod vitals;
 
 use core::ffi::c_void;
 
-use crate::Entity;
 use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
+use crate::{Entity, PlayerKey};
 use crate::{Host, Load, Off};
 
 pub use build::{BuildRefusal, PlayerPermissions};
@@ -35,7 +35,7 @@ pub use prop_state::{HeldState, PropState};
 pub(crate) use props::span;
 pub use props::{Prop, WorldTransform};
 pub use rename::Rename;
-pub use stats::{Meter, Progress, Skill, Vitals};
+pub use stats::{Meter, Progress, Skill, SkillNode, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
 /// A reflected ECS component type, resolved once at init.
@@ -169,7 +169,7 @@ pub struct Player {
     /// The server's player slot.
     pub slot: u32,
     /// The same for the same account in every session.
-    pub key: u64,
+    pub key: PlayerKey,
     /// Permission bits, `PlayerInfo::CAN_*`.
     pub permissions: u8,
     /// The name the client sent; untrusted, may repeat between players.
@@ -180,7 +180,7 @@ impl Player {
     pub(crate) fn from_info(info: &PlayerInfo) -> Self {
         let name = &info.name[..usize::from(info.name_len).min(info.name.len())];
         Self {
-            entity: Entity(info.entity),
+            entity: info.entity,
             slot: info.slot,
             key: info.key,
             permissions: info.permissions,
@@ -197,7 +197,7 @@ impl Player {
     /// use enshwick::Entity;
     /// use enshwick::world::Player;
     ///
-    /// let player = Player { entity: Entity(2), slot: 0, key: 7, permissions: 0, name: "Émile".into() };
+    /// let player = Player { entity: Entity(2), slot: 0, key: enshwick::PlayerKey::new(7), permissions: 0, name: "Émile".into() };
     /// assert!(player.is_named("éMILE"));
     /// assert!(!player.is_named("Emile"));
     /// ```
@@ -234,7 +234,7 @@ pub struct Placed {
 impl Placed {
     fn from_abi(place: &EntityPlace) -> Self {
         Self {
-            entity: Entity(place.entity),
+            entity: place.entity,
             position: crate::ecs::metres(place.position),
         }
     }
@@ -358,8 +358,8 @@ fn blank_info() -> PlayerInfo {
     PlayerInfo {
         header: Header::of::<PlayerInfo>(),
         slot: 0,
-        entity: 0,
-        key: 0,
+        entity: Entity::NONE,
+        key: PlayerKey::new(0),
         permissions: 0,
         name_len: 0,
         name: [0; 64],
@@ -376,7 +376,7 @@ fn blank_info() -> PlayerInfo {
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let world = load.world()?;
 ///     load.on::<PlayerJoined>(move |joined| {
-///         let entity = enshwick::Entity(joined.entity);
+///         let entity = joined.entity;
 ///         if let Some(player) = world.player(entity) {
 ///             enshwick::info!("{} joined, admin: {}", player.name, player.is_admin());
 ///         }
@@ -497,7 +497,7 @@ impl World {
     pub fn component(&self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
         let mut out: *const c_void = core::ptr::null();
         let status =
-            (self.0.host.api().component)(self.0.host.handle(), entity.0, ty.0, &raw mut out);
+            (self.0.host.api().component)(self.0.host.handle(), entity, ty.0, &raw mut out);
         (status == Status::OK && !out.is_null()).then_some(out)
     }
 
@@ -677,7 +677,7 @@ impl World {
     ) -> Result<*mut c_void, WorldError> {
         let mut out: *mut c_void = core::ptr::null_mut();
         let status =
-            (self.0.host.api().component_write)(self.0.host.handle(), entity.0, ty.0, &raw mut out);
+            (self.0.host.api().component_write)(self.0.host.handle(), entity, ty.0, &raw mut out);
         match WorldError::check(status, WorldError::Gone) {
             Ok(()) if !out.is_null() => Ok(out),
             Ok(()) => Err(WorldError::Missing),
@@ -746,7 +746,7 @@ impl World {
     pub fn template(&self, entity: Entity) -> Option<[u8; 16]> {
         let mut out = [0u8; 16];
         let status =
-            (self.0.host.api().entity_template)(self.0.host.handle(), entity.0, &raw mut out);
+            (self.0.host.api().entity_template)(self.0.host.handle(), entity, &raw mut out);
         status.is_ok().then_some(out)
     }
 

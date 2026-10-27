@@ -353,6 +353,44 @@ impl AffixDef {
     }
 }
 
+/// An affix as this process numbers it, from [`Load::define_affix`](crate::Load::define_affix)
+/// or a [`Line`](super::Line), to ask [`Affixes::info`](super::Affixes::info) its text.
+///
+/// The number differs between processes; save an [`AffixKey`] instead.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::affixes::AffixId;
+///
+/// let affix = AffixId::new(3);
+/// assert_eq!(affix.get(), 3);
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AffixId(u32);
+
+impl AffixId {
+    /// The affix this process numbers `index`.
+    ///
+    /// # Examples
+    ///
+    /// See [`AffixId`].
+    #[must_use]
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    /// This process's number for the affix.
+    ///
+    /// # Examples
+    ///
+    /// See [`AffixId`].
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
 /// The stored name of an affix: the FNV-1a 32 hash of its full id.
 ///
 /// # Examples

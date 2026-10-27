@@ -9,6 +9,7 @@
 use core::fmt::Write as _;
 
 use super::Value;
+use crate::PlayerKey;
 
 /// An action a player may use, as the interface shows it.
 ///
@@ -40,7 +41,7 @@ pub struct Entry {
     /// Its arguments, for an action that is not a list.
     pub args: Vec<ArgView>,
     /// The players of a list: account key, name and whether switched on.
-    pub players: Vec<(u64, String, bool)>,
+    pub players: Vec<(PlayerKey, String, bool)>,
 }
 
 /// An argument as the interface shows it.
@@ -64,7 +65,7 @@ pub struct ArgView {
     /// A choice's options, in the player's language.
     pub choices: Vec<String>,
     /// A player argument's options: account key and name.
-    pub players: Vec<(u64, String)>,
+    pub players: Vec<(PlayerKey, String)>,
 }
 
 impl ArgView {
@@ -175,7 +176,10 @@ pub fn decode(text: &str) -> Vec<Entry> {
                     let players = items
                         .filter_map(|item| {
                             let (key, name) = item.split_once(PAIR)?;
-                            Some((u64::from_str_radix(key, 16).ok()?, name.to_owned()))
+                            Some((
+                                u64::from_str_radix(key, 16).ok().map(PlayerKey::new)?,
+                                name.to_owned(),
+                            ))
                         })
                         .collect();
                     (Vec::new(), players)
@@ -193,8 +197,10 @@ pub fn decode(text: &str) -> Vec<Entry> {
                 });
             }
             ["O", key, on, name] => {
-                let (Some(entry), Ok(key)) = (entries.last_mut(), u64::from_str_radix(key, 16))
-                else {
+                let (Some(entry), Ok(key)) = (
+                    entries.last_mut(),
+                    u64::from_str_radix(key, 16).map(PlayerKey::new),
+                ) else {
                     continue;
                 };
                 entry.players.push((key, (*name).to_owned(), *on == "1"));
@@ -250,7 +256,7 @@ pub fn decode_args(text: &str) -> Option<Vec<Value>> {
             let (tag, rest) = field.split_at_checked(1)?;
             Some(match tag {
                 "p" => Value::Player {
-                    key: u64::from_str_radix(rest, 16).ok()?,
+                    key: u64::from_str_radix(rest, 16).ok().map(PlayerKey::new)?,
                     name: String::new(),
                 },
                 "c" => Value::Choice(rest.parse().ok()?),
@@ -279,8 +285,8 @@ mod tests {
                 subject: "Your locker at (2, 10, -4)".into(),
                 args: Vec::new(),
                 players: vec![
-                    (7, "Ann".into(), true),
-                    (u64::MAX, "Bob\tLee".into(), false),
+                    (PlayerKey::new(7), "Ann".into(), true),
+                    (PlayerKey::new(u64::MAX), "Bob\tLee".into(), false),
                 ],
             },
             Entry {
@@ -292,7 +298,7 @@ mod tests {
                     ArgView {
                         kind: ArgView::PLAYER,
                         label: "To".into(),
-                        players: vec![(9, "Cy".into())],
+                        players: vec![(PlayerKey::new(9), "Cy".into())],
                         ..ArgView::default()
                     },
                     ArgView {
@@ -323,7 +329,7 @@ mod tests {
     fn arguments_round_trip_and_bad_ones_are_refused() {
         let args = vec![
             Value::Player {
-                key: 0xdead_beef,
+                key: PlayerKey::new(0xdead_beef),
                 name: String::new(),
             },
             Value::Toggle(false),

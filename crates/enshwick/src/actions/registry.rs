@@ -1,6 +1,7 @@
 use std::sync::RwLock;
 
 use crate::Host;
+use crate::PlayerKey;
 use crate::i18n::{Language, Texts};
 use crate::locks::RelockRw;
 use crate::world::Player;
@@ -180,11 +181,11 @@ impl Registry {
     fn player_named(
         &self,
         name: &str,
-        listed: &[(u64, String)],
+        listed: &[(PlayerKey, String)],
         language: Language,
     ) -> Result<Value, String> {
         let lower = name.to_lowercase();
-        let mut found: Vec<(u64, String)> = self
+        let mut found: Vec<(PlayerKey, String)> = self
             .online()
             .into_iter()
             .filter(|p| p.is_named(name))
@@ -207,7 +208,12 @@ impl Registry {
 
     /// The players a list switches on for `player` now; none while the
     /// action has nothing at hand.
-    fn listed(&self, d: &Declared, player: &Player, language: Language) -> Vec<(u64, String)> {
+    fn listed(
+        &self,
+        d: &Declared,
+        player: &Player,
+        language: Language,
+    ) -> Vec<(PlayerKey, String)> {
         let ask = self.ask(player, language);
         let subject = match d.action.at.as_ref().map(|at| at(&ask)) {
             Some(Ok(subject)) => Some(subject),
@@ -270,7 +276,7 @@ impl Registry {
     pub(super) fn sheet(&self, player: &Player, language: Language) -> String {
         let declared = self.declared.relock_read();
         let online = self.online();
-        let others: Vec<(u64, String)> = online
+        let others: Vec<(PlayerKey, String)> = online
             .iter()
             .filter(|p| p.key != player.key)
             .map(|p| (p.key, p.name.clone()))
@@ -306,7 +312,7 @@ impl Registry {
                 } else {
                     Vec::new()
                 };
-                let mut players: Vec<(u64, String, bool)> = others
+                let mut players: Vec<(PlayerKey, String, bool)> = others
                     .iter()
                     .map(|(key, name)| (*key, name.clone(), switched.iter().any(|(k, _)| k == key)))
                     .collect();

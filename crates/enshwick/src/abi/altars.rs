@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::Header;
+use crate::abi::{Entity, Header};
 
 /// A box of whole cells or of 32.32 fixed-point metres, as its user says:
 /// `min` inclusive, `max` exclusive on each axis; axis 1 is up.
@@ -35,7 +35,7 @@ pub struct Bounds {
 /// use enshwick::abi::{AltarInfo, Bounds, Header};
 ///
 /// let mut altar = AltarInfo::EMPTY;
-/// altar.entity = 4096;
+/// altar.entity = enshwick::Entity(4096);
 /// altar.level = 1;
 /// altar.level_count = 1;
 /// altar.zone = Bounds { min: [0, 0, 0], max: [80, 80, 80] };
@@ -48,7 +48,7 @@ pub struct AltarInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The altar's entity.
-    pub entity: u32,
+    pub entity: Entity,
     /// Its Flame level; 0 until the engine has reported it.
     pub level: u8,
     /// 1 when the altar is tilted off the vertical: its zone is known, its
@@ -72,7 +72,7 @@ impl AltarInfo {
     /// An altar with nothing known, its header set.
     pub const EMPTY: Self = Self {
         header: Header::of::<Self>(),
-        entity: 0,
+        entity: Entity::NONE,
         level: 0,
         tilted: 0,
         level_count: 0,
@@ -102,7 +102,7 @@ impl AltarInfo {
 /// ```
 /// use enshwick::abi::{AltarZone, Header};
 ///
-/// let zone = AltarZone { header: Header::of::<AltarZone>(), altar: 4096, level: 2, reserved: [0; 3], grow: 0, height: 60 };
+/// let zone = AltarZone { header: Header::of::<AltarZone>(), altar: enshwick::Entity(4096), level: 2, reserved: [0; 3], grow: 0, height: 60 };
 /// assert_eq!(zone.grow, 0);
 /// ```
 #[repr(C)]
@@ -111,7 +111,7 @@ pub struct AltarZone {
     /// Size and version of this struct.
     pub header: Header,
     /// The altar's entity.
-    pub altar: u32,
+    pub altar: Entity,
     /// The altar's level.
     pub level: u8,
     /// Zero.

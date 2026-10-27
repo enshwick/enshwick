@@ -55,8 +55,8 @@ mod tests {
             .type_hash("keen::ecs::Fuel", FUEL)
             .type_size("keen::ecs::FuelSetup", 0x28)
             .type_size("keen::ecs::Fuel", 16)
-            .component(WELL.0, FUEL_SETUP, &setup)
-            .component(WELL.0, FUEL, &[0; 16])
+            .component(Entity(WELL.0), FUEL_SETUP, &setup)
+            .component(Entity(WELL.0), FUEL, &[0; 16])
             .static_half(FUEL_SETUP)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Wells)`.

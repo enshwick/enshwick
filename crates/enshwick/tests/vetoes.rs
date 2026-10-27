@@ -14,7 +14,9 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_craft(|craft| craft.station.is_some() || craft.amount < 10)?;
-            load.on_build(|placement| placement.position[1] >= 0.0 && placement.item != 13)?;
+            load.on_build(|placement| {
+                placement.position[1] >= 0.0 && placement.item != enshwick::ItemId::new(13)
+            })?;
             Ok(Self)
         }
     }
@@ -29,22 +31,22 @@ mod tests {
         assert_eq!(status, Status::OK);
         let craft = |station, amount| CraftCheck {
             header: Header::of::<CraftCheck>(),
-            player: 2,
+            player: enshwick::Entity(2),
             station,
-            recipe: 5,
+            recipe: enshwick::RecipeId::new(5),
             amount,
         };
-        assert!(loader.craft(&craft(0, 3)));
-        assert!(!loader.craft(&craft(0, 12)));
-        assert!(loader.craft(&craft(40, 12)));
+        assert!(loader.craft(&craft(enshwick::Entity(0), 3)));
+        assert!(!loader.craft(&craft(enshwick::Entity(0), 12)));
+        assert!(loader.craft(&craft(enshwick::Entity(40), 12)));
         let build = |item, y: i64| BuildCheck {
             header: Header::of::<BuildCheck>(),
-            player: 2,
+            player: enshwick::Entity(2),
             item,
             position: [0, y << 32, 0],
         };
-        assert!(loader.build(&build(7, 5)));
-        assert!(!loader.build(&build(7, -1)));
-        assert!(!loader.build(&build(13, 5)));
+        assert!(loader.build(&build(enshwick::ItemId::new(7), 5)));
+        assert!(!loader.build(&build(enshwick::ItemId::new(7), -1)));
+        assert!(!loader.build(&build(enshwick::ItemId::new(13), 5)));
     }
 }

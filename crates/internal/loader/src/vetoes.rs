@@ -219,15 +219,15 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let amount: u16 = unsafe { read_at(payload, layout.amount) };
     let call = CraftCheck {
         header: Header::of::<CraftCheck>(),
-        player,
-        station,
-        recipe,
+        player: enshwick::Entity(player),
+        station: enshwick::Entity(station),
+        recipe: enshwick::RecipeId::new(recipe),
         amount: u32::from(amount),
     };
-    if call.player == 0 {
+    if call.player == enshwick::Entity(0) {
         return;
     }
-    let disabled = crate::recipes::is_disabled(call.recipe);
+    let disabled = crate::recipes::is_disabled(call.recipe.get());
     let allowed = !disabled
         && filters.iter().filter(|f| f.live()).all(|f| {
             // SAFETY: `callback` is a `CraftCheckFn` the mod registered, in
@@ -253,7 +253,7 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
             DEBUG,
             "craft of recipe {:#x} by player {} refused{}",
             call.recipe,
-            call.player,
+            call.player.0,
             if disabled {
                 ": the recipe is disabled"
             } else {
@@ -330,8 +330,8 @@ unsafe fn refuse(flags: *mut u32, cursor: *mut u8, placement: *mut u8, transform
     };
     let call = BuildCheck {
         header: Header::of::<BuildCheck>(),
-        player,
-        item,
+        player: enshwick::Entity(player),
+        item: enshwick::ItemId::new(item),
         // SAFETY: `transform` is non-null (the null checks return first) and
         // the check's live cursor transform (the caller's contract), which
         // starts with its 32.32 position, three `i64`.

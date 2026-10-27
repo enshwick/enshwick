@@ -189,6 +189,18 @@ macro_rules! id_conversions {
                 id.0
             }
         }
+
+        impl core::fmt::LowerHex for $id {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::LowerHex::fmt(&self.0, f)
+            }
+        }
+
+        impl core::fmt::UpperHex for $id {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::fmt::UpperHex::fmt(&self.0, f)
+            }
+        }
     )*};
 }
 
@@ -231,6 +243,13 @@ mod tests {
         assert_eq!(u32::from(recipe), 77);
         assert_eq!(recipe, RecipeId::new(77));
         assert_eq!(recipe.get(), 77);
+    }
+
+    #[test]
+    fn an_id_prints_in_hex_as_its_number_does() {
+        assert_eq!(format!("{:#x}", ItemId::new(0x5e01)), "0x5e01");
+        assert_eq!(format!("{:016X}", PlayerKey::new(0xab)), "00000000000000AB");
+        assert_eq!(format!("{:x}", RecipeId::new(255)), "ff");
     }
 
     #[test]

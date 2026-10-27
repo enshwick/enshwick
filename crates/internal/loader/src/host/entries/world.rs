@@ -10,14 +10,12 @@ use crate::locks::Relock;
 
 pub(crate) extern "system" fn component(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     type_hash: u32,
     out: *mut *const core::ffi::c_void,
 ) -> Status {
     entry("component", || {
-        match caller(me)
-            .and_then(|loader| crate::world::component(loader, Entity(entity), type_hash))
-        {
+        match caller(me).and_then(|loader| crate::world::component(loader, entity, type_hash)) {
             // SAFETY: `HostApi::component` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.
@@ -29,11 +27,11 @@ pub(crate) extern "system" fn component(
 
 pub(crate) extern "system" fn entity_template(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     out: *mut [u8; 16],
 ) -> Status {
     entry("entity_template", || {
-        match caller(me).and_then(|loader| crate::world::template(loader, Entity(entity))) {
+        match caller(me).and_then(|loader| crate::world::template(loader, entity)) {
             // SAFETY: `HostApi::entity_template` has the mod pass `out` null or
             // pointing at a writable, aligned `[u8; 16]` that no other thread
             // touches during the call.
@@ -45,7 +43,7 @@ pub(crate) extern "system" fn entity_template(
 
 pub(crate) extern "system" fn player(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     out: *mut api_frame::PlayerInfo,
 ) -> Status {
     entry("player", || {
@@ -99,25 +97,25 @@ pub(crate) extern "system" fn server_world() -> u64 {
     entry("server_world", crate::world::server_world)
 }
 
-pub(crate) extern "system" fn chat(me: ModHandle, to: u64, message: Str) -> Status {
+pub(crate) extern "system" fn chat(me: ModHandle, to: enshwick::PlayerKey, message: Str) -> Status {
     entry("chat", || {
         let Some(message) = text(message) else {
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(_) => crate::chat::send(to, message),
+            Ok(_) => crate::chat::send(to.get(), message),
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn set_label(me: ModHandle, entity: u32, label: Str) -> Status {
+pub(crate) extern "system" fn set_label(me: ModHandle, entity: Entity, label: Str) -> Status {
     entry("set_label", || {
         let Some(label) = text(label) else {
             return Status::BAD_ARGS;
         };
         match caller(me) {
-            Ok(loader) => crate::label::set(loader, Entity(entity), label),
+            Ok(loader) => crate::label::set(loader, entity, label),
             Err(status) => status,
         }
     })
@@ -283,9 +281,9 @@ pub(crate) extern "system" fn entities(
     })
 }
 
-pub(crate) extern "system" fn destroy(me: ModHandle, entity: u32) -> Status {
+pub(crate) extern "system" fn destroy(me: ModHandle, entity: Entity) -> Status {
     entry("destroy", || {
-        match caller(me).and_then(|loader| crate::entities::destroy(loader, Entity(entity))) {
+        match caller(me).and_then(|loader| crate::entities::destroy(loader, entity)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }
@@ -344,13 +342,13 @@ pub(crate) extern "system" fn map_markers(
 
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
-    entity: u32,
+    entity: Entity,
     type_hash: u32,
     out: *mut *mut core::ffi::c_void,
 ) -> Status {
     entry("component_write", || {
         match caller_index(me).and_then(|(loader, index)| {
-            let data = crate::writes::component_mut(loader, entity, type_hash)?;
+            let data = crate::writes::component_mut(loader, entity.0, type_hash)?;
             crate::conflicts::note_write(type_hash, index);
             Ok(data)
         }) {
@@ -407,7 +405,7 @@ pub(crate) extern "system" fn teleport(
 pub(crate) extern "system" fn spawn(
     me: ModHandle,
     request: *const enshwick::abi::SpawnRequest,
-    out: *mut u32,
+    out: *mut Entity,
 ) -> Status {
     entry("spawn", || {
         // SAFETY: the caller passes null or a request with its header; an
@@ -419,21 +417,21 @@ pub(crate) extern "system" fn spawn(
         };
         match caller(me).and_then(|loader| crate::spawns::spawn(loader, &request)) {
             // SAFETY: `HostApi::spawn` has the mod pass `out` null or pointing
-            // at a writable, aligned `u32` that no other thread touches during
+            // at a writable, aligned `Entity` that no other thread touches during
             // the call.
-            Ok(entity) => unsafe { put(out, entity) },
+            Ok(entity) => unsafe { put(out, Entity(entity)) },
             Err(status) => status,
         }
     })
 }
 
-pub(crate) extern "system" fn notify(me: ModHandle, key: u64, text: Str) -> Status {
+pub(crate) extern "system" fn notify(me: ModHandle, key: enshwick::PlayerKey, text: Str) -> Status {
     entry("notify", || {
         // SAFETY: the text is borrowed for the call.
         let Some(text) = (unsafe { text.as_str() }) else {
             return Status::BAD_ARGS;
         };
-        match caller(me).and_then(|loader| crate::notices::send(loader, key, text)) {
+        match caller(me).and_then(|loader| crate::notices::send(loader, key.get(), text)) {
             Ok(()) => Status::OK,
             Err(status) => status,
         }

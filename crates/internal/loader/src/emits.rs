@@ -258,13 +258,13 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let teleport = layout.teleport.ok_or(Status::MISSING)?;
     let world = entity_world()?;
-    if request.entity == 0 {
+    if request.entity == Entity(0) {
         return Err(Status::BAD_ARGS);
     }
-    let current = crate::world::component(loader, Entity(request.entity), layout.transform)?;
+    let current = crate::world::component(loader, request.entity, layout.transform)?;
     // The game's teleport moves only what counts its teleports, actors and
     // characters; a prop would keep the component and stay.
-    if crate::world::component(loader, Entity(request.entity), layout.teleport_count).is_err() {
+    if crate::world::component(loader, request.entity, layout.teleport_count).is_err() {
         return Err(Status::REFUSED);
     }
     let orientation: [f32; 4] = if request.flags & TeleportRequest::ORIENTED == 0 {
@@ -312,7 +312,7 @@ pub(crate) fn teleport(loader: &Loader, request: &TeleportRequest) -> Result<(),
             core::ptr::with_exposed_provenance_mut(buffer + layout.records),
             SET_COMPONENT,
             size,
-            request.entity,
+            request.entity.0,
         )
     };
     if record.is_null() {

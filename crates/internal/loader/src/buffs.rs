@@ -405,7 +405,7 @@ pub(crate) fn of(loader: &Loader, entity: Entity) -> Result<Vec<ActiveBuff>, Sta
             // reflected `keen::ecs::BuffInstance` places its `u32` `typeId` at
             // `instance_type`.
             id: unsafe { read(slot, layout.instance_type) },
-            entity: buff,
+            entity: Entity(buff),
             slot: u32::from(kind),
             // SAFETY: `network` is the buff entity's live `BuffNetworkData`,
             // which `crate::world::component` found on the game thread; the
@@ -454,7 +454,7 @@ pub(crate) fn type_ids(loader: &Loader, entity: Entity) -> Vec<u32> {
 pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     let (server, _, game, now) = server(layout)?;
-    if request.entity == 0 || request.level > u32::from(u8::MAX) || request.duration < 0 {
+    if request.entity == Entity(0) || request.level > u32::from(u8::MAX) || request.duration < 0 {
         return Err(Status::BAD_ARGS);
     }
     let ty = find_type(layout, registry(layout, game)?, request.id).ok_or(Status::BAD_ARGS)?;
@@ -466,8 +466,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     } else {
         request.duration
     };
-    let container = crate::world::component(loader, Entity(request.entity), layout.container)?
-        .expose_provenance();
+    let container =
+        crate::world::component(loader, request.entity, layout.container)?.expose_provenance();
     for (slot, _) in slots(layout, container) {
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
         // `crate::world::component` found on the game thread; the reflected
@@ -494,8 +494,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
             return renew(loader, layout, buff, duration, now);
         }
     }
-    let container =
-        crate::writes::component_mut(loader, request.entity, layout.container)?.expose_provenance();
+    let container = crate::writes::component_mut(loader, request.entity.0, layout.container)?
+        .expose_provenance();
     let mut record = [0u8; RECORD];
     let mut put = |at: usize, bytes: &[u8]| {
         if let Some(out) = record.get_mut(at..at + bytes.len()) {
@@ -524,7 +524,7 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     unsafe {
         (layout.restore)(
             core::ptr::with_exposed_provenance_mut(container),
-            request.entity,
+            request.entity.0,
             record.as_ptr(),
             core::ptr::with_exposed_provenance_mut(server),
             core::ptr::with_exposed_provenance_mut(balancing),

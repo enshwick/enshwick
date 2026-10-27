@@ -1,12 +1,12 @@
 use core::ffi::c_void;
 
-use crate::Entity;
 use crate::abi::{Header, InventoryOp, InventoryRequest, ItemData};
 use crate::ecs::Components;
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
 use crate::world::{ComponentType, World};
+use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
 use super::ops::{Batch, Op};
@@ -149,7 +149,7 @@ impl Inventories {
     /// ```
     /// unsafe fn held(inventories: &enshwick::inventory::Inventories, ctx: *mut u64, player: enshwick::Entity) -> u32 {
     ///     // SAFETY: called from a system's hook with its live context, used at once.
-    ///     unsafe { inventories.read_in(ctx) }.count(player, 0x0c01)
+    ///     unsafe { inventories.read_in(ctx) }.count(player, enshwick::ItemId::new(0x0c01))
     /// }
     /// ```
     #[must_use]
@@ -168,10 +168,10 @@ impl Inventories {
     /// See [`ItemInfo`].
     #[must_use]
     #[script]
-    pub fn item_info(&self, item: u32) -> Option<ItemInfo> {
+    pub fn item_info(&self, item: ItemId) -> Option<ItemInfo> {
         let mut out = ItemData {
             header: Header::of::<ItemData>(),
-            id: 0,
+            id: ItemId::new(0),
             max_stack: 0,
             category: 0,
             rarity: 0,
@@ -200,8 +200,8 @@ impl Inventories {
     ///
     /// fn trade(inventories: &Inventories, player: Entity) {
     ///     let batch = Batch::new()
-    ///         .with(Op::Take { from: player, item: 0x0c01, count: 5 })
-    ///         .with(Op::Give { to: player, item: 0x5e01, count: 1, fill: None });
+    ///         .with(Op::Take { from: player, item: enshwick::ItemId::new(0x0c01), count: 5 })
+    ///         .with(Op::Give { to: player, item: enshwick::ItemId::new(0x5e01), count: 1, fill: None });
     ///     let _ticket = inventories.submit(&batch, |outcome| {
     ///         enshwick::info!("trade: {:?}", outcome.done);
     ///     });
@@ -222,7 +222,7 @@ impl Inventories {
         let request = InventoryRequest {
             header: Header::of::<InventoryRequest>(),
             flags: batch.request_flags(),
-            actor: batch.actor_entity().0,
+            actor: batch.actor_entity(),
             ops: ops.as_ptr(),
             op_count: u32::try_from(ops.len()).unwrap_or(0),
             reserved: 0,
@@ -249,7 +249,7 @@ impl Inventories {
     /// # Examples
     ///
     /// ```
-    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Option<u32> {
+    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> Option<enshwick::ItemId> {
     ///     inventories.slots(player).into_iter().find(|s| !s.is_empty()).map(|s| s.item)
     /// }
     /// ```
@@ -266,12 +266,12 @@ impl Inventories {
     ///
     /// ```
     /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) -> u32 {
-    ///     inventories.count(player, 0x0c01)
+    ///     inventories.count(player, enshwick::ItemId::new(0x0c01))
     /// }
     /// ```
     #[must_use]
     #[script]
-    pub fn count(&self, root: Entity, item: u32) -> u32 {
+    pub fn count(&self, root: Entity, item: ItemId) -> u32 {
         self.read().count(root, item)
     }
 
@@ -288,7 +288,7 @@ impl Inventories {
     ///
     /// ```
     /// fn reward(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
-    ///     inventories.give(player, 0x0c01, 10, |outcome| {
+    ///     inventories.give(player, enshwick::ItemId::new(0x0c01), 10, |outcome| {
     ///         if !outcome.is_committed() {
     ///             enshwick::warn!("no room for the reward");
     ///         }
@@ -299,7 +299,7 @@ impl Inventories {
     pub fn give(
         &self,
         to: Entity,
-        item: u32,
+        item: ItemId,
         count: u32,
         done: impl FnOnce(&Outcome) + Send + 'static,
     ) -> Ticket {
@@ -320,14 +320,14 @@ impl Inventories {
     ///
     /// ```
     /// fn charge(inventories: &enshwick::inventory::Inventories, player: enshwick::Entity) {
-    ///     inventories.take(player, 0x0c01, 5, |outcome| enshwick::info!("paid: {}", outcome.is_committed()));
+    ///     inventories.take(player, enshwick::ItemId::new(0x0c01), 5, |outcome| enshwick::info!("paid: {}", outcome.is_committed()));
     /// }
     /// ```
     #[script]
     pub fn take(
         &self,
         from: Entity,
-        item: u32,
+        item: ItemId,
         count: u32,
         done: impl FnOnce(&Outcome) + Send + 'static,
     ) -> Ticket {
@@ -410,10 +410,10 @@ impl Inventories {
     /// use enshwick::inventory::Fill;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     const STAFF: u32 = 0x5e01;
+    ///     const STAFF: enshwick::ItemId = enshwick::ItemId::new(0x5e01);
     ///     let inventories = load.inventories()?;
     ///     load.on::<PlayerJoined>(move |joined| {
-    ///         let player = enshwick::Entity(joined.entity);
+    ///         let player = joined.entity;
     ///         let _renewed = inventories.renew(player, &[STAFF], Fill::FULL, |_| {});
     ///     })
     /// }
@@ -421,7 +421,7 @@ impl Inventories {
     pub fn renew(
         &self,
         root: Entity,
-        items: &[u32],
+        items: &[ItemId],
         fill: Fill,
         done: impl FnOnce(&Outcome) + Send + 'static,
     ) -> Option<Ticket> {
@@ -608,7 +608,7 @@ impl Reader<'_> {
     ///
     /// See [`Inventories::read_in`].
     #[must_use]
-    pub fn count(&self, root: Entity, item: u32) -> u32 {
+    pub fn count(&self, root: Entity, item: ItemId) -> u32 {
         self.slots(root)
             .iter()
             .filter(|s| s.item == item && !s.is_empty())

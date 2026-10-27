@@ -151,7 +151,10 @@ fn a_drop_s_meter_follows_its_items() {
     let good = files(&items).with(LOOT_FILE, "[[drop]]\nitems = [\"staff\"]\nchance = 0.5\nfrom = [\"corpses\", \"chests\"]\nmeter = [1, 3]\n");
     let pack = Pack::parse("staffs", &good).unwrap();
     let drop = &pack.drops()[0];
-    assert_eq!(drop.items, [Guid::named("staffs:staff").id()]);
+    assert_eq!(
+        drop.items,
+        [crate::ItemId::new(Guid::named("staffs:staff").id())]
+    );
     assert_eq!(drop.from.kinds, Kinds::CONTAINERS);
     assert_eq!(drop.meter.map(|m| m.of), Some(3));
     let bad = files(&items).with(

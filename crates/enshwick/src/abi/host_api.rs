@@ -19,6 +19,7 @@ use crate::abi::{
     TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
     UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
+use crate::abi::{Entity, ItemId, PlayerKey, RecipeId};
 
 /// The table of services the loader offers a mod.
 ///
@@ -101,17 +102,17 @@ pub struct HostApi {
     /// set-up data the entity's template holds.
     pub component: extern "system" fn(
         me: ModHandle,
-        entity: u32,
+        entity: Entity,
         type_hash: u32,
         out: *mut *const c_void,
     ) -> Status,
     /// The template GUID of `entity`, in file order; on the server's game
     /// thread only.
     pub entity_template:
-        extern "system" fn(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status,
+        extern "system" fn(me: ModHandle, entity: Entity, out: *mut [u8; 16]) -> Status,
     /// The connected player whose character is `entity`; on the server's game
     /// thread only.
-    pub player: extern "system" fn(me: ModHandle, entity: u32, out: *mut PlayerInfo) -> Status,
+    pub player: extern "system" fn(me: ModHandle, entity: Entity, out: *mut PlayerInfo) -> Status,
     /// Up to `capacity` connected players with characters in the world, and
     /// how many there are; on the server's game thread only.
     /// Every entry is as large as the header of the first one says.
@@ -184,11 +185,11 @@ pub struct HostApi {
     /// Sends `text` to the chat of the player whose account key is `to`, or of
     /// everyone for 0, from any thread; the server posts it after the next
     /// step. Lines past 1024 bytes are cut.
-    pub chat: extern "system" fn(me: ModHandle, to: u64, text: Str) -> Status,
+    pub chat: extern "system" fn(me: ModHandle, to: PlayerKey, text: Str) -> Status,
     /// Gives `entity` the name `text`, as a player's rename does: shown on
     /// hover, sent to every client and saved with the world; cut at 255
     /// bytes, removed when empty. On the server's game thread only.
-    pub set_label: extern "system" fn(me: ModHandle, entity: u32, text: Str) -> Status,
+    pub set_label: extern "system" fn(me: ModHandle, entity: Entity, text: Str) -> Status,
     /// Calls `callback` with `user` before the server applies a player's
     /// rename of an entity; any filter returning 0 refuses it. Allowed during
     /// `enshwick_mod_init` only.
@@ -222,7 +223,7 @@ pub struct HostApi {
     /// `out` starts with says the caller's struct reaches;
     /// [`Status::MISSING`] for an unknown item, or while no world runs.
     /// Any thread.
-    pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
+    pub item_info: extern "system" fn(me: ModHandle, item: ItemId, out: *mut ItemData) -> Status,
     /// Queues `request`, from any thread, for the game's inventory system,
     /// which runs it as one transaction: all or nothing. `done` gets the
     /// result with `user` on the game thread after a later step, unless the
@@ -291,7 +292,7 @@ pub struct HostApi {
     /// Files item `item` as a summoning staff of the survivor `survivor`, so
     /// the game treats it as that survivor's staff, on both sides. Allowed
     /// during `enshwick_mod_init` only.
-    pub summon_item: extern "system" fn(me: ModHandle, item: u32, survivor: u32) -> Status,
+    pub summon_item: extern "system" fn(me: ModHandle, item: ItemId, survivor: u32) -> Status,
     /// Makes `callback` with `user` merge the statuses the client's survivor
     /// menu shows for a survivor with several entities. Client only; one mod
     /// at a time. Allowed during `enshwick_mod_init` only.
@@ -359,7 +360,7 @@ pub struct HostApi {
     /// step; [`Status::REFUSED`] for a player's character,
     /// [`Status::MISSING`] for an entity not in the world. On the server's
     /// game thread only.
-    pub destroy: extern "system" fn(me: ModHandle, entity: u32) -> Status,
+    pub destroy: extern "system" fn(me: ModHandle, entity: Entity) -> Status,
     /// Asks the server to save the world now, as its timed saves do;
     /// [`Event::WORLD_SAVED`] follows once the save is on disk. A save under
     /// way counts as asked; [`Status::REFUSED`] while the world may not be
@@ -381,7 +382,7 @@ pub struct HostApi {
     /// server's game thread only.
     pub component_write: extern "system" fn(
         me: ModHandle,
-        entity: u32,
+        entity: Entity,
         type_hash: u32,
         out: *mut *mut c_void,
     ) -> Status,
@@ -406,7 +407,7 @@ pub struct HostApi {
     /// template; a template the game does not know spawns nothing. On the
     /// server's game thread only.
     pub spawn:
-        extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut u32) -> Status,
+        extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut Entity) -> Status,
     /// Calls `callback` with `user` on each player's craft request in the
     /// server's world, on the game thread before the crafting system reads
     /// it; any filter returning 0 refuses it, and nothing is made or taken.
@@ -442,20 +443,20 @@ pub struct HostApi {
     pub net_send: extern "system" fn(
         me: ModHandle,
         channel: u32,
-        peer: u64,
+        peer: PlayerKey,
         data: *const u8,
         size: u32,
     ) -> Status,
     /// [`Status::OK`] when `peer` takes messages: a player's client that
     /// runs Enshwick, on the server; the server, for [`NetMessage::SERVER`](super::NetMessage::SERVER)
     /// on a client. [`Status::MISSING`] otherwise. Any thread.
-    pub net_ready: extern "system" fn(me: ModHandle, peer: u64) -> Status,
+    pub net_ready: extern "system" fn(me: ModHandle, peer: PlayerKey) -> Status,
     /// Shows `text`, cut at 255 bytes, on the screen of the player with
     /// account key `key`, as the game shows its own "can't do that"
     /// messages; [`Status::MISSING`] when the player's client lacks
     /// Enshwick and cannot show it, and nothing is sent. On the server's
     /// game thread only.
-    pub notify: extern "system" fn(me: ModHandle, key: u64, text: Str) -> Status,
+    pub notify: extern "system" fn(me: ModHandle, key: PlayerKey, text: Str) -> Status,
     /// Writes the clock of the server's world, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches. On the server's
     /// game thread only.
@@ -509,7 +510,7 @@ pub struct HostApi {
     /// Every entry is as large as the header of the first one says.
     pub buffs: extern "system" fn(
         me: ModHandle,
-        entity: u32,
+        entity: Entity,
         out: *mut ActiveBuff,
         capacity: u32,
         count: *mut u32,
@@ -526,14 +527,18 @@ pub struct HostApi {
     /// had it, else 0; [`Status::MISSING`] for an entity that holds no
     /// buffs. On the server's game thread only.
     pub remove_buff:
-        extern "system" fn(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status,
+        extern "system" fn(me: ModHandle, entity: Entity, id: u32, removed: *mut u8) -> Status,
     /// Writes knowledge `id` of the player whose character is `entity`, or
     /// of the world for 0 or for an id of the world's;
     /// [`Status::MISSING`] for an id the game does not know,
     /// [`Status::REFUSED`] for a player not in the game. On the server's
     /// game thread only.
-    pub knowledge:
-        extern "system" fn(me: ModHandle, entity: u32, id: u32, out: *mut KnowledgeInfo) -> Status,
+    pub knowledge: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: u32,
+        out: *mut KnowledgeInfo,
+    ) -> Status,
     /// Grants knowledge `id`, of `kind`, to the player whose character is
     /// `entity`, or to the world for 0, as the game grants it: the next
     /// step applies it with what follows (experience, unlocks, clients,
@@ -544,7 +549,7 @@ pub struct HostApi {
     /// [`Status::REFUSED`] for a player not in the
     /// game or a full queue. On the server's game thread only.
     pub grant_knowledge:
-        extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
+        extern "system" fn(me: ModHandle, entity: Entity, id: u32, kind: u32, value: u32) -> Status,
     /// Up to `capacity` quest ids of the running game, and how many there
     /// are. On the server's game thread only.
     pub quests:
@@ -616,8 +621,8 @@ pub struct HostApi {
     pub item_data_get: extern "system" fn(
         me: ModHandle,
         kind: u32,
-        pide: u32,
-        item: u32,
+        pide: Entity,
+        item: ItemId,
         out: *mut u8,
         capacity: u32,
         len: *mut u32,
@@ -630,8 +635,8 @@ pub struct HostApi {
     pub item_data_set: extern "system" fn(
         me: ModHandle,
         kind: u32,
-        pide: u32,
-        item: u32,
+        pide: Entity,
+        item: ItemId,
         data: *const u8,
         len: u32,
     ) -> Status,
@@ -733,7 +738,7 @@ pub struct HostApi {
     /// each step a source changed; a client answers defaults. Any thread,
     /// without locks.
     pub stat_value:
-        extern "system" fn(me: ModHandle, entity: u32, stat: u32, out: *mut f32) -> Status,
+        extern "system" fn(me: ModHandle, entity: Entity, stat: u32, out: *mut f32) -> Status,
     /// Sets or removes a modifier the mod keeps on an entity; the value
     /// follows after the next step. [`Status::REFUSED`] on a client alone,
     /// or for a saved modifier on an entity that is no player. Any thread.
@@ -757,7 +762,7 @@ pub struct HostApi {
     /// `count`; every stat for `u32::MAX`. Any thread.
     pub stat_sources: extern "system" fn(
         me: ModHandle,
-        entity: u32,
+        entity: Entity,
         stat: u32,
         out: *mut StatSource,
         capacity: u32,
@@ -766,7 +771,7 @@ pub struct HostApi {
     /// Watches `entity` for the items it wears and the buffs it has, or
     /// stops for `watch` 0: players are always watched, and so is every
     /// entity a mod keeps a modifier on. Any thread.
-    pub stat_watch: extern "system" fn(me: ModHandle, entity: u32, watch: u8) -> Status,
+    pub stat_watch: extern "system" fn(me: ModHandle, entity: Entity, watch: u8) -> Status,
     /// Defines the mod event `spec` describes, named `<id>:<name>` after
     /// the defining mod, and writes the id [`HostApi::send_event`] takes;
     /// [`Status::REFUSED`] for a name outside the mod's id or defined
@@ -807,8 +812,8 @@ pub struct HostApi {
     /// client, from what the server sent. Any thread.
     pub item_lines: extern "system" fn(
         me: ModHandle,
-        pide: u32,
-        item: u32,
+        pide: Entity,
+        item: ItemId,
         out: *mut ItemLine,
         capacity: u32,
         count: *mut u32,
@@ -884,7 +889,7 @@ pub struct HostApi {
     /// a bit past 31, [`Status::REFUSED`] for a player not in the game or
     /// whose save has not loaded yet. On the server's game thread only.
     pub revoke_knowledge:
-        extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
+        extern "system" fn(me: ModHandle, entity: Entity, id: u32, kind: u32, value: u32) -> Status,
     /// Grants knowledge `id` of a player's, as [`HostApi::grant_knowledge`]
     /// does, or takes it back as [`HostApi::revoke_knowledge`] does when
     /// `revoke` is 1, for the account whose [`PlayerInfo::key`] is `key`:
@@ -895,7 +900,7 @@ pub struct HostApi {
     /// runs. On the server's game thread only.
     pub account_knowledge: extern "system" fn(
         me: ModHandle,
-        key: u64,
+        key: PlayerKey,
         id: u32,
         kind: u32,
         value: u32,
@@ -946,7 +951,8 @@ pub struct HostApi {
     /// Writes 1 to `out` when the recipe with game id `recipe` is disabled
     /// in this process now, else 0: on a client joined to a server, by the
     /// server's rules. Any thread.
-    pub recipe_disabled: extern "system" fn(me: ModHandle, recipe: u32, out: *mut u32) -> Status,
+    pub recipe_disabled:
+        extern "system" fn(me: ModHandle, recipe: RecipeId, out: *mut u32) -> Status,
     /// Defines the extension point `spec` describes, named
     /// `<id>:<point>` after the defining mod, and writes its id and the
     /// count of its live links to `out`; [`Status::REFUSED`] for a name
@@ -1003,7 +1009,8 @@ pub struct HostApi {
     /// not loaded the item, which on a dedicated server comes after its
     /// recipe registry is first built, and while the loader serves no
     /// resource. Any thread.
-    pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
+    pub recipe_kind:
+        extern "system" fn(me: ModHandle, item: ItemId, out: *mut RecipeKind) -> Status,
     /// Reports whether the mod's feature `name` runs on this game build:
     /// off for the reason `off`, or on when `off` is empty. The loader
     /// logs it and shows it in the status summary and on the Mods screen; a
@@ -1229,7 +1236,7 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for an `actor` of 0. Any thread.
     pub transaction_commit_for: extern "system" fn(
         me: ModHandle,
-        actor: u32,
+        actor: Entity,
         ops: *const TransactionOp,
         count: u32,
         id: *mut u64,
@@ -1307,7 +1314,7 @@ pub struct HostApi {
     pub transaction_entities: extern "system" fn(
         me: ModHandle,
         id: u64,
-        out: *mut u32,
+        out: *mut Entity,
         capacity: u32,
         count: *mut u32,
     ) -> Status,

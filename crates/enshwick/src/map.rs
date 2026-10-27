@@ -201,7 +201,7 @@ impl Map {
     fn live(self, entity: Entity, ty: ComponentType) -> Result<Option<*const u8>, WorldError> {
         let host = self.0.host;
         let mut out: *const core::ffi::c_void = core::ptr::null();
-        let status = (host.api().component)(host.handle(), entity.0, ty.hash(), &raw mut out);
+        let status = (host.api().component)(host.handle(), entity, ty.hash(), &raw mut out);
         match status {
             Status::MISSING => Ok(None),
             status => WorldError::from_status(status)
