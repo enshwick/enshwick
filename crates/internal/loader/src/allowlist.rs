@@ -9,7 +9,7 @@ use crate::console::accounts;
 #[cfg(windows)]
 mod runtime;
 #[cfg(windows)]
-pub(crate) use runtime::{command, configure, has, refuses, set, start};
+pub(crate) use runtime::{command, configure, guarded, has, refuses, set, start};
 
 /// The file under the loader's data folder.
 pub const FILE: &str = "allowlist.txt";
@@ -21,6 +21,17 @@ pub const HEADER: &str = "\
 # is a note, such as the player's name. Administrators always may join.
 ";
 
+/// The account word of a file line: before any `#`, without blanks or the
+/// byte-order mark an editor may put first.
+fn word(line: &str) -> &str {
+    line.split('#')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .trim_start_matches('\u{feff}')
+        .trim()
+}
+
 /// The accounts `text` lists, in file order, each once; lines that spell no
 /// account are left out and returned apart, numbered from 1.
 #[must_use]
@@ -28,7 +39,7 @@ pub fn parse(text: &str) -> (Vec<u64>, Vec<usize>) {
     let mut listed = Vec::new();
     let mut bad = Vec::new();
     for (i, line) in text.lines().enumerate() {
-        let word = line.split('#').next().unwrap_or("").trim();
+        let word = word(line);
         if word.is_empty() {
             continue;
         }
@@ -71,7 +82,7 @@ pub fn remove(text: &str, key: u64) -> Option<String> {
     let mut found = false;
     let mut out = String::with_capacity(text.len());
     for line in text.lines() {
-        let word = line.split('#').next().unwrap_or("").trim();
+        let word = word(line);
         if accounts::account(word) == Some(key) {
             found = true;
             continue;
@@ -82,11 +93,44 @@ pub fn remove(text: &str, key: u64) -> Option<String> {
     found.then_some(out)
 }
 
-/// Whether the player `key` may stay: always with the allowlist off, and
-/// for an administrator or a listed account with it on.
+/// Who is asking at a join, for [`refused`].
+#[derive(Clone, Copy, Debug)]
+pub struct Joining<'a> {
+    /// The `allowlist` setting.
+    pub on: bool,
+    /// Whether this is a dedicated server; a game a client hosts keeps its
+    /// own invitations.
+    pub server: bool,
+    /// The joining player's account; 0 when the game gave none.
+    pub key: u64,
+    /// A hosted game's host, when known.
+    pub host: Option<u64>,
+    /// Whether the player may kick and ban, the game's administrators.
+    pub admin: bool,
+    /// The accounts the file lists, `None` when it never read.
+    pub listed: Option<&'a [u64]>,
+}
+
+/// Whether the joining player must leave. A player without an account and
+/// a list that never read are refused, so a broken file or a missing key
+/// never opens the server.
 #[must_use]
-pub fn admits(on: bool, listed: &[u64], key: u64, admin: bool) -> bool {
-    !on || admin || listed.contains(&key)
+pub fn refused(joining: Joining<'_>) -> bool {
+    let Joining {
+        on,
+        server,
+        key,
+        host,
+        admin,
+        listed,
+    } = joining;
+    if !on || !server || (key != 0 && host == Some(key)) {
+        return false;
+    }
+    if key == 0 {
+        return true;
+    }
+    !admin && listed.is_none_or(|listed| !listed.contains(&key))
 }
 
 #[cfg(test)]
@@ -123,12 +167,67 @@ mod tests {
         assert_eq!(remove(text, 0x99), None);
     }
 
+    fn joining(key: u64) -> Joining<'static> {
+        Joining {
+            on: true,
+            server: true,
+            key,
+            host: None,
+            admin: false,
+            listed: Some(&[7]),
+        }
+    }
+
     #[test]
-    fn with_the_allowlist_on_only_listed_accounts_and_administrators_stay() {
-        assert!(admits(false, &[], 7, false));
-        assert!(admits(true, &[7], 7, false));
-        assert!(admits(true, &[], 7, true));
-        assert!(!admits(true, &[8], 7, false));
+    fn a_join_is_refused_only_on_a_server_with_the_allowlist_on() {
+        assert!(refused(joining(8)));
+        assert!(!refused(joining(7)));
+        assert!(!refused(Joining {
+            on: false,
+            ..joining(8)
+        }));
+        assert!(!refused(Joining {
+            server: false,
+            ..joining(8)
+        }));
+    }
+
+    #[test]
+    fn administrators_and_the_host_stay_unlisted() {
+        assert!(!refused(Joining {
+            admin: true,
+            ..joining(8)
+        }));
+        assert!(!refused(Joining {
+            host: Some(8),
+            ..joining(8)
+        }));
+    }
+
+    #[test]
+    fn a_player_without_an_account_or_a_list_that_never_read_is_refused() {
+        assert!(refused(joining(0)));
+        assert!(refused(Joining {
+            admin: true,
+            host: Some(0),
+            ..joining(0)
+        }));
+        assert!(refused(Joining {
+            listed: None,
+            ..joining(7)
+        }));
+        assert!(!refused(Joining {
+            listed: None,
+            admin: true,
+            ..joining(7)
+        }));
+    }
+
+    #[test]
+    fn a_byte_order_mark_does_not_hide_the_first_account() {
+        let text = "\u{feff}0x2a # Ann\n0x2b\n";
+        assert_eq!(parse(text), (vec![0x2a, 0x2b], Vec::new()));
+        assert_eq!(remove(text, 0x2a).unwrap(), "0x2b\n");
     }
 
     proptest! {

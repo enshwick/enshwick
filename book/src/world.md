@@ -278,7 +278,8 @@ Call it on the server's game thread between steps.
 
 With `allowlist = true` in `mod-configs/enshwick.toml`, a dedicated server
 lets in only the accounts its allowlist lists, and its administrators; the
-loader removes any other player as the player enters the world. The game has
+loader removes any other player as the player enters the world, and a player
+the game gives no account. The game has
 no such list, so the loader keeps it in `mod-data/enshwick/allowlist.txt`,
 one account per line, with `#` notes.
 

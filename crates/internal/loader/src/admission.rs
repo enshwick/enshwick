@@ -398,7 +398,9 @@ fn machine_to_kick(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{after_step, configure, forget, hello, joined, left, nonce, start};
+pub(crate) use runtime::{
+    after_step, can_kick, configure, forget, hello, joined, left, nonce, start,
+};
 
 #[cfg(windows)]
 mod runtime;

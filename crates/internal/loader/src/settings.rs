@@ -75,8 +75,9 @@ pub struct Settings {
     /// read it. Read at start.
     pub join_note_seconds: u32,
     /// On a dedicated server, let only the accounts in
-    /// mod-data/enshwick/allowlist.txt, and administrators, stay in the game; the console's enshwick allowlist add and remove
-    /// change the file, and changes apply at the next join. Read at start.
+    /// mod-data/enshwick/allowlist.txt, and administrators, stay in the
+    /// game; the console's enshwick allowlist add and remove change the
+    /// file, and changes apply at the next join. Read at start.
     pub allowlist: bool,
 }
 

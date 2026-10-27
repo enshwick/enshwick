@@ -18,7 +18,7 @@ Each entry names the pull request that made the change.
   administrators; the console's `enshwick allowlist add|remove` and
   `World::set_allowlisted` change the list, `World::allowlisted` reads it
   (`HostApi::allowlist_set`, `HostApi::allowlist_has`, ABI minor 99). The
-  fake keeps the list (`Installed::allowlisted`).
+  fake keeps the list (`Installed::allowlisted`) (#602).
 - `error_once!` and `info_every!`, so every level that has a once or a
   periodic macro has both (#597).
 

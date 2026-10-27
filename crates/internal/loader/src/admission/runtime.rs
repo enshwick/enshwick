@@ -190,12 +190,7 @@ pub(crate) fn joined(key: u64) {
     {
         return;
     }
-    if key != 0
-        && STATE
-            .fuse
-            .run("the allowlist's check", || refuse_unlisted(key))
-            .unwrap_or(false)
-    {
+    if crate::allowlist::guarded(|| refuse_unlisted(key)).unwrap_or(false) {
         return;
     }
     let Some(serving) = STATE.serving.get() else {
@@ -223,29 +218,26 @@ pub(crate) fn joined(key: u64) {
 }
 
 /// Removes the player `key` from a dedicated server whose allowlist is on
-/// and lists neither the account nor an administrator; a game a client
-/// hosts keeps its own invitations. A player whose slot does not read
-/// counts as no administrator. Whether the player was removed.
+/// and lists neither the account nor an administrator, as
+/// `allowlist::refused` decides; a player without an account goes too. A
+/// player whose slot does not read counts as no administrator. Whether the
+/// player was removed.
 fn refuse_unlisted(key: u64) -> bool {
-    let Some(loader) = crate::host::loader().filter(|loader| loader.side == Side::SERVER) else {
+    let Some(loader) = crate::host::loader() else {
         return false;
     };
     let host = STATE
         .serving
         .get()
         .and_then(|serving| with_gate(serving, |gate| gate.host));
-    if host == Some(key) {
-        return false;
-    }
     let admin = crate::world::players(loader).is_ok_and(|players| {
         players
             .iter()
             .any(|p| p.key == key && crate::console::player_is_admin(p))
     });
-    if !crate::allowlist::refuses(loader, key, admin) {
+    if !crate::allowlist::refuses(loader, key, host, admin) {
         return false;
     }
-    crate::chat::send(key, &crate::texts::fill("allowlist.refused", &[]));
     let Some(kick) = STATE.kick.get().and_then(Option::as_ref) else {
         crate::log!(
             WARN,
@@ -253,6 +245,9 @@ fn refuse_unlisted(key: u64) -> bool {
         );
         return false;
     };
+    if key != 0 {
+        crate::chat::send(key, &crate::texts::fill("allowlist.refused", &[]));
+    }
     match disconnect(loader, kick, key, host, false) {
         Ok(machine) => {
             crate::log!(
@@ -269,6 +264,11 @@ fn refuse_unlisted(key: u64) -> bool {
             false
         }
     }
+}
+
+/// Whether this build can remove a player, once [`start`] looked.
+pub(crate) fn can_kick() -> bool {
+    STATE.kick.get().is_some_and(Option::is_some)
 }
 
 /// Removes and bans the player `key`, whose account went onto the ban list
