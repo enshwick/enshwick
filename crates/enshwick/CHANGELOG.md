@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Hold::for_world` holds the game for one world only
+  (`mod-data/<id>/worlds/<key>/hold.txt`): the loader stops the game as
+  that world starts to load without the mod, before its save is read, and
+  on a build it leaves vanilla at start; `world_holds`, `held_worlds` and
+  `WORLDS_DIR` read them. A data pack that raised a stack size now holds
+  the worlds saved with it, not the whole data folder (#PR).
 - `Map::snapshot` takes the map as a `MapSnapshot` of players, Flame Altars
   with their bases, and markers, plain data for a process outside the game;
   `MapSnapshot::to_bytes` and `from_bytes` write and read it in a versioned
