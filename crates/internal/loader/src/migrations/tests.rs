@@ -520,3 +520,22 @@ fn a_migration_never_leaves_a_settings_file_that_does_not_read_back() {
         "a file deeper than the reader takes is refused"
     );
 }
+
+#[test]
+fn a_removed_setting_goes_from_an_inline_table_too() {
+    let m = migration(
+        "2",
+        vec![
+            step(MigrationStep::REMOVE_SETTING, "old.legacy", ""),
+            step(MigrationStep::REMOVE_SETTING, "old.inner.gone", ""),
+        ],
+    );
+    let text = "old = { radius = 3, legacy = true, inner = { gone = 1, kept = 2 } }\n";
+    let new = apply_settings(text, 0, &m, &double, &none).unwrap();
+    let table: toml::Table = new.parse().unwrap();
+    let at = |key| enshwick::config::value_at(&table, key).map(ToString::to_string);
+    assert_eq!(at("old.legacy"), None, "{new}");
+    assert_eq!(at("old.inner.gone"), None, "{new}");
+    assert_eq!(at("old.radius").as_deref(), Some("3"), "{new}");
+    assert_eq!(at("old.inner.kept").as_deref(), Some("2"), "{new}");
+}
