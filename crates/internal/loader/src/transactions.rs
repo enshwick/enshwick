@@ -30,7 +30,7 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 #[cfg(windows)]
-pub(crate) use game::{resolve, resolve_prop};
+pub(crate) use game::{resolve, resolve_prop, saving};
 #[cfg(any(windows, test))]
 pub(crate) use ledger::Change;
 use ledger::{Ledger, Limits};
@@ -76,6 +76,8 @@ struct Transactions {
     ledger: Mutex<Ledger>,
     /// Off after a pass panicked: no more passes, commits or undos.
     fuse: Fuse,
+    /// The props its removals and undos keep players from.
+    holds: crate::prop_holds::PropHolds,
 }
 
 impl Transactions {
@@ -84,11 +86,17 @@ impl Transactions {
             busy: AtomicBool::new(false),
             ledger: Mutex::new(Ledger::new(LIMITS)),
             fuse: Fuse::new("world transactions"),
+            holds: crate::prop_holds::PropHolds::new(),
         }
     }
 }
 
 static STATE: Transactions = Transactions::new();
+
+/// The props the running world's transactions keep players from.
+pub(crate) fn holds() -> &'static crate::prop_holds::PropHolds {
+    &STATE.holds
+}
 
 /// Runs a step's `work` behind the feature's fuse. A panic turns the
 /// feature off and settles every transaction held, since its work in hand
@@ -100,6 +108,11 @@ fn guarded(state: &Transactions, work: impl FnOnce()) {
             ledger.forget();
         }
         state.busy.store(false, Ordering::Release);
+        let deposits = state.holds.release_all();
+        #[cfg(windows)]
+        game::restore_deposits(&deposits);
+        #[cfg(not(windows))]
+        drop(deposits);
     }
 }
 
@@ -211,6 +224,7 @@ pub(crate) fn forget() {
     let mut ledger = STATE.ledger.relock();
     ledger.forget();
     STATE.busy.store(false, Ordering::Release);
+    STATE.holds.forget();
 }
 
 #[cfg(test)]
@@ -258,5 +272,16 @@ mod tests {
         let mut ran = false;
         guarded(&state, || ran = true);
         assert!(!ran, "a turned-off feature runs no more passes");
+    }
+
+    #[test]
+    fn a_pass_that_panics_lets_every_held_prop_go() {
+        let state = Transactions::new();
+        state.holds.linked(0, true);
+        state.holds.hold(40, false).unwrap();
+        state.holds.note_deposit(40, 1);
+        guarded(&state, || panic!("in a pass"));
+        assert!(!state.holds.is_held(40));
+        assert!(state.holds.quiet(), "players reach it again");
     }
 }

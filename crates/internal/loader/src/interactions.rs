@@ -5,8 +5,7 @@
 
 use core::ffi::c_void;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{Header, HookFlags, Interaction, InteractionFn, Side, Status};
@@ -15,7 +14,6 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
 use crate::host::{Loader, Registered};
-use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
@@ -82,17 +80,6 @@ static FILTERS: Registry<Filter> = Registry::new();
 static LOADED: OnceLock<(&'static Loader, Layout, Components)> = OnceLock::new();
 /// The players' character entities, read on the game thread now and then.
 static PLAYERS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
-/// The props transactions hold against players before destroying them,
-/// each with the step by which its destroy has landed, `None` while it
-/// is only held.
-static HELD: Mutex<Vec<(u32, Option<u64>)>> = Mutex::new(Vec::new());
-/// The entities in [`HELD`], for the filter's lock-free check.
-static HELD_IDS: ArcSwapOption<Vec<u32>> = ArcSwapOption::const_empty();
-/// The last step the loader saw.
-static STEP: AtomicU64 = AtomicU64::new(0);
-/// Steps after its request by which a destroy has landed: the request
-/// plays back at the end of the next step.
-const DESTROY_STEPS: u64 = 2;
 
 // SAFETY: `OfferFn` is the signature of the build table's
 // `access.offer_test`, and `link` uses this slot only as that function's
@@ -189,12 +176,10 @@ pub(crate) fn register(
 
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
-    // The server links the filter for the props transactions hold too.
-    let wanted = !filters.is_empty() || loader.side == Side::SERVER;
-    if !wanted {
-        return;
-    }
+    // Linked on every side, as any can host a world whose transactions hold
+    // props; the detours act only in a server's world.
     let (Some(layout), Some(components)) = (layout(loader), Components::resolve(loader)) else {
+        crate::transactions::holds().linked(filters.len(), false);
         return;
     };
     let _first = LOADED.set((loader, layout, components));
@@ -210,104 +195,63 @@ pub(crate) fn link(loader: &'static Loader) {
         HookFlags::CALLER_FRAME
     };
     let none = HookFlags::NONE;
-    loader.link_feature(
+    let offers = loader.link_feature(
         "interaction offers",
         at("offer_test"),
         &OFFER_NEXT,
         offer,
         none,
     );
-    loader.link_feature(
+    let transfers = loader.link_feature(
         "transfers",
         at("transfer"),
         &TRANSFER_NEXT,
         transfer as ActionFn,
         none,
     );
-    loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
-    loader.link_feature(
+    let sorting = loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
+    let _stock = loader.link_feature(
         "base stock",
         at("base_stock"),
         &STOCK_NEXT,
         stock,
         stock_flags,
     );
-    loader.link_feature(
+    let dismantling = loader.link_feature(
         "dismantling",
         at("dismantle_method"),
         &DISMANTLE_NEXT,
         dismantle,
         none,
     );
-    loader.link_feature(
+    let actions = loader.link_feature(
         "inventory actions",
         actions,
         &ACTIONS_NEXT,
         inventory_actions,
         none,
     );
+    let hold_ready = offers && transfers && sorting && dismantling && actions;
+    if !hold_ready {
+        crate::log!(
+            WARN,
+            "prop removal by transactions off: a hook that keeps players from a prop did not link"
+        );
+    }
+    crate::transactions::holds().linked(filters.len(), hold_ready);
     crate::log!(INFO, "interaction filters on");
 }
 
-/// Keeps players from `entity` until [`release`] or its destroy: opening
-/// it, moving items in or out, sorting, its Quick Stash switch and
-/// dismantling it are refused. [`Status::MISSING`] when the filter is not
-/// linked on this build.
-pub(crate) fn hold(entity: u32) -> Result<(), Status> {
-    if LOADED.get().is_none() {
-        return Err(Status::MISSING);
-    }
-    let mut held = HELD.relock();
-    if !held.iter().any(|&(id, _)| id == entity) {
-        held.push((entity, None));
-    }
-    publish(&held);
-    Ok(())
-}
-
-/// Lets players reach `entity` again.
-pub(crate) fn release(entity: u32) {
-    let mut held = HELD.relock();
-    held.retain(|&(id, _)| id != entity);
-    publish(&held);
-}
-
-/// Keeps `entity` held until its destroy, asked for now, has landed; then
-/// its id is free for the game to give again.
-pub(crate) fn destroying(entity: u32) {
-    let until = STEP.load(Ordering::Acquire) + DESTROY_STEPS;
-    let mut held = HELD.relock();
-    for (id, landed) in held.iter_mut() {
-        if *id == entity {
-            *landed = Some(until);
-        }
-    }
-}
-
-fn publish(held: &[(u32, Option<u64>)]) {
-    let ids: Vec<u32> = held.iter().map(|&(id, _)| id).collect();
-    HELD_IDS.store((!ids.is_empty()).then(|| std::sync::Arc::new(ids)));
-}
-
-fn is_held(entity: u32) -> bool {
-    HELD_IDS
-        .load()
-        .as_deref()
-        .is_some_and(|ids| ids.contains(&entity))
+/// Whether the filter's fuse is off, after a panic in its work: a hold
+/// would not keep anyone out.
+pub(crate) fn filter_off() -> bool {
+    INTERACTIONS_FUSE.is_off()
 }
 
 /// Reads the players again now and then, and lets destroyed props go, on
 /// the game thread.
 pub(crate) fn after_step(loader: &Loader, step: u64) {
-    STEP.store(step, Ordering::Release);
-    {
-        let mut held = HELD.relock();
-        let before = held.len();
-        held.retain(|&(_, landed)| landed.is_none_or(|until| step < until));
-        if held.len() != before {
-            publish(&held);
-        }
-    }
+    crate::transactions::holds().after_step(step);
     if LOADED.get().is_none() || !step.is_multiple_of(PLAYERS_EVERY) {
         return;
     }
@@ -320,12 +264,10 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
 
 pub(crate) fn forget() {
     PLAYERS.store(None);
-    HELD.relock().clear();
-    HELD_IDS.store(None);
 }
 
 fn allowed(call: &Interaction) -> bool {
-    if is_held(call.target) {
+    if crate::transactions::holds().is_held(call.target) {
         return false;
     }
     let Some(filters) = FILTERS.sealed() else {
@@ -430,6 +372,23 @@ unsafe extern "system" fn offer(
     permissions: u8,
     range: u32,
 ) -> *mut u8 {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.offer_test` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe {
+            OFFER_NEXT.get()(
+                out,
+                query,
+                hits,
+                candidate,
+                shape,
+                transform,
+                permissions,
+                range,
+            )
+        };
+    }
     let refused = !out.is_null()
         && !query.is_null()
         && INTERACTIONS_FUSE
@@ -524,6 +483,12 @@ unsafe fn may_touch(
 }
 
 unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.transfer` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { TRANSFER_NEXT.get()(ctx, state) };
+    }
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
             && INTERACTIONS_FUSE
@@ -579,6 +544,12 @@ unsafe extern "system" fn transfer(ctx: *mut u64, state: *mut u8) {
 }
 
 unsafe extern "system" fn sort(ctx: *mut u64, state: *mut u8) {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.sort` link, so the
+        // slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { SORT_NEXT.get()(ctx, state) };
+    }
     let refused = LOADED.get().is_some_and(|(_, layout, _)| {
         !state.is_null()
             && INTERACTIONS_FUSE
@@ -661,6 +632,12 @@ unsafe extern "system" fn stock(
     position: *const f32,
     player: u32,
 ) -> *mut u8 {
+    if crate::transactions::holds().quiet() {
+        // SAFETY: this detour runs only as the `access.base_stock` link, so
+        // the slot holds the next function of that signature; the game's
+        // arguments pass unchanged.
+        return unsafe { STOCK_NEXT.get()(out, lists, server, client, position, player) };
+    }
     // Asked by the client's own interface, which sees the client's world;
     // read before the chain calls on.
     let ui = LOADED.get().is_some_and(|(loader, layout, _)| {
@@ -763,6 +740,9 @@ unsafe extern "system" fn dismantle(
     // the slot holds the next function of that signature; the game's
     // arguments pass unchanged.
     let method = unsafe { DISMANTLE_NEXT.get()(ctx, object, held, permissions) };
+    if crate::transactions::holds().quiet() {
+        return method;
+    }
     if method.trailing_zeros() >= 8 || ctx.is_null() || object.is_null() {
         return method;
     }
@@ -807,7 +787,7 @@ unsafe extern "system" fn dismantle(
 /// the upgrade a filter refuses; the system then skips them as already
 /// handled.
 unsafe extern "system" fn inventory_actions(ctx: *mut u64) -> u64 {
-    if LOADED.get().is_some() && !ctx.is_null() {
+    if !crate::transactions::holds().quiet() && LOADED.get().is_some() && !ctx.is_null() {
         // SAFETY: `ctx` is non-null by the check before it and is the system's
         // own context, at its entry on its thread.
         let _done =

@@ -492,10 +492,21 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
 }
 
 unsafe extern "system" fn save(out: *mut u8, save: *mut u8, context: *mut u8) -> *mut u8 {
+    let held = !crate::transactions::holds().quiet();
+    if held {
+        guarded(&SAVE_FUSE, "the save link", || {
+            crate::transactions::saving(true);
+        });
+    }
     // SAFETY: this detour runs only as the `server.save_step` link, so the
     // slot holds the next function of that signature; the game's arguments
     // pass unchanged.
     let result = unsafe { SAVE_NEXT.get()(out, save, context) };
+    if held {
+        guarded(&SAVE_FUSE, "the save link", || {
+            crate::transactions::saving(false);
+        });
+    }
     // SAFETY: `out` is non-null by the check before it and is the save
     // step's result, whose first byte the game has just written.
     let done = !out.is_null() && unsafe { read_at::<u8>(out, 0) } == 0;

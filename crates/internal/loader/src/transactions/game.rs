@@ -184,3 +184,26 @@ impl Voxels for Game<'_> {
         Ok(())
     }
 }
+
+/// Puts back the Quick Stash settings `deposits` of props no longer held,
+/// by entity. On the game thread.
+pub(crate) fn restore_deposits(deposits: &[(u32, u8)]) {
+    let Some(loader) = crate::host::loader() else {
+        return;
+    };
+    for &(entity, before) in deposits {
+        props::set_deposit(loader, entity, before);
+    }
+}
+
+/// Around one call of the game's save: with `saving`, puts back the Quick
+/// Stash settings of the props held, so a save keeps them as players left
+/// them; after it, turns them off again. On the thread that saves.
+pub(crate) fn saving(saving: bool) {
+    let Some(loader) = crate::host::loader() else {
+        return;
+    };
+    for (entity, before) in super::holds().deposits() {
+        props::set_deposit(loader, entity, if saving { before } else { 0 });
+    }
+}

@@ -5,7 +5,6 @@ use enshwick::ecs::Entity;
 use enshwick_gamedata::catalogue;
 
 use crate::host::Loader;
-use crate::locks::Relock;
 use crate::transactions::props::{
     FactoryRead, LINKS, Prop, SLOTS, Setup, StateReads, fuel_above_start, holds_items, wired,
 };
@@ -325,34 +324,28 @@ pub(super) fn stands(loader: &Loader, prop: &Prop) -> Result<bool, Status> {
 /// it is gone.
 pub(super) fn remove(loader: &Loader, entity: u32) -> Result<(), Status> {
     crate::entities::destroy(loader, Entity(entity))?;
-    crate::interactions::destroying(entity);
-    DEPOSITS.relock().retain(|&(held, _)| held != entity);
+    crate::transactions::holds().destroying(entity);
     Ok(())
 }
-
-/// The Quick Stash setting of each container held, as it was before the
-/// hold turned it off.
-static DEPOSITS: std::sync::Mutex<Vec<(u32, u8)>> = std::sync::Mutex::new(Vec::new());
 
 /// Keeps players from the prop `entity` until its destroy: the loader's
 /// interaction filter refuses opening it, moving items in or out, sorting
 /// and dismantling it, and its Quick Stash setting is off, so area deposits
-/// skip it. [`Status::MISSING`] when the filter or the setting is not in
-/// place on this build. On the game thread at a quiet moment.
+/// skip it. [`Status::MISSING`] when a hook the filter needs did not link
+/// or its fuse is off, or the setting does not resolve. On the game thread
+/// at a quiet moment.
 pub(super) fn hold(loader: &Loader, entity: u32) -> Result<(), Status> {
     let stock = type_of(loader, catalogue::CRAFTING_STOCK)?;
     let deposit_at = offset(loader, catalogue::CRAFTING_STOCK_DEPOSIT)?;
-    crate::interactions::hold(entity)?;
+    let holds = crate::transactions::holds();
+    holds.hold(entity, crate::interactions::filter_off())?;
     if let Some(data) = data(loader, entity, stock) {
         // SAFETY: `data` is the entity's live `InventoryCraftingStock`,
         // with its Quick Stash byte at the reflected offset; read on the
         // game thread at a quiet moment, when no system runs.
         let before: u8 = unsafe { enshwick::raw::read_at(data, deposit_at) };
-        // SAFETY: as read just before: the byte lies inside the live
-        // component, written on the game thread between steps, where the
-        // game's own writer, the player's switch action, does not run.
-        unsafe { enshwick::raw::write_at(data.cast_mut(), deposit_at, 0u8) };
-        DEPOSITS.relock().push((entity, before));
+        holds.note_deposit(entity, before);
+        set_deposit(loader, entity, 0);
     }
     Ok(())
 }
@@ -360,14 +353,15 @@ pub(super) fn hold(loader: &Loader, entity: u32) -> Result<(), Status> {
 /// Lets players reach the prop `entity` again, its Quick Stash setting as
 /// it was. On the game thread at a quiet moment.
 pub(super) fn release(loader: &Loader, entity: u32) {
-    crate::interactions::release(entity);
-    let before = {
-        let mut deposits = DEPOSITS.relock();
-        let found = deposits.iter().position(|&(held, _)| held == entity);
-        found.map(|index| deposits.swap_remove(index).1)
-    };
-    let (Some(before), Ok(stock), Ok(deposit_at)) = (
-        before,
+    if let Some(before) = crate::transactions::holds().release(entity) {
+        set_deposit(loader, entity, before);
+    }
+}
+
+/// Writes `value` into the Quick Stash setting of `entity`, when it has
+/// one. On the game thread at a quiet moment.
+pub(crate) fn set_deposit(loader: &Loader, entity: u32, value: u8) {
+    let (Ok(stock), Ok(deposit_at)) = (
         type_of(loader, catalogue::CRAFTING_STOCK),
         offset(loader, catalogue::CRAFTING_STOCK_DEPOSIT),
     ) else {
@@ -376,8 +370,9 @@ pub(super) fn release(loader: &Loader, entity: u32) {
     if let Some(data) = data(loader, entity, stock) {
         // SAFETY: `data` is the entity's live `InventoryCraftingStock`, with
         // its Quick Stash byte at the reflected offset, written on the game
-        // thread between steps, where no system runs.
-        unsafe { enshwick::raw::write_at(data.cast_mut(), deposit_at, before) };
+        // thread at a quiet moment, where the game's own writer, the
+        // player's switch action, does not run.
+        unsafe { enshwick::raw::write_at(data.cast_mut(), deposit_at, value) };
     }
 }
 

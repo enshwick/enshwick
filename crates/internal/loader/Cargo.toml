@@ -78,3 +78,7 @@ harness = false
 [[bench]]
 name = "item_kinds"
 harness = false
+
+[[bench]]
+name = "prop_holds_quiet"
+harness = false

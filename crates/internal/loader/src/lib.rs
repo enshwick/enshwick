@@ -147,6 +147,7 @@ mod points;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+pub mod prop_holds;
 #[cfg(windows)]
 mod rate_links;
 #[cfg_attr(
