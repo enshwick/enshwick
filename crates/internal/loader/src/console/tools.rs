@@ -49,7 +49,10 @@ pub(crate) fn world(loader: &Loader) -> String {
 /// `enshwick entity <id>`: what the server knows of an entity.
 pub(crate) fn entity(loader: &Loader, args: &str) -> String {
     let Ok(entity) = args.trim().parse::<u32>() else {
-        return texts::fill("console.usage", &[("usage", "enshwick entity <number>")]);
+        return texts::fill(
+            "console.usage",
+            &[("usage", &texts::fill("usage.entity", &[]))],
+        );
     };
     let player = crate::world::players(loader).ok().and_then(|players| {
         players
@@ -70,7 +73,10 @@ pub(crate) fn entity(loader: &Loader, args: &str) -> String {
 pub(crate) fn placed(args: &str) -> String {
     match answers::placed_count(args) {
         Ok(count) => answers::placed(&super::newest(count)),
-        Err(_) => texts::fill("console.usage", &[("usage", "enshwick placed [number]")]),
+        Err(_) => texts::fill(
+            "console.usage",
+            &[("usage", &texts::fill("usage.placed", &[]))],
+        ),
     }
 }
 
@@ -150,9 +156,9 @@ fn refused(act: Act, refusal: &Refusal) -> String {
     match refusal {
         Refusal::Empty => {
             let usage = match act {
-                Act::Kick => "enshwick kick <player or account>",
-                Act::Ban => "enshwick ban <player or account>",
-                Act::Unban => "enshwick unban <account>",
+                Act::Kick => "usage.kick",
+                Act::Ban => "usage.ban",
+                Act::Unban => "usage.unban",
             };
             texts::fill("console.usage", &[("usage", usage)])
         }

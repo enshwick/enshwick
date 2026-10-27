@@ -474,14 +474,14 @@ fn now() -> When {
     }
 }
 
-pub(crate) fn after_step(loader: &Loader) {
+pub(crate) fn after_step(loader: &Loader, now: Instant) {
     let step = STEP.fetch_add(1, Ordering::Relaxed) + 1;
     // Only the post-step forgets: passes run many times a step, and none
     // runs once the last altar is gone.
     if step.is_multiple_of(EXPIRE_EVERY)
         && let Some(mut state) = STATE.try_relock()
     {
-        let now = now();
+        let now = When { at: now, step };
         let state = &mut *state;
         let gone = state.placed.expire(now) | state.built.expire(now) | state.levels.expire(now);
         if gone {

@@ -88,6 +88,7 @@ mod table_config;
 mod task_workers;
 mod terrain;
 mod texts_override;
+mod ticks;
 mod transactions;
 mod ui;
 mod vetoes;

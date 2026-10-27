@@ -817,7 +817,7 @@ fn raise_maxima(loader: &Loader, sealed: &Sealed, entity: Entity, watched: &mut 
 /// The step's work on the game thread: drops what ran out, looks at the
 /// watched entities when due, works out the values that may have changed
 /// and tells the mods.
-pub(crate) fn after_step(loader: &Loader, step: u64) {
+pub(crate) fn after_step(loader: &Loader, step: u64, now: Instant) {
     let Some(sealed) = SEALED.get().filter(|_| wanted()) else {
         return;
     };
@@ -834,7 +834,7 @@ pub(crate) fn after_step(loader: &Loader, step: u64) {
     let mut forgot = false;
     let mut due = Vec::new();
     with_state(|state| {
-        expire(state, Instant::now());
+        expire(state, now);
         if let Some(players) = &players {
             forgot = follow(loader, state, players);
         }

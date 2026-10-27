@@ -32,7 +32,9 @@ pub(crate) fn order(loader: &Loader, order: Order, args: &str) -> String {
         Order::Spawn => orders::spawn(args).map(|spawn| self::spawn(loader, &spawn)),
         Order::Teleport => orders::teleport(args).map(|to| teleport(loader, &to)),
     };
-    answer.unwrap_or_else(|Usage(usage)| texts::fill("console.usage", &[("usage", usage)]))
+    answer.unwrap_or_else(|Usage(usage)| {
+        texts::fill("console.usage", &[("usage", &texts::fill(usage, &[]))])
+    })
 }
 
 /// The player online `words` name, or the answer that says why none.

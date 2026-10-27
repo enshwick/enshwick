@@ -195,10 +195,14 @@ pub(crate) fn write(game_dir: &Path, stub: u32, status: Option<String>) {
     let mods_dir = game_dir.join("mods");
     let mut files = files_in(&mods_dir, "mods/");
     files.extend(files_in(&mods_dir.join("chain"), "mods/chain/"));
-    files.extend(crate::others::PROXY_NAMES.iter().filter_map(|name| {
-        let meta = std::fs::metadata(game_dir.join(name)).ok()?;
-        meta.is_file().then(|| ((*name).to_owned(), meta.len()))
-    }));
+    files.extend(
+        crate::others::beside_game(game_dir)
+            .into_iter()
+            .filter_map(|name| {
+                let size = std::fs::metadata(game_dir.join(&name)).ok()?.len();
+                Some((name, size))
+            }),
+    );
     let report = Report {
         at: crate::diag::clock(crate::diag::now()),
         version: env!("CARGO_PKG_VERSION").to_owned(),

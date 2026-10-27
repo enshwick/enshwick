@@ -4,6 +4,15 @@ This chapter sets up the tools, creates a mod, puts it into the game and
 shows where its log goes. The first mod uses the API's high-level calls;
 raw hooks come last, as the way down when the API has no call.
 
+## Performance
+
+Mods run inside the game's frame, so their handlers cost the game time. A
+tick handler runs every 100 ms by default, since a call costs about 1 µs and
+the number of server steps a second differs between servers, clients and
+load. Ask for every step only for state that changes each step, input or
+the camera. [Ticks](events.md#ticks) has the numbers, the every-step and
+runtime period options, and an adaptive tick.
+
 ## The toolchain
 
 A mod is a Windows DLL. You need:

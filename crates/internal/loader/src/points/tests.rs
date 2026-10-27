@@ -453,7 +453,7 @@ fn the_report_names_mods_changing_one_point_and_who_undid_whom() {
     assert_eq!(
         super::conflict_lines(&points, &loaded()),
         [
-            "point you.trading-post:price: you.discounts then you.haggling, each may change the answer; you.haggling changed the answer you.discounts had set, once"
+            "point you.trading-post:price: you.discounts then you.haggling, each may change the answer; you.haggling changed the answer you.discounts had set; times: 1"
         ]
     );
     let (defines, extends) = super::screen_lines(&points, &inert, 0, &loaded());
