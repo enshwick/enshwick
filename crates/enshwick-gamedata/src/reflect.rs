@@ -52,7 +52,10 @@ pub struct TypeInfo<'a> {
     name: &'a str,
     size: u32,
     align: u16,
+    kind: Kind,
     base: Option<&'a str>,
+    inner: Option<&'a str>,
+    count: u32,
     fields: Vec<Field<'a>>,
     enum_values: Vec<EnumValue<'a>>,
 }
@@ -119,6 +122,71 @@ impl<'a> TypeInfo<'a> {
     #[must_use]
     pub fn base(&self) -> Option<&'a str> {
         self.base
+    }
+
+    /// What the type is: a primitive, a struct, an enum, an array and so
+    /// on.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Kind, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// assert_eq!(reflection.type_info("keen::uint32")?.kind(), Kind::Uint32);
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+
+    /// The full name of the type this one holds or names: an array's or an
+    /// optional's element, a typedef's target. `None` for a struct, whose
+    /// inner type is its [`base`](Self::base), and for a type without one.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// assert_eq!(reflection.type_info("keen::ItemId")?.inner(), Some("keen::HashKey32"));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn inner(&self) -> Option<&'a str> {
+        self.inner
+    }
+
+    /// How many elements a [`Kind::StaticArray`] holds; `None` for every
+    /// other kind, whose length, if any, is in the data.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let bytes = std::fs::read("enshrouded_server.exe")?;
+    /// let image = Image::parse(&bytes, Layout::File, None)?;
+    /// let reflection = Reflection::scan(&image);
+    /// let array = reflection.type_info("keen::StaticArray<keen::uint32,4>")?;
+    /// assert_eq!(array.element_count(), Some(4));
+    /// # Ok(())
+    /// # }
+    /// ```
+    #[must_use]
+    pub fn element_count(&self) -> Option<u32> {
+        (self.kind == Kind::StaticArray).then_some(self.count)
     }
 
     /// The fields, in the engine's order.
@@ -364,6 +432,126 @@ const DESCRIPTOR_KIND: u64 = 0x8c;
 /// inner type, which is not a base.
 const KIND_STRUCT: u8 = 0x12;
 const KIND_ENUM: u8 = 0x0c;
+
+/// What a reflected type is, from its descriptor's kind byte.
+///
+/// The engine numbers the kinds; the names are the engine's kind names in
+/// Rust casing, and the numbers held on client build 426 for every
+/// descriptor. A byte no variant names reads as [`Kind::Other`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::reflect::Kind;
+///
+/// assert_eq!(Kind::from_byte(0x12), Kind::Struct);
+/// assert_eq!(Kind::from_byte(0x7f), Kind::Other(0x7f));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Kind {
+    /// `keen::bool`, one byte.
+    Bool,
+    /// `keen::uint8`.
+    Uint8,
+    /// `keen::sint8`.
+    Sint8,
+    /// `keen::uint16`.
+    Uint16,
+    /// `keen::sint16`.
+    Sint16,
+    /// `keen::uint32`.
+    Uint32,
+    /// `keen::sint32`.
+    Sint32,
+    /// `keen::uint64`.
+    Uint64,
+    /// `keen::sint64`.
+    Sint64,
+    /// `keen::float32`.
+    Float32,
+    /// An enum, with its constants in [`TypeInfo::enum_values`].
+    Enum,
+    /// A set of flags in one byte.
+    Bitmask8,
+    /// A set of flags in two bytes.
+    Bitmask16,
+    /// A set of flags in four bytes.
+    Bitmask32,
+    /// A set of flags in eight bytes.
+    Bitmask64,
+    /// Another name for its [`inner`](TypeInfo::inner) type.
+    Typedef,
+    /// A struct, with its fields and its [`base`](TypeInfo::base).
+    Struct,
+    /// A fixed number of [`inner`](TypeInfo::inner) elements in place.
+    StaticArray,
+    /// An array of designer data.
+    DsArray,
+    /// A string of designer data.
+    DsString,
+    /// An optional value of designer data.
+    DsOptional,
+    /// A variant of designer data.
+    DsVariant,
+    /// An array in a resource: a self-relative offset and a count.
+    BlobArray,
+    /// A string in a resource.
+    BlobString,
+    /// An optional value in a resource.
+    BlobOptional,
+    /// A variant in a resource.
+    BlobVariant,
+    /// A reference to a resource by GUID.
+    ObjectReference,
+    /// `keen::Guid`, 16 bytes.
+    Guid,
+    /// A kind byte no variant names.
+    Other(u8),
+}
+
+impl Kind {
+    /// The kind a descriptor's kind byte names.
+    ///
+    /// # Examples
+    ///
+    /// See [`Kind`].
+    #[must_use]
+    pub const fn from_byte(byte: u8) -> Self {
+        match byte {
+            0x01 => Self::Bool,
+            0x02 => Self::Uint8,
+            0x03 => Self::Sint8,
+            0x04 => Self::Uint16,
+            0x05 => Self::Sint16,
+            0x06 => Self::Uint32,
+            0x07 => Self::Sint32,
+            0x08 => Self::Uint64,
+            0x09 => Self::Sint64,
+            0x0a => Self::Float32,
+            KIND_ENUM => Self::Enum,
+            0x0d => Self::Bitmask8,
+            0x0e => Self::Bitmask16,
+            0x0f => Self::Bitmask32,
+            0x10 => Self::Bitmask64,
+            0x11 => Self::Typedef,
+            KIND_STRUCT => Self::Struct,
+            0x13 => Self::StaticArray,
+            0x14 => Self::DsArray,
+            0x15 => Self::DsString,
+            0x16 => Self::DsOptional,
+            0x17 => Self::DsVariant,
+            0x18 => Self::BlobArray,
+            0x19 => Self::BlobString,
+            0x1a => Self::BlobOptional,
+            0x1b => Self::BlobVariant,
+            0x1c => Self::ObjectReference,
+            0x1d => Self::Guid,
+            other => Self::Other(other),
+        }
+    }
+}
+
 /// Bases deeper than this are taken for a loop in bad data.
 const MAX_BASES: usize = 32;
 /// Where a type descriptor holds its hash, whose low 32 bits are the
@@ -674,26 +862,33 @@ impl<'a> Reader<'_, 'a> {
         let size = self.image.u32(at(DESCRIPTOR_SIZE_ALIGN)?)?;
         let align = self.image.u16(at(DESCRIPTOR_SIZE_ALIGN + 4)?)?;
         let count = self.image.u32(at(DESCRIPTOR_FIELD_COUNT)?)?;
-        let kind = self.image.read(at(DESCRIPTOR_KIND)?, 1)?;
+        let kind = Kind::from_byte(*self.image.read(at(DESCRIPTOR_KIND)?, 1)?.first()?);
         let (mut fields, mut enum_values) = (Vec::new(), Vec::new());
-        if count > 0 && count <= MAX_FIELDS {
-            if kind == [KIND_ENUM] {
+        // A static array's count is its length, and it has no fields.
+        if count > 0 && count <= MAX_FIELDS && kind != Kind::StaticArray {
+            if kind == Kind::Enum {
                 enum_values = self.enum_values(self.image.u64(at(DESCRIPTOR_ENUM_VALUES)?)?, count);
             } else {
                 fields = self.fields(self.image.u64(at(DESCRIPTOR_FIELDS)?)?, count);
             }
         }
-        let base = if kind == [KIND_STRUCT] {
-            self.type_name(self.image.u64(at(DESCRIPTOR_INNER)?)?)
+        let inner = at(DESCRIPTOR_INNER)
+            .and_then(|slot| self.image.u64(slot))
+            .and_then(|ptr| self.type_name(ptr));
+        let (base, inner) = if kind == Kind::Struct {
+            (inner, None)
         } else {
-            None
+            (None, inner)
         };
         Some(TypeInfo {
             va,
             name,
             size,
             align,
+            kind,
             base,
+            inner,
+            count,
             fields,
             enum_values,
         })
