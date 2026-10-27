@@ -4,7 +4,7 @@ struct OldMod;
 
 impl enshwick::Mod for OldMod {
     fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(id: "old-mod", side: SERVER)
+        enshwick::manifest!(id: "you.old-mod", side: SERVER)
     }
 
     fn init(_load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
