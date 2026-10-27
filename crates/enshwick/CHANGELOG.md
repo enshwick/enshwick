@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The title screen shows the loader's line under the game's version,
+  `Enshwick 1.0.0 · mods: 6`, with the mods off and a warning when the game
+  version leaves features off.
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
   test holds its texts complete for every offered language.
