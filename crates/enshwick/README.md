@@ -25,6 +25,6 @@ enshwick::declare_mod!(Hello);
 With the `test` feature, `enshwick::test` is a fake loader for a
 mod's unit tests; turn it on under `[dev-dependencies]` only. The macros come
 from `enshwick-macros`, an internal crate this one re-exports. See
-[the modding book](https://github.com/enshwick/enshwick/blob/main/book/src/SUMMARY.md).
+[the modding book](https://enshwick.github.io/docs/dev/).
 
 Licensed under [MIT](https://github.com/enshwick/enshwick/blob/main/LICENSE).

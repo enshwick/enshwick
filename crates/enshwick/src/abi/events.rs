@@ -102,7 +102,7 @@ impl Event {
     pub const PLAYER_DIED: Self = Self(20);
 }
 
-/// The data of [`Event::PLAYER_DIED`].
+/// The data of the [`PlayerDied`](crate::events::PlayerDied) event.
 ///
 /// # Examples
 ///
@@ -131,10 +131,11 @@ pub struct PlayerDeathData {
     pub header: Header,
     /// The player's character; 0 when the account left in the same step.
     pub entity: u32,
-    /// [`PlayerDeathData::HIT`], [`PlayerDeathData::FALL`],
-    /// [`PlayerDeathData::SHROUD`] or [`PlayerDeathData::SUFFOCATED`].
+    /// What killed the player: 0 [a hit](PlayerDeathData::HIT), 1
+    /// [a fall](PlayerDeathData::FALL), 2 [the shroud](PlayerDeathData::SHROUD),
+    /// 3 [suffocation](PlayerDeathData::SUFFOCATED).
     pub cause: u32,
-    /// The account, as [`PlayerInfo::key`].
+    /// The account, [the same number](PlayerInfo::key) in every session.
     pub key: u64,
     /// Where, in metres.
     pub position: [f32; 3],
@@ -148,7 +149,7 @@ pub struct PlayerDeathData {
     /// Zero.
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
-    /// `HitHistory`, as [`crate::game_events::EntityDiedEvent`] reads it; 0 for other
+    /// `HitHistory`, as [`EntityDiedEvent`](crate::game_events::EntityDiedEvent) reads it; 0 for other
     /// causes, or when the history names none.
     pub killer_entity: u32,
     /// Zero.
@@ -168,7 +169,7 @@ impl PlayerDeathData {
     pub const SUFFOCATED: u32 = 3;
 }
 
-/// The data of [`Event::KNOWLEDGE_CHANGED`].
+/// The data of the [`KnowledgeChanged`](crate::events::KnowledgeChanged) event.
 ///
 /// # Examples
 ///
@@ -193,7 +194,7 @@ pub struct KnowledgeData {
 
 impl_headed!(KnowledgeData);
 
-/// The data of [`Event::QUEST_COMPLETED`].
+/// The data of the [`QuestCompleted`](crate::events::QuestCompleted) event.
 ///
 /// # Examples
 ///
@@ -296,7 +297,8 @@ impl KnowledgeInput {
 pub type KnowledgeInputFn =
     unsafe extern "system" fn(call: *const KnowledgeInput, user: *mut c_void) -> u8;
 
-/// The data of [`Event::CHUNK_LOADED`] and [`Event::CHUNK_UNLOADED`].
+/// The data of the [`ChunkLoaded`](crate::events::ChunkLoaded) and
+/// [`ChunkUnloaded`](crate::events::ChunkUnloaded) events.
 ///
 /// # Examples
 ///
@@ -324,7 +326,8 @@ pub struct ChunkData {
 
 impl_headed!(ChunkData);
 
-/// The data of [`Event::BUILDING_PLACED`] and [`Event::BUILDING_REMOVED`].
+/// The data of the [`BuildingPlaced`](crate::events::BuildingPlaced) and
+/// [`BuildingRemoved`](crate::events::BuildingRemoved) events.
 ///
 /// # Examples
 ///
@@ -355,8 +358,8 @@ pub struct BuildingData {
     /// The item placed, which the entity keeps as its `UsedItem`; 0 for a
     /// removal.
     pub item: u32,
-    /// [`BuildingData::PLACED`], [`BuildingData::PICKED_UP`] or
-    /// [`BuildingData::TORN_DOWN`].
+    /// What happened: 0 [placed](BuildingData::PLACED), 1
+    /// [picked up](BuildingData::PICKED_UP), 2 [torn down](BuildingData::TORN_DOWN).
     pub kind: u8,
     /// 1 when undo or redo replayed the action.
     pub replay: u8,
@@ -415,7 +418,13 @@ pub struct PlayerInfo {
     pub entity: u32,
     /// The same number for the same account in every session.
     pub key: u64,
-    /// The server's permission bits for the player, `PlayerInfo::CAN_*`.
+    /// The server's permission bits for the player: 1
+    /// [kick and ban](PlayerInfo::CAN_KICK_BAN), 2
+    /// [open inventories](PlayerInfo::CAN_ACCESS_INVENTORIES), 4
+    /// [edit the base](PlayerInfo::CAN_EDIT_BASE), 8
+    /// [edit the world](PlayerInfo::CAN_EDIT_WORLD), 16
+    /// [extend the base](PlayerInfo::CAN_EXTEND_BASE), 32
+    /// [receive experience](PlayerInfo::CAN_RECEIVE_EXP).
     pub permissions: u8,
     /// Bytes of `name` in use.
     pub name_len: u8,
@@ -440,7 +449,7 @@ impl PlayerInfo {
     pub const CAN_RECEIVE_EXP: u8 = 1 << 5;
 }
 
-/// The data of [`Event::TICKED`].
+/// The data of the [`Ticked`](crate::events::Ticked) event.
 ///
 /// # Examples
 ///
@@ -461,7 +470,8 @@ pub struct TickData {
 
 impl_headed!(TickData);
 
-/// The data of [`Event::PLAYER_JOINED`] and [`Event::PLAYER_LEFT`].
+/// The data of the [`PlayerJoined`](crate::events::PlayerJoined) and
+/// [`PlayerLeft`](crate::events::PlayerLeft) events.
 ///
 /// # Examples
 ///
