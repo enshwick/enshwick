@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::{AltarInfo, Bounds, Header, PlayerInfo, Status};
+    use enshwick::abi::{AltarInfo, Bounds, Header, MapMarkerInfo, PlayerInfo, Status};
     use enshwick::altars::Altars;
     use enshwick::content::Guid;
     use enshwick::ecs::Entity;
@@ -14,7 +14,6 @@ mod tests {
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
-    const MARKER: u32 = 1;
     const WAYPOINT: u32 = 2;
     const TRANSFORM: u32 = 3;
     const USED_ITEM: u32 = 4;
@@ -40,28 +39,19 @@ mod tests {
 
     enshwick::declare_mod!(Cartographer);
 
-    /// A `MapMarker` as the game lays it out: label tag, type reference,
-    /// then fields only the client fills.
-    fn marker_bytes(label: Guid, marker_type: Guid) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(40);
-        bytes.extend_from_slice(&label.0);
-        bytes.extend_from_slice(&marker_type.0);
-        bytes.extend_from_slice(&[0; 8]);
-        bytes
-    }
-
+    /// A marker of the scene at `position`, as the loader reads it.
     fn marker(
         fake: enshwick::test::FakeHost,
-        entity: u32,
         position: [f64; 3],
         label: Guid,
         marker_type: Guid,
     ) -> enshwick::test::FakeHost {
-        fake.placed(MARKER, entity, position).component(
-            entity,
-            MARKER,
-            &marker_bytes(label, marker_type),
-        )
+        fake.map_marker(MapMarkerInfo {
+            position,
+            marker_type: marker_type.0,
+            label: label.0,
+            ..MapMarkerInfo::EMPTY
+        })
     }
 
     fn waypoint(
@@ -85,10 +75,6 @@ mod tests {
         enshwick::test::FakeHost::new()
             .type_hash("current_transform", TRANSFORM)
             .type_hash("used_item", USED_ITEM)
-            .type_hash("map_marker", MARKER)
-            .type_size("map_marker", 40)
-            .constant("map_marker.marker_id", 0)
-            .constant("map_marker.marker_type", 0x10)
     }
 
     fn fake() -> enshwick::test::FakeHost {
@@ -109,8 +95,8 @@ mod tests {
 
     #[test]
     fn markers_carry_their_type_label_and_place() {
-        let fake = marker(fake(), 7, [100.0, 20.0, -50.0], LABEL, TOWN);
-        let fake = marker(fake, 5, [-10.0, 0.0, 10.0], Guid([0; 16]), Guid([0; 16]));
+        let fake = marker(fake(), [100.0, 20.0, -50.0], LABEL, TOWN);
+        let fake = marker(fake, [-10.0, 0.0, 10.0], Guid([0; 16]), Guid([0; 16]));
         let (_loader, map) = start(fake);
 
         let markers = map.markers().unwrap();
@@ -118,16 +104,14 @@ mod tests {
             markers,
             [
                 MapMarker {
-                    entity: Entity(5),
-                    position: [-10.0, 0.0, 10.0],
-                    marker_type: None,
-                    label: None,
-                },
-                MapMarker {
-                    entity: Entity(7),
                     position: [100.0, 20.0, -50.0],
                     marker_type: Some(MapMarkerTypeId::from_guid(TOWN)),
                     label: Some(LABEL),
+                },
+                MapMarker {
+                    position: [-10.0, 0.0, 10.0],
+                    marker_type: None,
+                    label: None,
                 },
             ]
         );
@@ -142,15 +126,15 @@ mod tests {
 
     #[test]
     fn markers_in_a_box_leave_out_the_rest() {
-        let fake = marker(fake(), 7, [100.0, 20.0, -50.0], LABEL, TOWN);
-        let fake = marker(fake, 8, [10.0, 5.0, 10.0], LABEL, TOWN);
-        let fake = marker(fake, 9, [20.0, 0.0, 0.0], LABEL, TOWN);
-        let fake = marker(fake, 10, [20.0, 0.0, 20.5], LABEL, TOWN);
+        let fake = marker(fake(), [100.0, 20.0, -50.0], LABEL, TOWN);
+        let fake = marker(fake, [10.0, 5.0, 10.0], LABEL, TOWN);
+        let fake = marker(fake, [20.0, 0.0, 0.0], LABEL, TOWN);
+        let fake = marker(fake, [20.0, 0.0, 20.5], LABEL, TOWN);
         let (_loader, map) = start(fake);
 
         let inside = map.markers_in([20.0, 10.0, 20.0], [0.0, 0.0, 0.0]).unwrap();
-        let entities: Vec<Entity> = inside.iter().map(|marker| marker.entity).collect();
-        assert_eq!(entities, [Entity(8), Entity(9)]);
+        let places: Vec<[f64; 3]> = inside.iter().map(|marker| marker.position).collect();
+        assert_eq!(places, [[10.0, 5.0, 10.0], [20.0, 0.0, 0.0]]);
         assert_eq!(
             map.markers_in([f64::NAN, 0.0, 0.0], [1.0; 3]),
             Err(WorldError::Refused)
@@ -191,7 +175,7 @@ mod tests {
 
     #[test]
     fn a_build_without_waypoints_keeps_the_markers() {
-        let fake = marker(markers_only(), 7, [1.0, 2.0, 3.0], LABEL, TOWN);
+        let fake = marker(markers_only(), [1.0, 2.0, 3.0], LABEL, TOWN);
         let (_loader, map) = start(fake);
 
         assert_eq!(map.markers().unwrap().len(), 1);
@@ -199,24 +183,29 @@ mod tests {
     }
 
     #[test]
-    fn a_build_without_markers_turns_the_map_off() {
-        let loader = enshwick::test::FakeHost::new()
-            .type_hash("current_transform", TRANSFORM)
-            .type_hash("used_item", USED_ITEM)
-            .install();
-        // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_ne!(status, Status::OK);
-        assert!(MAP.get().is_none());
+    fn markers_fail_while_no_world_runs_or_off_the_game_thread() {
+        let fake = marker(fake(), [1.0, 2.0, 3.0], LABEL, TOWN);
+        let (loader, map) = start(fake);
+
+        let elsewhere = std::thread::spawn(move || map.markers()).join().unwrap();
+        assert_eq!(elsewhere, Err(WorldError::WrongThread));
+        loader.stop_world();
+        assert_eq!(map.markers(), Err(WorldError::Missing));
     }
 
     #[test]
-    fn a_field_past_its_type_turns_the_map_off() {
-        let loader = fake().type_size("map_marker", 0x18).install();
-        // SAFETY: both functions are the exports of this file's `declare_mod!(Cartographer)`.
-        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
-        assert_ne!(status, Status::OK);
-        assert!(MAP.get().is_none());
+    fn a_waypoint_field_past_its_type_turns_waypoints_off_alone() {
+        let fake = marker(
+            fake().type_size("player_waypoint", 0x18),
+            [1.0, 2.0, 3.0],
+            LABEL,
+            TOWN,
+        );
+        let fake = waypoint(fake, 40, 1, [12.5, 3.0, -7.25]);
+        let (_loader, map) = start(fake);
+
+        assert_eq!(map.markers().unwrap().len(), 1);
+        assert_eq!(map.waypoint(Entity(40)), Err(WorldError::Missing));
     }
 
     fn player(slot: u32, entity: u32, name: &str) -> PlayerInfo {
@@ -246,7 +235,7 @@ mod tests {
 
     #[test]
     fn a_snapshot_holds_players_altars_with_their_bases_and_markers() {
-        let fake = marker(fake(), 7, [100.0, 20.0, -50.0], LABEL, TOWN);
+        let fake = marker(fake(), [100.0, 20.0, -50.0], LABEL, TOWN);
         let fake = waypoint(fake, 40, 1, [12.5, 3.0, -7.25])
             .player(player(1, 41, "Ann"))
             .player(player(0, 40, "Bob"));

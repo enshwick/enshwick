@@ -1410,15 +1410,6 @@ pub const FACTS: &[(&str, Fact)] = &[
         "building_terraforming_config.hardness",
         offset("keen::BuildingTerraformingConfig", "hardness"),
     ),
-    ("map_marker", Fact::Type("keen::ecs::MapMarker")),
-    (
-        "map_marker.marker_id",
-        offset("keen::ecs::MapMarker", "markerId"),
-    ),
-    (
-        "map_marker.marker_type",
-        offset("keen::ecs::MapMarker", "markerType"),
-    ),
     ("player_waypoint", Fact::Type("keen::ecs::PlayerWaypoint")),
     (
         "player_waypoint.enabled",

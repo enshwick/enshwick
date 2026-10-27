@@ -723,3 +723,21 @@ pub(crate) extern "system" fn build_rights(
         Status::BAD_ARGS
     }
 }
+
+pub(crate) extern "system" fn map_markers(
+    _me: ModHandle,
+    out: *mut crate::abi::MapMarkerInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let Some(markers) = with(None, |s| {
+        (!s.edits.stopped).then(|| s.host.map_markers.clone())
+    }) else {
+        return Status::MISSING;
+    };
+    crate::test::table::mods::list(&markers, out, entry_size, capacity, count)
+}

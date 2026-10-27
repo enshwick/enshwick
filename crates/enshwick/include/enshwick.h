@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 94
+#define ENSHWICK_ABI_MINOR 95
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -2637,6 +2637,20 @@ typedef struct EnshwickTransactionInfo {
 // again.
 #define EnshwickTransactionInfo_UNDO_REFUSED 6
 
+// A map marker of the scene the server runs, one of the list
+// `HostApi::map_markers` writes.
+typedef struct EnshwickMapMarkerInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Where it stands, in metres, y up.
+  double position[3];
+  // Its `markerType` reference, a GUID in memory order; zero for none.
+  uint8_t marker_type[16];
+  // Its label's text tag (`markerId`), a GUID in memory order; zero for
+  // none.
+  uint8_t label[16];
+} EnshwickMapMarkerInfo;
+
 // The table of services the loader offers a mod.
 //
 // Fields are only ever appended; a mod checks `Header::covers` before it
@@ -3865,6 +3879,18 @@ typedef struct EnshwickHostApi {
                              uint32_t height,
                              uint8_t *out,
                              uint32_t capacity);
+  // Up to `capacity` map markers of the scene the server runs and how
+  // many there are: what the scene's global chunk places, read from the
+  // game's archive once per scene. Entries are `entry_size` bytes apart,
+  // the caller's `size_of::<MapMarkerInfo>()`. On the server's game
+  // thread at a quiet moment (`Status::WRONG_THREAD` elsewhere or
+  // inside a step); `Status::MISSING` while no world runs or when the
+  // scene does not read on this build. Since minor 95.
+  EnshwickStatus (*map_markers)(EnshwickModHandle me,
+                                struct EnshwickMapMarkerInfo *out,
+                                uint32_t entry_size,
+                                uint32_t capacity,
+                                uint32_t *count);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.

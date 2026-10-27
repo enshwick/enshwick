@@ -2,9 +2,10 @@
 //! waypoint.
 //!
 //! A marker is a `MapMarker` the world comes with: a town, a ruin, a
-//! dungeon, a Flame shrine, a quest area. Its type is a key into the game's
-//! marker type registry, an open set the game's data defines. What a player
-//! has uncovered of the map lives only on that player's machine.
+//! dungeon, a Flame shrine, a quest area, as the scene's own data places
+//! it. Its type is a key into the game's marker type registry, an open set
+//! the game's data defines. What a player has uncovered of the map lives
+//! only on that player's machine.
 //!
 //! # Examples
 //!
@@ -37,7 +38,7 @@ pub use snapshot::{
 };
 
 use crate::Host;
-use crate::abi::Status;
+use crate::abi::{MapMarkerInfo, Status};
 use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
 use crate::ecs::Entity;
@@ -94,7 +95,8 @@ impl MapMarkerTypeId {
     }
 }
 
-/// A marker on the map that the world comes with, from its `MapMarker`.
+/// A marker on the map that the world comes with: a `MapMarker` the
+/// scene places.
 ///
 /// # Examples
 ///
@@ -109,8 +111,6 @@ impl MapMarkerTypeId {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MapMarker {
-    /// The entity that carries it.
-    pub entity: Entity,
     /// Where it is, in metres.
     pub position: [f64; 3],
     /// Its type; `None` for a marker without one.
@@ -138,9 +138,6 @@ pub struct Map(&'static Resolved);
 struct Resolved {
     host: Host,
     world: World,
-    marker: ComponentType,
-    label_at: usize,
-    type_at: usize,
     waypoint: Option<Waypoint>,
 }
 
@@ -193,9 +190,6 @@ impl Map {
         let resolved = Resolved {
             host: load.host(),
             world,
-            marker: world.component_type(load, ids::MAP_MARKER)?,
-            label_at: field(load, ids::MAP_MARKER, ids::MAP_MARKER_MARKER_ID, 16)?,
-            type_at: field(load, ids::MAP_MARKER, ids::MAP_MARKER_MARKER_TYPE, 16)?,
             waypoint: Waypoint::resolve(load, world)
                 .inspect_err(|off| crate::debug!("waypoint reads off: {off}"))
                 .ok(),
@@ -215,13 +209,15 @@ impl Map {
         }
     }
 
-    /// Every marker in the world, by entity. The engine walks every entity
-    /// with a `MapMarker`, so call it now and then, not every step.
+    /// Every marker of the scene the server runs, in the scene's order.
+    /// The loader reads them from the game's data once per scene, so a
+    /// call after the first is cheap.
     ///
     /// # Errors
     ///
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
-    /// step; [`WorldError::Missing`] before a world runs.
+    /// step; [`WorldError::Missing`] while no world runs or when the scene
+    /// does not read on this game build.
     ///
     /// # Examples
     ///
@@ -231,7 +227,7 @@ impl Map {
     }
 
     /// The markers whose position lies in the box between corners `a` and
-    /// `b`, in metres, edges included, by entity.
+    /// `b`, in metres, edges included.
     ///
     /// # Errors
     ///
@@ -254,44 +250,35 @@ impl Map {
     }
 
     fn scan(self, keep: impl Fn([f64; 3]) -> bool) -> Result<Vec<MapMarker>, WorldError> {
-        let resolved = self.0;
-        let world = resolved.world;
-        let mut markers: Vec<MapMarker> = world
-            .placed_with(resolved.marker.hash())?
+        let host = self.0.host;
+        let size = u32::try_from(size_of::<MapMarkerInfo>()).map_err(|_| WorldError::Missing)?;
+        let mut capacity = 1024u32;
+        let infos = loop {
+            let mut infos = vec![MapMarkerInfo::EMPTY; capacity as usize];
+            let mut count = 0u32;
+            let status = (host.api().map_markers)(
+                host.handle(),
+                infos.as_mut_ptr(),
+                size,
+                capacity,
+                &raw mut count,
+            );
+            WorldError::from_status(status)?;
+            if count <= capacity {
+                infos.truncate(count as usize);
+                break infos;
+            }
+            capacity = count;
+        };
+        Ok(infos
             .iter()
-            .map(|place| (Entity(place.entity), crate::ecs::metres(place.position)))
-            .filter(|&(_, at)| keep(at))
-            .filter_map(
-                |(entity, position)| match self.live(entity, resolved.marker) {
-                    Ok(Some(data)) => Some(Ok((entity, position, data))),
-                    Ok(None) => None,
-                    Err(why) => Some(Err(why)),
-                },
-            )
-            .map(|found| {
-                let (entity, position, data) = found?;
-                // SAFETY: `data` is the entity's live MapMarker, read in the
-                // same call as `placed_with`, whose entities entry answered
-                // only on the game thread at a quiet moment, so no system
-                // writes it now; `resolve` checked that 16 bytes from
-                // `label_at` lie inside the type's size.
-                let label = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.label_at) };
-                // SAFETY: `data` is the entity's live MapMarker, read in the
-                // same call as `placed_with`, whose entities entry answered
-                // only on the game thread at a quiet moment, so no system
-                // writes it now; `resolve` checked that 16 bytes from
-                // `type_at` lie inside the type's size.
-                let reference = unsafe { crate::raw::read_at::<[u8; 16]>(data, resolved.type_at) };
-                Ok(MapMarker {
-                    entity,
-                    position,
-                    marker_type: set(reference).map(MapMarkerTypeId::from_guid),
-                    label: set(label),
-                })
+            .filter(|info| keep(info.position))
+            .map(|info| MapMarker {
+                position: info.position,
+                marker_type: set(info.marker_type).map(MapMarkerTypeId::from_guid),
+                label: set(info.label),
             })
-            .collect::<Result<_, WorldError>>()?;
-        markers.sort_unstable_by_key(|marker| marker.entity.0);
-        Ok(markers)
+            .collect())
     }
 
     /// Where `player` has set the waypoint all players see, in metres;

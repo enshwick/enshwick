@@ -369,3 +369,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
 | `fog_open`               | Has the loader copy the client's fog of war for the mod; client, init only                           | 94          |
 | `fog_read`               | Copies a box of the client's fog of war and its size and version; any thread                         | 94          |
+| `map_markers`            | The markers the scene places, read from the game's data once per scene; game thread, quiet           | 95          |

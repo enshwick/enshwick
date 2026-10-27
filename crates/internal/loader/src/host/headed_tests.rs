@@ -51,6 +51,7 @@ macro_rules! headed {
             KnowledgeInfo,
             KnowledgeInput,
             LoopWaitData,
+            MapMarkerInfo,
             Manifest,
             MigrationSet,
             ModInfo,

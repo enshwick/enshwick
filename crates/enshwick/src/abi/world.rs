@@ -939,3 +939,40 @@ impl TransactionInfo {
     /// again.
     pub const UNDO_REFUSED: u32 = 6;
 }
+
+/// A map marker of the scene the server runs, one of the list
+/// [`HostApi::map_markers`](super::HostApi::map_markers) writes.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::MapMarkerInfo;
+///
+/// let marker = MapMarkerInfo::EMPTY;
+/// assert_eq!(marker.label, [0; 16]);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct MapMarkerInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// Where it stands, in metres, y up.
+    pub position: [f64; 3],
+    /// Its `markerType` reference, a GUID in memory order; zero for none.
+    pub marker_type: [u8; 16],
+    /// Its label's text tag (`markerId`), a GUID in memory order; zero for
+    /// none.
+    pub label: [u8; 16],
+}
+
+impl_headed!(MapMarkerInfo);
+
+impl MapMarkerInfo {
+    /// A marker with nothing known, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        position: [0.0; 3],
+        marker_type: [0; 16],
+        label: [0; 16],
+    };
+}

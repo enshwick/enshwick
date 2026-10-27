@@ -323,6 +323,25 @@ pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
     })
 }
 
+pub(crate) extern "system" fn map_markers(
+    me: ModHandle,
+    out: *mut enshwick::abi::MapMarkerInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("map_markers", || {
+        let markers = match caller(me).and_then(crate::scene::markers) {
+            Ok(markers) => markers,
+            Err(status) => return status,
+        };
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
+        unsafe { crate::host::entries::mods::list(&markers, out, entry_size, capacity, count) }
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: u32,

@@ -93,6 +93,24 @@ impl FakeHost {
         self
     }
 
+    /// A map marker of the scene, as the loader reads it from the game's
+    /// archive for [`Map::markers`](crate::map::Map::markers).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::abi::MapMarkerInfo;
+    ///
+    /// let marker = MapMarkerInfo { position: [10.0, 40.0, 20.0], ..MapMarkerInfo::EMPTY };
+    /// let loader = enshwick::test::FakeHost::new().map_marker(marker).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn map_marker(mut self, marker: crate::abi::MapMarkerInfo) -> Self {
+        self.map_markers.push(marker);
+        self
+    }
+
     /// The template GUID of `entity`, in file order.
     ///
     /// # Examples
