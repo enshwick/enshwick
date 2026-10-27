@@ -12,6 +12,12 @@ Each entry names the pull request that made the change.
   without reading them. The loader lists a Luau mod's scripts each time it
   looks, so a script added, removed or renamed while the game runs reloads
   the mod with `dev_reload` as an edited one does.
+- A Luau mod reads and changes inventories through `enshwick.inventory`:
+  `slots`, `count`, `item_info`, `give`, `take`, `destroy_slot`,
+  `move_slot` and `move_all`, the done function getting the `Outcome` as a
+  table with `Done` and `OpError` by name. `Inventories::slots` and
+  `Inventories::count` read an inventory on the server's game thread
+  without a `Reader` (#581).
 - A Luau mod calls another mod's call with `enshwick.caller(description)`,
   from the module `cargo enshwick call --luau` writes; the input's fields
   are numbers, booleans, entities and GUIDs, each checked against its
