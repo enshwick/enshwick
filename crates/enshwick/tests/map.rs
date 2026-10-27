@@ -4,10 +4,13 @@
 mod tests {
     use std::sync::OnceLock;
 
-    use enshwick::abi::Status;
+    use enshwick::abi::{AltarInfo, Bounds, Header, PlayerInfo, Status};
+    use enshwick::altars::Altars;
     use enshwick::content::Guid;
     use enshwick::ecs::Entity;
-    use enshwick::map::{Map, MapMarker, MapMarkerTypeId};
+    use enshwick::map::{
+        Map, MapAltar, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
+    };
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
@@ -19,6 +22,7 @@ mod tests {
     const LABEL: Guid = Guid::parse("0b6f4c1a-7e2d-4a90-b3c8-1d2e3f405162");
 
     static MAP: OnceLock<Map> = OnceLock::new();
+    static ALTARS: OnceLock<Altars> = OnceLock::new();
 
     struct Cartographer;
 
@@ -29,6 +33,7 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let _first = MAP.set(load.map()?);
+            let _first = ALTARS.set(load.altars()?);
             Ok(Self)
         }
     }
@@ -212,5 +217,93 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_ne!(status, Status::OK);
         assert!(MAP.get().is_none());
+    }
+
+    fn player(slot: u32, entity: u32, name: &str) -> PlayerInfo {
+        let mut info = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot,
+            entity,
+            key: u64::from(entity) * 100,
+            permissions: 0,
+            name_len: u8::try_from(name.len()).unwrap(),
+            name: [0; 64],
+        };
+        info.name[..name.len()].copy_from_slice(name.as_bytes());
+        info
+    }
+
+    /// An altar at the middle of its zone, whose cells are 0.5 m.
+    fn altar(entity: u32, level: u8, min: [i64; 3], max: [i64; 3]) -> AltarInfo {
+        let mut info = AltarInfo::EMPTY;
+        info.entity = entity;
+        info.level = level;
+        info.zone = Bounds { min, max };
+        let middle = |axis: usize| f64::from(i32::try_from(min[axis] + max[axis]).unwrap()) * 0.25;
+        info.position = [middle(0), 0.0, middle(2)];
+        info
+    }
+
+    #[test]
+    fn a_snapshot_holds_players_altars_with_their_bases_and_markers() {
+        let fake = marker(fake(), 7, [100.0, 20.0, -50.0], LABEL, TOWN);
+        let fake = waypoint(fake, 40, 1, [12.5, 3.0, -7.25])
+            .player(player(1, 41, "Ann"))
+            .player(player(0, 40, "Bob"));
+        let (loader, map) = start(fake);
+        loader.set_altars(&[
+            altar(300, 2, [0, 0, 0], [10, 10, 10]),
+            altar(200, 1, [10, 0, 0], [20, 10, 10]),
+            altar(100, 3, [100, 0, 100], [110, 10, 110]),
+            altar(400, 0, [0; 3], [0; 3]),
+        ]);
+
+        let snapshot = map.snapshot(ALTARS.get().copied()).unwrap();
+        assert_eq!(
+            snapshot.players,
+            [
+                MapPlayer {
+                    key: 4000,
+                    name: "Bob".to_owned(),
+                    position: None,
+                    waypoint: Some([12.5, 3.0, -7.25])
+                },
+                MapPlayer {
+                    key: 4100,
+                    name: "Ann".to_owned(),
+                    position: None,
+                    waypoint: None
+                },
+            ]
+        );
+        let bases: Vec<Option<u32>> = snapshot.altars.iter().map(|altar| altar.base).collect();
+        assert_eq!(bases, [Some(0), Some(1), Some(1), None]);
+        assert_eq!(
+            snapshot.altars[0],
+            MapAltar {
+                position: [52.5, 0.0, 52.5],
+                level: 3,
+                zone: [[100, 0, 100], [110, 10, 110]],
+                base: Some(0)
+            }
+        );
+        assert_eq!(
+            snapshot.markers,
+            [MapPoint {
+                position: [100.0, 20.0, -50.0],
+                marker_type: Some(TOWN.id()),
+                label: Some(LABEL.id())
+            }]
+        );
+        let bytes = snapshot.to_bytes().unwrap();
+        assert_eq!(MapSnapshot::from_bytes(&bytes).unwrap(), snapshot);
+    }
+
+    #[test]
+    fn a_snapshot_without_altars_has_none() {
+        let (loader, map) = start(fake());
+        loader.set_altars(&[altar(300, 2, [0, 0, 0], [10, 10, 10])]);
+
+        assert!(map.snapshot(None).unwrap().altars.is_empty());
     }
 }

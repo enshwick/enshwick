@@ -53,6 +53,18 @@ player in the game sees, in metres; `None` while it is off. The server keeps
 it only while the player plays, never in the save. It fails like
 `markers()`, and with `Missing` on a game build without waypoints.
 
+## Snapshots for a map outside the game
+
+`map.snapshot(altars)` takes what the map shows now as a `MapSnapshot`:
+every player with position and waypoint, the Flame Altars of an `Altars`
+from `load.altars()` with the base each belongs to, and every marker. It is
+plain serde data in Enshwick's own format, for a process beside the server
+such as a web map. `to_bytes()` writes `MAP_SNAPSHOT_FORMAT` in two bytes and
+then the fields in postcard's encoding; `MapSnapshot::from_bytes` reads it
+back and refuses any other format. A snapshot carries a marker's label as a
+text id only, since a dedicated server has no texts. Take one every few
+seconds, not every step: it walks every marker.
+
 ## What a server does not have
 
 What a player has uncovered of the map, the markers a player places by hand
