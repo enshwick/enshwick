@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- `declare_mod!` exports the five functions under their C names only
+  outside test builds, so one test binary can declare several mods.
+
 ## [1.0.0-alpha.8] - 2026-10-27
 
 ### Added
