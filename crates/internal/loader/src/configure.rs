@@ -113,6 +113,24 @@ pub fn refused(why: &str) -> String {
     texts::fill("refused", &[("why", why)])
 }
 
+/// A mod's reason for refusing its settings, in the reader's language.
+///
+/// The reason's key names a text of the mod's `texts`, filled from its
+/// tab-separated `name=value` pairs; a reason no text has shows as the mod
+/// gave it.
+#[must_use]
+pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
+    let mut parts = why.split('\t');
+    let key = parts.next().unwrap_or_default();
+    let args: Vec<(&str, &str)> = parts.filter_map(|pair| pair.split_once('=')).collect();
+    match texts {
+        Some(texts) if texts.get(key, texts::language()).is_some() => {
+            texts.fill(key, texts::language(), &args)
+        }
+        _ => why.replace('\t', " "),
+    }
+}
+
 /// A mod's settings: one line per setting.
 #[must_use]
 pub fn list(id: &str, schema: &Schema, text: &str) -> String {
@@ -376,6 +394,41 @@ mod tests {
             parse("you.trading-post note hello there"),
             Request::Set("you.trading-post", "note", "hello there")
         );
+    }
+
+    #[test]
+    fn a_mod_s_reason_that_names_a_text_reads_in_the_reader_s_language() {
+        let texts = enshwick::i18n::Texts::parse(
+            "[en]\n\"stalls.too-few\" = \"Too few stalls.\"\n[uk]\n\"stalls.too-few\" = \"Замало ятків.\"\n",
+        )
+        .unwrap();
+        let uk = Some(enshwick::i18n::Language::UK_UA);
+        assert_eq!(
+            mod_reason(Some(&texts), "stalls.too-few"),
+            "Too few stalls."
+        );
+        assert_eq!(
+            texts::for_reader(uk, || mod_reason(Some(&texts), "stalls.too-few")),
+            "Замало ятків."
+        );
+        assert_eq!(
+            mod_reason(Some(&texts), "limit is 1 to 16"),
+            "limit is 1 to 16"
+        );
+        assert_eq!(mod_reason(None, "stalls.too-few"), "stalls.too-few");
+        let filled = enshwick::i18n::Texts::parse(
+            "[en]\n\"stalls.min\" = \"At least {min} stalls.\"\n[uk]\n\"stalls.min\" = \"Щонайменше {min} ятки.\"\n",
+        )
+        .unwrap();
+        let why = enshwick::config::ConfigError::text("stalls.min", &[("min", "2")]);
+        let sent = "stalls.min\tmin=2";
+        assert_eq!(why.to_string(), "stalls.min (min = 2)");
+        assert_eq!(mod_reason(Some(&filled), sent), "At least 2 stalls.");
+        assert_eq!(
+            texts::for_reader(uk, || mod_reason(Some(&filled), sent)),
+            "Щонайменше 2 ятки."
+        );
+        assert_eq!(mod_reason(None, sent), "stalls.min min=2");
     }
 
     #[test]

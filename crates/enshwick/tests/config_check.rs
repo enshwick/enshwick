@@ -3,6 +3,7 @@
 #[cfg(test)]
 mod tests {
     use enshwick::abi::Status;
+    use enshwick::config::ConfigError;
     use enshwick::{Load, Mod, Off};
 
     /// Altar settings.
@@ -18,9 +19,12 @@ mod tests {
     }
 
     impl Settings {
-        fn check(&self) -> Result<(), String> {
+        fn check(&self) -> Result<(), ConfigError> {
             if self.first > self.last {
-                return Err("first is more than last".to_owned());
+                return Err("first is more than last".into());
+            }
+            if self.last == 20 {
+                return Err(ConfigError::text("config.last.max", &[("max", "19")]));
             }
             Ok(())
         }
@@ -54,6 +58,12 @@ mod tests {
             loader.check_settings("first = 5\nlast = 4\n"),
             Err(enshwick::test::SettingsRefused {
                 reason: "first is more than last".to_owned()
+            })
+        );
+        assert_eq!(
+            loader.check_settings("first = 2\nlast = 20\n"),
+            Err(enshwick::test::SettingsRefused {
+                reason: "config.last.max\tmax=19".to_owned()
             })
         );
         assert!(loader.check_settings("first = 50\nlast = 60\n").is_err());

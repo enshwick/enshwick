@@ -259,7 +259,7 @@ pub(super) fn expand_config(input: &DeriveInput) -> syn::Result<TokenStream> {
     let (defaults, text, schema) = (local("defaults"), local("text"), local("schema"));
     let (validate, title) = struct_config(&input.attrs)?;
     let own_check = validate
-        .map(|path| quote!(#path(self).map_err(::enshwick::config::ConfigError::invalid)?;));
+        .map(|path| quote!(#path(self).map_err(::core::convert::Into::<::enshwick::config::ConfigError>::into)?;));
     let mut entries = Vec::new();
     let mut described = Vec::new();
     let mut checks = Vec::new();
