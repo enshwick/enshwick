@@ -75,23 +75,19 @@ struct Layout {
 }
 
 impl Layout {
-    fn read(loader: &Loader) -> Result<Self, String> {
-        let table = |id: Constant| {
-            loader
-                .offset(id)
-                .ok_or(format!("{id} is not in this build"))
-        };
-        let reflected = |id: &str| {
+    fn read(loader: &Loader) -> Result<Self, LayoutError> {
+        let table = |id: Constant| loader.offset(id).ok_or(LayoutError::Table(id));
+        let reflected = |id: &'static str| {
             catalogue::constant(id, &loader.reflection)
                 .and_then(|v| usize::try_from(v).ok())
-                .ok_or(format!("the game does not reflect {id}"))
+                .ok_or(LayoutError::Reflection(id))
         };
         let type_size = loader
             .reflection
             .type_info(catalogue::type_name(catalogue::MARKER_TYPE))
             .ok()
             .and_then(|info| usize::try_from(info.size()).ok())
-            .ok_or("the game does not reflect its marker types")?;
+            .ok_or(LayoutError::Reflection(catalogue::MARKER_TYPE))?;
         Ok(Self {
             list: table(pinned::map::LIST)?,
             list_count: table(pinned::map::LIST_COUNT)?,
@@ -103,7 +99,7 @@ impl Layout {
             entry_label: table(pinned::map::ENTRY_LABEL)?,
             entry_color: table(pinned::map::ENTRY_COLOR)?,
             visible: u8::try_from(reflected(catalogue::MARKER_VISIBLE)?)
-                .map_err(|e| e.to_string())?,
+                .map_err(|_| LayoutError::Reflection(catalogue::MARKER_VISIBLE))?,
             registry: table(pinned::map::REGISTRY)?,
             registry_blob: table(pinned::map::REGISTRY_BLOB)?,
             blob_types: reflected(catalogue::MARKER_REGISTRY_TYPES)?,
@@ -137,6 +133,17 @@ impl Layout {
             && entry_ends.iter().all(|&end| end <= self.entry_size)
             && type_ends.iter().all(|&end| end <= self.type_size)
     }
+}
+
+/// Why the map markers' layout does not read on this build.
+#[derive(Debug, thiserror::Error)]
+enum LayoutError {
+    /// The build table lacks a row.
+    #[error("{0} is not in this build")]
+    Table(Constant),
+    /// The game's reflection lacks a fact, or gives one out of range.
+    #[error("the game does not reflect {0}")]
+    Reflection(&'static str),
 }
 
 /// The layout [`link`] read, once the build has every part of it.

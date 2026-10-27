@@ -130,6 +130,18 @@ struct Layout {
     quest_id: usize,
 }
 
+impl Layout {
+    fn entry_holds_its_fields(&self) -> bool {
+        entry_holds(self.log_entry, self.log_entry_id, self.log_entry_value)
+    }
+}
+
+/// Whether a log entry of `size` bytes holds its `u32` id at `id` and its
+/// `u32` value at `value`.
+const fn entry_holds(size: usize, id: usize, value: usize) -> bool {
+    id + 4 <= size && value + 4 <= size
+}
+
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 /// The quest ids, read once from the journal.
 static QUESTS: OnceLock<FxHashSet<u32>> = OnceLock::new();
@@ -210,6 +222,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 quest_size: size("keen::JournalQuestResource")?,
                 quest_id: field("keen::JournalCollectionResource", "entryId")?,
             })
+            .filter(Layout::entry_holds_its_fields)
         })
         .as_ref()
 }
@@ -626,4 +639,17 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
 /// Forgets the last update seen when a hosted game ends.
 pub(crate) fn forget() {
     SEEN_STEP.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_log_entry_must_hold_its_id_and_value() {
+        assert!(entry_holds(0x10, 0, 4));
+        assert!(!entry_holds(0x10, 0, 0xd), "the value ends past the entry");
+        assert!(!entry_holds(4, 0, 4), "the value ends past the entry");
+        assert!(!entry_holds(0x10, 0x10, 4), "the id ends past the entry");
+    }
 }
