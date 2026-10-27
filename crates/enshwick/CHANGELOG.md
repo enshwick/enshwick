@@ -14,7 +14,7 @@ Each entry names the pull request that made the change.
   data by the loader (`DataSelect::RECIPE_KIND`, `DataSelect::WORKSHOP`,
   ABI minor 90); a data pack's `recipes.toml` takes `kind = [...]` and
   `workshop = [...]` for the same, and `RecipeKind::name` gives the names
-  (#PR).
+  (#562).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
