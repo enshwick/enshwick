@@ -8,9 +8,6 @@ use super::{
     SCRIPT_EXTENSION, SCRIPT_MAIN,
 };
 
-/// The folder of a pack's icons, as their names start.
-const ICONS: &str = "icons/";
-
 /// One problem in a pack: where it is and what is wrong.
 ///
 /// # Examples
@@ -171,31 +168,27 @@ impl PackFiles {
     /// ```
     pub fn read_dir(dir: &Path) -> Result<Self, ReadPackError> {
         let mut files = Self::new();
-        let read = |path: &Path, name: &str, files: &mut Self| -> Result<(), ReadPackError> {
-            let io = |source| ReadPackError::Io {
-                file: name.to_owned(),
-                source,
-            };
-            let meta = std::fs::metadata(path).map_err(io)?;
-            let limit = if name.starts_with(ICONS) {
-                MAX_ICON_FILE
-            } else {
-                MAX_FILE
-            };
-            if meta.len() > limit {
-                return Err(ReadPackError::TooLarge {
+        let read =
+            |path: &Path, name: &str, limit: u64, files: &mut Self| -> Result<(), ReadPackError> {
+                let io = |source| ReadPackError::Io {
                     file: name.to_owned(),
-                    limit,
-                });
-            }
-            let bytes = std::fs::read(path).map_err(io)?;
-            files.files.insert(name.to_owned(), bytes);
-            Ok(())
-        };
+                    source,
+                };
+                let meta = std::fs::metadata(path).map_err(io)?;
+                if meta.len() > limit {
+                    return Err(ReadPackError::TooLarge {
+                        file: name.to_owned(),
+                        limit,
+                    });
+                }
+                let bytes = std::fs::read(path).map_err(io)?;
+                files.files.insert(name.to_owned(), bytes);
+                Ok(())
+            };
         for name in FILES {
             let path = dir.join(name);
             if path.is_file() {
-                read(&path, name, &mut files)?;
+                read(&path, name, MAX_FILE, &mut files)?;
             }
         }
         if let Ok(entries) = std::fs::read_dir(dir.join("icons")) {
@@ -210,12 +203,12 @@ impl PackFiles {
                     if icons > MAX_ICONS {
                         return Err(ReadPackError::TooManyIcons);
                     }
-                    read(&path, &format!("{ICONS}{file}"), &mut files)?;
+                    read(&path, &format!("icons/{file}"), MAX_ICON_FILE, &mut files)?;
                 }
             }
         }
         for (path, name) in scripts_in(dir)? {
-            read(&path, &name, &mut files)?;
+            read(&path, &name, MAX_FILE, &mut files)?;
         }
         Ok(files)
     }

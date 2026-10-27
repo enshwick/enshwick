@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use enshwick::abi::{Event, Level, ManifestFlags};
 
 use crate::host::loader;
+use crate::join::missing::{ADVERTISED_BYTES, Missing, Wanted, listed};
 use crate::kept_text::KeptText;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -152,23 +153,8 @@ pub(crate) fn apply_join_values(values: &BTreeMap<String, String>) {
     }
 }
 
-/// One of the server's join mods the last refused join found missing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Missing {
-    pub(crate) id: &'static str,
-    pub(crate) name: &'static str,
-    pub(crate) version: &'static str,
-    pub(crate) file: &'static str,
-    pub(crate) page: &'static str,
-}
-
 /// The server's join mods the last refused join found missing.
 pub(crate) static JOIN_MISSING: Mutex<Vec<Missing>> = Mutex::new(Vec::new());
-
-/// The most bytes of server-advertised text kept for
-/// [`HostApi::join_missing`](enshwick::abi::HostApi::join_missing) over the
-/// process: each refused join may bring new text, and none of it is freed.
-const ADVERTISED_BYTES: usize = 64 << 10;
 
 /// The loader's own strings the host table has handed out.
 static KEPT: Mutex<KeptText> = Mutex::new(KeptText::new(usize::MAX));
@@ -180,20 +166,6 @@ pub(crate) fn keep(text: &str) -> &'static str {
     KEPT.relock().keep(text).unwrap_or_default()
 }
 
-/// One of the server's join mods the join check found missing on this
-/// client, as the server advertises it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Wanted {
-    /// The mod id.
-    pub(crate) id: String,
-    /// The name players read; empty for none.
-    pub(crate) name: String,
-    /// The server's version.
-    pub(crate) version: String,
-    /// The mod's homepage; empty for none.
-    pub(crate) page: String,
-}
-
 /// On a client the join check kept out: records `missing`, the server's
 /// join mods this client lacks or runs in another version, and raises
 /// [`Event::JOIN_REFUSED`].
@@ -201,20 +173,15 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
     let Some(loader) = loader() else {
         return;
     };
-    let mut left_out = 0usize;
-    let entries: Vec<Missing> = {
-        let mut advertised = ADVERTISED.relock();
-        missing
-            .iter()
-            .filter_map(|wanted| {
-                let ours = loader.mods.iter().find(|m| m.id == wanted.id);
-                let file = keep(ours.map_or("", |m| m.file.as_str()));
-                let entry = advertised_entry(&mut advertised, wanted, file);
-                left_out += usize::from(entry.is_none());
-                entry
-            })
-            .collect()
-    };
+    let (entries, left_out) = listed(&mut ADVERTISED.relock(), missing, |id| {
+        keep(
+            loader
+                .mods
+                .iter()
+                .find(|m| m.id == id)
+                .map_or("", |m| m.file.as_str()),
+        )
+    });
     if left_out > 0 {
         crate::log!(
             WARN,
@@ -227,22 +194,6 @@ pub(crate) fn report_join_missing(missing: &[Wanted]) {
         *held = entries;
     }
     loader.emit(Event::JOIN_REFUSED, None, core::ptr::null());
-}
-
-/// `wanted` as listed to mods, its text kept in `advertised`; `None` once
-/// that has no room for it.
-fn advertised_entry(
-    advertised: &mut KeptText,
-    wanted: &Wanted,
-    file: &'static str,
-) -> Option<Missing> {
-    Some(Missing {
-        id: advertised.keep(&wanted.id)?,
-        name: advertised.keep(&wanted.name)?,
-        version: advertised.keep(&wanted.version)?,
-        file,
-        page: advertised.keep(&wanted.page)?,
-    })
 }
 
 /// Turns off the loaded mod `id`, if there is one, with `reason`.

@@ -754,6 +754,19 @@ fn scripts_deeper_than_the_bound_are_not_read_and_too_many_are_refused() {
 }
 
 #[test]
+fn a_script_in_the_icons_folder_keeps_the_file_bound() {
+    let folder = Folder::new("icon-script");
+    folder.write("main.luau", "return 1");
+    let script = "-".repeat(usize::try_from(MAX_ICON_FILE).unwrap() + 1);
+    folder.write("icons/large.luau", &script);
+    let files = PackFiles::read_dir(&folder.0).unwrap();
+    assert_eq!(
+        files.get("icons/large.luau").map(<[u8]>::len),
+        Some(script.len())
+    );
+}
+
+#[test]
 fn icons_past_the_bound_are_refused() {
     let folder = Folder::new("icons");
     for i in 0..MAX_ICONS {
