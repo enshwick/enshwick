@@ -22,7 +22,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::pinned;
 use crate::scene_markers::{
-    Lookup, SceneFailure, SceneKey, SceneLayout, SceneMarkers, collect, placements,
+    Lookup, ReadSceneError, SceneKey, SceneLayout, SceneMarkers, collect, placements,
 };
 
 /// The build table ids this part of the loader names.
@@ -110,19 +110,19 @@ fn scene_key(loader: &Loader) -> Result<SceneKey, Status> {
 }
 
 /// Reads the markers of the scene `key` from the archive.
-fn read(layout: Option<SceneLayout>, key: SceneKey) -> Result<Vec<MapMarkerInfo>, SceneFailure> {
-    let layout = layout.ok_or(SceneFailure::Layout)?;
-    let chunk_hash = names::type_hash(names::SCENE_CHUNK).ok_or(SceneFailure::Layout)?;
-    let marker_hash = names::type_hash(names::MAP_MARKER).ok_or(SceneFailure::Layout)?;
-    let archive = crate::archive::game().ok_or(SceneFailure::Archive)?;
+fn read(layout: Option<SceneLayout>, key: SceneKey) -> Result<Vec<MapMarkerInfo>, ReadSceneError> {
+    let layout = layout.ok_or(ReadSceneError::Layout)?;
+    let chunk_hash = names::type_hash(names::SCENE_CHUNK).ok_or(ReadSceneError::Layout)?;
+    let marker_hash = names::type_hash(names::MAP_MARKER).ok_or(ReadSceneError::Layout)?;
+    let archive = crate::archive::game().ok_or(ReadSceneError::Archive)?;
     let chunk = archive
         .resource(&ResourceKey {
             guid: key.scene,
             type_hash: chunk_hash,
             part: key.part,
         })
-        .ok_or(SceneFailure::Chunk)?;
-    let placed = placements(&layout, &chunk).ok_or(SceneFailure::ChunkUnreadable)?;
+        .ok_or(ReadSceneError::Chunk)?;
+    let placed = placements(&layout, &chunk).ok_or(ReadSceneError::ChunkUnreadable)?;
     let (found, skipped) = collect(&layout, &placed, marker_hash, |guid| {
         archive.resource(&ResourceKey {
             guid,
@@ -165,7 +165,7 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
             let work = move || {
                 let began = Instant::now();
                 let found = std::panic::catch_unwind(|| read(layout, key))
-                    .unwrap_or(Err(SceneFailure::Panicked));
+                    .unwrap_or(Err(ReadSceneError::Panicked));
                 match &found {
                     Ok(markers) => crate::log!(
                         DEBUG,
@@ -185,7 +185,7 @@ pub(crate) fn markers(loader: &Loader) -> Result<Arc<[MapMarkerInfo]>, Status> {
                 let _kept = STATE
                     .relock()
                     .markers
-                    .finish(key, Err(SceneFailure::Thread));
+                    .finish(key, Err(ReadSceneError::Thread));
             }
             Err(Status::NOT_LOADED)
         }
