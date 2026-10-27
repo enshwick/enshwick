@@ -49,7 +49,7 @@ Each entry names the pull request that made the change.
   `CraftRecipeEvent`) take them, and the fake host's methods do too.
   `affixes::AffixId` names an affix in this process (`Load::define_affix`,
   `Affixes::info`, `Line::affix`), and `world::SkillNode` a skill node
-  (`Skill::node`). `Summon::ammo` is an `Option`.
+  (`Skill::node`). `Summon::ammo` is an `Option` (#608).
 - Breaking: `Load::on` subscribes to typed game events too, as Luau's
   `enshwick.on` does: `load.on::<EntityDiedEvent>(..)` replaces
   `load.on_game`. `events::Kind` is the one trait `on` takes; the loader
