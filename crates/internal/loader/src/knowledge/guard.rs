@@ -208,23 +208,21 @@ fn refusal(definition: Option<Definition>, kind: u8, value: u32) -> u32 {
     }
 }
 
-/// The definition of `id` in the running world, read from any thread: the
-/// definitions and the journal stay put while a world runs.
+/// The definition of `id` in the running world, read from any thread under
+/// an access to the server: the definitions and the journal stay put while
+/// a world runs, and the access keeps the world from ending under the read.
 fn define(layout: &Layout, site: Site, id: u32) -> Option<Definition> {
-    let server = crate::world::SERVER.load(Ordering::Acquire);
-    if server == 0 {
-        return None;
-    }
-    let (game, state) = super::store_of(layout, server).ok()?;
+    let access = crate::world::access(&"knowledge guard")?;
+    let (game, state) = super::store_of(layout, access.server()).ok()?;
     let (scope, def) = definition(layout, state, id)?;
     let player = scope == KnowledgeInfo::PLAYER;
     let (experience, skill_points) = if player {
         // SAFETY: `def` is a player's definition `definition` found in the
-        // live blob, which stays put while the world runs; its experience
+        // live blob, which stays put while the world runs and `access` is held; its experience
         // id sits at the reflected `experienceGainId` field.
         let experience = unsafe { read(def, site.experience) };
         // SAFETY: `def` is a player's definition `definition` found in the
-        // live blob, which stays put while the world runs; its skill points
+        // live blob, which stays put while the world runs and `access` is held; its skill points
         // sit at the reflected `unlockedSkillPoints` field.
         let skill_points = unsafe { read(def, site.skill_points) };
         (experience, skill_points)
