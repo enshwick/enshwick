@@ -479,7 +479,7 @@ pub(crate) fn after_step(loader: &Loader) {
     // Only the post-step forgets: passes run many times a step, and none
     // runs once the last altar is gone.
     if step.is_multiple_of(EXPIRE_EVERY)
-        && let Ok(mut state) = STATE.try_lock()
+        && let Some(mut state) = STATE.try_relock()
     {
         let now = now();
         let state = &mut *state;
