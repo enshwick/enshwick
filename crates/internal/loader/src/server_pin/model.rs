@@ -37,7 +37,7 @@ mod tests {
         a: &Arc<Memory>,
         b: Option<&Arc<Memory>>,
     ) -> thread::JoinHandle<()> {
-        let (cell, a, b) = (Arc::clone(cell), Arc::clone(a), b.map(Arc::clone));
+        let (cell, a, b) = (Arc::clone(cell), Arc::clone(a), b.cloned());
         thread::spawn(move || {
             if let Some(pin) = cell.pin(READER) {
                 let memory = match pin.server {

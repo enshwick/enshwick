@@ -375,11 +375,11 @@ fn held(loader: &Loader, access: &ServerAccess<'_>) -> Option<usize> {
     let registry_at = loader.offset(pinned::server::ITEM_REGISTRY)?;
     // SAFETY: `access` holds the running server, non-zero. The game frees
     // it, with its game-systems holder, only in the teardown on its game
-    // thread after set_state(…, 7) (server 399, client 426): an access on
-    // that thread ends before the teardown runs, and one elsewhere is a pin,
-    // which `world::wait_unpinned` waits for at that call, while no pin is
-    // taken after the shutdown's `world::retire`. The holder sits at the
-    // table's `server.player_infos`.
+    // thread after set_state(…, 7) (server 399, client 426). At that call
+    // `world::tear_down` stops new pins, waits for every pin to drop and
+    // then forgets the server, so a game-thread access, which ends before
+    // the teardown runs, finds none after it, and one elsewhere is a pin it
+    // waited for. The holder sits at the table's `server.player_infos`.
     let holder: usize = unsafe { crate::memory::read(access.server(), holder_at) };
     if holder == 0 {
         return None;

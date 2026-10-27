@@ -459,8 +459,11 @@ fn end_session() {
 }
 
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
-    if state == STATE_TEAR_DOWN {
-        crate::world::wait_unpinned();
+    if state == STATE_TEAR_DOWN && std::panic::catch_unwind(crate::world::tear_down).is_err() {
+        crate::log!(
+            ERROR,
+            "the server's teardown wait panicked; readers off the game thread may still hold it"
+        );
     }
     let old = loaded()
         .filter(|_| !entry.is_null())
@@ -472,6 +475,9 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     // slot holds the next function of that signature; the game's arguments
     // pass unchanged.
     unsafe { STATE_NEXT.get()(entry, state) };
+    if state == STATE_SHUTDOWN {
+        crate::world::retire();
+    }
     let (Some((loader, _)), Some(old)) = (loaded().filter(|_| !STATE_FUSE.is_off()), old) else {
         return;
     };
@@ -488,7 +494,6 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
         }
         STATE_SHUTDOWN if old != STATE_SHUTDOWN => {
             loader.emit(Event::SHUTDOWN_STARTED, None, core::ptr::null());
-            crate::world::retire();
             if loader.side == Side::CLIENT {
                 end_session();
                 crate::chat::forget();

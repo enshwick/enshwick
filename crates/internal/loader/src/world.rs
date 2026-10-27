@@ -62,6 +62,8 @@ static SERVER: ServerCell = ServerCell::new();
 const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
 /// How often the warning repeats while the reader still holds it.
 const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
+/// The game thread at the server's shutdown, 0 once its teardown began.
+static RETIRED_ON: AtomicU32 = AtomicU32::new(0);
 /// The game thread's id, seen by the post-step hook.
 pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
 /// The server's entity world, seen by the post-step hook.
@@ -87,21 +89,32 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
 
 /// Begins the server's end at its shutdown, on its game thread: no reader
 /// off the game thread pins it from now on, while the game thread still
-/// reads it. The game frees the server only in the teardown after
-/// [`wait_unpinned`] (server 399, client 426).
+/// reads it for the shutdown work. The game frees the server only in the
+/// teardown after [`tear_down`] (server 399, client 426).
 pub(crate) fn retire() {
+    RETIRED_ON.store(GAME_THREAD.load(Ordering::Acquire), Ordering::Release);
     SERVER.retire();
 }
 
-/// Waits, without a bound, until every reader off the game thread that
-/// pinned the server before [`retire`] has let go; on the game thread as it
-/// enters the teardown, before the game frees anything. A reader still
-/// holding on after a second is named in a warning, repeated every few
-/// seconds: a hang is better than a read of freed memory.
-pub(crate) fn wait_unpinned() {
+/// Ends the server as the game enters its teardown, on the game thread
+/// before the game frees anything: no pin from now on, a wait without a
+/// bound until every reader off the game thread that pinned it has let go,
+/// then no server for anyone. A reader still holding on after a second is
+/// named in a warning, repeated every few seconds: a hang is better than a
+/// read of freed memory.
+pub(crate) fn tear_down() {
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
+    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    let retired_on = RETIRED_ON.swap(0, Ordering::AcqRel);
+    if retired_on != 0 && retired_on != me {
+        crate::log!(
+            WARN,
+            "the server's teardown runs on thread {me}, its shutdown ran on thread {retired_on}"
+        );
+    }
     let start = Instant::now();
     let mut next_warning = start + STALL_FIRST_WARNING;
-    SERVER.wait_unpinned(|place| {
+    SERVER.tear_down(|place| {
         std::thread::yield_now();
         let now = Instant::now();
         if now >= next_warning {
@@ -113,6 +126,8 @@ pub(crate) fn wait_unpinned() {
             );
         }
     });
+    SERVER_WORLD.store(0, Ordering::Release);
+    GAME_THREAD.store(0, Ordering::Release);
 }
 
 /// Forgets the server of a hosted game that stopped, after [`retire`].
@@ -199,7 +214,7 @@ pub(crate) fn hosting() -> bool {
 /// The running server for a read at `place` on any thread: on its game
 /// thread directly, since the teardown that frees it runs there too;
 /// elsewhere through a pin, and the game frees the server only after
-/// [`wait_unpinned`] has seen every pin drop. `None` while no server runs,
+/// [`tear_down`] has seen every pin drop. `None` while no server runs,
 /// or off the game thread once its end began at shutdown.
 pub(crate) fn access(place: Place) -> Option<ServerAccess<'static>> {
     // SAFETY: `GetCurrentThreadId` has no preconditions.

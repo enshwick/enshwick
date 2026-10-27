@@ -77,7 +77,9 @@ impl ServerCell {
     }
 
     /// The running server, 0 for none, for its game thread, which needs
-    /// no pin; it stays readable there until it is published anew.
+    /// no pin: still there after [`ServerCell::retire`], for the shutdown
+    /// work, and 0 from [`ServerCell::tear_down`] on, before the game frees
+    /// it.
     pub(crate) fn current(&self) -> usize {
         self.server.0.load(Ordering::Acquire)
     }
@@ -123,6 +125,17 @@ impl ServerCell {
         while self.state.0.load(Ordering::Acquire) & !ENDING != 0 {
             stalled(self.last_place());
         }
+    }
+
+    /// Ends the running server before its teardown frees it, on its game
+    /// thread: no pin from now on, as [`ServerCell::retire`] (again, in
+    /// case the shutdown did not), the wait of
+    /// [`ServerCell::wait_unpinned`], then no server, even for the game
+    /// thread.
+    pub(crate) fn tear_down(&self, stalled: impl FnMut(&'static str)) {
+        self.retire();
+        self.wait_unpinned(stalled);
+        self.publish(0);
     }
 
     /// The place of the last pin taken.
@@ -233,6 +246,37 @@ mod tests {
         );
         drop(access);
         cell.wait_unpinned(|_| panic!("the access dropped"));
+    }
+
+    #[test]
+    fn the_game_thread_gets_none_after_the_teardown_point() {
+        let cell = ServerCell::new();
+        cell.publish(0x1000);
+        cell.retire();
+        assert!(
+            cell.access(HERE, true).is_some(),
+            "shutdown work still reads"
+        );
+        cell.tear_down(|_| panic!("no pin to wait for"));
+        assert!(cell.access(HERE, true).is_none());
+        assert!(cell.access(HERE, false).is_none());
+        assert_eq!(cell.current(), 0);
+    }
+
+    #[test]
+    fn the_teardown_ends_the_server_even_when_the_shutdown_did_not() {
+        let cell = ServerCell::new();
+        cell.publish(0x1000);
+        let pin = cell.pin(HERE).unwrap();
+        let mut stalls = 0;
+        let mut pin = Some(pin);
+        cell.tear_down(|_| {
+            stalls += 1;
+            assert!(cell.pin(HERE).is_none(), "no pin once the teardown began");
+            drop(pin.take());
+        });
+        assert_eq!(stalls, 1);
+        assert!(cell.access(HERE, true).is_none());
     }
 
     #[test]
