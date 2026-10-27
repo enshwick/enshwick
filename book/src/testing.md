@@ -230,6 +230,7 @@ Playing the game:
 | `run_at(address, &mut registers)` | Runs the mid-function hooks at an address; returns how many ran.            |
 | `raise::<E>(&data)`               | Raises an event to the mod's handlers on this thread; returns how many ran. |
 | `raise_raw(event, data)`          | The same for a raw `Event` id; `unsafe`.                                    |
+| `tick(elapsed)`                   | Runs a step `elapsed` after the last, as the loader does; returns the runs. |
 | `raise_game_event(hash, bytes)`   | Hands a game event to the mod's handlers; returns how many ran.             |
 | `send_mod_event(&event)`          | Sends another mod's event to the mod's handlers; returns how many ran.      |
 | `migrate_settings(text)`          | Runs the mod's migrations' settings steps on a settings text.               |

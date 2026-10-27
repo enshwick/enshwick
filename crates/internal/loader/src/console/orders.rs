@@ -14,15 +14,18 @@ pub const MAX_SPAWNS: u32 = 32;
 /// range.
 pub const MAX_METRES: f64 = 100_000.0;
 
-/// `give <item> <count>`: items for every player online.
-pub const GIVE_USAGE: &str = "enshwick give <item> <count>";
-/// `give-to <item> <count> <player or account>`: items for one player.
-pub const GIVE_TO_USAGE: &str = "enshwick give-to <item> <count> <player or account>";
-/// `spawn <template> <count> <x> <y> <z> | <player or account>`.
+/// The key of the usage of `give <item> <count>`: items for every player
+/// online.
+pub const GIVE_USAGE: &str = "usage.give";
+/// The key of the usage of `give-to <item> <count> <player or account>`:
+/// items for one player.
+pub const GIVE_TO_USAGE: &str = "usage.give-to";
+/// The key of the usage of `spawn <template> <count> <x> <y> <z> | <player
+/// or account>`.
 pub const SPAWN_USAGE: &str =
     "enshwick spawn <template GUID> <count> <x> <y> <z> | <player or account>";
-/// `teleport <x> <y> <z> <player or account>`.
-pub const TELEPORT_USAGE: &str = "enshwick teleport <x> <y> <z> <player or account>";
+/// The key of the usage of `teleport <x> <y> <z> <player or account>`.
+pub const TELEPORT_USAGE: &str = "usage.teleport";
 
 /// Who receives a give.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,7 +177,7 @@ pub fn spawn(args: &str) -> Result<Spawn<'_>, Usage> {
     })
 }
 
-/// `teleport <x> <y> <z> <player or account>`.
+/// The key of the usage of `teleport <x> <y> <z> <player or account>`.
 ///
 /// # Errors
 ///

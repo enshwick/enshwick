@@ -101,7 +101,7 @@ fn refusal(line: &str, status: Status) -> String {
     if status == Status::MISSING {
         texts::fill("enshwick.unknown", &[("id", word)])
     } else {
-        format!("not run ({status:?})")
+        texts::fill("console.not-run", &[("status", &format!("{status:?}"))])
     }
 }
 

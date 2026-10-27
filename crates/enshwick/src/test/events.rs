@@ -50,16 +50,18 @@ impl Installed {
     }
 
     /// Raises the event `E` with `data` to every handler of the mod, on this
-    /// thread; returns how many ran.
+    /// thread; returns how many ran. [`Ticked`](crate::events::Ticked)
+    /// reaches every tick handler, periodic ones too, whatever their period;
+    /// [`tick`](Self::tick) runs a step as the loader does.
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick::abi::{Header, TickData};
+    /// use enshwick::abi::TickData;
     /// use enshwick::events;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let tick = TickData { header: Header::of::<TickData>(), step: 1 };
+    /// let tick = TickData::new(1);
     /// assert_eq!(loader.raise::<events::Ticked>(&tick), 0);
     /// assert_eq!(loader.raise::<events::ShutdownStarted>(&()), 0);
     /// ```
@@ -91,10 +93,12 @@ impl Installed {
     #[must_use = "the count says whether the mod handles the event"]
     pub unsafe fn raise_raw(&self, event: Event, data: *const core::ffi::c_void) -> usize {
         let handlers: Vec<_> = table::with(Vec::new(), |s| {
+            let periodic = (event == Event::TICKED).then(|| s.ticks.handlers());
             s.subscriptions
                 .iter()
                 .filter(|s| s.0 == event)
                 .map(|s| (s.1, s.2))
+                .chain(periodic.into_iter().flatten())
                 .collect()
         });
         for &(callback, user) in &handlers {

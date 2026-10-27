@@ -621,7 +621,7 @@ pub(crate) fn forget() {
         gone.iter()
             .map(|r| Finished::without_run(r, InventoryResult::UNAVAILABLE)),
     );
-    deliver();
+    deliver(Instant::now());
 }
 
 fn finish(results: impl IntoIterator<Item = Finished>) {
@@ -782,8 +782,7 @@ pub(crate) fn item_info(loader: &Loader, item: u32) -> Result<ItemData, Status> 
 
 /// Answers the requests that waited too long and hands out the results; on
 /// the game thread after each step.
-pub(crate) fn deliver() {
-    let now = Instant::now();
+pub(crate) fn deliver(now: Instant) {
     let late = QUEUE.drain(|r| now.duration_since(r.queued) > TIMEOUT);
     if !late.is_empty() {
         finish(

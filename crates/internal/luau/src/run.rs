@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 
 use arc_swap::{ArcSwap, ArcSwapOption};
 use enshwick::__private::Relock as _;
-use enshwick::abi::Level;
+use enshwick::abi::{Event, Level};
+use enshwick::events::Ticked;
 use enshwick::script::{self, EventKind, Opened, Signature, Value};
 use enshwick::{Host, Load, Off};
 use mlua::chunk::ChunkMode;
@@ -501,7 +502,13 @@ fn subscribe(
         match &sub {
             Subscription::Loader(event) => {
                 let kind = Subscription::loader_kind(*event)?;
-                load.on_raw_event(*event, move |raw| handled.dispatch(kind, raw))?;
+                if *event == Event::TICKED {
+                    load.on_tick(Ticked::DEFAULT_EVERY, move |tick| {
+                        handled.dispatch(kind, (&raw const *tick).cast());
+                    })?;
+                } else {
+                    load.on_raw_event(*event, move |raw| handled.dispatch(kind, raw))?;
+                }
             }
             Subscription::Game(name) => {
                 let kind = Subscription::game_kind(name)?;
