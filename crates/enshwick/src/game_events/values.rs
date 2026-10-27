@@ -67,7 +67,69 @@ macro_rules! mask {
                 self.union(other)
             }
         }
+
+        /// The names of the bits set, such as `{"MAGICAL_FIRE"}`.
+        impl crate::script::Typed for $name {
+            const TY: &'static crate::script::Ty = &crate::script::Ty::List(&crate::script::Ty::String);
+        }
+
+        impl crate::script::IntoScript for $name {
+            fn into_value(self) -> crate::script::Value {
+                let set = [$((stringify!($constant), Self::$constant)),*]
+                    .into_iter()
+                    .filter(|(_, bit)| self.contains(*bit))
+                    .map(|(name, _)| crate::script::Value::String(name.to_owned()))
+                    .collect();
+                crate::script::Value::List(set)
+            }
+        }
+
+        impl crate::script::FromScript for $name {
+            fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+                let names = <Vec<String> as crate::script::FromScript>::from_value(value)?;
+                names.iter().try_fold(Self::default(), |set, name| {
+                    [$((stringify!($constant), Self::$constant)),*]
+                        .into_iter()
+                        .find(|(known, _)| known == name)
+                        .map(|(_, bit)| set.union(bit))
+                        .ok_or_else(|| crate::script::Error::new(format!("{name:?} is no bit of {}", stringify!($name))))
+                })
+            }
+        }
     };
+}
+
+/// Script conversions for an enum of the game's values with an `Other(u8)`
+/// for values this crate does not name: each value is its variant's name,
+/// and an unnamed one `Other(<number>)`.
+macro_rules! named_values {
+    ($($name:ident),*) => {$(
+        impl crate::script::Typed for $name {
+            const TY: &'static crate::script::Ty = &crate::script::Ty::String;
+        }
+
+        impl crate::script::IntoScript for $name {
+            fn into_value(self) -> crate::script::Value {
+                crate::script::Value::String(format!("{self:?}"))
+            }
+        }
+
+        impl crate::script::FromScript for $name {
+            fn from_value(value: crate::script::Value) -> Result<Self, crate::script::Error> {
+                let text = <String as crate::script::FromScript>::from_value(value)?;
+                if let Some(raw) = text.strip_prefix("Other(").and_then(|t| t.strip_suffix(')')) {
+                    return raw.parse().map(Self::Other).map_err(|_| {
+                        crate::script::Error::new(format!("{text:?} is no {}", stringify!($name)))
+                    });
+                }
+                Self::IDS
+                    .iter()
+                    .map(|(value, _)| *value)
+                    .find(|value| format!("{value:?}") == text)
+                    .ok_or_else(|| crate::script::Error::new(format!("{text:?} is no {}", stringify!($name))))
+            }
+        }
+    )*};
 }
 
 mask! {
@@ -326,6 +388,8 @@ impl EquipmentSlot {
         (Self::MainHand, ids::EQUIPMENT_SLOT_MAIN_HAND),
     ];
 }
+
+named_values!(ExperienceSourceType, FlameAltarActionType, EquipmentSlot);
 
 #[cfg(test)]
 mod tests {

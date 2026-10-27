@@ -752,3 +752,32 @@ fn linked_folders_are_not_followed() {
     let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
     assert_eq!(scripts, ["main.luau"]);
 }
+
+#[test]
+fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
+    let head = "id = \"you.greeter\"\nversion = \"1.0.0\"\n";
+    let cases = [
+        (
+            "[[setting]]\nkey = \"Greeting\"\ndefault = \"hi\"\n",
+            "a key is of [a-z0-9_]",
+        ),
+        (
+            "[[setting]]\nkey = \"a\"\ndefault = 1\n[[setting]]\nkey = \"a\"\ndefault = 2\n",
+            "is given twice",
+        ),
+        (
+            "[[setting]]\nkey = \"every\"\ndefault = 0\nmin = 1\n",
+            "the default is refused: every is at least 1",
+        ),
+        (
+            "[[setting]]\nkey = \"rule\"\ndefault = true\nsynced = true\n",
+            "synced goes with stage = \"startup\"",
+        ),
+    ];
+    for (settings, problem) in cases {
+        let text = format!("{head}{settings}");
+        let error = PackManifest::parse(&text).unwrap_err().to_string();
+        assert!(error.contains(problem), "{error}");
+        assert!(error.starts_with("pack.toml:4"), "{error}");
+    }
+}

@@ -6,3 +6,16 @@ authors = ["Enshwick"]
 license = "MIT"
 side = "server"
 join = false
+
+[[setting]]
+key = "greeting"
+default = "Welcome"
+doc = "What a player who joins reads before their name."
+
+[[setting]]
+key = "announce_minutes"
+default = 30
+min = 1
+max = 1440
+stage = "startup"
+doc = "How often the log counts the players online, in minutes."

@@ -361,7 +361,7 @@ std::thread_local! {
     /// The reason a mod's check refused a settings text, kept on the thread
     /// that asked until its next check there: the game thread and the UI
     /// thread may check at once, and each reads its own after the call.
-    static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
+    pub(crate) static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
 }
 
 impl Load<'_> {
