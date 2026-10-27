@@ -478,4 +478,8 @@ ids! {
     LOGIC_GRAPH_NODE_CONNECTED_WRITER_GRAPH_ID = "logic_graph_node_connected.writer_graph_id";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_GRAPH_NODE_CONNECTED_HAS_READER_GRAPHS = "logic_graph_node_connected.has_reader_graphs";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_GRAPH_TRIGGER = "logic_graph_trigger";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    LOGIC_TRIGGER_SHAPE = "logic_trigger_shape";
 }

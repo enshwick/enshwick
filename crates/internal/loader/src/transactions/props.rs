@@ -12,6 +12,7 @@ const HOLDS_STORE_ASSOCIATED_NPC_IDS: u32 = TransactionInfo::HOLDS_STORE_ASSOCIA
 const HOLDS_CUSTOM_PLAYER_STRING: u32 = TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING;
 const HOLDS_FUEL: u32 = TransactionInfo::HOLDS_FUEL;
 const HOLDS_LOGIC_GRAPH_NODE_CONNECTED: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED;
+const HOLDS_LOGIC_GRAPH_TRIGGER: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER;
 
 /// What a `FactoryStation` shows: its `FactoryStationState` (0 is
 /// `NoRecipe`), and whether a recipe runs or waits next.
@@ -47,6 +48,9 @@ pub(crate) struct StateReads {
     pub(crate) fuel: bool,
     /// Logic wired to other logic: its `LogicGraphNodeConnected`.
     pub(crate) logic: bool,
+    /// A logic trigger, its settings set or not: its `LogicGraphTrigger`
+    /// or `LogicTriggerShape`.
+    pub(crate) trigger: bool,
 }
 
 impl StateReads {
@@ -64,6 +68,7 @@ impl StateReads {
             (self.text, HOLDS_CUSTOM_PLAYER_STRING),
             (self.fuel, HOLDS_FUEL),
             (self.logic, HOLDS_LOGIC_GRAPH_NODE_CONNECTED),
+            (self.trigger, HOLDS_LOGIC_GRAPH_TRIGGER),
         ]
         .into_iter()
         .filter(|&(held, _)| held)
@@ -316,6 +321,15 @@ mod tests {
         assert!(!wired(0, 0));
         assert!(wired(7, 0));
         assert!(wired(0, 1));
+    }
+
+    #[test]
+    fn a_logic_trigger_is_state_whatever_it_holds() {
+        let plate = StateReads {
+            trigger: true,
+            ..StateReads::default()
+        };
+        assert_eq!(plate.holds(), HOLDS_LOGIC_GRAPH_TRIGGER);
     }
 
     #[test]

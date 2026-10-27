@@ -1027,6 +1027,9 @@ impl TransactionInfo {
     pub const HOLDS_FUEL: u32 = 1 << 6;
     /// It is wired to other logic: `LogicGraphNodeConnected`.
     pub const HOLDS_LOGIC_GRAPH_NODE_CONNECTED: u32 = 1 << 7;
+    /// It is a logic trigger, whose settings a player may have changed:
+    /// `LogicGraphTrigger` or `LogicTriggerShape`, whatever they hold.
+    pub const HOLDS_LOGIC_GRAPH_TRIGGER: u32 = 1 << 8;
     /// Its last undo stopped for `reason`: before writing anything, or at a
     /// brick changed since or not loaded for the loader's wait limit, with
     /// what it put back kept. The rest stays written and can be undone

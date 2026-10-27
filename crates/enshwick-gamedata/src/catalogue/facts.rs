@@ -1493,6 +1493,14 @@ pub const FACTS: &[(&str, Fact)] = &[
         "logic_graph_node_connected.has_reader_graphs",
         offset("keen::ecs::LogicGraphNodeConnected", "hasReaderGraphs"),
     ),
+    (
+        "logic_graph_trigger",
+        Fact::Type("keen::ecs::LogicGraphTrigger"),
+    ),
+    (
+        "logic_trigger_shape",
+        Fact::Type("keen::ecs::LogicTriggerShape"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.

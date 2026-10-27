@@ -30,6 +30,10 @@ pub enum HeldState {
     Fuel,
     /// Wiring to other logic: `LogicGraphNodeConnected`.
     LogicGraphNodeConnected,
+    /// A logic trigger's settings, such as its area: `LogicGraphTrigger`.
+    /// Every trigger counts, set or not, as the loader cannot tell a
+    /// player's settings from its item's.
+    LogicGraphTrigger,
 }
 
 impl HeldState {
@@ -42,7 +46,7 @@ impl HeldState {
             .map_or(0, |&(_, bit)| bit)
     }
 
-    const ALL: [(Self, u32); 8] = [
+    const ALL: [(Self, u32); 9] = [
         (Self::Inventory, TransactionInfo::HOLDS_INVENTORY),
         (Self::Growth, TransactionInfo::HOLDS_GROWTH),
         (Self::FactoryStation, TransactionInfo::HOLDS_FACTORY_STATION),
@@ -59,6 +63,10 @@ impl HeldState {
         (
             Self::LogicGraphNodeConnected,
             TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED,
+        ),
+        (
+            Self::LogicGraphTrigger,
+            TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER,
         ),
     ];
 }

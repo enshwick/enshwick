@@ -260,6 +260,8 @@ fn state(loader: &Loader, entity: u32) -> StateReads {
         text,
         fuel: fuel(loader, entity),
         logic: wired(loader, entity),
+        trigger: component(loader, entity, catalogue::LOGIC_TRIGGER).is_some()
+            || component(loader, entity, catalogue::LOGIC_TRIGGER_SHAPE).is_some(),
     }
 }
 

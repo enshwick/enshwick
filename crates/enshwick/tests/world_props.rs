@@ -116,6 +116,7 @@ mod tests {
             HeldState::CustomPlayerString,
             HeldState::Fuel,
             HeldState::LogicGraphNodeConnected,
+            HeldState::LogicGraphTrigger,
         ] {
             let (loader, world) = started();
             loader.set_prop_state(OLD_CHEST, &[kind]);

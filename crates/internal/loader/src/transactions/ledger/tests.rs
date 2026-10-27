@@ -1132,6 +1132,7 @@ fn every_kind_of_state_stops_a_removal_and_an_undo() {
         TransactionInfo::HOLDS_CUSTOM_PLAYER_STRING,
         TransactionInfo::HOLDS_FUEL,
         TransactionInfo::HOLDS_LOGIC_GRAPH_NODE_CONNECTED,
+        TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER,
     ] {
         let mut world = World::new();
         let mut ledger = Ledger::new(LIMITS);

@@ -215,6 +215,10 @@ pub const LOGIC_CONNECTED: &str = "logic_graph_node_connected";
 pub const LOGIC_CONNECTED_WRITER: &str = "logic_graph_node_connected.writer_graph_id";
 /// The id of the byte that tells a logic prop has readers.
 pub const LOGIC_CONNECTED_READERS: &str = "logic_graph_node_connected.has_reader_graphs";
+/// The id of a logic trigger's settings.
+pub const LOGIC_TRIGGER: &str = "logic_graph_trigger";
+/// The id of a logic trigger's area.
+pub const LOGIC_TRIGGER_SHAPE: &str = "logic_trigger_shape";
 /// The id of the component that names the item an entity was placed from.
 pub const USED_ITEM: &str = "used_item";
 /// The id of an entity's place in the world.
