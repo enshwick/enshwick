@@ -9,9 +9,11 @@
 use serde::{Deserialize, Serialize};
 
 mod schema;
+mod table;
 mod values;
 
 pub use schema::{Field, Group, Kind, Schema, value_at};
+pub use table::TableConfig;
 pub(crate) use values::changed_keys;
 #[doc(hidden)]
 pub use values::{__Values, __check_field, __entry};
@@ -398,6 +400,7 @@ impl From<toml::de::Error> for ConfigError {
 /// ```
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Stage {
     /// Read when a world loads (or at start, with none); a change takes

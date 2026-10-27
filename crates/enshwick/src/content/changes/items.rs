@@ -12,14 +12,15 @@ use super::{Change, Field, Value, ValueError, field_and_value};
 ///
 /// A stack size reaches only items one slot already holds more than one of
 /// and that keep no state of their own, such as durability; container slots
-/// reach only items that place a container.
+/// reach only items that place a container or are backpacks, and
+/// [`Items::Containers`] and [`Items::Backpacks`] pick one kind alone.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::content::changes::{Field, ItemTraits, Items};
 ///
-/// let wood = ItemTraits { max_stack: 20, category: 9, flags: 0, slots: None };
+/// let wood = ItemTraits { max_stack: 20, category: 9, flags: 0, slots: None, backpack_slots: None };
 /// assert!(Items::Stackable.picks(Field::MaxStackSize, &wood));
 /// assert!(!Items::Containers.picks(Field::Slots, &wood));
 /// ```
@@ -32,6 +33,9 @@ pub enum Items {
     Stackable,
     /// Every item that places a container.
     Containers,
+    /// Every backpack: an item worn in the game's `Backpack` equipment slot,
+    /// which carries an inventory of its own.
+    Backpacks,
 }
 
 /// What a selection reads of one vanilla item, from the game's data.
@@ -50,6 +54,9 @@ pub struct ItemTraits {
     /// How many slots the container it places holds; `None` when it places
     /// none.
     pub slots: Option<u8>,
+    /// How many slots it holds as a backpack; `None` for an item that is no
+    /// backpack.
+    pub backpack_slots: Option<u8>,
 }
 
 impl Items {
@@ -64,11 +71,16 @@ impl Items {
             Self::Category(mask) => mask.holds(item.category),
             Self::Stackable => item.max_stack > 1,
             Self::Containers => item.slots.is_some(),
+            Self::Backpacks => item.backpack_slots.is_some(),
         };
         selected
             && match field {
                 Field::MaxStackSize => item.max_stack > 1 && item.flags & ItemData::HAS_PIDE == 0,
-                Field::Slots => item.slots.is_some(),
+                Field::Slots => match self {
+                    Self::Containers => item.slots.is_some(),
+                    Self::Backpacks => item.backpack_slots.is_some(),
+                    _ => item.slots.is_some() || item.backpack_slots.is_some(),
+                },
                 _ => false,
             }
     }
@@ -79,6 +91,7 @@ impl Items {
             Self::Category(mask) => (DataSelect::CATEGORY, mask.0),
             Self::Stackable => (DataSelect::STACKABLE, 0),
             Self::Containers => (DataSelect::CONTAINERS, 0),
+            Self::Backpacks => (DataSelect::BACKPACKS, 0),
         }
     }
 
@@ -89,6 +102,7 @@ impl Items {
             DataSelect::CATEGORY => Some(Self::Category(ItemCategoryMask(categories))),
             DataSelect::STACKABLE => Some(Self::Stackable),
             DataSelect::CONTAINERS => Some(Self::Containers),
+            DataSelect::BACKPACKS => Some(Self::Backpacks),
             _ => None,
         }
     }
@@ -290,19 +304,38 @@ mod tests {
         category: 9,
         flags: 0,
         slots: None,
+        backpack_slots: None,
     };
     const SWORD: ItemTraits = ItemTraits {
         max_stack: 1,
         category: 2,
         flags: ItemData::HAS_PIDE,
         slots: None,
+        backpack_slots: None,
     };
     const CHEST: ItemTraits = ItemTraits {
         max_stack: 1,
         category: 6,
         flags: 0,
         slots: Some(24),
+        backpack_slots: None,
     };
+    const BACKPACK: ItemTraits = ItemTraits {
+        max_stack: 1,
+        category: 1,
+        flags: ItemData::HAS_PIDE,
+        slots: None,
+        backpack_slots: Some(16),
+    };
+
+    #[test]
+    fn backpack_slots_reach_backpacks_alone() {
+        assert!(Items::Backpacks.picks(Field::Slots, &BACKPACK));
+        assert!(!Items::Backpacks.picks(Field::Slots, &CHEST));
+        assert!(!Items::Containers.picks(Field::Slots, &BACKPACK));
+        assert!(!Items::Backpacks.picks(Field::MaxStackSize, &BACKPACK));
+        assert!(Items::Category(ItemCategoryMask::EQUIPMENT).picks(Field::Slots, &BACKPACK));
+    }
 
     #[test]
     fn a_stack_size_reaches_only_items_that_stack() {
@@ -343,8 +376,9 @@ mod tests {
             Items::Category(ItemCategoryMask::MATERIALS | ItemCategoryMask::AMMUNITION),
             Items::Stackable,
             Items::Containers,
+            Items::Backpacks,
         ] {
-            let field = if items == Items::Containers {
+            let field = if matches!(items, Items::Containers | Items::Backpacks) {
                 Field::Slots
             } else {
                 Field::MaxStackSize

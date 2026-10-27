@@ -133,6 +133,10 @@ name = "item_changes"
 required-features = ["test"]
 
 [[test]]
+name = "recipe_changes"
+required-features = ["test"]
+
+[[test]]
 name = "live_changes"
 required-features = ["test"]
 
@@ -250,6 +254,10 @@ required-features = ["test"]
 
 [[test]]
 name = "weather"
+required-features = ["test"]
+
+[[test]]
+name = "table_config"
 required-features = ["test"]
 
 [[test]]

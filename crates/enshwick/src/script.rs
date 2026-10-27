@@ -1000,3 +1000,123 @@ impl Bound for Log {
         Ok(Self(load.host()))
     }
 }
+
+/// The function behind [`GameEventKind::subscribe`].
+type SubscribeGame = fn(&mut crate::Load<'_>, Box<GameHandler>) -> Result<(), crate::Off>;
+
+/// A handler of a typed game event: it gets the event's data as a function
+/// that converts it, so a handler with nothing to do converts nothing.
+type GameHandler = dyn Fn(&dyn Fn() -> Value) + Send + Sync;
+
+/// A typed game event a script subscribes to, from
+/// [`game_events`](crate::game_events): its data and how to subscribe.
+///
+/// # Examples
+///
+/// ```
+/// let died = enshwick::script::game_events().find(|e| e.name() == "EntityDiedEvent");
+/// assert!(died.is_some());
+/// ```
+#[derive(Debug)]
+pub struct GameEventKind {
+    record: &'static Record,
+    data: &'static Ty,
+    subscribe: SubscribeGame,
+}
+
+impl GameEventKind {
+    pub(crate) const fn of<E>() -> Self
+    where
+        E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
+    {
+        let record = match E::TY {
+            Ty::Record(record) => *record,
+            #[expect(
+                clippy::panic,
+                reason = "evaluated at compile time: a typed game event that is no record does not build"
+            )]
+            _ => panic!("a typed game event derives Script as a record"),
+        };
+        Self {
+            record,
+            data: E::TY,
+            subscribe: subscribe_game::<E>,
+        }
+    }
+
+    /// The event's Rust name, the game's type name without its namespace,
+    /// such as `EntityDiedEvent`.
+    ///
+    /// # Examples
+    ///
+    /// See [`GameEventKind`].
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        self.record.name()
+    }
+
+    /// The event's doc comment up to its first section.
+    ///
+    /// # Examples
+    ///
+    /// See [`GameEventKind`].
+    #[must_use]
+    pub const fn doc(&self) -> &'static str {
+        self.record.doc()
+    }
+
+    /// What a handler gets.
+    ///
+    /// # Examples
+    ///
+    /// See [`GameEventKind`].
+    #[must_use]
+    pub const fn data(&self) -> &'static Ty {
+        self.data
+    }
+
+    /// Calls `handler` with each event's data, as
+    /// [`Load::on_game`](crate::Load::on_game) does for the Rust type.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`](crate::Off) when this build lacks a field of the event, or
+    /// after `init`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let died = enshwick::script::game_events()
+    ///         .find(|e| e.name() == "EntityDiedEvent")
+    ///         .ok_or(enshwick::Off::new("no such event"))?;
+    ///     died.subscribe(load, |data| enshwick::debug!("{:?}", data()))
+    /// }
+    /// ```
+    pub fn subscribe(
+        &self,
+        load: &mut crate::Load<'_>,
+        handler: impl Fn(&dyn Fn() -> Value) + Send + Sync + 'static,
+    ) -> Result<(), crate::Off> {
+        (self.subscribe)(load, Box::new(handler))
+    }
+}
+
+fn subscribe_game<E>(
+    load: &mut crate::Load<'_>,
+    handler: Box<GameHandler>,
+) -> Result<(), crate::Off>
+where
+    E: crate::game_events::Kind + IntoScript + Clone + Send + Sync,
+{
+    load.on_game::<E>(move |event| handler(&|| event.clone().into_value()))
+}
+
+/// Every typed game event a script may subscribe to.
+///
+/// # Examples
+///
+/// See [`GameEventKind`].
+pub fn game_events() -> impl Iterator<Item = &'static GameEventKind> {
+    crate::game_events::SCRIPT_KINDS.iter()
+}

@@ -529,7 +529,7 @@ fn a_category_change_selects_its_items_where_the_loader_reads_them() {
 #[test]
 fn stackable_items_and_containers_are_selected_by_a_word() {
     use crate::content::changes::{Items, ItemsChange};
-    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n";
+    let items = "[[change]]\nitems = \"stackable\"\nmax_stack = 100\n\n[[change]]\nitems = \"containers\"\nslots = { times = 2 }\n\n[[change]]\nitems = \"backpacks\"\nslots = 32\n";
     let pack = Pack::parse("you.stacks", &files(items)).unwrap();
     assert_eq!(
         pack.selections(),
@@ -541,6 +541,10 @@ fn stackable_items_and_containers_are_selected_by_a_word() {
             (
                 ItemsChange::new(Items::Containers, Field::Slots, Value::Times(2.0)),
                 "items.toml:5 (containers)".to_owned()
+            ),
+            (
+                ItemsChange::new(Items::Backpacks, Field::Slots, Value::Set(32.0)),
+                "items.toml:9 (backpacks)".to_owned()
             ),
         ]
     );
@@ -565,7 +569,7 @@ fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
         ),
         (
             "[[change]]\nitems = \"chests\"\nslots = 48\n",
-            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\" or \"containers\"",
+            "items.toml:1:1: change 1: items \"chests\" is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\"",
         ),
         (
             "[[change]]\ncategory = []\nmax_stack = 50\n",
@@ -576,6 +580,88 @@ fn a_selection_that_cannot_hold_is_a_problem_at_its_change() {
         let errors = Pack::parse("you.stacks", &files(items)).unwrap_err();
         assert_eq!(errors.to_string(), error, "{items}");
     }
+}
+
+#[test]
+fn a_recipe_change_selects_by_kind_or_workshop() {
+    use crate::content::changes::{Recipes, RecipesChange};
+    use crate::content::recipes::RecipeKind;
+    let forge = Guid([5; 16]);
+    let vanilla = crate::content::vanilla::tests::game_with_recipes(
+        &[(forge, "Prop_Production_T1_Forge")],
+        &[],
+    );
+    let station = vanilla.workshop(forge).unwrap();
+    let text = "[[change]]\nkind = [\"roof\", \"building-block\"]\ncost = { times = 0.5 }\n\n\
+                [[change]]\nworkshop = [\"Prop_Production_T1_Forge\"]\ntime = 0\n";
+    let pack = Pack::parse_with("you.cheap", &recipes(text), Some(&vanilla)).unwrap();
+    assert!(pack.changes().is_empty());
+    assert_eq!(
+        pack.recipe_selections(),
+        [
+            (
+                RecipesChange::new(
+                    Recipes::Kind(RecipeKind::Roof),
+                    Field::Cost,
+                    Value::Times(0.5)
+                ),
+                "recipes.toml:1 (kind roof)".to_owned()
+            ),
+            (
+                RecipesChange::new(
+                    Recipes::Kind(RecipeKind::BuildingBlock),
+                    Field::Cost,
+                    Value::Times(0.5)
+                ),
+                "recipes.toml:1 (kind building-block)".to_owned()
+            ),
+            (
+                RecipesChange::new(
+                    Recipes::Workshop(station),
+                    Field::CraftingDuration,
+                    Value::Set(0.0)
+                ),
+                "recipes.toml:5 (workshop Prop_Production_T1_Forge)".to_owned()
+            ),
+        ]
+    );
+    assert!(pack.reaches_players());
+}
+
+#[test]
+fn a_recipe_selection_that_cannot_hold_is_a_problem_at_its_change() {
+    let (vanilla, ..) = vanilla_torch();
+    let cases = [
+        (
+            "[[change]]\nkind = [\"roofs\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: no recipe kind \"roofs\"; near: roof",
+        ),
+        (
+            "[[change]]\nkind = [\"roof\"]\nrecipes = [\"Tool_Torch01_T0_PK\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: give one of recipes or output, kind, workshop",
+        ),
+        (
+            "[[change]]\nkind = [\"roof\"]\ningredients = { Material_T1_Wood_Logs = 0 }\n",
+            "recipes.toml:1:1: change 1: ingredients is no field a selection of recipes changes",
+        ),
+        (
+            "[[change]]\nworkshop = [\"Tool_Torch01\"]\ncost = 2\n",
+            "recipes.toml:1:1: change 1: Tool_Torch01 is no crafting station",
+        ),
+    ];
+    for (text, error) in cases {
+        let errors = Pack::parse_with("you.cheap", &recipes(text), Some(&vanilla)).unwrap_err();
+        assert_eq!(errors.to_string(), error, "{text}");
+    }
+    let errors = Pack::parse(
+        "you.cheap",
+        &recipes("[[change]]\nworkshop = [\"Prop_Production_T1_Forge\"]\ncost = 2\n"),
+    )
+    .unwrap_err();
+    assert!(
+        errors.to_string().contains("the game's data at hand"),
+        "{errors}"
+    );
 }
 
 /// A folder of its own under the system's temporary folder, removed when
@@ -669,4 +755,33 @@ fn linked_folders_are_not_followed() {
     let files = PackFiles::read_dir(&folder.0).unwrap();
     let scripts: Vec<&str> = files.scripts().map(|(name, _)| name).collect();
     assert_eq!(scripts, ["main.luau"]);
+}
+
+#[test]
+fn a_setting_that_cannot_hold_is_a_problem_at_its_key() {
+    let head = "id = \"you.greeter\"\nversion = \"1.0.0\"\n";
+    let cases = [
+        (
+            "[[setting]]\nkey = \"Greeting\"\ndefault = \"hi\"\n",
+            "a key is of [a-z0-9_]",
+        ),
+        (
+            "[[setting]]\nkey = \"a\"\ndefault = 1\n[[setting]]\nkey = \"a\"\ndefault = 2\n",
+            "is given twice",
+        ),
+        (
+            "[[setting]]\nkey = \"every\"\ndefault = 0\nmin = 1\n",
+            "the default is refused: every is at least 1",
+        ),
+        (
+            "[[setting]]\nkey = \"rule\"\ndefault = true\nsynced = true\n",
+            "synced goes with stage = \"startup\"",
+        ),
+    ];
+    for (settings, problem) in cases {
+        let text = format!("{head}{settings}");
+        let error = PackManifest::parse(&text).unwrap_err().to_string();
+        assert!(error.contains(problem), "{error}");
+        assert!(error.starts_with("pack.toml:4"), "{error}");
+    }
 }

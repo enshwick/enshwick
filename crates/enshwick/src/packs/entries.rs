@@ -141,7 +141,7 @@ pub(super) struct ScaleEntry {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(untagged)]
 pub(super) enum ItemsEntry {
-    /// `stackable` or `containers`.
+    /// `stackable`, `containers` or `backpacks`.
     Word(String),
     /// Debug names, GUIDs or content ids.
     Names(Vec<String>),
@@ -153,8 +153,8 @@ pub(super) enum ItemsEntry {
 #[serde(deny_unknown_fields)]
 pub(super) struct ItemChangeEntry {
     /// The items changed: debug names, GUIDs or content ids; or
-    /// `"stackable"`, every item one slot holds more of, or `"containers"`,
-    /// every item that places a container.
+    /// `"stackable"`, every item one slot holds more of, `"containers"`,
+    /// every item that places a container, or `"backpacks"`.
     pub(super) items: Option<ItemsEntry>,
     /// Every vanilla item of these categories, by the game's names, such as
     /// `Materials`.
@@ -189,6 +189,14 @@ pub(super) struct RecipeChangeEntry {
     /// Every vanilla recipe that makes one of these items.
     #[serde(default)]
     pub(super) output: Vec<String>,
+    /// Every vanilla recipe whose output is of these kinds:
+    /// `building-block`, `roof`, `overgrowth`, `terrain` or `other`.
+    #[serde(default)]
+    pub(super) kind: Vec<String>,
+    /// Every vanilla recipe made at these crafting stations, named by their
+    /// items.
+    #[serde(default)]
+    pub(super) workshop: Vec<String>,
     /// How many of each item the recipe makes, 1 to 65535.
     pub(super) output_count: Option<ValueEntry>,
     /// How many of each ingredient it takes, 1 to 65535.

@@ -62,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 
 ## Names and references
 
@@ -131,7 +132,7 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
-| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
+| `slots` | how many slots the container the item places holds, or the backpack it is, never fewer than it has | 8 to 128, in steps of 8 |
 | `damage_mod` | a weapon's damage factor | 0 to 100 |
 | `speed_mod` | a weapon's attack speed factor | 0 to 10 |
 | `armor` | every armour value of the item, scaled only: `{ times = x }` | a factor |
@@ -169,11 +170,14 @@ max_stack = 999
 | `category = [...]` | every item of these categories, by the game's names: `Customization`, `Equipment`, `Weapons`, `Tools`, `Instrument`, `FishingRod`, `BuildTools`, `Consumables`, `Ammunition`, `Materials`, `Blueprints`, `Currency`, `Collectibles`, `AnimalFood`, `PetFood`, `WeaponGem`, `ColorPalette` |
 | `items = "stackable"` | every item one slot already holds more than one of |
 | `items = "containers"` | every item that places a container |
+| `items = "backpacks"` | every backpack, an item worn in the game's `Backpack` slot |
 
 A selection changes only `max_stack` and `slots`. A stack size reaches only
 items that stack and keep no state of their own, such as durability, so
 weapons and armour stay at one; slots reach only items that place a
-container. An item the pack also names in `items` keeps that change alone,
+container or are backpacks. A backpack's size reaches only backpacks made
+after the change: one a player has keeps the size it was made with, which
+the save holds. An item the pack also names in `items` keeps that change alone,
 so the last table above sets Wood Logs to 999 while other materials take
 four times their size. A change gives `items` or `category`, never both. The
 pack's log says how many items each selection reached.
@@ -229,6 +233,30 @@ any item of a kind keeps its count. Most workbench recipes
 take no time; production stations such as the kiln do. A changed time
 reaches a production that runs already from its next step on.
 
+A change can also pick every vanilla recipe of some kinds, by what it
+makes, or every vanilla recipe made at some crafting stations, named by
+their items:
+
+```toml
+[[change]]
+kind = ["building-block", "roof"]
+cost = { times = 0.5 }
+
+[[change]]
+workshop = ["Prop_Production_T2_Kiln", "Prop_Production_T2_Smelter"]
+time = { times = 0.5 }
+```
+
+| Selection | Picks |
+| --- | --- |
+| `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
+| `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
+
+A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
+the pack also names in `recipes` or `output` keeps that change alone, and
+the pack's log says how many recipes each selection reached.
+
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check
 proves. [Game rates](../rates.md) multiply what a pack sets.
@@ -250,8 +278,8 @@ warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from
 
 A Rust mod declares the same changes with
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`. With `Load::change_items` it makes the selections a pack
-makes. The loader reads the selection from the game's data and merges one
+during `init`. With `Load::change_items` and `Load::change_recipes` it
+makes the selections a pack makes. The loader reads the selection from the game's data and merges one
 change per item in the mod's place in load order, as it does for a pack:
 
 ```rust

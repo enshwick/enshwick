@@ -148,7 +148,7 @@
           ]
         },
         "items": {
-          "description": "The items changed: debug names, GUIDs or content ids; or\n`\"stackable\"`, every item one slot holds more of, or `\"containers\"`,\nevery item that places a container.",
+          "description": "The items changed: debug names, GUIDs or content ids; or\n`\"stackable\"`, every item one slot holds more of, `\"containers\"`,\nevery item that places a container, or `\"backpacks\"`.",
           "anyOf": [
             {
               "$ref": "#/$defs/ItemsEntry"
@@ -263,7 +263,7 @@
       "description": "The items a change names: a list of names, or a word that selects\nvanilla items from the game's data.",
       "anyOf": [
         {
-          "description": "`stackable` or `containers`.",
+          "description": "`stackable`, `containers` or `backpacks`.",
           "type": "string"
         },
         {

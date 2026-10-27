@@ -4,9 +4,15 @@ use std::collections::HashMap;
 
 use crate::content::Guid;
 use crate::content::categories::ItemCategoryMask;
-use crate::content::changes::{Change, Entry, Field, Items, ItemsChange, Value};
+use crate::content::changes::{
+    Change, Entry, Field, Items, ItemsChange, Recipes, RecipesChange, Value,
+};
+use crate::content::recipes::RecipeKind;
+use crate::content::vanilla::VanillaError;
 
-use super::entries::{ItemChangeEntry, ItemsEntry, ItemsFile, LootFile, RecipesFile, ValueEntry};
+use super::entries::{
+    ItemChangeEntry, ItemsEntry, ItemsFile, LootFile, RecipeChangeEntry, RecipesFile, ValueEntry,
+};
 use super::files::PackError;
 use super::pack::Reader;
 use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
@@ -17,6 +23,9 @@ type RecipeField = (Field, Option<(Guid, String)>, Value);
 
 /// Changes of every item a selection picks, each with its source.
 type Selections = Vec<(ItemsChange, String)>;
+
+/// Changes of every recipe a selection picks, each with its source.
+type RecipeSelections = Vec<(RecipesChange, String)>;
 
 /// One `[[change]]` table read: where it starts, the items it names and
 /// the value it gives each field.
@@ -99,8 +108,9 @@ pub(super) fn item_changes(
             (Some(ItemsEntry::Word(word)), None) => match word.as_str() {
                 "stackable" => Ok((Items::Stackable, word.clone())),
                 "containers" => Ok((Items::Containers, word.clone())),
+                "backpacks" => Ok((Items::Backpacks, word.clone())),
                 _ => Err(format!(
-                    "items {word:?} is no selection; give a list of items, \"stackable\" or \"containers\""
+                    "items {word:?} is no selection; give a list of items, \"stackable\", \"containers\" or \"backpacks\""
                 )),
             },
             (None, Some(categories)) => category(categories).map(|mask| {
@@ -363,60 +373,28 @@ pub(super) fn recipe_changes(
     reader: &mut Reader<'_>,
     recipes_file: &RecipesFile,
     text: &str,
-) -> Vec<(Change, String)> {
+) -> (Vec<(Change, String)>, RecipeSelections) {
     let file = RECIPES_FILE;
     let mut out = Vec::new();
+    let mut selections = Vec::new();
     let mut seen: HashMap<(Guid, Field, Option<Guid>), usize> = HashMap::new();
+    let mut seen_selected: HashMap<(Recipes, Field), usize> = HashMap::new();
     for (index, entry) in recipes_file.change.iter().enumerate() {
         let at = entry.span().start;
         let line = PackError::at(file, text, at, "").line;
         let e = entry.get_ref();
         let number = index + 1;
-        let mut fields: Vec<RecipeField> = [
-            (Field::Output, e.output_count),
-            (Field::Cost, e.cost),
-            (Field::CraftingDuration, e.time),
-        ]
-        .into_iter()
-        .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))
-        .collect();
-        for (name, v) in &e.ingredients {
-            if let Some((item, _)) = reader.reference(file, text, at, name, "item", "") {
-                fields.push((Field::Ingredient, Some((item, name.clone())), value(*v)));
-            }
+        if selected_recipes(
+            reader,
+            text,
+            (at, line, number),
+            e,
+            &mut seen_selected,
+            &mut selections,
+        ) {
+            continue;
         }
-        if e.recipes.is_empty() && e.output.is_empty() {
-            reader.error(
-                file,
-                text,
-                at,
-                format!("change {number}: names no recipe; give recipes or output"),
-            );
-        }
-        if fields.is_empty() && e.ingredients.is_empty() {
-            let names: Vec<&str> = Field::ALL
-                .iter()
-                .filter(|f| f.entry() == Entry::Recipe && **f != Field::Ingredient)
-                .map(|f| f.name())
-                .chain(["ingredients"])
-                .collect();
-            reader.error(
-                file,
-                text,
-                at,
-                format!(
-                    "change {number}: changes nothing; give {}",
-                    names.join(", ")
-                ),
-            );
-        }
-        let mut valid = Vec::new();
-        for (field, item, value) in fields {
-            match field.check(value) {
-                Ok(()) => valid.push((field, item, value)),
-                Err(why) => reader.error(file, text, at, format!("change {number}: {why}")),
-            }
-        }
+        let valid = recipe_fields(reader, text, at, number, e);
         let mut picked: Vec<(Guid, &str)> = Vec::new();
         for name in &e.recipes {
             if let Some(guid) = recipe(reader, text, at, name) {
@@ -452,6 +430,198 @@ pub(super) fn recipe_changes(
                     None => Change::new(recipe, *field, *value),
                 };
                 out.push((change, source(file, line, name)));
+            }
+        }
+    }
+    (out, selections)
+}
+
+/// The checked fields change `number`, `e`, gives the recipes it names;
+/// problems are noted at the change.
+fn recipe_fields(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    number: usize,
+    e: &RecipeChangeEntry,
+) -> Vec<RecipeField> {
+    let file = RECIPES_FILE;
+    let mut fields: Vec<RecipeField> = [
+        (Field::Output, e.output_count),
+        (Field::Cost, e.cost),
+        (Field::CraftingDuration, e.time),
+    ]
+    .into_iter()
+    .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))
+    .collect();
+    for (name, v) in &e.ingredients {
+        if let Some((item, _)) = reader.reference(file, text, at, name, "item", "") {
+            fields.push((Field::Ingredient, Some((item, name.clone())), value(*v)));
+        }
+    }
+    if e.recipes.is_empty() && e.output.is_empty() {
+        reader.error(
+            file,
+            text,
+            at,
+            format!("change {number}: names no recipe; give recipes or output"),
+        );
+    }
+    if fields.is_empty() && e.ingredients.is_empty() {
+        let names: Vec<&str> = Field::ALL
+            .iter()
+            .filter(|f| f.entry() == Entry::Recipe && **f != Field::Ingredient)
+            .map(|f| f.name())
+            .chain(["ingredients"])
+            .collect();
+        reader.error(
+            file,
+            text,
+            at,
+            format!(
+                "change {number}: changes nothing; give {}",
+                names.join(", ")
+            ),
+        );
+    }
+    let mut valid = Vec::new();
+    for (field, item, value) in fields {
+        match field.check(value) {
+            Ok(()) => valid.push((field, item, value)),
+            Err(why) => reader.error(file, text, at, format!("change {number}: {why}")),
+        }
+    }
+    valid
+}
+
+/// Reads change `e` when it selects recipes by `kind` or `workshop`, or
+/// names more than one way to pick them, into `selections`; whether it
+/// did. `at` is where the change starts, its line and its number.
+fn selected_recipes(
+    reader: &mut Reader<'_>,
+    text: &str,
+    (at, line, number): (usize, usize, usize),
+    e: &RecipeChangeEntry,
+    seen: &mut HashMap<(Recipes, Field), usize>,
+    selections: &mut RecipeSelections,
+) -> bool {
+    let file = RECIPES_FILE;
+    let by_name = !(e.recipes.is_empty() && e.output.is_empty());
+    let groups = [by_name, !e.kind.is_empty(), !e.workshop.is_empty()];
+    if groups.iter().filter(|g| **g).count() > 1 {
+        reader.error(
+            file,
+            text,
+            at,
+            format!("change {number}: give one of recipes or output, kind, workshop"),
+        );
+        return true;
+    }
+    if by_name || !(groups[1] || groups[2]) {
+        return false;
+    }
+    for (change, label) in select_recipes(reader, text, at, number, e) {
+        let key = (change.recipes, change.field);
+        if let Some(&first) = seen.get(&key) {
+            reader.error(
+                file,
+                text,
+                at,
+                format!(
+                    "change {number}: {} of {label} is changed at line {first} already",
+                    change.field
+                ),
+            );
+            continue;
+        }
+        seen.insert(key, line);
+        selections.push((change, format!("{file}:{line} ({label})")));
+    }
+    true
+}
+
+/// The checked changes of every recipe the `kind` or `workshop` selection
+/// of change `number` picks, each with the selection in words; problems are
+/// noted at the change.
+fn select_recipes(
+    reader: &mut Reader<'_>,
+    text: &str,
+    at: usize,
+    number: usize,
+    e: &RecipeChangeEntry,
+) -> Vec<(RecipesChange, String)> {
+    let file = RECIPES_FILE;
+    let fail = |reader: &mut Reader<'_>, why: String| {
+        reader.error(file, text, at, format!("change {number}: {why}"));
+    };
+    if !e.ingredients.is_empty() {
+        fail(
+            reader,
+            "ingredients is no field a selection of recipes changes".to_owned(),
+        );
+        return Vec::new();
+    }
+    let fields: Vec<(Field, Value)> = [
+        (Field::Output, e.output_count),
+        (Field::Cost, e.cost),
+        (Field::CraftingDuration, e.time),
+    ]
+    .into_iter()
+    .filter_map(|(field, v)| v.map(|v| (field, value(v))))
+    .collect();
+    if fields.is_empty() {
+        let names: Vec<&str> = [Field::Output, Field::Cost, Field::CraftingDuration]
+            .iter()
+            .map(|f| f.name())
+            .collect();
+        fail(
+            reader,
+            format!("changes nothing; give {}", names.join(", ")),
+        );
+        return Vec::new();
+    }
+    let mut targets: Vec<(Recipes, String)> = Vec::new();
+    for name in &e.kind {
+        if let Some(kind) = RecipeKind::named(name) {
+            targets.push((Recipes::Kind(kind), format!("kind {name}")));
+            continue;
+        }
+        let near: Vec<&str> = RecipeKind::ALL
+            .iter()
+            .map(|k| k.name())
+            .filter(|k| strsim::levenshtein(k, &name.to_lowercase()) <= 2)
+            .collect();
+        let near = if near.is_empty() {
+            String::new()
+        } else {
+            format!("; near: {}", near.join(", "))
+        };
+        fail(reader, format!("no recipe kind {name:?}{near}"));
+    }
+    for name in &e.workshop {
+        let Some(vanilla) = reader.vanilla else {
+            fail(
+                reader,
+                format!("workshop {name:?} needs the game's data at hand to find its recipes"),
+            );
+            continue;
+        };
+        let station = vanilla.item(name).and_then(|item| vanilla.workshop(item));
+        match station {
+            Ok(workshop) => targets.push((Recipes::Workshop(workshop), format!("workshop {name}"))),
+            Err(VanillaError::NotAStation(_)) => {
+                fail(reader, format!("{name} is no crafting station"));
+            }
+            Err(why) => fail(reader, why.to_string()),
+        }
+    }
+    let mut out = Vec::new();
+    for (recipes, label) in targets {
+        for &(field, value) in &fields {
+            let change = RecipesChange::new(recipes, field, value);
+            match change.check() {
+                Ok(()) => out.push((change, label.clone())),
+                Err(why) => fail(reader, why.to_string()),
             }
         }
     }

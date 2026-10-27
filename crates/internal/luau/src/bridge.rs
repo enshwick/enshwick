@@ -178,3 +178,33 @@ pub(crate) fn arguments(
         })
         .collect()
 }
+
+/// The Luau value of the TOML value `value`, such as a setting's; a date
+/// becomes its text.
+pub(crate) fn toml_to_lua(lua: &Lua, value: &toml::Value) -> mlua::Result<LuaValue> {
+    Ok(match value {
+        toml::Value::String(s) => LuaValue::String(lua.create_string(s)?),
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "a Luau number holds 53 bits; a setting past that is not exact"
+        )]
+        toml::Value::Integer(i) => LuaValue::Number(*i as f64),
+        toml::Value::Float(f) => LuaValue::Number(*f),
+        toml::Value::Boolean(b) => LuaValue::Boolean(*b),
+        toml::Value::Datetime(d) => LuaValue::String(lua.create_string(d.to_string())?),
+        toml::Value::Array(items) => {
+            let table = lua.create_table_with_capacity(items.len(), 0)?;
+            for item in items {
+                table.raw_push(toml_to_lua(lua, item)?)?;
+            }
+            LuaValue::Table(table)
+        }
+        toml::Value::Table(entries) => {
+            let table = lua.create_table_with_capacity(0, entries.len())?;
+            for (key, item) in entries {
+                table.raw_set(key.as_str(), toml_to_lua(lua, item)?)?;
+            }
+            LuaValue::Table(table)
+        }
+    })
+}

@@ -233,11 +233,14 @@ pub struct DataChange {
     /// The item the field names inside its entry, such as a recipe's
     /// ingredient; all zero for none. Since minor 79.
     pub item: [u8; 16],
-    /// Which vanilla items the change reaches: `entry` alone, or every item
-    /// a selection picks, with `entry` all zero. Since minor 83.
+    /// Which vanilla entries the change reaches: `entry` alone, or every
+    /// item or recipe a selection picks, with `entry` all zero but for
+    /// [`DataSelect::WORKSHOP`]. Since minor 83.
     pub select: DataSelect,
     /// The item categories [`DataSelect::CATEGORY`] picks, a bit per the
-    /// game's `ItemCategory`; 0 for any other selection. Since minor 83.
+    /// game's `ItemCategory`, or the [`RecipeKind`] code
+    /// [`DataSelect::RECIPE_KIND`] picks; 0 for any other selection. Since
+    /// minor 83.
     pub categories: u32,
 }
 
@@ -265,6 +268,14 @@ impl DataSelect {
     pub const STACKABLE: Self = Self(2);
     /// Every item that places a container.
     pub const CONTAINERS: Self = Self(3);
+    /// Every recipe whose output is of the kind whose
+    /// [`RecipeKind`] code is [`DataChange::categories`]. Since minor 91.
+    pub const RECIPE_KIND: Self = Self(4);
+    /// Every recipe made at the workshop whose GUID is
+    /// [`DataChange::entry`]. Since minor 91.
+    pub const WORKSHOP: Self = Self(5);
+    /// Every backpack. Since minor 92.
+    pub const BACKPACKS: Self = Self(6);
 }
 
 /// Flags of [`HostApi::entity_data_open`](super::HostApi::entity_data_open).

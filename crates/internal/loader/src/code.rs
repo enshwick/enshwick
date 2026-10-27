@@ -122,12 +122,156 @@ pub(crate) fn text(base: u64) -> Option<(usize, usize)> {
     })
 }
 
+/// Where the game's code section starts, from the image base.
+fn text_start(base: u64) -> Option<usize> {
+    text(base)?.0.checked_sub(usize::try_from(base).ok()?)
+}
+
 /// The game's code section as bytes.
 pub(crate) fn text_bytes(base: u64) -> Option<&'static [u8]> {
     let (start, len) = text(base)?;
     // SAFETY: `text` found the `.text` section of the game executable's own
     // headers: `len` bytes from `start`, mapped readable for the process.
     Some(unsafe { core::slice::from_raw_parts(start as *const u8, len) })
+}
+
+/// The bytes the stub writes over the server's entry point while it holds
+/// it, `jmp [rip+0]` and the target, and writes back once released.
+const ENTRY_HOLD: usize = 14;
+
+/// The game's code while the loader starts: the copy each mod's load, init
+/// and ready is compared against.
+#[derive(Debug)]
+pub(crate) struct Watching {
+    watch: crate::code_watch::Watch,
+    /// Where `.text` is mapped.
+    start: usize,
+    len: usize,
+    /// Where `.text` starts, from the image base.
+    rva: usize,
+}
+
+impl Watching {
+    /// Starts from the image on disk when it reads, so changes made before
+    /// the loader count too, or else from the code as it is now; `None`
+    /// when the code section cannot be found. The entry point's first bytes,
+    /// which the stub holds and gives back, are left out.
+    pub(crate) fn start(base: u64) -> Option<Self> {
+        let (start, len) = text(base)?;
+        let rva = text_start(base)?;
+        let ignored: Vec<(usize, usize)> = entry_rva(base)
+            .and_then(|entry| entry.checked_sub(rva))
+            .filter(|&at| at < len)
+            .map(|at| (at, ENTRY_HOLD))
+            .into_iter()
+            .collect();
+        let mut watching = Self {
+            watch: crate::code_watch::Watch::new(&[], &[]),
+            start,
+            len,
+            rva,
+        };
+        let now = watching.now();
+        watching.watch = disk_text(base, rva, len)
+            .and_then(|disk| crate::code_watch::Watch::from_disk(disk, now, &ignored))
+            .unwrap_or_else(|| {
+                crate::log!(
+                    INFO,
+                    "game code is compared from now on: the executable on disk does not read as the code in memory"
+                );
+                crate::code_watch::Watch::new(now, &ignored)
+            });
+        watching.log_from(0);
+        Some(watching)
+    }
+
+    /// The game's code as it reads now, for one comparison.
+    fn now<'a>(&self) -> &'a [u8] {
+        // SAFETY: `start` and `len` are the game executable's `.text`
+        // section as `text` found it, mapped readable for the life of the
+        // process. Mod code, the stub's entry hold and arming may write these
+        // bytes between two calls, so each check builds the slice anew and
+        // reads it at once; a byte has no invalid value.
+        unsafe { core::slice::from_raw_parts(self.start as *const u8, self.len) }
+    }
+
+    /// Compares the code now and puts what changed down to `by` at `stage`.
+    pub(crate) fn check(&mut self, by: &str, stage: crate::code_watch::Stage) {
+        let before = self.watch.changes().len();
+        let now = self.now();
+        if self.watch.check(now, by, stage) > 0 {
+            self.log_from(before);
+        }
+    }
+
+    /// Takes the code now as it should be: the loader's hooks and the
+    /// patches mods asked for were just written.
+    pub(crate) fn absorb(&mut self) {
+        let now = self.now();
+        self.watch.absorb(now);
+    }
+
+    /// Ends the watch and keeps what it found for the conflict report.
+    pub(crate) fn finish(self) {
+        crate::conflicts::set_code_changes(self.rva, self.watch.into_changes());
+    }
+
+    fn log_from(&self, first: usize) {
+        for change in &self.watch.changes()[first..] {
+            crate::log!(
+                WARN,
+                "{} changed game code at game+{:#x}, {} bytes, outside the API {}",
+                change.who(),
+                self.rva + change.offset,
+                change.len,
+                change.stage.describe()
+            );
+        }
+    }
+}
+
+/// The game's entry point, from its mapped PE header, relative to `base`.
+fn entry_rva(base: u64) -> Option<usize> {
+    let base = usize::try_from(base).ok().filter(|&b| b != 0)?;
+    // SAFETY: `base` is the game executable's non-zero image base, where
+    // Windows maps its PE headers as one readable page for the process.
+    let headers = unsafe { core::slice::from_raw_parts(base as *const u8, 0x1000) };
+    let word = |at: usize| -> Option<usize> {
+        usize::try_from(u32::from_le_bytes(
+            headers.get(at..at + 4)?.try_into().ok()?,
+        ))
+        .ok()
+    };
+    let pe = word(0x3c)?;
+    // `AddressOfEntryPoint`, 16 bytes into the optional header.
+    word(pe + 24 + 16)
+}
+
+/// The game's `.text` as the executable on disk holds it, relocated to
+/// `base` and `len` bytes long as mapped; `None` when the file does not read
+/// or its section starts elsewhere than `rva`.
+fn disk_text(base: u64, rva: usize, len: usize) -> Option<Vec<u8>> {
+    use enshwick_gamedata::reflect::{Image, Layout};
+    let bytes = std::fs::read(std::env::current_exe().ok()?).ok()?;
+    let image = Image::parse(&bytes, Layout::File, None).ok()?;
+    let section = image.section(".text")?;
+    if usize::try_from(section.rva()).ok()? != rva {
+        return None;
+    }
+    let range = image.range(section);
+    let raw = range
+        .end
+        .saturating_sub(range.start)
+        .min(u64::try_from(len).ok()?);
+    let mut text = image.read(range.start, raw)?.to_vec();
+    text.resize(len, 0);
+    crate::code_watch::relocate(
+        &mut text,
+        section.rva(),
+        image.relocations(),
+        base.wrapping_sub(image.base()),
+    );
+    Some(text)
 }
 
 /// Registers `patch` within `text`; refused once sealed, outside the code,
@@ -155,13 +299,29 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
         return Status::BAD_ARGS;
     }
     let mut pending = PENDING.relock();
-    let clash = patches.iter().enumerate().any(|(i, patch)| {
+    let clash = patches.iter().enumerate().find_map(|(i, patch)| {
         pending
             .iter()
             .chain(&patches[..i])
-            .any(|p| overlaps(p.span(), patch.span()))
+            .find(|p| overlaps(p.span(), patch.span()))
+            .map(|held| (held.owner, held.address, patch))
     });
-    if clash {
+    if let Some((holder, address, patch)) = clash {
+        if holder != patch.owner {
+            let feature = format!("code patch at {address:#x}");
+            crate::conflicts::note(
+                feature.clone(),
+                holder,
+                crate::conflicts::Mode::Exclusive,
+                Status::OK,
+            );
+            crate::conflicts::note(
+                feature,
+                patch.owner,
+                crate::conflicts::Mode::Exclusive,
+                Status::REFUSED,
+            );
+        }
         return Status::REFUSED;
     }
     pending.extend(patches);
