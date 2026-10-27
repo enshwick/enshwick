@@ -37,6 +37,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::REGISTRY_TYPE_MAP.id(),
     pinned::ecs::REGISTRY_TYPE_MAP_FALLBACK.id(),
     pinned::ecs::TYPE_INDEX.id(),
+    pinned::server::PERMISSION_ENTRIES.id(),
     pinned::server::PERMISSION_ENTRY_SIZE.id(),
     pinned::server::PERMISSION_MASK.id(),
     pinned::server::PERMISSION_TABLE.id(),
@@ -251,6 +252,7 @@ struct Layout {
     record_template: usize,
     server_players: usize,
     permission_table: usize,
+    permission_entries: usize,
     permission_entry: usize,
     permission_mask: usize,
     slots: usize,
@@ -313,6 +315,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 record_template: constant(pinned::ecs::RECORD_TEMPLATE)?,
                 server_players: constant(pinned::server::PLAYER_INFOS)?,
                 permission_table: constant(pinned::server::PERMISSION_TABLE)?,
+                permission_entries: constant(pinned::server::PERMISSION_ENTRIES)?,
                 permission_entry: constant(pinned::server::PERMISSION_ENTRY_SIZE)?,
                 permission_mask: constant(pinned::server::PERMISSION_MASK)?,
                 slots: constant(pinned::server::PLAYER_SLOTS)?,
@@ -655,9 +658,6 @@ pub(crate) fn live_keys() -> Option<Vec<u64>> {
     Some(machines.iter().map(|&(key, _)| key).collect())
 }
 
-/// Entries in the player infos' permission table, one per entity id from 1.
-const PERMISSION_ENTRIES: usize = 0x3ff;
-
 fn player_at(
     layout: &Layout,
     slot: usize,
@@ -688,17 +688,17 @@ fn player_at(
     } else {
         let table = infos + layout.permission_table;
         let index = (entity.0 as usize).wrapping_sub(1);
-        if index < PERMISSION_ENTRIES {
+        if index < layout.permission_entries {
             let entry = table + index * layout.permission_entry;
             // SAFETY: `infos` is non-zero (`infos == 0` gives 0 first); the
-            // table's `server.permission_table` and `permission_entry_size`
-            // place `PERMISSION_ENTRIES` entries there, `index` is below that
-            // (the enclosing condition), and each starts with its `u32` entity;
-            // read on the game thread.
+            // table's `server.permission_table`, `permission_entries` and
+            // `permission_entry_size` place that many entries there, `index`
+            // is below their count (the enclosing condition), and each starts
+            // with its `u32` entity; read on the game thread.
             let owner: u32 = unsafe { read(entry, 0) };
             if owner == entity.0 {
                 // SAFETY: `entry` is a permission entry inside the table
-                // (`index < PERMISSION_ENTRIES`, the enclosing condition); the
+                // (below `permission_entries`, the enclosing condition); the
                 // table's `server.permission_mask` offset holds its mask byte;
                 // read on the game thread.
                 unsafe { read::<u8>(entry, layout.permission_mask) }

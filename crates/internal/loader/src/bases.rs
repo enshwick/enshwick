@@ -46,6 +46,8 @@ use crate::registry::Registry;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::COUNT.id(),
+    pinned::bases::ITEM_ALTAR.id(),
+    pinned::bases::MAX_ALTARS_REACHED.id(),
     pinned::bases::MEMBERS.id(),
     pinned::bases::STRIDE.id(),
     pinned::bases::ZONE_HIGH.id(),
@@ -98,17 +100,12 @@ const CURSOR_ALTAR: &str = "80 7F 43 00 0F B6 9D A0 01 00 00 74 ?? F6 C3 10 75 ?
                             48 8B 96 ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 8B 52 14 E8";
 const CURSOR_BALANCING_AT: usize = 35;
 const CURSOR_SPAN: usize = 0x400;
-/// The cursor's "too many altars" bit.
-/// Found on the 1.0 build 1269579, server and client.
-const MAX_ALTARS_REACHED: u32 = 0x40;
-/// The item flag that marks an altar.
-/// Found on the 1.0 build 1269579, server and client.
-const ITEM_ALTAR: usize = 0x43;
 
 /// The bases object's fields, from the build table: the count, each base
 /// `stride` apart with its members mask at `members`, and the zone boxes in
 /// a list of `zone_size` bytes each, the low corner first and the high one
-/// at `zone_high`.
+/// at `zone_high`; the placement cursor's altar flag in an item and its
+/// "too many altars" bit.
 #[derive(Debug, Clone, Copy)]
 struct Fields {
     count: usize,
@@ -118,6 +115,8 @@ struct Fields {
     zone_list_len: usize,
     zone_size: usize,
     zone_high: usize,
+    item_altar: usize,
+    max_altars_reached: u32,
 }
 
 impl Fields {
@@ -135,6 +134,9 @@ impl Fields {
             zone_list_len: f(pinned::bases::ZONE_LIST_LEN)?,
             zone_size: f(pinned::bases::ZONE_SIZE)?,
             zone_high: f(pinned::bases::ZONE_HIGH)?,
+            item_altar: f(pinned::bases::ITEM_ALTAR)?,
+            max_altars_reached: u32::try_from(f(pinned::bases::MAX_ALTARS_REACHED)?)
+                .map_err(|e| e.to_string())?,
         })
     }
 }
@@ -592,18 +594,21 @@ unsafe extern "system" fn check(
 /// - Called on the cursor's thread after the original ran, which alone
 ///   writes `flags` meanwhile.
 unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, item: *const u8) {
-    // SAFETY: the caller guarantees the cursor's live item definition; its
-    // u8 altar flag sits at `ITEM_ALTAR` (1.0 build 1269579).
-    let altar = unsafe { read_at::<u8>(item, ITEM_ALTAR) } != 0;
-    // SAFETY: the caller guarantees the cursor's live u32 flags word.
-    if !altar || unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } & MAX_ALTARS_REACHED != 0 {
-        return;
-    }
     let (Some(sites), Some(known), Some(engine)) =
         (SITES.get(), ZONES.get(), crate::ecs::resolved())
     else {
         return;
     };
+    let fields = sites.fields;
+    // SAFETY: the caller guarantees the cursor's live item definition; its
+    // u8 altar flag sits at the build table's `bases.item_altar`.
+    let altar = unsafe { read_at::<u8>(item, fields.item_altar) } != 0;
+    // SAFETY: the caller guarantees the cursor's live u32 flags word.
+    let reached =
+        unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } & fields.max_altars_reached;
+    if !altar || reached != 0 {
+        return;
+    }
     let zones = known.load();
     if zones.bases < MAX_BASES {
         return;
@@ -626,7 +631,8 @@ unsafe fn refuse_17th(flags: *mut u32, ctx: *const u8, transform: *const i64, it
     let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
     if zones.refuses(&candidate) {
         // SAFETY: the caller guarantees the cursor's live u32 flags word.
-        let refused = unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } | MAX_ALTARS_REACHED;
+        let refused =
+            unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } | fields.max_altars_reached;
         // SAFETY: the caller guarantees the cursor's live u32 flags word,
         // which only the cursor's thread writes meanwhile.
         unsafe { write_at(flags.cast(), 0, refused) };
