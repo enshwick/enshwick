@@ -165,6 +165,11 @@ never run and dialogs show as system message boxes instead.
 
 ## The Mods screen
 
+Under the game's version in the title screen's corner, the loader writes its
+own line in the same look: `Enshwick 1.0.0 · mods: 6`, with how many mods are
+off and a warning when this game version leaves some of the loader's features
+off.
+
 The loader adds a "Mods" entry to the title screen's main menu and to the
 pause menu, beside Settings. It opens a screen of the loader's own that lists
 every mod, with the [extension points](extending.md) it defines and the ones

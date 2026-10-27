@@ -91,6 +91,50 @@ impl Engine {
         unsafe { (self.label_draw)(label.ptr()) };
     }
 
+    /// Draws a line in the look of the main menu's version line, right under
+    /// it; false, drawing nothing, on a build without that look.
+    ///
+    /// # Safety
+    ///
+    /// - Called at the main menu's site between its version line and its
+    ///   legal line, while the column of its `LegalLine` window is open, on
+    ///   the frame's thread.
+    /// - `context` is the non-zero context [`Engine::context`] read in this
+    ///   frame.
+    /// - The bytes `text` points at outlive the frame.
+    pub(in crate::ui) unsafe fn legal_line(&self, context: usize, text: &UiText) -> bool {
+        let Some(legal) = self.legal else {
+            return false;
+        };
+        let bundle = self.bundle(context);
+        let mut label = Buf::<LABEL_SIZE>::zeroed();
+        // SAFETY: `self.label_new` is the game's `ui.label_new`, checked in
+        // `Engine::resolve`; `label` holds the table's `ui.label_extent` bytes
+        // (`Layout::read`), `text` outlives the frame by this function's
+        // `# Safety`, and the style is the reflected `legalText` offset inside
+        // the frame's look bundle.
+        unsafe { (self.label_new)(label.ptr(), text, bundle + legal.style, 0) };
+        label.u8(self.layout.label_shown, 1);
+        let node = self.frame_node(&label);
+        // Bottom left, as the game aligns its version line (client 426).
+        let align: u16 = 0x301;
+        // SAFETY: `self.node_align` is the game's `ui.node_align`, checked in
+        // `Engine::resolve`, on the node the game just wrote into `label`,
+        // with a live alignment word.
+        unsafe { (self.node_align)(node, &raw const align) };
+        label.u16(self.layout.label_align, align);
+        // SAFETY: `bundle` is the frame's look bundle, read from the live
+        // context, and `legal.size` the reflected offset of its `xsmall`
+        // font size, a float.
+        let size = unsafe { crate::memory::read::<f32>(bundle, legal.size) };
+        label.f32(self.layout.label_font_size, size);
+        // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
+        // `Engine::resolve`, on the label `label_new` filled, inside the
+        // column this function's `# Safety` gives.
+        unsafe { (self.label_draw)(label.ptr()) };
+        true
+    }
+
     /// Draws a button; true when clicked this frame.
     ///
     /// # Safety
