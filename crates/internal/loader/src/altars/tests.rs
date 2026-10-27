@@ -118,7 +118,9 @@ fn seen_merges_batches_and_reports_changes() {
     assert!(seen.merge([(2, 21)], now));
     assert_eq!(seen.get(2), Some(&21));
     assert_eq!(seen.iter().count(), 2);
-    assert!(seen.merge([], later));
+    assert!(!seen.merge([], later), "a pass forgets nothing");
+    assert_eq!(seen.iter().count(), 2);
+    assert!(seen.expire(later));
     assert_eq!(seen.iter().count(), 0);
 }
 
