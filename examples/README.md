@@ -10,6 +10,7 @@ and none is released.
 | [trading-post](trading-post/)                         | publishing the service, sending the event, defining a point |
 | [market-stalls](market-stalls/)                       | using the service and subscribing to the event              |
 | [haggling](haggling/)                                 | extending another mod's rule at its extension point         |
+| [hello-c](hello-c/)                                   | a mod written in C against `enshwick.h`                     |
 | [hot-reload](hot-reload/)                             | a mod a development server reloads while it runs            |
 | [you.material-stacks](you.material-stacks/)           | a data pack that raises the stack size of materials         |
 | [you.recipe-cost-and-time](you.recipe-cost-and-time/) | a data pack that halves three recipes' cost and time        |

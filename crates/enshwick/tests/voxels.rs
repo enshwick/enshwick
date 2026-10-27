@@ -27,7 +27,7 @@ mod tests {
     enshwick::declare_mod!(Surveyor);
 
     const ROCK: Voxel = Voxel::new(VoxelMaterial::Terrain(9), 255);
-    const WALL: Voxel = Voxel::new(VoxelMaterial::Building(0x83), 255);
+    const WALL: Voxel = Voxel::new(VoxelMaterial::Building(0x83), 0);
     const AIR: Voxel = Voxel::new(VoxelMaterial::Air, 0);
 
     /// A loaded box of 2 × 2 × 2 from (10, 20, 30): rock below, air above,
@@ -152,5 +152,32 @@ mod tests {
         );
         assert_eq!(read, Status::OK);
         assert_eq!(out[7].kind, enshwick::abi::Voxel::BUILDING);
+    }
+
+    #[test]
+    fn a_box_past_the_world_s_edge_is_outside_the_world() {
+        let loader = enshwick::test::FakeHost::new()
+            .world_extent([40, 40, 40])
+            .voxels(VoxelPos::new(32, 32, 32), [8, 8, 8], &[AIR; 512])
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Surveyor)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let voxels = VOXELS.get().unwrap();
+
+        assert!(voxels.read(VoxelPos::new(32, 32, 32), [8, 8, 8]).is_ok());
+        assert_eq!(
+            voxels.read(VoxelPos::new(36, 32, 32), [8, 1, 1]).err(),
+            Some(WorldError::OutsideWorld)
+        );
+        assert_eq!(
+            voxels.sample(VoxelPos::new(32, 40, 32)),
+            Err(WorldError::OutsideWorld)
+        );
+        assert_eq!(
+            voxels.sample(VoxelPos::new(0, 0, 100)),
+            Err(WorldError::OutsideWorld),
+            "outside comes before not loaded"
+        );
     }
 }

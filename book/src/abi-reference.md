@@ -4,7 +4,8 @@ The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
 `extern "system"` functions, strings borrowed for the call, and no unwinding
 across the boundary. Mods normally use the safe layer of `enshwick`; this
 chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
+C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 ## Versions
 
@@ -128,17 +129,18 @@ The safe layer turns a failed status into an
 reason of the form `<what>: <why>`, such as
 `symbol quest.reward: missing on this game build`:
 
-| Code | Constant       | Meaning                                                                | `<why>` in the Off reason          |
-| ---- | -------------- | ---------------------------------------------------------------------- | ---------------------------------- |
-| 0    | `OK`           | Success                                                                |                                    |
-| 1    | `MISSING`      | What was asked for does not exist on this game build                   | `missing on this game build`       |
-| 2    | `AMBIGUOUS`    | More than one candidate answers a lookup                               | `ambiguous on this game build`     |
-| 3    | `REFUSED`      | Conflicts with another mod or with the loader's rules                  | `refused by the loader`            |
-| 4    | `BAD_ARGS`     | An argument is malformed                                               | `malformed`                        |
-| 5    | `TOO_LATE`     | Called in a phase where it is not allowed, such as a hook after arming | `asked for too late`               |
-| 6    | `FAULTED`      | The mod has faulted and is off                                         | `unavailable: the mod has faulted` |
-| 7    | `WRONG_THREAD` | Called from a thread the function does not serve                       | `called off the thread it serves`  |
-| 8    | `NOT_LOADED`   | The part of the world asked about is not loaded now; try again later   | `not loaded now`                   |
+| Code | Constant        | Meaning                                                                    | `<why>` in the Off reason          |
+| ---- | --------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| 0    | `OK`            | Success                                                                    |                                    |
+| 1    | `MISSING`       | What was asked for does not exist on this game build                       | `missing on this game build`       |
+| 2    | `AMBIGUOUS`     | More than one candidate answers a lookup                                   | `ambiguous on this game build`     |
+| 3    | `REFUSED`       | Conflicts with another mod or with the loader's rules                      | `refused by the loader`            |
+| 4    | `BAD_ARGS`      | An argument is malformed                                                   | `malformed`                        |
+| 5    | `TOO_LATE`      | Called in a phase where it is not allowed, such as a hook after arming     | `asked for too late`               |
+| 6    | `FAULTED`       | The mod has faulted and is off                                             | `unavailable: the mod has faulted` |
+| 7    | `WRONG_THREAD`  | Called from a thread the function does not serve                           | `called off the thread it serves`  |
+| 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
+| 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -238,7 +240,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `join_missing`           | The server's join mods the last refused join found missing on this client                            | 10          |
 | `hook_at`                | Runs a handler before an instruction inside a game function; init only                               | 11          |
 | `inventory_open`         | Asks for inventory transactions and item data; init only; `MISSING` on a build that lacks them       | 12          |
-| `item_info`              | Writes an item's static data; any thread                                                             | 12          |
+| `item_info`              | Writes an item's static data, since minor 88 with the template it places; any thread                 | 12          |
 | `inventory_submit`       | Queues an inventory transaction, from any thread; the result comes on the game thread                | 12          |
 | `status`                 | Adds a source of lines for the loader's status summary                                               | 13          |
 | `run_console`            | Runs a console line as the server's console, an action's text form included; server game thread only | 13          |
@@ -358,3 +360,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `voxel_read`             | Reads a box of up to 64³ voxels at full detail, decoded; server game thread, quiet moment only       | 84          |
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
+| `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |
+| `transaction_commit`     | Queues terrain edits, voxel writes, erases and blocks as one transaction, with undo; any thread      | 87          |
+| `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
+| `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
+| `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |

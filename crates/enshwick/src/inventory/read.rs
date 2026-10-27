@@ -147,8 +147,8 @@ impl Inventories {
         }
     }
 
-    /// The static data of `item`; `None` for an unknown item, or before the
-    /// game first ran its inventory system (a player was online). Any thread.
+    /// The static data of `item`; `None` for an unknown item, or while no
+    /// world runs. Any thread.
     ///
     /// # Examples
     ///
@@ -162,6 +162,7 @@ impl Inventories {
             category: 0,
             rarity: 0,
             flags: 0,
+            placed_entity: [0; 16],
         };
         let status = (self.host.api().item_info)(self.host.handle(), item, &raw mut out);
         status.is_ok().then_some(ItemInfo {

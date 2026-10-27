@@ -6,17 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn,
-    DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn,
-    EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec, InteractionFn,
-    InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn,
-    Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
-    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
+    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
+    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
+    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
+    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
+    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
+    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
+    WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -223,8 +224,8 @@ pub struct HostApi {
     pub inventory_open: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the static data of the item `item`, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches;
-    /// [`Status::MISSING`] for an unknown item, or before the game first ran
-    /// its inventories. Any thread. Since minor 12.
+    /// [`Status::MISSING`] for an unknown item, or while no world runs.
+    /// Any thread. Since minor 12.
     pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
     /// Queues `request`, from any thread, for the game's inventory system,
     /// which runs it as one transaction: all or nothing. `done` gets the
@@ -607,8 +608,12 @@ pub struct HostApi {
     /// does, and writes the volume it changed in cubic metres (for a
     /// flatten, 1 when anything changed) to `amount`; clients see it and
     /// the save keeps it. Building voxels are left alone.
-    /// [`Status::BAD_ARGS`] for an edit out of range. On the server's game
-    /// thread only. Since minor 34.
+    /// [`Status::BAD_ARGS`] for an edit out of range;
+    /// [`Status::OUTSIDE_WORLD`] for one that reaches past the world's edge
+    /// or above the height the loader takes, [`Status::NOT_LOADED`] unless
+    /// every column of the box it can write is loaded, writing nothing
+    /// (both since minor 87). On the server's game thread only. Since minor
+    /// 34.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the mod's settings schema, `schema`, the TOML text
@@ -1101,14 +1106,18 @@ pub struct HostApi {
         found: *mut u32,
     ) -> Status,
     /// Caps the worker threads of the task system's default and background
-    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// groups (`foreground` and `background`) as it starts, 0 leaving a group as the game sizes it; with
     /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
     /// `enshwick_mod_init` only. Since minor 77.
-    pub task_workers:
-        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
+    pub task_workers: extern "system" fn(
+        me: ModHandle,
+        foreground: u32,
+        background: u32,
+        found: *mut u32,
+    ) -> Status,
     /// Calls `callback` with `user` for every altar of the server's world
     /// when the loader sizes the altar zones: after altars change and after
     /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
@@ -1150,11 +1159,12 @@ pub struct HostApi {
     /// `out`: x fastest, then y, then z, `size[0] * size[1] * size[2]`
     /// entries. `min` and `size` are borrowed for the call; `out` points at
     /// `capacity` writable entries, untouched unless the call returns
-    /// [`Status::OK`]. Voxels past the world's edge read as air.
-    /// [`Status::BAD_ARGS`] for a null pointer, an empty box, one past
-    /// [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or a `capacity`
-    /// below them; [`Status::NOT_LOADED`] while part of the box is not
-    /// loaded, far from every player; [`Status::MISSING`] before a world
+    /// [`Status::OK`]. [`Status::BAD_ARGS`] for a null pointer, an empty
+    /// box, one past [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or
+    /// a `capacity` below them; [`Status::OUTSIDE_WORLD`] for a box past
+    /// the world's edge or above the height the loader takes (since minor
+    /// 87); [`Status::NOT_LOADED`] while part of the box is not loaded
+    /// yet, which starts loading it; [`Status::MISSING`] before a world
     /// runs or on a build without the read. On the server's game thread at
     /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
     /// inside a step. Since minor 84.
@@ -1196,4 +1206,75 @@ pub struct HostApi {
     /// call. Since minor 85.
     pub set_change:
         extern "system" fn(me: ModHandle, id: ChangeId, op: ChangeOp, value: f64) -> Status,
+    /// Fills `check.refusal` with whether the server lets the player whose
+    /// character is `check.player` edit the box from `check.min` to
+    /// `check.max`. The permissions follow the game's terrain tool:
+    /// `CanEditWorld` for every edit, `CanEditBase` where the box overlaps a
+    /// building zone. The loader adds two tests the building cursor runs for
+    /// items: both corners inside the world's building area, and no strict
+    /// no-build zone the world places. A player not in game has no
+    /// permissions. `check` is borrowed for the call. [`Status::BAD_ARGS`]
+    /// for a null `check`, an old header, a corner that is not finite or a
+    /// `max` below `min`; [`Status::MISSING`] while no world is loaded or on
+    /// a build without the checks. On the server's game thread at a quiet
+    /// moment only, outside a step or in a game event:
+    /// [`Status::WRONG_THREAD`] inside a step. Since minor 86.
+    pub build_rights: extern "system" fn(me: ModHandle, check: *mut BuildRights) -> Status,
+    /// Queues the `count` changes at `ops` as one transaction of the
+    /// server's world and writes its id to `id`: the loader writes them in
+    /// order on the server's game thread at quiet moments, a budget of
+    /// bricks a step, keeping the earlier state of every brick a change can
+    /// touch so [`HostApi::transaction_undo`] can put it back. `ops` and the
+    /// records they point at are borrowed for the call. [`Status::BAD_ARGS`]
+    /// for a null pointer, no changes, a kind or record the loader refuses
+    /// (as [`HostApi::terrain_edit`] does, and a dry run), or more than its
+    /// cap of changes or bricks; [`Status::OUTSIDE_WORLD`] for a change that
+    /// leaves the world, once the loader knows its extent (a transaction
+    /// committed earlier fails with it before writing); [`Status::REFUSED`]
+    /// while the queue is full; [`Status::MISSING`] while no world runs or
+    /// on a build without the edits, the voxel read or the undo write. Any
+    /// thread. Since minor 87.
+    pub transaction_commit: extern "system" fn(
+        me: ModHandle,
+        ops: *const TransactionOp,
+        count: u32,
+        id: *mut u64,
+    ) -> Status,
+    /// Queues the undo of transaction `id` of this mod: a queued one is
+    /// dropped, one written in whole or in part gets each brick it touched
+    /// back as it was, in reverse order, on the server's game thread at
+    /// quiet moments. Before writing, the undo checks that every brick still
+    /// holds what the transaction left there and that all of them are
+    /// loaded, and it checks each brick again right before writing it back;
+    /// a brick changed meanwhile, or a column that stays unloaded for the
+    /// loader's wait limit, stops it, and the state turns
+    /// [`TransactionInfo::UNDO_REFUSED`] with what was put back kept. A
+    /// refused undo may be asked again. [`Status::OK`] when queued or
+    /// already undoing; [`Status::REFUSED`] for an id this mod did not get,
+    /// one the loader forgot, one undone, one whose undo data is gone, or
+    /// while the transactions in work already claim the loader's cap of
+    /// undo data. Any thread. Since minor 87.
+    pub transaction_undo: extern "system" fn(me: ModHandle, id: u64) -> Status,
+    /// Writes where transaction `id` of this mod stands to `out`, a
+    /// [`TransactionInfo`] with its header. [`Status::BAD_ARGS`] for a null
+    /// `out`; [`Status::MISSING`] for an id this mod did not get or one the
+    /// loader forgot (it keeps the newest few thousand). Any thread. Since
+    /// minor 87.
+    pub transaction_status:
+        extern "system" fn(me: ModHandle, id: u64, out: *mut TransactionInfo) -> Status,
+    /// As [`HostApi::transaction_commit`], for the player whose character
+    /// is `actor`: before it writes anything the loader checks that the
+    /// server lets the player edit the box of every change, as
+    /// [`HostApi::build_rights`] does, and marks building events with the
+    /// player. A refusal fails it with [`Status::REFUSED`] and the reason in
+    /// [`TransactionInfo::refusal`]; nothing is written. The check runs at
+    /// its first step on the server's game thread, never at the commit.
+    /// [`Status::BAD_ARGS`] for an `actor` of 0. Any thread. Since minor 89.
+    pub transaction_commit_for: extern "system" fn(
+        me: ModHandle,
+        actor: u32,
+        ops: *const TransactionOp,
+        count: u32,
+        id: *mut u64,
+    ) -> Status,
 }

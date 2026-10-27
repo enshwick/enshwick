@@ -228,7 +228,7 @@ impl Installed {
     /// See [`Installed::set_terrain`].
     #[must_use]
     pub fn terrain_edits(&self) -> Vec<crate::abi::TerrainEdit> {
-        table::with(Vec::new(), |s| s.terrain_edits.clone())
+        table::with(Vec::new(), |s| s.edits.terrain.clone())
     }
 
     /// The labels the mod set, as `(entity, text)`, in order.
@@ -345,15 +345,32 @@ impl Installed {
     pub fn saves(&self) -> usize {
         table::with(0, |s| s.saves)
     }
+
+    /// The voxel boxes the mod read on the game thread, `(min, size)`, in
+    /// order, whatever the read answered.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.voxel_reads().is_empty());
+    /// ```
+    #[must_use]
+    pub fn voxel_reads(&self) -> Vec<([u32; 3], [u32; 3])> {
+        table::with(Vec::new(), |s| s.edits.voxel_reads.clone())
+    }
 }
 
 impl FakeHost {
     /// Loaded voxels of the world: the box of `size` from `min`, its
     /// `voxels` x fastest, then y, then z. A read answers from the boxes,
     /// the last given first where they overlap, and finds a box it does not
-    /// cover wholly not loaded, as the loader does far from every player.
-    /// The fake has no world's edge: where the loader reads air past it,
-    /// the fake answers not loaded.
+    /// cover wholly not loaded, as the loader does where the world is not
+    /// loaded yet;
+    /// once the fake has boxes, a terrain edit whose position lies in none
+    /// is not loaded either.
+    /// Past the world's edge ([`FakeHost::world_extent`]) a read is outside
+    /// the world.
     ///
     /// # Panics
     ///
@@ -390,6 +407,60 @@ impl FakeHost {
         });
         self
     }
+}
+
+impl FakeHost {
+    /// The world's end on each axis, in voxels: a read of a box past it,
+    /// and an edit or a transaction's change whose position lies past it,
+    /// is outside the world, as the loader refuses them. The loader takes
+    /// the edge across from the game and its own height; the fake checks
+    /// an edit's position, where the loader checks every voxel the edit can
+    /// write. Without it, the fake has no edge.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().world_extent([20_480, 2048, 20_480]).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub const fn world_extent(mut self, end: [u32; 3]) -> Self {
+        self.extent = Some(end);
+        self
+    }
+}
+
+/// Whether the box of `size` from `min` leaves a world ending at `end`.
+pub(crate) fn outside(end: Option<[u32; 3]>, min: [u32; 3], size: [u32; 3]) -> bool {
+    end.is_some_and(|end| {
+        (0..3).any(|axis| {
+            min[axis]
+                .checked_add(size[axis])
+                .is_none_or(|stop| stop > end[axis])
+        })
+    })
+}
+
+/// Whether the edit's position lies past a world ending at `end`.
+pub(crate) fn edit_outside(end: Option<[u32; 3]>, edit: &crate::abi::TerrainEdit) -> bool {
+    end.is_some_and(|end| {
+        edit.position
+            .iter()
+            .zip(end)
+            .any(|(&metres, stop)| f64::from(metres) * 2.0 >= f64::from(stop))
+    })
+}
+
+/// Whether the edit's position lies in one of `grids`, when the fake has
+/// any: the loader checks every column of bricks the edit can write.
+pub(crate) fn edit_loaded(grids: &[VoxelGrid], edit: &crate::abi::TerrainEdit) -> bool {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "a checked edit's position is finite and at 0 or more; `as` saturates"
+    )]
+    let at = edit.position.map(|metres| (f64::from(metres) * 2.0) as u32);
+    grids.is_empty() || grids.iter().any(|grid| grid.get(at).is_some())
 }
 
 /// A box of loaded voxels the fake answers reads from.
@@ -433,5 +504,117 @@ impl VoxelGrid {
             }
         }
         Some(voxels)
+    }
+}
+
+impl FakeHost {
+    /// A Flame Altar's building zone from `min` to `max` in metres, where
+    /// [`World::can_build`](crate::world::World::can_build) asks for
+    /// `CanEditBase`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .building_zone([0.0, 0.0, 0.0], [40.0, 40.0, 40.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn building_zone(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.zones.building.push(FakeBox { min, max });
+        self
+    }
+
+    /// A box of the world's building area; once one is given, a corner
+    /// outside every such box is refused, as past the world's edge.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .building_area([0.0, 0.0, 0.0], [4096.0, 1024.0, 4096.0])
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn building_area(mut self, min: [f64; 3], max: [f64; 3]) -> Self {
+        self.zones.area.push(FakeBox { min, max });
+        self
+    }
+
+    /// A no-build zone from `min` to `max` in metres; only a `strict` one
+    /// refuses an edit, as the game's own rule for an edit without an item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new()
+    ///     .no_build_zone([10.0, 0.0, 10.0], [20.0, 10.0, 20.0], true)
+    ///     .install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn no_build_zone(mut self, min: [f64; 3], max: [f64; 3], strict: bool) -> Self {
+        self.zones.no_build.push((FakeBox { min, max }, strict));
+        self
+    }
+}
+
+/// A box in metres.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FakeBox {
+    min: [f64; 3],
+    max: [f64; 3],
+}
+
+impl FakeBox {
+    /// Whether the boxes overlap with some thickness on every axis: boxes
+    /// that share only a face do not.
+    fn overlaps(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        (0..3).all(|a| self.min[a] < max[a] && min[a] < self.max[a])
+    }
+
+    /// Whether `point` lies inside, the high faces excluded.
+    fn holds(&self, point: [f64; 3]) -> bool {
+        (0..3).all(|a| self.min[a] <= point[a] && point[a] < self.max[a])
+    }
+}
+
+/// The zones the fake answers build rights from.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct FakeZones {
+    building: Vec<FakeBox>,
+    area: Vec<FakeBox>,
+    no_build: Vec<(FakeBox, bool)>,
+}
+
+impl FakeZones {
+    /// The refusal of an edit of the box from `min` to `max` by a player
+    /// with the permission mask `permissions`, as the loader decides: the
+    /// game's terrain tool rule for the permissions, then the building area
+    /// and strict no-build tests Enshwick adds from the building cursor.
+    pub(crate) fn refusal(&self, permissions: u8, min: [f64; 3], max: [f64; 3]) -> u32 {
+        use crate::abi::{BuildRights, PlayerInfo};
+        if permissions & PlayerInfo::CAN_EDIT_WORLD == 0 {
+            return BuildRights::NO_CAN_EDIT_WORLD;
+        }
+        if permissions & PlayerInfo::CAN_EDIT_BASE == 0
+            && self.building.iter().any(|zone| zone.overlaps(min, max))
+        {
+            return BuildRights::NO_CAN_EDIT_BASE;
+        }
+        let in_area = |corner| self.area.is_empty() || self.area.iter().any(|b| b.holds(corner));
+        if !in_area(min) || !in_area(max) {
+            return BuildRights::OUTSIDE_BUILDING_ZONE;
+        }
+        if self
+            .no_build
+            .iter()
+            .any(|(zone, strict)| *strict && zone.overlaps(min, max))
+        {
+            return BuildRights::INSIDE_STRICT_BUILD_INHIBITOR_ZONE;
+        }
+        BuildRights::ALLOWED
     }
 }

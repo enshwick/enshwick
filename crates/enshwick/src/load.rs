@@ -56,7 +56,8 @@ impl Off {
             Status::TOO_LATE => "asked for too late",
             Status::FAULTED => "unavailable: the mod has faulted",
             Status::WRONG_THREAD => "called off the thread it serves",
-            Status::NOT_LOADED => "not loaded now",
+            Status::NOT_LOADED => "not loaded yet",
+            Status::OUTSIDE_WORLD => "outside the world",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))

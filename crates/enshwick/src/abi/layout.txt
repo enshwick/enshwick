@@ -1,4 +1,4 @@
-abi 2.85
+abi 2.89
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -82,6 +82,12 @@ BedCheck size 72 align 8
     bed at 16 size 4
     home at 24 size 24
     bed_at at 48 size 24
+BlockPlace size 56 align 8
+    header at 0 size 8
+    shape at 8 size 4
+    material at 12 size 4
+    position at 16 size 24
+    rotation at 40 size 16
 Bounds size 48 align 8
     min at 0 size 24
     max at 24 size 24
@@ -110,6 +116,12 @@ BuildInfo size 48 align 8
     base at 16 size 8
     fingerprint at 24 size 20
     table at 44 size 1
+BuildRights size 64 align 8
+    header at 0 size 8
+    player at 8 size 4
+    refusal at 12 size 4
+    min at 16 size 24
+    max at 40 size 24
 BuildRow size 56 align 8
     side at 0 size 1
     fingerprint at 4 size 20
@@ -244,7 +256,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1280 align 8
+HostApi size 1320 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -404,6 +416,11 @@ HostApi size 1280 align 8
     voxel_read at 1256 size 8
     declare_change at 1264 size 8
     set_change at 1272 size 8
+    build_rights at 1280 size 8
+    transaction_commit at 1288 size 8
+    transaction_undo at 1296 size 8
+    transaction_status at 1304 size 8
+    transaction_commit_for at 1312 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -435,13 +452,14 @@ InventoryResult size 24 align 8
     outcome at 8 size 4
     op_count at 12 size 4
     ops at 16 size 8
-ItemData size 20 align 4
+ItemData size 36 align 4
     header at 0 size 8
     id at 8 size 4
     max_stack at 12 size 2
     category at 14 size 1
     rarity at 15 size 1
     flags at 16 size 4
+    placed_entity at 20 size 16
 ItemLine size 16 align 4
     modifier at 0 size 12
     affix at 12 size 4
@@ -763,6 +781,19 @@ TerrainMaterialInfo size 20 align 4
 TickData size 16 align 8
     header at 0 size 8
     step at 8 size 8
+TransactionInfo size 40 align 8
+    header at 0 size 8
+    state at 8 size 4
+    reason at 12 size 4
+    ops at 16 size 4
+    applied at 20 size 4
+    bricks at 24 size 8
+    refusal at 32 size 4
+    reserved at 36 size 4
+TransactionOp size 16 align 8
+    kind at 0 size 4
+    reserved at 4 size 4
+    data at 8 size 8
 UiDialog size 64 align 8
     header at 0 size 8
     title at 8 size 16
@@ -803,6 +834,16 @@ Voxel size 4 align 1
     material at 1 size 1
     fill at 2 size 1
     reserved at 3 size 1
+VoxelRegion size 32 align 4
+    header at 0 size 8
+    min at 8 size 12
+    size at 20 size 12
+VoxelWrite size 48 align 8
+    header at 0 size 8
+    min at 8 size 12
+    size at 20 size 12
+    voxels at 32 size 8
+    count at 40 size 8
 WeatherFront size 56 align 8
     header at 0 size 8
     layer at 8 size 4

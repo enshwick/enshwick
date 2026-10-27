@@ -5,8 +5,13 @@
 //! world's corner ([`VoxelPos`]). Each voxel is air, ground of a terrain
 //! material ([`Terrain::materials`](crate::terrain::Terrain::materials)
 //! lists them) or a building block's material, and is more or less full.
-//! The server holds only the parts of the world near players: a read
-//! elsewhere fails with [`WorldError::NotLoaded`] until a player comes near.
+//! The server holds only some parts of the world in memory: a read
+//! elsewhere fails with [`WorldError::NotLoaded`] and starts loading that
+//! part, which is there to read about a second later. Every read can pull
+//! a part of the world into memory, so a mod reads where it needs to, never
+//! the whole world.
+//! A read past the world's edge, or above the 1,024 metres the loader
+//! takes, fails with [`WorldError::OutsideWorld`].
 //!
 //! Every read belongs on the server's game thread at a quiet moment, as the
 //! world's writes do: from a game event, a
@@ -64,7 +69,19 @@ const PER_METRE: f64 = 2.0;
 /// assert_eq!(at.to_metres(), [10.0, 4.0, 7.5]);
 /// # Ok::<(), &str>(())
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct VoxelPos {
     x: u32,
     y: u32,
@@ -190,7 +207,9 @@ fn index(metres: f64) -> Option<u32> {
 /// }
 /// assert!(!is_ground(VoxelMaterial::Air));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[non_exhaustive]
 pub enum VoxelMaterial {
     /// Empty: no ground and no building.
@@ -218,7 +237,9 @@ pub enum VoxelMaterial {
 /// assert!(!rock.is_air());
 /// assert_eq!(rock.fill(), 255);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Voxel {
     material: VoxelMaterial,
     fill: u8,
@@ -246,7 +267,8 @@ impl Voxel {
     }
 
     /// How full it is, 0 to 255, which shapes the ground's surface between
-    /// voxels. The name is enshwick's: the game does not name it.
+    /// voxels; the game's building voxels carry 0. The name is enshwick's:
+    /// the game does not name it.
     ///
     /// # Examples
     ///
@@ -277,8 +299,7 @@ impl Voxel {
         Self::new(material, raw.fill)
     }
 
-    /// The voxel as the loader writes it.
-    #[cfg(any(test, feature = "test"))]
+    /// The voxel as the loader writes it, and reads it from a mod.
     pub(crate) const fn to_abi(self) -> abi::Voxel {
         let (kind, material) = match self.material {
             VoxelMaterial::Air => (abi::Voxel::AIR, 0),
@@ -307,14 +328,98 @@ impl Voxel {
 ///     Ok(block.iter().filter(|(_, voxel)| !voxel.is_air()).count())
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "Parts")]
 pub struct VoxelBox {
     min: VoxelPos,
     size: [u32; 3],
     voxels: Vec<Voxel>,
 }
 
+/// A [`VoxelBox`] as serde reads it, before its voxels are counted.
+#[derive(serde::Deserialize)]
+struct Parts {
+    min: VoxelPos,
+    size: [u32; 3],
+    voxels: Vec<Voxel>,
+}
+
+/// Why a [`VoxelBox`] read with serde was refused.
+#[derive(Debug, thiserror::Error)]
+#[error("a voxel box of {size:?} from {min:?} holding {held} voxels")]
+struct VoxelBoxError {
+    min: VoxelPos,
+    size: [u32; 3],
+    held: usize,
+}
+
+impl TryFrom<Parts> for VoxelBox {
+    type Error = VoxelBoxError;
+
+    fn try_from(parts: Parts) -> Result<Self, VoxelBoxError> {
+        let (min, size, held) = (parts.min, parts.size, parts.voxels.len());
+        Self::from_parts(min, size, parts.voxels).ok_or(VoxelBoxError { min, size, held })
+    }
+}
+
 impl VoxelBox {
+    /// The box of `size` from `min` holding `voxels`, x fastest, then y,
+    /// then z; `None` unless there is one voxel for each place and the box
+    /// ends below [`abi::Voxel::END`] on every axis.
+    pub(crate) fn from_parts(min: VoxelPos, size: [u32; 3], voxels: Vec<Voxel>) -> Option<Self> {
+        let within = (0..3).all(|axis| {
+            min.to_array()[axis]
+                .checked_add(size[axis])
+                .is_some_and(|end| end <= abi::Voxel::END)
+        });
+        let count = size
+            .iter()
+            .try_fold(1usize, |count, &axis| count.checked_mul(axis as usize))?;
+        (within && count == voxels.len()).then_some(Self { min, size, voxels })
+    }
+
+    /// The box turned a quarter turn about the vertical, keeping its
+    /// corner: the voxel at (x, y, z) from the corner moves to
+    /// (depth − 1 − z, y, x).
+    pub(crate) fn turned(&self) -> Self {
+        let [width, height, depth] = self.size.map(|axis| axis as usize);
+        let mut voxels = Vec::with_capacity(self.voxels.len());
+        for new_z in 0..width {
+            for y in 0..height {
+                for new_x in 0..depth {
+                    let (x, z) = (new_z, depth - 1 - new_x);
+                    voxels.push(self.voxels[x + width * (y + height * z)]);
+                }
+            }
+        }
+        let [width, height, depth] = self.size;
+        Self {
+            min: self.min,
+            size: [depth, height, width],
+            voxels,
+        }
+    }
+
+    /// The same voxels with the corner at `(0, 0, 0)`.
+    pub(crate) fn at_corner(self) -> Self {
+        Self {
+            min: VoxelPos::default(),
+            ..self
+        }
+    }
+
+    /// Copies `block`, which lies inside this box, into its place.
+    pub(crate) fn fill_from(&mut self, block: &Self) {
+        let [width, height, _] = self.size.map(|axis| axis as usize);
+        let [row, rows, _] = block.size.map(|axis| axis as usize);
+        let [x, y, z] =
+            [0, 1, 2].map(|axis| (block.min.to_array()[axis] - self.min.to_array()[axis]) as usize);
+        for (index, source) in block.voxels.chunks_exact(row).enumerate() {
+            let start = x + width * (y + index % rows + height * (z + index / rows));
+            self.voxels[start..start + row].copy_from_slice(source);
+        }
+    }
+
     /// Its lowest corner.
     ///
     /// # Examples
@@ -350,6 +455,72 @@ impl VoxelBox {
     /// ```
     #[must_use]
     pub fn get(&self, at: VoxelPos) -> Option<Voxel> {
+        self.voxels.get(self.index(at)?).copied()
+    }
+
+    /// Sets the voxel at `at`, a place in the world; whether `at` lies in
+    /// the box.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
+    ///
+    /// fn hollow(block: &mut VoxelBox) {
+    ///     let [x, y, z] = block.min().to_array();
+    ///     block.set(VoxelPos::new(x + 1, y + 1, z + 1), Voxel::new(VoxelMaterial::Air, 0));
+    /// }
+    /// ```
+    pub fn set(&mut self, at: VoxelPos, voxel: Voxel) -> bool {
+        let Some(slot) = self.index(at).and_then(|index| self.voxels.get_mut(index)) else {
+            return false;
+        };
+        *slot = voxel;
+        true
+    }
+
+    /// A box of `size` voxels from `min` holding `voxels`, x fastest, then
+    /// y, then z, to write with
+    /// [`Transaction::write_voxels`](crate::world::Transaction::write_voxels);
+    /// `None` for an empty box or `voxels` that do not fill it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
+    ///
+    /// let stone = Voxel::new(VoxelMaterial::Building(0x83), 0);
+    /// let pillar = VoxelBox::new(VoxelPos::new(200, 80, 200), [1, 4, 1], vec![stone; 4]);
+    /// assert!(pillar.is_some());
+    /// ```
+    #[must_use]
+    pub fn new(min: VoxelPos, size: [u32; 3], voxels: Vec<Voxel>) -> Option<Self> {
+        let count = size
+            .iter()
+            .try_fold(1usize, |count, &axis| count.checked_mul(axis as usize))?;
+        (count > 0 && count == voxels.len()).then_some(Self { min, size, voxels })
+    }
+
+    /// The same voxels with the box's lowest corner at `min`, to write
+    /// what was read in one place somewhere else.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::voxels::{VoxelBox, VoxelPos};
+    ///
+    /// fn copy_up(block: &VoxelBox) -> VoxelBox {
+    ///     let [x, y, z] = block.min().to_array();
+    ///     block.clone().moved_to(VoxelPos::new(x, y + 20, z))
+    /// }
+    /// ```
+    #[must_use]
+    pub fn moved_to(self, min: VoxelPos) -> Self {
+        Self { min, ..self }
+    }
+
+    /// The index of `at` in the voxels; `None` outside the box.
+    fn index(&self, at: VoxelPos) -> Option<usize> {
         let mut index = 0usize;
         for axis in (0..3).rev() {
             let offset = at.to_array()[axis].checked_sub(self.min.to_array()[axis])?;
@@ -358,7 +529,7 @@ impl VoxelBox {
             }
             index = index * self.size[axis] as usize + offset as usize;
         }
-        self.voxels.get(index).copied()
+        Some(index)
     }
 
     /// Every voxel, x fastest, then y, then z.
@@ -445,17 +616,24 @@ pub struct Voxels {
 }
 
 impl Voxels {
+    /// The reads through `host`.
+    pub(crate) const fn new(host: Host) -> Self {
+        Self { host }
+    }
+
     /// The voxels of the box of `size` voxels from `min`, its lowest corner.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an empty box, more than [`READ_MAX`]
     /// voxels or one past 2³⁰ voxels on an axis;
-    /// [`WorldError::NotLoaded`] while part of the box is not loaded, far
-    /// from every player; [`WorldError::Missing`] before a world runs or on
+    /// [`WorldError::NotLoaded`] while part of the box is not loaded yet,
+    /// which this read starts loading: try again in a second or so;
+    /// [`WorldError::Missing`] before a world runs or on
     /// a game build without the read; [`WorldError::WrongThread`] off the
-    /// game thread or inside a step. Voxels past the world's edge read as
-    /// air.
+    /// game thread or inside a step; [`WorldError::OutsideWorld`] for a box
+    /// past the world's edge or above the height the loader takes, 1,024
+    /// metres.
     ///
     /// # Examples
     ///
@@ -543,6 +721,61 @@ mod tests {
             let voxel = Voxel::new(material, 0x40);
             assert_eq!(Voxel::from_abi(voxel.to_abi()), voxel);
         }
+    }
+
+    #[test]
+    fn serde_refuses_a_box_whose_count_or_end_is_wrong() {
+        let short = VoxelBox {
+            min: VoxelPos::new(0, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default()],
+        };
+        let bytes = postcard::to_allocvec(&short).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let past_the_end = VoxelBox {
+            min: VoxelPos::new(abi::Voxel::END - 1, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&past_the_end).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let wrapping = VoxelBox {
+            min: VoxelPos::new(u32::MAX, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&wrapping).unwrap();
+        assert!(postcard::from_bytes::<VoxelBox>(&bytes).is_err());
+
+        let fine = VoxelBox {
+            min: VoxelPos::new(abi::Voxel::END - 2, 0, 0),
+            size: [2, 1, 1],
+            voxels: vec![Voxel::default(); 2],
+        };
+        let bytes = postcard::to_allocvec(&fine).unwrap();
+        assert_eq!(postcard::from_bytes::<VoxelBox>(&bytes).unwrap(), fine);
+    }
+
+    #[test]
+    fn a_block_fills_its_place_row_by_row() {
+        let mut whole = VoxelBox {
+            min: VoxelPos::new(10, 10, 10),
+            size: [4, 3, 2],
+            voxels: vec![Voxel::default(); 24],
+        };
+        let rock = |i: u8| Voxel::new(VoxelMaterial::Terrain(i + 1), 255);
+        let block = VoxelBox {
+            min: VoxelPos::new(11, 11, 10),
+            size: [2, 2, 2],
+            voxels: (0..8).map(rock).collect(),
+        };
+        whole.fill_from(&block);
+        for (at, voxel) in &block {
+            assert_eq!(whole.get(at), Some(voxel), "{at:?}");
+        }
+        assert_eq!(whole.iter().filter(|(_, v)| !v.is_air()).count(), 8);
     }
 
     #[test]

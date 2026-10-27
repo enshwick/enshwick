@@ -12,6 +12,7 @@ use core::cell::Cell;
 use core::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
@@ -22,6 +23,8 @@ use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+pub(crate) use crate::server_pin::ServerAccess;
+use crate::server_pin::{Place, ServerCell};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -51,8 +54,16 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::world::STEP.id(),
 ];
 
-/// The server object, seen by the post-step hook.
-pub(crate) static SERVER: AtomicUsize = AtomicUsize::new(0);
+/// The server object, seen by the post-step hook, and the pins of readers
+/// off its game thread.
+static SERVER: ServerCell = ServerCell::new();
+/// When the server's end first warns of a reader that still holds it;
+/// readers hold the server for microseconds.
+const STALL_FIRST_WARNING: Duration = Duration::from_secs(1);
+/// How often the warning repeats while the reader still holds it.
+const STALL_WARNING_EVERY: Duration = Duration::from_secs(5);
+/// The game thread at the server's shutdown, 0 once its teardown began.
+static RETIRED_ON: AtomicU32 = AtomicU32::new(0);
 /// The game thread's id, seen by the post-step hook.
 pub(crate) static GAME_THREAD: AtomicU32 = AtomicU32::new(0);
 /// The server's entity world, seen by the post-step hook.
@@ -61,7 +72,7 @@ static SERVER_WORLD: AtomicUsize = AtomicUsize::new(0);
 /// Records the server seen after a step on `thread`, and its entity world
 /// from `world_offset` and `entities`.
 pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities: usize) {
-    SERVER.store(server, Ordering::Release);
+    SERVER.publish(server);
     GAME_THREAD.store(thread, Ordering::Release);
     let world = if server == 0 {
         0
@@ -76,10 +87,53 @@ pub(crate) fn capture(server: usize, thread: u32, world_offset: usize, entities:
     SERVER_WORLD.store(entity_world, Ordering::Release);
 }
 
-/// Forgets the server of a hosted game that stopped.
-pub(crate) fn release() {
+/// Begins the server's end at its shutdown, on its game thread: no reader
+/// off the game thread pins it from now on, while the game thread still
+/// reads it for the shutdown work. The game frees the server only in the
+/// teardown after [`tear_down`] (server 399, client 426).
+pub(crate) fn retire() {
+    RETIRED_ON.store(GAME_THREAD.load(Ordering::Acquire), Ordering::Release);
+    SERVER.retire();
+}
+
+/// Ends the server as the game enters its teardown, on the game thread
+/// before the game frees anything: no pin from now on, a wait without a
+/// bound until every reader off the game thread that pinned it has let go,
+/// then no server for anyone. A reader still holding on after a second is
+/// named in a warning, repeated every few seconds: a hang is better than a
+/// read of freed memory.
+pub(crate) fn tear_down() {
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
+    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    let retired_on = RETIRED_ON.swap(0, Ordering::AcqRel);
+    if retired_on != 0 && retired_on != me {
+        crate::log!(
+            WARN,
+            "the server's teardown runs on thread {me}, its shutdown ran on thread {retired_on}"
+        );
+    }
+    let start = Instant::now();
+    let mut next_warning = start + STALL_FIRST_WARNING;
+    SERVER.tear_down(|place| {
+        std::thread::yield_now();
+        let now = Instant::now();
+        if now >= next_warning {
+            next_warning = now + STALL_WARNING_EVERY;
+            crate::log!(
+                WARN,
+                "the server's end waits {} s for a reader to let go of it, last pinned by the {place}",
+                now.duration_since(start).as_secs()
+            );
+        }
+    });
     SERVER_WORLD.store(0, Ordering::Release);
-    SERVER.store(0, Ordering::Release);
+    GAME_THREAD.store(0, Ordering::Release);
+}
+
+/// Forgets the server of a hosted game that stopped, after [`retire`].
+pub(crate) fn release() {
+    SERVER.publish(0);
+    SERVER_WORLD.store(0, Ordering::Release);
     GAME_THREAD.store(0, Ordering::Release);
     crate::stats::forget();
 }
@@ -154,7 +208,18 @@ fn quiet() -> bool {
 
 /// Whether a server has been seen and not released.
 pub(crate) fn hosting() -> bool {
-    SERVER.load(Ordering::Acquire) != 0
+    SERVER.current() != 0
+}
+
+/// The running server for a read at `place` on any thread: on its game
+/// thread directly, since the teardown that frees it runs there too;
+/// elsewhere through a pin, and the game frees the server only after
+/// [`tear_down`] has seen every pin drop. `None` while no server runs,
+/// or off the game thread once its end began at shutdown.
+pub(crate) fn access(place: Place) -> Option<ServerAccess<'static>> {
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
+    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    SERVER.access(place, me == GAME_THREAD.load(Ordering::Acquire))
 }
 
 /// The running server's entity world, 0 for none.
@@ -265,7 +330,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
 
 /// The server, when the caller is on the game thread.
 pub(crate) fn reader() -> Result<usize, Status> {
-    let server = SERVER.load(Ordering::Acquire);
+    let server = SERVER.current();
     if server == 0 {
         return Err(Status::MISSING);
     }

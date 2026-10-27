@@ -87,6 +87,7 @@ mod rates;
 mod settings;
 mod stats;
 mod table;
+mod transactions;
 mod ui;
 mod world;
 
@@ -94,6 +95,7 @@ pub use content::{LiveChange, ServedResource};
 pub use hooks::LinkedHook;
 pub use inventory::SubmittedRequest;
 pub use settings::SettingsRefused;
+pub use transactions::{FakeChange, FakeTransaction};
 pub use ui::{Drawn, FakeMarker, Input, ShownDialog};
 
 /// The modding book's chapter on tests, whose examples run as doctests here.
@@ -226,6 +228,10 @@ pub struct FakeHost {
     recipe_kinds: HashMap<u32, crate::abi::RecipeKind>,
     missing_rates: HashSet<crate::abi::RateId>,
     voxels: Vec<world::VoxelGrid>,
+    zones: world::FakeZones,
+    extent: Option<[u32; 3]>,
+    blueprints: HashMap<u32, [u32; 3]>,
+    building_materials: HashMap<u32, u8>,
 }
 
 impl Default for FakeHost {
@@ -292,6 +298,10 @@ impl FakeHost {
             recipe_kinds: HashMap::new(),
             missing_rates: HashSet::new(),
             voxels: Vec::new(),
+            zones: world::FakeZones::default(),
+            extent: None,
+            blueprints: HashMap::new(),
+            building_materials: HashMap::new(),
         }
     }
 

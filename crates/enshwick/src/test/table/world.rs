@@ -1,4 +1,4 @@
-//! The fake world: players, entities, chat, time, settings, weather, terrain and voxels.
+//! The fake world: players, entities, chat, time, settings, weather, terrain, voxels and build rights.
 
 use core::ffi::c_void;
 
@@ -200,6 +200,9 @@ pub(crate) extern "system" fn entities(
     capacity: u32,
     count: *mut u32,
 ) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
         s.host
             .placed
@@ -572,14 +575,20 @@ pub(crate) extern "system" fn terrain_edit(
     if amount.is_null() {
         return Status::BAD_ARGS;
     }
-    if !(edit.radius > 0.0 && edit.radius <= 16.0) || edit.position.iter().any(|a| *a < 0.0) {
+    if !terrain_edit_valid(&edit) {
         return Status::BAD_ARGS;
     }
     with(Status::MISSING, |s| {
         if s.terrain.is_none() {
             return Status::MISSING;
         }
-        s.terrain_edits.push(edit);
+        if crate::test::world::edit_outside(s.host.extent, &edit) {
+            return Status::OUTSIDE_WORLD;
+        }
+        if !crate::test::world::edit_loaded(&s.host.voxels, &edit) {
+            return Status::NOT_LOADED;
+        }
+        s.edits.terrain.push(edit);
         // SAFETY: `amount` is non-null, checked after the edit is read; the
         // safe layer passes it pointing at a writable, aligned `f32`.
         unsafe { amount.write(1.0) };
@@ -609,11 +618,16 @@ pub(crate) extern "system" fn voxel_read(
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
-    let voxels = with(None, |s| {
-        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size)
+    let read = with(Err(Status::MISSING), |s| {
+        s.edits.voxel_reads.push((min, size));
+        if crate::test::world::outside(s.host.extent, min, size) {
+            return Err(Status::OUTSIDE_WORLD);
+        }
+        crate::test::world::VoxelGrid::read(&s.host.voxels, min, size).ok_or(Status::NOT_LOADED)
     });
-    let Some(voxels) = voxels else {
-        return Status::NOT_LOADED;
+    let voxels = match read {
+        Ok(voxels) => voxels,
+        Err(status) => return status,
     };
     for (i, voxel) in voxels.into_iter().enumerate() {
         // SAFETY: `out` is non-null, checked above, and `i` is below the
@@ -625,4 +639,68 @@ pub(crate) extern "system" fn voxel_read(
         unsafe { slot.write(voxel) };
     }
     Status::OK
+}
+
+/// Whether the loader takes `edit`: a known kind and shape, a radius above
+/// 0 and up to 16, a position at 0 or more, and for an add or a flatten a
+/// terrain material, for an add a height above 0 and up to 16.
+pub(crate) fn terrain_edit_valid(edit: &TerrainEdit) -> bool {
+    let reach = |metres: f32| metres > 0.0 && metres <= crate::terrain::MAX_RADIUS;
+    let material = (1..=0x7f).contains(&edit.material);
+    reach(edit.radius)
+        && edit
+            .position
+            .iter()
+            .all(|axis| axis.is_finite() && *axis >= 0.0)
+        && edit.shape <= TerrainEdit::SQUARE
+        && match edit.kind {
+            TerrainEdit::ADD => material && reach(edit.height),
+            TerrainEdit::DIG => true,
+            TerrainEdit::FLATTEN => material,
+            _ => false,
+        }
+}
+
+pub(crate) extern "system" fn build_rights(
+    _me: ModHandle,
+    check: *mut crate::abi::BuildRights,
+) -> Status {
+    use crate::abi::BuildRights;
+    // SAFETY: the safe layer passes `check` null or pointing at a live
+    // `BuildRights` for the call, readable for the size its header states.
+    let Some(mut request) = (unsafe { crate::abi::read_headed(check, size_of::<BuildRights>()) })
+    else {
+        return Status::BAD_ARGS;
+    };
+    let finite = request
+        .min
+        .iter()
+        .chain(&request.max)
+        .all(|v| v.is_finite());
+    if !finite || (0..3).any(|a| request.max[a] < request.min[a]) {
+        return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let refusal = with(None, |s| {
+        let permissions = s
+            .host
+            .players
+            .iter()
+            .find(|p| p.entity == request.player)
+            .map_or(0, |p| p.permissions);
+        Some(s.host.zones.refusal(permissions, request.min, request.max))
+    });
+    let Some(refusal) = refusal else {
+        return Status::MISSING;
+    };
+    request.refusal = refusal;
+    // SAFETY: the safe layer passes `check` non-null (read above) and
+    // writable for the size its header states, untouched by other threads.
+    if unsafe { crate::abi::write_headed(check, request) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
 }

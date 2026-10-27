@@ -11,6 +11,8 @@ UE = "UE"
 SEH = "SEH"
 # The game's localisation tags, LocaTag.
 Loca = "Loca"
+# clang-cl's object file option, /Fo.
+Fo = "Fo"
 
 [default]
 # Byte patterns of game code: hex bytes and `??`, such as "48 8B BA".

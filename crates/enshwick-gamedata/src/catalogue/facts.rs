@@ -159,6 +159,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::BuildingPlaceEvent", "position"),
     ),
     (
+        "building_place_event.orientation",
+        offset("keen::ecs::BuildingPlaceEvent", "orientation"),
+    ),
+    (
         "building_place_event.volume_min",
         offset("keen::ecs::BuildingPlaceEvent", "volumeMin"),
     ),
@@ -185,6 +189,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "building_tear_down_event.position",
         offset("keen::ecs::BuildingTearDownEvent", "position"),
+    ),
+    (
+        "building_tear_down_event.orientation",
+        offset("keen::ecs::BuildingTearDownEvent", "orientation"),
     ),
     (
         "building_tear_down_event.volume_min",
@@ -385,6 +393,22 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Path(&[
             ("keen::ItemInfo", "equipment"),
             ("keen::EquipmentSetup", "placedEntity"),
+        ]),
+    ),
+    (
+        "item_info.building_voxel",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "voxelData"),
+            ("keen::ChangeVoxelData", "isBuildingVoxel"),
+        ]),
+    ),
+    (
+        "item_info.place_voxel_material_id",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "voxelData"),
+            ("keen::ChangeVoxelData", "placeVoxelMaterialId"),
         ]),
     ),
     (
@@ -662,6 +686,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "current_transform",
         Fact::Type("keen::ecs::CurrentTransform"),
+    ),
+    (
+        "current_transform.transform",
+        offset("keen::ecs::CurrentTransform", "transform"),
     ),
     ("used_item", Fact::Type("keen::ecs::UsedItem")),
     ("label", Fact::Type("keen::ecs::CustomPlayerString")),
@@ -1347,6 +1375,33 @@ pub const FACTS: &[(&str, Fact)] = &[
         enum_constant(CURSE_MODIFIER, "Normal"),
     ),
     ("curse_modifier.hard", enum_constant(CURSE_MODIFIER, "Hard")),
+    (
+        "player_permissions.can_edit_base",
+        enum_constant(PLAYER_PERMISSIONS, "CanEditBase"),
+    ),
+    (
+        "player_permissions.can_edit_world",
+        enum_constant(PLAYER_PERMISSIONS, "CanEditWorld"),
+    ),
+    (
+        "terraforming_registry.building_configs",
+        offset(
+            "keen::TerraformingEfficiencyRegistryResource",
+            "buildingConfigs",
+        ),
+    ),
+    (
+        "building_terraforming_config",
+        Fact::Type("keen::BuildingTerraformingConfig"),
+    ),
+    (
+        "building_terraforming_config.building_material",
+        offset("keen::BuildingTerraformingConfig", "buildingMaterial"),
+    ),
+    (
+        "building_terraforming_config.hardness",
+        offset("keen::BuildingTerraformingConfig", "hardness"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.
@@ -1393,3 +1448,6 @@ const TAMING_STARTLE_REPERCUSSION: &str = "keen::ecs::TamingStartleRepercussion"
 
 /// How hard the shroud's curse hits.
 const CURSE_MODIFIER: &str = "keen::ecs::CurseModifier";
+
+/// The bits of a player's permission mask.
+const PLAYER_PERMISSIONS: &str = "keen::PlayerPermissions";

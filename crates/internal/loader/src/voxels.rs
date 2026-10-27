@@ -4,10 +4,14 @@
 //! voxels, half a metre a voxel. The game's box read copies a box at one
 //! level of detail into a buffer of voxel words, brick by brick under the
 //! store's own lock, and answers false when a brick of the box is not
-//! resident (far from every player, or still streaming). The loader reads
-//! at full detail on the game thread at a quiet moment, since the read
-//! takes the editor's lock for each column and a step may hold it, and
-//! decodes each word for the mod, so the word's layout stays in the loader.
+//! resident; that read also makes the server load the column, about a
+//! second later (server 399, server copy). The store numbers
+//! its levels coarse to fine; the loader reads at the finest, half a metre
+//! a voxel, on the game thread at a quiet moment, since the read takes the
+//! editor's lock for each column and a step may hold it, and decodes each
+//! word for the mod, so the word's layout stays in the loader. A column
+//! past the editor's column grid reads as air with no error, so the loader
+//! refuses a box that leaves the grid, or rises above [`HEIGHT`], itself.
 
 use enshwick::abi::{Status, Voxel};
 
@@ -16,6 +20,10 @@ use crate::pinned;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::terrain::EDITOR.id(),
+    pinned::voxel::FINEST_LEVEL.id(),
+    pinned::voxel::GRIDS.id(),
+    pinned::voxel::GRID_PAGES.id(),
+    pinned::voxel::GRID_STRIDE.id(),
     pinned::voxel::READ_BOX.id(),
     pinned::voxel::STORE.id(),
 ];
@@ -56,6 +64,45 @@ impl ReadBox {
     }
 }
 
+/// The height of the world a box may reach, in voxels: 1,024 metres.
+/// The game keeps no height: each column holds as many bricks as its
+/// ground reaches and reads as air above (server 399, client 426). The
+/// cap is enshwick's, above every place the game builds.
+pub(crate) const HEIGHT: u32 = 2048;
+
+/// The voxels of the world on each axis, x, y and z: the game's own edge
+/// across, the loader's [`HEIGHT`] up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WorldExtent([u32; 3]);
+
+impl WorldExtent {
+    /// The extent of a column grid of `width` by `depth` pages, `packed`
+    /// holding the bricks of 8 voxels along a page's x at bits 3 to 31 and
+    /// along its z from bit 35 (server 399, client 426); `None` for an
+    /// empty grid or one past [`Voxel::END`].
+    pub(crate) fn from_grid(packed: u64, width: u32, depth: u32) -> Option<Self> {
+        let across = |pages: u32, bricks: u64| {
+            u64::from(pages)
+                .checked_mul(bricks)?
+                .checked_mul(8)
+                .filter(|&voxels| voxels > 0 && voxels <= u64::from(Voxel::END))
+                .and_then(|voxels| u32::try_from(voxels).ok())
+        };
+        let x = across(width, (packed >> 3) & 0x1fff_ffff)?;
+        let z = across(depth, packed >> 35)?;
+        Some(Self([x, HEIGHT, z]))
+    }
+
+    /// Whether the box of `size` from `min` lies wholly inside.
+    pub(crate) fn holds(self, min: [u32; 3], size: [u32; 3]) -> bool {
+        (0..3).all(|axis| {
+            min[axis]
+                .checked_add(size[axis])
+                .is_some_and(|end| end <= self.0[axis])
+        })
+    }
+}
+
 /// The voxel a game voxel word stands for: its low byte the material, its
 /// high byte the fill (server 399, client 426).
 pub(crate) const fn decode(word: u16) -> Voxel {
@@ -71,6 +118,16 @@ pub(crate) const fn decode(word: u16) -> Voxel {
         fill,
         reserved: 0,
     }
+}
+
+/// The game's voxel word for `voxel`, the inverse of [`decode`];
+/// [`Status::BAD_ARGS`] when its kind is not the one its material names,
+/// or its reserved byte is set.
+pub(crate) const fn encode(voxel: Voxel) -> Result<u16, Status> {
+    if decode(voxel.material as u16).kind != voxel.kind || voxel.reserved != 0 {
+        return Err(Status::BAD_ARGS);
+    }
+    Ok(u16::from_le_bytes([voxel.material, voxel.fill]))
 }
 
 /// The game's box read: `out` takes the buffer, `size` and `min` are in
@@ -95,27 +152,52 @@ struct Words {
     count: u64,
 }
 
-/// The full level of detail, half a metre a voxel.
+/// Where a column grid's pages along z lie after its pages along x: the
+/// next `u32` (server 399, client 426).
 #[cfg(windows)]
-const FULL_DETAIL: u32 = 0;
+const DEPTH_AFTER_WIDTH: usize = 4;
 
-/// The voxel words of `request` at full detail, x fastest, then y, then z;
-/// on the game thread at a quiet moment only. [`Status::NOT_LOADED`] while
-/// a brick of the box is not resident, [`Status::MISSING`] before a world
-/// runs or on a build without the read.
+/// The store's finest level, half a metre a voxel, and where the editor
+/// holds its column grid, from the build table: the grid starts with the
+/// bricks a page holds, packed in a `u64`, then its pages along x and z.
 #[cfg(windows)]
-pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Vec<u16>, Status> {
+struct Finest {
+    level: u32,
+    grid: usize,
+    width: usize,
+}
+
+#[cfg(windows)]
+fn finest(loader: &crate::host::Loader) -> Result<Finest, Status> {
+    let constant = |id| loader.offset(id).ok_or(Status::MISSING);
+    let level = constant(pinned::voxel::FINEST_LEVEL)?;
+    let grids = constant(pinned::voxel::GRIDS)?;
+    let pages = constant(pinned::voxel::GRID_PAGES)?;
+    let stride = constant(pinned::voxel::GRID_STRIDE)?;
+    let grid = level
+        .checked_mul(stride)
+        .and_then(|offset| offset.checked_add(grids))
+        .ok_or(Status::MISSING)?;
+    let width = pages
+        .checked_sub(grids)
+        .and_then(|field| field.checked_add(grid))
+        .ok_or(Status::MISSING)?;
+    Ok(Finest {
+        level: u32::try_from(level).map_err(|_| Status::MISSING)?,
+        grid,
+        width,
+    })
+}
+
+/// The server's voxel editor, on the game thread at a quiet moment.
+#[cfg(windows)]
+fn editor(loader: &crate::host::Loader) -> Result<usize, Status> {
     use crate::memory::read;
 
     let server = crate::world::server()?;
-    let function = loader
-        .address(pinned::voxel::READ_BOX)
-        .and_then(|address| usize::try_from(address).ok())
-        .ok_or(Status::MISSING)?;
     let editor_at = loader
         .offset(pinned::terrain::EDITOR)
         .ok_or(Status::MISSING)?;
-    let store_at = loader.offset(pinned::voxel::STORE).ok_or(Status::MISSING)?;
     // SAFETY: `server` comes from `crate::world::server`, on the game thread
     // that alone writes it; the table's `terrain.editor` offset holds its
     // voxel editor pointer.
@@ -123,9 +205,54 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
     if editor == 0 {
         return Err(Status::MISSING);
     }
-    // SAFETY: `editor` is non-zero (`editor == 0` returns first), the
-    // server's voxel editor, read on the game thread that alone replaces
-    // it; the table's `voxel.store` offset holds its store pointer.
+    Ok(editor)
+}
+
+/// The world's extent from the editor's finest column grid, the bounds the
+/// game's own column lookup takes; on the game thread at a quiet moment.
+#[cfg(windows)]
+pub(crate) fn extent(loader: &crate::host::Loader) -> Result<WorldExtent, Status> {
+    use crate::memory::read;
+
+    let finest = finest(loader)?;
+    let editor = editor(loader)?;
+    // SAFETY: `editor` is the server's non-zero voxel editor, read on the
+    // game thread that alone replaces it; the table's `voxel.grids`,
+    // `voxel.grid_stride` and `voxel.finest_level` place its finest column
+    // grid at `finest.grid`, which starts with its packed bricks per page.
+    let packed: u64 = unsafe { read(editor, finest.grid) };
+    // SAFETY: `editor` is the server's non-zero voxel editor, read on the
+    // game thread; the table's `voxel.grid_pages` places the finest grid's
+    // pages along x at `finest.width`.
+    let width: u32 = unsafe { read(editor, finest.width) };
+    // SAFETY: `editor` is the server's non-zero voxel editor, read on the
+    // game thread; the finest grid's pages along z follow its pages along x.
+    let depth: u32 = unsafe { read(editor, finest.width + DEPTH_AFTER_WIDTH) };
+    WorldExtent::from_grid(packed, width, depth).ok_or(Status::MISSING)
+}
+
+/// The voxel words of `request` at the finest level, x fastest, then y, then z;
+/// on the game thread at a quiet moment only. [`Status::NOT_LOADED`] while
+/// a brick of the box is not resident, [`Status::OUTSIDE_WORLD`] for a box
+/// that leaves the world, [`Status::MISSING`] before a world runs or on a
+/// build without the read.
+#[cfg(windows)]
+pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Vec<u16>, Status> {
+    use crate::memory::read;
+
+    let function = loader
+        .address(pinned::voxel::READ_BOX)
+        .and_then(|address| usize::try_from(address).ok())
+        .ok_or(Status::MISSING)?;
+    let store_at = loader.offset(pinned::voxel::STORE).ok_or(Status::MISSING)?;
+    let level = finest(loader)?.level;
+    let editor = editor(loader)?;
+    if !extent(loader)?.holds(request.min, request.size) {
+        return Err(Status::OUTSIDE_WORLD);
+    }
+    // SAFETY: `editor` is the server's non-zero voxel editor (checked by
+    // `editor`), read on the game thread that alone replaces it; the
+    // table's `voxel.store` offset holds its store pointer.
     let store: usize = unsafe { read(editor, store_at) };
     if store == 0 {
         return Err(Status::MISSING);
@@ -150,21 +277,22 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
     };
     // SAFETY: `read_box` is the table's `voxel.read_box`, called on the game
     // thread at a quiet moment, where no step holds the editor's column lock
-    // (checked by `crate::world::server`), with the server's non-zero voxel
-    // editor whose store is non-zero (both checked above), which the read
-    // dereferences unconditionally. The read writes the product of
-    // `request.size` words at `out.data` without a bound: `ReadBox::new`
-    // takes `request.count` from `Voxel::read_count`, which multiplies with
-    // overflow checks, so `request.count` is that product and at most
-    // `Voxel::READ_MAX`, and `words` holds `request.count` words. Every end
-    // lies within `Voxel::END`, below `SIGNED_END`, where the read's signed
-    // loops neither wrap nor run past the box.
+    // (checked by `crate::world::server` in `editor`), with the server's
+    // non-zero voxel editor whose store is non-zero (both checked above),
+    // which the read dereferences unconditionally. The read writes the
+    // product of `request.size` words at `out.data` without a bound:
+    // `ReadBox::new` takes `request.count` from `Voxel::read_count`, which
+    // multiplies with overflow checks, so `request.count` is that product
+    // and at most `Voxel::READ_MAX`, and `words` holds `request.count`
+    // words. Every end lies inside the world's extent (checked above) and
+    // within `Voxel::END`, below `SIGNED_END`, where the read's signed loops
+    // neither wrap nor run past the box.
     let resident = unsafe {
         read_box(
             &raw mut out,
             &raw const request.size,
             core::ptr::with_exposed_provenance_mut(editor),
-            FULL_DETAIL,
+            level,
             &raw const request.min,
         )
     };
@@ -174,9 +302,53 @@ pub(crate) fn read(loader: &crate::host::Loader, request: &ReadBox) -> Result<Ve
     Ok(words)
 }
 
+/// `Ok` when the column of bricks holding the voxel at `at` is loaded;
+/// [`Status::NOT_LOADED`] when not. The game keeps a column loaded or not
+/// as one, and its box read answers false for a column without data and
+/// starts loading it. An editor write there computes the edit against air
+/// and merges it onto the real ground when that arrives (server 399,
+/// server copy).
+#[cfg(windows)]
+pub(crate) fn column_loaded(loader: &crate::host::Loader, at: [u32; 3]) -> Result<(), Status> {
+    read(loader, &ReadBox::new(at, [1; 3], 1)?).map(drop)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The grid of the tested save on server 399: 80 by 80 pages of 32 by
+    /// 32 bricks.
+    const SAVE_GRID: (u64, u32, u32) = (32 << 3 | 32 << 35, 80, 80);
+
+    #[test]
+    fn the_extent_is_the_finest_grid_s_pages_of_bricks() {
+        let (packed, width, depth) = SAVE_GRID;
+        let extent = WorldExtent::from_grid(packed, width, depth).unwrap();
+        assert_eq!(extent, WorldExtent([20_480, HEIGHT, 20_480]));
+    }
+
+    #[test]
+    fn an_empty_or_overflowing_grid_has_no_extent() {
+        let (packed, width, depth) = SAVE_GRID;
+        assert_eq!(WorldExtent::from_grid(packed, 0, depth), None);
+        assert_eq!(WorldExtent::from_grid(0, width, depth), None);
+        assert_eq!(WorldExtent::from_grid(packed, u32::MAX, depth), None);
+    }
+
+    #[test]
+    fn a_box_holds_only_inside_every_edge() {
+        let (packed, width, depth) = SAVE_GRID;
+        let extent = WorldExtent::from_grid(packed, width, depth).unwrap();
+        assert!(extent.holds([0; 3], [1; 3]));
+        assert!(extent.holds([20_479, HEIGHT - 1, 20_479], [1; 3]));
+        assert!(extent.holds([20_416, 0, 0], [64, 64, 64]));
+        assert!(!extent.holds([20_480, 0, 0], [1; 3]));
+        assert!(!extent.holds([20_417, 0, 0], [64, 1, 1]));
+        assert!(!extent.holds([0, HEIGHT, 0], [1; 3]));
+        assert!(!extent.holds([0, 0, 20_479], [1, 1, 2]));
+        assert!(!extent.holds([0, 0, u32::MAX], [1, 1, 2]));
+    }
 
     #[test]
     fn every_word_splits_into_material_and_fill() {
@@ -188,6 +360,36 @@ mod tests {
                 "{word:#06x}"
             );
             assert_eq!(voxel.reserved, 0);
+        }
+    }
+
+    #[test]
+    fn every_decoded_word_encodes_back_to_itself() {
+        for word in 0..=u16::MAX {
+            assert_eq!(encode(decode(word)), Ok(word), "{word:#06x}");
+        }
+    }
+
+    #[test]
+    fn a_voxel_whose_kind_and_material_disagree_does_not_encode() {
+        let voxel = |kind, material| Voxel {
+            kind,
+            material,
+            fill: 0xff,
+            reserved: 0,
+        };
+        for bad in [
+            voxel(Voxel::AIR, 1),
+            voxel(Voxel::TERRAIN, 0),
+            voxel(Voxel::TERRAIN, 0x80),
+            voxel(Voxel::BUILDING, 0x7f),
+            voxel(3, 0),
+            Voxel {
+                reserved: 1,
+                ..voxel(Voxel::AIR, 0)
+            },
+        ] {
+            assert_eq!(encode(bad), Err(Status::BAD_ARGS), "{bad:?}");
         }
     }
 

@@ -1,8 +1,8 @@
-//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, terrain and voxels.
+//! The world: game events, entities, teleports, spawns, daytime, damage, knowledge, weather, terrain, voxels, build rights and transactions.
 
 use core::ffi::c_void;
 
-use crate::abi::{Header, Str};
+use crate::abi::{Header, Status, Str};
 
 /// A game event handed to a [`GameEventFn`], from the ECS event streams
 /// of the server's systems.
@@ -664,4 +664,278 @@ impl Voxel {
         }
         Some(count)
     }
+}
+
+/// Whether a player may edit a box of the server's world, for
+/// [`HostApi::build_rights`](crate::abi::HostApi::build_rights): the mod
+/// fills `player`, `min` and `max`, and the loader writes `refusal`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{BuildRights, Header};
+///
+/// let check = BuildRights {
+///     header: Header::of::<BuildRights>(),
+///     player: 2,
+///     refusal: BuildRights::ALLOWED,
+///     min: [100.0, 40.0, 100.0],
+///     max: [104.0, 44.0, 104.0],
+/// };
+/// assert_eq!(check.refusal, BuildRights::ALLOWED);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct BuildRights {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The player's character entity.
+    pub player: u32,
+    /// [`BuildRights::ALLOWED`] or why the server refuses, written by the
+    /// loader.
+    pub refusal: u32,
+    /// The box's lowest corner, in metres.
+    pub min: [f64; 3],
+    /// The box's highest corner, in metres, at least `min` on every axis.
+    pub max: [f64; 3],
+}
+
+impl_headed!(BuildRights);
+
+impl BuildRights {
+    /// The server lets the player edit the box.
+    pub const ALLOWED: u32 = 0;
+    /// The player lacks `CanEditWorld`, which every edit needs.
+    pub const NO_CAN_EDIT_WORLD: u32 = 1;
+    /// The player lacks `CanEditBase`, and the box overlaps a building zone.
+    pub const NO_CAN_EDIT_BASE: u32 = 2;
+    /// A corner of the box lies outside the world's building area.
+    pub const OUTSIDE_BUILDING_ZONE: u32 = 3;
+    /// The box reaches into a strict no-build zone.
+    pub const INSIDE_STRICT_BUILD_INHIBITOR_ZONE: u32 = 4;
+}
+
+/// One change of a transaction, handed to
+/// [`HostApi::transaction_commit`](super::HostApi::transaction_commit) in an
+/// array: its kind names the record `data` points at.
+///
+/// Its layout is frozen: the commit reads an array of it with no entry
+/// size. A new kind of change gets a new kind, never a new field.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, TerrainEdit, TransactionOp};
+///
+/// let dig = TerrainEdit {
+///     header: Header::of::<TerrainEdit>(),
+///     kind: TerrainEdit::DIG,
+///     shape: TerrainEdit::ROUND,
+///     flags: 0,
+///     material: 0,
+///     position: [100.0, 40.0, 100.0],
+///     radius: 3.0,
+///     height: 0.0,
+///     protect: [0; 16],
+/// };
+/// let op = TransactionOp { kind: TransactionOp::TERRAIN, reserved: 0, data: (&raw const dig).cast() };
+/// assert_eq!(op.kind, TransactionOp::TERRAIN);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TransactionOp {
+    /// One of the kinds below; the loader refuses a kind it does not know.
+    pub kind: u32,
+    /// Zero; the loader refuses another value.
+    pub reserved: u32,
+    /// The change, borrowed for the call: the record its kind names.
+    pub data: *const c_void,
+}
+
+impl TransactionOp {
+    /// A terrain add, dig or flatten: `data` points at a [`TerrainEdit`]
+    /// without [`TerrainEdit::DRY_RUN`].
+    pub const TERRAIN: u32 = 1;
+    /// Voxels written over a box: `data` points at a [`VoxelWrite`]. Since
+    /// minor 89.
+    pub const VOXELS: u32 = 2;
+    /// The building voxels of a box cleared to air: `data` points at a
+    /// [`VoxelRegion`]. Since minor 89.
+    pub const ERASE: u32 = 3;
+    /// A building block placed: `data` points at a [`BlockPlace`]. Since
+    /// minor 89.
+    pub const BLOCK: u32 = 4;
+}
+
+/// Voxels a transaction writes over a box, for
+/// [`TransactionOp::VOXELS`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, Voxel, VoxelWrite};
+///
+/// let stone = [Voxel { kind: Voxel::BUILDING, material: 0x83, fill: 0, reserved: 0 }; 8];
+/// let write = VoxelWrite {
+///     header: Header::of::<VoxelWrite>(),
+///     min: [200, 80, 200],
+///     size: [2, 2, 2],
+///     voxels: stone.as_ptr(),
+///     count: 8,
+/// };
+/// assert_eq!(write.count, 8);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct VoxelWrite {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The box's lowest voxel, in voxels of half a metre from the world's
+    /// corner.
+    pub min: [u32; 3],
+    /// The box's voxels along each axis.
+    pub size: [u32; 3],
+    /// The box's voxels, x fastest, then y, then z, borrowed for the call;
+    /// each kind must be the one its material names.
+    pub voxels: *const Voxel,
+    /// The voxels at `voxels`: `size[0] * size[1] * size[2]`.
+    pub count: u64,
+}
+
+impl_headed!(VoxelWrite);
+
+/// A box of voxels, for [`TransactionOp::ERASE`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, VoxelRegion};
+///
+/// let region = VoxelRegion { header: Header::of::<VoxelRegion>(), min: [200, 80, 200], size: [8, 4, 8] };
+/// assert_eq!(region.size[1], 4);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct VoxelRegion {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The box's lowest voxel, in voxels of half a metre.
+    pub min: [u32; 3],
+    /// The box's voxels along each axis.
+    pub size: [u32; 3],
+}
+
+impl_headed!(VoxelRegion);
+
+/// A building block a transaction places, as a player's building tool
+/// does, for [`TransactionOp::BLOCK`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{BlockPlace, Header};
+///
+/// let block = BlockPlace {
+///     header: Header::of::<BlockPlace>(),
+///     shape: 0x1234,
+///     material: 0x5678,
+///     position: [100.0, 40.0, 100.0],
+///     rotation: [0.0, 0.0, 0.0, 1.0],
+/// };
+/// assert_eq!(block.rotation[3], 1.0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct BlockPlace {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The shape's item: one with a `VoxelBlueprintItem`.
+    pub shape: u32,
+    /// The material's item: one whose `ChangeVoxelData` places a building
+    /// material.
+    pub material: u32,
+    /// Where the block's middle lies, in metres.
+    pub position: [f64; 3],
+    /// The block's rotation, a quaternion x, y, z, w; the game keeps the
+    /// nearest quarter turns.
+    pub rotation: [f32; 4],
+}
+
+impl_headed!(BlockPlace);
+
+/// Where a transaction stands, written by
+/// [`HostApi::transaction_status`](super::HostApi::transaction_status).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, Status, TransactionInfo};
+///
+/// let info = TransactionInfo {
+///     header: Header::of::<TransactionInfo>(),
+///     state: TransactionInfo::APPLIED,
+///     reason: Status::OK,
+///     ops: 2,
+///     applied: 2,
+///     bricks: 16,
+///     refusal: 0,
+///     reserved: 0,
+/// };
+/// assert_eq!(info.applied, info.ops);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct TransactionInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// One of the states below; a reader treats a state it does not know as
+    /// [`TransactionInfo::PENDING`].
+    pub state: u32,
+    /// Why it failed, or why its last undo was refused:
+    /// [`Status::NOT_LOADED`] for a part of the world not loaded,
+    /// [`Status::OUTSIDE_WORLD`] for a change that leaves the world,
+    /// [`Status::REFUSED`] for a region changed since, [`Status::MISSING`]
+    /// when the world ended or the build lacks a piece; [`Status::OK`]
+    /// otherwise.
+    pub reason: Status,
+    /// The changes it holds.
+    pub ops: u32,
+    /// The changes written to the world and not undone yet.
+    pub applied: u32,
+    /// The 8³-voxel bricks whose earlier state the loader keeps for its
+    /// undo, 1 KiB each.
+    pub bricks: u64,
+    /// When the server refused the player the transaction acts for, its
+    /// reason, one of the [`BuildRights`] refusals; [`BuildRights::ALLOWED`]
+    /// otherwise. Since minor 89.
+    pub refusal: u32,
+    /// Zero.
+    pub reserved: u32,
+}
+
+impl_headed!(TransactionInfo);
+
+impl TransactionInfo {
+    /// Queued, or written in part: the loader spreads a large one over the
+    /// server's steps.
+    pub const PENDING: u32 = 0;
+    /// Written whole; it can be undone.
+    pub const APPLIED: u32 = 1;
+    /// An undo is queued or written in part.
+    pub const UNDOING: u32 = 2;
+    /// Undone, or dropped before it wrote anything.
+    pub const UNDONE: u32 = 3;
+    /// It stopped before or right after a change it could not write or
+    /// read back, for `reason`; the changes written stay and can be undone
+    /// while `bricks` is above 0. An undo never fails: it is refused.
+    pub const FAILED: u32 = 4;
+    /// Written whole, or with its undo refused, but the loader dropped what
+    /// its undo needs, to stay within its memory cap or because the world
+    /// ended; it can no longer be undone.
+    pub const EXPIRED: u32 = 5;
+    /// Its last undo stopped for `reason`: before writing anything, or at a
+    /// brick changed since or not loaded for the loader's wait limit, with
+    /// what it put back kept. The rest stays written and can be undone
+    /// again.
+    pub const UNDO_REFUSED: u32 = 6;
 }

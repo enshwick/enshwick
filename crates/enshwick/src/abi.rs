@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 85;
+pub const ABI_MINOR: u16 = 89;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -446,7 +446,7 @@ impl Str {
 /// assert!(!Status::MISSING.is_ok());
 /// ```
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, bytemuck::Zeroable)]
 pub struct Status(pub u32);
 
 impl Status {
@@ -468,10 +468,14 @@ impl Status {
     /// Called from a thread the function does not serve, such as a game
     /// read off the server's game thread, or a world change inside a step.
     pub const WRONG_THREAD: Self = Self(7);
-    /// The part of the world asked about is not loaded now, far from every
-    /// player or still streaming in; the same call may work later. A mod
+    /// The part of the world asked about is not loaded yet; asking starts
+    /// loading it, so the same call works again in a second or so. A mod
     /// built before minor 84 reads it as an unknown failure. Since minor 84.
     pub const NOT_LOADED: Self = Self(8);
+    /// The box asked about leaves the world: past its edge across, or above
+    /// the height the loader takes. A mod built before minor 87 reads it as
+    /// an unknown failure. Since minor 87.
+    pub const OUTSIDE_WORLD: Self = Self(9);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -684,8 +688,19 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 157 * 8);
+    assert!(size_of::<HostApi>() == 24 + 162 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);
+    assert!(size_of::<VoxelWrite>() == 8 + 24 + 16);
+    assert!(size_of::<VoxelRegion>() == 8 + 24);
+    assert!(size_of::<BlockPlace>() == 8 + 8 + 24 + 16);
+    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 157 * 8);
+    assert!(size_of::<BuildRights>() == 8 + 8 + 48);
     assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 154 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 158 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 160 * 8);
+    // Frozen: read as an array.
+    assert!(size_of::<TransactionOp>() == 16);
+    assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8);
     // Frozen: written as an array.
     assert!(size_of::<Voxel>() == 4);
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);
@@ -768,7 +783,7 @@ const _: () = {
     assert!(size_of::<InventoryRequest>() == 32);
     assert!(size_of::<InventoryOpResult>() == 8);
     assert!(size_of::<InventoryResult>() == 24);
-    assert!(size_of::<ItemData>() == 20);
+    assert!(size_of::<ItemData>() == 20 + 16);
     // Frozen: embedded in calls and written as an array.
     assert!(size_of::<PlayerInfo>() == 96);
     assert!(core::mem::offset_of!(PlayerInfo, name) == 26);

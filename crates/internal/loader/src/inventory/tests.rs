@@ -208,3 +208,16 @@ fn operations_must_name_what_they_need() {
     assert!(!valid(&slot));
     assert!(valid(&InventoryOp { count: 5, ..slot }));
 }
+
+#[test]
+fn the_holder_s_registry_stands_in_until_the_inventory_system_runs() {
+    assert_eq!(pick_registry(0, 0x2000), (0x2000, false));
+    assert_eq!(pick_registry(0x2000, 0x2000), (0x2000, false));
+    assert_eq!(pick_registry(0x1000, 0), (0x1000, false));
+    assert_eq!(pick_registry(0, 0), (0, false));
+}
+
+#[test]
+fn registries_that_differ_keep_the_captured_one_and_say_so() {
+    assert_eq!(pick_registry(0x1000, 0x2000), (0x1000, true));
+}

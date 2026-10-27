@@ -24,8 +24,9 @@ mod mods;
 mod net;
 mod pacing;
 mod services;
+mod transactions;
 mod ui;
-mod world;
+pub(crate) mod world;
 
 use build::{
     build, caller_frame, constant, data_dir, field_offset, log_level, symbol, system, type_hash,
@@ -56,11 +57,14 @@ pub(crate) use services::view;
 use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
 };
+use transactions::{
+    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+};
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template,
-    event_types, feature, forget_game_settings, game_event, game_settings, hosting,
-    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    actions, build_rights, chat, component, component_write, destroy, emit, entities,
+    entity_template, event_types, feature, forget_game_settings, game_event, game_settings,
+    hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
     voxel_read, weather_at, weather_fronts, world_key,
@@ -173,8 +177,8 @@ pub(crate) struct State {
     pub(crate) forecasts: Vec<(u32, i64)>,
     /// The terrain materials, once a world runs.
     pub(crate) terrain: Option<Vec<TerrainMaterialInfo>>,
-    /// The terrain edits the mod asked for.
-    pub(crate) terrain_edits: Vec<TerrainEdit>,
+    /// The terrain edits and transactions the mod asked for.
+    pub(crate) edits: WorldEdits,
     pub(crate) config_schema: Option<String>,
     /// Frame callbacks: callback and pointer.
     pub(crate) frames: Vec<(UiFrameFn, usize)>,
@@ -321,6 +325,18 @@ pub(crate) struct DataChanges {
     pub(crate) live: Vec<crate::test::content::LiveChange>,
 }
 
+/// The changes of the world the mod asked for, and its voxel reads, in
+/// order.
+#[derive(Default)]
+pub(crate) struct WorldEdits {
+    /// The voxel boxes the mod read on the game thread, `(min, size)`.
+    pub(crate) voxel_reads: Vec<([u32; 3], [u32; 3])>,
+    /// Direct terrain edits.
+    pub(crate) terrain: Vec<TerrainEdit>,
+    /// Committed transactions, oldest first.
+    pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+}
+
 /// Waits for the table to be free, then answers from `host`.
 pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
     let turn = take_turn();
@@ -378,7 +394,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         weather: None,
         forecasts: Vec::new(),
         terrain: None,
-        terrain_edits: Vec::new(),
+        edits: WorldEdits::default(),
         config_schema: None,
         channels: Vec::new(),
         net_sent: Vec::new(),
@@ -644,4 +660,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     voxel_read,
     declare_change,
     set_change,
+    build_rights,
+    transaction_commit,
+    transaction_undo,
+    transaction_status,
+    transaction_commit_for,
 };

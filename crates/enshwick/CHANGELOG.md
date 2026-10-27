@@ -8,11 +8,69 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `World::can_build` tells whether the server lets a player edit a box:
+  `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
+  terrain tools decide, plus two tests from the game's building cursor, the
+  world's building area and strict no-build zones; a refusal is a
+  `BuildRefusal` with the game's `CursorFlag` names (#547).
+- `World::transaction` writes terrain edits as one transaction at the
+  server's quiet moments, 64 bricks a step, and `World::undo` puts every
+  brick it touched back, refusing when one has changed since;
+  `World::transaction_status` follows it (#548).
+- `WorldError::OutsideWorld` (`Status::OUTSIDE_WORLD`): voxel reads, terrain
+  edits and transactions past the world's edge or above 1,024 metres are
+  refused, where the game would read air (#548).
+- `World::props_in` lists the props in a box, the things players placed
+  from items, each with its `ItemId` and `WorldTransform`, told apart from
+  the things a world comes with by the template their item places (#550).
+- `World::capture` takes a region of up to `CAPTURE_TILES` reads of 32
+  metres a side as a `Capture` of its voxels and props, counted from its
+  corner; `Capture::rotated` turns it by quarter turns about the vertical
+  and `Capture::translated` moves it (#550).
+- `ItemId`, the game's number for an item, and `WorldTransform`, a
+  position in metres with an orientation (#550).
+- `Capture`, `VoxelBox`, `Voxel`, `VoxelMaterial`, `VoxelPos`, `Entity`,
+  `ItemId`, `Prop` and `WorldTransform` implement serde's `Serialize` and
+  `Deserialize`; a `VoxelBox` read must hold one voxel per place and end
+  inside the world's coordinates (#550).
+- `ItemData::placed_entity`, the GUID of the template a player places from
+  the item, from `HostApi::item_info`; ABI minor 88 (#550).
+- `Transaction::write_voxels`, `erase_block` and `place_block` write voxels,
+  tear down building voxels and place building blocks inside a
+  transaction, with the same undo; blocks and tear-downs raise the game's
+  `BuildingPlaceEvent` and `BuildingTearDownEvent`. `VoxelBox::new`,
+  `set` and `moved_to` build boxes to write (#551).
+- `World::transaction_for` acts for a player: the loader checks the
+  player's rights for every change before it writes, and a refusal shows
+  as `TransactionStatus::NotAllowed`; the op kinds, records and
+  `transaction_commit_for` are ABI minor 89 (#551).
+
+### Changed
+
+- `Terrain::{add,dig,flatten}` write nothing and fail with
+  `WorldError::NotLoaded` unless the whole area the edit can reach is
+  loaded; the game would compute such an edit against air and merge it
+  onto the ground once the area loads (#548).
+- `World::entities` takes the world by value, as the other `World` calls
+  do (#550).
+- Item data (`Inventories::item_info`, `HostApi::item_info`) and the
+  item checks of `World::props_in` and `Transaction::place_block` work from
+  world start: the loader finds the item registry without waiting for a
+  player to join (#551).
+
+## [1.0.0-alpha.7] - 2026-10-26
+
+### Added
+
+- `load.voxels()` reads up to 64³ voxels of the server's world with
+  `Voxels::read` and `Voxels::sample`, on the game thread at a quiet
+  moment, as `VoxelBox` of `Voxel`s; `Status::NOT_LOADED` and
+  `WorldError::NotLoaded` name a part of the world that is not loaded
+  (#541).
 - `Load::change_items` changes a stack size or container slots of every
   vanilla item a selection picks (`Items::Category`, `Items::Stackable`,
   `Items::Containers`), read from the game's data by the loader;
-  `ItemCategoryMask` moved to `content::categories` and names every item
-  category (#540).
+  `ItemCategoryMask` names every item category (#540).
 - `Load::declare_change` declares a change of a vanilla value at init whose
   value the mod sets any time later through its `ChangeHandle`
   (`set`, `reset`); the loader merges it with every mod's and pack's
@@ -35,6 +93,11 @@ Each entry names the pull request that made the change.
 
 - Each mod handle has a scheduler queue of its own, so one copy of the API
   can run tasks for several packs and scripts (#543).
+
+### Changed
+
+- `ItemCategoryMask` lives in `content::categories`, beside the selections
+  that use it, instead of `affixes` (#540).
 
 ## [1.0.0-alpha.6] - 2026-10-26
 

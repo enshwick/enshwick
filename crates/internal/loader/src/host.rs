@@ -56,14 +56,17 @@ use entries::services::{
     attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
     service, subscribe, subscribe_event,
 };
+use entries::transactions::{
+    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+};
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
-    actions, chat, component, component_write, destroy, emit, entities, entity_template, feature,
-    forget_game_settings, game_event, game_settings, hosting, keep_game_settings, notify, player,
-    players, rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
-    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
-    terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
-    world_key,
+    actions, build_rights, chat, component, component_write, destroy, emit, entities,
+    entity_template, feature, forget_game_settings, game_event, game_settings, hosting,
+    keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
+    server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
+    spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
+    voxel_read, weather_at, weather_fronts, world_key,
 };
 pub(crate) use join::{
     Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
@@ -770,6 +773,11 @@ pub(crate) static API: HostApi = HostApi {
     voxel_read,
     declare_change,
     set_change,
+    build_rights,
+    transaction_commit,
+    transaction_undo,
+    transaction_status,
+    transaction_commit_for,
 };
 
 /// The loader and the calling mod, when the mod is on.

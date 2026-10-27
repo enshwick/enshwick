@@ -12,6 +12,10 @@ Each entry names the pull request that made the change.
   (#543); `cargo enshwick luau` writes them to a file, and
   `cargo enshwick new --luau` starts a Luau mod (#545).
 
+## [1.0.0-alpha.7] - 2026-10-26
+
+Released beside `enshwick` 1.0.0-alpha.7, with no changes of its own.
+
 ## [1.0.0-alpha.6] - 2026-10-26
 
 ### Fixed

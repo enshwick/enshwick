@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-luau"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "Internal, not for mods: runs Luau mods in a sandboxed VM each, over the API's script descriptions"
 keywords = ["enshrouded", "modding", "luau", "scripting"]
 categories = ["game-development"]

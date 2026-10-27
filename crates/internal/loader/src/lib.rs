@@ -170,8 +170,18 @@ pub mod resolve;
     expect(dead_code, reason = "only the Windows build hands the game memory")
 )]
 mod retire;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build asks the game's zones")
+)]
+mod rights;
 #[cfg(windows)]
 mod saves;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build reads the game's server")
+)]
+mod server_pin;
 #[cfg(windows)]
 mod services;
 pub mod settings;
@@ -198,6 +208,11 @@ mod terrain;
 mod texts;
 #[cfg(windows)]
 mod textures;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build writes the game's voxels")
+)]
+mod transactions;
 #[cfg(windows)]
 mod ui;
 #[cfg(windows)]

@@ -55,6 +55,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 const STATE_INITIALIZE: u8 = 2;
 const STATE_RUN: u8 = 5;
 const STATE_SHUTDOWN: u8 = 6;
+/// The state whose updates tear the server down and free it, the
+/// game-systems holder and the world, after `set_state` enters it (server
+/// 399, client 426). The name is enshwick's.
+const STATE_TEAR_DOWN: u8 = 7;
 /// The slot state of a player in the world.
 const SLOT_IN_GAME: u8 = 3;
 /// Slots the joined set can hold; the game has 16.
@@ -386,6 +390,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("join admission", crate::admission::after_step(loader));
     part!("console lines", crate::console::after_step(loader));
     part!("chat sending", crate::chat::drain());
+    crate::transactions::after_step(loader);
     if server.is_null() {
         return;
     }
@@ -432,6 +437,7 @@ fn end_session() {
     }
     SESSION.relock().stop();
     crate::world::release();
+    crate::transactions::forget();
     crate::altars::forget();
     crate::survivors::forget();
     crate::interactions::forget();
@@ -453,6 +459,12 @@ fn end_session() {
 }
 
 unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
+    if state == STATE_TEAR_DOWN && std::panic::catch_unwind(crate::world::tear_down).is_err() {
+        crate::log!(
+            ERROR,
+            "the server's teardown wait panicked; readers off the game thread may still hold it"
+        );
+    }
     let old = loaded()
         .filter(|_| !entry.is_null())
         // SAFETY: `entry` is non-null by the filter before it and is the hooked
@@ -463,6 +475,9 @@ unsafe extern "system" fn set_state(entry: *mut u8, state: u8) {
     // slot holds the next function of that signature; the game's arguments
     // pass unchanged.
     unsafe { STATE_NEXT.get()(entry, state) };
+    if state == STATE_SHUTDOWN {
+        crate::world::retire();
+    }
     let (Some((loader, _)), Some(old)) = (loaded().filter(|_| !STATE_FUSE.is_off()), old) else {
         return;
     };

@@ -11,6 +11,7 @@ members = [
     "examples/haggling",
     "examples/trading-post",
     "examples/trading-post-api",
+    "examples/hello-c",
     "tools/xtask",
 ]
 
@@ -30,11 +31,12 @@ const-sha1 = { version = "0.3.0", default-features = false }
 const_format = { version = "0.2.37", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "env"] }
 arrayvec = { version = "0.7.8", default-features = false, features = ["std"] }
+cbindgen = { version = "0.29.4", default-features = false }
 bytemuck = { version = "1.25.2", default-features = false, features = ["derive", "min_const_generics", "zeroable_atomics"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
-enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.6" }
+enshwick = { path = "crates/enshwick", version = "=1.0.0-alpha.7" }
 enshwick-luau = { path = "crates/internal/luau" }
-enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.6" }
+enshwick-gamedata = { path = "crates/enshwick-gamedata", version = "=1.0.0-alpha.7" }
 fastrand = { version = "2.5.0", default-features = false, features = ["std"] }
 insta = { version = "1.49.0", default-features = false }
 iced-x86 = { version = "1.21.0", default-features = false, features = ["std", "decoder", "block_encoder", "instr_info"] }

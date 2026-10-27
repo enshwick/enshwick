@@ -1,6 +1,6 @@
 [package]
 name = "enshwick-loader"
-version = "1.0.0-alpha.6"
+version = "1.0.0-alpha.7"
 description = "Internal, not for mods: the Enshwick Loader DLL that finds the game build, loads mods and links their hooks inside Enshrouded"
 keywords = ["enshrouded", "modding", "loader", "hooks"]
 categories = ["game-development"]
@@ -54,7 +54,8 @@ windows-sys = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
-# Only for the model test of the hook chains: `RUSTFLAGS="--cfg loom"`.
+# Only for the model tests of the hook chains and the server pin:
+# `RUSTFLAGS="--cfg loom"`.
 [target.'cfg(loom)'.dependencies]
 loom = { version = "0.7.2", default-features = false }
 
