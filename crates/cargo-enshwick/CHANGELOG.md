@@ -12,7 +12,7 @@ Each entry names the pull request that made the change.
   beside the API's definitions, in `types/game.d.luau`, and points
   luau-lsp at them; `cargo enshwick types --luau` keeps every type clear of
   the names the API's definitions export, and
-  `cargo_enshwick::luau::type_names` lists them.
+  `cargo_enshwick::luau::type_names` lists them (#583).
 - `cargo enshwick call <call> --luau` writes a call's Luau module
   (`cargo_enshwick::points::luau_call`); it refuses a call whose input holds
   a value type or an enum (#577).
