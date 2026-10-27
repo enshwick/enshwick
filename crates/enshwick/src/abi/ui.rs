@@ -336,3 +336,54 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 /// It must not unwind.
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;
+
+/// The size, scale and version of the client's fog of war, which
+/// [`HostApi::fog_read`](super::HostApi::fog_read) writes.
+///
+/// The fog is one image of a byte per pixel, the coverage from 0 (hidden)
+/// to 255 (uncovered), row 0 at the world's high z edge and x growing with
+/// world x.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{FogInfo, Header};
+///
+/// let info = FogInfo { header: Header::of::<FogInfo>(), ..FogInfo::EMPTY };
+/// assert_eq!(info.width, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct FogInfo {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The image's width in pixels.
+    pub width: u32,
+    /// The image's height in pixels.
+    pub height: u32,
+    /// The metres one pixel covers along each axis.
+    pub metres_per_pixel: f32,
+    /// The world's z size the fog covers, in metres: pixel row
+    /// `(size_z - z) / metres_per_pixel`.
+    pub size_z: f32,
+    /// Grows whenever pixels of the copy changed.
+    pub version: u64,
+    /// Counts the fogs the loader has seen, one per world the client
+    /// enters; a new one starts from the save of that world.
+    pub session: u64,
+}
+
+impl_headed!(FogInfo);
+
+impl FogInfo {
+    /// No fog, its header set.
+    pub const EMPTY: Self = Self {
+        header: Header::of::<Self>(),
+        width: 0,
+        height: 0,
+        metres_per_pixel: 0.0,
+        size_z: 0.0,
+        version: 0,
+        session: 0,
+    };
+}

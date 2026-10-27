@@ -27,6 +27,7 @@ pub(crate) mod item;
 pub(crate) mod knowledge;
 pub(crate) mod label;
 pub(crate) mod loot;
+pub(crate) mod map;
 pub(crate) mod net;
 pub(crate) mod npc;
 pub(crate) mod pacing;
