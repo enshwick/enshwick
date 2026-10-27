@@ -33,6 +33,7 @@ mod chat;
 mod clones;
 #[cfg(windows)]
 mod code;
+pub mod code_watch;
 pub mod configure;
 pub mod conflicts;
 pub mod console;

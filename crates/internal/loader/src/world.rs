@@ -364,6 +364,16 @@ pub(crate) fn server() -> Result<usize, Status> {
     Ok(server)
 }
 
+/// `Ok` on the game thread at a quiet moment while a world runs:
+/// [`Status::WRONG_THREAD`] elsewhere or inside a step,
+/// [`Status::MISSING`] while no world runs.
+pub(crate) fn quiet_world(loader: &Loader) -> Result<(), Status> {
+    let layout = layout(loader).ok_or(Status::MISSING)?;
+    entity_world(layout, server()?)
+        .map(drop)
+        .ok_or(Status::MISSING)
+}
+
 /// The entity world: `*(server + world) + entities`.
 fn entity_world(layout: &Layout, server: usize) -> Option<usize> {
     // SAFETY: callers pass the server `reader` returned, so this runs on the

@@ -203,6 +203,9 @@ pub(crate) extern "system" fn entities(
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
+    if with(true, |s| s.edits.stopped) {
+        return Status::MISSING;
+    }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
         s.host
             .placed
@@ -216,6 +219,19 @@ pub(crate) extern "system" fn entities(
         unsafe { out.wrapping_add(i).write(*place) };
     }
     put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+}
+
+pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    with(Status::MISSING, |s| {
+        if s.edits.stopped {
+            Status::MISSING
+        } else {
+            Status::OK
+        }
+    })
 }
 
 pub(crate) extern "system" fn destroy(_me: ModHandle, entity: u32) -> Status {

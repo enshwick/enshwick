@@ -206,6 +206,20 @@ impl Load<'_> {
         crate::world::World::resolve(self)
     }
 
+    /// The map's markers and the players' waypoints in the game server,
+    /// dedicated or hosted by the client.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the game build lacks the marker reads.
+    ///
+    /// # Examples
+    ///
+    /// See [`Map`](crate::map::Map).
+    pub fn map(&mut self) -> Result<crate::map::Map, Off> {
+        crate::map::Map::resolve(self)
+    }
+
     /// Inventory reads and transactions in the game server, dedicated or
     /// hosted by the client; a mod asks for them during `init`.
     ///
@@ -348,7 +362,7 @@ std::thread_local! {
     /// The reason a mod's check refused a settings text, kept on the thread
     /// that asked until its next check there: the game thread and the UI
     /// thread may check at once, and each reads its own after the call.
-    static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
+    pub(crate) static CHECK_WHY: core::cell::RefCell<String> = const { core::cell::RefCell::new(String::new()) };
 }
 
 impl Load<'_> {

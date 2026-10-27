@@ -135,13 +135,30 @@ pub(super) struct ScaleEntry {
     pub(super) times: f64,
 }
 
+/// The items a change names: a list of names, or a word that selects
+/// vanilla items from the game's data.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged)]
+pub(super) enum ItemsEntry {
+    /// `stackable` or `containers`.
+    Word(String),
+    /// Debug names, GUIDs or content ids.
+    Names(Vec<String>),
+}
+
 /// A change of vanilla items' values.
 #[derive(Clone, Debug, PartialEq, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub(super) struct ItemChangeEntry {
-    /// The items changed: debug names, GUIDs or content ids.
-    pub(super) items: Vec<String>,
+    /// The items changed: debug names, GUIDs or content ids; or
+    /// `"stackable"`, every item one slot holds more of, or `"containers"`,
+    /// every item that places a container.
+    pub(super) items: Option<ItemsEntry>,
+    /// Every vanilla item of these categories, by the game's names, such as
+    /// `Materials`.
+    pub(super) category: Option<Vec<String>>,
     /// How many of the item one inventory slot holds, 1 to 65535.
     pub(super) max_stack: Option<ValueEntry>,
     /// How many slots the container the item places holds, 8 to 128 in
@@ -172,6 +189,14 @@ pub(super) struct RecipeChangeEntry {
     /// Every vanilla recipe that makes one of these items.
     #[serde(default)]
     pub(super) output: Vec<String>,
+    /// Every vanilla recipe whose output is of these kinds:
+    /// `building-block`, `roof`, `overgrowth`, `terrain` or `other`.
+    #[serde(default)]
+    pub(super) kind: Vec<String>,
+    /// Every vanilla recipe made at these crafting stations, named by their
+    /// items.
+    #[serde(default)]
+    pub(super) workshop: Vec<String>,
     /// How many of each item the recipe makes, 1 to 65535.
     pub(super) output_count: Option<ValueEntry>,
     /// How many of each ingredient it takes, 1 to 65535.

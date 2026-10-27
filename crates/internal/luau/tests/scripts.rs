@@ -7,12 +7,13 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use enshwick::abi::{Header, PlayerData, PlayerInfo, Status, TickData};
-    use enshwick::events::{PlayerJoined, Ticked, WorldSaved};
+    use enshwick::config::{Field, Schema, Stage};
+    use enshwick::events::{PlayerJoined, SettingsChanged, Ticked, WorldSaved};
     use enshwick::test::{FakeHost, Installed};
     use enshwick::{Load, Mod, Off};
     use enshwick_luau::{Limits, Runtime, Scripts};
 
-    static CASE: Mutex<Option<(Scripts, Limits)>> = Mutex::new(None);
+    static CASE: Mutex<Option<(Scripts, Option<Schema>, Limits)>> = Mutex::new(None);
     static RUNTIME: Mutex<Option<Runtime>> = Mutex::new(None);
 
     struct Luau;
@@ -23,8 +24,8 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let (scripts, limits) = CASE.lock().unwrap().take().unwrap();
-            let runtime = enshwick_luau::start(load, "you.luau", scripts, limits)?;
+            let (scripts, settings, limits) = CASE.lock().unwrap().take().unwrap();
+            let runtime = enshwick_luau::start(load, "you.luau", scripts, settings, limits)?;
             *RUNTIME.lock().unwrap() = Some(runtime);
             Ok(Self)
         }
@@ -47,8 +48,18 @@ mod tests {
     }
 
     fn run_with(main: &str, limits: Limits, scripts: Scripts) -> (Installed, Status) {
-        *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), limits));
-        let loader = FakeHost::new()
+        run_full(main, limits, scripts, None, FakeHost::new())
+    }
+
+    fn run_full(
+        main: &str,
+        limits: Limits,
+        scripts: Scripts,
+        settings: Option<Schema>,
+        host: FakeHost,
+    ) -> (Installed, Status) {
+        *CASE.lock().unwrap() = Some((scripts.with("main.luau", main), settings, limits));
+        let loader = host
             .type_hash("current_transform", 1)
             .type_hash("used_item", 2)
             .player(player(10, 7, "Ann"))
@@ -327,5 +338,108 @@ mod tests {
     fn print_writes_to_the_mod_s_log() {
         let loader = run(r#"print("one", 2)"#);
         assert!(logged(&loader, "one\t2"), "{:?}", loader.logs());
+    }
+
+    fn main(source: &str) -> Scripts {
+        Scripts::new().with("main.luau", source)
+    }
+
+    fn count(loader: &Installed, text: &str) -> usize {
+        loader
+            .logs()
+            .iter()
+            .filter(|(_, line)| line.contains(text))
+            .count()
+    }
+
+    #[test]
+    fn a_reload_moves_the_handlers_to_the_new_scripts() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
+        runtime()
+            .reload(main(
+                r#"enshwick.on("WorldSaved", function() print("second") end)"#,
+            ))
+            .unwrap();
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert!(logged(&loader, "second"), "{:?}", loader.logs());
+        assert!(!logged(&loader, "first"));
+    }
+
+    #[test]
+    fn a_failing_reload_keeps_the_old_scripts() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() print("first") end)"#);
+        let error = runtime().reload(main("local x = ")).unwrap_err();
+        assert!(error.to_string().contains("main.luau:1"), "{error}");
+        let _handled = loader.raise::<WorldSaved>(&());
+        assert!(logged(&loader, "first"));
+        assert!(loader.faults().is_empty());
+    }
+
+    #[test]
+    fn a_reload_stops_the_old_tasks_without_a_fault() {
+        let loader =
+            run(r#"enshwick.scheduler.every(0, function() print("old task") return true end)"#);
+        tick(&loader);
+        assert_eq!(count(&loader, "old task"), 1);
+        runtime().reload(main("")).unwrap();
+        tick(&loader);
+        tick(&loader);
+        assert_eq!(count(&loader, "old task"), 1);
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+        assert!(!runtime().is_off());
+    }
+
+    #[test]
+    fn a_handler_of_a_new_event_waits_for_the_next_start() {
+        let loader = run(r#"enshwick.on("WorldSaved", function() end)"#);
+        runtime()
+            .reload(main(r#"enshwick.on("PlayerJoined", function() end)"#))
+            .unwrap();
+        assert!(
+            logged(&loader, "handlers of PlayerJoined run from the next start"),
+            "{:?}",
+            loader.logs()
+        );
+    }
+
+    #[test]
+    fn the_status_shows_the_vm_s_cost() {
+        let _loader = run("local t = {} for i = 1, 1000 do t[i] = i end");
+        assert!(runtime().usage().memory > 0);
+        assert_eq!(runtime().usage().calls, 1);
+    }
+
+    fn greeting_schema() -> Schema {
+        Schema::new(
+            "",
+            "config",
+            vec![Field::new("greeting", Stage::Runtime, "hi").with_doc("What to say.", "")],
+        )
+    }
+
+    #[test]
+    fn a_script_reads_its_settings_and_sees_them_change() {
+        let (loader, status) = run_full(
+            r#"enshwick.log.info(`greeting {enshwick.settings().greeting}`)
+            enshwick.on("SettingsChanged", function()
+                enshwick.log.info(`now {enshwick.settings().greeting}`)
+            end)"#,
+            Limits::default(),
+            Scripts::new(),
+            Some(greeting_schema()),
+            FakeHost::new().settings("greeting = \"yo\"\n"),
+        );
+        assert_eq!(status, Status::OK, "{:?}", loader.logs());
+        assert!(logged(&loader, "greeting yo"), "{:?}", loader.logs());
+        assert_eq!(loader.config_schema(), Some(greeting_schema()));
+        loader.set_settings("greeting = \"hey\"\n");
+        let _handled = loader.raise::<SettingsChanged>(&());
+        assert!(logged(&loader, "now hey"), "{:?}", loader.logs());
+    }
+
+    #[test]
+    fn a_mod_without_settings_reads_an_empty_table() {
+        let loader = run("enshwick.log.info(`keys {next(enshwick.settings()) == nil}`)");
+        assert!(logged(&loader, "keys true"), "{:?}", loader.logs());
     }
 }

@@ -244,6 +244,20 @@ impl Installed {
         table::with(Vec::new(), |s| s.changes.items.clone())
     }
 
+    /// The changes of every recipe a selection picks the mod declared, in
+    /// order, each with its source.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.recipe_changes().is_empty());
+    /// ```
+    #[must_use]
+    pub fn recipe_changes(&self) -> Vec<(crate::content::changes::RecipesChange, String)> {
+        table::with(Vec::new(), |s| s.changes.recipes.clone())
+    }
+
     /// The changes the mod declared to set later, in order, each with its
     /// value in force: `None` until set or after a reset.
     ///
@@ -460,7 +474,7 @@ pub struct ServedResource {
 ///
 /// # Examples
 ///
-/// See [`FakeHost::live_changes`](crate::test::FakeHost::live_changes).
+/// See [`Installed::live_changes`](crate::test::Installed::live_changes).
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct LiveChange {

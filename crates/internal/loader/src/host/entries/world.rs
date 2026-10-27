@@ -314,6 +314,15 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
     })
 }
 
+pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
+    entry("world_quiet", || {
+        match caller(me).and_then(crate::world::quiet_world) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: u32,
@@ -321,8 +330,11 @@ pub(crate) extern "system" fn component_write(
     out: *mut *mut core::ffi::c_void,
 ) -> Status {
     entry("component_write", || {
-        match caller(me).and_then(|loader| crate::writes::component_mut(loader, entity, type_hash))
-        {
+        match caller_index(me).and_then(|(loader, index)| {
+            let data = crate::writes::component_mut(loader, entity, type_hash)?;
+            crate::conflicts::note_write(type_hash, index);
+            Ok(data)
+        }) {
             // SAFETY: `HostApi::component_write` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.

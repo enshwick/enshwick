@@ -12,6 +12,8 @@ use windows_sys::Win32::System::LibraryLoader::{
 };
 
 use crate::chains::Chains;
+use crate::code::Watching;
+use crate::code_watch::Stage;
 use crate::host::{self, Loader, ModRecord};
 use crate::mod_index::ModIndex;
 use crate::modlist;
@@ -133,7 +135,12 @@ pub(crate) fn start(
     let Some(game) = game(&data_dir).or_else(|| no_game(&mods_dir, stub_abi, first_report)) else {
         return;
     };
-    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game);
+    let mut watching = Watching::start(game.base);
+    let (libraries, candidates, others) = libraries(&mods_dir, Run::Game, &mut |file| {
+        if let Some(w) = watching.as_mut() {
+            w.check(file, Stage::Load);
+        }
+    });
     warn_unloaded(&others);
     let lock_files: Vec<(String, String)> = libraries
         .iter()
@@ -142,6 +149,9 @@ pub(crate) fn start(
         .collect();
     let plan = resolve::resolve(&candidates, game.side);
     skip(&libraries, &candidates, &plan);
+    if let Some(w) = watching.as_mut() {
+        w.check("", Stage::Skip);
+    }
     carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
@@ -177,7 +187,7 @@ pub(crate) fn start(
     }
     attribute_crashes(loader, &order);
     crate::reload::prepare(loader.mods.len());
-    initialise(loader, &order);
+    initialise(loader, &order, watching.as_mut());
     crate::stats::seal();
     crate::item_data::seal();
     loader.seal_subscriptions();
@@ -194,11 +204,14 @@ pub(crate) fn start(
             waited.as_millis()
         );
     }
-    arm(loader, frame);
+    arm_watched(loader, frame, watching.as_mut());
     release_server(release, began);
     crate::ui::armed(loader);
     enforce_holds(loader);
-    ready(loader, &order);
+    ready(loader, &order, watching.as_mut());
+    if let Some(w) = watching {
+        w.finish();
+    }
     watch_copies(loader, &order);
     write_lock(loader, lock_files);
     crate::watch::start(loader);
@@ -414,8 +427,22 @@ fn attribute_crashes(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Calls every mod's `init` in load order.
-fn initialise(loader: &Loader, order: &[&Library]) {
+/// Arms the hooks and code patches; game code changed since the last init
+/// is put down to no mod, and what arming writes to none.
+fn arm_watched(loader: &Loader, frame: Option<FrameSlot>, watching: Option<&mut Watching>) {
+    match watching {
+        Some(w) => {
+            w.check("", Stage::BeforeArming);
+            arm(loader, frame);
+            w.absorb();
+        }
+        None => arm(loader, frame),
+    }
+}
+
+/// Calls every mod's `init` in load order, putting game code each one
+/// changes outside the API down to it.
+fn initialise(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
     for (index, library) in order.iter().enumerate() {
         let record = &loader.mods[index];
         // SAFETY: `library.init` is the mod's `INIT` export, typed `InitFn`
@@ -424,6 +451,9 @@ fn initialise(loader: &Loader, order: &[&Library]) {
         let status = crate::reload::initialising(index, || unsafe {
             (library.init)(&raw const host::API, host::handle(ModIndex::new(index)))
         });
+        if let Some(w) = watching.as_deref_mut() {
+            w.check(&record.id, Stage::Init);
+        }
         if status.is_ok() {
             crate::log!(INFO, "{} {} initialised", record.id, record.version);
         } else {
@@ -432,14 +462,18 @@ fn initialise(loader: &Loader, order: &[&Library]) {
     }
 }
 
-/// Calls `ready` on every mod still on.
-fn ready(loader: &Loader, order: &[&Library]) {
+/// Calls `ready` on every mod still on, putting game code each one changes
+/// outside the API down to it.
+fn ready(loader: &Loader, order: &[&Library], mut watching: Option<&mut Watching>) {
     for (index, library) in order.iter().enumerate() {
         if !loader.mods[index].off.load(Ordering::Acquire) {
             // SAFETY: `library.ready` is the mod's `READY` export, typed
             // `ReadyFn` as `enshwick::abi::exports` documents, called with the
             // static host table after the mod's init succeeded.
             unsafe { (library.ready)(&raw const host::API, host::handle(ModIndex::new(index))) };
+            if let Some(w) = watching.as_deref_mut() {
+                w.check(&loader.mods[index].id, Stage::Ready);
+            }
         }
     }
     let running = loader

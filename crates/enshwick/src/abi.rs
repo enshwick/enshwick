@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 90;
+pub const ABI_MINOR: u16 = 92;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -478,8 +478,8 @@ impl Status {
     pub const OUTSIDE_WORLD: Self = Self(9);
     /// The entity named is no prop: not placed from an item, or a creature
     /// such as an animal, a pet or a survivor, which only the general
-    /// entity calls reach. A mod built before minor 90 reads it as an
-    /// unknown failure. Since minor 90.
+    /// entity calls reach. A mod built before minor 92 reads it as an
+    /// unknown failure. Since minor 92.
     pub const NOT_A_PROP: Self = Self(10);
 
     /// Whether this is [`Status::OK`].
@@ -693,11 +693,12 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 163 * 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 162 * 8);
+    assert!(size_of::<HostApi>() == 24 + 164 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 163 * 8);
     assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<PropRemove>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_quiet) == 24 + 162 * 8);
     assert!(size_of::<VoxelWrite>() == 8 + 24 + 16);
     assert!(size_of::<VoxelRegion>() == 8 + 24);
     assert!(size_of::<BlockPlace>() == 8 + 8 + 24 + 16);

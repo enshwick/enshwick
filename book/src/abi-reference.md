@@ -4,7 +4,8 @@ The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
 `extern "system"` functions, strings borrowed for the call, and no unwinding
 across the boundary. Mods normally use the safe layer of `enshwick`; this
 chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
+C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 ## Versions
 
@@ -348,7 +349,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   | 73          |
 | `rate`                   | Declares a game rate the mod multiplies; init only                                                   | 75          |
 | `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             | 75          |
-| `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 76          |
+| `change_data`            | Declares a change of a vanilla value, or of each item or recipe a selection picks; init only         | 76          |
 | `feature`                | Reports one of the mod's features on or off for the log, status summary and Mods screen              | 74          |
 | `loop_wait`              | Runs a handler before every wait of the engine's event loop; init only                               | 77          |
 | `server_wait`            | Runs a handler where the server loop picks its wait, which it may change; init only                  | 77          |
@@ -365,4 +366,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
-| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 90          |
+| `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
+| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 92          |

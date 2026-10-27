@@ -104,6 +104,16 @@
             }
           ]
         },
+        "category": {
+          "description": "Every vanilla item of these categories, by the game's names, such as\n`Materials`.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
         "comfort_amount": {
           "description": "The comfort the placed item gives.",
           "anyOf": [
@@ -138,11 +148,15 @@
           ]
         },
         "items": {
-          "description": "The items changed: debug names, GUIDs or content ids.",
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
+          "description": "The items changed: debug names, GUIDs or content ids; or\n`\"stackable\"`, every item one slot holds more of, or `\"containers\"`,\nevery item that places a container.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemsEntry"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "max_stack": {
           "description": "How many of the item one inventory slot holds, 1 to 65535.",
@@ -178,10 +192,7 @@
           ]
         }
       },
-      "additionalProperties": false,
-      "required": [
-        "items"
-      ]
+      "additionalProperties": false
     },
     "ItemEntry": {
       "type": "object",
@@ -246,6 +257,22 @@
       "required": [
         "id",
         "like"
+      ]
+    },
+    "ItemsEntry": {
+      "description": "The items a change names: a list of names, or a word that selects\nvanilla items from the game's data.",
+      "anyOf": [
+        {
+          "description": "`stackable` or `containers`.",
+          "type": "string"
+        },
+        {
+          "description": "Debug names, GUIDs or content ids.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       ]
     },
     "MeterEntry": {

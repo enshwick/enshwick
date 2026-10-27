@@ -27,7 +27,8 @@ content. A pack changes vanilla values only through
 item, recipe or table, never gives one another id, and never writes the
 game's files or saves.
 
-A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
+A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod). A pack
+with a `main.luau` is a [Luau mod](../luau.md).
 
 The repository's `examples/` folder holds three packs to start from:
 `you.material-stacks`, `you.recipe-cost-and-time` and `you.storage-slots`.
@@ -61,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 
 ## Names and references
 
@@ -142,6 +144,41 @@ A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
 
+A stack size or container slots can also change for every vanilla item a
+selection picks, read from the game's data when the game starts:
+
+```toml
+[[change]]
+category = ["Materials", "Ammunition"]
+max_stack = { times = 4 }
+
+[[change]]
+items = "stackable"
+max_stack = { times = 2 }
+
+[[change]]
+items = "containers"
+slots = { times = 2 }
+
+[[change]]
+items = ["Material_T1_Wood_Logs"]
+max_stack = 999
+```
+
+| Selection | Picks |
+| --- | --- |
+| `category = [...]` | every item of these categories, by the game's names: `Customization`, `Equipment`, `Weapons`, `Tools`, `Instrument`, `FishingRod`, `BuildTools`, `Consumables`, `Ammunition`, `Materials`, `Blueprints`, `Currency`, `Collectibles`, `AnimalFood`, `PetFood`, `WeaponGem`, `ColorPalette` |
+| `items = "stackable"` | every item one slot already holds more than one of |
+| `items = "containers"` | every item that places a container |
+
+A selection changes only `max_stack` and `slots`. A stack size reaches only
+items that stack and keep no state of their own, such as durability, so
+weapons and armour stay at one; slots reach only items that place a
+container. An item the pack also names in `items` keeps that change alone,
+so the last table above sets Wood Logs to 999 while other materials take
+four times their size. A change gives `items` or `category`, never both. The
+pack's log says how many items each selection reached.
+
 The stats change only on items that have them: a `damage_mod` on an item
 that deals no damage is left, and the pack's log says so. A weapon deals the
 changed damage once the game sets it up again; the number its tooltip shows
@@ -193,6 +230,30 @@ any item of a kind keeps its count. Most workbench recipes
 take no time; production stations such as the kiln do. A changed time
 reaches a production that runs already from its next step on.
 
+A change can also pick every vanilla recipe of some kinds, by what it
+makes, or every vanilla recipe made at some crafting stations, named by
+their items:
+
+```toml
+[[change]]
+kind = ["building-block", "roof"]
+cost = { times = 0.5 }
+
+[[change]]
+workshop = ["Prop_Production_T2_Kiln", "Prop_Production_T2_Smelter"]
+time = { times = 0.5 }
+```
+
+| Selection | Picks |
+| --- | --- |
+| `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
+| `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
+
+A selection changes `output_count`, `cost` and `time`, never `ingredients`.
+A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
+the pack also names in `recipes` or `output` keeps that change alone, and
+the pack's log says how many recipes each selection reached.
+
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check
 proves. [Game rates](../rates.md) multiply what a pack sets.
@@ -214,11 +275,9 @@ warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from
 
 A Rust mod declares the same changes with
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`. With `Load::change_items` it changes a stack size or
-container slots of every vanilla item a selection picks: the items of some
-categories, every item that stacks, or every item that places a container.
-The loader reads the selection from the game's data and merges one change
-per item in the mod's place in load order:
+during `init`. With `Load::change_items` and `Load::change_recipes` it
+makes the selections a pack makes. The loader reads the selection from the game's data and merges one
+change per item in the mod's place in load order, as it does for a pack:
 
 ```rust
 use enshwick::content::categories::ItemCategoryMask;

@@ -1106,14 +1106,18 @@ pub struct HostApi {
         found: *mut u32,
     ) -> Status,
     /// Caps the worker threads of the task system's default and background
-    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// groups (`foreground` and `background`) as it starts, 0 leaving a group as the game sizes it; with
     /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
     /// `enshwick_mod_init` only. Since minor 77.
-    pub task_workers:
-        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
+    pub task_workers: extern "system" fn(
+        me: ModHandle,
+        foreground: u32,
+        background: u32,
+        found: *mut u32,
+    ) -> Status,
     /// Calls `callback` with `user` for every altar of the server's world
     /// when the loader sizes the altar zones: after altars change and after
     /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
@@ -1273,13 +1277,19 @@ pub struct HostApi {
         count: u32,
         id: *mut u64,
     ) -> Status,
+    /// [`Status::OK`] on the server's game thread at a quiet moment while a
+    /// world runs, where a mod may read live components that no system
+    /// writes meanwhile; [`Status::WRONG_THREAD`] on another thread or
+    /// inside a step, [`Status::MISSING`] while no world runs. Since
+    /// minor 90.
+    pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the entities of the props transaction `id` of this mod placed
     /// and still holds, oldest first, up to `capacity` of them at `out`,
     /// and their number to `count`; a prop is in the world from the step
     /// after the one that placed it. `out` may be null with `capacity` 0 to
     /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
     /// [`Status::MISSING`] for an id this mod did not get or one the loader
-    /// forgot. Any thread. Since minor 90.
+    /// forgot. Any thread. Since minor 92.
     pub transaction_entities: extern "system" fn(
         me: ModHandle,
         id: u64,

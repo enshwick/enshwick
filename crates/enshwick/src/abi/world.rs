@@ -765,9 +765,9 @@ impl TransactionOp {
     /// A building block placed: `data` points at a [`BlockPlace`]. Since
     /// minor 89.
     pub const BLOCK: u32 = 4;
-    /// A prop placed: `data` points at a [`PropPlace`]. Since minor 90.
+    /// A prop placed: `data` points at a [`PropPlace`]. Since minor 92.
     pub const PLACE_PROP: u32 = 5;
-    /// A prop removed: `data` points at a [`PropRemove`]. Since minor 90.
+    /// A prop removed: `data` points at a [`PropRemove`]. Since minor 92.
     pub const REMOVE_PROP: u32 = 6;
 }
 
@@ -982,11 +982,11 @@ pub struct TransactionInfo {
     pub reserved: u32,
     /// When a prop's state stopped it, or stopped its last undo, the kinds
     /// of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
-    /// Since minor 90.
+    /// Since minor 92.
     pub holds: u32,
     /// The props it placed and still holds, which
     /// [`HostApi::transaction_entities`](super::HostApi::transaction_entities)
-    /// lists. Since minor 90.
+    /// lists. Since minor 92.
     pub created: u32,
 }
 

@@ -1,4 +1,4 @@
-abi 2.90
+abi 2.92
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -256,7 +256,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1328 align 8
+HostApi size 1336 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -421,7 +421,8 @@ HostApi size 1328 align 8
     transaction_undo at 1296 size 8
     transaction_status at 1304 size 8
     transaction_commit_for at 1312 size 8
-    transaction_entities at 1320 size 8
+    world_quiet at 1320 size 8
+    transaction_entities at 1328 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

@@ -1402,6 +1402,24 @@ pub const FACTS: &[(&str, Fact)] = &[
         "building_terraforming_config.hardness",
         offset("keen::BuildingTerraformingConfig", "hardness"),
     ),
+    ("map_marker", Fact::Type("keen::ecs::MapMarker")),
+    (
+        "map_marker.marker_id",
+        offset("keen::ecs::MapMarker", "markerId"),
+    ),
+    (
+        "map_marker.marker_type",
+        offset("keen::ecs::MapMarker", "markerType"),
+    ),
+    ("player_waypoint", Fact::Type("keen::ecs::PlayerWaypoint")),
+    (
+        "player_waypoint.enabled",
+        offset("keen::ecs::PlayerWaypoint", "enabled"),
+    ),
+    (
+        "player_waypoint.waypoint_position",
+        offset("keen::ecs::PlayerWaypoint", "waypointPosition"),
+    ),
     (
         "disable_random_loot_on_destroy",
         Fact::Type("keen::ecs::DisableRandomLootOnDestroy"),

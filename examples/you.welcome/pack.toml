@@ -1,0 +1,21 @@
+id = "you.welcome"
+version = "0.1.0"
+name = "Welcome"
+description = "Greets each player who joins and says how many are online."
+authors = ["Enshwick"]
+license = "MIT"
+side = "server"
+join = false
+
+[[setting]]
+key = "greeting"
+default = "Welcome"
+doc = "What a player who joins reads before their name."
+
+[[setting]]
+key = "announce_minutes"
+default = 30
+min = 1
+max = 1440
+stage = "restart"
+doc = "How often the log counts the players online, in minutes."

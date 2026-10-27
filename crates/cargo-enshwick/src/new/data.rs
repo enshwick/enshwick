@@ -106,6 +106,12 @@ const ITEMS_TOML: &str = r#"#:schema ./items.schema.json
 # [[change]]
 # items = ["Material_T1_Wood_Logs", "Material_T1_Resin"]
 # max_stack = { times = 4 }
+
+# Every item of some categories, every item that stacks ("stackable") or
+# every item that places a container ("containers"):
+# [[change]]
+# category = ["Materials"]
+# max_stack = { times = 2 }
 "#;
 
 const RECIPES_TOML: &str = r#"#:schema ./recipes.schema.json
@@ -224,6 +230,9 @@ mod tests {
     #[test]
     fn every_example_pack_has_the_layout_a_new_pack_gets() {
         for dir in crate::pack::tests::example_packs() {
+            if dir.join(enshwick::packs::SCRIPT_MAIN).is_file() {
+                continue;
+            }
             let at = dir.display();
             let manifest: toml_edit::DocumentMut = std::fs::read_to_string(dir.join(MANIFEST_FILE))
                 .unwrap()
