@@ -417,8 +417,7 @@ pub fn start(
                 let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
                 let key = sub.clone();
                 load.on_raw_game_event(ty, move |event| {
-                    let values = reader.read(event);
-                    handled.deliver(&key, |lua, _| raw_table(lua, &values));
+                    handled.deliver(&key, |lua, _| raw_table(lua, &reader.read(event)));
                 })?;
             }
         }
