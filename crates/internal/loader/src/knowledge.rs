@@ -236,12 +236,13 @@ fn store(layout: &Layout) -> Result<(usize, usize), Status> {
 
 /// The game object and its knowledge store of `server`, the running server
 /// from [`crate::world::server`] on the game thread or a
-/// [`crate::world::pin`] held elsewhere.
+/// [`crate::world::access`] held elsewhere.
 fn store_of(layout: &Layout, server: usize) -> Result<(usize, usize), Status> {
-    // SAFETY: callers pass the running server, non-zero, on its game thread
-    // or while they hold a pin on it, which keeps its memory until the pin
-    // drops; its game object pointer sits at the build table's
-    // `server.player_infos` offset.
+    // SAFETY: callers pass the running server, non-zero, on its game thread,
+    // where the teardown that frees it runs after them, or while they hold
+    // an access to it, which keeps its memory until it drops; its game
+    // object pointer sits at the build table's `server.player_infos`
+    // offset.
     let game: usize = unsafe { read(server, layout.game) };
     if game == 0 {
         return Err(Status::MISSING);

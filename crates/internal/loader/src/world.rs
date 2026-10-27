@@ -23,7 +23,7 @@ use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
-pub(crate) use crate::server_pin::ServerPin;
+pub(crate) use crate::server_pin::ServerAccess;
 use crate::server_pin::{Place, ServerCell};
 
 /// The build table ids this part of the loader names.
@@ -196,12 +196,15 @@ pub(crate) fn hosting() -> bool {
     SERVER.current() != 0
 }
 
-/// A pin on the running server for a reader on any thread, taken at
-/// `place`: the game frees the server and what it holds only after
-/// [`wait_unpinned`] has seen every pin drop; `None` while no server runs
-/// or once its end began at shutdown.
-pub(crate) fn pin(place: Place) -> Option<ServerPin<'static>> {
-    SERVER.pin(place)
+/// The running server for a read at `place` on any thread: on its game
+/// thread directly, since the teardown that frees it runs there too;
+/// elsewhere through a pin, and the game frees the server only after
+/// [`wait_unpinned`] has seen every pin drop. `None` while no server runs,
+/// or off the game thread once its end began at shutdown.
+pub(crate) fn access(place: Place) -> Option<ServerAccess<'static>> {
+    // SAFETY: `GetCurrentThreadId` has no preconditions.
+    let me = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
+    SERVER.access(place, me == GAME_THREAD.load(Ordering::Acquire))
 }
 
 /// The running server's entity world, 0 for none.

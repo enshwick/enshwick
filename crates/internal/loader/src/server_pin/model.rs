@@ -40,7 +40,7 @@ mod tests {
         let (cell, a, b) = (Arc::clone(cell), Arc::clone(a), b.map(Arc::clone));
         thread::spawn(move || {
             if let Some(pin) = cell.pin(READER) {
-                let memory = match pin.server() {
+                let memory = match pin.server {
                     A => &a,
                     other => {
                         assert_eq!(other, B);
@@ -114,7 +114,7 @@ mod tests {
                 let (cell, b) = (Arc::clone(&cell), Arc::clone(&b));
                 thread::spawn(move || {
                     if let Some(pin) = cell.pin(READER) {
-                        assert_eq!(pin.server(), B);
+                        assert_eq!(pin.server, B);
                         // SAFETY: the pin keeps the end from writing the
                         // word until it drops; loom checks the order.
                         let word = b.0.with(|word| unsafe { *word });

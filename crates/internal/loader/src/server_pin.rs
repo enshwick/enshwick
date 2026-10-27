@@ -98,6 +98,18 @@ impl ServerCell {
         (pin.server != 0).then_some(pin)
     }
 
+    /// The running server for a read at `place`: as its game thread sees
+    /// it when `on_game_thread`, with no pin, since the end and the
+    /// teardown run there too; else through a pin. `None` while none runs,
+    /// or off the game thread once its end began.
+    pub(crate) fn access(&self, place: Place, on_game_thread: bool) -> Option<ServerAccess<'_>> {
+        if on_game_thread {
+            let server = self.current();
+            return (server != 0).then_some(ServerAccess::GameThread(server));
+        }
+        self.pin(place).map(ServerAccess::Pinned)
+    }
+
     /// Begins the running server's end: no pin is taken from now on. The
     /// game thread still reads it through [`ServerCell::current`].
     pub(crate) fn retire(&self) {
@@ -130,10 +142,23 @@ pub(crate) struct ServerPin<'a> {
     server: usize,
 }
 
-impl ServerPin<'_> {
-    /// The pinned server's address, non-zero.
+/// The running server for one read: on its game thread, or through a pin
+/// elsewhere. Either way its memory stays until the access drops.
+#[derive(Debug)]
+pub(crate) enum ServerAccess<'a> {
+    /// On the game thread, which alone runs the teardown that frees it.
+    GameThread(usize),
+    /// Off the game thread, held by a pin.
+    Pinned(ServerPin<'a>),
+}
+
+impl ServerAccess<'_> {
+    /// The server's address, non-zero.
     pub(crate) const fn server(&self) -> usize {
-        self.server
+        match self {
+            Self::GameThread(server) => *server,
+            Self::Pinned(pin) => pin.server,
+        }
     }
 }
 
@@ -168,7 +193,7 @@ mod tests {
         assert!(cell.pin(HERE).is_none());
         cell.publish(0x1000);
         let pin = cell.pin(HERE).unwrap();
-        assert_eq!(pin.server(), 0x1000);
+        assert_eq!(pin.server, 0x1000);
         assert_eq!(cell.current(), 0x1000);
         drop(pin);
         end(&cell);
@@ -182,12 +207,41 @@ mod tests {
     }
 
     #[test]
+    fn the_game_thread_reads_after_the_end_began_and_others_do_not() {
+        let cell = ServerCell::new();
+        cell.publish(0x1000);
+        cell.retire();
+        assert_eq!(cell.access(HERE, true).map(|a| a.server()), Some(0x1000));
+        assert!(cell.access(HERE, false).is_none());
+        cell.wait_unpinned(|_| panic!("a game-thread access takes no pin"));
+        cell.publish(0);
+        assert!(cell.access(HERE, true).is_none());
+    }
+
+    #[test]
+    fn off_the_game_thread_an_access_is_a_pin() {
+        let cell = ServerCell::new();
+        cell.publish(0x1000);
+        let access = cell.access(HERE, false).unwrap();
+        assert!(matches!(access, ServerAccess::Pinned(_)));
+        assert_eq!(access.server(), 0x1000);
+        cell.retire();
+        assert_ne!(
+            cell.state.0.load(Ordering::Acquire) & !ENDING,
+            0,
+            "the end sees it"
+        );
+        drop(access);
+        cell.wait_unpinned(|_| panic!("the access dropped"));
+    }
+
+    #[test]
     fn a_new_server_takes_pins_again() {
         let cell = ServerCell::new();
         cell.publish(0x1000);
         end(&cell);
         cell.publish(0x2000);
-        assert_eq!(cell.pin(HERE).map(|pin| pin.server()), Some(0x2000));
+        assert_eq!(cell.pin(HERE).map(|pin| pin.server), Some(0x2000));
     }
 
     #[test]
@@ -249,7 +303,7 @@ mod tests {
                         for _ in 0..200 {
                             if let Some(pin) = cell.pin(HERE) {
                                 assert!(!freed.load(Ordering::SeqCst), "a read after the free");
-                                assert_ne!(pin.server(), 0);
+                                assert_ne!(pin.server, 0);
                             }
                         }
                     })
