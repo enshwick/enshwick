@@ -67,7 +67,7 @@ use world::{
     hosting, keep_game_settings, notify, player, players, rename_filter, run_console, save_world,
     server_world, set_game_settings, set_label, set_time_of_day, set_time_speed, set_weather,
     spawn, status, teleport, terrain_edit, terrain_materials, time_of_day, time_speed_control,
-    voxel_read, weather_at, weather_fronts, world_key,
+    voxel_read, weather_at, weather_fronts, world_key, world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -335,6 +335,8 @@ pub(crate) struct WorldEdits {
     pub(crate) terrain: Vec<TerrainEdit>,
     /// Committed transactions, oldest first.
     pub(crate) transactions: Vec<crate::test::FakeTransaction>,
+    /// Whether the world has stopped, as between two worlds.
+    pub(crate) stopped: bool,
 }
 
 /// Waits for the table to be free, then answers from `host`.
@@ -665,4 +667,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_undo,
     transaction_status,
     transaction_commit_for,
+    world_quiet,
 };

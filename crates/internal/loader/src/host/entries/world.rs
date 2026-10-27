@@ -314,6 +314,15 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
     })
 }
 
+pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
+    entry("world_quiet", || {
+        match caller(me).and_then(crate::world::quiet_world) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: u32,

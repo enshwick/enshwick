@@ -30,6 +30,7 @@ pub use build::{BuildRefusal, PlayerPermissions};
 pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
+pub(crate) use props::span;
 pub use props::{Prop, WorldTransform};
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};

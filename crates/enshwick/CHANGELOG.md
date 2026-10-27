@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.map()` returns the `Map` of the game server: `Map::markers` and
+  `Map::markers_in` list the world's map markers, each a `MapMarker` with
+  its position, its `MapMarkerTypeId` (the key of the game's marker type
+  registry) and its label's text tag; `Map::waypoint` reads the waypoint a
+  player set (#557).
+- The `world_quiet` entry answers whether a mod is on the server's game
+  thread at a quiet moment while a world runs, where it may read live
+  components (ABI 2.90) (#557).
 - `Load::table_config` reads settings described by a `config::Schema` at
   run time, with the file, checks, stages, Mods screen and join values of a
   typed `Config`; `config::TableConfig::on_change` follows them, and
