@@ -20,11 +20,14 @@ struct State {
     on: AtomicBool,
     /// The file's accounts as last read, with its time of change.
     listed: Mutex<Option<(SystemTime, Vec<u64>)>>,
+    /// Held while a change reads and writes the file.
+    writing: Mutex<()>,
 }
 
 static STATE: State = State {
     on: AtomicBool::new(false),
     listed: Mutex::new(None),
+    writing: Mutex::new(()),
 };
 
 /// Takes the loader settings' switch, before the loader starts.
@@ -96,13 +99,16 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
         .trim()
         .split_once(char::is_whitespace)
         .map_or((args.trim(), ""), |(word, rest)| (word, rest.trim()));
-    let path = path(loader);
     let shown = format!("mod-data/{LOADER_ID}/{FILE}");
-    let on = if STATE.on.load(Ordering::Acquire) {
-        "on"
-    } else {
-        "off"
-    };
+    let on = texts::fill(
+        if STATE.on.load(Ordering::Acquire) {
+            "allowlist.is_on"
+        } else {
+            "allowlist.is_off"
+        },
+        &[],
+    );
+    let on = on.as_str();
     if word.is_empty() {
         let count = listed(loader).len().to_string();
         return texts::fill(
@@ -141,41 +147,70 @@ pub(crate) fn command(loader: &Loader, args: &str) -> String {
         }
         Err(_) => return texts::fill("allowlist.usage", &[]),
     };
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let changed = if adding {
-        add(&text, key, name.as_deref())
+    let account = format!("{key:016x}");
+    match set(loader, key, adding, name.as_deref(), "the console") {
+        Ok(true) => {
+            let done = if adding {
+                "allowlist.added"
+            } else {
+                "allowlist.removed"
+            };
+            texts::fill(done, &[("account", &account), ("state", on)])
+        }
+        Ok(false) => {
+            let same = if adding {
+                "allowlist.listed"
+            } else {
+                "allowlist.unlisted"
+            };
+            texts::fill(same, &[("account", &account), ("file", &shown)])
+        }
+        Err(e) => texts::fill(
+            "allowlist.unwritten",
+            &[("file", &shown), ("why", &e.to_string())],
+        ),
+    }
+}
+
+/// Whether the file lists `key` now, the setting on or not.
+pub(crate) fn has(loader: &Loader, key: u64) -> bool {
+    listed(loader).contains(&key)
+}
+
+/// Lists `key` in the file, its note `name`, or takes it off, for `who`
+/// in the log; whether the file changed. One change at a time, so two
+/// writers never lose each other's line.
+pub(crate) fn set(
+    loader: &Loader,
+    key: u64,
+    listed: bool,
+    name: Option<&str>,
+    who: &str,
+) -> std::io::Result<bool> {
+    let _one = STATE.writing.relock();
+    let path = path(loader);
+    let text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
+    };
+    let changed = if listed {
+        add(&text, key, name)
     } else {
         remove(&text, key)
     };
-    let account = format!("{key:016x}");
     let Some(changed) = changed else {
-        let same = if adding {
-            "allowlist.listed"
-        } else {
-            "allowlist.unlisted"
-        };
-        return texts::fill(same, &[("account", &account), ("file", &shown)]);
+        return Ok(false);
     };
-    let written = path
-        .parent()
+    path.parent()
         .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::write(&path, changed));
-    if let Err(e) = written {
-        return texts::fill(
-            "allowlist.unwritten",
-            &[("file", &shown), ("why", &e.to_string())],
-        );
-    }
-    let done = if adding {
-        "allowlist.added"
-    } else {
-        "allowlist.removed"
-    };
+        .and_then(|()| std::fs::write(&path, changed))?;
+    *STATE.listed.relock() = None;
     crate::log!(
         INFO,
-        "the console {} {account} {} the allowlist",
-        if adding { "added" } else { "removed" },
-        if adding { "to" } else { "from" }
+        "{who} {} {key:016x} {} the allowlist",
+        if listed { "added" } else { "removed" },
+        if listed { "to" } else { "from" }
     );
-    texts::fill(done, &[("account", &account), ("state", on)])
+    Ok(true)
 }

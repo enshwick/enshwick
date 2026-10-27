@@ -13,6 +13,12 @@ Each entry names the pull request that made the change.
   onto the server's ban list (`HostApi::account_action`,
   `AccountActionType`, ABI minor 98). The fake keeps a ban list
   (`Installed::banned`, `removed`) (#586).
+- With `allowlist = true` in the loader's settings, a dedicated server lets
+  in only the accounts `mod-data/enshwick/allowlist.txt` lists, and its
+  administrators; the console's `enshwick allowlist add|remove` and
+  `World::set_allowlisted` change the list, `World::allowlisted` reads it
+  (`HostApi::allowlist_set`, `HostApi::allowlist_has`, ABI minor 99). The
+  fake keeps the list (`Installed::allowlisted`).
 
 ### Changed
 

@@ -72,6 +72,51 @@ mod tests {
     }
 
     #[test]
+    fn the_allowlist_lists_each_account_once_from_any_thread() {
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+
+        assert_eq!(world.allowlisted(7), Ok(false));
+        assert_eq!(world.set_allowlisted(7, true), Ok(()));
+        assert_eq!(world.set_allowlisted(7, true), Ok(()));
+        let other = std::thread::spawn(move || world.set_allowlisted(9, true))
+            .join()
+            .unwrap();
+        assert_eq!(other, Ok(()));
+        assert_eq!(loader.allowlisted(), [7, 9]);
+        assert_eq!(world.allowlisted(7), Ok(true));
+
+        assert_eq!(world.set_allowlisted(7, false), Ok(()));
+        assert_eq!(world.set_allowlisted(7, false), Ok(()));
+        assert_eq!(loader.allowlisted(), [9]);
+        assert_eq!(world.set_allowlisted(0, true), Err(WorldError::Refused));
+        assert_eq!(world.allowlisted(0), Err(WorldError::Refused));
+    }
+
+    #[test]
+    fn the_allowlist_is_missing_outside_a_dedicated_server() {
+        let loader = enshwick::test::FakeHost::new()
+            .side(enshwick::abi::Side::CLIENT)
+            .type_hash("current_transform", 1)
+            .type_hash("used_item", 2)
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Admin)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let world = *WORLD.get().unwrap();
+
+        assert_eq!(world.set_allowlisted(7, true), Err(WorldError::Missing));
+        assert_eq!(world.allowlisted(7), Err(WorldError::Missing));
+        assert!(loader.allowlisted().is_empty());
+    }
+
+    #[test]
     fn account_actions_wait_for_the_game_thread() {
         let loader = enshwick::test::FakeHost::new()
             .type_hash("current_transform", 1)

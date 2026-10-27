@@ -155,6 +155,19 @@ impl Installed {
         table::with(Vec::new(), |s| s.removed.clone())
     }
 
+    /// The accounts on the fake server's allowlist, in the order listed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// assert!(loader.allowlisted().is_empty());
+    /// ```
+    #[must_use]
+    pub fn allowlisted(&self) -> Vec<u64> {
+        table::with(Vec::new(), |s| s.allowlisted.clone())
+    }
+
     /// Stops the world, as between two worlds: the world's reads answer
     /// that none runs.
     ///
