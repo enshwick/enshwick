@@ -206,8 +206,9 @@ pub struct HostApi {
     /// entry has the server's version, [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN), `off` 1, the
     /// client's DLL path when it has the mod (empty otherwise), and the name
     /// and homepage the server advertises. The strings stay valid for the
-    /// process. Empty before a refused
-    /// join; see [`Event::JOIN_REFUSED`]. Since minor 10.
+    /// process; once 64 KiB of advertised text is kept, an entry with new
+    /// text is left out. Empty before a refused join; see
+    /// [`Event::JOIN_REFUSED`]. Since minor 10.
     pub join_missing: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
