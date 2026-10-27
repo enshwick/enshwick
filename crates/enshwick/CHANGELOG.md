@@ -13,7 +13,7 @@ Each entry names the pull request that made the change.
   finds the table a container template rolls, with how many containers
   share it; a data pack's `loot.toml` takes `table = [...]` with the
   containers' template names. `FillTableLayout` and `template_table` read
-  a template's name and table (#PR).
+  a template's name and table (#570).
 - `Field::Station` and `Change::station` move a vanilla recipe to another
   workshop (`DataField::RECIPE_STATION`, ABI minor 93): the loader writes
   the recipe's workshop and lists it in the client's crafting menu at the
