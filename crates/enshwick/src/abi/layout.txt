@@ -1,4 +1,4 @@
-abi 2.89
+abi 2.90
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -256,7 +256,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1320 align 8
+HostApi size 1328 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -421,6 +421,7 @@ HostApi size 1320 align 8
     transaction_undo at 1296 size 8
     transaction_status at 1304 size 8
     transaction_commit_for at 1312 size 8
+    transaction_entities at 1320 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -618,6 +619,16 @@ PointSpec size 64 align 8
     output at 48 size 16
 PointVerdict size 4 align 4
     0 at 0 size 4
+PropPlace size 56 align 8
+    header at 0 size 8
+    item at 8 size 4
+    reserved at 12 size 4
+    position at 16 size 24
+    orientation at 40 size 16
+PropRemove size 16 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    flags at 12 size 4
 QuestData size 16 align 4
     header at 0 size 8
     entity at 8 size 4
@@ -781,7 +792,7 @@ TerrainMaterialInfo size 20 align 4
 TickData size 16 align 8
     header at 0 size 8
     step at 8 size 8
-TransactionInfo size 40 align 8
+TransactionInfo size 48 align 8
     header at 0 size 8
     state at 8 size 4
     reason at 12 size 4
@@ -790,6 +801,8 @@ TransactionInfo size 40 align 8
     bricks at 24 size 8
     refusal at 32 size 4
     reserved at 36 size 4
+    holds at 40 size 4
+    created at 44 size 4
 TransactionOp size 16 align 8
     kind at 0 size 4
     reserved at 4 size 4

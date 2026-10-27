@@ -154,6 +154,72 @@ pub const BUILDING_CONFIG_MATERIAL: &str = "building_terraforming_config.buildin
 /// The id of a building config's hardness, a `u8`.
 pub const BUILDING_CONFIG_HARDNESS: &str = "building_terraforming_config.hardness";
 
+/// The id of the tag that keeps a prop from dropping random loot when it
+/// is destroyed.
+pub const DISABLE_RANDOM_LOOT_ON_DESTROY: &str = "disable_random_loot_on_destroy";
+/// The id of the `Level` attribute and of its `u32` values: the level,
+/// then its most.
+pub const LEVEL: &str = "level";
+/// The id of a `Level`'s values.
+pub const LEVEL_DATA: &str = "level.data_storage";
+/// The id of a plant's `Growth`.
+pub const GROWTH: &str = "growth";
+/// The id of a production station and of its state (a `u8`, 0 for no
+/// recipe) and running and next recipe (`u32` each, 0 for none).
+pub const FACTORY_STATION: &str = "factory_station";
+/// The id of a production station's state.
+pub const FACTORY_STATE: &str = "factory_station.state";
+/// The id of a production station's running recipe.
+pub const FACTORY_RUNNING: &str = "factory_station.running_recipe";
+/// The id of a production station's next recipe.
+pub const FACTORY_NEXT: &str = "factory_station.next_recipe";
+/// The id of a survivor bed and of its survivor, a `u32`, 0 for none.
+pub const NPC_BED: &str = "npc_bed";
+/// The id of a survivor bed's survivor.
+pub const NPC_BED_NPC: &str = "npc_bed.associated_npc";
+/// The id of the survivors a station keeps, and of their two `u32`s.
+pub const STORE_NPCS: &str = "store_associated_npc_ids";
+/// The id of a station's two survivors.
+pub const STORE_NPCS_IDS: &str = "store_associated_npc_ids.npc_ids";
+/// The id of a player's text on a prop, and of its `u64` id, 0 for none.
+pub const CUSTOM_PLAYER_STRING: &str = "custom_player_string";
+/// The id of a player's text's id.
+pub const CUSTOM_PLAYER_STRING_ID: &str = "custom_player_string.string_id";
+/// The id of the event that tells who placed a logic prop.
+pub const LOGIC_ENTITY_PLACED_EVENT: &str = "logic_entity_placed_event";
+/// The ids of that event's fields: who placed it, then the prop.
+pub const LOGIC_ENTITY_PLACED_FIELDS: [&str; 2] = [
+    "logic_entity_placed_event.placed_by_player_id",
+    "logic_entity_placed_event.placed_logic_entity_id",
+];
+/// The ids of an item's placement box, before it turns: the lowest and
+/// the highest corner, `f32` on each axis.
+pub const ITEM_PLACEMENT_BOX: [&str; 2] =
+    ["item_info.placement_box_min", "item_info.placement_box_max"];
+/// The id of the bit of an item's flags that marks a logic prop.
+pub const ITEM_FLAG_IS_LOGIC_ENTITY: &str = "item_flag.is_logic_entity";
+/// The id of the component that names the item an entity was placed from.
+pub const USED_ITEM: &str = "used_item";
+/// The id of an entity's place in the world.
+pub const CURRENT_TRANSFORM: &str = "current_transform";
+/// The id of the transform inside a [`CURRENT_TRANSFORM`].
+pub const CURRENT_TRANSFORM_TRANSFORM: &str = "current_transform.transform";
+/// The id of a transform's orientation, a quaternion of four `f32`.
+pub const WORLD_TRANSFORM_ORIENTATION: &str = "world_transform.orientation";
+/// The id of an entity's inventory setup and of its links (`u32`
+/// entities), their categories (bytes) and its initialized byte.
+pub const INVENTORY_SETUP: &str = "inventory_setup";
+/// The id of an inventory setup's linked entities.
+pub const INVENTORY_SETUP_LINKS: &str = "inventory_setup.links";
+/// The id of an inventory setup's link categories.
+pub const INVENTORY_SETUP_CATEGORIES: &str = "inventory_setup.categories";
+/// The id of an inventory setup's initialized byte.
+pub const INVENTORY_SETUP_INITIALIZED: &str = "inventory_setup.initialized";
+/// The id of a sub-inventory's stacks.
+pub const INVENTORY: &str = "inventory";
+/// The id of a stack in an inventory, its `u32` item first.
+pub const ITEM_STACK: &str = "item_stack";
+
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";
 

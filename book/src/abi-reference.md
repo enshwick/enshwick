@@ -360,7 +360,8 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
 | `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |
-| `transaction_commit`     | Queues terrain edits, voxel writes, erases and blocks as one transaction, with undo; any thread      | 87          |
+| `transaction_commit`     | Queues terrain, voxels, erases, blocks and props as one transaction, with undo; any thread           | 87          |
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
+| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 90          |

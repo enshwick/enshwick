@@ -1402,6 +1402,80 @@ pub const FACTS: &[(&str, Fact)] = &[
         "building_terraforming_config.hardness",
         offset("keen::BuildingTerraformingConfig", "hardness"),
     ),
+    (
+        "disable_random_loot_on_destroy",
+        Fact::Type("keen::ecs::DisableRandomLootOnDestroy"),
+    ),
+    ("level", Fact::Type("keen::ecs::Level")),
+    (
+        "level.data_storage",
+        offset("keen::ecs::Level", "dataStorage"),
+    ),
+    ("growth", Fact::Type("keen::ecs::Growth")),
+    ("factory_station", Fact::Type("keen::ecs::FactoryStation")),
+    (
+        "factory_station.state",
+        offset("keen::ecs::FactoryStation", "state"),
+    ),
+    (
+        "factory_station.running_recipe",
+        offset("keen::ecs::FactoryStation", "runningRecipe"),
+    ),
+    (
+        "factory_station.next_recipe",
+        offset("keen::ecs::FactoryStation", "nextRecipe"),
+    ),
+    ("npc_bed", Fact::Type("keen::ecs::NpcBed")),
+    (
+        "npc_bed.associated_npc",
+        offset("keen::ecs::NpcBed", "associatedNpc"),
+    ),
+    (
+        "store_associated_npc_ids",
+        Fact::Type("keen::ecs::StoreAssociatedNpcIds"),
+    ),
+    (
+        "store_associated_npc_ids.npc_ids",
+        offset("keen::ecs::StoreAssociatedNpcIds", "npcIds"),
+    ),
+    (
+        "custom_player_string",
+        Fact::Type("keen::ecs::CustomPlayerString"),
+    ),
+    (
+        "custom_player_string.string_id",
+        offset("keen::ecs::CustomPlayerString", "stringId"),
+    ),
+    (
+        "logic_entity_placed_event",
+        Fact::Type("keen::ecs::LogicEntityPlacedEvent"),
+    ),
+    (
+        "logic_entity_placed_event.placed_by_player_id",
+        offset("keen::ecs::LogicEntityPlacedEvent", "placedByPlayerId"),
+    ),
+    (
+        "logic_entity_placed_event.placed_logic_entity_id",
+        offset("keen::ecs::LogicEntityPlacedEvent", "placedLogicEntityId"),
+    ),
+    (
+        "item_info.placement_box_min",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "placementAABBmin"),
+        ]),
+    ),
+    (
+        "item_info.placement_box_max",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "placementAABBmax"),
+        ]),
+    ),
+    (
+        "item_flag.is_logic_entity",
+        enum_constant("keen::ItemFlag", "IsLogicEntity"),
+    ),
 ];
 
 /// The server's game settings, one reflected struct.

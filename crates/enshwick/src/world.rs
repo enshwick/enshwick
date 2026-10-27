@@ -12,6 +12,7 @@ mod containers;
 mod entities;
 mod geometry;
 mod players;
+mod prop_state;
 mod props;
 mod rename;
 mod stats;
@@ -30,6 +31,7 @@ pub use build::{BuildRefusal, PlayerPermissions};
 pub use capture::{CAPTURE_TILES, Capture};
 pub use containers::ContainerKinds;
 pub use geometry::near;
+pub use prop_state::{HeldState, PropState};
 pub use props::{Prop, WorldTransform};
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, Vitals};
@@ -308,6 +310,10 @@ pub enum WorldError {
     /// above the height the loader takes.
     #[error("outside the world")]
     OutsideWorld,
+    /// The prop holds state a player would lose: items, growth, a
+    /// production queue, assigned survivors or written text.
+    #[error("the prop holds {0}")]
+    HoldsState(PropState),
 }
 
 impl WorldError {

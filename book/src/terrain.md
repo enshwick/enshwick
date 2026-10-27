@@ -226,11 +226,78 @@ rest. It takes no cost from anyone. `place_block` raises the game's `BuildingPla
 `erase_block` its `BuildingTearDownEvent`, so the game's listeners and
 other mods see the change. `write_voxels` raises no event.
 
+### Props
+
+`place_prop(item, at)` places a prop as a player places one from an item:
+the template the item places, standing at the transform, with the item it
+came from. The game's `BuildingPlaceEvent` tells its listeners, and its
+`LogicEntityPlacedEvent` for a switch or another logic prop. An item that
+places nothing is refused at commit. A prop is in the world from the step
+after the one that placed it; `world.transaction_entities(id)` lists the
+props a transaction placed and still holds.
+
+`remove_prop(entity)` removes a prop as the game tears one down, without
+loot, and raises the game's `BuildingTearDownEvent`.
+
+```rust
+use enshwick::ItemId;
+use enshwick::ecs::Entity;
+use enshwick::world::{HeldState, TransactionId, TransactionStatus, World, WorldError, WorldTransform};
+
+fn swap_chest(world: World, old: Entity, chest: ItemId, at: [f64; 3]) -> Option<TransactionId> {
+    world
+        .transaction()
+        .remove_prop(old)
+        .place_prop(chest, WorldTransform::at(at))
+        .commit()
+        .ok()
+}
+
+fn why_not(world: World, id: TransactionId) {
+    if let Some(TransactionStatus::Failed(WorldError::HoldsState(state))) = world.transaction_status(id) {
+        if state.holds(HeldState::Inventory) {
+            enshwick::info!("the chest still holds items");
+        }
+    }
+}
+```
+
+The loader never loses a player's things without being asked. A prop
+**holds state** when a prop placed again from its item would not have
+what it has now:
+
+| State | What it is |
+| --- | --- |
+| `Inventory` | items in any of its slots, its linked inventories included: a chest's contents, a station's materials and outputs |
+| `Growth` | a plant grown past its start |
+| `FactoryStation` | a recipe running or waiting in a production station |
+| `NpcBed` | a survivor assigned to a bed |
+| `StoreAssociatedNpcIds` | survivors assigned to a station |
+| `CustomPlayerString` | text a player wrote on a sign |
+
+Fuel, a switch's setting and a container's Quick Stash setting do not
+count. `remove_prop` refuses a prop that holds state: the transaction
+fails with `WorldError::HoldsState(state)`, naming the kinds, before it
+writes anything. Empty the chest first, with the inventory API, or use
+`remove_prop_discarding_state(entity)`, which removes it anyway and loses
+what it held for good: the items, the growth, the queue, the survivors'
+places and the text.
+
+An undo keeps to the same rule. It takes a placed prop away only while it
+holds no state: once a chest it placed has items, a plant has grown or a
+survivor has moved in, the undo stops with `UndoRefused(HoldsState(…))`
+and the prop stays; empty it and ask again. An undo brings a removed prop
+back from its item, at its place, only when the removal took no state with
+it; one removed with `remove_prop_discarding_state` that held state stays
+removed, and the undo is refused the same way. An undo also refuses to
+bring a prop back where another like it now stands.
+
 ### For a player
 
 `world.transaction_for(&player)` starts a transaction for a player. Before
 it writes anything, the loader checks that the server lets the player edit
-the box of every change, as `world.can_build` does. A refusal fails the
+the box of every change, as `world.can_build` does; a prop's box is its
+item's placement box, turned with it. A refusal fails the
 transaction with `NotAllowed(why)`, and nothing is written. The check runs
 at the transaction's first step on the game thread, never at the commit,
 so `commit` succeeds and `transaction_status` tells. The building events

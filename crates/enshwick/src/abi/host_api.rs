@@ -1273,4 +1273,18 @@ pub struct HostApi {
         count: u32,
         id: *mut u64,
     ) -> Status,
+    /// Writes the entities of the props transaction `id` of this mod placed
+    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and their number to `count`; a prop is in the world from the step
+    /// after the one that placed it. `out` may be null with `capacity` 0 to
+    /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot. Any thread. Since minor 90.
+    pub transaction_entities: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        out: *mut u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }

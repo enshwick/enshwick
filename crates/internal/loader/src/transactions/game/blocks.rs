@@ -8,6 +8,7 @@ use crate::memory::read;
 use crate::pinned;
 use crate::transactions::block::{Block, EventLayout, GameBox, MATERIALS, replace_table};
 use crate::transactions::paste::Region;
+use crate::transactions::props::Prop;
 
 /// The game's lookup of a shape's `VoxelBlueprintItem` by its item in a
 /// blueprint registry; null when the item has none (server 399, client
@@ -292,6 +293,9 @@ pub(super) unsafe fn write(
 pub(super) struct Events {
     place: Option<(u32, EventLayout)>,
     tear_down: Option<(u32, EventLayout)>,
+    /// The `LogicEntityPlacedEvent`: its hash, size, and where it keeps who
+    /// placed it and the prop.
+    logic: Option<(u32, usize, usize, usize)>,
 }
 
 impl Events {
@@ -307,6 +311,7 @@ impl Events {
                 catalogue::BUILDING_TEAR_DOWN_EVENT,
                 &catalogue::BUILDING_TEAR_DOWN_EVENT_FIELDS,
             ),
+            logic: logic_layout(loader),
         }
     }
 
@@ -329,6 +334,54 @@ impl Events {
             let _raised = crate::emits::push(loader, hash, &bytes);
         }
     }
+
+    /// Raises the game's events for `prop` placed as `entity`: its
+    /// `BuildingPlaceEvent`, and its `LogicEntityPlacedEvent` for a logic
+    /// prop, as the game's place-prop op does.
+    pub(super) fn prop_placed(self, loader: &Loader, prop: &Prop, entity: u32, actor: u32) {
+        if let Some((hash, layout)) = self.place
+            && let Some(bytes) = layout.place_prop(prop, actor)
+        {
+            let _raised = crate::emits::push(loader, hash, &bytes);
+        }
+        if prop.logic
+            && let Some((hash, size, owner_at, entity_at)) = self.logic
+            && owner_at + 4 <= size
+            && entity_at + 4 <= size
+        {
+            let mut bytes = vec![0u8; size];
+            bytes[owner_at..owner_at + 4].copy_from_slice(&actor.to_le_bytes());
+            bytes[entity_at..entity_at + 4].copy_from_slice(&entity.to_le_bytes());
+            let _raised = crate::emits::push(loader, hash, &bytes);
+        }
+    }
+
+    /// Raises the game's `BuildingTearDownEvent` for `prop` removed, as the
+    /// game's tear-down does.
+    pub(super) fn prop_removed(self, loader: &Loader, prop: &Prop, actor: u32) {
+        if let Some((hash, layout)) = self.tear_down
+            && let Some(bytes) = layout.remove_prop(prop, actor)
+        {
+            let _raised = crate::emits::push(loader, hash, &bytes);
+        }
+    }
+}
+
+/// The `LogicEntityPlacedEvent` from reflection: its hash, size, and the
+/// offsets of who placed it and of the prop.
+fn logic_layout(loader: &Loader) -> Option<(u32, usize, usize, usize)> {
+    let id = catalogue::LOGIC_ENTITY_PLACED_EVENT;
+    let hash = catalogue::type_hash(id)?;
+    let size = loader
+        .reflection
+        .type_info(catalogue::type_name(id))
+        .ok()
+        .and_then(|info| usize::try_from(info.size()).ok())?;
+    let at = |field: &str| {
+        catalogue::constant(field, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let [owner, entity] = catalogue::LOGIC_ENTITY_PLACED_FIELDS;
+    Some((hash, size, at(owner)?, at(entity)?))
 }
 
 /// The layout of the event type `id` from reflection, its fields named by

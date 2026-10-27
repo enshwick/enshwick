@@ -44,6 +44,14 @@ Each entry names the pull request that made the change.
   player's rights for every change before it writes, and a refusal shows
   as `TransactionStatus::NotAllowed`; the op kinds, records and
   `transaction_commit_for` are ABI minor 89 (#551).
+- `Transaction::place_prop`, `remove_prop` and
+  `remove_prop_discarding_state` place and remove props inside a
+  transaction, with undo; `World::transaction_entities` lists the props a
+  transaction placed. A prop that holds state a player would lose (items,
+  growth, a production queue, assigned survivors, written text) is never
+  removed or taken away by an undo unless the mod opts in:
+  `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
+  records and `transaction_entities` are ABI minor 90 (#PR).
 
 ### Changed
 

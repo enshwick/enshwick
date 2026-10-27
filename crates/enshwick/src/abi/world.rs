@@ -765,6 +765,73 @@ impl TransactionOp {
     /// A building block placed: `data` points at a [`BlockPlace`]. Since
     /// minor 89.
     pub const BLOCK: u32 = 4;
+    /// A prop placed: `data` points at a [`PropPlace`]. Since minor 90.
+    pub const PLACE_PROP: u32 = 5;
+    /// A prop removed: `data` points at a [`PropRemove`]. Since minor 90.
+    pub const REMOVE_PROP: u32 = 6;
+}
+
+/// A prop a transaction places, as a player places one from an item, for
+/// [`TransactionOp::PLACE_PROP`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, PropPlace};
+///
+/// let chest = PropPlace {
+///     header: Header::of::<PropPlace>(),
+///     item: 0x1234,
+///     reserved: 0,
+///     position: [100.0, 40.0, 100.0],
+///     orientation: [0.0, 0.0, 0.0, 1.0],
+/// };
+/// assert_eq!(chest.item, 0x1234);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable)]
+pub struct PropPlace {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The item whose placed template the prop is.
+    pub item: u32,
+    /// Zero.
+    pub reserved: u32,
+    /// Where it stands, in metres.
+    pub position: [f64; 3],
+    /// Which way it faces, a quaternion x, y, z, w.
+    pub orientation: [f32; 4],
+}
+
+impl_headed!(PropPlace);
+
+/// A prop a transaction removes, for [`TransactionOp::REMOVE_PROP`].
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{Header, PropRemove};
+///
+/// let gone = PropRemove { header: Header::of::<PropRemove>(), entity: 77, flags: 0 };
+/// assert_eq!(gone.flags & PropRemove::DISCARD_STATE, 0);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
+pub struct PropRemove {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The prop's entity.
+    pub entity: u32,
+    /// [`PropRemove::DISCARD_STATE`] or none.
+    pub flags: u32,
+}
+
+impl_headed!(PropRemove);
+
+impl PropRemove {
+    /// Removes the prop even when it holds state a player would lose (see
+    /// [`TransactionInfo::holds`]); without it, such a prop is refused.
+    pub const DISCARD_STATE: u32 = 1;
 }
 
 /// Voxels a transaction writes over a box, for
@@ -880,6 +947,8 @@ impl_headed!(BlockPlace);
 ///     bricks: 16,
 ///     refusal: 0,
 ///     reserved: 0,
+///     holds: 0,
+///     created: 0,
 /// };
 /// assert_eq!(info.applied, info.ops);
 /// ```
@@ -911,6 +980,14 @@ pub struct TransactionInfo {
     pub refusal: u32,
     /// Zero.
     pub reserved: u32,
+    /// When a prop's state stopped it, or stopped its last undo, the kinds
+    /// of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
+    /// Since minor 90.
+    pub holds: u32,
+    /// The props it placed and still holds, which
+    /// [`HostApi::transaction_entities`](super::HostApi::transaction_entities)
+    /// lists. Since minor 90.
+    pub created: u32,
 }
 
 impl_headed!(TransactionInfo);
@@ -933,6 +1010,19 @@ impl TransactionInfo {
     /// its undo needs, to stay within its memory cap or because the world
     /// ended; it can no longer be undone.
     pub const EXPIRED: u32 = 5;
+    /// The prop's inventory holds items, in any of its linked slots.
+    pub const HOLDS_INVENTORY: u32 = 1;
+    /// The plant has grown: its `Level` is above its start, as `Growth`
+    /// keeps it.
+    pub const HOLDS_GROWTH: u32 = 1 << 1;
+    /// The `FactoryStation` has a recipe running or queued.
+    pub const HOLDS_FACTORY_STATION: u32 = 1 << 2;
+    /// A survivor is assigned to the `NpcBed`.
+    pub const HOLDS_NPC_BED: u32 = 1 << 3;
+    /// Survivors are assigned to it: `StoreAssociatedNpcIds`.
+    pub const HOLDS_STORE_ASSOCIATED_NPC_IDS: u32 = 1 << 4;
+    /// A player wrote its text: `CustomPlayerString`.
+    pub const HOLDS_CUSTOM_PLAYER_STRING: u32 = 1 << 5;
     /// Its last undo stopped for `reason`: before writing anything, or at a
     /// brick changed since or not loaded for the loader's wait limit, with
     /// what it put back kept. The rest stays written and can be undone

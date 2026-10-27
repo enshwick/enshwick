@@ -1,6 +1,7 @@
 //! The game's side of transactions: brick reads, terrain edits, blocks, rights and undo writes.
 
 mod blocks;
+mod props;
 
 use enshwick::abi::{BuildRights, Header, Status, TerrainEdit};
 
@@ -8,11 +9,13 @@ use super::block::Block;
 use super::cover::{BRICK, BRICK_VOXELS, Brick};
 use super::ledger::{Image, Voxels};
 use super::paste::Erase;
+use super::props::Prop;
 use super::record::UndoRecord;
 use crate::host::Loader;
 use crate::pinned;
 use crate::voxels::ReadBox;
 pub(crate) use blocks::resolve;
+pub(crate) use props::resolve as resolve_prop;
 
 /// The editor's undo write: puts the voxels of `record`'s box back through
 /// the same write as an edit, which marks them for clients and the save;
@@ -107,6 +110,27 @@ impl Voxels for Game<'_> {
         // this step.
         unsafe { blocks::write(write, self.editor, self.alloc, &replace, block, &game) };
         self.events.placed(self.loader, block, actor);
+        Ok(())
+    }
+
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
+        let entity = props::spawn(self.loader, prop)?;
+        self.events.prop_placed(self.loader, prop, entity, actor);
+        Ok(entity)
+    }
+
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
+        props::read(self.loader, entity)
+    }
+
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
+        props::stands(self.loader, prop)
+    }
+
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status> {
+        let (prop, _) = props::read(self.loader, entity)?;
+        props::remove(self.loader, entity)?;
+        self.events.prop_removed(self.loader, &prop, actor);
         Ok(())
     }
 

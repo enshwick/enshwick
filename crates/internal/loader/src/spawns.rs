@@ -150,6 +150,17 @@ fn bytes(size: usize, parts: &[(usize, &[u8])]) -> Vec<u8> {
 
 /// Asks the server to spawn an entity of a template; its id.
 pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Status> {
+    spawn_with(loader, request, Vec::new())
+}
+
+/// [`spawn`], the entity starting with `extra` components as well: each a
+/// reflected type's hash and its bytes, as the game's own prop spawn adds
+/// them.
+pub(crate) fn spawn_with(
+    loader: &Loader,
+    request: &SpawnRequest,
+    extra: Vec<(u32, Vec<u8>)>,
+) -> Result<u32, Status> {
     let layout = layout(loader).ok_or(Status::MISSING)?;
     crate::world::server()?;
     let world = usize::try_from(crate::world::server_world())
@@ -214,6 +225,7 @@ pub(crate) fn spawn(loader: &Loader, request: &SpawnRequest) -> Result<u32, Stat
             ),
         ));
     }
+    initial.extend(extra);
     let entries: Vec<Initial> = initial
         .iter()
         .map(|(hash, data)| Initial {

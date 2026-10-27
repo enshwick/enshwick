@@ -80,26 +80,52 @@ impl Installed {
     /// ```
     pub fn run_transactions(&self) {
         table::with((), |s| {
-            let host = &s.host;
+            let host = &mut s.host;
             for transaction in &mut s.edits.transactions {
                 let refusal = transaction.refusal(host);
                 let bricks = transaction.bricks(host);
-                let info = &mut transaction.info;
-                match info.state {
+                match transaction.info.state {
                     TransactionInfo::PENDING if refusal != 0 => {
+                        let info = &mut transaction.info;
                         info.state = TransactionInfo::FAILED;
                         info.reason = Status::REFUSED;
                         info.refusal = refusal;
                     }
                     TransactionInfo::PENDING => {
-                        info.state = TransactionInfo::APPLIED;
-                        info.applied = info.ops;
-                        info.bricks = bricks;
+                        match super::props::apply(host, transaction) {
+                            Ok(()) => {
+                                let info = &mut transaction.info;
+                                info.state = TransactionInfo::APPLIED;
+                                info.applied = info.ops;
+                                info.bricks = bricks;
+                            }
+                            Err((reason, holds)) => {
+                                let info = &mut transaction.info;
+                                info.state = TransactionInfo::FAILED;
+                                info.reason = reason;
+                                info.holds = holds;
+                            }
+                        }
+                        transaction.info.created =
+                            u32::try_from(transaction.created.len()).unwrap_or(u32::MAX);
                     }
                     TransactionInfo::UNDOING => {
-                        info.state = TransactionInfo::UNDONE;
-                        info.applied = 0;
-                        info.bricks = 0;
+                        match super::props::undo(host, transaction) {
+                            Ok(()) => {
+                                let info = &mut transaction.info;
+                                info.state = TransactionInfo::UNDONE;
+                                info.applied = 0;
+                                info.bricks = 0;
+                            }
+                            Err((reason, holds)) => {
+                                let info = &mut transaction.info;
+                                info.state = TransactionInfo::UNDO_REFUSED;
+                                info.reason = reason;
+                                info.holds = holds;
+                            }
+                        }
+                        transaction.info.created =
+                            u32::try_from(transaction.created.len()).unwrap_or(u32::MAX);
                     }
                     _ => {}
                 }
@@ -157,6 +183,10 @@ impl Installed {
 pub enum FakeChange {
     /// A terrain add, dig or flatten.
     Terrain(TerrainEdit),
+    /// A prop placed.
+    PlaceProp(crate::abi::PropPlace),
+    /// A prop removed.
+    RemoveProp(crate::abi::PropRemove),
     /// Voxels written over the box of `size` from `min`.
     Voxels {
         /// The box's lowest voxel.
@@ -194,6 +224,13 @@ impl FakeChange {
                 min.map(|at| f64::from(at) / 2.0),
                 [0, 1, 2].map(|axis| f64::from(min[axis] + size[axis]) / 2.0),
             ),
+            Self::PlaceProp(prop) => super::props::reach(prop.position),
+            Self::RemoveProp(remove) => super::props::reach(
+                host.props
+                    .iter()
+                    .find(|prop| prop.entity == remove.entity)
+                    .map_or([0.0; 3], |prop| prop.at),
+            ),
             Self::Block(block) => {
                 let size = host.blueprints.get(&block.shape).copied().unwrap_or([0; 3]);
                 let half = size.map(|voxels| f64::from(voxels) / 4.0);
@@ -207,6 +244,9 @@ impl FakeChange {
 
     /// The 8³-voxel bricks of its box.
     pub(crate) fn bricks(&self, host: &FakeHost) -> u64 {
+        if matches!(self, Self::PlaceProp(_) | Self::RemoveProp(_)) {
+            return 0;
+        }
         let (min, max) = self.metres(host);
         #[expect(
             clippy::cast_possible_truncation,
@@ -249,6 +289,10 @@ pub struct FakeTransaction {
     pub changes: Vec<FakeChange>,
     /// Where it stands, as the mod reads it.
     pub info: TransactionInfo,
+    /// The entities of the props it placed and still holds.
+    pub(crate) created: Vec<u32>,
+    /// The props it removed, with the state they held.
+    pub(crate) removed: Vec<super::props::FakeProp>,
 }
 
 impl FakeTransaction {

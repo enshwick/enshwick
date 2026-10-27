@@ -83,6 +83,7 @@ mod inventory;
 mod pacing;
 mod players;
 mod points;
+mod props;
 mod rates;
 mod settings;
 mod stats;
@@ -231,6 +232,7 @@ pub struct FakeHost {
     zones: world::FakeZones,
     extent: Option<[u32; 3]>,
     blueprints: HashMap<u32, [u32; 3]>,
+    props: Vec<props::FakeProp>,
     building_materials: HashMap<u32, u8>,
 }
 
@@ -301,6 +303,7 @@ impl FakeHost {
             zones: world::FakeZones::default(),
             extent: None,
             blueprints: HashMap::new(),
+            props: Vec::new(),
             building_materials: HashMap::new(),
         }
     }

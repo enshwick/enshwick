@@ -1,14 +1,15 @@
 //! Transactions: changes of the server's world written as one, with undo.
 
 use crate::abi::{
-    BlockPlace, Header, Status, TerrainEdit, TransactionInfo, TransactionOp, VoxelRegion,
-    VoxelWrite,
+    BlockPlace, Header, PropPlace, PropRemove, Status, TerrainEdit, TransactionInfo, TransactionOp,
+    VoxelRegion, VoxelWrite,
 };
+use crate::ecs::Entity;
 use crate::terrain::{Shape, add_edit, dig_edit, flatten_edit};
 use crate::voxels::{VoxelBox, VoxelPos};
 use crate::{Host, ItemId};
 
-use super::{BuildRefusal, Player, World, WorldError, WorldTransform};
+use super::{BuildRefusal, Player, PropState, World, WorldError, WorldTransform};
 
 /// The id of a committed [`Transaction`], for [`World::undo`] and
 /// [`World::transaction_status`]; valid while the server runs.
@@ -79,8 +80,11 @@ pub enum TransactionStatus {
     /// its undo needs, to stay within its memory cap or because the world
     /// ended; it can no longer be undone.
     Expired,
-    /// Its last undo stopped: [`WorldError::Refused`] when a brick it
-    /// touched has changed since, [`WorldError::NotLoaded`] when part of it
+    /// Its last undo stopped: [`WorldError::HoldsState`] when a prop it
+    /// placed now holds state, or one it removed held state it took with
+    /// it; [`WorldError::Refused`] when a brick it touched has changed
+    /// since, or a prop it placed is gone or one like the prop it removed
+    /// stands in its place; [`WorldError::NotLoaded`] when part of it
     /// stayed unloaded for about 3,600 steps. It stopped before writing, or
     /// at that brick with what it had put back kept; the rest stays
     /// written, and [`World::undo`] may be asked again.
@@ -89,7 +93,12 @@ pub enum TransactionStatus {
 
 impl TransactionStatus {
     fn from_info(info: &TransactionInfo) -> Self {
-        let reason = || WorldError::check(info.reason, WorldError::Missing).err();
+        let reason = || {
+            if info.holds != 0 {
+                return Some(WorldError::HoldsState(PropState::from_bits(info.holds)));
+            }
+            WorldError::check(info.reason, WorldError::Missing).err()
+        };
         match info.state {
             TransactionInfo::APPLIED => Self::Applied,
             TransactionInfo::UNDOING => Self::Undoing,
@@ -160,6 +169,8 @@ enum Change {
     ),
     Erase(VoxelRegion),
     Block(BlockPlace),
+    PlaceProp(PropPlace),
+    RemoveProp(PropRemove),
 }
 
 impl Change {
@@ -170,6 +181,8 @@ impl Change {
             Self::Voxels(write, _) => (TransactionOp::VOXELS, (&raw const *write).cast()),
             Self::Erase(region) => (TransactionOp::ERASE, (&raw const *region).cast()),
             Self::Block(block) => (TransactionOp::BLOCK, (&raw const *block).cast()),
+            Self::PlaceProp(prop) => (TransactionOp::PLACE_PROP, (&raw const *prop).cast()),
+            Self::RemoveProp(prop) => (TransactionOp::REMOVE_PROP, (&raw const *prop).cast()),
         };
         TransactionOp {
             kind,
@@ -337,6 +350,86 @@ impl Transaction {
         self
     }
 
+    /// Places a prop as a player places one from `item`: the template the
+    /// item places, with the item it came from, standing at `at`. The game's
+    /// `BuildingPlaceEvent` tells its listeners, and its
+    /// `LogicEntityPlacedEvent` for a logic prop. It takes no cost from
+    /// anyone. The prop is in the world from the step after it is placed;
+    /// [`World::transaction_entities`] lists it. [`Transaction::commit`]
+    /// refuses an item that places nothing.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ItemId;
+    /// use enshwick::world::{World, WorldTransform};
+    ///
+    /// fn chest(world: World, chest: ItemId, at: [f64; 3]) -> bool {
+    ///     world.transaction().place_prop(chest, WorldTransform::at(at)).commit().is_ok()
+    /// }
+    /// ```
+    pub fn place_prop(mut self, item: ItemId, at: WorldTransform) -> Self {
+        self.changes.push(Change::PlaceProp(PropPlace {
+            header: Header::of::<PropPlace>(),
+            item: item.get(),
+            reserved: 0,
+            position: at.position,
+            orientation: at.orientation,
+        }));
+        self
+    }
+
+    /// Removes the prop `entity` as the game tears one down, without loot,
+    /// and raises the game's `BuildingTearDownEvent`. A prop that holds
+    /// state a player would lose (see [`PropState`]: items, growth, a
+    /// production queue, assigned survivors, written text) is refused: the
+    /// transaction fails with [`WorldError::HoldsState`] before it writes
+    /// anything. Empty it first, or use
+    /// [`Transaction::remove_prop_discarding_state`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ecs::Entity;
+    ///
+    /// fn tidy(world: enshwick::world::World, crate_entity: Entity) -> bool {
+    ///     world.transaction().remove_prop(crate_entity).commit().is_ok()
+    /// }
+    /// ```
+    pub fn remove_prop(mut self, entity: Entity) -> Self {
+        self.changes.push(Change::RemoveProp(PropRemove {
+            header: Header::of::<PropRemove>(),
+            entity: entity.0,
+            flags: 0,
+        }));
+        self
+    }
+
+    /// Removes the prop `entity` even when it holds state a player would
+    /// lose. Destructive: a chest's items, a plant's growth, a station's
+    /// queue, survivors' places and written text are gone for good, and an
+    /// undo will not bring the prop back without them, so it refuses with
+    /// [`WorldError::HoldsState`]. Without state, it is
+    /// [`Transaction::remove_prop`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ecs::Entity;
+    ///
+    /// fn clear_ruin(world: enshwick::world::World, ruined: Entity) -> bool {
+    ///     world.transaction().remove_prop_discarding_state(ruined).commit().is_ok()
+    /// }
+    /// ```
+    pub fn remove_prop_discarding_state(mut self, entity: Entity) -> Self {
+        self.changes.push(Change::RemoveProp(PropRemove {
+            header: Header::of::<PropRemove>(),
+            entity: entity.0,
+            flags: PropRemove::DISCARD_STATE,
+        }));
+        self
+    }
+
     /// The changes so far.
     ///
     /// # Examples
@@ -468,6 +561,49 @@ impl World {
         WorldError::from_status((host.api().transaction_undo)(host.handle(), id.0))
     }
 
+    /// The props transaction `id` of this mod placed and still holds, oldest
+    /// first; empty for an id the loader no longer remembers, or not this
+    /// mod's. A prop is in the world from the step after the one that
+    /// placed it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn placed(world: enshwick::world::World, id: enshwick::world::TransactionId) -> usize {
+    ///     world.transaction_entities(id).len()
+    /// }
+    /// ```
+    #[must_use]
+    pub fn transaction_entities(self, id: TransactionId) -> Vec<Entity> {
+        let host = self.0.host;
+        let mut count = 0u32;
+        let api = host.api();
+        if (api.transaction_entities)(
+            host.handle(),
+            id.0,
+            core::ptr::null_mut(),
+            0,
+            &raw mut count,
+        ) != Status::OK
+        {
+            return Vec::new();
+        }
+        let mut raw = vec![0u32; count as usize];
+        let capacity = u32::try_from(raw.len()).unwrap_or(u32::MAX);
+        if (api.transaction_entities)(
+            host.handle(),
+            id.0,
+            raw.as_mut_ptr(),
+            capacity,
+            &raw mut count,
+        ) != Status::OK
+        {
+            return Vec::new();
+        }
+        raw.truncate(count as usize);
+        raw.into_iter().map(Entity).collect()
+    }
+
     /// Where transaction `id` of this mod stands; `None` for an id the
     /// loader no longer remembers (it keeps the newest few thousand) or not
     /// this mod's.
@@ -487,6 +623,8 @@ impl World {
             bricks: 0,
             refusal: 0,
             reserved: 0,
+            holds: 0,
+            created: 0,
         };
         let status = (host.api().transaction_status)(host.handle(), id.0, &raw mut info);
         status.is_ok().then(|| TransactionStatus::from_info(&info))

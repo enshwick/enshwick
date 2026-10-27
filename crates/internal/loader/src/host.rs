@@ -57,7 +57,8 @@ use entries::services::{
     service, subscribe, subscribe_event,
 };
 use entries::transactions::{
-    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
+    transaction_undo,
 };
 use entries::ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
@@ -778,6 +779,7 @@ pub(crate) static API: HostApi = HostApi {
     transaction_undo,
     transaction_status,
     transaction_commit_for,
+    transaction_entities,
 };
 
 /// The loader and the calling mod, when the mod is on.

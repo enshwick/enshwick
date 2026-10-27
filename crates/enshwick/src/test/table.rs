@@ -58,7 +58,8 @@ use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
 };
 use transactions::{
-    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
+    transaction_undo,
 };
 use ui::{ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
@@ -665,4 +666,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_undo,
     transaction_status,
     transaction_commit_for,
+    transaction_entities,
 };

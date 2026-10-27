@@ -17,6 +17,7 @@ pub(crate) mod cover;
 mod game;
 mod ledger;
 mod paste;
+mod props;
 mod record;
 
 use std::sync::Mutex;
@@ -29,7 +30,7 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
 #[cfg(windows)]
-pub(crate) use game::resolve;
+pub(crate) use game::{resolve, resolve_prop};
 #[cfg(any(windows, test))]
 pub(crate) use ledger::Change;
 use ledger::{Ledger, Limits};
@@ -135,6 +136,12 @@ fn undo_in(state: &Transactions, owner: ModIndex, id: u64) -> Result<(), Status>
     ledger.undo(owner, id)?;
     state.busy.store(ledger.busy(), Ordering::Release);
     Ok(())
+}
+
+/// The entities of the props transaction `id` of `owner` placed and still
+/// holds, as [`Ledger::entities`].
+pub(crate) fn entities(owner: ModIndex, id: u64) -> Option<Vec<u32>> {
+    STATE.ledger.relock().entities(owner, id)
 }
 
 /// Where transaction `id` of `owner` stands.
