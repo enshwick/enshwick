@@ -1,0 +1,57 @@
+# The C header of the ABI, written by `cargo xtask header`; the types it
+# declares are those the golden layout file lists.
+language = "C"
+cpp_compat = true
+header = """#ifndef ENSHWICK_H
+#define ENSHWICK_H"""
+autogen_warning = "/* Written by cbindgen from the enshwick crate's ABI module: run `cargo xtask header`, never edit by hand. */"
+documentation = true
+documentation_style = "c99"
+style = "both"
+usize_is_size_t = true
+sys_includes = ["stdbool.h", "stddef.h", "stdint.h"]
+no_includes = true
+sort_by = "Name"
+trailer = """
+#if defined(_WIN32)
+#define ENSHWICK_EXPORT __declspec(dllexport)
+#else
+#define ENSHWICK_EXPORT
+#endif
+
+// An `EnshwickStr` initializer for a string literal, without its final zero.
+#define ENSHWICK_STR_INIT(literal) { (const uint8_t *)(literal), sizeof(literal) - 1 }
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// The ENSHWICK_ABI_MAJOR the mod was built for.
+ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
+// The mod's manifest; static, no side effects.
+ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);
+// Registers hooks, services and settings.
+ENSHWICK_EXPORT EnshwickStatus enshwick_mod_init(const EnshwickHostApi *host, EnshwickModHandle me);
+// Runs after every chain is armed.
+ENSHWICK_EXPORT void enshwick_mod_ready(const EnshwickHostApi *host, EnshwickModHandle me);
+// Optional: stops what the mod started before a development reload unloads it.
+ENSHWICK_EXPORT void enshwick_mod_shutdown(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif  /* ENSHWICK_H */"""
+line_length = 100
+
+[export]
+renaming_overrides_prefixing = true
+
+[const]
+allow_static_const = false
+
+
+# Pointers to atomics the loader shares; C reads them with its own atomics.
+[export.rename]
+"AtomicU32" = "uint32_t"
+"AtomicUsize" = "uintptr_t"
