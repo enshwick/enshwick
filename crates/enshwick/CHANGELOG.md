@@ -48,7 +48,7 @@ Each entry names the pull request that made the change.
   bytes, vanilla values one mod's set overrides with both values, and
   components several mods write; the loader compares the game's code with
   the executable on disk while it starts and names the DLL or mod that
-  changed it outside the API, after each load, `init` and `ready` (#PR).
+  changed it outside the API, after each load, `init` and `ready` (#555).
 
 ### Changed
 
