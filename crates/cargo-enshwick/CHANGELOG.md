@@ -9,7 +9,8 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick pin` ports a constant in a `cell` with the value read
-  from the new executable at its symbol (#603).
+  from the new executable at its symbol, and flags it for a human when
+  that value changed (#603).
 
 ## [1.0.0-alpha.8] - 2026-10-27
 

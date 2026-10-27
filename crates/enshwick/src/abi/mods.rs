@@ -51,20 +51,20 @@ pub struct ModInfo {
     pub file: Str,
     /// The manifest's human metadata, as in [`Manifest`](super::Manifest); in
     /// [`HostApi::join_missing`](super::HostApi::join_missing), the name and homepage the server advertises
-    /// and empty strings for the rest. Since minor 36.
+    /// and empty strings for the rest.
     pub name: Str,
-    /// One sentence on what the mod does. Since minor 36.
+    /// One sentence on what the mod does.
     pub description: Str,
-    /// The authors' names. Since minor 36.
+    /// The authors' names.
     pub authors: *const Str,
-    /// How many names `authors` points at. Since minor 36.
+    /// How many names `authors` points at.
     pub author_count: usize,
-    /// An SPDX licence expression. Since minor 36.
+    /// An SPDX licence expression.
     pub license: Str,
-    /// Where players read about the mod. Since minor 36.
+    /// Where players read about the mod.
     pub homepage: Str,
     /// In [`HostApi::replaced`](super::HostApi::replaced), the id of the mod that replaces this one;
-    /// empty elsewhere. Since minor 54.
+    /// empty elsewhere.
     pub replaced_by: Str,
 }
 

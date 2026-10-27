@@ -48,8 +48,7 @@ pub struct BuildInfo {
     pub base: u64,
     /// The build fingerprint.
     pub fingerprint: Fingerprint,
-    /// Whether the loader's build table was made for this build. Since
-    /// minor 51; older loaders run only on builds with their own table.
+    /// Whether the loader's build table was made for this build.
     pub table: BuildTable,
 }
 
@@ -205,13 +204,12 @@ impl Relation {
     pub const RECOMMENDS: Self = Self(3);
     /// This mod takes the place of the other mod, such as one it folds in
     /// (any version; the range stays empty): while this one is present, the
-    /// loader never starts the other and names its DLL to delete. Since
-    /// minor 54.
+    /// loader never starts the other and names its DLL to delete.
     pub const REPLACES: Self = Self(4);
     /// The other id is one this mod had before a rename: it replaces that
     /// mod as [`REPLACES`](Self::REPLACES) does, a requirement or a point
     /// named by the old id finds this mod, and on the first start the loader
-    /// copies the old id's settings and data to this one. Since minor 69.
+    /// copies the old id's settings and data to this one.
     pub const WAS: Self = Self(5);
 }
 
@@ -262,7 +260,7 @@ impl ManifestFlags {
     /// The mod may be reloaded while the game runs, for development: it
     /// keeps no state it cannot hand over, stops its own threads in
     /// `shutdown` and uses only what a reload can unlink (hooks, events,
-    /// lookups, settings, logging). Since minor 53; see the modding book.
+    /// lookups, settings, logging); see the modding book.
     pub const RELOAD: Self = Self(2);
 
     /// Whether every flag of `other` is set.
@@ -327,24 +325,22 @@ pub struct Manifest {
     /// How many rows `builds` points at.
     pub build_count: usize,
     /// The name players read, such as `Survivors per Altar`; empty for the
-    /// id. Since minor 36.
+    /// id.
     pub name: Str,
-    /// One sentence on what the mod does. Since minor 36.
+    /// One sentence on what the mod does.
     pub description: Str,
-    /// The authors' names. Since minor 36.
+    /// The authors' names.
     pub authors: *const Str,
-    /// How many names `authors` points at. Since minor 36.
+    /// How many names `authors` points at.
     pub author_count: usize,
-    /// An SPDX licence expression, such as `MIT OR Apache-2.0`. Since minor
-    /// 36.
+    /// An SPDX licence expression, such as `MIT OR Apache-2.0`.
     pub license: Str,
-    /// Where players read about the mod, an `https://` address. Since minor
-    /// 36.
+    /// Where players read about the mod, an `https://` address.
     pub homepage: Str,
     /// The schemas of the extension points the mod defines, as TOML that
     /// `cargo enshwick point` reads; empty for none. The same text sits in
     /// the DLL's `.enshpt` section, so a tool reads it without running the
-    /// mod. Since minor 71.
+    /// mod.
     pub points: Str,
 }
 

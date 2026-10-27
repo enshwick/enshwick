@@ -9,6 +9,7 @@
 //! its code pattern, and what it cannot find stays missing: the features and
 //! mods that need it turn off, the rest runs.
 
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -17,6 +18,11 @@ use enshwick_gamedata::reflect::Fingerprint;
 use enshwick_gamedata::{self as tables, Part, PartState, Resolved, Table};
 
 pub use enshwick_gamedata::Kind;
+
+use crate::settings::LOADER_ID;
+
+/// The name a carried table is saved under, before its side.
+const CARRIED_FILE: &str = "carried";
 
 /// Whether a build without a table runs on patterns; set from the settings.
 static PATTERNS: AtomicBool = AtomicBool::new(true);
@@ -158,7 +164,9 @@ pub fn load() -> Vec<Table> {
 /// Its own when there is one; else, unless the settings turned it off, the
 /// newest table of its side carried over by patterns in `code` (the code
 /// section and its RVA), with `cell` reading the `u32` the game's image
-/// holds at an RVA for the constants the game keeps in data cells.
+/// holds at an RVA for the constants the game keeps in data cells. A carried table is read from its file under
+/// `data_dir` while the code and the table stay the same, and saved there
+/// otherwise.
 #[must_use]
 pub fn select(
     tables: &[Table],
@@ -166,6 +174,7 @@ pub fn select(
     fingerprint: Fingerprint,
     code: Option<(&[u8], u64)>,
     cell: impl Fn(u64) -> Option<u32> + Sync,
+    data_dir: Option<&Path>,
 ) -> Option<KnownBuild> {
     let side = side(running)?;
     if let Some(table) = tables::exact(tables, side, fingerprint) {
@@ -181,13 +190,65 @@ pub fn select(
     }
     let (code, code_rva) = code?;
     let base = tables::newest(tables, side)?;
-    let table = base.fall_back(code, code_rva, cell);
+    let table = match data_dir.and_then(|dir| carried_file(dir, running)) {
+        Some(path) => carry(base, code, code_rva, cell, &path),
+        None => base.fall_back(code, code_rva, cell),
+    };
     Some(KnownBuild {
         name: table.name().to_owned(),
         kind: Kind::Fallback,
         table,
         lacking: OnceLock::new(),
     })
+}
+
+/// The file under the game's `mod-data` a build of `running`'s side without
+/// a table keeps its carried table in.
+fn carried_file(data_dir: &Path, running: Side) -> Option<PathBuf> {
+    let side = side(running)?;
+    Some(
+        data_dir
+            .join(LOADER_ID)
+            .join(format!("{CARRIED_FILE}-{}.txt", side.as_str())),
+    )
+}
+
+/// `base` carried to `code`: read from `path` when it was saved for this
+/// code and table, else found by patterns and saved there.
+fn carry(
+    base: &Table,
+    code: &[u8],
+    code_rva: u64,
+    cell: impl Fn(u64) -> Option<u32> + Sync,
+    path: &Path,
+) -> Resolved {
+    let key = base.carry_key(code, code_rva);
+    if let Some(table) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| base.restore(&text, key))
+    {
+        return table;
+    }
+    let table = base.fall_back(code, code_rva, cell);
+    if let Some(text) = table.to_saved(key)
+        && let Err(e) = save(path, &text)
+    {
+        crate::log!(
+            WARN,
+            "the carried build table could not be saved to {}, so the next start searches again: {e}",
+            path.display()
+        );
+    }
+    table
+}
+
+fn save(path: &Path, text: &str) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let staged = path.with_extension("tmp");
+    std::fs::write(&staged, text)?;
+    std::fs::rename(&staged, path)
 }
 
 /// The newest table of `running`'s side carried over by patterns in `code`
@@ -277,6 +338,7 @@ mod tests {
             unknown,
             Some((&code, 0x1000)),
             |_| None,
+            None,
         )
         .unwrap();
         let lacking = carried.lacking(crate::TABLE_IDS);
@@ -300,12 +362,12 @@ mod tests {
             .find(|t| t.name() == server.name)
             .unwrap()
             .fingerprint();
-        let found = select(&tables, Side::SERVER, fingerprint, None, |_| None).unwrap();
+        let found = select(&tables, Side::SERVER, fingerprint, None, |_| None, None).unwrap();
         assert_eq!(found.kind, Kind::Exact);
         assert_eq!(found.symbol("npc.lookup"), Some(0x20_3d30));
         assert_eq!(found.symbol("npc.nope"), None);
         assert!(!found.checks().is_empty());
-        assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None).is_none());
+        assert!(select(&tables, Side::CLIENT, fingerprint, None, |_| None, None).is_none());
     }
 
     #[test]
@@ -319,19 +381,168 @@ mod tests {
             unknown,
             Some((&code, 0x1000)),
             |_| None,
+            None,
         )
         .unwrap();
         assert_eq!(found.kind, Kind::Fallback);
         assert_eq!(found.symbol("npc.lookup"), None);
         assert!(found.checks().is_empty());
         assert!(!found.missing().is_empty());
-        assert!(select(&tables, Side::SERVER, unknown, None, |_| None).is_none());
+        assert!(select(&tables, Side::SERVER, unknown, None, |_| None, None).is_none());
         assert!(
-            select(&tables, Side::BOTH, unknown, Some((&code, 0x1000)), |_| {
+            select(
+                &tables,
+                Side::BOTH,
+                unknown,
+                Some((&code, 0x1000)),
+                |_| None,
                 None
-            })
+            )
             .is_none()
         );
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-carried-{name}-{}", std::process::id()));
+        let _fresh = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn patterned_code() -> Vec<u8> {
+        let tables = load();
+        let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
+        let mut code = vec![0u8; 4096];
+        let (pattern, _) = base.symbols().iter().find_map(|s| s.pattern()).unwrap();
+        for i in 0..pattern.len() {
+            code[16 + i] = if pattern.is_fixed(i) == Some(true) {
+                0
+            } else {
+                0x5a
+            };
+        }
+        code
+    }
+
+    #[test]
+    fn a_carried_table_is_saved_and_read_back_while_the_code_stays() {
+        let tables = load();
+        let unknown = Fingerprint::new([0xee; 16], 1);
+        let dir = scratch("same");
+        let saved = carried_file(&dir, Side::SERVER).unwrap();
+        let code = patterned_code();
+        let first = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(&saved).unwrap();
+        assert!(text.contains("missing npc.lookup\n"), "{text}");
+        let again = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        assert_eq!(again.table, first.table);
+        std::fs::write(
+            &saved,
+            text.replace("missing npc.lookup\n", "symbol npc.lookup 1234\n"),
+        )
+        .unwrap();
+        let edited = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        assert_eq!(
+            edited.symbol("npc.lookup"),
+            Some(0x1234),
+            "read from the save, not searched"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_save_for_other_code_or_a_damaged_one_is_replaced() {
+        let tables = load();
+        let unknown = Fingerprint::new([0xee; 16], 1);
+        let dir = scratch("other");
+        let saved = carried_file(&dir, Side::SERVER).unwrap();
+        let code = patterned_code();
+        let base = tables::newest(&tables, enshwick_gamedata::Side::Server).unwrap();
+        std::fs::create_dir_all(saved.parent().unwrap()).unwrap();
+        std::fs::write(&saved, "not a carried table").unwrap();
+        let found = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&code, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        assert_eq!(found.table, base.fall_back(&code, 0x1000, |_| None));
+        let key = base.carry_key(&code, 0x1000);
+        assert!(
+            std::fs::read_to_string(&saved)
+                .unwrap()
+                .contains(&key.to_string())
+        );
+        let other = vec![0u8; 4096];
+        let found = select(
+            &tables,
+            Side::SERVER,
+            unknown,
+            Some((&other, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        assert_eq!(found.table, base.fall_back(&other, 0x1000, |_| None));
+        let key = base.carry_key(&other, 0x1000);
+        assert!(
+            std::fs::read_to_string(&saved)
+                .unwrap()
+                .contains(&key.to_string())
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_build_with_its_own_table_saves_nothing() {
+        let tables = load();
+        let server = embedded(Side::SERVER);
+        let fingerprint = tables
+            .iter()
+            .find(|t| t.name() == server.name)
+            .unwrap()
+            .fingerprint();
+        let dir = scratch("exact");
+        let saved = carried_file(&dir, Side::SERVER).unwrap();
+        let code = patterned_code();
+        let found = select(
+            &tables,
+            Side::SERVER,
+            fingerprint,
+            Some((&code, 0x1000)),
+            |_| None,
+            Some(&dir),
+        )
+        .unwrap();
+        assert_eq!(found.kind, Kind::Exact);
+        assert!(!saved.exists());
     }
 
     /// Every symbol with a `.bytes` constant reads those bytes in the client

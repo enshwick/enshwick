@@ -6,13 +6,16 @@
 //! For the running build it takes the table
 //! made for it ([`exact`], [`Table::resolve`]); on a build without one, the
 //! newest table of the same side ([`newest`]) finds each entry by its pattern
-//! ([`Table::fall_back`]), and what no pattern finds stays missing. The
+//! ([`Table::fall_back`]), and what no pattern finds stays missing; the
+//! loader saves that carried table and restores it while the code stays the
+//! same ([`Table::restore`]). The
 //! game's own archive reads with [`archive::Archive`], and the engine's
 //! reflection data with [`reflect::Reflection`].
 //! The [`catalogue`] maps the ids the API asks engine facts by to the
 //! game's reflected types and fields.
 
 pub mod archive;
+mod carry;
 pub mod catalogue;
 mod entries;
 #[cfg(test)]
@@ -24,6 +27,7 @@ mod resolve;
 mod table;
 mod version;
 
+pub use carry::CarryKey;
 pub use parts::{Part, PartState};
 
 pub use entries::{Constant, Locate, Operand, Symbol};
@@ -663,6 +667,12 @@ age = 1
             }
             let base = image.base();
             let resolved = table.fall_back(code, code_rva, |rva| image.u32(base + rva));
+            for constant in table.constants().iter().filter(|c| c.cell().is_some()) {
+                let found = resolved.constant(constant.id());
+                if found != Some(constant.value()) {
+                    wrong.push(format!("{}: its cell reads {found:x?}", constant.id()));
+                }
+            }
             assert!(wrong.is_empty(), "{var}:\n{}", wrong.join("\n"));
             let missing: Vec<&String> = resolved
                 .missing()

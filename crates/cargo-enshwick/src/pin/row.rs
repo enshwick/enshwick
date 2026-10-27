@@ -453,7 +453,9 @@ pub(crate) fn confirm_by_patterns(ported: &mut PortedRow<'_>, table: &Table, new
 
 /// Settles the constants of `ported` the game keeps in a data cell
 /// ([`Constant::cell`](enshwick_gamedata::Constant::cell)): the value is
-/// the `u32` in `new` at the cell's ported symbol, kept when unchanged.
+/// the `u32` in `new` at the cell's ported symbol, kept when unchanged and
+/// flagged when not, since a cell holds game data a build seldom changes
+/// and a new value more likely means a wrongly ported symbol.
 pub(crate) fn confirm_cells(ported: &mut PortedRow<'_>, table: &Table, new: &Exe<'_>) {
     for constant in table.constants() {
         let Some(cell) = constant.cell() else {
@@ -485,10 +487,10 @@ pub(crate) fn confirm_cells(ported: &mut PortedRow<'_>, table: &Table, new: &Exe
         line.status = if value == line.old {
             Status::Kept
         } else {
-            Status::Read
+            Status::Flagged
         };
         line.new = Some(value);
-        line.note = format!("read from its cell at {}", hex(rva));
+        line.note = format!("its cell at {} reads {}", hex(rva), hex(value));
         if let Some(edit) = ported.edits.iter_mut().find(|(e, _)| e.id == constant.id()) {
             edit.1 = Edit::Set(value);
         }

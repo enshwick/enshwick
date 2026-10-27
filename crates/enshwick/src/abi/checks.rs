@@ -214,11 +214,6 @@ impl_headed!(ExperiencePass);
 /// An experience filter: the pass and the pointer given at registration.
 pub type ExperiencePassFn = unsafe extern "system" fn(pass: *mut ExperiencePass, user: *mut c_void);
 
-/// A mod's altar limit before minor 82: the Flame level and the pointer
-/// given at registration; returns how many altars that level allows. The
-/// retired [`HostApi::altar_limit`](super::HostApi::altar_limit) refuses it.
-pub type AltarLimitFn = unsafe extern "system" fn(flame_level: u32, user: *mut c_void) -> u8;
-
 /// How many altars a Flame level allows, as the loader asks every
 /// [`HostApi::altar_limit_filter`](super::HostApi::altar_limit_filter) in
 /// load order.

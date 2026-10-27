@@ -144,10 +144,6 @@ pub(crate) extern "system" fn sync(_me: ModHandle, synced: Str, out: *mut Str) -
     put(out, served)
 }
 
-pub(crate) extern "system" fn retired_command(_me: ModHandle) -> Status {
-    Status::MISSING
-}
-
 pub(crate) extern "system" fn config_schema(_me: ModHandle, schema: Str) -> Status {
     // SAFETY: the mod passes text valid for the call.
     let Some(text) = (unsafe { schema.as_str() }) else {

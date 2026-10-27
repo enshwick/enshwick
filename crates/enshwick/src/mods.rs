@@ -3,7 +3,7 @@
 use crate::Host;
 use crate::abi::{ManifestFlags, ModInfo, Side, Str};
 
-/// The id the loader lists itself under in [`mods`]; no mod may take it.
+/// The id the loader lists itself under in [`all`]; no mod may take it.
 ///
 /// # Examples
 ///
@@ -51,7 +51,7 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 /// ```
 pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 
-/// One loaded mod, or the loader itself, from [`mods`] or [`Host::mods`].
+/// One loaded mod, or the loader itself, from [`all`].
 ///
 /// # Examples
 ///

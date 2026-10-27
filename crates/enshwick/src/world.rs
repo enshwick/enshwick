@@ -172,7 +172,8 @@ pub struct Player {
     pub slot: u32,
     /// The same for the same account in every session.
     pub key: u64,
-    /// Permission bits, `PlayerInfo::CAN_*`.
+    /// The server's permission bits for the player, as
+    /// [player events](crate::abi::PlayerInfo::permissions) list them.
     pub permissions: u8,
     /// The name the client sent; untrusted, may repeat between players.
     pub name: String,
@@ -259,7 +260,7 @@ impl Placed {
     }
 }
 
-/// How a notice reached a player, from [`World::notify`].
+/// How a notice reached a player, from [`notify`](World::notify).
 ///
 /// # Examples
 ///
