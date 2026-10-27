@@ -193,11 +193,7 @@ impl PackFiles {
                 }
             }
         }
-        let mut scripts = Vec::new();
-        if dir.join(SCRIPT_MAIN).is_file() {
-            find_scripts(dir, "", 0, &mut scripts)?;
-        }
-        for (path, name) in scripts {
+        for (path, name) in scripts_in(dir)? {
             read(&path, &name, &mut files)?;
         }
         Ok(files)
@@ -298,6 +294,36 @@ impl PackError {
         let offset = error.span().map_or(0, |span| span.start);
         Self::at(file, text, offset, error.message().trim_end())
     }
+}
+
+/// The scripts [`PackFiles::read_dir`] reads from the folder `dir`, as
+/// paths, without reading them: what a watcher looks at to see a script
+/// added, removed or renamed.
+///
+/// # Errors
+///
+/// [`ReadPackError`] naming the folder that could not be read, or for too
+/// many scripts.
+///
+/// # Examples
+///
+/// ```
+/// let scripts = enshwick::packs::script_files(std::path::Path::new("no such folder"))?;
+/// assert!(scripts.is_empty());
+/// # Ok::<(), enshwick::packs::ReadPackError>(())
+/// ```
+pub fn script_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, ReadPackError> {
+    Ok(scripts_in(dir)?.into_iter().map(|(path, _)| path).collect())
+}
+
+/// Every script of the pack folder `dir` with its name, when it has a
+/// [`SCRIPT_MAIN`].
+fn scripts_in(dir: &Path) -> Result<Vec<(std::path::PathBuf, String)>, ReadPackError> {
+    let mut scripts = Vec::new();
+    if dir.join(SCRIPT_MAIN).is_file() {
+        find_scripts(dir, "", 0, &mut scripts)?;
+    }
+    Ok(scripts)
 }
 
 /// Whether the file `name` is a script.

@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `packs::script_files` lists the scripts `PackFiles::read_dir` would read,
+  without reading them. The loader lists a Luau mod's scripts each time it
+  looks, so a script added, removed or renamed while the game runs reloads
+  the mod with `dev_reload` as an edited one does (#585).
 - A Luau mod reads and changes inventories through `enshwick.inventory`:
   `slots`, `count`, `item_info`, `give`, `take`, `destroy_slot`,
   `move_slot` and `move_all`, the done function getting the `Outcome` as a
