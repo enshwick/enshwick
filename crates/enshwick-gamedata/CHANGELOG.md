@@ -16,6 +16,13 @@ Each entry names the pull request that made the change.
 - Every table reads `skill.airborne_architect` from the cell the fly mode
   gate loads, and the client tables carry `user.interaction_kind` and
   `user.join_failed_kind` by pattern (#603).
+- The catalogue names the map's marker types: `MapMarkerType`'s size,
+  id and flags, the registry's type array and the `Visible` visibility
+  (#607).
+- The tables pin, by pattern, the map marker list and its entries in the
+  client tables, the knowledge log entry's id and value, the placement
+  cursor's altar flag and bit, the permission table's size, and the
+  newest tables the voxel material numbering (#607).
 
 ### Changed
 

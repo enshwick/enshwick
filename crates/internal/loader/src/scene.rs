@@ -1,8 +1,8 @@
 //! The map markers of the scene the server runs, read from the game's
 //! archive.
 //!
-//! Engine facts from server build 1269579 (age 399) and client 1273043
-//! (age 426): the entity world keeps a scene chunk manager whose requested
+//! Engine facts from server and client build 1273043 (ages 399 and 426):
+//! the entity world keeps a scene chunk manager whose requested
 //! scene GUID and chunk count the table pins; its last chunk is the global
 //! one, which holds every map marker the scene places (`MapMarker` on a
 //! template). A dedicated server builds those entities without a marker

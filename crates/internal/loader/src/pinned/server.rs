@@ -13,6 +13,7 @@ pub(crate) const ENTRY_STATE: Constant = Constant::new("server.entry_state");
 pub(crate) const GAME_SETTINGS: Constant = Constant::new("server.game_settings");
 pub(crate) const GAME_SETTINGS_PRESET: Constant = Constant::new("server.game_settings_preset");
 pub(crate) const GAME_SETTINGS_RESEND: Constant = Constant::new("server.game_settings_resend");
+pub(crate) const PERMISSION_ENTRIES: Constant = Constant::new("server.permission_entries");
 pub(crate) const PERMISSION_ENTRY_SIZE: Constant = Constant::new("server.permission_entry_size");
 pub(crate) const PERMISSION_MASK: Constant = Constant::new("server.permission_mask");
 pub(crate) const PERMISSION_TABLE: Constant = Constant::new("server.permission_table");

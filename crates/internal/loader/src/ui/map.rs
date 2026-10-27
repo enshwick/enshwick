@@ -1,6 +1,6 @@
 //! Mod markers on the client's map.
 //!
-//! Engine facts from client build 1269579: every frame the ECS system
+//! Engine facts from clients 410 and 426: every frame the ECS system
 //! `replicate_map_markers_for_ui` fills a list of the map's markers in the
 //! interface's play data, which the clear system empties first. The loader
 //! appends the mods' markers to that list right after the game fills it, on
@@ -8,8 +8,9 @@
 //! shows only with a marker type the game's registry knows; the loader picks
 //! a custom marker type with a label from the registry once it loads.
 //!
-//! The layouts below are pinned for that build alone and no pattern finds
-//! them on another, so map markers stay off on a build without its own table.
+//! The list, its entries and the walk to them come from the build table,
+//! the marker types from reflection; map markers stay off where either
+//! lacks one.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -19,11 +20,13 @@ use arc_swap::ArcSwap;
 use enshwick::abi::{HookFlags, Status, UiMarker};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
-use crate::builds::Kind;
+use enshwick_gamedata::catalogue;
+
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::pinned::{self, Constant};
 
 use super::engine::{Buf, UiText};
 
@@ -35,31 +38,116 @@ const RETIRED_FRAMES: u64 = 2;
 /// Old marker sets kept at most while no frame runs to retire them.
 const MAX_RETIRED: usize = 64;
 
-/// The play data's main marker list: entries, count, capacity.
-const LIST_DATA: usize = 0x36_ea00;
-const LIST_COUNT: usize = 0x36_ea08;
-const LIST_CAPACITY: usize = 0x36_ea10;
-/// A marker entry and its fields.
-const ENTRY_SIZE: usize = 0xa0;
-const ENTRY_POSITION: usize = 0x10;
-const ENTRY_TYPE: usize = 0x30;
-const ENTRY_VISIBILITY: usize = 0x34;
-const ENTRY_LABEL: usize = 0x50;
-const ENTRY_COLOR: usize = 0x80;
-const VISIBLE: u8 = 2;
-/// The marker type registry, its blob, and the blob's type array:
-/// `{offset from the array, count}`, `MapMarkerType` entries of 0x50 bytes.
-const REGISTRY: usize = 0x46_67f0;
-const REGISTRY_BLOB: usize = 0x20;
-const BLOB_TYPES: usize = 0x10;
-const TYPE_SIZE: usize = 0x50;
-const TYPE_ID: usize = 0x10;
-const TYPE_ABOVE_FOG: usize = 0x40;
-const TYPE_LABEL: usize = 0x41;
-const TYPE_CUSTOM: usize = 0x19;
-/// The interface context's G38 state and the play data pointer in it.
-const CONTEXT_STATE: usize = 0xd0;
-const STATE_PLAY_DATA: usize = 0x38;
+/// Room for one marker entry, which the build table's entry size must fit.
+const ENTRY_ROOM: usize = 0x100;
+
+/// Where the map's markers lie, from the build table and reflection.
+#[derive(Debug)]
+struct Layout {
+    /// The play data's main marker list, and its `u64` count and capacity
+    /// from the list.
+    list: usize,
+    list_count: usize,
+    list_capacity: usize,
+    /// A marker entry and its fields.
+    entry_size: usize,
+    entry_position: usize,
+    entry_type: usize,
+    entry_visibility: usize,
+    entry_label: usize,
+    entry_color: usize,
+    /// The visibility of a marker the map shows.
+    visible: u8,
+    /// The marker type registry in the play data, its blob, and the blob's
+    /// type array `{i32 offset from the array, u32 count}`.
+    registry: usize,
+    registry_blob: usize,
+    blob_types: usize,
+    /// A `MapMarkerType` entry and its fields.
+    type_size: usize,
+    type_id: usize,
+    type_custom: usize,
+    type_above_fog: usize,
+    type_label: usize,
+    /// The interface context's G38 state and the play data pointer in it.
+    context_state: usize,
+    state_play_data: usize,
+}
+
+impl Layout {
+    fn read(loader: &Loader) -> Result<Self, LayoutError> {
+        let table = |id: Constant| loader.offset(id).ok_or(LayoutError::Table(id));
+        let reflected = |id: &'static str| {
+            catalogue::constant(id, &loader.reflection)
+                .and_then(|v| usize::try_from(v).ok())
+                .ok_or(LayoutError::Reflection(id))
+        };
+        let type_size = loader
+            .reflection
+            .type_info(catalogue::type_name(catalogue::MARKER_TYPE))
+            .ok()
+            .and_then(|info| usize::try_from(info.size()).ok())
+            .ok_or(LayoutError::Reflection(catalogue::MARKER_TYPE))?;
+        Ok(Self {
+            list: table(pinned::map::LIST)?,
+            list_count: table(pinned::map::LIST_COUNT)?,
+            list_capacity: table(pinned::map::LIST_CAPACITY)?,
+            entry_size: table(pinned::map::ENTRY_SIZE)?,
+            entry_position: table(pinned::map::ENTRY_POSITION)?,
+            entry_type: table(pinned::map::ENTRY_TYPE)?,
+            entry_visibility: table(pinned::map::ENTRY_VISIBILITY)?,
+            entry_label: table(pinned::map::ENTRY_LABEL)?,
+            entry_color: table(pinned::map::ENTRY_COLOR)?,
+            visible: u8::try_from(reflected(catalogue::MARKER_VISIBLE)?)
+                .map_err(|_| LayoutError::Reflection(catalogue::MARKER_VISIBLE))?,
+            registry: table(pinned::map::REGISTRY)?,
+            registry_blob: table(pinned::map::REGISTRY_BLOB)?,
+            blob_types: reflected(catalogue::MARKER_REGISTRY_TYPES)?,
+            type_size,
+            type_id: reflected(catalogue::MARKER_TYPE_ID)?,
+            type_custom: reflected(catalogue::MARKER_TYPE_CUSTOM)?,
+            type_above_fog: reflected(catalogue::MARKER_TYPE_ABOVE_FOG)?,
+            type_label: reflected(catalogue::MARKER_TYPE_LABEL)?,
+            context_state: table(pinned::map::CONTEXT_STATE)?,
+            state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
+        })
+    }
+
+    /// Whether an entry fits [`ENTRY_ROOM`] and holds every field the loader
+    /// writes, and a marker type every field it reads.
+    fn fits(&self) -> bool {
+        let entry_ends = [
+            self.entry_position + 3 * 8,
+            self.entry_type + 4,
+            self.entry_visibility + 1,
+            self.entry_label + 3 * 8,
+            self.entry_color + 1,
+        ];
+        let type_ends = [
+            self.type_id + 4,
+            self.type_custom + 1,
+            self.type_above_fog + 1,
+            self.type_label + 1,
+        ];
+        self.entry_size <= ENTRY_ROOM
+            && entry_ends.iter().all(|&end| end <= self.entry_size)
+            && type_ends.iter().all(|&end| end <= self.type_size)
+    }
+}
+
+/// Why the map markers' layout does not read on this build.
+#[derive(Debug, thiserror::Error)]
+enum LayoutError {
+    /// The build table lacks a row.
+    #[error("{0} is not in this build")]
+    Table(Constant),
+    /// The game's reflection lacks a fact, or gives one out of range.
+    #[error("the game does not reflect {0}")]
+    Reflection(&'static str),
+}
+
+/// The layout [`link`] read, once the build has every part of it.
+static LAYOUT: OnceLock<Layout> = OnceLock::new();
 
 /// One marker, owned by the loader.
 struct Owned {
@@ -145,28 +233,28 @@ fn retire(retired: &mut VecDeque<(u64, Arc<Sets>)>, now: u64) {
 /// Notes the play data of the interface context `context`, for the
 /// system's thread.
 pub(super) fn note(context: usize) {
-    if NEXT.wired().is_none() {
+    let (Some(_), Some(layout)) = (NEXT.wired(), LAYOUT.get()) else {
         return;
-    }
+    };
     // SAFETY: the one caller passes the live interface context of the frame
-    // it draws, on the interface thread; client build 1269579 keeps its G38
-    // state pointer at `CONTEXT_STATE`.
-    let state = unsafe { crate::memory::read_ptr::<u8>(context, CONTEXT_STATE) };
+    // it draws, on the interface thread, which keeps its G38 state pointer
+    // at the build table's `map.context_state`.
+    let state = unsafe { crate::memory::read_ptr::<u8>(context, layout.context_state) };
     let play = if state.is_null() {
         core::ptr::null_mut()
     } else {
         // SAFETY: `state` is the context's non-null G38 state (checked
-        // earlier), whose first word is the play state pointer or null on
-        // client build 1269579.
+        // earlier), whose first word is the play state pointer or null
+        // (clients 410 and 426).
         unsafe { crate::memory::read_ptr::<u8>(state.expose_provenance(), 0) }
     };
     let data = if play.is_null() {
         0
     } else {
         // SAFETY: `play` is the non-null play state (checked earlier), which
-        // holds its play data pointer at `STATE_PLAY_DATA` on client build
-        // 1269579.
-        unsafe { crate::memory::read_ptr::<u8>(play.expose_provenance(), STATE_PLAY_DATA) }
+        // holds its play data pointer at the build table's
+        // `map.state_play_data`.
+        unsafe { crate::memory::read_ptr::<u8>(play.expose_provenance(), layout.state_play_data) }
             .expose_provenance()
     };
     PLAY_DATA.store(data, Ordering::Release);
@@ -174,21 +262,24 @@ pub(super) fn note(context: usize) {
     NOTED_AT.store(unsafe { GetTickCount64() }, Ordering::Release);
 }
 
-/// Whether the layouts this module writes through hold on a build whose
-/// table came about as `kind`.
-fn layout_pinned(kind: Kind) -> bool {
-    kind == Kind::Exact
-}
-
-/// Links the replicate system on the client, on a build with its own table.
+/// Links the replicate system on the client, on a build whose table and
+/// reflection give the markers' whole layout.
 pub(crate) fn link(loader: &Loader) {
-    if !layout_pinned(loader.build.kind) {
-        crate::log!(
-            WARN,
-            "map markers off: their layout is known only on a build with its own table"
-        );
-        return;
-    }
+    let layout = match Layout::read(loader) {
+        Ok(layout) if layout.fits() => layout,
+        Ok(_) => {
+            crate::log!(
+                WARN,
+                "map markers off: this build's marker entries do not fit the loader's"
+            );
+            return;
+        }
+        Err(why) => {
+            crate::log!(WARN, "map markers off: {why}");
+            return;
+        }
+    };
+    let _set = LAYOUT.set(layout);
     let target = loader
         .reflection
         .system("replicate_map_markers_for_ui")
@@ -219,6 +310,9 @@ unsafe extern "system" fn detour(context: *mut u8) {
 
 fn append() {
     let sets = snapshot().load();
+    let Some(layout) = LAYOUT.get() else {
+        return;
+    };
     if sets.is_empty() {
         return;
     }
@@ -231,22 +325,23 @@ fn append() {
     // SAFETY: `data` is the non-zero play data `note` found under 500 ms ago
     // (checked earlier), and `append` runs inside the replicate system's
     // detour, on its thread while it runs.
-    let Some(kind) = (unsafe { marker_type(data) }) else {
+    let Some(kind) = (unsafe { marker_type(layout, data) }) else {
         return;
     };
+    let list = data + layout.list;
     // SAFETY: `data` is the non-zero play data `note` found under 500 ms ago
     // (checked earlier), read on the replicate system's thread, which owns it
-    // while the system runs; client build 1269579 keeps the marker list's
-    // entry pointer at `LIST_DATA`.
-    let entries = unsafe { crate::memory::read_ptr::<u8>(data, LIST_DATA) };
-    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
-    // replicate system's thread; client build 1269579 keeps the list's `u64`
-    // count at `LIST_COUNT`.
-    let mut count: u64 = unsafe { crate::memory::read(data, LIST_COUNT) };
-    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
-    // replicate system's thread; client build 1269579 keeps the list's `u64`
-    // capacity at `LIST_CAPACITY`.
-    let capacity: u64 = unsafe { crate::memory::read(data, LIST_CAPACITY) };
+    // while the system runs; it keeps the marker list's entry pointer at the
+    // build table's `map.list`.
+    let entries = unsafe { crate::memory::read_ptr::<u8>(list, 0) };
+    // SAFETY: the live play data's marker list, checked fresh and non-zero
+    // earlier, on the replicate system's thread; its `u64` count sits at the
+    // build table's `map.list_count`.
+    let mut count: u64 = unsafe { crate::memory::read(list, layout.list_count) };
+    // SAFETY: the live play data's marker list, checked fresh and non-zero
+    // earlier, on the replicate system's thread; its `u64` capacity sits at
+    // the build table's `map.list_capacity`.
+    let capacity: u64 = unsafe { crate::memory::read(list, layout.list_capacity) };
     if entries.is_null() {
         return;
     }
@@ -260,28 +355,31 @@ fn append() {
         let Ok(index) = usize::try_from(count) else {
             break;
         };
-        let mut entry = Buf::<ENTRY_SIZE>::zeroed();
+        let mut entry = Buf::<ENTRY_ROOM>::zeroed();
         for (i, axis) in marker.position.iter().enumerate() {
-            entry.u64(ENTRY_POSITION + 8 * i, axis.cast_unsigned());
+            entry.u64(layout.entry_position + 8 * i, axis.cast_unsigned());
         }
-        entry.u32(ENTRY_TYPE, kind);
-        entry.u8(ENTRY_VISIBILITY, VISIBLE);
+        entry.u32(layout.entry_type, kind);
+        entry.u8(layout.entry_visibility, layout.visible);
         // The label lives in the snapshot, kept for `RETIRED` sets after it
         // is replaced.
-        entry.text(ENTRY_LABEL, &UiText::new(&marker.label));
-        entry.u8(ENTRY_COLOR, marker.color);
-        let slot = entries.wrapping_add(index * ENTRY_SIZE);
+        entry.text(layout.entry_label, &UiText::new(&marker.label));
+        entry.u8(layout.entry_color, marker.color);
+        let slot = entries.wrapping_add(index * layout.entry_size);
         // SAFETY: `index` is the list's count, below its capacity by the
-        // earlier check, so `slot` is a free entry of `ENTRY_SIZE` bytes in the
-        // list's non-null storage; the replicate system's thread owns the list
-        // while the system runs, and `entry` is the loader's own buffer.
-        unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, ENTRY_SIZE) };
+        // earlier check, so `slot` is a free entry of the table's
+        // `map.entry_size` bytes in the list's non-null storage; `link` took
+        // the layout only where that size fits `ENTRY_ROOM`, the loader's own
+        // buffer `entry`; the replicate system's thread owns the list while
+        // the system runs.
+        unsafe { core::ptr::copy_nonoverlapping(entry.ptr(), slot, layout.entry_size) };
         count += 1;
     }
-    // SAFETY: the live play data, checked fresh and non-zero earlier, on the
-    // replicate system's thread, which owns it while the system runs; client
-    // build 1269579 keeps the list's `u64` count at `LIST_COUNT`.
-    unsafe { crate::memory::write(data, LIST_COUNT, count) };
+    // SAFETY: the live play data's marker list, checked fresh and non-zero
+    // earlier, on the replicate system's thread, which owns it while the
+    // system runs; its `u64` count sits at the build table's
+    // `map.list_count`.
+    unsafe { crate::memory::write(list, layout.list_count, count) };
 }
 
 /// The marker type for mod markers: the registry's first custom marker type
@@ -290,35 +388,36 @@ fn append() {
 ///
 /// # Safety
 ///
-/// - `data` is the address of the interface's live play data of client build
-///   1269579.
+/// - `data` is the address of the interface's live play data, of the build
+///   `layout` was read for.
 /// - The call runs on the replicate system's thread while the system runs,
 ///   so nothing writes the play data or its registry during the call.
-unsafe fn marker_type(data: usize) -> Option<u32> {
+unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
     if let Some(found) = MARKER_TYPE.get() {
         return *found;
     }
     // SAFETY: the caller's contract makes `data` the live play data, read on
-    // the replicate system's thread; client build 1269579 keeps the marker
-    // type registry pointer at `REGISTRY`.
-    let registry = unsafe { crate::memory::read_ptr::<u8>(data, REGISTRY) };
+    // the replicate system's thread; it keeps the marker type registry
+    // pointer at the build table's `map.registry`.
+    let registry = unsafe { crate::memory::read_ptr::<u8>(data, layout.registry) };
     if registry.is_null() {
         return None;
     }
     // SAFETY: `registry` is the non-null marker type registry (checked
-    // earlier), which holds its blob pointer at `REGISTRY_BLOB` on client build
-    // 1269579.
-    let blob =
-        unsafe { crate::memory::read_ptr::<u8>(registry.expose_provenance(), REGISTRY_BLOB) };
+    // earlier), which holds its blob pointer at the build table's
+    // `map.registry_blob`.
+    let blob = unsafe {
+        crate::memory::read_ptr::<u8>(registry.expose_provenance(), layout.registry_blob)
+    };
     if blob.is_null() {
         return None;
     }
-    let array = blob.expose_provenance() + BLOB_TYPES;
-    // SAFETY: the non-null blob (checked earlier) holds its type array header
-    // at `BLOB_TYPES` on client build 1269579: an `i32` offset first.
+    let array = blob.expose_provenance() + layout.blob_types;
+    // SAFETY: the non-null blob (checked earlier) holds its type array at the
+    // reflected `MapMarkerRegistryResource` path; a blob array starts with
+    // its `i32` offset from itself, the game's resource format.
     let offset: i32 = unsafe { crate::memory::read(array, 0) };
-    // SAFETY: the same type array header in the non-null blob, whose `u32`
-    // count follows the `i32` offset on client build 1269579.
+    // SAFETY: the same blob array, whose `u32` count follows its offset.
     let count: u32 = unsafe { crate::memory::read(array, 4) };
     if offset == 0 || count == 0 || count > MAX_TYPES {
         return None;
@@ -326,24 +425,24 @@ unsafe fn marker_type(data: usize) -> Option<u32> {
     let first = array.wrapping_add_signed(offset as isize);
     let types: Vec<(u32, bool, bool, bool)> = (0..count as usize)
         .map(|i| {
-            let at = first + i * TYPE_SIZE;
-            // SAFETY: the blob's type array holds `count` `MapMarkerType`
-            // entries of `TYPE_SIZE` bytes from `first` (count bounded by
-            // `MAX_TYPES` earlier) and `i` is below `count`; each keeps a `u32`
-            // id at `TYPE_ID` on client build 1269579.
-            let id: u32 = unsafe { crate::memory::read(at, TYPE_ID) };
+            let at = first + i * layout.type_size;
+            // SAFETY: the blob's type array holds `count` reflected
+            // `MapMarkerType` entries from `first` (count bounded by
+            // `MAX_TYPES` earlier) and `i` is below `count`; each keeps its
+            // reflected `u32` id inside the entry (`Layout::fits`).
+            let id: u32 = unsafe { crate::memory::read(at, layout.type_id) };
             // SAFETY: entry `i` of the blob's type array, `i` below `count`;
-            // its custom flag is a byte at `TYPE_CUSTOM` on client build
-            // 1269579, read as a byte and compared.
-            let custom: u8 = unsafe { crate::memory::read(at, TYPE_CUSTOM) };
+            // its reflected custom flag is a byte inside the entry, read as a
+            // byte and compared.
+            let custom: u8 = unsafe { crate::memory::read(at, layout.type_custom) };
             // SAFETY: entry `i` of the blob's type array, `i` below `count`;
-            // its label flag is a byte at `TYPE_LABEL` on client build
-            // 1269579, read as a byte and compared.
-            let label: u8 = unsafe { crate::memory::read(at, TYPE_LABEL) };
+            // its reflected label flag is a byte inside the entry, read as a
+            // byte and compared.
+            let label: u8 = unsafe { crate::memory::read(at, layout.type_label) };
             // SAFETY: entry `i` of the blob's type array, `i` below `count`;
-            // its above-fog flag is a byte at `TYPE_ABOVE_FOG` on client
-            // build 1269579, read as a byte and compared.
-            let above_fog: u8 = unsafe { crate::memory::read(at, TYPE_ABOVE_FOG) };
+            // its reflected above-fog flag is a byte inside the entry, read as
+            // a byte and compared.
+            let above_fog: u8 = unsafe { crate::memory::read(at, layout.type_above_fog) };
             (id, custom != 0, label != 0, above_fog != 0)
         })
         .collect();
@@ -386,10 +485,54 @@ fn pick(types: &[(u32, bool, bool, bool)]) -> Option<u32> {
 mod tests {
     use super::*;
 
+    /// The layout of client 426, from its table and reflection.
+    fn client_426() -> Layout {
+        Layout {
+            list: 0x36_ea00,
+            list_count: 0x8,
+            list_capacity: 0x10,
+            entry_size: 0xa0,
+            entry_position: 0x10,
+            entry_type: 0x30,
+            entry_visibility: 0x34,
+            entry_label: 0x50,
+            entry_color: 0x80,
+            visible: 2,
+            registry: 0x46_67f0,
+            registry_blob: 0x20,
+            blob_types: 0x10,
+            type_size: 0x50,
+            type_id: 0x10,
+            type_custom: 0x19,
+            type_above_fog: 0x40,
+            type_label: 0x41,
+            context_state: 0xd0,
+            state_play_data: 0x38,
+        }
+    }
+
     #[test]
-    fn markers_need_a_build_with_its_own_table() {
-        assert!(layout_pinned(Kind::Exact));
-        assert!(!layout_pinned(Kind::Fallback));
+    fn a_layout_whose_entries_hold_every_field_fits() {
+        assert!(client_426().fits());
+    }
+
+    #[test]
+    fn an_entry_or_field_past_the_room_turns_markers_off() {
+        let too_big = Layout {
+            entry_size: ENTRY_ROOM + 0x10,
+            ..client_426()
+        };
+        assert!(!too_big.fits());
+        let label_past = Layout {
+            entry_label: 0x90,
+            ..client_426()
+        };
+        assert!(!label_past.fits(), "the label's three words end past 0xa0");
+        let flag_past = Layout {
+            type_label: 0x50,
+            ..client_426()
+        };
+        assert!(!flag_past.fits(), "a marker type flag past the type");
     }
 
     #[test]

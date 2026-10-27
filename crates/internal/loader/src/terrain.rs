@@ -28,15 +28,25 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::terrain::DIG.id(),
     pinned::terrain::EDITOR.id(),
     pinned::terrain::FLATTEN.id(),
+    pinned::voxel::BUILDING_FIRST.id(),
+    pinned::voxel::MATERIALS.id(),
     pinned::terrain::REGISTRY.id(),
     pinned::terrain::REGISTRY_RESOURCE.id(),
     pinned::terrain::VOXEL_WORLD.id(),
 ];
 
-/// The materials the edits work on: terrain, not air nor buildings.
+/// The materials the edits work on: terrain, not air nor buildings, which
+/// start at the build table's `voxel.building_first`.
 const TERRAIN: core::ops::RangeInclusive<u8> = 1..=0x7f;
-/// Materials a voxel can have.
+/// Materials a voxel can have, as the build table's `voxel.materials`
+/// counts them; the per-material arrays the game reads are this long.
 const MATERIALS: usize = 0x100;
+
+/// Whether this build's material numbering is the one [`TERRAIN`] and
+/// [`MATERIALS`] describe.
+fn materials_hold(materials: Option<usize>, building_first: Option<usize>) -> bool {
+    materials == Some(MATERIALS) && building_first == Some(usize::from(*TERRAIN.end()) + 1)
+}
 /// The largest radius the loader takes, in metres: the game reads a region
 /// of `(4r)^3` voxels for an edit.
 pub(crate) const MAX_RADIUS: f32 = 16.0;
@@ -127,6 +137,16 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 fn layout(loader: &Loader) -> Option<&'static Layout> {
     LAYOUT
         .get_or_init(|| {
+            if !materials_hold(
+                loader.offset(pinned::voxel::MATERIALS),
+                loader.offset(pinned::voxel::BUILDING_FIRST),
+            ) {
+                crate::log!(
+                    WARN,
+                    "terrain edits off: this build numbers its voxel materials differently"
+                );
+                return None;
+            }
             let reflection = &loader.reflection;
             let field = |ty: &str, name: &str| {
                 reflection
@@ -523,4 +543,18 @@ fn terrain_material(material: u32) -> Result<u8, Status> {
         .ok()
         .filter(|id| TERRAIN.contains(id))
         .ok_or(Status::BAD_ARGS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edits_need_the_material_numbering_their_arrays_hold() {
+        assert!(materials_hold(Some(0x100), Some(0x80)));
+        assert!(!materials_hold(Some(0x200), Some(0x80)), "more materials");
+        assert!(!materials_hold(Some(0x100), Some(0x40)), "fewer terrain");
+        assert!(!materials_hold(None, Some(0x80)), "not in the table");
+        assert!(!materials_hold(Some(0x100), None), "not in the table");
+    }
 }

@@ -42,7 +42,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::knowledge::JOURNAL.id(),
     pinned::knowledge::JOURNAL_BLOB.id(),
     pinned::knowledge::JOURNAL_BLOB_GET.id(),
+    pinned::knowledge::LOG_ENTRY_ID.id(),
     pinned::knowledge::LOG_ENTRY_SIZE.id(),
+    pinned::knowledge::LOG_ENTRY_VALUE.id(),
     pinned::knowledge::OBJECT.id(),
     pinned::knowledge::PLAYER_VALUE.id(),
     pinned::knowledge::PUSH.id(),
@@ -107,7 +109,10 @@ struct Layout {
     world_log_count: usize,
     record_log: usize,
     record_log_count: usize,
+    /// A log entry: its size, its u32 id and its u32 new value.
     log_entry: usize,
+    log_entry_id: usize,
+    log_entry_value: usize,
     /// A trigger request's definition kind, value and target, after its id.
     request_kind: usize,
     request_value: usize,
@@ -123,6 +128,18 @@ struct Layout {
     quests: usize,
     quest_size: usize,
     quest_id: usize,
+}
+
+impl Layout {
+    fn entry_holds_its_fields(&self) -> bool {
+        entry_holds(self.log_entry, self.log_entry_id, self.log_entry_value)
+    }
+}
+
+/// Whether a log entry of `size` bytes holds its `u32` id at `id` and its
+/// `u32` value at `value`.
+const fn entry_holds(size: usize, id: usize, value: usize) -> bool {
+    id + 4 <= size && value + 4 <= size
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -188,6 +205,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 record_log: offset(pinned::knowledge::RECORD_LOG)?,
                 record_log_count: offset(pinned::knowledge::RECORD_LOG_COUNT)?,
                 log_entry: offset(pinned::knowledge::LOG_ENTRY_SIZE)?,
+                log_entry_id: offset(pinned::knowledge::LOG_ENTRY_ID)?,
+                log_entry_value: offset(pinned::knowledge::LOG_ENTRY_VALUE)?,
                 request_kind: offset(pinned::knowledge::REQUEST_KIND)?,
                 request_value: offset(pinned::knowledge::REQUEST_VALUE)?,
                 request_target: offset(pinned::knowledge::REQUEST_TARGET)?,
@@ -203,6 +222,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 quest_size: size("keen::JournalQuestResource")?,
                 quest_id: field("keen::JournalCollectionResource", "entryId")?,
             })
+            .filter(Layout::entry_holds_its_fields)
         })
         .as_ref()
 }
@@ -586,11 +606,12 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
         let entry = log + i * layout.log_entry;
         // SAFETY: `log` is non-null and `i` below its count by the check
         // before it, so `entry` is an entry of the log, of the build table's
-        // `knowledge.log_entry_size`, which starts with its u32 id.
-        let id: u32 = unsafe { read(entry, 0) };
-        // SAFETY: `entry` is an entry of the live log, its u32 new value
-        // after the id.
-        let value: u32 = unsafe { read(entry, 4) };
+        // `knowledge.log_entry_size`, with its u32 id at
+        // `knowledge.log_entry_id`.
+        let id: u32 = unsafe { read(entry, layout.log_entry_id) };
+        // SAFETY: `entry` is an entry of the live log, with its u32 new value
+        // at the build table's `knowledge.log_entry_value`.
+        let value: u32 = unsafe { read(entry, layout.log_entry_value) };
         if id == 0 {
             continue;
         }
@@ -618,4 +639,17 @@ fn raise(loader: &Loader, layout: &Layout, game: usize, entity: Entity, log: usi
 /// Forgets the last update seen when a hosted game ends.
 pub(crate) fn forget() {
     SEEN_STEP.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_log_entry_must_hold_its_id_and_value() {
+        assert!(entry_holds(0x10, 0, 4));
+        assert!(!entry_holds(0x10, 0, 0xd), "the value ends past the entry");
+        assert!(!entry_holds(4, 0, 4), "the value ends past the entry");
+        assert!(!entry_holds(0x10, 0x10, 4), "the id ends past the entry");
+    }
 }

@@ -25,16 +25,19 @@ const WORKSHOP_RECIPES: usize = 512;
 
 /// The check before a recipe joins its workshop's list, the same on server
 /// and client: `movzx eax, word [rdx+0x1000]; mov ecx, 0x200; cmp ax, cx;
-/// je stop; mov [rdx+rax*8], rdi; inc r13`.
-const LIMIT_SITE: &str =
-    "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 0E 01 00 00 48 89 3C C2 49 FF C5";
-/// The block that stops the game on a full list, from the check.
-const STOP: usize = 0x123;
+/// je stop; mov [rdx+rax*8], rdi; inc r13; inc word [rdx+0x1000]`, which
+/// ends where the loop's next recipe starts.
+const LIMIT_SITE: &str = "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ?? \
+                          48 89 3C C2 49 FF C5 66 FF 82 00 10 00 00";
+/// Where the check's `je` to the block that stops the game on a full list
+/// holds its rel32, and where the jump ends.
+const STOP_JUMP: usize = 0x11;
+const STOP_JUMP_END: usize = 0x15;
 /// Its length.
 const STOP_LEN: usize = 27;
 /// How the block starts: the message's arguments.
 const STOP_START: &str = "4C 8D 05 ?? ?? ?? ?? 33 C9 48 8D 15";
-/// The next recipe of the loop, from the check.
+/// The next recipe of the loop, from the check: the end of [`LIMIT_SITE`].
 const NEXT_RECIPE: usize = 0x23;
 /// The per-workshop list lookup's first bytes, the same on server and client.
 const LOOKUP: &str = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 83 BA 4C 01 00 00 00 4C 8B D2 48 8B BA 08 01 00 00";
@@ -439,12 +442,13 @@ static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
-/// The stop block's replacement: `inc r13` (the loop counter the skipped
-/// append would have raised), then `jmp` to the next recipe.
-fn stop_replacement() -> [u8; STOP_LEN] {
+/// The replacement of the stop block `stop` bytes from the check: `inc r13`
+/// (the loop counter the skipped append would have raised), then `jmp` to
+/// the next recipe.
+fn stop_replacement(stop: usize) -> [u8; STOP_LEN] {
     let mut bytes = [0xcc; STOP_LEN];
     bytes[..4].copy_from_slice(&[0x49, 0xff, 0xc5, 0xe9]);
-    let from = i32::try_from(STOP + 8).unwrap_or(i32::MAX);
+    let from = i32::try_from(stop + 8).unwrap_or(i32::MAX);
     let to = i32::try_from(NEXT_RECIPE).unwrap_or(0);
     bytes[4..8].copy_from_slice(&(to - from).to_le_bytes());
     bytes
@@ -462,7 +466,14 @@ pub(crate) fn find(code: &[u8], pattern: &str) -> Result<usize, String> {
 /// `start`.
 fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
     let site = find(code, LIMIT_SITE)?;
-    let stop = site + STOP;
+    let jump: [u8; 4] = code
+        .get(site + STOP_JUMP..site + STOP_JUMP_END)
+        .and_then(|b| b.try_into().ok())
+        .ok_or("the check is cut")?;
+    let from_site = STOP_JUMP_END
+        .checked_add_signed(isize::try_from(i32::from_le_bytes(jump)).map_err(|e| e.to_string())?)
+        .ok_or("the check jumps before itself")?;
+    let stop = site + from_site;
     let expected = code
         .get(stop..stop + STOP_LEN)
         .ok_or("the stop block is past the code")?;
@@ -474,7 +485,7 @@ fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
         owner: ModIndex::LOADER,
         address: start + stop,
         expected: expected.into(),
-        replacement: stop_replacement().into(),
+        replacement: stop_replacement(from_site).into(),
         needs: Box::default(),
     })
 }
@@ -883,36 +894,49 @@ mod tests {
         );
     }
 
+    /// The check of 1.0 server 399 and client 426 at `site` in `code`, its
+    /// `je` landing `stop` bytes from the check, and a stop block there.
+    fn limit_site(code: &mut [u8], site: usize, stop: usize) {
+        let je = i32::try_from(stop - 0x15).unwrap().to_le_bytes();
+        let check = [
+            [
+                0x0f, 0xb7, 0x82, 0x00, 0x10, 0x00, 0x00, 0xb9, 0x00, 0x02, 0x00, 0x00,
+            ]
+            .as_slice(),
+            &[0x66, 0x3b, 0xc1, 0x0f, 0x84],
+            &je,
+            &[0x48, 0x89, 0x3c, 0xc2, 0x49, 0xff, 0xc5],
+            &[0x66, 0xff, 0x82, 0x00, 0x10, 0x00, 0x00],
+        ]
+        .concat();
+        code[site..site + check.len()].copy_from_slice(&check);
+        code[site + stop..site + stop + 12]
+            .copy_from_slice(&[0x4c, 0x8d, 0x05, 1, 2, 3, 4, 0x33, 0xc9, 0x48, 0x8d, 0x15]);
+    }
+
     #[test]
     fn the_stop_block_becomes_inc_r13_and_a_jump_to_the_next_recipe() {
-        let mut code = vec![0x90_u8; 0x200];
         let site = 0x40;
-        let check = Pattern::parse(LIMIT_SITE).unwrap();
-        assert_eq!(check.len(), 28);
-        for (i, byte) in LIMIT_SITE.split(' ').enumerate() {
-            code[site + i] = u8::from_str_radix(byte, 16).unwrap();
+        for stop_at in [0x123, 0x150] {
+            let mut code = vec![0x90_u8; 0x200];
+            limit_site(&mut code, site, stop_at);
+            assert_eq!(Pattern::parse(LIMIT_SITE).unwrap().len(), NEXT_RECIPE);
+            let stop = site + stop_at;
+            let made = limit_patch(&code, 0x1_4000_0000).unwrap();
+            assert_eq!(made.address, 0x1_4000_0000 + stop, "{stop_at:#x}");
+            assert_eq!(&made.expected[..], &code[stop..stop + STOP_LEN]);
+            // inc r13, then jmp rel32 from the end of the jump to the next recipe.
+            assert_eq!(&made.replacement[..4], &[0x49, 0xff, 0xc5, 0xe9]);
+            let rel = i32::from_le_bytes(made.replacement[4..8].try_into().unwrap());
+            let end = i64::try_from(stop + 8).unwrap();
+            assert_eq!(
+                end + i64::from(rel),
+                i64::try_from(site + NEXT_RECIPE).unwrap()
+            );
+            assert!(made.replacement[8..].iter().all(|&b| b == 0xcc));
+            code[stop] = 0x90;
+            assert!(limit_patch(&code, 0).is_err());
         }
-        let stop = site + STOP;
-        code[stop..stop + 12]
-            .copy_from_slice(&[0x4c, 0x8d, 0x05, 1, 2, 3, 4, 0x33, 0xc9, 0x48, 0x8d, 0x15]);
-        let made = limit_patch(&code, 0x1_4000_0000).unwrap();
-        assert_eq!(made.address, 0x1_4000_0000 + stop);
-        assert_eq!(&made.expected[..], &code[stop..stop + STOP_LEN]);
-        // The `je` of the check lands on the stop block.
-        let je = i32::from_le_bytes(code[site + 0x11..site + 0x15].try_into().unwrap());
-        assert_eq!(site + 0x15 + usize::try_from(je).unwrap(), stop);
-        // inc r13, then jmp rel32 from the end of the jump to the next recipe.
-        assert_eq!(&made.replacement[..4], &[0x49, 0xff, 0xc5, 0xe9]);
-        let rel = i32::from_le_bytes(made.replacement[4..8].try_into().unwrap());
-        let end = i64::try_from(stop + 8).unwrap();
-        assert_eq!(
-            end + i64::from(rel),
-            i64::try_from(site + NEXT_RECIPE).unwrap()
-        );
-        assert!(made.replacement[8..].iter().all(|&b| b == 0xcc));
-
-        code[stop] = 0x90;
-        assert!(limit_patch(&code, 0).is_err());
     }
 
     #[test]
