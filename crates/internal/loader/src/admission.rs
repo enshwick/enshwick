@@ -387,6 +387,9 @@ fn machine_to_kick(
             .find(|&&(k, _)| k == key)
             .map(|&(_, machine)| machine)
     };
+    if key == 0 && machines.iter().filter(|&&(k, _)| k == 0).nth(1).is_some() {
+        return Err("several players hold no account, so which one joined is unknown");
+    }
     let machine = machine_of(key).ok_or("the player holds no slot")?;
     if host.and_then(machine_of) == Some(machine) {
         return Err("the player's machine is the host's");
@@ -743,6 +746,12 @@ mod tests {
             "a guest on the host's machine"
         );
         assert!(machine_to_kick(&machines, 4, Some(1), None).is_err());
+    }
+
+    #[test]
+    fn a_player_without_an_account_is_kicked_only_when_no_other_slot_lacks_one() {
+        assert_eq!(machine_to_kick(&[(0, 30), (2, 20)], 0, None, None), Ok(30));
+        assert!(machine_to_kick(&[(0, 30), (2, 20), (0, 40)], 0, None, None).is_err());
     }
 
     #[test]
