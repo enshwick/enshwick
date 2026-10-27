@@ -1,4 +1,4 @@
-abi 2.95
+abi 2.97
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -140,6 +140,12 @@ BuildingData size 52 align 4
     replay at 21 size 1
     template at 22 size 16
     position at 40 size 12
+CallSpec size 64 align 8
+    header at 0 size 8
+    name at 8 size 16
+    major at 24 size 4
+    input at 32 size 16
+    output at 48 size 16
 CallerFrame size 72 align 8
     rsp at 0 size 8
     rbx at 8 size 8
@@ -264,7 +270,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1352 align 8
+HostApi size 1392 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -432,7 +438,12 @@ HostApi size 1352 align 8
     world_quiet at 1320 size 8
     fog_open at 1328 size 8
     fog_read at 1336 size 8
-    map_markers at 1344 size 8
+    serve_call at 1344 size 8
+    find_call at 1352 size 8
+    call at 1360 size 8
+    transaction_entities at 1368 size 8
+    world_persists at 1376 size 8
+    map_markers at 1384 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -635,6 +646,16 @@ PointSpec size 64 align 8
     output at 48 size 16
 PointVerdict size 4 align 4
     0 at 0 size 4
+PropPlace size 56 align 8
+    header at 0 size 8
+    item at 8 size 4
+    reserved at 12 size 4
+    position at 16 size 24
+    orientation at 40 size 16
+PropRemove size 16 align 4
+    header at 0 size 8
+    entity at 8 size 4
+    flags at 12 size 4
 QuestData size 16 align 4
     header at 0 size 8
     entity at 8 size 4
@@ -798,7 +819,7 @@ TerrainMaterialInfo size 20 align 4
 TickData size 16 align 8
     header at 0 size 8
     step at 8 size 8
-TransactionInfo size 40 align 8
+TransactionInfo size 48 align 8
     header at 0 size 8
     state at 8 size 4
     reason at 12 size 4
@@ -807,6 +828,8 @@ TransactionInfo size 40 align 8
     bricks at 24 size 8
     refusal at 32 size 4
     reserved at 36 size 4
+    holds at 40 size 4
+    created at 44 size 4
 TransactionOp size 16 align 8
     kind at 0 size 4
     reserved at 4 size 4

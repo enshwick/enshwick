@@ -190,6 +190,8 @@ pub fn definitions() -> String {
     out.push_str(
         "\t--- What a point's handler returns to refuse, on a refusable point.\n\trefuse: {},\n",
     );
+    out.push_str("\t--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.\n\ton_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),\n");
+    out.push_str("\t--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.\n\tdefine_event: (event: { name: string }) -> { send: (data: any) -> () },\n");
     out.push_str("\t--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.\n\tsettings: () -> { [string]: any },\n");
     for namespace in script::NAMESPACES {
         comment(namespace.doc(), "\t", &mut out);

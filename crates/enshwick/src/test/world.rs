@@ -653,6 +653,16 @@ pub(crate) struct FakeZones {
 }
 
 impl FakeZones {
+    /// Whether a save keeps changes in the box from `min` to `max`, as the
+    /// loader decides: wholly inside one building zone, half a metre in
+    /// from its edges.
+    pub(crate) fn kept(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        const MARGIN: f64 = 0.5;
+        self.building.iter().any(|zone| {
+            (0..3).all(|a| min[a] >= zone.min[a] + MARGIN && max[a] <= zone.max[a] - MARGIN)
+        })
+    }
+
     /// The refusal of an edit of the box from `min` to `max` by a player
     /// with the permission mask `permissions`, as the loader decides: the
     /// game's terrain tool rule for the permissions, then the building area

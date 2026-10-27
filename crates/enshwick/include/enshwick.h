@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 95
+#define ENSHWICK_ABI_MINOR 97
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -515,6 +515,42 @@ typedef struct EnshwickBuildingData {
 // Torn down.
 #define EnshwickBuildingData_TORN_DOWN 2
 
+// One field of a service table or mod event, as its layout hash sees it.
+//
+// Frozen: written as an array.
+typedef struct EnshwickLayoutField {
+  // The field's name.
+  struct EnshwickStr name;
+  // The hash of the field's name, the shape of its type, its size,
+  // alignment and offset.
+  uint64_t hash;
+} EnshwickLayoutField;
+
+// The layout of a service table or mod event, field by field.
+typedef struct EnshwickLayout {
+  // The fields, in declaration order.
+  const struct EnshwickLayoutField *fields;
+  // How many `fields` points at.
+  uint32_t count;
+  // The size of the whole type.
+  uint32_t size;
+} EnshwickLayout;
+
+// A described service, a call: one function from an input struct to an
+// answer, which one mod serves and others call, or the call a mod asks for.
+typedef struct EnshwickCallSpec {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The call's name, `<serving mod id>:<what>`.
+  struct EnshwickStr name;
+  // The incompatible version: calls of two majors share nothing.
+  uint32_t major;
+  // The input's fields and size.
+  struct EnshwickLayout input;
+  // The answer, one field, and its size.
+  struct EnshwickLayout output;
+} EnshwickCallSpec;
+
 // The game caller's context at entry of a hook chain: its stack pointer and
 // callee-saved registers, for links that tell callers apart.
 typedef struct EnshwickCallerFrame {
@@ -911,27 +947,6 @@ typedef uint32_t EnshwickEvent;
 // administrator's kill, raise none. Server only. Since minor 60.
 #define EnshwickEvent_PLAYER_DIED 20
 
-// One field of a service table or mod event, as its layout hash sees it.
-//
-// Frozen: written as an array.
-typedef struct EnshwickLayoutField {
-  // The field's name.
-  struct EnshwickStr name;
-  // The hash of the field's name, the shape of its type, its size,
-  // alignment and offset.
-  uint64_t hash;
-} EnshwickLayoutField;
-
-// The layout of a service table or mod event, field by field.
-typedef struct EnshwickLayout {
-  // The fields, in declaration order.
-  const struct EnshwickLayoutField *fields;
-  // How many `fields` points at.
-  uint32_t count;
-  // The size of the whole type.
-  uint32_t size;
-} EnshwickLayout;
-
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
   // Size and version of this struct.
@@ -1090,6 +1105,11 @@ typedef uint32_t EnshwickStatus;
 // shares, which a write would change for all of them. A mod built
 // before minor 94 reads it as an unknown failure. Since minor 94.
 #define EnshwickStatus_STATIC_HALF 10
+// The entity named is no prop: not placed from an item, or a creature
+// such as an animal, a pet or a survivor, which only the general
+// entity calls reach. A mod built before minor 96 reads it as an
+// unknown failure. Since minor 96.
+#define EnshwickStatus_NOT_A_PROP 11
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -2584,6 +2604,10 @@ typedef struct EnshwickTransactionOp {
 // A building block placed: `data` points at a `BlockPlace`. Since
 // minor 89.
 #define EnshwickTransactionOp_BLOCK 4
+// A prop placed: `data` points at a `PropPlace`. Since minor 96.
+#define EnshwickTransactionOp_PLACE_PROP 5
+// A prop removed: `data` points at a `PropRemove`. Since minor 96.
+#define EnshwickTransactionOp_REMOVE_PROP 6
 
 // Where a transaction stands, written by
 // `HostApi::transaction_status`.
@@ -2613,6 +2637,14 @@ typedef struct EnshwickTransactionInfo {
   uint32_t refusal;
   // Zero.
   uint32_t reserved;
+  // When a prop's state stopped it, or stopped its last undo, the kinds
+  // of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
+  // Since minor 96.
+  uint32_t holds;
+  // The props it placed and still holds, which
+  // `HostApi::transaction_entities`
+  // lists. Since minor 96.
+  uint32_t created;
 } EnshwickTransactionInfo;
 // Queued, or written in part: the loader spreads a large one over the
 // server's steps.
@@ -2631,11 +2663,44 @@ typedef struct EnshwickTransactionInfo {
 // its undo needs, to stay within its memory cap or because the world
 // ended; it can no longer be undone.
 #define EnshwickTransactionInfo_EXPIRED 5
+// The prop's inventory holds items, in any of its linked slots.
+#define EnshwickTransactionInfo_HOLDS_INVENTORY 1
+// It is a plant (`Growth`): any plant for a removal; for the undo of
+// a placement, one whose `Level` differs from the level it first
+// stood with.
+#define EnshwickTransactionInfo_HOLDS_GROWTH (1 << 1)
+// The `FactoryStation` has a recipe running or queued.
+#define EnshwickTransactionInfo_HOLDS_FACTORY_STATION (1 << 2)
+// A survivor is assigned to the `NpcBed`.
+#define EnshwickTransactionInfo_HOLDS_NPC_BED (1 << 3)
+// Survivors are assigned to it: `StoreAssociatedNpcIds`.
+#define EnshwickTransactionInfo_HOLDS_STORE_ASSOCIATED_NPC_IDS (1 << 4)
+// A player wrote its text: `CustomPlayerString`.
+#define EnshwickTransactionInfo_HOLDS_CUSTOM_PLAYER_STRING (1 << 5)
+// It holds more `Fuel` charges than a fresh one starts with, and does
+// not refill itself, as a well or a rain barrel does.
+#define EnshwickTransactionInfo_HOLDS_FUEL (1 << 6)
+// It is wired to other logic: `LogicGraphNodeConnected`.
+#define EnshwickTransactionInfo_HOLDS_LOGIC_GRAPH_NODE_CONNECTED (1 << 7)
+// It is a logic trigger, whose settings a player may have changed:
+// `LogicGraphTrigger` or `LogicTriggerShape`. Any trigger for a
+// removal; for the undo of a placement, one whose settings differ
+// from those it first stood with.
+#define EnshwickTransactionInfo_HOLDS_LOGIC_GRAPH_TRIGGER (1 << 8)
 // Its last undo stopped for `reason`: before writing anything, or at a
 // brick changed since or not loaded for the loader's wait limit, with
 // what it put back kept. The rest stays written and can be undone
 // again.
 #define EnshwickTransactionInfo_UNDO_REFUSED 6
+
+// A mod's handler for a call it serves.
+//
+// It gets the input, valid for the call, the answer to write, as large as
+// the spec's output, and the pointer given at serving, and answers
+// `Status::OK` only once the whole answer is written.
+// It runs on the caller's thread, any thread, possibly on several at once
+// and inside another call, and must not unwind.
+typedef EnshwickStatus (*EnshwickCallFn)(const void *input, void *output, void *user);
 
 // A map marker of the scene the server runs, one of the list
 // `HostApi::map_markers` writes.
@@ -3879,6 +3944,59 @@ typedef struct EnshwickHostApi {
                              uint32_t height,
                              uint8_t *out,
                              uint32_t capacity);
+  // Serves the call `spec` describes with `callback` and `user`, named
+  // `<id>:<call>` after the serving mod or one of its former ids;
+  // `Status::REFUSED` for another name, or a name and major served
+  // twice, `Status::BAD_ARGS` for a spec that does not read. Allowed
+  // during `enshwick_mod_init` only: `Status::TOO_LATE` once every mod
+  // is initialised. Since minor 95.
+  EnshwickStatus (*serve_call)(EnshwickModHandle me,
+                               const struct EnshwickCallSpec *spec,
+                               EnshwickCallFn callback,
+                               void *user);
+  // Asks for the call `spec` describes and writes its id to `out`.
+  // Matched against the served call by name and major once every mod is
+  // initialised: the input and the answer must agree field by field and
+  // in size, or the call stays unmatched with the reason in the log.
+  // `Status::REFUSED` when the mod asked for the name and major already
+  // with another spec, `Status::BAD_ARGS` for a spec that does not read
+  // or a null `out`. Allowed during `enshwick_mod_init` only:
+  // `Status::TOO_LATE` once every mod is initialised. Since minor 95.
+  EnshwickStatus (*find_call)(EnshwickModHandle me,
+                              const struct EnshwickCallSpec *spec,
+                              uint32_t *out);
+  // Runs the call `id` from `HostApi::find_call` on this thread: the
+  // server's handler reads `input` and writes the answer to `output`,
+  // both as large as the spec says. `Status::MISSING` while the call
+  // is unmatched or before every mod is initialised, `Status::REFUSED`
+  // when the serving mod or its handler is off, `Status::BAD_ARGS` for
+  // a null pointer or an id the mod was not given, or what the handler
+  // answers. Any thread. Since minor 95.
+  EnshwickStatus (*call)(EnshwickModHandle me, uint32_t id, const void *input, void *output);
+  // Writes the entities of the props transaction `id` of this mod placed
+  // and still holds, oldest first, up to `capacity` of them at `out`,
+  // and their number to `count`; a prop is in the world from the step
+  // after the one that placed it. `out` may be null with `capacity` 0 to
+  // learn the number. `Status::BAD_ARGS` for a null `count`;
+  // `Status::MISSING` for an id this mod did not get or one the loader
+  // forgot. Any thread. Since minor 96.
+  EnshwickStatus (*transaction_entities)(EnshwickModHandle me,
+                                         uint64_t id,
+                                         uint32_t *out,
+                                         uint32_t capacity,
+                                         uint32_t *count);
+  // Writes to `kept` 1 when a save keeps changes in the box from `min`
+  // to `max`, in metres, and 0 when not: the game saves a world only
+  // inside its bases' zones, so the box must lie wholly inside one, half
+  // a metre in from its edges. `Status::BAD_ARGS` for a null pointer,
+  // a corner that is not finite or a `max` below `min`;
+  // `Status::MISSING` while no world is loaded or on a build without
+  // the zone list. On the server's game thread at a quiet moment only:
+  // `Status::WRONG_THREAD` elsewhere or inside a step. Since minor 96.
+  EnshwickStatus (*world_persists)(EnshwickModHandle me,
+                                   const double (*min)[3],
+                                   const double (*max)[3],
+                                   uint8_t *kept);
   // Up to `capacity` map markers of the scene the server runs and how
   // many there are: what the scene's global chunk places, read from the
   // game's archive once per scene on a thread of the loader's;
@@ -3888,7 +4006,7 @@ typedef struct EnshwickHostApi {
   // count, and a null `count` is not written. On the server's game
   // thread at a quiet moment (`Status::WRONG_THREAD` elsewhere or
   // inside a step); `Status::MISSING` while no world runs or when the
-  // scene does not read on this build. Since minor 95.
+  // scene does not read on this build. Since minor 97.
   EnshwickStatus (*map_markers)(EnshwickModHandle me,
                                 struct EnshwickMapMarkerInfo *out,
                                 uint32_t entry_size,
@@ -4002,6 +4120,34 @@ typedef struct EnshwickPlayerDeathData {
 #define EnshwickPlayerDeathData_SHROUD 2
 // Out of breath, under water.
 #define EnshwickPlayerDeathData_SUFFOCATED 3
+
+// A prop a transaction places, as a player places one from an item, for
+// `TransactionOp::PLACE_PROP`.
+typedef struct EnshwickPropPlace {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The item whose placed template the prop is.
+  uint32_t item;
+  // Zero.
+  uint32_t reserved;
+  // Where it stands, in metres.
+  double position[3];
+  // Which way it faces, a quaternion x, y, z, w.
+  float orientation[4];
+} EnshwickPropPlace;
+
+// A prop a transaction removes, for `TransactionOp::REMOVE_PROP`.
+typedef struct EnshwickPropRemove {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The prop's entity.
+  uint32_t entity;
+  // `PropRemove::DISCARD_STATE` or none.
+  uint32_t flags;
+} EnshwickPropRemove;
+// Removes the prop even when it holds state a player would lose (see
+// `TransactionInfo::holds`); without it, such a prop is refused.
+#define EnshwickPropRemove_DISCARD_STATE 1
 
 // The data of `Event::QUEST_COMPLETED`.
 typedef struct EnshwickQuestData {

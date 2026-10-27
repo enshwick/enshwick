@@ -14,6 +14,9 @@ mod tests {
     const TRANSFORM: u32 = 1;
     const USED_ITEM: u32 = 2;
     const BED: u32 = 3;
+    const ANIMAL: u32 = 4;
+    const SURVIVOR: u32 = 5;
+    const ALTAR: u32 = 6;
     const TURNED: [f32; 4] = [
         0.0,
         core::f32::consts::FRAC_1_SQRT_2,
@@ -86,6 +89,9 @@ mod tests {
         enshwick::test::FakeHost::new()
             .type_hash("current_transform", TRANSFORM)
             .type_hash("used_item", USED_ITEM)
+            .type_hash("animal_saved", ANIMAL)
+            .type_hash("active_npc_state_saved", SURVIVOR)
+            .type_hash("base_id_component", ALTAR)
             .constant("current_transform.transform", 0)
             .constant("world_transform.orientation", 24)
             .constant("item_info.placed_entity", 0x3c0)
@@ -142,6 +148,33 @@ mod tests {
         assert_eq!(
             world.props_in([f64::NAN, 0.0, 0.0], [1.0; 3]),
             Err(WorldError::Refused)
+        );
+    }
+
+    #[test]
+    fn creatures_and_flame_altars_are_no_props() {
+        let fake = prop(fake(), 10, 50, [10.0; 3], STILL);
+        let fake = prop(fake, 11, 51, [11.0; 3], STILL).component(11, ANIMAL, &[0; 4]);
+        let fake = prop(fake, 12, 52, [12.0; 3], STILL).component(12, SURVIVOR, &[0; 4]);
+        let fake = prop(fake, 13, 53, [13.0; 3], STILL).component(13, ALTAR, &[0; 4]);
+        let (_loader, world) = start(fake);
+        let props = world.props_in([0.0; 3], [20.0; 3]).unwrap();
+        let entities: Vec<Entity> = props.iter().map(|prop| prop.entity).collect();
+        assert_eq!(entities, [Entity(10)]);
+    }
+
+    #[test]
+    fn props_are_missing_on_a_build_without_the_creature_marks() {
+        let fake = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", TRANSFORM)
+            .type_hash("used_item", USED_ITEM)
+            .constant("current_transform.transform", 0)
+            .constant("world_transform.orientation", 24)
+            .constant("item_info.placed_entity", 0x3c0);
+        let (_loader, world) = start(prop(fake, 10, 50, [10.0; 3], STILL));
+        assert_eq!(
+            world.props_in([0.0; 3], [20.0; 3]),
+            Err(WorldError::Missing)
         );
     }
 

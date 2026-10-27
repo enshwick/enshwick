@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 95;
+pub const ABI_MINOR: u16 = 97;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -481,6 +481,11 @@ impl Status {
     /// shares, which a write would change for all of them. A mod built
     /// before minor 94 reads it as an unknown failure. Since minor 94.
     pub const STATIC_HALF: Self = Self(10);
+    /// The entity named is no prop: not placed from an item, or a creature
+    /// such as an animal, a pet or a survivor, which only the general
+    /// entity calls reach. A mod built before minor 96 reads it as an
+    /// unknown failure. Since minor 96.
+    pub const NOT_A_PROP: Self = Self(11);
 
     /// Whether this is [`Status::OK`].
     ///
@@ -693,12 +698,19 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 166 * 8);
-    assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 165 * 8);
+    assert!(size_of::<HostApi>() == 24 + 171 * 8);
+    assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 170 * 8);
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 163 * 8);
     assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 164 * 8);
     assert!(size_of::<FogInfo>() == 8 + 16 + 16);
+    assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 165 * 8);
+    assert!(core::mem::offset_of!(HostApi, call) == 24 + 167 * 8);
+    assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
+    assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 168 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 169 * 8);
+    assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
+    assert!(size_of::<PropRemove>() == 8 + 8);
     assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);
     assert!(core::mem::offset_of!(HostApi, world_quiet) == 24 + 162 * 8);
     assert!(size_of::<VoxelWrite>() == 8 + 24 + 16);
@@ -711,7 +723,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 160 * 8);
     // Frozen: read as an array.
     assert!(size_of::<TransactionOp>() == 16);
-    assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8);
+    assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8 + 8);
     // Frozen: written as an array.
     assert!(size_of::<Voxel>() == 4);
     assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);

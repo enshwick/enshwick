@@ -1,0 +1,48 @@
+---
+source: crates/cargo-enshwick/src/points/calls.rs
+expression: code
+---
+//! The call `you.trading-post:price-of` v2 of you.trading-post 1.2.0.
+//!
+//! Written by `cargo enshwick call you.trading-post:price-of`. Write it again for a newer
+//! you.trading-post rather than edit it; the checks at the end hold it to the server's
+//! layout. Declare this module `pub`.
+
+/// What the trading post pays for an item.
+#[enshwick::call(name = "you.trading-post:price-of", output = u32, version = 2)]
+#[derive(Clone, Copy, Debug)]
+pub struct PriceOf {
+    /// The item.
+    pub item: u32,
+    /// The `deal` of the input.
+    pub deal: Deal,
+}
+
+/// How the item changes hands.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+pub enum Deal {
+    /// `Buy`, as `you.trading-post` names it.
+    Buy = 0,
+    /// `Sell`, as `you.trading-post` names it.
+    Sell = 1,
+}
+
+const _: () = {
+    assert!(
+        <PriceOf as enshwick::services::Call>::LAYOUT[0].hash == 0x0000_0000_0000_0001,
+        "`item` differs from the server's",
+    );
+    assert!(
+        <PriceOf as enshwick::services::Call>::LAYOUT[1].hash == 0x0000_0000_0000_0002,
+        "`deal` differs from the server's",
+    );
+    assert!(
+        <PriceOf as enshwick::services::Call>::OUTPUT[0].hash == 0x0000_0000_0000_0011,
+        "the answer differs from the server's",
+    );
+    assert!(
+        size_of::<PriceOf>() == 8,
+        "the input's size differs from the server's"
+    );
+};

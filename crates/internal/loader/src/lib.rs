@@ -23,6 +23,8 @@ mod bases;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
+#[cfg(windows)]
+mod calls;
 pub mod carry;
 #[cfg(windows)]
 mod catalogue;
@@ -151,6 +153,7 @@ mod points;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+pub mod prop_holds;
 #[cfg(windows)]
 mod rate_links;
 #[cfg_attr(

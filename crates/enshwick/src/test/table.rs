@@ -58,7 +58,8 @@ use services::{
     declare_content, define_event, publish, send_event, service, subscribe, subscribe_event,
 };
 use transactions::{
-    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
+    transaction_undo,
 };
 use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
@@ -67,7 +68,8 @@ use world::{
     hosting, keep_game_settings, map_markers, notify, player, players, rename_filter, run_console,
     save_world, server_world, set_game_settings, set_label, set_time_of_day, set_time_speed,
     set_weather, spawn, status, teleport, terrain_edit, terrain_materials, time_of_day,
-    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_quiet,
+    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_persists,
+    world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -77,8 +79,12 @@ pub(crate) struct OpenRequest {
     pub(crate) user: usize,
 }
 
-/// A mod event handler: name, layout, handler and the mod's pointer.
-pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, ModEventFn, usize);
+/// A defined mod event: name, layout and the size of its data.
+pub(crate) type DefinedEvent = (String, Vec<(String, u64)>, u32);
+
+/// A mod event handler: name, layout, the bytes it reads, handler and the
+/// mod's pointer.
+pub(crate) type ModEventSubscription = (String, Vec<(String, u64)>, u32, ModEventFn, usize);
 
 /// What the installed fake answers and what it has recorded.
 pub(crate) struct State {
@@ -103,11 +109,11 @@ pub(crate) struct State {
     pub(crate) code_patches: Vec<(u64, Vec<u8>, Vec<u8>)>,
     pub(crate) published: Vec<super::FakeService>,
     /// Mod events the mod defined: name and layout, by id.
-    pub(crate) defined_events: Vec<(String, Vec<(String, u64)>)>,
+    pub(crate) defined_events: Vec<DefinedEvent>,
     /// Mod event handlers: name, layout, handler, pointer.
     pub(crate) mod_event_subscriptions: Vec<ModEventSubscription>,
     /// The names of the mod events the mod sent, in order.
-    pub(crate) sent_events: Vec<String>,
+    pub(crate) sent_events: Vec<(String, Vec<u8>)>,
     /// The migrations the mod declared.
     pub(crate) migrations: Option<super::FakeMigrations>,
     /// Content ids the mod declared, in order.
@@ -229,6 +235,8 @@ pub(crate) struct State {
     pub(crate) stats: super::stats::FakeStats,
     /// Extension points the mod defined and links it attached.
     pub(crate) points: super::points::FakePoints,
+    /// Calls the mod serves and asks for.
+    pub(crate) calls: super::calls::FakeCalls,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
@@ -441,6 +449,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         summon_items: Vec::new(),
         stats: super::stats::FakeStats::default(),
         points: super::points::FakePoints::default(),
+        calls: super::calls::FakeCalls::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -685,4 +694,9 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_status,
     transaction_commit_for,
     world_quiet,
+    serve_call: super::calls::serve_call,
+    find_call: super::calls::find_call,
+    call: super::calls::call,
+    transaction_entities,
+    world_persists,
 };

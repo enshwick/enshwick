@@ -63,6 +63,7 @@ end)
 | `enshwick.on(event, handler)` | calls `handler` on each loader [event](events.md) or typed [game event](#game-events), with its data as a table; only at the top level of `main.luau` |
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
+| `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
@@ -158,6 +159,34 @@ as an event handler. An error or an answer of the wrong type turns the mod
 off, and the answer stays as it was. An owner version with another layout
 leaves the link idle, with the reason in the log, until the module is
 written again.
+
+## Mod events
+
+A Luau mod hears another mod's [events](services.md) and sends its own.
+`cargo enshwick event <owner>:<event> --from <owner's DLL> --out
+events/<event>.luau` writes the description of an event the owner lists in
+its `manifest!(events: [..])`. A description may also be written by hand:
+each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
+`bool`, `entity` or `guid`, laid out and hashed as Rust lays out a
+`#[repr(C)]` struct of those fields:
+
+```luau
+local greeted = enshwick.define_event({ name = "you.greeter:greeted", fields = {
+    { name = "player", read = "entity" },
+    { name = "times", read = "u16" },
+} })
+
+enshwick.on_mod_event(require("./events/sold"), function(sold)
+    greeted.send({ player = sold.character, times = 1 })
+end)
+```
+
+The loader matches a subscription by its layout hashes, as for a Rust mod,
+and leaves it idle, with the reason in the log, when the defining mod's
+event differs or is smaller. An event a script defines has primitive fields
+only. `define_event` raises an error for a new event, or for changed
+fields, after the start: either takes the next start. A `send` before
+`main.luau` has finished reaches no one.
 
 ## Settings
 

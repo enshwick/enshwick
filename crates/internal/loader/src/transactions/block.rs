@@ -3,6 +3,7 @@
 use enshwick::abi::Status;
 
 use super::paste::Region;
+use super::props::Prop;
 
 /// The game's box for a block write, built by its own block builder from
 /// the shape, the position and the rotation (server 399, client 426); the
@@ -123,8 +124,13 @@ impl EventLayout {
     /// The event's bytes with the box of `region`, the owner `actor`, and
     /// the place `position` turned by `rotation`; the time stamp is left
     /// for the game's push.
-    fn event(self, region: Region, position: [f64; 3], rotation: [f32; 4], actor: u32) -> Event {
-        let (min, max) = region.metres();
+    fn event(
+        self,
+        (min, max): ([f64; 3], [f64; 3]),
+        position: [f64; 3],
+        rotation: [f32; 4],
+        actor: u32,
+    ) -> Event {
         let mut event = Event(Some(vec![0; self.size]));
         event.floats(self.position, metres(position));
         event.floats(self.orientation, rotation);
@@ -140,7 +146,7 @@ impl EventLayout {
     /// place does (server 399, client 426); `None` when a field passes the
     /// event's size.
     pub(crate) fn place(self, block: &Block, actor: u32) -> Option<Vec<u8>> {
-        let mut event = self.event(block.region, block.position, block.rotation, actor);
+        let mut event = self.event(block.region.metres(), block.position, block.rotation, actor);
         event.put(self.material, &block.feedback.to_le_bytes());
         event.put(self.item?, &block.shape.to_le_bytes());
         event.0
@@ -151,7 +157,25 @@ impl EventLayout {
     pub(crate) fn tear_down(self, region: Region, actor: u32) -> Option<Vec<u8>> {
         let (min, max) = region.metres();
         let middle = [0, 1, 2].map(|axis| f64::midpoint(min[axis], max[axis]));
-        self.event(region, middle, [0.0, 0.0, 0.0, 1.0], actor).0
+        self.event((min, max), middle, [0.0, 0.0, 0.0, 1.0], actor)
+            .0
+    }
+
+    /// The `BuildingPlaceEvent` of `prop` placed for `actor`, 0 for none,
+    /// tracking its item, with its box; as the game's place-prop op raises
+    /// it, but with no feedback, which the loader does not look up for a
+    /// prop.
+    pub(crate) fn place_prop(self, prop: &Prop, actor: u32) -> Option<Vec<u8>> {
+        let mut event = self.event(prop.reach(), prop.metres(), prop.orientation, actor);
+        event.put(self.item?, &prop.item.to_le_bytes());
+        event.0
+    }
+
+    /// The `BuildingTearDownEvent` of `prop` removed for `actor`, 0 for
+    /// none, with its box, as the game's tear-down raises it.
+    pub(crate) fn remove_prop(self, prop: &Prop, actor: u32) -> Option<Vec<u8>> {
+        self.event(prop.reach(), prop.metres(), prop.orientation, actor)
+            .0
     }
 }
 
@@ -255,6 +279,32 @@ mod tests {
             (66, 7),
             "the shape tracks the block"
         );
+    }
+
+    #[test]
+    fn a_prop_s_place_event_carries_its_box_item_and_owner() {
+        let mut prop = Prop::for_tests(88, [100.0, 40.0, 100.0]);
+        prop.local_box = Some(([-1.0, 0.0, -1.0], [1.0, 2.0, 1.0]));
+        let bytes = layout().place_prop(&prop, 7).unwrap();
+        assert_eq!(f32_at(&bytes, 0x8), 100.0);
+        assert_eq!(f32_at(&bytes, 0x24 + 4), 40.0);
+        assert_eq!(f32_at(&bytes, 0x30 + 4), 42.0);
+        assert_eq!(u32_at(&bytes, 0x3c), 0, "no feedback for a prop");
+        assert_eq!((u32_at(&bytes, 0x40), u32_at(&bytes, 0x44)), (88, 7));
+    }
+
+    #[test]
+    fn a_prop_s_tear_down_event_carries_its_box_and_owner() {
+        let layout = EventLayout {
+            item: None,
+            owner: 0x40,
+            ..layout()
+        };
+        let prop = Prop::for_tests(88, [100.0, 40.0, 100.0]);
+        let bytes = layout.remove_prop(&prop, 9).unwrap();
+        assert_eq!(f32_at(&bytes, 0x8), 100.0);
+        assert_eq!(f32_at(&bytes, 0x24), 98.0);
+        assert_eq!(u32_at(&bytes, 0x40), 9);
     }
 
     #[test]

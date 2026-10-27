@@ -20,9 +20,32 @@ use crate::pinned;
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::IN_BUILDING_AREA.id(),
     pinned::building::NO_BUILD_TEST.id(),
+    pinned::building::ZONE_ENTRY_IGNORED.id(),
+    pinned::building::ZONE_ENTRY_SIZE.id(),
+    pinned::building::ZONE_LIST_COUNT.id(),
+    pinned::building::ZONE_LIST_ENTRIES.id(),
     pinned::building::ZONE_TOUCHES.id(),
     pinned::server::BUILD_ZONE_SYSTEM.id(),
 ];
+
+/// How far inside a base's zone a box must stay for the save to keep it,
+/// in 32.32 fixed-point metres: half a metre, since where the save's cut
+/// falls at a zone's edge is not known exactly.
+const KEPT_MARGIN: i64 = 1 << 31;
+
+/// Whether a save keeps changes in the box `corners`: it lies wholly inside
+/// one of `zones`, the bases' zones as the save gathers them, each two
+/// corners in any order, by [`KEPT_MARGIN`] on every side. The game saves a
+/// world only inside its bases.
+pub(crate) fn kept(zones: &[[[i64; 3]; 2]], corners: [[i64; 3]; 2]) -> bool {
+    zones.iter().any(|&[a, b]| {
+        (0..3).all(|axis| {
+            let low = a[axis].min(b[axis]).saturating_add(KEPT_MARGIN);
+            let high = a[axis].max(b[axis]).saturating_sub(KEPT_MARGIN);
+            corners[0][axis] >= low && corners[1][axis] <= high
+        })
+    })
+}
 
 /// The masks of the two permission bits the rule reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -57,14 +80,17 @@ impl EditBox {
     /// The box of `check`; [`Status::BAD_ARGS`] for a corner that is not
     /// finite or a `max` below `min`.
     pub(crate) fn new(check: &BuildRights) -> Result<Self, Status> {
-        let finite = check.min.iter().chain(&check.max).all(|v| v.is_finite());
-        if !finite || (0..3).any(|a| check.max[a] < check.min[a]) {
+        Self::between(check.min, check.max)
+    }
+
+    /// The box from `min` to `max`; [`Status::BAD_ARGS`] for a corner that
+    /// is not finite or a `max` below `min`.
+    pub(crate) fn between(min: [f64; 3], max: [f64; 3]) -> Result<Self, Status> {
+        let finite = min.iter().chain(&max).all(|v| v.is_finite());
+        if !finite || (0..3).any(|a| max[a] < min[a]) {
             return Err(Status::BAD_ARGS);
         }
-        Ok(Self {
-            min: check.min,
-            max: check.max,
-        })
+        Ok(Self { min, max })
     }
 
     /// The box as the game's zone tests take it: min x, y, z, a pad, then
@@ -126,11 +152,12 @@ pub(crate) fn refusal(
 }
 
 #[cfg(windows)]
-pub(crate) use game::check;
+pub(crate) use game::{check, kept_by_save};
 
 #[cfg(windows)]
 mod game {
     use enshwick::abi::{BuildRights, Status};
+    use enshwick::altars::MAX_ZONES;
 
     use super::{EditBox, Permissions, Zones, refusal};
     use crate::host::Loader;
@@ -209,6 +236,55 @@ mod game {
             };
             found & STRICT != 0
         }
+    }
+
+    /// Whether a save keeps changes in `edit`, as [`super::kept`] decides
+    /// from the bases' zones the server holds; on the game thread at a
+    /// quiet moment. [`Status::MISSING`] while no world is loaded or on a
+    /// build without the zone list.
+    pub(crate) fn kept_by_save(loader: &Loader, edit: EditBox) -> Result<bool, Status> {
+        let server = crate::world::server()?;
+        let at = |id| loader.offset(id).ok_or(Status::MISSING);
+        let zones_at = at(pinned::server::BUILD_ZONE_SYSTEM)?;
+        let entries_at = at(pinned::building::ZONE_LIST_ENTRIES)?;
+        let count_at = at(pinned::building::ZONE_LIST_COUNT)?;
+        let entry_size = at(pinned::building::ZONE_ENTRY_SIZE)?;
+        let ignored_at = at(pinned::building::ZONE_ENTRY_IGNORED)?;
+        // SAFETY: `server` comes from `crate::world::server`, on the game
+        // thread that alone writes it; the table's `server.build_zone_system`
+        // offset holds its building-zone object, made when the world starts.
+        let zones: usize = unsafe { read(server, zones_at) };
+        if zones == 0 {
+            return Err(Status::MISSING);
+        }
+        // SAFETY: `zones` is the live building-zone object, whose first list,
+        // the bases' zones, keeps its entries pointer at the table's
+        // `building.zone_list_entries` offset; read on the game thread.
+        let entries: usize = unsafe { read(zones, entries_at) };
+        // SAFETY: as above, its entry count at `building.zone_list_count`.
+        let count: usize = unsafe { read(zones, count_at) };
+        if count > MAX_ZONES || (count > 0 && entries == 0) {
+            return Err(Status::MISSING);
+        }
+        let mut boxes = Vec::with_capacity(count);
+        for i in 0..count {
+            let entry = entries + i * entry_size;
+            // SAFETY: `entries` is non-zero and `i` below the list's count, so
+            // `entry` is a live entry of `building.zone_entry_size` bytes;
+            // its u8 ignored mark sits at `building.zone_entry_ignored`.
+            let ignored: u8 = unsafe { read(entry, ignored_at) };
+            if ignored != 0 {
+                continue;
+            }
+            // SAFETY: `entry` is a live entry, which starts with its two
+            // corners as six i64 in 32.32 fixed-point metres.
+            let corners: [i64; 6] = unsafe { read(entry, 0) };
+            boxes.push([
+                [corners[0], corners[1], corners[2]],
+                [corners[3], corners[4], corners[5]],
+            ]);
+        }
+        Ok(super::kept(&boxes, edit.corners()))
     }
 
     /// The refusal of `check`'s edit, or [`BuildRights::ALLOWED`]; on the
@@ -343,6 +419,35 @@ mod tests {
             refusal(BITS.edit_world, BITS, CORNERS, &mut outside),
             BuildRights::ALLOWED
         );
+    }
+
+    /// Metres as 32.32 fixed point.
+    fn fixed(corner: [f64; 3]) -> [i64; 3] {
+        enshwick::ecs::fixed(corner)
+    }
+
+    #[test]
+    fn a_save_keeps_a_box_well_inside_one_base_zone() {
+        let base = [fixed([0.0; 3]), fixed([40.0; 3])];
+        let other = [fixed([40.0, 0.0, 0.0]), fixed([80.0, 40.0, 40.0])];
+        let zones = [base, other];
+        assert!(kept(&zones, [fixed([1.0; 3]), fixed([39.0; 3])]));
+        assert!(
+            !kept(&zones, [fixed([0.2; 3]), fixed([10.0; 3])]),
+            "too close to the edge"
+        );
+        assert!(
+            !kept(&zones, [fixed([30.0, 1.0, 1.0]), fixed([50.0, 2.0, 2.0])]),
+            "across two zones"
+        );
+        assert!(!kept(&zones, [fixed([100.0; 3]), fixed([101.0; 3])]));
+        assert!(!kept(&[], [fixed([1.0; 3]), fixed([2.0; 3])]));
+    }
+
+    #[test]
+    fn a_zone_s_corners_count_in_any_order() {
+        let zones = [[fixed([40.0; 3]), fixed([0.0; 3])]];
+        assert!(kept(&zones, [fixed([1.0; 3]), fixed([2.0; 3])]));
     }
 
     #[test]

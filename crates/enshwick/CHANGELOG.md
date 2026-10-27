@@ -8,6 +8,22 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Calls, described services: `#[call]` declares one function from a
+  `repr(C)` input to an answer, `Load::serve_call` serves it and
+  `Load::caller` gives a `Caller` that runs it from any thread
+  (`services::Call`, `CallError`); `manifest!(calls: [..])` puts its schema
+  into the manifest. `DescribedCall`, `Load::described_caller` and
+  `Load::serve_described_call` do the same with bytes, for a runtime that
+  knows a call from its schema. The loader matches callers by name, major,
+  fields and sizes once every mod is initialised (`HostApi::serve_call`,
+  `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
+  them (`Installed::serve_call`, `call`, `served_calls`). A call's input
+  and answer have no padding, which `Shape::PADDING_FREE` reports.
+- `Load::on_described_mod_event` and `Load::define_described_event`
+  (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
+  event described at run time, its data as bytes in the definer's layout;
+  `manifest!(events: [..])` puts the schema of each listed `#[event]` into
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
 - `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
   copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
   read what the player has uncovered, as a `FogState` and `FogImage`; the
@@ -118,11 +134,27 @@ Each entry names the pull request that made the change.
   `FakeHost::static_half`: a write to the static half of a component
   type, the set-up data every entity of a template shares, is refused
   (#568).
+- `Transaction::place_prop`, `remove_prop` and
+  `remove_prop_discarding_state` place and remove props inside a
+  transaction, with undo; `World::transaction_entities` lists the props a
+  transaction placed. A prop that holds state a player would lose (items,
+  growth, a production queue, assigned survivors, written text, fuel,
+  logic wiring, a logic trigger) is never
+  removed or taken away by an undo unless the mod opts in:
+  `WorldError::HoldsState(PropState)` names what it holds. The op kinds,
+  records and `transaction_entities` are ABI minor 96 (#552).
+- `World::persists` tells whether a save keeps changes in a box: the
+  game saves a world only inside its bases' zones, so props, blocks and
+  terrain changed elsewhere are gone after a restart, a mod's as a
+  player's. `HostApi::world_persists` is ABI minor 96 (#552).
+- `WorldError::NotAProp` (`Status::NOT_A_PROP`, ABI minor 96): creatures
+  placed from items (animals, pets, survivors) and flame altars are no
+  props; prop removal refuses them in either mode (#552).
 
 ### Changed
 
 - `Map::markers` reads the markers the scene places from the game's data
-  through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.95), once
+  through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.97), once
   per scene; `MapMarker` no longer names an entity (#573).
 - An item a mod or pack changes by name keeps that change over its own
   selection of the same field, so a selection can leave out exceptions
@@ -137,9 +169,17 @@ Each entry names the pull request that made the change.
   item checks of `World::props_in` and `Transaction::place_block` work from
   world start: the loader finds the item registry without waiting for a
   player to join (#551).
+- `World::props_in` and `World::capture` leave out creatures placed from
+  items (animals, pets, survivors) and flame altars, which are no props,
+  and answer `WorldError::Missing` on a game build without their marks
+  (#552).
 
 ### Fixed
 
+- The loader's profile names the survivors feature `survivors`; it showed a
+  mod id.
+- The loader and the fake leave a mod event subscription idle when it
+  reads more bytes than the definer sends.
 - `Map::markers` listed no marker on a dedicated server, whose marker
   entities the entity walk does not find (#573).
 - `World::component` and `World::get` read the static half of a component

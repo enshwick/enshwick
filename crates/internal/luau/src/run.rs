@@ -18,9 +18,11 @@ use crate::bridge::{arguments, from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
 use crate::files::{Requirer, Scripts};
-use crate::points::{PointDesc, Read, decode, encode};
+use crate::points::{EventDesc, PointDesc, Read, decode, encode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
 use enshwick::points::{DescribedVerdict, Order};
+use enshwick::services::DescribedEmitter;
+use std::sync::OnceLock;
 
 /// How much a mod's scripts may take.
 ///
@@ -124,8 +126,10 @@ pub(crate) struct Vm {
     handlers: Mutex<Vec<(Subscription, Function)>>,
     /// The descriptions of the points the scripts extend.
     points: Mutex<Vec<PointDesc>>,
+    /// The descriptions of the mod events the scripts subscribe to.
+    events: Mutex<Vec<EventDesc>>,
     /// `enshwick.refuse`, which a point's handler returns to refuse.
-    refuse: std::sync::OnceLock<Table>,
+    refuse: OnceLock<Table>,
 }
 
 pub(crate) struct Inner {
@@ -140,6 +144,11 @@ pub(crate) struct Inner {
     vm: ArcSwapOption<Vm>,
     /// The subscriptions made at start, the only ones a reload can serve.
     subscribed: Mutex<Vec<Subscription>>,
+    /// The mod events the scripts define, each with the emitter the loader
+    /// gives once `main.luau` ran at start.
+    defined: Mutex<Vec<Defined>>,
+    /// Whether the start is over, so a new definition waits for the next.
+    started: AtomicBool,
     /// The game event types of the build, with their sizes, read at start.
     event_types: Vec<(&'static str, u32)>,
     off: AtomicBool,
@@ -148,6 +157,13 @@ pub(crate) struct Inner {
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
     peak: AtomicUsize,
+}
+
+/// A mod event the scripts define: its description and the emitter the
+/// loader hands back.
+struct Defined {
+    desc: EventDesc,
+    emitter: Arc<OnceLock<DescribedEmitter>>,
 }
 
 /// A running Luau mod.
@@ -382,6 +398,8 @@ pub fn start(
         namespaces,
         vm: ArcSwapOption::empty(),
         subscribed: Mutex::new(Vec::new()),
+        defined: Mutex::new(Vec::new()),
+        started: AtomicBool::new(false),
         event_types,
         off: AtomicBool::new(false),
         calls: AtomicU64::new(0),
@@ -406,6 +424,24 @@ pub fn start(
     inner.vm.store(Some(vm));
     inner.subscribed.relock().clone_from(&events);
     subscribe(&inner, load, events)?;
+    let defined: Vec<(
+        enshwick::services::DescribedEvent,
+        Arc<OnceLock<DescribedEmitter>>,
+    )> = inner
+        .defined
+        .relock()
+        .iter()
+        .map(|d| (d.desc.event.clone(), Arc::clone(&d.emitter)))
+        .collect();
+    for (event, emitter) in defined {
+        // SAFETY: `EventDesc::parse_definition` accepts only primitive
+        // fields whose hashes it worked out from their reads and offsets,
+        // and `encode` writes each primitive's valid bytes, a bool as 0 or
+        // 1; every send goes through the table `define_event` made for this
+        // description, which a reload cannot change.
+        let _first = emitter.set(unsafe { load.define_described_event(&event) }?);
+    }
+    inner.started.store(true, Ordering::Release);
 
     let usage = Arc::downgrade(&inner);
     load.add_status(move || {
@@ -469,6 +505,25 @@ fn subscribe(
                         handled.run_point(&key, &desc, input, answer)
                     })
                 }?;
+            }
+            Subscription::ModEvent(name) => {
+                let desc = inner
+                    .vm
+                    .load()
+                    .as_ref()
+                    .and_then(|vm| {
+                        vm.events
+                            .relock()
+                            .iter()
+                            .find(|d| d.event.name == *name)
+                            .cloned()
+                    })
+                    .ok_or_else(|| Off::new(format!("mod event {name} has no description")))?;
+                let key = sub.clone();
+                let read = Read::Struct(desc.fields.clone());
+                load.on_described_mod_event(&desc.event, move |data| {
+                    handled.deliver(&key, |lua, _| decode(lua, data, 0, &read));
+                })?;
             }
             Subscription::Raw(spec) => {
                 let (ty, reader) = RawReader::resolve(load, spec, &inner.event_types)?;
@@ -590,7 +645,8 @@ impl Inner {
             starting: AtomicBool::new(true),
             handlers: Mutex::new(Vec::new()),
             points: Mutex::new(Vec::new()),
-            refuse: std::sync::OnceLock::new(),
+            events: Mutex::new(Vec::new()),
+            refuse: OnceLock::new(),
         });
         let api = self
             .globals(&vm, scripts)
@@ -640,6 +696,41 @@ impl Inner {
                     }
                 }
                 vm.subscribe("enshwick.extend", sub, handler)
+            })?,
+        )?;
+        let weak = Arc::downgrade(vm);
+        api.raw_set(
+            "on_mod_event",
+            lua.create_function(move |_, (event, handler): (Table, Function)| {
+                let vm = weak
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                let desc = EventDesc::parse(&event)?;
+                let sub = Subscription::ModEvent(desc.event.name.clone());
+                {
+                    let mut events = vm.events.relock();
+                    match events.iter().find(|d| d.event.name == desc.event.name) {
+                        Some(known) if *known != desc => {
+                            return Err(mlua::Error::runtime(format!(
+                                "enshwick.on_mod_event: {} is described twice, differently",
+                                desc.event.name
+                            )));
+                        }
+                        Some(_) => {}
+                        None => events.push(desc),
+                    }
+                }
+                vm.subscribe("enshwick.on_mod_event", sub, handler)
+            })?,
+        )?;
+        let me = Weak::clone(&self.me);
+        api.raw_set(
+            "define_event",
+            lua.create_function(move |lua, event: Table| {
+                let inner = me
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                inner.define_event(lua, &event)
             })?,
         )?;
         let weak = Arc::downgrade(vm);
@@ -813,6 +904,58 @@ impl Inner {
         self.deliver(&Subscription::Loader(kind.event()), |lua, scope| {
             to_lua(lua, scope, data.clone(), kind.data())
         });
+    }
+
+    /// The emitter table of the mod event `event` describes: defined with
+    /// the loader once `main.luau` ran at start, or the one defined then
+    /// for a reload.
+    fn define_event(&self, lua: &Lua, event: &Table) -> mlua::Result<Table> {
+        let desc = EventDesc::parse_definition(event)?;
+        let emitter = {
+            let mut defined = self.defined.relock();
+            match defined
+                .iter()
+                .find(|d| d.desc.event.name == desc.event.name)
+            {
+                Some(known) if known.desc != desc => {
+                    return Err(mlua::Error::runtime(format!(
+                        "enshwick.define_event: {} changed its fields; the change takes the next start",
+                        desc.event.name
+                    )));
+                }
+                Some(known) => Arc::clone(&known.emitter),
+                None if self.started.load(Ordering::Acquire) => {
+                    return Err(mlua::Error::runtime(format!(
+                        "enshwick.define_event: {} is defined from the next start",
+                        desc.event.name
+                    )));
+                }
+                None => {
+                    let emitter = Arc::new(OnceLock::new());
+                    defined.push(Defined {
+                        desc: desc.clone(),
+                        emitter: Arc::clone(&emitter),
+                    });
+                    emitter
+                }
+            }
+        };
+        let read = Read::Struct(desc.fields);
+        let size = usize::try_from(desc.event.size).unwrap_or(0);
+        let table = lua.create_table()?;
+        table.raw_set(
+            "send",
+            lua.create_function(move |_, data: LuaValue| {
+                let mut bytes = vec![0u8; size];
+                encode(&data, &read, &mut bytes, 0)?;
+                if let Some(emitter) = emitter.get() {
+                    emitter.send(&bytes);
+                }
+                Ok(())
+            })?,
+        )?;
+        table.set_readonly(true);
+        Ok(table)
     }
 
     /// Runs the handlers of the point `sub` on its `input`, the answer so

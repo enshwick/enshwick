@@ -28,6 +28,7 @@ use entries::build::{
     build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,
     type_hash, type_size,
 };
+use entries::calls::{call, find_call, serve_call};
 use entries::content::{
     add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
     game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
@@ -57,7 +58,8 @@ use entries::services::{
     service, subscribe, subscribe_event,
 };
 use entries::transactions::{
-    transaction_commit, transaction_commit_for, transaction_status, transaction_undo,
+    transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
+    transaction_undo,
 };
 use entries::ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use entries::world::{
@@ -66,7 +68,8 @@ use entries::world::{
     keep_game_settings, map_markers, notify, player, players, rename_filter, run_console,
     save_world, server_world, set_game_settings, set_label, set_time_of_day, set_time_speed,
     set_weather, spawn, status, teleport, terrain_edit, terrain_materials, time_of_day,
-    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_quiet,
+    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_persists,
+    world_quiet,
 };
 pub(crate) use join::{
     Wanted, apply_join_values, apply_server_value, join_mods, join_mods_off, join_values,
@@ -781,6 +784,11 @@ pub(crate) static API: HostApi = HostApi {
     world_quiet,
     fog_open,
     fog_read,
+    serve_call,
+    find_call,
+    call,
+    transaction_entities,
+    world_persists,
     map_markers,
 };
 

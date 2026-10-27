@@ -730,3 +730,36 @@ pub(crate) extern "system" fn build_rights(
         }
     })
 }
+
+pub(crate) extern "system" fn world_persists(
+    me: ModHandle,
+    min: *const [f64; 3],
+    max: *const [f64; 3],
+    kept: *mut u8,
+) -> Status {
+    entry("world_persists", || {
+        if min.is_null() || max.is_null() || kept.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: `HostApi::world_persists` has the mod pass `min` readable
+        // for three `f64`, borrowed for the call; non-null by the check
+        // before it.
+        let low = unsafe { min.read_unaligned() };
+        // SAFETY: as for `min`, `max` readable for three `f64`.
+        let high = unsafe { max.read_unaligned() };
+        let edit = match crate::rights::EditBox::between(low, high) {
+            Ok(edit) => edit,
+            Err(status) => return status,
+        };
+        match caller(me).and_then(|loader| crate::rights::kept_by_save(loader, edit)) {
+            Ok(saved) => {
+                // SAFETY: `HostApi::world_persists` has the mod pass `kept`
+                // writable for one byte, untouched by other threads during the
+                // call; non-null by the check before it.
+                unsafe { kept.write(u8::from(saved)) };
+                Status::OK
+            }
+            Err(status) => status,
+        }
+    })
+}

@@ -6,18 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec, MigrationSet,
-    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
-    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
-    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
-    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
-    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
+    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec,
+    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
+    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
+    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
+    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
+    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
+    TerrainEdit, TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1310,6 +1310,69 @@ pub struct HostApi {
         out: *mut u8,
         capacity: u32,
     ) -> Status,
+    /// Serves the call `spec` describes with `callback` and `user`, named
+    /// `<id>:<call>` after the serving mod or one of its former ids;
+    /// [`Status::REFUSED`] for another name, or a name and major served
+    /// twice, [`Status::BAD_ARGS`] for a spec that does not read. Allowed
+    /// during `enshwick_mod_init` only: [`Status::TOO_LATE`] once every mod
+    /// is initialised. Since minor 95.
+    pub serve_call: extern "system" fn(
+        me: ModHandle,
+        spec: *const CallSpec,
+        callback: CallFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Asks for the call `spec` describes and writes its id to `out`.
+    /// Matched against the served call by name and major once every mod is
+    /// initialised: the input and the answer must agree field by field and
+    /// in size, or the call stays unmatched with the reason in the log.
+    /// [`Status::REFUSED`] when the mod asked for the name and major already
+    /// with another spec, [`Status::BAD_ARGS`] for a spec that does not read
+    /// or a null `out`. Allowed during `enshwick_mod_init` only:
+    /// [`Status::TOO_LATE`] once every mod is initialised. Since minor 95.
+    pub find_call:
+        extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
+    /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
+    /// server's handler reads `input` and writes the answer to `output`,
+    /// both as large as the spec says. [`Status::MISSING`] while the call
+    /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
+    /// when the serving mod or its handler is off, [`Status::BAD_ARGS`] for
+    /// a null pointer or an id the mod was not given, or what the handler
+    /// answers. Any thread. Since minor 95.
+    pub call: extern "system" fn(
+        me: ModHandle,
+        id: u32,
+        input: *const c_void,
+        output: *mut c_void,
+    ) -> Status,
+    /// Writes the entities of the props transaction `id` of this mod placed
+    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and their number to `count`; a prop is in the world from the step
+    /// after the one that placed it. `out` may be null with `capacity` 0 to
+    /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot. Any thread. Since minor 96.
+    pub transaction_entities: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        out: *mut u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes to `kept` 1 when a save keeps changes in the box from `min`
+    /// to `max`, in metres, and 0 when not: the game saves a world only
+    /// inside its bases' zones, so the box must lie wholly inside one, half
+    /// a metre in from its edges. [`Status::BAD_ARGS`] for a null pointer,
+    /// a corner that is not finite or a `max` below `min`;
+    /// [`Status::MISSING`] while no world is loaded or on a build without
+    /// the zone list. On the server's game thread at a quiet moment only:
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. Since minor 96.
+    pub world_persists: extern "system" fn(
+        me: ModHandle,
+        min: *const [f64; 3],
+        max: *const [f64; 3],
+        kept: *mut u8,
+    ) -> Status,
     /// Up to `capacity` map markers of the scene the server runs and how
     /// many there are: what the scene's global chunk places, read from the
     /// game's archive once per scene on a thread of the loader's;
@@ -1319,7 +1382,7 @@ pub struct HostApi {
     /// count, and a null `count` is not written. On the server's game
     /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
     /// inside a step); [`Status::MISSING`] while no world runs or when the
-    /// scene does not read on this build. Since minor 95.
+    /// scene does not read on this build. Since minor 97.
     pub map_markers: extern "system" fn(
         me: ModHandle,
         out: *mut MapMarkerInfo,
