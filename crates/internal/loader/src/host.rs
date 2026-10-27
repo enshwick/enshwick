@@ -35,14 +35,14 @@ use entries::content::{
     recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
 };
 use entries::gameplay::{
-    account_knowledge, affix_info, affix_open, affix_roll, altar_limit, altar_limit_filter,
-    altar_zone_filter, altar_zones_changed, altar_zones_control, altars, altars_open, apply_buff,
-    base_limit, base_zones, buff_types, buffs, build_filter, comfort_filter, craft_filter,
-    damage_filter, experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
-    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
-    set_altar_zones, set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open,
-    stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
-    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
+    account_knowledge, affix_info, affix_open, affix_roll, altar_limit_filter, altar_zone_filter,
+    altar_zones_changed, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
+    buffs, build_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
+    grant_knowledge, interaction_filter, item_lines, knowledge, knowledge_input_filter, quests,
+    raise_base_limit, rate, remove_buff, revoke_knowledge, set_rate, skill_override, stat_buff,
+    stat_info, stat_modify, stat_open, stat_sources, stat_value, stat_watch, stats_changed,
+    summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup, survivor_status,
+    zone_check_filter,
 };
 use entries::hooks::{
     code_range, hook, hook_at, loop_wait, patch_code, server_wait, task_workers, workshop_recipes,
@@ -50,7 +50,7 @@ use entries::hooks::{
 use entries::inventory::{inventory_open, inventory_submit, item_info};
 use entries::mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
-    retired_command, settings, sync, texts,
+    settings, sync, texts,
 };
 use entries::net::{net_channel, net_ready, net_send};
 use entries::services::{
@@ -574,12 +574,11 @@ impl Loader {
     ) -> impl Iterator<Item = &'static enshwick::abi::BuildRow> + '_ {
         let manifest = self.mods.get(index).map(|record| record.manifest);
         let rows: &'static [enshwick::abi::BuildRow] = match manifest {
-            Some(m)
-                if m.header
-                    .covers(core::mem::offset_of!(Manifest, build_count) + 8)
-                    && !m.builds.is_null() =>
-            {
-                // SAFETY: the manifest points at `build_count` static rows.
+            Some(m) if !m.builds.is_null() => {
+                // SAFETY: `manifest::read` refused every manifest shorter
+                // than `Manifest`, so `builds` and `build_count` were read
+                // from the mod, and `manifest::own` copied the rows into
+                // leaked loader memory: `build_count` rows, `'static`.
                 unsafe { core::slice::from_raw_parts(m.builds, m.build_count) }
             }
             _ => &[],
@@ -649,7 +648,6 @@ pub(crate) static API: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
-    retired_command,
     chat,
     set_label,
     rename_filter,
@@ -662,8 +660,6 @@ pub(crate) static API: HostApi = HostApi {
     run_console,
     altars_open,
     altars,
-    altar_zones_control,
-    set_altar_zones,
     zone_check_filter,
     survivor_lookup,
     survivor_bed_check,
@@ -674,7 +670,6 @@ pub(crate) static API: HostApi = HostApi {
     skill_override,
     comfort_filter,
     experience_filter,
-    altar_limit,
     raise_base_limit,
     base_zones,
     game_event,

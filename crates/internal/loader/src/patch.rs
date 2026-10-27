@@ -240,7 +240,7 @@ pub(crate) fn arm(
     let thunk = counting.thunk();
     let hops = counting.hops(chains);
     let code_len = (count * thunk + hops * TIMED_THUNK).div_ceil(PAGE) * PAGE;
-    let slots_len = (count + hops) * size_of::<usize>();
+    let slots_len = ((count + hops) * size_of::<usize>()).next_multiple_of(align_of::<Counter>());
     let counters_len = (count + hops) * size_of::<Counter>();
     let functions_len = (count + hops) * size_of::<RuntimeFunction>();
     let data_len = (slots_len + counters_len + functions_len + UNWIND.len()).div_ceil(PAGE) * PAGE;
@@ -263,7 +263,7 @@ pub(crate) fn arm(
     let counter_start = unsafe { data_start.add(slots_len) };
     #[expect(
         clippy::cast_ptr_alignment,
-        reason = "the slots end on an 8-byte boundary"
+        reason = "the slot area is rounded up to the counters' alignment"
     )]
     let counter_base = counter_start.cast::<Counter>();
     // SAFETY: the data pages hold at least `slots_len + counters_len +
@@ -319,8 +319,9 @@ pub(crate) fn arm(
             // counters, so counter `i` lies inside the data pages.
             let counter_ptr = unsafe { counter_base.add(i) };
             // SAFETY: `reserve` committed and zeroed the block, and the
-            // loader never frees it; the slots end on an 8-byte boundary,
-            // and a zeroed `Counter` is valid.
+            // loader never frees it; the data pages are page-aligned and
+            // `slots_len` is rounded up to the counters' alignment, so the
+            // counter is aligned, and a zeroed `Counter` is valid.
             let counter: &'static Counter = unsafe { &*counter_ptr };
             counters.push((chain.target, counter));
             (counter, counting == Count::Timed)

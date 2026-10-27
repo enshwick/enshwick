@@ -38,19 +38,18 @@ use content::{
     recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
 };
 use gameplay::{
-    account_knowledge, altar_limit, altar_limit_filter, altar_zone_filter, altar_zones_changed,
-    altar_zones_control, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
-    buffs, build_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
-    grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
-    raise_base_limit, rate, remove_buff, revoke_knowledge, set_altar_zones, set_rate,
-    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
-    survivor_status, zone_check_filter,
+    account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
+    altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
+    comfort_filter, craft_filter, damage_filter, experience_filter, grant_knowledge,
+    interaction_filter, knowledge, knowledge_input_filter, quests, raise_base_limit, rate,
+    remove_buff, revoke_knowledge, set_rate, skill_override, summon_filter, summon_item, summoned,
+    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
 use mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
-    retired_command, settings, sync, texts,
+    settings, sync, texts,
 };
 use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
@@ -567,7 +566,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
-    retired_command,
     chat,
     set_label,
     rename_filter,
@@ -580,8 +578,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_console,
     altars_open,
     altars,
-    altar_zones_control,
-    set_altar_zones,
     zone_check_filter,
     survivor_lookup,
     survivor_bed_check,
@@ -592,7 +588,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     skill_override,
     comfort_filter,
     experience_filter,
-    altar_limit,
     raise_base_limit,
     base_zones,
     game_event,

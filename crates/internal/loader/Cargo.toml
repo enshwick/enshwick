@@ -84,3 +84,7 @@ harness = false
 [[bench]]
 name = "prop_holds_quiet"
 harness = false
+
+[[bench]]
+name = "dispatch"
+harness = false

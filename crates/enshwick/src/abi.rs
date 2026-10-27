@@ -8,10 +8,10 @@
 
 /// The major version of this interface. A loader refuses a mod built for
 /// another major.
-pub const ABI_MAJOR: u16 = 2;
+pub const ABI_MAJOR: u16 = 3;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 99;
+pub const ABI_MINOR: u16 = 1;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -469,22 +469,18 @@ impl Status {
     /// read off the server's game thread, or a world change inside a step.
     pub const WRONG_THREAD: Self = Self(7);
     /// The part of the world asked about is not loaded yet; asking starts
-    /// loading it, so the same call works again in a second or so. A mod
-    /// built before minor 84 reads it as an unknown failure. Since minor 84.
+    /// loading it, so the same call works again in a second or so.
     pub const NOT_LOADED: Self = Self(8);
     /// The box asked about leaves the world: past its edge across, or above
-    /// the height the loader takes. A mod built before minor 87 reads it as
-    /// an unknown failure. Since minor 87.
+    /// the height the loader takes.
     pub const OUTSIDE_WORLD: Self = Self(9);
     /// The component type is the static half of its ECS type: the set-up
     /// values the entity's template holds and every entity of that template
-    /// shares, which a write would change for all of them. A mod built
-    /// before minor 94 reads it as an unknown failure. Since minor 94.
+    /// shares, which a write would change for all of them.
     pub const STATIC_HALF: Self = Self(10);
     /// The entity named is no prop: not placed from an item, or a creature
     /// such as an animal, a pet or a survivor, which only the general
-    /// entity calls reach. A mod built before minor 96 reads it as an
-    /// unknown failure. Since minor 96.
+    /// entity calls reach.
     pub const NOT_A_PROP: Self = Self(11);
 
     /// Whether this is [`Status::OK`].
@@ -641,7 +637,7 @@ pub mod exports {
     /// armed.
     pub const READY: &str = "enshwick_mod_ready";
     /// `extern "system" fn()`: before a development reload unloads the DLL;
-    /// the mod stops what it started. Since minor 53, optional.
+    /// the mod stops what it started. Optional.
     pub const SHUTDOWN: &str = "enshwick_mod_shutdown";
 }
 
@@ -677,19 +673,18 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, workshop_recipes) == 24 + 27 * 8);
     assert!(core::mem::offset_of!(HostApi, hosting) == 24 + 28 * 8);
     assert!(core::mem::offset_of!(HostApi, server_world) == 24 + 29 * 8);
-    assert!(core::mem::offset_of!(HostApi, retired_command) == 24 + 30 * 8);
-    assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 33 * 8);
-    assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 34 * 8);
-    assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 35 * 8);
-    assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 36 * 8);
-    assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 38 * 8);
-    assert!(core::mem::offset_of!(HostApi, affix_open) == 24 + 118 * 8);
+    assert!(core::mem::offset_of!(HostApi, rename_filter) == 24 + 32 * 8);
+    assert!(core::mem::offset_of!(HostApi, join_missing) == 24 + 33 * 8);
+    assert!(core::mem::offset_of!(HostApi, hook_at) == 24 + 34 * 8);
+    assert!(core::mem::offset_of!(HostApi, inventory_open) == 24 + 35 * 8);
+    assert!(core::mem::offset_of!(HostApi, inventory_submit) == 24 + 37 * 8);
+    assert!(core::mem::offset_of!(HostApi, affix_open) == 24 + 114 * 8);
     assert!(size_of::<AffixDefData>() == 8 + 32 + 8 + 16);
     // Frozen: read and written as arrays.
     assert!(size_of::<AffixModifierData>() == 20);
     assert!(size_of::<ItemLine>() == 16);
     assert!(size_of::<AffixRoll>() == 8 + 12 + 4 + 8);
-    assert!(core::mem::offset_of!(HostApi, stat_open) == 24 + 107 * 8);
+    assert!(core::mem::offset_of!(HostApi, stat_open) == 24 + 103 * 8);
     assert!(size_of::<StatDefData>() == 8 + 16 + 16);
     // Frozen: written as arrays.
     assert!(size_of::<StatRef>() == 8);
@@ -697,78 +692,77 @@ const _: () = {
     assert!(size_of::<StatSource>() == 20);
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
-    assert!(core::mem::offset_of!(HostApi, language) == 24 + 127 * 8);
-    assert!(size_of::<HostApi>() == 24 + 174 * 8);
-    assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 170 * 8);
-    assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 171 * 8);
-    assert!(core::mem::offset_of!(HostApi, allowlist_set) == 24 + 172 * 8);
-    assert!(core::mem::offset_of!(HostApi, allowlist_has) == 24 + 173 * 8);
+    assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
+    assert!(size_of::<HostApi>() == 24 + 170 * 8);
+    assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 166 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 167 * 8);
+    assert!(core::mem::offset_of!(HostApi, allowlist_set) == 24 + 168 * 8);
+    assert!(core::mem::offset_of!(HostApi, allowlist_has) == 24 + 169 * 8);
     assert!(size_of::<MapMarkerInfo>() == 8 + 24 + 16 + 16);
-    assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 163 * 8);
-    assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 164 * 8);
+    assert!(core::mem::offset_of!(HostApi, fog_open) == 24 + 159 * 8);
+    assert!(core::mem::offset_of!(HostApi, fog_read) == 24 + 160 * 8);
     assert!(size_of::<FogInfo>() == 8 + 16 + 16);
-    assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 165 * 8);
-    assert!(core::mem::offset_of!(HostApi, call) == 24 + 167 * 8);
+    assert!(core::mem::offset_of!(HostApi, serve_call) == 24 + 161 * 8);
+    assert!(core::mem::offset_of!(HostApi, call) == 24 + 163 * 8);
     assert!(size_of::<CallSpec>() == 8 + 16 + 8 + 16 + 16);
-    assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 168 * 8);
-    assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 169 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_entities) == 24 + 164 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_persists) == 24 + 165 * 8);
     assert!(size_of::<AccountActionType>() == 1);
     assert!(size_of::<PropPlace>() == 8 + 8 + 24 + 16);
     assert!(size_of::<PropRemove>() == 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 161 * 8);
-    assert!(core::mem::offset_of!(HostApi, world_quiet) == 24 + 162 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit_for) == 24 + 157 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_quiet) == 24 + 158 * 8);
     assert!(size_of::<VoxelWrite>() == 8 + 24 + 16);
     assert!(size_of::<VoxelRegion>() == 8 + 24);
     assert!(size_of::<BlockPlace>() == 8 + 8 + 24 + 16);
-    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 157 * 8);
+    assert!(core::mem::offset_of!(HostApi, build_rights) == 24 + 153 * 8);
     assert!(size_of::<BuildRights>() == 8 + 8 + 48);
-    assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 154 * 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 158 * 8);
-    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 160 * 8);
+    assert!(core::mem::offset_of!(HostApi, voxel_read) == 24 + 150 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_commit) == 24 + 154 * 8);
+    assert!(core::mem::offset_of!(HostApi, transaction_status) == 24 + 156 * 8);
     // Frozen: read as an array.
     assert!(size_of::<TransactionOp>() == 16);
     assert!(size_of::<TransactionInfo>() == 8 + 16 + 8 + 8 + 8);
     // Frozen: written as an array.
     assert!(size_of::<Voxel>() == 4);
-    assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 152 * 8);
-    assert!(core::mem::offset_of!(HostApi, base_limit) == 24 + 153 * 8);
-    assert!(core::mem::offset_of!(HostApi, declare_change) == 24 + 155 * 8);
-    assert!(core::mem::offset_of!(HostApi, set_change) == 24 + 156 * 8);
+    assert!(core::mem::offset_of!(HostApi, altar_limit_filter) == 24 + 148 * 8);
+    assert!(core::mem::offset_of!(HostApi, base_limit) == 24 + 149 * 8);
+    assert!(core::mem::offset_of!(HostApi, declare_change) == 24 + 151 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_change) == 24 + 152 * 8);
     assert!(size_of::<AltarLimit>() == 8 + 8);
     assert!(size_of::<BaseLimitInfo>() == 8 + 16);
-    assert!(core::mem::offset_of!(HostApi, altar_zone_filter) == 24 + 150 * 8);
-    assert!(core::mem::offset_of!(HostApi, altar_zones_changed) == 24 + 151 * 8);
+    assert!(core::mem::offset_of!(HostApi, altar_zone_filter) == 24 + 146 * 8);
+    assert!(core::mem::offset_of!(HostApi, altar_zones_changed) == 24 + 147 * 8);
     assert!(size_of::<AltarZone>() == 8 + 8 + 16);
-    assert!(size_of::<AltarZoneSize>() == 24);
-    assert!(core::mem::offset_of!(HostApi, loop_wait) == 24 + 147 * 8);
-    assert!(core::mem::offset_of!(HostApi, server_wait) == 24 + 148 * 8);
-    assert!(core::mem::offset_of!(HostApi, task_workers) == 24 + 149 * 8);
+    assert!(core::mem::offset_of!(HostApi, loop_wait) == 24 + 143 * 8);
+    assert!(core::mem::offset_of!(HostApi, server_wait) == 24 + 144 * 8);
+    assert!(core::mem::offset_of!(HostApi, task_workers) == 24 + 145 * 8);
     assert!(size_of::<LoopWaitData>() == 8 + 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 143 * 8);
-    assert!(core::mem::offset_of!(HostApi, change_data) == 24 + 146 * 8);
+    assert!(core::mem::offset_of!(HostApi, feature) == 24 + 139 * 8);
+    assert!(core::mem::offset_of!(HostApi, change_data) == 24 + 142 * 8);
     assert!(size_of::<DataChange>() == 8 + 16 + 4 + 4 + 8 + 16 + 16 + 4 + 4);
-    assert!(core::mem::offset_of!(HostApi, recipe_kind) == 24 + 142 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_kind) == 24 + 138 * 8);
     assert!(size_of::<RecipeKind>() == 4);
-    assert!(core::mem::offset_of!(HostApi, rate) == 24 + 144 * 8);
-    assert!(core::mem::offset_of!(HostApi, set_rate) == 24 + 145 * 8);
-    assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 135 * 8);
-    assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 136 * 8);
-    assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 134 * 8);
-    assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 133 * 8);
-    assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 131 * 8);
-    assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 125 * 8);
-    assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 124 * 8);
-    assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 126 * 8);
-    assert!(core::mem::offset_of!(HostApi, forget_game_settings) == 24 + 129 * 8);
+    assert!(core::mem::offset_of!(HostApi, rate) == 24 + 140 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_rate) == 24 + 141 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_rule) == 24 + 131 * 8);
+    assert!(core::mem::offset_of!(HostApi, recipe_disabled) == 24 + 132 * 8);
+    assert!(core::mem::offset_of!(HostApi, rebuild_resource) == 24 + 130 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_text) == 24 + 129 * 8);
+    assert!(core::mem::offset_of!(HostApi, account_knowledge) == 24 + 127 * 8);
+    assert!(core::mem::offset_of!(HostApi, replaced) == 24 + 121 * 8);
+    assert!(core::mem::offset_of!(HostApi, entity_data_open) == 24 + 120 * 8);
+    assert!(core::mem::offset_of!(HostApi, knowledge_input_filter) == 24 + 122 * 8);
+    assert!(core::mem::offset_of!(HostApi, forget_game_settings) == 24 + 125 * 8);
     assert!(size_of::<KnowledgeInput>() == 8 + 24);
-    assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 122 * 8);
-    assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 123 * 8);
+    assert!(core::mem::offset_of!(HostApi, migrate) == 24 + 118 * 8);
+    assert!(core::mem::offset_of!(HostApi, declare_content) == 24 + 119 * 8);
     // Frozen: written as arrays.
     assert!(size_of::<MigrationStep>() == 8 + 16 + 16 + 16 + 16);
     assert!(size_of::<Migration>() == 16 + 8 + 8);
     assert!(size_of::<MigrationSet>() == 8 + 8 + 8 + 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 115 * 8);
-    assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 137 * 8);
+    assert!(core::mem::offset_of!(HostApi, define_event) == 24 + 111 * 8);
+    assert!(core::mem::offset_of!(HostApi, define_point) == 24 + 133 * 8);
     assert!(size_of::<PointSpec>() == 8 + 16 + 4 + 4 + 16 + 16);
     assert!(size_of::<PointLink>() == 8 + 3 * 8 + 3 * 4 + 4);
     assert!(size_of::<PointHandle>() == 8 + 8 + 8);
@@ -778,31 +772,31 @@ const _: () = {
     assert!(size_of::<ServiceSpec>() == 8 + 16 + 8 + 16 + 8);
     assert!(size_of::<ServiceFound>() == 8 + 8 + 8 + 3 * 16);
     assert!(size_of::<EventSpec>() == 8 + 16 + 16);
-    assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 92 * 8);
-    assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 73 * 8);
-    assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 76 * 8);
+    assert!(core::mem::offset_of!(HostApi, config_schema) == 24 + 88 * 8);
+    assert!(core::mem::offset_of!(HostApi, time_of_day) == 24 + 69 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_time_speed) == 24 + 72 * 8);
     assert!(size_of::<DaytimeInfo>() == 8 + 5 * 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, game_settings) == 24 + 77 * 8);
-    assert!(core::mem::offset_of!(HostApi, damage_filter) == 24 + 79 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_settings) == 24 + 73 * 8);
+    assert!(core::mem::offset_of!(HostApi, damage_filter) == 24 + 75 * 8);
     assert!(size_of::<DamageCheck>() == 8 + 16 + 13 * 4 + 4);
-    assert!(core::mem::offset_of!(HostApi, buff_types) == 24 + 80 * 8);
-    assert!(core::mem::offset_of!(HostApi, remove_buff) == 24 + 83 * 8);
+    assert!(core::mem::offset_of!(HostApi, buff_types) == 24 + 76 * 8);
+    assert!(core::mem::offset_of!(HostApi, remove_buff) == 24 + 79 * 8);
     // Frozen: written as arrays.
     assert!(size_of::<BuffTypeInfo>() == 8 + 12 + 4 + 8);
     assert!(size_of::<ActiveBuff>() == 8 + 16 + 16);
     assert!(size_of::<BuffRequest>() == 8 + 16 + 8);
-    assert!(core::mem::offset_of!(HostApi, knowledge) == 24 + 84 * 8);
-    assert!(core::mem::offset_of!(HostApi, quests) == 24 + 86 * 8);
+    assert!(core::mem::offset_of!(HostApi, knowledge) == 24 + 80 * 8);
+    assert!(core::mem::offset_of!(HostApi, quests) == 24 + 82 * 8);
     assert!(size_of::<KnowledgeInfo>() == 8 + 16);
     assert!(size_of::<KnowledgeData>() == 8 + 12);
     assert!(size_of::<PlayerDeathData>() == 8 + 8 + 8 + 12 + 16 + 4 + 8);
     assert!(size_of::<QuestData>() == 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 87 * 8);
-    assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 89 * 8);
+    assert!(core::mem::offset_of!(HostApi, weather_at) == 24 + 83 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_weather) == 24 + 85 * 8);
     // Frozen: written as an array.
     assert!(size_of::<WeatherFront>() == 8 + 8 + 24 + 8 + 8);
     assert!(size_of::<ChunkData>() == 8 + 16);
-    assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 90 * 8);
+    assert!(core::mem::offset_of!(HostApi, terrain_materials) == 24 + 86 * 8);
     // Frozen: written as an array.
     assert!(size_of::<TerrainMaterialInfo>() == 8 + 12);
     assert!(size_of::<TerrainEdit>() == 8 + 16 + 12 + 8 + 16);
@@ -818,39 +812,39 @@ const _: () = {
     assert!(core::mem::offset_of!(Registers, rsp) == 4 * 8);
     assert!(core::mem::offset_of!(Registers, rflags) == 16 * 8);
     assert!(size_of::<MidHookSpec>() == 32);
-    assert!(core::mem::offset_of!(HostApi, status) == 24 + 39 * 8);
-    assert!(core::mem::offset_of!(HostApi, run_console) == 24 + 40 * 8);
-    assert!(core::mem::offset_of!(HostApi, actions) == 24 + 140 * 8);
-    assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 141 * 8);
+    assert!(core::mem::offset_of!(HostApi, status) == 24 + 38 * 8);
+    assert!(core::mem::offset_of!(HostApi, run_console) == 24 + 39 * 8);
+    assert!(core::mem::offset_of!(HostApi, actions) == 24 + 136 * 8);
+    assert!(core::mem::offset_of!(HostApi, event_types) == 24 + 137 * 8);
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
-    assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 41 * 8);
-    assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 45 * 8);
-    assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 46 * 8);
-    assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 50 * 8);
-    assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 51 * 8);
-    assert!(core::mem::offset_of!(HostApi, skill_override) == 24 + 52 * 8);
-    assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 54 * 8);
-    assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 57 * 8);
-    assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 58 * 8);
-    assert!(core::mem::offset_of!(HostApi, world_key) == 24 + 62 * 8);
-    assert!(core::mem::offset_of!(HostApi, component_write) == 24 + 63 * 8);
-    assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 65 * 8);
+    assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 40 * 8);
+    assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 42 * 8);
+    assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 43 * 8);
+    assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 47 * 8);
+    assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 48 * 8);
+    assert!(core::mem::offset_of!(HostApi, skill_override) == 24 + 49 * 8);
+    assert!(core::mem::offset_of!(HostApi, experience_filter) == 24 + 51 * 8);
+    assert!(core::mem::offset_of!(HostApi, base_zones) == 24 + 53 * 8);
+    assert!(core::mem::offset_of!(HostApi, game_event) == 24 + 54 * 8);
+    assert!(core::mem::offset_of!(HostApi, world_key) == 24 + 58 * 8);
+    assert!(core::mem::offset_of!(HostApi, component_write) == 24 + 59 * 8);
+    assert!(core::mem::offset_of!(HostApi, teleport) == 24 + 61 * 8);
     assert!(size_of::<TeleportRequest>() == 8 + 8 + 24 + 16);
-    assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 66 * 8);
+    assert!(core::mem::offset_of!(HostApi, spawn) == 24 + 62 * 8);
     assert!(size_of::<SpawnRequest>() == 8 + 16 + 24 + 16 + 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 68 * 8);
+    assert!(core::mem::offset_of!(HostApi, build_filter) == 24 + 64 * 8);
     assert!(size_of::<CraftCheck>() == 8 + 16);
     assert!(size_of::<BuildCheck>() == 8 + 8 + 24);
-    assert!(core::mem::offset_of!(HostApi, net_ready) == 24 + 71 * 8);
+    assert!(core::mem::offset_of!(HostApi, net_ready) == 24 + 67 * 8);
     assert!(size_of::<NetMessage>() == 8 + 8 + 8 + 8 + 8);
-    assert!(core::mem::offset_of!(HostApi, notify) == 24 + 72 * 8);
-    assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 99 * 8);
+    assert!(core::mem::offset_of!(HostApi, notify) == 24 + 68 * 8);
+    assert!(core::mem::offset_of!(HostApi, ui_dialog) == 24 + 95 * 8);
     assert!(size_of::<UiFrame>() == 24);
     assert!(size_of::<UiWidget>() == 8 + 16 + 32 + 8 + 32);
     assert!(size_of::<UiMarker>() == 8 + 24 + 16 + 8);
-    assert!(core::mem::offset_of!(HostApi, texts) == 24 + 103 * 8);
-    assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 102 * 8);
+    assert!(core::mem::offset_of!(HostApi, texts) == 24 + 99 * 8);
+    assert!(core::mem::offset_of!(HostApi, config_check) == 24 + 98 * 8);
     assert!(size_of::<UiDialog>() == 8 + 48 + 8);
     assert!(size_of::<GameEventData>() == 24);
     // Frozen: written as an array.

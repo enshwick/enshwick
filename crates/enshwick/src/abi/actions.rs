@@ -67,7 +67,7 @@ impl ActionCall {
     /// `access Ann on`, in `action`: the action's id and its values as
     /// words; `help` or nothing lists the actions. `player` is the console,
     /// an administrator with no character. The reply is as for
-    /// [`ActionCall::RUN`]. Since minor 68.
+    /// [`ActionCall::RUN`].
     pub const CONSOLE: u32 = 3;
 }
 

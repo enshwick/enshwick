@@ -111,3 +111,5 @@ jobs:
         -p enshwick-gamedata --lib --tests --harness proofs
       # The memory reader and the fake host walk raw pointers in these.
       asan: -p enshwick -p enshwick-gamedata -p enshwick-loader --features enshwick/test --lib --tests
+      # The hook, world and tick benches drive a mod through the fake host.
+      bench-args: --features enshwick/test

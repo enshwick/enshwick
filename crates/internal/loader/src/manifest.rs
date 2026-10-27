@@ -5,9 +5,9 @@ use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
-/// Where the fields every manifest has end: an older minor lacks `builds`,
-/// which defaults to none.
-const REQUIRED: usize = core::mem::offset_of!(Manifest, builds);
+/// Where the fields every manifest of this major has end; a newer minor
+/// appends after them.
+const REQUIRED: usize = size_of::<Manifest>();
 
 /// Why a mod's manifest is refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -295,9 +295,8 @@ impl Meta {
     }
 }
 
-/// The metadata `manifest` declares; empty for a manifest older than ABI
-/// minor 36. Text that is not UTF-8, or a homepage that is not an address,
-/// is left out.
+/// The metadata `manifest` declares. Text that is not UTF-8, or a homepage
+/// that is not an address, is left out.
 ///
 /// # Safety
 ///
@@ -307,10 +306,6 @@ impl Meta {
 ///   and unchanged for the call.
 #[must_use]
 pub unsafe fn meta(manifest: &Manifest) -> Meta {
-    let end = core::mem::offset_of!(Manifest, homepage) + size_of::<Str>();
-    if !manifest.header.covers(end) {
-        return Meta::default();
-    }
     // SAFETY: the closure reads only the manifest's own strings and its
     // authors, which the caller guarantees readable and unchanged for the call.
     let text = |s: &Str| unsafe { s.as_str() }.unwrap_or_default().trim().to_owned();
@@ -440,98 +435,12 @@ mod tests {
         assert_eq!(meta.authors, ["themaiby"]);
         assert!(meta.homepage.is_empty());
         assert_eq!(meta.credits(), "by themaiby; MIT");
-        m.header.size = u32::try_from(core::mem::offset_of!(Manifest, name)).unwrap();
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        assert_eq!(unsafe { super::meta(&m) }, Meta::default());
-    }
-
-    /// A manifest of minor 4: no names yet.
-    #[repr(C)]
-    struct Minor4 {
-        header: Header,
-        id: Str,
-        version: Str,
-        side: Side,
-        flags: ManifestFlags,
-        dependencies: *const Dependency,
-        dependency_count: usize,
-        builds: *const enshwick::abi::BuildRow,
-        build_count: usize,
-    }
-
-    /// A manifest with only the fields every minor has.
-    #[repr(C)]
-    struct Oldest {
-        header: Header,
-        id: Str,
-        version: Str,
-        side: Side,
-        flags: ManifestFlags,
-        dependencies: *const Dependency,
-        dependency_count: usize,
-    }
-
-    fn header_of<T>() -> Header {
-        Header {
-            size: u32::try_from(size_of::<T>()).unwrap(),
-            abi_minor: 4,
-            ..Header::of::<Manifest>()
-        }
     }
 
     #[test]
-    fn a_manifest_of_an_older_minor_loads_with_defaults() {
-        let old = Minor4 {
-            header: header_of::<Minor4>(),
-            id: Str::new("you.trading-post"),
-            version: Str::new("0.1.0"),
-            side: Side::BOTH,
-            flags: ManifestFlags::JOIN,
-            dependencies: DEPENDENCIES.as_ptr(),
-            dependency_count: DEPENDENCIES.len(),
-            builds: core::ptr::null(),
-            build_count: 0,
-        };
-        // SAFETY: `old` is a local manifest readable for the size its header
-        // says, its strings and lists pointing at `'static` data.
-        let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
-        assert!(manifest.name.is_empty());
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        let candidate = unsafe { parse(manifest) }.unwrap();
-        assert_eq!(candidate.id, "you.trading-post");
-        assert_eq!(candidate.dependencies.len(), 1);
-    }
-
-    #[test]
-    fn a_manifest_without_builds_loads_with_none() {
-        let old = Oldest {
-            header: header_of::<Oldest>(),
-            id: Str::new("you.trading-post"),
-            version: Str::new("0.1.0"),
-            side: Side::SERVER,
-            flags: ManifestFlags::NONE,
-            dependencies: core::ptr::null(),
-            dependency_count: 0,
-        };
-        // SAFETY: `old` is a local manifest readable for the size its header
-        // says, its strings and lists pointing at `'static` data.
-        let manifest = unsafe { read((&raw const old).cast()) }.unwrap();
-        assert!(manifest.builds.is_null());
-        assert_eq!(manifest.build_count, 0);
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        let candidate = unsafe { parse(manifest) }.unwrap();
-        assert_eq!(candidate.side, Side::SERVER);
-        assert!(candidate.dependencies.is_empty());
-    }
-
-    #[test]
-    fn a_manifest_shorter_than_every_minor_is_refused() {
+    fn a_manifest_without_every_field_of_its_major_is_refused() {
         let mut short = manifest("you.trading-post", "0.1.0");
-        short.header.size =
-            u32::try_from(core::mem::offset_of!(Manifest, dependency_count)).unwrap();
+        short.header.size = u32::try_from(core::mem::offset_of!(Manifest, points)).unwrap();
         // SAFETY: `short` is a whole local manifest, its strings and lists
         // pointing at `'static` data.
         let reason = unsafe { read(&raw const short) }.unwrap_err().to_string();
@@ -628,28 +537,26 @@ mod tests {
     }
 
     #[test]
-    fn an_id_without_an_author_is_refused_from_every_minor() {
-        let mut old = manifest("lanterns", "0.1.0");
-        old.header.abi_minor = 69;
+    fn an_id_without_an_author_is_refused() {
+        let authorless = manifest("lanterns", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        let why = unsafe { parse(&old) }.unwrap_err().to_string();
+        let why = unsafe { parse(&authorless) }.unwrap_err().to_string();
         assert!(why.contains("not <author>.<name>"), "{why}");
     }
 
     #[test]
-    fn a_mod_of_a_newer_minor_is_refused_and_an_older_one_loads() {
+    fn a_mod_of_a_newer_minor_is_refused_and_one_of_this_minor_loads() {
         let mut newer = manifest("you.ok", "0.1.0");
         newer.header.abi_minor = ABI_MINOR + 1;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let why = unsafe { parse(&newer) }.unwrap_err().to_string();
         assert!(why.contains("update Enshwick"), "{why}");
-        let mut older = manifest("you.ok", "0.1.0");
-        older.header.abi_minor = ABI_MINOR - 1;
+        let current = manifest("you.ok", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        assert!(unsafe { parse(&older) }.is_ok());
+        assert!(unsafe { parse(&current) }.is_ok());
     }
 
     #[test]
