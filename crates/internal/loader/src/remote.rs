@@ -380,6 +380,17 @@ pub fn admit(
     Ok(())
 }
 
+/// What the server does with a message a client sent, by [`Queries::gate`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Gate {
+    /// Serve it.
+    Pass,
+    /// Send the player this answer instead of serving the message.
+    Busy(Message),
+    /// Neither serve nor answer it: the client asks again on its own.
+    Drop,
+}
+
 /// The rates of the [rated](Message::is_rated) messages of players who are
 /// no administrators, on the server.
 #[derive(Debug, Default)]
@@ -398,6 +409,22 @@ impl Queries {
                 .entry(key)
                 .or_insert_with(|| Peer::with_tokens(QUERY_BURST))
                 .admit_at(now, QUERY_RATE, QUERY_BURST)
+    }
+
+    /// Decides whether the server serves `message` of the player with
+    /// account key `key` at `now`. Only [rated](Message::is_rated) messages
+    /// spend the player's rate; an actions query over it gets no answer.
+    pub fn gate(&mut self, key: u64, admin: bool, message: &Message, now: Instant) -> Gate {
+        if !message.is_rated() || self.admit(key, admin, now) {
+            Gate::Pass
+        } else if matches!(message, Message::ActionsQuery { .. }) {
+            Gate::Drop
+        } else {
+            Gate::Busy(Message::Result {
+                ok: false,
+                text: texts::fill("remote.slow", &[]),
+            })
+        }
     }
 
     /// Forgets the player with account key `key`, who left.
@@ -430,7 +457,7 @@ mod live {
     use enshwick::abi::PlayerInfo;
     use enshwick::config::Schema;
 
-    use super::{Message, Queries, admit, redacted, texts, values_text};
+    use super::{Gate, Message, Queries, admit, redacted, texts, values_text};
     use crate::host::Loader;
 
     /// When each player last changed a setting.
@@ -556,17 +583,10 @@ mod live {
     pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
         let admin =
             player(loader, key).is_some_and(|p| p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
-        if message.is_rated() && !admitted(key, admin) {
-            if !matches!(message, Message::ActionsQuery { .. }) {
-                crate::net::to_player(
-                    key,
-                    &Message::Result {
-                        ok: false,
-                        text: texts::fill("remote.slow", &[]),
-                    },
-                );
-            }
-            return;
+        match gate(key, admin, &message) {
+            Gate::Pass => {}
+            Gate::Busy(answer) => return crate::net::to_player(key, &answer),
+            Gate::Drop => return,
         }
         match message {
             Message::Query { id } if id.is_empty() => {
@@ -618,13 +638,15 @@ mod live {
         }
     }
 
-    /// Whether the player with account key `key` may send a rated message
-    /// now.
-    fn admitted(key: u64, admin: bool) -> bool {
-        QUERIES
-            .relock()
-            .get_or_insert_with(Queries::default)
-            .admit(key, admin, Instant::now())
+    /// What the server does with `message` of the player with account key
+    /// `key` now.
+    fn gate(key: u64, admin: bool, message: &Message) -> Gate {
+        QUERIES.relock().get_or_insert_with(Queries::default).gate(
+            key,
+            admin,
+            message,
+            Instant::now(),
+        )
     }
 
     /// Forgets the player with account key `key`, who left the server.
@@ -932,5 +954,65 @@ mod tests {
             },
         ];
         assert!(!free.iter().any(Message::is_rated));
+    }
+
+    fn over_the_rate(queries: &mut Queries, key: u64, now: Instant) {
+        while queries.admit(key, false, now) {}
+    }
+
+    #[test]
+    fn a_query_or_edit_over_the_rate_is_answered_busy_and_not_served() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let busy = Gate::Busy(Message::Result {
+            ok: false,
+            text: texts::fill("remote.slow", &[]),
+        });
+        for message in [
+            Message::Query { id: String::new() },
+            Message::Edit {
+                id: "zones".into(),
+                key: "radius".into(),
+                value: "5".into(),
+            },
+        ] {
+            assert_eq!(queries.gate(7, false, &message, now), busy);
+        }
+    }
+
+    #[test]
+    fn an_actions_query_over_the_rate_gets_no_answer_at_all() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let message = Message::ActionsQuery { language: 0 };
+        assert_eq!(queries.gate(7, false, &message, now), Gate::Drop);
+    }
+
+    #[test]
+    fn rated_messages_pass_until_the_burst_is_spent() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        let message = Message::Query { id: String::new() };
+        let passed = (0..100)
+            .take_while(|_| queries.gate(7, false, &message, now) == Gate::Pass)
+            .count();
+        assert_eq!(f64::from(u32::try_from(passed).unwrap()), QUERY_BURST);
+    }
+
+    #[test]
+    fn unrated_messages_and_administrators_always_pass() {
+        let mut queries = Queries::default();
+        let now = Instant::now();
+        over_the_rate(&mut queries, 7, now);
+        let run = Message::ActionRun {
+            id: "zones".into(),
+            action: "clear".into(),
+            args: String::new(),
+        };
+        assert_eq!(queries.gate(7, false, &run, now), Gate::Pass);
+        let query = Message::Query { id: String::new() };
+        assert!((0..100).all(|_| queries.gate(8, true, &query, now) == Gate::Pass));
     }
 }
