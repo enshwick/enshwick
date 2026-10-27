@@ -12,7 +12,7 @@ Each entry names the pull request that made the change.
   which now reaches a backpack's own inventory too, for backpacks made
   after it (`DataSelect::BACKPACKS`, ABI minor 92); a data pack takes
   `items = "backpacks"`, and `ItemTraits::backpack_slots` reads a
-  backpack's size (#PR).
+  backpack's size (#566).
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
