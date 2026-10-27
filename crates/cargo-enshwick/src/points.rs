@@ -18,7 +18,7 @@ use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 use serde::Deserialize;
 
 pub use calls::rust_call;
-pub use luau::{luau, luau_event};
+pub use luau::{luau, luau_call, luau_event};
 
 /// The section of a mod DLL that holds its point schemas.
 pub const SECTION: &str = ".enshpt";

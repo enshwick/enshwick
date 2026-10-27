@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `cargo enshwick call <call> --luau` writes a call's Luau module
+  (`cargo_enshwick::points::luau_call`).
 - `cargo enshwick call <call>` writes the Rust declaration of another mod's
   call from the server's schema (`cargo_enshwick::points::rust_call`).
 - `cargo enshwick event <event>` writes a mod event's Luau module from the

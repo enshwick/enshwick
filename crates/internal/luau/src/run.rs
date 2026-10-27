@@ -17,11 +17,12 @@ use mlua::{Function, Lua, LuaOptions, MultiValue, StdLib, Table, Value as LuaVal
 use crate::bridge::{arguments, from_lua, to_lua};
 use enshwick::packs::SCRIPT_MAIN as MAIN;
 
+use crate::calls::CallDesc;
 use crate::files::{Requirer, Scripts};
 use crate::points::{EventDesc, PointDesc, Read, decode, encode};
 use crate::subscribe::{RawReader, Subscription, raw_table};
 use enshwick::points::{DescribedVerdict, Order};
-use enshwick::services::DescribedEmitter;
+use enshwick::services::{DescribedCall, DescribedCaller, DescribedEmitter};
 use std::sync::OnceLock;
 
 /// How much a mod's scripts may take.
@@ -147,6 +148,9 @@ pub(crate) struct Inner {
     /// The mod events the scripts define, each with the emitter the loader
     /// gives once `main.luau` ran at start.
     defined: Mutex<Vec<Defined>>,
+    /// The calls the scripts ask for, each with the caller the loader
+    /// hands over once `main.luau` ran at start.
+    asked: Mutex<Vec<Asked>>,
     /// Whether the start is over, so a new definition waits for the next.
     started: AtomicBool,
     /// The game event types of the build, with their sizes, read at start.
@@ -164,6 +168,12 @@ pub(crate) struct Inner {
 struct Defined {
     desc: EventDesc,
     emitter: Arc<OnceLock<DescribedEmitter>>,
+}
+
+/// A call a script asked for, and its caller once the start is over.
+struct Asked {
+    desc: CallDesc,
+    caller: Arc<OnceLock<DescribedCaller>>,
 }
 
 /// A running Luau mod.
@@ -399,6 +409,7 @@ pub fn start(
         vm: ArcSwapOption::empty(),
         subscribed: Mutex::new(Vec::new()),
         defined: Mutex::new(Vec::new()),
+        asked: Mutex::new(Vec::new()),
         started: AtomicBool::new(false),
         event_types,
         off: AtomicBool::new(false),
@@ -440,6 +451,20 @@ pub fn start(
         // 1; every send goes through the table `define_event` made for this
         // description, which a reload cannot change.
         let _first = emitter.set(unsafe { load.define_described_event(&event) }?);
+    }
+    let asked: Vec<(DescribedCall, Arc<OnceLock<DescribedCaller>>)> = inner
+        .asked
+        .relock()
+        .iter()
+        .map(|a| (a.desc.call.clone(), Arc::clone(&a.caller)))
+        .collect();
+    for (call, caller) in asked {
+        // SAFETY: `CallDesc::parse` accepts only primitive input fields
+        // whose hashes it worked out from their names, reads and offsets,
+        // and `encode` writes each primitive's valid bytes, a bool as 0 or
+        // 1; every call goes through the function `caller` made for this
+        // description, which a reload cannot change.
+        let _first = caller.set(unsafe { load.described_caller(&call) }?);
     }
     inner.started.store(true, Ordering::Release);
 
@@ -672,6 +697,32 @@ impl Inner {
         }
     }
 
+    /// Puts `define_event` and `caller` into `api`: what the scripts offer
+    /// other mods and ask of them, settled at start.
+    fn mod_functions(&self, lua: &Lua, api: &Table) -> mlua::Result<()> {
+        let me = Weak::clone(&self.me);
+        api.raw_set(
+            "define_event",
+            lua.create_function(move |lua, event: Table| {
+                let inner = me
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                inner.define_event(lua, &event)
+            })?,
+        )?;
+        let me = Weak::clone(&self.me);
+        api.raw_set(
+            "caller",
+            lua.create_function(move |lua, call: Table| {
+                let inner = me
+                    .upgrade()
+                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
+                inner.caller(lua, &call)
+            })?,
+        )?;
+        Ok(())
+    }
+
     /// Puts `extend`, `refuse`, `on_game_type`, `game_event_types` and `on`
     /// into `api`, the subscriptions `vm`'s scripts make at start.
     fn subscription_functions(&self, vm: &Arc<Vm>, api: &Table) -> mlua::Result<()> {
@@ -721,16 +772,6 @@ impl Inner {
                     }
                 }
                 vm.subscribe("enshwick.on_mod_event", sub, handler)
-            })?,
-        )?;
-        let me = Weak::clone(&self.me);
-        api.raw_set(
-            "define_event",
-            lua.create_function(move |lua, event: Table| {
-                let inner = me
-                    .upgrade()
-                    .ok_or_else(|| mlua::Error::runtime("the mod has stopped"))?;
-                inner.define_event(lua, &event)
             })?,
         )?;
         let weak = Arc::downgrade(vm);
@@ -815,6 +856,7 @@ impl Inner {
             })?,
         )?;
         self.subscription_functions(vm, &api)?;
+        self.mod_functions(lua, &api)?;
         let globals = lua.globals();
         globals.raw_set("enshwick", api.clone())?;
         let host = self.host;
@@ -956,6 +998,43 @@ impl Inner {
         )?;
         table.set_readonly(true);
         Ok(table)
+    }
+
+    /// The function that runs the call `call` describes: asked for with the
+    /// loader once `main.luau` ran at start, or the one asked for then for
+    /// a reload.
+    fn caller(&self, lua: &Lua, call: &Table) -> mlua::Result<Function> {
+        let desc = CallDesc::parse(call)?;
+        let caller = {
+            let mut asked = self.asked.relock();
+            let name = &desc.call.name;
+            let major = desc.call.major;
+            match asked
+                .iter()
+                .find(|a| a.desc.call.name == *name && a.desc.call.major == major)
+            {
+                Some(known) if known.desc != desc => {
+                    return Err(mlua::Error::runtime(format!(
+                        "enshwick.caller: {name} v{major} is described differently than at the start"
+                    )));
+                }
+                Some(known) => Arc::clone(&known.caller),
+                None if self.started.load(Ordering::Acquire) => {
+                    return Err(mlua::Error::runtime(format!(
+                        "enshwick.caller: {name} v{major} is asked for from the next start"
+                    )));
+                }
+                None => {
+                    let caller = Arc::new(OnceLock::new());
+                    asked.push(Asked {
+                        desc: desc.clone(),
+                        caller: Arc::clone(&caller),
+                    });
+                    caller
+                }
+            }
+        };
+        desc.function(lua, caller)
     }
 
     /// Runs the handlers of the point `sub` on its `input`, the answer so

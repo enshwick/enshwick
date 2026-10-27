@@ -37,7 +37,7 @@ pub(crate) enum Primitive {
 }
 
 impl Primitive {
-    fn parse(name: &str) -> Option<Self> {
+    pub(crate) fn parse(name: &str) -> Option<Self> {
         Some(match name {
             "u8" => Self::U8,
             "i8" => Self::I8,
@@ -56,7 +56,7 @@ impl Primitive {
         })
     }
 
-    const fn size(self) -> usize {
+    pub(crate) const fn size(self) -> usize {
         match self {
             Self::U8 | Self::I8 | Self::Bool => 1,
             Self::U16 | Self::I16 => 2,
@@ -75,7 +75,7 @@ pub(crate) struct PointDesc {
     pub(crate) output: Read,
 }
 
-fn bad(why: impl core::fmt::Display) -> mlua::Error {
+pub(crate) fn bad(why: impl core::fmt::Display) -> mlua::Error {
     mlua::Error::runtime(format!(
         "enshwick.extend: the point's description: {why}; write it again with cargo enshwick point --luau"
     ))
@@ -83,7 +83,7 @@ fn bad(why: impl core::fmt::Display) -> mlua::Error {
 
 /// The [`Read`] the description value `value` gives, for a value of `size`
 /// bytes at most.
-fn read_of(value: &LuaValue, depth: u32) -> mlua::Result<Read> {
+pub(crate) fn read_of(value: &LuaValue, depth: u32) -> mlua::Result<Read> {
     if depth > 16 {
         return Err(bad("types nest too deep"));
     }
@@ -122,7 +122,7 @@ fn fields_of(fields: &Table, depth: u32) -> mlua::Result<Vec<(String, usize, Rea
 }
 
 /// The size of a value read as `read`, from its fields' offsets.
-fn size_of_read(read: &Read) -> usize {
+pub(crate) fn size_of_read(read: &Read) -> usize {
     match read {
         Read::Primitive(p) | Read::Enum(p, _) => p.size(),
         Read::Struct(fields) => fields
@@ -425,6 +425,21 @@ impl Primitive {
             Self::Guid => enshwick::content::Guid::SHAPE,
             Self::Entity => enshwick::ecs::Entity::SHAPE,
         }
+    }
+
+    /// Whether the type is an integer, which a value type or enum wraps.
+    pub(crate) const fn is_integer(self) -> bool {
+        matches!(
+            self,
+            Self::U8
+                | Self::I8
+                | Self::U16
+                | Self::I16
+                | Self::U32
+                | Self::I32
+                | Self::U64
+                | Self::I64
+        )
     }
 
     /// The type's alignment.

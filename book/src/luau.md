@@ -64,6 +64,7 @@ end)
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
+| `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
@@ -187,6 +188,33 @@ event differs or is smaller. An event a script defines has primitive fields
 only. `define_event` raises an error for a new event, or for changed
 fields, after the start: either takes the next start. A `send` before
 `main.luau` has finished reaches no one.
+
+## Calling another mod
+
+A Luau mod calls another mod's [call](calls.md) through the module `cargo
+enshwick call <server>:<call> --from <server's DLL> --luau --out
+calls/<call>.luau` writes. `enshwick.caller` at the top level of `main.luau`
+returns the function that runs it once the start is over:
+
+```luau
+local price_of = enshwick.caller(require("./calls/price_of"))
+
+enshwick.on("WorldSaved", function()
+    local coins, why = price_of({ item = 7, count = 1 })
+    if coins then
+        enshwick.log.info(`item 7 sells for {coins}`)
+    else
+        enshwick.log.warn(`no price: {why}`)
+    end
+end)
+```
+
+The function answers nil and why not: `unmatched` when no running mod serves
+the call as described, `off` when the server is, and `failed` when its handler
+failed. The input's fields are numbers, booleans, entities, value types and
+enums; the runtime checks each against its layout hash, so an edited module
+cannot hand the server bytes its types forbid, and an enum field takes only
+its listed variants.
 
 ## Settings
 

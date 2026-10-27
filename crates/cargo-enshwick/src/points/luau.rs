@@ -346,6 +346,106 @@ pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
     Ok(out)
 }
 
+/// The `shape` a call's input field of the type `name` carries when it is
+/// a value type or an enum: what the runtime hashes to check it.
+fn named_shape(schema: &Schema, name: &str) -> Option<String> {
+    let ty = schema.types.iter().find(|t| t.name == name)?;
+    let kind = match ty.kind {
+        Kind::Values => "values",
+        Kind::Enum => "enum",
+        Kind::Struct | Kind::Newtype => return None,
+    };
+    let values: Vec<String> = ty
+        .value
+        .iter()
+        .chain(&ty.variant)
+        .map(|v| format!("{{ name = {:?}, value = {} }}", v.name, v.value))
+        .collect();
+    Some(format!(
+        "{{ name = {:?}, kind = {kind:?}, repr = {:?}, values = {{ {} }} }}",
+        ty.name,
+        ty.repr,
+        values.join(", ")
+    ))
+}
+
+/// The Luau definition of the call `name` of `schema`: a module that exports
+/// the types its input and answer reach and the named values, and returns
+/// the description `enshwick.caller` asks for the call with.
+///
+/// # Errors
+///
+/// [`Error`] when the schema lacks the call or a type it names, or its
+/// input is no struct of its layout's fields.
+///
+/// # Examples
+///
+/// ```
+/// use cargo_enshwick::points::{Schema, luau_call};
+///
+/// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+/// assert!(luau_call(&schema, "you.stalls:rent").is_err());
+/// # Ok::<(), cargo_enshwick::points::Error>(())
+/// ```
+pub fn luau_call(schema: &Schema, name: &str) -> Result<String, Error> {
+    let call = schema
+        .call
+        .iter()
+        .find(|c| c.name == name)
+        .ok_or_else(|| Error::NoCall {
+            owner: schema.owner.clone(),
+            name: name.to_owned(),
+        })?;
+    let name = call.name.as_str();
+    let input = find(schema, name, &call.input)?;
+    if input.kind != Kind::Struct || input.field.len() != call.layout.len() {
+        return Err(Error::BadInput(name.to_owned()));
+    }
+    let writer = Writer {
+        schema,
+        point: name,
+    };
+    let mut out = format!(
+        "--!strict\n-- The call `{name}` v{} of {} {}.\n-- Written by `cargo enshwick call {name} --luau`. Write it again for a newer\n-- {} rather than edit it: the runtime calls by the layout below.\n",
+        call.major, schema.owner, schema.version, schema.owner
+    );
+    let mut types = reached_from(
+        schema,
+        name,
+        input
+            .field
+            .iter()
+            .map(|f| f.ty.as_str())
+            .chain([call.output.as_str()])
+            .collect(),
+    )?;
+    types.push(input);
+    let values = types_and_values(schema, &types, &mut out);
+    let output_hash: u64 = call
+        .output_layout
+        .parse()
+        .map_err(|_| Error::BadHash(name.to_owned()))?;
+    let mut fields = writer.fields(input, Some(&call.layout), 1)?;
+    for (text, field) in fields.iter_mut().zip(&input.field) {
+        if let Some(shape) = named_shape(schema, &field.ty) {
+            let end = text.len() - " }".len();
+            text.insert_str(end, &format!(", shape = {shape}"));
+        }
+    }
+    out.push('\n');
+    comment(&mut out, "", &call.doc);
+    let _ = writeln!(
+        out,
+        "return table.freeze({{\n\tname = {name:?},\n\tmajor = {},\n\tinput = {{ size = {}, fields = {{\n\t\t{},\n\t}} }},\n\toutput = {{ size = {}, hash = \"{output_hash}\", read = {} }},\n{values}}})",
+        call.major,
+        call.input_size,
+        fields.join(",\n\t\t"),
+        call.output_size,
+        writer.read(&call.output, 0)?,
+    );
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

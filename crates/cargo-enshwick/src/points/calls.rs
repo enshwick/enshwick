@@ -204,6 +204,14 @@ value = 1
     }
 
     #[test]
+    fn the_luau_module_of_the_fixture_is_the_one_the_runtime_is_tested_with() {
+        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+        let schema = Schema::parse(text).unwrap();
+        let code = super::super::luau_call(&schema, "you.stalls:rent").unwrap();
+        assert_eq!(code, include_str!("../../tests/fixtures/stalls_rent.luau"));
+    }
+
+    #[test]
     fn a_call_the_schema_lacks_is_named() {
         let schema = Schema::parse(SCHEMA).unwrap();
         let error = rust_call(&schema, "you.trading-post:rent").unwrap_err();

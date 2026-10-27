@@ -123,6 +123,9 @@ enum Command {
         /// The file to write; the declaration is printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Writes the call's Luau module for a Luau mod instead.
+        #[arg(long)]
+        luau: bool,
     },
     /// Writes the Luau definitions of the API, which luau-lsp reads, for
     /// the loader this tool was built with.
@@ -235,7 +238,12 @@ fn main() -> ExitCode {
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
         Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
-        Command::Call { name, from, out } => point::run_call(&name, &from, out.as_deref()),
+        Command::Call {
+            name,
+            from,
+            out,
+            luau,
+        } => point::run_call(&name, &from, out.as_deref(), luau),
         Command::Types {
             names,
             from,
