@@ -638,18 +638,17 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_of_a_newer_minor_is_refused_and_an_older_one_loads() {
+    fn a_mod_of_a_newer_minor_is_refused_and_one_of_this_minor_loads() {
         let mut newer = manifest("you.ok", "0.1.0");
         newer.header.abi_minor = ABI_MINOR + 1;
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
         let why = unsafe { parse(&newer) }.unwrap_err().to_string();
         assert!(why.contains("update Enshwick"), "{why}");
-        let mut older = manifest("you.ok", "0.1.0");
-        older.header.abi_minor = ABI_MINOR - 1;
+        let current = manifest("you.ok", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
-        assert!(unsafe { parse(&older) }.is_ok());
+        assert!(unsafe { parse(&current) }.is_ok());
     }
 
     #[test]

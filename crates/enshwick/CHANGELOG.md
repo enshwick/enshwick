@@ -8,6 +8,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: the ABI is 3.0. A mod built for ABI 2 is refused and needs a
+  rebuild against this release; the C header's `ENSHWICK_ABI_MAJOR` is 3.
 - `declare_mod!` exports the five functions under their C names only
   outside test builds, so one test binary can declare several mods.
 
@@ -21,6 +23,13 @@ Each entry names the pull request that made the change.
 - `Schema::parse` refuses a field or group key with an empty part, such as
   `auth..token`, and `Load::table_config` a field with an empty key; the
   loader refuses such a schema, and the mod's warning names the key (#593).
+
+### Removed
+
+- Breaking: the retired `HostApi` entries `retired_command`,
+  `altar_zones_control`, `set_altar_zones` and `altar_limit`, with
+  `AltarZoneSize` and `AltarLimitFn`; every later entry moves up. The ABI
+  docs no longer say in which minor of ABI 2 a field came.
 
 ## [1.0.0-alpha.8] - 2026-10-27
 

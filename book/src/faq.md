@@ -146,7 +146,7 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
 
 A mod built for a newer ABI minor than the loader's never starts: the log
-shows `built for ABI 2.<n>, newer than the loader's 2.<m>: update Enshwick`.
+shows `built for ABI 3.<n>, newer than the loader's 3.<m>: update Enshwick`.
 A settings file that stops parsing while the game runs does
 not turn the mod off: the mod logs
 `settings change skipped, the running values stay: ...` and keeps its values.

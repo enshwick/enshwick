@@ -55,7 +55,7 @@ impl MigrationStep {
     pub const RENAME_CONTENT: u32 = 6;
     /// Sets the setting `to` from the setting another mod keeps, `from`
     /// written `<mod id>:<key>`, in its settings file and in each world's
-    /// copy; nothing where that mod has no such value. Since minor 69.
+    /// copy; nothing where that mod has no such value.
     pub const TAKE_SETTING: u32 = 7;
 }
 

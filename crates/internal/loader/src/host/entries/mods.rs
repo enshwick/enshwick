@@ -343,10 +343,6 @@ pub(crate) extern "system" fn sync(me: ModHandle, synced: Str, out: *mut Str) ->
     })
 }
 
-pub(crate) extern "system" fn retired_command(_me: ModHandle) -> Status {
-    Status::MISSING
-}
-
 pub(crate) extern "system" fn config_check(
     me: ModHandle,
     callback: api_frame::ConfigCheckFn,

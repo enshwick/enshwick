@@ -9,10 +9,10 @@
 
 // The major version of this interface. A loader refuses a mod built for
 // another major.
-#define ENSHWICK_ABI_MAJOR 2
+#define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 97
+#define ENSHWICK_ABI_MINOR 0
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -105,7 +105,7 @@ typedef struct EnshwickActionCall {
 // `access Ann on`, in `action`: the action's id and its values as
 // words; `help` or nothing lists the actions. `player` is the console,
 // an administrator with no character. The reply is as for
-// `ActionCall::RUN`. Since minor 68.
+// `ActionCall::RUN`.
 #define EnshwickActionCall_CONSOLE 3
 
 // A buff an entity has, written by `HostApi::buffs`.
@@ -263,21 +263,6 @@ typedef struct EnshwickAltarZone {
   int64_t height;
 } EnshwickAltarZone;
 
-// The size `HostApi::set_altar_zones`
-// took for one altar before minor 78; the retired entry refuses it.
-typedef struct EnshwickAltarZoneSize {
-  // The altar's entity.
-  uint32_t altar;
-  // The level the size was worked out for.
-  uint8_t level;
-  // Zero.
-  uint8_t reserved[3];
-  // Cells added on every horizontal side.
-  int64_t grow;
-  // The zone's height in cells.
-  int64_t height;
-} EnshwickAltarZoneSize;
-
 // The most altar zones and bases the game groups, as
 // `HostApi::base_limit` writes it.
 typedef struct EnshwickBaseLimitInfo {
@@ -427,8 +412,7 @@ typedef struct EnshwickBuildInfo {
   uint64_t base;
   // The build fingerprint.
   struct EnshwickFingerprint fingerprint;
-  // Whether the loader's build table was made for this build. Since
-  // minor 51; older loaders run only on builds with their own table.
+  // Whether the loader's build table was made for this build.
   EnshwickBuildTable table;
 } EnshwickBuildInfo;
 
@@ -587,7 +571,7 @@ typedef uint32_t EnshwickChangeOp;
 #define EnshwickChangeOp_TIMES 1
 // The mod's value is taken out, as if it never set one; `value` is
 // ignored. Only `HostApi::set_change`
-// takes it. Since minor 85.
+// takes it.
 #define EnshwickChangeOp_RESET 2
 
 // The data of `Event::CHUNK_LOADED` and `Event::CHUNK_UNLOADED`.
@@ -650,7 +634,6 @@ typedef struct EnshwickDamageCheck {
   uint32_t source;
   // Who dealt a hit, the root of the impact that hit (the archer for an
   // arrow), or `source` when the game names none; 0 for other causes.
-  // Since minor 45.
   uint32_t attacker;
   // A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
   // fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
@@ -698,42 +681,34 @@ typedef uint32_t EnshwickDataField;
 // How long a recipe takes, in seconds; the entry is a recipe.
 #define EnshwickDataField_RECIPE_TIME 5
 // How many slots the container an item places holds; the entry is the
-// item. Since minor 80.
+// item.
 #define EnshwickDataField_CONTAINER_SLOTS 6
-// A weapon's damage factor; the entry is the item. Since minor 81.
+// A weapon's damage factor; the entry is the item.
 #define EnshwickDataField_DAMAGE_MOD 7
-// A weapon's attack speed factor; the entry is the item. Since minor 81.
+// A weapon's attack speed factor; the entry is the item.
 #define EnshwickDataField_SPEED_MOD 8
 // Every armour value of an item, scaled only; the entry is the item.
-// Since minor 81.
 #define EnshwickDataField_ARMOR 9
 // How long an item burns as fuel, in seconds; the entry is the item.
-// Since minor 81.
 #define EnshwickDataField_BURN_TIME 10
-// The energy an item gives as fuel; the entry is the item. Since
-// minor 81.
+// The energy an item gives as fuel; the entry is the item.
 #define EnshwickDataField_ENERGY_OUTPUT 11
-// The comfort a placed item gives; the entry is the item. Since
-// minor 81.
+// The comfort a placed item gives; the entry is the item.
 #define EnshwickDataField_COMFORT_AMOUNT 12
 // The stack size random loot rolls for an item; the entry is the item.
-// Since minor 82.
 #define EnshwickDataField_LOOT_STACK_SIZE 13
-// The count fill tables give of an item; the entry is the item. Since
-// minor 82.
+// The count fill tables give of an item; the entry is the item.
 #define EnshwickDataField_LOOT_COUNT 14
-// The chance fill tables give an item; the entry is the item. Since
-// minor 82.
+// The chance fill tables give an item; the entry is the item.
 #define EnshwickDataField_LOOT_SPAWN_PROBABILITY 15
-// The weight of an item in fill tables; the entry is the item. Since
-// minor 82.
+// The weight of an item in fill tables; the entry is the item.
 #define EnshwickDataField_LOOT_WEIGHT 16
-// The workshop a recipe is made at, by its game id. Since minor 93.
+// The workshop a recipe is made at, by its game id.
 #define EnshwickDataField_RECIPE_STATION 17
 
 // Which vanilla items a `DataChange` reaches.
 typedef uint32_t EnshwickDataSelect;
-// The entry the change names, as before minor 83.
+// The entry the change names.
 #define EnshwickDataSelect_ENTRY 0
 // Every item of the categories in `DataChange::categories`.
 #define EnshwickDataSelect_CATEGORY 1
@@ -742,12 +717,12 @@ typedef uint32_t EnshwickDataSelect;
 // Every item that places a container.
 #define EnshwickDataSelect_CONTAINERS 3
 // Every recipe whose output is of the kind whose
-// `RecipeKind` code is `DataChange::categories`. Since minor 91.
+// `RecipeKind` code is `DataChange::categories`.
 #define EnshwickDataSelect_RECIPE_KIND 4
 // Every recipe made at the workshop whose GUID is
-// `DataChange::entry`. Since minor 91.
+// `DataChange::entry`.
 #define EnshwickDataSelect_WORKSHOP 5
-// Every backpack. Since minor 92.
+// Every backpack.
 #define EnshwickDataSelect_BACKPACKS 6
 
 // One change of a vanilla value, as
@@ -768,16 +743,15 @@ typedef struct EnshwickDataChange {
   // of conflicts; may be empty.
   struct EnshwickStr source;
   // The item the field names inside its entry, such as a recipe's
-  // ingredient; all zero for none. Since minor 79.
+  // ingredient; all zero for none.
   uint8_t item[16];
   // Which vanilla entries the change reaches: `entry` alone, or every
   // item or recipe a selection picks, with `entry` all zero but for
-  // `DataSelect::WORKSHOP`. Since minor 83.
+  // `DataSelect::WORKSHOP`.
   EnshwickDataSelect select;
   // The item categories `DataSelect::CATEGORY` picks, a bit per the
   // game's `ItemCategory`, or the `RecipeKind` code
-  // `DataSelect::RECIPE_KIND` picks; 0 for any other selection. Since
-  // minor 83.
+  // `DataSelect::RECIPE_KIND` picks; 0 for any other selection.
   uint32_t categories;
 } EnshwickDataChange;
 
@@ -823,13 +797,12 @@ typedef uint8_t EnshwickRelation;
 #define EnshwickRelation_RECOMMENDS 3
 // This mod takes the place of the other mod, such as one it folds in
 // (any version; the range stays empty): while this one is present, the
-// loader never starts the other and names its DLL to delete. Since
-// minor 54.
+// loader never starts the other and names its DLL to delete.
 #define EnshwickRelation_REPLACES 4
 // The other id is one this mod had before a rename: it replaces that
 // mod as `REPLACES` does, a requirement or a point
 // named by the old id finds this mod, and on the first start the loader
-// copies the old id's settings and data to this one. Since minor 69.
+// copies the old id's settings and data to this one.
 #define EnshwickRelation_WAS 5
 
 // A relation to another mod, by id and SemVer range.
@@ -904,47 +877,47 @@ typedef uint32_t EnshwickEvent;
 // the client lacks or runs in another version; no data.
 // `HostApi::join_missing` lists those mods with the versions the
 // server runs and their pages. Raised on the game thread once the player
-// closed the loader's dialog. Client only. Since minor 10.
+// closed the loader's dialog. Client only.
 #define EnshwickEvent_JOIN_REFUSED 11
 // The Flame Altars of the server's world changed: one was placed or
 // removed, moved, raised a level or had its zone built anew; no data.
 // `HostApi::altars` lists them as they are now. Raised on the game
 // thread after the step that noticed it, while a mod has opened altars
-// (`HostApi::altars_open`). Server only. Since minor 15.
+// (`HostApi::altars_open`). Server only.
 #define EnshwickEvent_ALTARS_CHANGED 12
 // The day began in the server's world: the clock passed the hour day
 // starts at, or a mod set it into the day; no data. Raised on the game
-// thread after the step that noticed it. Server only. Since minor 28.
+// thread after the step that noticed it. Server only.
 #define EnshwickEvent_DAY_STARTED 13
 // The night began in the server's world, as `Event::DAY_STARTED` the
-// day; no data. Server only. Since minor 28.
+// day; no data. Server only.
 #define EnshwickEvent_NIGHT_STARTED 14
 // A knowledge value of the server's world or of a connected player
 // changed: a recipe learnt, a quest step, a place found; data is a
 // `KnowledgeData`. Raised on the game thread after the step that
-// applied it. Server only. Since minor 32.
+// applied it. Server only.
 #define EnshwickEvent_KNOWLEDGE_CHANGED 15
 // A player completed a quest and got its rewards; data is a
 // `QuestData`. Raised on the game thread after the step. Server
-// only. Since minor 32.
+// only.
 #define EnshwickEvent_QUEST_COMPLETED 16
 // A chunk of the server's world loaded: players came near, and its
 // entities exist now; data is a `ChunkData`. Raised on the game
-// thread after the step. Server only. Since minor 33.
+// thread after the step. Server only.
 #define EnshwickEvent_CHUNK_LOADED 17
 // A chunk of the server's world unloaded: no player is near, and its
 // entities are gone; data is a `ChunkData`. Raised on the game thread
-// after the step. Server only. Since minor 33.
+// after the step. Server only.
 #define EnshwickEvent_CHUNK_UNLOADED 18
 // The settings a mod reads were replaced whole, as a world loads in this
 // process (its own settings from then on) or stops (the settings file
 // again); no data. The settings that wait for a start apply too.
-// Raised on the server's game thread. Since minor 46.
+// Raised on the server's game thread.
 #define EnshwickEvent_SETTINGS_REPLACED 19
 // A player died, from a hit, a fall, the shroud or drowning; data is a
 // `PlayerDeathData`. Raised on the game thread after the step.
 // Deaths the game keeps no record of, such as freezing or an
-// administrator's kill, raise none. Server only. Since minor 60.
+// administrator's kill, raise none. Server only.
 #define EnshwickEvent_PLAYER_DIED 20
 
 // A mod event a mod defines, or the one it subscribes to.
@@ -1093,22 +1066,18 @@ typedef uint32_t EnshwickStatus;
 // read off the server's game thread, or a world change inside a step.
 #define EnshwickStatus_WRONG_THREAD 7
 // The part of the world asked about is not loaded yet; asking starts
-// loading it, so the same call works again in a second or so. A mod
-// built before minor 84 reads it as an unknown failure. Since minor 84.
+// loading it, so the same call works again in a second or so.
 #define EnshwickStatus_NOT_LOADED 8
 // The box asked about leaves the world: past its edge across, or above
-// the height the loader takes. A mod built before minor 87 reads it as
-// an unknown failure. Since minor 87.
+// the height the loader takes.
 #define EnshwickStatus_OUTSIDE_WORLD 9
 // The component type is the static half of its ECS type: the set-up
 // values the entity's template holds and every entity of that template
-// shares, which a write would change for all of them. A mod built
-// before minor 94 reads it as an unknown failure. Since minor 94.
+// shares, which a write would change for all of them.
 #define EnshwickStatus_STATIC_HALF 10
 // The entity named is no prop: not placed from an item, or a creature
 // such as an animal, a pet or a survivor, which only the general
-// entity calls reach. A mod built before minor 96 reads it as an
-// unknown failure. Since minor 96.
+// entity calls reach.
 #define EnshwickStatus_NOT_A_PROP 11
 
 // An opaque handle the loader gives each mod; every call names its caller
@@ -1195,7 +1164,7 @@ typedef uint32_t EnshwickManifestFlags;
 // The mod may be reloaded while the game runs, for development: it
 // keeps no state it cannot hand over, stops its own threads in
 // `shutdown` and uses only what a reload can unlink (hooks, events,
-// lookups, settings, logging). Since minor 53; see the modding book.
+// lookups, settings, logging); see the modding book.
 #define EnshwickManifestFlags_RELOAD 2
 
 // A mod the loader loaded, from `HostApi::mods`; the loader itself comes
@@ -1221,20 +1190,20 @@ typedef struct EnshwickModInfo {
   struct EnshwickStr file;
   // The manifest's human metadata, as in `Manifest`; in
   // `HostApi::join_missing`, the name and homepage the server advertises
-  // and empty strings for the rest. Since minor 36.
+  // and empty strings for the rest.
   struct EnshwickStr name;
-  // One sentence on what the mod does. Since minor 36.
+  // One sentence on what the mod does.
   struct EnshwickStr description;
-  // The authors' names. Since minor 36.
+  // The authors' names.
   const struct EnshwickStr *authors;
-  // How many names `authors` points at. Since minor 36.
+  // How many names `authors` points at.
   size_t author_count;
-  // An SPDX licence expression. Since minor 36.
+  // An SPDX licence expression.
   struct EnshwickStr license;
-  // Where players read about the mod. Since minor 36.
+  // Where players read about the mod.
   struct EnshwickStr homepage;
   // In `HostApi::replaced`, the id of the mod that replaces this one;
-  // empty elsewhere. Since minor 54.
+  // empty elsewhere.
   struct EnshwickStr replaced_by;
 } EnshwickModInfo;
 
@@ -1333,15 +1302,15 @@ typedef struct EnshwickItemData {
   // How many fit one stack.
   uint16_t max_stack;
   // The game's `ItemCategory`: 1 equipment, 2 weapons, 3 tools and so
-  // on. Since minor 48; zero before.
+  // on.
   uint8_t category;
-  // The game's `ItemRarity` of the type. Since minor 48; zero before.
+  // The game's `ItemRarity` of the type.
   uint8_t rarity;
   // `ItemInfo` flags: `ItemData::HAS_PIDE` and the others on this type.
   uint32_t flags;
   // The GUID of the template a player places from the item, its
   // `equipment.placedEntity`, in file order; all zero for an item that
-  // places nothing. Since minor 88; zero before.
+  // places nothing.
   uint8_t placed_entity[16];
 } EnshwickItemData;
 // Each item has an entity of its own, with durability or a level.
@@ -1390,10 +1359,10 @@ typedef struct EnshwickInventoryOp {
 // Replaces the stack in slot `target` with `count` new items `item`,
 // each with its own entity, given to the inventory in `other`'s low
 // half and asked for the same slot; `other`'s high half holds the
-// `f32` fill of their meter. Since minor 42.
+// `f32` fill of their meter.
 #define EnshwickInventoryOp_RENEW 6
 // For `InventoryOp::GIVE`: `other` holds the fill of each new item's
-// meter, the game's own per-item fuel fill. Since minor 37.
+// meter, the game's own per-item fuel fill.
 #define EnshwickInventoryOp_FILLED 2
 
 // Inventory operations to run in one transaction, for
@@ -1557,15 +1526,13 @@ typedef struct EnshwickSummon {
   // The target cell.
   int64_t target[3];
   // The slot the used item lies in, `sub-inventory | index << 32`.
-  // Since minor 37.
   uint64_t slot;
-  // The used item's own entity, 0 for an item without one. Since minor
-  // 37.
+  // The used item's own entity, 0 for an item without one.
   uint32_t pide;
   // The used item's meter as clients see it, current and maximum;
-  // `[0, 0]` for an item without one. Since minor 37.
+  // `[0, 0]` for an item without one.
   uint16_t meter[2];
-  // After the use: 1 when it took the item. Since minor 37.
+  // After the use: 1 when it took the item.
   uint8_t consumed;
   // Zero.
   uint8_t reserved[3];
@@ -1573,7 +1540,7 @@ typedef struct EnshwickSummon {
 // A filter's answer: the use takes the item.
 #define EnshwickSummon_TAKE 1
 // A filter's answer: the use is refused; nothing spawns, moves or is
-// taken. Since minor 42.
+// taken.
 #define EnshwickSummon_REFUSE 2
 
 // A summon filter: returns `Summon::TAKE` to make the game take the
@@ -1674,11 +1641,6 @@ typedef int32_t (*EnshwickComfortFn)(const struct EnshwickComfort *comfort, void
 
 // An experience filter: the pass and the pointer given at registration.
 typedef void (*EnshwickExperiencePassFn)(struct EnshwickExperiencePass *pass, void *user);
-
-// A mod's altar limit before minor 82: the Flame level and the pointer
-// given at registration; returns how many altars that level allows. The
-// retired `HostApi::altar_limit` refuses it.
-typedef uint8_t (*EnshwickAltarLimitFn)(uint32_t flame_level, void *user);
 
 // A mod's handler for game events: the event and the pointer given at
 // subscription. It must not unwind.
@@ -2283,7 +2245,7 @@ typedef struct EnshwickMigrationStep {
 #define EnshwickMigrationStep_RENAME_CONTENT 6
 // Sets the setting `to` from the setting another mod keeps, `from`
 // written `<mod id>:<key>`, in its settings file and in each world's
-// copy; nothing where that mod has no such value. Since minor 69.
+// copy; nothing where that mod has no such value.
 #define EnshwickMigrationStep_TAKE_SETTING 7
 
 // One mod migration: an id and its steps, in order.
@@ -2595,18 +2557,16 @@ typedef struct EnshwickTransactionOp {
 // A terrain add, dig or flatten: `data` points at a `TerrainEdit`
 // without `TerrainEdit::DRY_RUN`.
 #define EnshwickTransactionOp_TERRAIN 1
-// Voxels written over a box: `data` points at a `VoxelWrite`. Since
-// minor 89.
+// Voxels written over a box: `data` points at a `VoxelWrite`.
 #define EnshwickTransactionOp_VOXELS 2
 // The building voxels of a box cleared to air: `data` points at a
-// `VoxelRegion`. Since minor 89.
+// `VoxelRegion`.
 #define EnshwickTransactionOp_ERASE 3
-// A building block placed: `data` points at a `BlockPlace`. Since
-// minor 89.
+// A building block placed: `data` points at a `BlockPlace`.
 #define EnshwickTransactionOp_BLOCK 4
-// A prop placed: `data` points at a `PropPlace`. Since minor 96.
+// A prop placed: `data` points at a `PropPlace`.
 #define EnshwickTransactionOp_PLACE_PROP 5
-// A prop removed: `data` points at a `PropRemove`. Since minor 96.
+// A prop removed: `data` points at a `PropRemove`.
 #define EnshwickTransactionOp_REMOVE_PROP 6
 
 // Where a transaction stands, written by
@@ -2633,17 +2593,16 @@ typedef struct EnshwickTransactionInfo {
   uint64_t bricks;
   // When the server refused the player the transaction acts for, its
   // reason, one of the `BuildRights` refusals; `BuildRights::ALLOWED`
-  // otherwise. Since minor 89.
+  // otherwise.
   uint32_t refusal;
   // Zero.
   uint32_t reserved;
   // When a prop's state stopped it, or stopped its last undo, the kinds
   // of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
-  // Since minor 96.
   uint32_t holds;
   // The props it placed and still holds, which
   // `HostApi::transaction_entities`
-  // lists. Since minor 96.
+  // lists.
   uint32_t created;
 } EnshwickTransactionInfo;
 // Queued, or written in part: the loader spreads a large one over the
@@ -2758,12 +2717,12 @@ typedef struct EnshwickHostApi {
                              struct EnshwickStr *out);
   // Publishes the service `spec` describes, table and layout, for other
   // mods; `Status::REFUSED` when another mod publishes its name and
-  // major. Allowed during `enshwick_mod_init` only. Since minor 47.
+  // major. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*publish)(EnshwickModHandle me, const struct EnshwickServiceSpec *spec);
   // Finds the service `wanted` describes, its table null, and checks
   // that the published layout starts with the wanted one; writes the
   // table and its publisher to `out`, and on `Status::MISSING` or
-  // `Status::REFUSED` the reason. Since minor 47.
+  // `Status::REFUSED` the reason.
   EnshwickStatus (*service)(EnshwickModHandle me,
                             const struct EnshwickServiceSpec *wanted,
                             struct EnshwickServiceFound *out);
@@ -2774,34 +2733,33 @@ typedef struct EnshwickHostApi {
   // path stays valid for the process.
   EnshwickStatus (*data_dir)(EnshwickModHandle me, struct EnshwickStr *out);
   // The most detailed level kept for the mod's lines; the mod skips
-  // formatting anything more detailed. Since minor 1.
+  // formatting anything more detailed.
   EnshwickLevel (*log_level)(EnshwickModHandle me);
   // Calls `callback` with `user` on every `event` for the mod, on the
   // thread that raises it, until the mod is off; allowed during
-  // `enshwick_mod_init` only. Since minor 2.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*subscribe)(EnshwickModHandle me,
                               EnshwickEvent event,
                               EnshwickEventFn callback,
                               void *user);
-  // The ECS type hash of a reflected component type, by name. Since minor 3.
+  // The ECS type hash of a reflected component type, by name.
   EnshwickStatus (*type_hash)(struct EnshwickStr type_name, uint32_t *out);
   // A read-only pointer to `entity`'s component of type `type_hash`, valid
   // until the game thread moves on; on the server's game thread only.
   // For the static half of an ECS type, such as `FuelSetup`, it is the
-  // set-up data the entity's template holds (since minor 94; the
-  // dynamic half's data before). Since minor 3.
+  // set-up data the entity's template holds.
   EnshwickStatus (*component)(EnshwickModHandle me,
                               uint32_t entity,
                               uint32_t type_hash,
                               const void **out);
   // The template GUID of `entity`, in file order; on the server's game
-  // thread only. Since minor 3.
+  // thread only.
   EnshwickStatus (*entity_template)(EnshwickModHandle me, uint32_t entity, uint8_t (*out)[16]);
   // The connected player whose character is `entity`; on the server's game
-  // thread only. Since minor 3.
+  // thread only.
   EnshwickStatus (*player)(EnshwickModHandle me, uint32_t entity, struct EnshwickPlayerInfo *out);
   // Up to `capacity` connected players with characters in the world, and
-  // how many there are; on the server's game thread only. Since minor 3.
+  // how many there are; on the server's game thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*players)(EnshwickModHandle me,
                             struct EnshwickPlayerInfo *out,
@@ -2810,7 +2768,7 @@ typedef struct EnshwickHostApi {
   // Serves the resource `key` as `patch` makes it from the resource
   // `base`, built the first time the game reads it: a new resource when
   // the keys differ, a changed vanilla one when they are equal. Allowed
-  // during `enshwick_mod_init` only; one mod per key. Since minor 4.
+  // during `enshwick_mod_init` only; one mod per key.
   EnshwickStatus (*serve_resource)(EnshwickModHandle me,
                                    const struct EnshwickResourceKey *key,
                                    const struct EnshwickResourceKey *base,
@@ -2818,7 +2776,7 @@ typedef struct EnshwickHostApi {
                                    void *user);
   // Adds the text of `LocaTag` `id` in `language` (`LanguageId`, 0 for any
   // language without its own); the client shows it wherever the game asks
-  // for that tag. Allowed during `enshwick_mod_init` only. Since minor 4.
+  // for that tag. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*add_text)(EnshwickModHandle me,
                              uint32_t id,
                              uint32_t language,
@@ -2826,7 +2784,7 @@ typedef struct EnshwickHostApi {
   // Up to `capacity` loaded mods, the loader first, and how many there
   // are. Entries are `entry_size` bytes apart, the caller's
   // `size_of::<ModInfo>()`; the loader fills what both sides know of each
-  // and its own `Header`. Since minor 5.
+  // and its own `Header`.
   EnshwickStatus (*mods)(EnshwickModHandle me,
                          struct EnshwickModInfo *out,
                          uint32_t entry_size,
@@ -2837,17 +2795,17 @@ typedef struct EnshwickHostApi {
   // over them: the server's while this client is joined to a server that
   // advertises values for the mod, else an empty string. A server
   // advertises the `synced` of each join mod. The text written stays valid
-  // for the life of the process. Since minor 6.
+  // for the life of the process.
   EnshwickStatus (*sync)(EnshwickModHandle me, struct EnshwickStr synced, struct EnshwickStr *out);
   // Writes where the game's code section (`.text`) is loaded and how many
-  // bytes it spans. Since minor 7.
+  // bytes it spans.
   EnshwickStatus (*code_range)(uint64_t *start, uint64_t *len);
   // Replaces `len` bytes of game code at `address`, which must read
   // `expected` at arming, with `replacement`; both point at `len` bytes
   // valid for the call. The loader writes the patch with the hooks, refuses
   // one that overlaps another patch, and skips one that overlaps hooked
   // bytes or no longer reads `expected`, turning the mod off. Allowed
-  // during `enshwick_mod_init` only. Since minor 7.
+  // during `enshwick_mod_init` only.
   EnshwickStatus (*patch_code)(EnshwickModHandle me,
                                uint64_t address,
                                const uint8_t *expected,
@@ -2855,31 +2813,26 @@ typedef struct EnshwickHostApi {
                                size_t len);
   // The most recipes one workshop takes on the running game: 512, the
   // game's own list size, or `u32::MAX` once the loader has lifted that
-  // limit at arming. Since minor 7.
+  // limit at arming.
   uint32_t (*workshop_recipes)(void);
   // 1 while this process runs a game server: always on the dedicated
   // server, on the client while it hosts a game, solo play included.
-  // Since minor 8.
   uint8_t (*hosting)(void);
   // The entity world of the game server this process runs, the value a
   // system context of that world holds at `ecs.context_entity_world`; 0
-  // while none runs or before its first step. Since minor 8.
+  // while none runs or before its first step.
   uint64_t (*server_world)(void);
-  // Retired in minor 68, when chat commands left the platform: always
-  // `Status::MISSING`. The slot keeps the table's layout.
-  EnshwickStatus (*retired_command)(EnshwickModHandle me);
   // Sends `text` to the chat of the player whose account key is `to`, or of
   // everyone for 0, from any thread; the server posts it after the next
-  // step. Lines past 1024 bytes are cut. Since minor 9.
+  // step. Lines past 1024 bytes are cut.
   EnshwickStatus (*chat)(EnshwickModHandle me, uint64_t to, struct EnshwickStr text);
   // Gives `entity` the name `text`, as a player's rename does: shown on
   // hover, sent to every client and saved with the world; cut at 255
-  // bytes, removed when empty. On the server's game thread only. Since
-  // minor 9.
+  // bytes, removed when empty. On the server's game thread only.
   EnshwickStatus (*set_label)(EnshwickModHandle me, uint32_t entity, struct EnshwickStr text);
   // Calls `callback` with `user` before the server applies a player's
   // rename of an entity; any filter returning 0 refuses it. Allowed during
-  // `enshwick_mod_init` only. Since minor 9.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*rename_filter)(EnshwickModHandle me, EnshwickRenameCallFn callback, void *user);
   // Up to `capacity` of the server's join mods that the last refused join
   // found missing on this client or in another version, and how many
@@ -2888,7 +2841,7 @@ typedef struct EnshwickHostApi {
   // client's DLL path when it has the mod (empty otherwise), and the name
   // and homepage the server advertises. The strings stay valid for the
   // process. Empty before a refused
-  // join; see `Event::JOIN_REFUSED`. Since minor 10.
+  // join; see `Event::JOIN_REFUSED`.
   EnshwickStatus (*join_missing)(EnshwickModHandle me,
                                  struct EnshwickModInfo *out,
                                  uint32_t entry_size,
@@ -2896,23 +2849,23 @@ typedef struct EnshwickHostApi {
                                  uint32_t *count);
   // Runs a handler before the instruction at an address inside a game
   // function, with the registers there; allowed during
-  // `enshwick_mod_init` only. Since minor 11.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*hook_at)(EnshwickModHandle me, const struct EnshwickMidHookSpec *spec);
   // Asks for inventory transactions and item data; allowed during
   // `enshwick_mod_init` only. `Status::MISSING` when this game build
   // lacks a piece of them. Requests run in the game server: the dedicated
-  // server, or the client while it hosts. Since minor 12.
+  // server, or the client while it hosts.
   EnshwickStatus (*inventory_open)(EnshwickModHandle me);
   // Writes the static data of the item `item`, as far as the `Header`
   // `out` starts with says the caller's struct reaches;
   // `Status::MISSING` for an unknown item, or while no world runs.
-  // Any thread. Since minor 12.
+  // Any thread.
   EnshwickStatus (*item_info)(EnshwickModHandle me, uint32_t item, struct EnshwickItemData *out);
   // Queues `request`, from any thread, for the game's inventory system,
   // which runs it as one transaction: all or nothing. `done` gets the
   // result with `user` on the game thread after a later step, unless the
   // mod is off by then. On an error status nothing is queued and `done` is
-  // never called. Since minor 12.
+  // never called.
   EnshwickStatus (*inventory_submit)(EnshwickModHandle me,
                                      const struct EnshwickInventoryRequest *request,
                                      EnshwickInventoryResultFn done,
@@ -2921,45 +2874,35 @@ typedef struct EnshwickHostApi {
   // calls it, on a thread of its own or the game thread, whenever it
   // writes its status summary (`logs/enshwick/status.log`, `/enshwick
   // status`) and shows its lines under the mod. Allowed during
-  // `enshwick_mod_init` only. Since minor 13.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*status)(EnshwickModHandle me, EnshwickStatusFn callback, void *user);
   // Runs the console line `line` as the server's console, an
   // administrator with no character, and writes its reply to `out`, valid
   // until the next call on this thread: `enshwick ...` for the loader's
   // own tools, or a mod's id and the text form of one of its
   // actions. On the server's game thread only;
-  // `Status::MISSING` when nothing answers the line's first word. Since
-  // minor 13, with actions since minor 68.
+  // `Status::MISSING` when nothing answers the line's first word.
   EnshwickStatus (*run_console)(EnshwickModHandle me,
                                 struct EnshwickStr line,
                                 struct EnshwickStr *out);
   // Asks the loader to follow the Flame Altars of the server's world, for
   // `HostApi::altars` and `Event::ALTARS_CHANGED`. Allowed during
-  // `enshwick_mod_init` only. Since minor 15.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*altars_open)(EnshwickModHandle me);
   // Up to `capacity` altars of the server's world and how many there are.
   // Entries are `entry_size` bytes apart, the caller's
   // `size_of::<AltarInfo>()`; the loader fills what both sides know of
   // each and its own `Header`. Any thread; empty while no world runs.
-  // `Status::REFUSED` for a mod that did not open altars. Since minor 15.
+  // `Status::REFUSED` for a mod that did not open altars.
   EnshwickStatus (*altars)(EnshwickModHandle me,
                            struct EnshwickAltarInfo *out,
                            uint32_t entry_size,
                            uint32_t capacity,
                            uint32_t *count);
-  // Retired in minor 78, when altar zone sizes became a chain any mod
-  // joins (`HostApi::altar_zone_filter`): always `Status::REFUSED`.
-  // The slot keeps the table's layout.
-  EnshwickStatus (*altar_zones_control)(EnshwickModHandle me);
-  // Retired in minor 78 with `HostApi::altar_zones_control`: always
-  // `Status::REFUSED`. The slot keeps the table's layout.
-  EnshwickStatus (*set_altar_zones)(EnshwickModHandle me,
-                                    const struct EnshwickAltarZoneSize *sizes,
-                                    size_t count);
   // Calls `callback` with `user` when the game refuses a placement whose
   // box does not lie in one building zone; any filter returning 1 accepts
   // it after all. Runs on both sides, since a client predicts placement.
-  // Allowed during `enshwick_mod_init` only. Since minor 15.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*zone_check_filter)(EnshwickModHandle me, EnshwickZoneCheckFn callback, void *user);
   // Makes `callback` with `user` the answer to the game's survivor
   // lookups that `SurvivorLookup` names; one mod at a time
@@ -2967,26 +2910,25 @@ typedef struct EnshwickHostApi {
   // threads, in the dedicated server or a hosting client, and for
   // `SurvivorLookup::CURSOR` on a client alone too. Allowed during
   // `enshwick_mod_init` only; `Status::MISSING` on a build that lacks a
-  // piece. Since minor 16.
+  // piece.
   EnshwickStatus (*survivor_lookup)(EnshwickModHandle me,
                                     EnshwickSurvivorLookupFn callback,
                                     void *user);
   // Calls `callback` with `user` after a survivor's own bed check kept its
   // bed; any filter returning 0 clears it. Server's worker threads.
-  // Allowed during `enshwick_mod_init` only. Since minor 16.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*survivor_bed_check)(EnshwickModHandle me, EnshwickBedCheckFn callback, void *user);
   // Calls `callback` with `user` before a summoning staff spawns or moves
   // a survivor; any filter returning 1 makes the use take the item.
-  // Server's game thread. Allowed during `enshwick_mod_init` only. Since
-  // minor 16.
+  // Server's game thread. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*summon_filter)(EnshwickModHandle me, EnshwickSummonFn callback, void *user);
   // Files item `item` as a summoning staff of the survivor `survivor`, so
   // the game treats it as that survivor's staff, on both sides. Allowed
-  // during `enshwick_mod_init` only. Since minor 16.
+  // during `enshwick_mod_init` only.
   EnshwickStatus (*summon_item)(EnshwickModHandle me, uint32_t item, uint32_t survivor);
   // Makes `callback` with `user` merge the statuses the client's survivor
   // menu shows for a survivor with several entities. Client only; one mod
-  // at a time. Allowed during `enshwick_mod_init` only. Since minor 16.
+  // at a time. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*survivor_status)(EnshwickModHandle me,
                                     EnshwickSurvivorStatusFn callback,
                                     void *user);
@@ -2994,14 +2936,14 @@ typedef struct EnshwickHostApi {
   // `Interaction` names; any filter returning 0 refuses it. Runs in the
   // server's world only, on the thread of the system that checks it.
   // Allowed during `enshwick_mod_init` only; `Status::MISSING` on a
-  // build that lacks a piece. Since minor 17.
+  // build that lacks a piece.
   EnshwickStatus (*interaction_filter)(EnshwickModHandle me,
                                        EnshwickInteractionFn callback,
                                        void *user);
   // Calls `callback` with `user` when the game asks whether a character
   // unlocked skill node `node`; the first filter that answers decides.
   // Runs on both sides, on the asking thread. Allowed during
-  // `enshwick_mod_init` only. Since minor 18.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*skill_override)(EnshwickModHandle me,
                                    uint32_t node,
                                    EnshwickSkillCheckFn callback,
@@ -3009,40 +2951,35 @@ typedef struct EnshwickHostApi {
   // Calls `callback` with `user` when a comfort provider registers its
   // comfort; filters run in load order, each on the last one's value.
   // Server's worker threads. Allowed during `enshwick_mod_init` only.
-  // Since minor 18.
   EnshwickStatus (*comfort_filter)(EnshwickModHandle me, EnshwickComfortFn callback, void *user);
   // Calls `callback` with `user` before the server applies the
   // characters' gained experience, once per batch; filters run in load
   // order. Server's worker threads. Allowed during `enshwick_mod_init`
-  // only. Since minor 18.
+  // only.
   EnshwickStatus (*experience_filter)(EnshwickModHandle me,
                                       EnshwickExperiencePassFn callback,
                                       void *user);
-  // Retired in minor 82, when the altar limit became a chain any mod
-  // joins (`HostApi::altar_limit_filter`): always `Status::REFUSED`.
-  // The slot keeps the table's layout.
-  EnshwickStatus (*altar_limit)(EnshwickModHandle me, EnshwickAltarLimitFn callback, void *user);
   // Lets the game group 32 altar zones into its 16 bases instead of 16
   // zones, refusing an altar that would start a 17th base; the patches
   // count as the mod's own. `Status::MISSING` when this build's code is
   // not the one the loader knows: the game keeps 16. Allowed during
-  // `enshwick_mod_init` only. Since minor 19.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*raise_base_limit)(EnshwickModHandle me);
   // Writes how many altar zones and bases the game's last grouping found;
   // `Status::MISSING` before the first one or without the raised limit.
-  // Any thread. Since minor 19.
+  // Any thread.
   EnshwickStatus (*base_zones)(EnshwickModHandle me, uint32_t *zones, uint32_t *bases);
   // Calls `callback` with `user` on every game event of the reflected
   // type whose hash is `type_hash`, or on every game event for 0, on
   // the server's game thread before the systems of the next step run.
-  // Allowed during `enshwick_mod_init` only. Since minor 20.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*game_event)(EnshwickModHandle me,
                                uint32_t type_hash,
                                EnshwickGameEventFn callback,
                                void *user);
   // Up to `capacity` entities of the server's world that have a component
   // of the reflected type `type_hash` and a place in the world, and how
-  // many there are. On the server's game thread only. Since minor 21.
+  // many there are. On the server's game thread only.
   EnshwickStatus (*entities)(EnshwickModHandle me,
                              uint32_t type_hash,
                              struct EnshwickEntityPlace *out,
@@ -3051,18 +2988,17 @@ typedef struct EnshwickHostApi {
   // Asks the server to destroy `entity` after the systems of the next
   // step; `Status::REFUSED` for a player's character,
   // `Status::MISSING` for an entity not in the world. On the server's
-  // game thread only. Since minor 21.
+  // game thread only.
   EnshwickStatus (*destroy)(EnshwickModHandle me, uint32_t entity);
   // Asks the server to save the world now, as its timed saves do;
   // `Event::WORLD_SAVED` follows once the save is on disk. A save under
   // way counts as asked; `Status::REFUSED` while the world may not be
   // saved, as before it has loaded. On the server's game thread only.
-  // Since minor 21.
   EnshwickStatus (*save_world)(EnshwickModHandle me);
   // Writes the key of the world the server runs: its save file's name and
   // a hash of its folder, `[a-z0-9_-]`, valid for the process.
   // `Status::MISSING` before the server has read or written the world.
-  // Any thread. Since minor 21.
+  // Any thread.
   EnshwickStatus (*world_key)(EnshwickModHandle me, struct EnshwickStr *out);
   // A writable pointer to `entity`'s component of the reflected type
   // `type_hash`, valid until the game thread returns to the game; the
@@ -3070,9 +3006,9 @@ typedef struct EnshwickHostApi {
   // the game sends it to clients and saves it. `Status::REFUSED` for a
   // copy the game keeps for clients (`Network*`, `Client*`), which it
   // overwrites; `Status::STATIC_HALF` for the static half of an ECS
-  // type, the template's set-up data (since minor 94);
+  // type, the template's set-up data;
   // `Status::MISSING` when the entity lacks the component. On the
-  // server's game thread only. Since minor 22.
+  // server's game thread only.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
                                     uint32_t entity,
                                     uint32_t type_hash,
@@ -3083,7 +3019,7 @@ typedef struct EnshwickHostApi {
   // allows, which the server's own systems raise: `Status::REFUSED`
   // for any other or when the step's stream is full,
   // `Status::BAD_ARGS` for a size that is not the type's. On the
-  // server's game thread only. Since minor 23.
+  // server's game thread only.
   EnshwickStatus (*emit)(EnshwickModHandle me,
                          uint32_t type_hash,
                          const uint8_t *data,
@@ -3092,33 +3028,33 @@ typedef struct EnshwickHostApi {
   // the next step; `Status::MISSING` for an entity not in the world,
   // `Status::REFUSED` for one the game's teleport does not move, as a
   // prop: it moves actors and characters.
-  // On the server's game thread only. Since minor 23.
+  // On the server's game thread only.
   EnshwickStatus (*teleport)(EnshwickModHandle me, const struct EnshwickTeleportRequest *request);
   // Asks the server to spawn an entity from a template, as its admin
   // spawn does, and writes the new entity's id to `out`; the entity is in
   // the world after the next step. `Status::BAD_ARGS` for a zero
   // template; a template the game does not know spawns nothing. On the
-  // server's game thread only. Since minor 24.
+  // server's game thread only.
   EnshwickStatus (*spawn)(EnshwickModHandle me,
                           const struct EnshwickSpawnRequest *request,
                           uint32_t *out);
   // Calls `callback` with `user` on each player's craft request in the
   // server's world, on the game thread before the crafting system reads
   // it; any filter returning 0 refuses it, and nothing is made or taken.
-  // Allowed during `enshwick_mod_init` only. Since minor 25.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*craft_filter)(EnshwickModHandle me, EnshwickCraftCheckFn callback, void *user);
   // Calls `callback` with `user` after the game's cursor check allows a
   // placement; any filter returning 0 refuses it as the game refuses a
   // placement without permission. Runs on both sides, on the cursor
   // systems' worker threads: the server's check decides, a client's
-  // shows. Allowed during `enshwick_mod_init` only. Since minor 25.
+  // shows. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*build_filter)(EnshwickModHandle me, EnshwickBuildCheckFn callback, void *user);
   // Opens the mod's channel `name`, 1 to 64 bytes, between its server
   // and client parts, and writes its id to `out`; `callback` gets each
   // message on it with `user`: on the server's game thread, on a client
   // on the thread that takes the server's chat. Join mods only
   // (`Status::REFUSED` for another), since both ends must run the mod.
-  // Allowed during `enshwick_mod_init` only. Since minor 26.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*net_channel)(EnshwickModHandle me,
                                 struct EnshwickStr name,
                                 EnshwickNetMessageFn callback,
@@ -3130,7 +3066,6 @@ typedef struct EnshwickHostApi {
   // that runs Enshwick for 0. Any thread. `Status::MISSING` while the
   // peer cannot take messages, `Status::REFUSED` over the peer's rate,
   // `Status::BAD_ARGS` for too many bytes or another mod's channel.
-  // Since minor 26.
   EnshwickStatus (*net_send)(EnshwickModHandle me,
                              uint32_t channel,
                              uint64_t peer,
@@ -3138,38 +3073,36 @@ typedef struct EnshwickHostApi {
                              uint32_t size);
   // `Status::OK` when `peer` takes messages: a player's client that
   // runs Enshwick, on the server; the server, for `NetMessage::SERVER`
-  // on a client. `Status::MISSING` otherwise. Any thread. Since minor
-  // 26.
+  // on a client. `Status::MISSING` otherwise. Any thread.
   EnshwickStatus (*net_ready)(EnshwickModHandle me, uint64_t peer);
   // Shows `text`, cut at 255 bytes, on the screen of the player with
   // account key `key`, as the game shows its own "can't do that"
   // messages; `Status::MISSING` when the player's client lacks
   // Enshwick and cannot show it, and nothing is sent. On the server's
-  // game thread only. Since minor 27.
+  // game thread only.
   EnshwickStatus (*notify)(EnshwickModHandle me, uint64_t key, struct EnshwickStr text);
   // Writes the clock of the server's world, as far as the `Header`
   // `out` starts with says the caller's struct reaches. On the server's
-  // game thread only. Since minor 28.
+  // game thread only.
   EnshwickStatus (*time_of_day)(EnshwickModHandle me, struct EnshwickDaytimeInfo *out);
   // Sets the clock of the server's world to `time`, game nanoseconds of
   // the day, taken modulo 24 hours; clients follow after the next step.
-  // On the server's game thread only. Since minor 28.
+  // On the server's game thread only.
   EnshwickStatus (*set_time_of_day)(EnshwickModHandle me, int64_t time);
   // Lets the mod change how fast the clock runs, with
   // `HostApi::set_time_speed`. Allowed during `enshwick_mod_init` only.
-  // Since minor 28.
   EnshwickStatus (*time_speed_control)(EnshwickModHandle me);
   // Sets the mod's factor on the clock's speed, from 0 (stopped) to 1000;
   // the clock runs at the game's own speed times every mod's factor.
   // `Status::REFUSED` for a mod without
   // `HostApi::time_speed_control`, `Status::BAD_ARGS` for a factor
-  // out of range. On the server's game thread only. Since minor 28.
+  // out of range. On the server's game thread only.
   EnshwickStatus (*set_time_speed)(EnshwickModHandle me, float factor);
   // Copies the server's live game settings, `keen::ecs::GameSettings`,
   // into `out`, `size` bytes, which must be the type's reflected size
   // (`Status::BAD_ARGS` otherwise), and writes the preset the server
   // runs (`GameSettingsPreset`) to `preset`. On the server's game thread
-  // only. Since minor 29.
+  // only.
   EnshwickStatus (*game_settings)(EnshwickModHandle me,
                                   uint8_t *out,
                                   uint32_t size,
@@ -3179,17 +3112,16 @@ typedef struct EnshwickHostApi {
   // see them from the next step and every client gets them; the preset
   // becomes custom. Until the server stops: nothing writes them to disk.
   // `Status::BAD_ARGS` for a wrong size or a day or night length of
-  // zero or less. On the server's game thread only. Since minor 29.
+  // zero or less. On the server's game thread only.
   EnshwickStatus (*set_game_settings)(EnshwickModHandle me, const uint8_t *data, uint32_t size);
   // Calls `callback` with `user` on damage about to reach an entity's
   // health in the server's world, before the game applies it: hits,
   // falls and the shroud; what the filters leave in the
   // `DamageCheck` is what the game applies. Runs on the game's worker
   // threads, in load order. Allowed during `enshwick_mod_init` only.
-  // Since minor 30.
   EnshwickStatus (*damage_filter)(EnshwickModHandle me, EnshwickDamageFilterFn callback, void *user);
   // Up to `capacity` buff and debuff types of the running game, and how
-  // many there are. On the server's game thread only. Since minor 31.
+  // many there are. On the server's game thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*buff_types)(EnshwickModHandle me,
                                struct EnshwickBuffTypeInfo *out,
@@ -3197,7 +3129,7 @@ typedef struct EnshwickHostApi {
                                uint32_t *count);
   // Up to `capacity` buffs `entity` has, and how many there are;
   // `Status::MISSING` for an entity that holds no buffs. On the
-  // server's game thread only. Since minor 31.
+  // server's game thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*buffs)(EnshwickModHandle me,
                           uint32_t entity,
@@ -3209,19 +3141,18 @@ typedef struct EnshwickHostApi {
   // is renewed to that duration. `Status::MISSING` for an entity that
   // holds no buffs, `Status::BAD_ARGS` for an unknown type,
   // `Status::REFUSED` for a type removed in this step, which the game
-  // clears only in the next. On the server's game thread only. Since
-  // minor 31.
+  // clears only in the next. On the server's game thread only.
   EnshwickStatus (*apply_buff)(EnshwickModHandle me, const struct EnshwickBuffRequest *request);
   // Removes every buff of type `id` from `entity`, as the game cleanses
   // one: it goes in the next step. Writes 1 to `removed` when the entity
   // had it, else 0; `Status::MISSING` for an entity that holds no
-  // buffs. On the server's game thread only. Since minor 31.
+  // buffs. On the server's game thread only.
   EnshwickStatus (*remove_buff)(EnshwickModHandle me, uint32_t entity, uint32_t id, uint8_t *removed);
   // Writes knowledge `id` of the player whose character is `entity`, or
   // of the world for 0 or for an id of the world's;
   // `Status::MISSING` for an id the game does not know,
   // `Status::REFUSED` for a player not in the game. On the server's
-  // game thread only. Since minor 32.
+  // game thread only.
   EnshwickStatus (*knowledge)(EnshwickModHandle me,
                               uint32_t entity,
                               uint32_t id,
@@ -3234,23 +3165,22 @@ typedef struct EnshwickHostApi {
   // `KnowledgeInfo::FLAGS`. `Status::BAD_ARGS` for an unknown id,
   // a kind that is not the id's or a bit the game does not expect,
   // `Status::REFUSED` for a player not in the
-  // game or a full queue. On the server's game thread only. Since minor
-  // 32.
+  // game or a full queue. On the server's game thread only.
   EnshwickStatus (*grant_knowledge)(EnshwickModHandle me,
                                     uint32_t entity,
                                     uint32_t id,
                                     uint32_t kind,
                                     uint32_t value);
   // Up to `capacity` quest ids of the running game, and how many there
-  // are. On the server's game thread only. Since minor 32.
+  // are. On the server's game thread only.
   EnshwickStatus (*quests)(EnshwickModHandle me, uint32_t *out, uint32_t capacity, uint32_t *count);
   // Writes how clear, rainy, snowy and stormy it is at `position`, in
   // 32.32 fixed-point metres, as weights that add up to 1, as the game's
-  // systems weigh it. On the server's game thread only. Since minor 33.
+  // systems weigh it. On the server's game thread only.
   EnshwickStatus (*weather_at)(EnshwickModHandle me, const int64_t (*position)[3], float (*out)[4]);
   // Up to `capacity` current weather fronts of the server's world, one per
   // layer that has one, and how many there are. On the server's game
-  // thread only. Since minor 33.
+  // thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*weather_fronts)(EnshwickModHandle me,
                                    struct EnshwickWeatherFront *out,
@@ -3260,10 +3190,10 @@ typedef struct EnshwickHostApi {
   // `effect` (`WeatherFront::NONE` for clear skies) where a layer has
   // one, clear skies elsewhere, for `duration` game nanoseconds or the
   // game's own for 0; `u32::MAX` lets the game choose anew. Clients
-  // follow. On the server's game thread only. Since minor 33.
+  // follow. On the server's game thread only.
   EnshwickStatus (*set_weather)(EnshwickModHandle me, uint32_t effect, int64_t duration);
   // Up to `capacity` terrain materials of the running game, and how many
-  // there are. On the server's game thread only. Since minor 34.
+  // there are. On the server's game thread only.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*terrain_materials)(EnshwickModHandle me,
                                       struct EnshwickTerrainMaterialInfo *out,
@@ -3276,9 +3206,8 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for an edit out of range;
   // `Status::OUTSIDE_WORLD` for one that reaches past the world's edge
   // or above the height the loader takes, `Status::NOT_LOADED` unless
-  // every column of the box it can write is loaded, writing nothing
-  // (both since minor 87). On the server's game thread only. Since minor
-  // 34.
+  // every column of the box it can write is loaded, writing nothing. On
+  // the server's game thread only.
   EnshwickStatus (*terrain_edit)(EnshwickModHandle me,
                                  const struct EnshwickTerrainEdit *edit,
                                  float *amount);
@@ -3286,25 +3215,24 @@ typedef struct EnshwickHostApi {
   // of a `config::Schema`; a later call replaces
   // it. The loader answers `enshwick config` on the console from it and checks values against it
   // before it writes them. `Status::BAD_ARGS` for text that is not a
-  // schema. Any time. Since minor 35.
+  // schema. Any time.
   EnshwickStatus (*config_schema)(EnshwickModHandle me, struct EnshwickStr schema);
   // Calls `callback` with `user` after a summoning staff's use spawned or
   // moved a survivor, with `Summon::consumed` set; its return value is
   // ignored. On the thread of the use, as `HostApi::summon_filter`.
-  // Allowed during `enshwick_mod_init` only. Since minor 37.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*summoned)(EnshwickModHandle me, EnshwickSummonFn callback, void *user);
   // Opens the item data kind `id`, `name` for the mod's own
   // (`<mod>:<name>`) or `mod:name` for any mod's, each side 1 to 64 of
   // `[a-z0-9_-]`, and writes its index to `out`; every mod gets the same
-  // index for one id. Allowed during `enshwick_mod_init` only. Since
-  // minor 38.
+  // index for one id. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*item_data_open)(EnshwickModHandle me, struct EnshwickStr id, uint32_t *out);
   // Copies the value of kind `kind` on the item entity `pide` holding
   // item `item` into `out`, at most `capacity` bytes, and writes its
   // length to `len`; `Status::MISSING` when it has none or its entity
   // holds another item, `Status::BAD_ARGS` when `capacity` is short,
   // with `len` written. On the server the server's values, on a client
-  // what the server sent. Any thread. Since minor 38.
+  // what the server sent. Any thread.
   EnshwickStatus (*item_data_get)(EnshwickModHandle me,
                                   uint32_t kind,
                                   uint32_t pide,
@@ -3316,7 +3244,7 @@ typedef struct EnshwickHostApi {
   // `item` to `len` bytes at `data`, at most 512, or removes it for 0;
   // the clients that run Enshwick get the change. `Status::REFUSED`
   // on a client alone, `Status::MISSING` before the world has loaded.
-  // Any thread. Since minor 38.
+  // Any thread.
   EnshwickStatus (*item_data_set)(EnshwickModHandle me,
                                   uint32_t kind,
                                   uint32_t pide,
@@ -3328,14 +3256,13 @@ typedef struct EnshwickHostApi {
   // callback draws with `HostApi::ui_widget`. Client only
   // (`Status::MISSING` on a server); when the interface could not be
   // linked, the callback never runs. Allowed during `enshwick_mod_init`
-  // only. Since minor 39.
+  // only.
   EnshwickStatus (*ui_frame)(EnshwickModHandle me, EnshwickUiFrameFn callback, void *user);
   // Draws `widget` in the frame `frame` names and writes back its
   // `index`, `value` and `result`. Only inside the mod's frame callback
   // (`Status::WRONG_THREAD` elsewhere); `Status::REFUSED` for a
   // widget outside a window or an `UiWidget::END` without one;
-  // `Status::MISSING` for a widget this game build lacks. Since minor
-  // 39.
+  // `Status::MISSING` for a widget this game build lacks.
   EnshwickStatus (*ui_widget)(EnshwickModHandle me, uint64_t frame, struct EnshwickUiWidget *widget);
   // Queues `dialog` and calls `callback` with the answer and `user` once
   // the player gives it; dialogs show one at a time, in order. Any
@@ -3343,7 +3270,7 @@ typedef struct EnshwickHostApi {
   // interface could not be linked, the dialog shows as a system message
   // box. `Status::REFUSED` when too many wait; `Status::WRONG_THREAD`
   // for `UiDialog::WAITING` on the thread that draws the interface. On
-  // an error status `callback` is never called. Since minor 39.
+  // an error status `callback` is never called.
   EnshwickStatus (*ui_dialog)(EnshwickModHandle me,
                               const struct EnshwickUiDialog *dialog,
                               EnshwickUiAnswerFn callback,
@@ -3352,12 +3279,12 @@ typedef struct EnshwickHostApi {
   // HUD in game, hidden with it; the callback draws labels and bars with
   // `HostApi::ui_widget` at their `anchor`. Client only
   // (`Status::MISSING` on a server). Allowed during
-  // `enshwick_mod_init` only. Since minor 40.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*ui_hud)(EnshwickModHandle me, EnshwickUiFrameFn callback, void *user);
   // Replaces the mod's markers on the client's map with the `count` at
   // `markers`, copied; none clears them. Any thread. Client only
   // (`Status::MISSING` on a server); `Status::BAD_ARGS` past 256
-  // markers. Since minor 40.
+  // markers.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*ui_markers)(EnshwickModHandle me,
                                const struct EnshwickUiMarker *markers,
@@ -3365,18 +3292,17 @@ typedef struct EnshwickHostApi {
   // Makes `callback` with `user` the mod's check of a new settings text,
   // which the loader runs before it writes a change from the console or the
   // Mods screen; a refusal keeps the file. Allowed during
-  // `enshwick_mod_init` only. Since minor 41.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*config_check)(EnshwickModHandle me, EnshwickConfigCheckFn callback, void *user);
   // Hands the loader the mod's texts, a TOML table per language code as
   // `crate::i18n::Texts` reads them, for the loader's own screens: the
   // Mods screen labels the mod's settings with them. A later call
-  // replaces them. Since minor 43.
+  // replaces them.
   EnshwickStatus (*texts)(EnshwickModHandle me, struct EnshwickStr toml);
   // Serves `len` bytes at `data` as game content, the pixels of a
   // texture the mod serves, and writes the content hash a resource names
   // them by to `out`; the same bytes give the same hash. The loader
-  // keeps the bytes for the life of the process. Any thread. Since minor
-  // 44.
+  // keeps the bytes for the life of the process. Any thread.
   EnshwickStatus (*content_serve)(EnshwickModHandle me,
                                   const uint8_t *data,
                                   uint32_t len,
@@ -3386,7 +3312,7 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` for a hash the archive lacks or keeps
   // compressed, `Status::BAD_ARGS` when `capacity` is short, with
   // `len` written. Reads the archive's files, never the game's memory.
-  // Any thread. Since minor 44.
+  // Any thread.
   EnshwickStatus (*content_read)(EnshwickModHandle me,
                                  const uint32_t (*hash)[4],
                                  uint8_t *out,
@@ -3395,7 +3321,7 @@ typedef struct EnshwickHostApi {
   // `Status::OK` when this client shows the UI images mods serve: the
   // content and UI registry links run and the registry knows the served
   // images; `Status::MISSING` otherwise, and always on a server. Any
-  // thread. Since minor 44.
+  // thread.
   EnshwickStatus (*icons_ready)(EnshwickModHandle me);
   // Defines the stat kind `id` with `def`, or opens it with a null
   // `def`, and writes its index and key to `out`. A mod defines kinds in
@@ -3404,14 +3330,13 @@ typedef struct EnshwickHostApi {
   // gets the same index for one id. `Status::BAD_ARGS` for a malformed
   // id or definition, `Status::REFUSED` for a kind defined twice or in
   // another mod's namespace. Allowed during `enshwick_mod_init` only.
-  // Since minor 45.
   EnshwickStatus (*stat_open)(EnshwickModHandle me,
                               struct EnshwickStr id,
                               const struct EnshwickStatDefData *def,
                               struct EnshwickStatRef *out);
   // Writes the definition of stat `stat` to `def` and its full id to
   // `id`, a string the loader keeps for the process; `Status::MISSING`
-  // for a kind opened but never defined. Any thread. Since minor 45.
+  // for a kind opened but never defined. Any thread.
   EnshwickStatus (*stat_info)(EnshwickModHandle me,
                               uint32_t stat,
                               struct EnshwickStatDefData *def,
@@ -3419,27 +3344,26 @@ typedef struct EnshwickHostApi {
   // Writes the value of stat `stat` on `entity` to `out`: its default
   // when nothing modifies it. Values are worked out on the server after
   // each step a source changed; a client answers defaults. Any thread,
-  // without locks. Since minor 45.
+  // without locks.
   EnshwickStatus (*stat_value)(EnshwickModHandle me, uint32_t entity, uint32_t stat, float *out);
   // Sets or removes a modifier the mod keeps on an entity; the value
   // follows after the next step. `Status::REFUSED` on a client alone,
   // or for a saved modifier on an entity that is no player. Any thread.
-  // Since minor 45.
   EnshwickStatus (*stat_modify)(EnshwickModHandle me, const struct EnshwickStatModify *request);
   // Gives the buff type `buff` the `count` modifiers at `modifiers`:
   // they count toward every watched entity that has the buff. Allowed
-  // during `enshwick_mod_init` only. Since minor 45.
+  // during `enshwick_mod_init` only.
   EnshwickStatus (*stat_buff)(EnshwickModHandle me,
                               uint32_t buff,
                               const struct EnshwickStatModifierData *modifiers,
                               uint32_t count);
   // Calls `callback` with `user` for every stat value that changed on a
   // watched entity, on the game thread after the step that changed it.
-  // Allowed during `enshwick_mod_init` only. Since minor 45.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*stats_changed)(EnshwickModHandle me, EnshwickStatChangeFn callback, void *user);
   // Writes up to `capacity` modifiers that count toward stat `stat` on
   // `entity`, in the order they apply, and how many there are to
-  // `count`; every stat for `u32::MAX`. Any thread. Since minor 45.
+  // `count`; every stat for `u32::MAX`. Any thread.
   EnshwickStatus (*stat_sources)(EnshwickModHandle me,
                                  uint32_t entity,
                                  uint32_t stat,
@@ -3448,19 +3372,19 @@ typedef struct EnshwickHostApi {
                                  uint32_t *count);
   // Watches `entity` for the items it wears and the buffs it has, or
   // stops for `watch` 0: players are always watched, and so is every
-  // entity a mod keeps a modifier on. Any thread. Since minor 45.
+  // entity a mod keeps a modifier on. Any thread.
   EnshwickStatus (*stat_watch)(EnshwickModHandle me, uint32_t entity, uint8_t watch);
   // Defines the mod event `spec` describes, named `<id>:<name>` after
   // the defining mod, and writes the id `HostApi::send_event` takes;
   // `Status::REFUSED` for a name outside the mod's id or defined
-  // twice. Allowed during `enshwick_mod_init` only. Since minor 47.
+  // twice. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*define_event)(EnshwickModHandle me,
                                  const struct EnshwickEventSpec *spec,
                                  uint32_t *out);
   // Calls `callback` with `user` and the event's data on every mod event
   // `spec` names, once its definition, checked against `spec`'s layout
   // when every mod is initialised, matches. Allowed during
-  // `enshwick_mod_init` only. Since minor 47.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*subscribe_event)(EnshwickModHandle me,
                                     const struct EnshwickEventSpec *spec,
                                     EnshwickModEventFn callback,
@@ -3468,11 +3392,10 @@ typedef struct EnshwickHostApi {
   // Hands `data` to every subscriber of the mod's own event `event`, on
   // this thread, before it returns; reaches no one before every mod is
   // initialised. `Status::REFUSED` for an event another mod defined.
-  // Any thread. Since minor 47.
+  // Any thread.
   EnshwickStatus (*send_event)(EnshwickModHandle me, uint32_t event, const void *data);
   // Defines the affix `id` in the mod's namespace with `def` and writes
   // its index and key to `out`. Allowed during `enshwick_mod_init` only.
-  // Since minor 48.
   EnshwickStatus (*affix_open)(EnshwickModHandle me,
                                struct EnshwickStr id,
                                const struct EnshwickAffixDefData *def,
@@ -3481,13 +3404,12 @@ typedef struct EnshwickHostApi {
   // category, replacing those it had, and writes how many to `count`;
   // `Status::REFUSED` for a `AffixRoll::ONCE` roll of an item that
   // rolled before, or off the server. On the server's game thread only.
-  // Since minor 48.
   EnshwickStatus (*affix_roll)(EnshwickModHandle me,
                                const struct EnshwickAffixRoll *roll,
                                uint32_t *count);
   // Writes up to `capacity` lines of what the item gives, its own
   // modifiers first and then each affix's, and how many to `count`. On a
-  // client, from what the server sent. Any thread. Since minor 48.
+  // client, from what the server sent. Any thread.
   EnshwickStatus (*item_lines)(EnshwickModHandle me,
                                uint32_t pide,
                                uint32_t item,
@@ -3495,7 +3417,7 @@ typedef struct EnshwickHostApi {
                                uint32_t capacity,
                                uint32_t *count);
   // Writes the text key and rarity of affix `affix` (an index) to `text`
-  // and `rarity`. Any thread. Since minor 48.
+  // and `rarity`. Any thread.
   EnshwickStatus (*affix_info)(EnshwickModHandle me,
                                uint32_t affix,
                                struct EnshwickStr *text,
@@ -3505,15 +3427,13 @@ typedef struct EnshwickHostApi {
   // world's files when the world loads, once per world, and records what
   // ran in `mod-data/enshwick/migrations.toml`. `Status::REFUSED` for
   // a second call or a migration that failed on the settings file, with
-  // the reason logged. Allowed during `enshwick_mod_init` only. Since
-  // minor 49.
+  // the reason logged. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*migrate)(EnshwickModHandle me, const struct EnshwickMigrationSet *set);
   // Declares the content id `id`, `<mod>:<name>` in the mod's own
   // namespace, and writes its GUID to `out`; `Status::REFUSED` for a
   // malformed id, one outside the namespace, or one whose game id
   // another content id has, which turns the mod off with both ids and
-  // both mods named. Allowed during `enshwick_mod_init` only. Since
-  // minor 50.
+  // both mods named. Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*declare_content)(EnshwickModHandle me, struct EnshwickStr id, uint8_t (*out)[16]);
   // Opens the entity data kind `id`, as `HostApi::item_data_open` opens
   // an item kind, and writes its index to `out`; with
@@ -3521,7 +3441,7 @@ typedef struct EnshwickHostApi {
   // values. `HostApi::item_data_get` and `HostApi::item_data_set`
   // read and write it with `item` 0; a set runs on the server's game
   // thread. `Status::REFUSED` for an id opened as an item kind. Allowed
-  // during `enshwick_mod_init` only. Since minor 52.
+  // during `enshwick_mod_init` only.
   EnshwickStatus (*entity_data_open)(EnshwickModHandle me,
                                      struct EnshwickStr id,
                                      EnshwickEntityDataFlags flags,
@@ -3529,7 +3449,7 @@ typedef struct EnshwickHostApi {
   // Lists the mods in `mods/` that a present mod replaces (see
   // `Relation::REPLACES`), which the loader never started, as
   // `HostApi::mods` lists the loaded ones, with
-  // `ModInfo::replaced_by` set. Any thread. Since minor 54.
+  // `ModInfo::replaced_by` set. Any thread.
   EnshwickStatus (*replaced)(EnshwickModHandle me,
                              struct EnshwickModInfo *out,
                              uint32_t entry_size,
@@ -3541,28 +3461,26 @@ typedef struct EnshwickHostApi {
   // and the last answer decides. It runs on the server's worker threads,
   // in the dedicated server or a hosting client. `Status::MISSING` on
   // a build without the input site. Allowed during `enshwick_mod_init`
-  // only. Since minor 55.
+  // only.
   EnshwickStatus (*knowledge_input_filter)(EnshwickModHandle me,
                                            EnshwickKnowledgeInputFn callback,
                                            void *user);
   // The game language the client last asked a text in, as the game
   // numbers them (see `crate::i18n::Language`); `0`, the fallback, on a
-  // server and before the client's first text. Any thread. Since minor
-  // 56.
+  // server and before the client's first text. Any thread.
   uint32_t (*language)(EnshwickModHandle me);
   // Replaces the live game settings with `data` as
   // `HostApi::set_game_settings` does, and keeps the fields with a
   // byte set in `mask` (as long as `data`) with the running world: the
   // loader applies them again each time the world loads, by the end of
   // its first step. `Status::MISSING` while no world runs.
-  // On the server's game thread only. Since minor 57.
+  // On the server's game thread only.
   EnshwickStatus (*keep_game_settings)(EnshwickModHandle me,
                                        const uint8_t *data,
                                        const uint8_t *mask,
                                        uint32_t size);
   // Forgets the game settings kept for the running world and puts back
-  // the values it loaded with. On the server's game thread only. Since
-  // minor 57.
+  // the values it loaded with. On the server's game thread only.
   EnshwickStatus (*forget_game_settings)(EnshwickModHandle me);
   // Takes knowledge `id`, of `kind`, back from the player whose character
   // is `entity`, or from the world for 0 or an id of the world's, and has
@@ -3573,7 +3491,6 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for an unknown id, a kind that is not the id's or
   // a bit past 31, `Status::REFUSED` for a player not in the game or
   // whose save has not loaded yet. On the server's game thread only.
-  // Since minor 59.
   EnshwickStatus (*revoke_knowledge)(EnshwickModHandle me,
                                      uint32_t entity,
                                      uint32_t id,
@@ -3586,7 +3503,7 @@ typedef struct EnshwickHostApi {
   // has loaded in this world; the loader keeps waiting changes with the
   // world. `Status::BAD_ARGS` for an unknown id, an id of the world's
   // or a kind that is not the id's, `Status::MISSING` while no world
-  // runs. On the server's game thread only. Since minor 59.
+  // runs. On the server's game thread only.
   EnshwickStatus (*account_knowledge)(EnshwickModHandle me,
                                       uint64_t key,
                                       uint32_t id,
@@ -3598,7 +3515,7 @@ typedef struct EnshwickHostApi {
   // references, and writes its length to `len`; `Status::MISSING` for
   // a key the archive lacks, `Status::BAD_ARGS` when `capacity` is
   // short, with `len` written. Reads the archive's files, never the
-  // game's memory. Any thread. Since minor 61.
+  // game's memory. Any thread.
   EnshwickStatus (*resource_read)(EnshwickModHandle me,
                                   const struct EnshwickResourceKey *key,
                                   uint8_t *out,
@@ -3610,7 +3527,7 @@ typedef struct EnshwickHostApi {
   // game's does. Read from the game's archive, the first call for a
   // language reads its table. `Status::MISSING` for a tag the game
   // lacks, and always on a server, whose archive has no texts. Any
-  // thread. Since minor 61.
+  // thread.
   EnshwickStatus (*game_text)(EnshwickModHandle me,
                               uint32_t id,
                               uint32_t language,
@@ -3625,7 +3542,6 @@ typedef struct EnshwickHostApi {
   // base was not kept, `Status::REFUSED` when the new build differs in length, which the
   // game's copy cannot take, `Status::BAD_ARGS` for a key the mod does
   // not serve. Each rebuild keeps the patches' new bytes for the process.
-  // Since minor 63.
   EnshwickStatus (*rebuild_resource)(EnshwickModHandle me, const struct EnshwickResourceKey *key);
   // Adds the calling mod's rule that disables recipes (`disable` 1), or
   // takes its own rule of that kind and name back (`disable` 0). `name`
@@ -3633,20 +3549,20 @@ typedef struct EnshwickHostApi {
   // workshop, as `kind` says, in the forms the loader's recipe file
   // takes; the loader resolves it against the recipe registry and logs a
   // name it cannot resolve. The server's recipe file wins over every
-  // mod's rules. Any thread; applied within a second. Since minor 64.
+  // mod's rules. Any thread; applied within a second.
   EnshwickStatus (*recipe_rule)(EnshwickModHandle me,
                                 EnshwickRecipeRuleKind kind,
                                 struct EnshwickStr name,
                                 uint32_t disable);
   // Writes 1 to `out` when the recipe with game id `recipe` is disabled
   // in this process now, else 0: on a client joined to a server, by the
-  // server's rules. Any thread. Since minor 64.
+  // server's rules. Any thread.
   EnshwickStatus (*recipe_disabled)(EnshwickModHandle me, uint32_t recipe, uint32_t *out);
   // Defines the extension point `spec` describes, named
   // `<id>:<point>` after the defining mod, and writes its id and the
   // count of its live links to `out`; `Status::REFUSED` for a name
   // outside the mod's id or defined twice. Allowed during
-  // `enshwick_mod_init` only. Since minor 65.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*define_point)(EnshwickModHandle me,
                                  const struct EnshwickPointSpec *spec,
                                  struct EnshwickPointHandle *out);
@@ -3654,7 +3570,7 @@ typedef struct EnshwickHostApi {
   // names, in the order it asks for. Matched against the point's
   // definition once every mod is initialised; a point no running mod
   // defines, or one whose layout or mode differs, leaves the link inert.
-  // Allowed during `enshwick_mod_init` only. Since minor 65.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*attach_point)(EnshwickModHandle me,
                                  const struct EnshwickPointLink *link,
                                  EnshwickPointFn callback,
@@ -3663,7 +3579,6 @@ typedef struct EnshwickHostApi {
   // `value`, which holds the mod's own answer, on this thread, and writes
   // to `verdict` whether the answer was kept, changed or refused.
   // `Status::REFUSED` for a point another mod defined. Any thread.
-  // Since minor 65.
   EnshwickStatus (*run_point)(EnshwickModHandle me,
                               uint32_t point,
                               const void *input,
@@ -3674,7 +3589,7 @@ typedef struct EnshwickHostApi {
   // use, to run one a player picked in the interface or the console
   // named, and for the hints a player has at hand. One registration per
   // mod. Allowed during
-  // `enshwick_mod_init` only. Since minor 66.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*actions)(EnshwickModHandle me, EnshwickActionFn callback, void *user);
   // Writes the first `capacity` of the running build's game event types
   // to `out`, null or room for `capacity` entries each as large as the
@@ -3684,7 +3599,7 @@ typedef struct EnshwickHostApi {
   // process. A null `count` gives `Status::BAD_ARGS` after the entries
   // are written; a handle the loader never gave out gives
   // `Status::BAD_ARGS` and a mod that is off `Status::FAULTED`, with
-  // nothing written. Any thread. Since minor 72.
+  // nothing written. Any thread.
   EnshwickStatus (*event_types)(EnshwickModHandle me,
                                 struct EnshwickEventTypeInfo *out,
                                 uint32_t capacity,
@@ -3693,14 +3608,14 @@ typedef struct EnshwickHostApi {
   // from the item's static data; `Status::MISSING` while the game has
   // not loaded the item, which on a dedicated server comes after its
   // recipe registry is first built, and while the loader serves no
-  // resource. Any thread. Since minor 73.
+  // resource. Any thread.
   EnshwickStatus (*recipe_kind)(EnshwickModHandle me, uint32_t item, EnshwickRecipeKind *out);
   // Reports whether the mod's feature `name` runs on this game build:
   // off for the reason `off`, or on when `off` is empty. The loader
   // logs it and shows it in the status summary and on the Mods screen; a
   // later report of the same name replaces the earlier one.
   // `Status::BAD_ARGS` for an empty name. Both strings are borrowed for
-  // the call. Any thread. Since minor 74.
+  // the call. Any thread.
   EnshwickStatus (*feature)(EnshwickModHandle me, struct EnshwickStr name, struct EnshwickStr off);
   // Declares that the calling mod multiplies `rate`, so the loader arms
   // what the rate needs; its factor is 1 until
@@ -3710,7 +3625,7 @@ typedef struct EnshwickHostApi {
   // mod without `ManifestFlags::JOIN`. A second declaration of the same rate is
   // `Status::OK`. `Status::TOO_LATE` after `enshwick_mod_init`,
   // `Status::FAULTED` for a mod that is off. Allowed during
-  // `enshwick_mod_init` only. Since minor 75.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*rate)(EnshwickModHandle me, EnshwickRateId rate);
   // Puts `factor` in force as the calling mod's factor for `rate`: the
   // game uses the product of every declaring mod's factor, held to 0 to
@@ -3719,7 +3634,7 @@ typedef struct EnshwickHostApi {
   // mod did not declare, `Status::FAULTED` for a mod that is off. Any
   // thread; neither allocates nor locks once every mod is initialised,
   // except for a recipe output rate, whose change builds the recipe
-  // registry again. Since minor 75.
+  // registry again.
   EnshwickStatus (*set_rate)(EnshwickModHandle me, EnshwickRateId rate, float factor);
   // Declares a change of a vanilla value. The loader merges the changes
   // of every mod once their `init` ran: a set in load order, the last
@@ -3728,7 +3643,7 @@ typedef struct EnshwickHostApi {
   // resource the first time the game reads it, on each side from its own
   // mods. `Status::BAD_ARGS` for a null `change`, an unknown field or
   // operation and a value outside the field's range; `Status::MISSING`
-  // when the build does not reflect the field. Init only. Since minor 76.
+  // when the build does not reflect the field. Init only.
   EnshwickStatus (*change_data)(EnshwickModHandle me, const struct EnshwickDataChange *change);
   // Calls `callback` with `user` before every wait of the engine's event
   // loop on its handles, on the thread that waits, and writes to `found`
@@ -3736,7 +3651,7 @@ typedef struct EnshwickHostApi {
   // whose code is not what its table expects, or that the mod hooked
   // already is left out. `Status::BAD_ARGS` for a null `found`, before
   // anything is hooked. Handlers run in load order. Allowed during
-  // `enshwick_mod_init` only. Since minor 77.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*loop_wait)(EnshwickModHandle me,
                               EnshwickLoopWaitFn callback,
                               void *user,
@@ -3747,7 +3662,7 @@ typedef struct EnshwickHostApi {
   // place, else 0. `Status::BAD_ARGS` for a null `found`, before
   // anything is hooked. Handlers run in load order, each on the last one's wait. On
   // the game thread of the server loop. Allowed during `enshwick_mod_init`
-  // only. Since minor 77.
+  // only.
   EnshwickStatus (*server_wait)(EnshwickModHandle me,
                                 EnshwickServerWaitFn callback,
                                 void *user,
@@ -3758,7 +3673,7 @@ typedef struct EnshwickHostApi {
   // hooked and the task system starts after the hooks arm, which only the
   // dedicated server does, else 0. `Status::BAD_ARGS` for a null
   // `found`, before anything is hooked. Allowed during
-  // `enshwick_mod_init` only. Since minor 77.
+  // `enshwick_mod_init` only.
   EnshwickStatus (*task_workers)(EnshwickModHandle me,
                                  uint32_t foreground,
                                  uint32_t background,
@@ -3770,12 +3685,12 @@ typedef struct EnshwickHostApi {
   // 0 counts as 0, a `height` below one cell keeps the height before it,
   // and the altar and level stay. It opens altars too, and may call the
   // host, such as `HostApi::altars`. On the server's game thread.
-  // Allowed during `enshwick_mod_init` only. Since minor 78.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*altar_zone_filter)(EnshwickModHandle me, EnshwickAltarZoneFn callback, void *user);
   // Asks the loader to size the altar zones again on the server's next
   // step, as when a mod's settings change what its filter answers. Any
   // thread, also during init. `Status::REFUSED` for a mod without an
-  // altar zone filter. Since minor 78.
+  // altar zone filter.
   EnshwickStatus (*altar_zones_changed)(EnshwickModHandle me);
   // Calls `callback` with `user` when the game asks how many altars a
   // Flame level allows, on whichever thread asks: the placement cursor
@@ -3785,8 +3700,7 @@ typedef struct EnshwickHostApi {
   // the answer within the zones the game can group
   // (`HostApi::base_limit`). A filter runs often: keep it cheap; it may
   // call the host. `Status::TOO_LATE` after `enshwick_mod_init`,
-  // `Status::MISSING` on a build without the game's lookup. Since minor
-  // 82.
+  // `Status::MISSING` on a build without the game's lookup.
   EnshwickStatus (*altar_limit_filter)(EnshwickModHandle me,
                                        EnshwickAltarLimitFilterFn callback,
                                        void *user);
@@ -3794,7 +3708,6 @@ typedef struct EnshwickHostApi {
   // its own, or the loader's maximum once `HostApi::raise_base_limit` is
   // in force, from `enshwick_mod_ready` on, with the zones its own
   // grouping takes. `Status::BAD_ARGS` for a null `out`. Any thread.
-  // Since minor 82.
   EnshwickStatus (*base_limit)(EnshwickModHandle me, struct EnshwickBaseLimitInfo *out);
   // Reads the voxels of the server's world in the box of `size` voxels
   // from `min`, in voxels of half a metre from the world's corner, into
@@ -3804,12 +3717,12 @@ typedef struct EnshwickHostApi {
   // `Status::OK`. `Status::BAD_ARGS` for a null pointer, an empty
   // box, one past `Voxel::END`, more than `Voxel::READ_MAX` voxels or
   // a `capacity` below them; `Status::OUTSIDE_WORLD` for a box past
-  // the world's edge or above the height the loader takes (since minor
-  // 87); `Status::NOT_LOADED` while part of the box is not loaded
+  // the world's edge or above the height the loader takes;
+  // `Status::NOT_LOADED` while part of the box is not loaded
   // yet, which starts loading it; `Status::MISSING` before a world
   // runs or on a build without the read. On the server's game thread at
   // a quiet moment only, as the world's writes: `Status::WRONG_THREAD`
-  // inside a step. Since minor 84.
+  // inside a step.
   EnshwickStatus (*voxel_read)(EnshwickModHandle me,
                                const uint32_t (*min)[3],
                                const uint32_t (*size)[3],
@@ -3826,7 +3739,7 @@ typedef struct EnshwickHostApi {
   // length; `Status::MISSING` when the build does not reflect the
   // field; `Status::REFUSED` for a field clients read in a mod without
   // `ManifestFlags::JOIN`; `Status::TOO_LATE` after
-  // `enshwick_mod_init`. Since minor 85.
+  // `enshwick_mod_init`.
   EnshwickStatus (*declare_change)(EnshwickModHandle me,
                                    const struct EnshwickDataChange *change,
                                    EnshwickChangeId *out);
@@ -3844,7 +3757,7 @@ typedef struct EnshwickHostApi {
   // not build again in place (the value is in force for what did build
   // and for every first read, the rest until a restart). Any
   // thread; it allocates and builds resources, so it is no per-frame
-  // call. Since minor 85.
+  // call.
   EnshwickStatus (*set_change)(EnshwickModHandle me,
                                EnshwickChangeId id,
                                EnshwickChangeOp op,
@@ -3861,7 +3774,7 @@ typedef struct EnshwickHostApi {
   // `max` below `min`; `Status::MISSING` while no world is loaded or on
   // a build without the checks. On the server's game thread at a quiet
   // moment only, outside a step or in a game event:
-  // `Status::WRONG_THREAD` inside a step. Since minor 86.
+  // `Status::WRONG_THREAD` inside a step.
   EnshwickStatus (*build_rights)(EnshwickModHandle me, struct EnshwickBuildRights *check);
   // Queues the `count` changes at `ops` as one transaction of the
   // server's world and writes its id to `id`: the loader writes them in
@@ -3876,7 +3789,7 @@ typedef struct EnshwickHostApi {
   // committed earlier fails with it before writing); `Status::REFUSED`
   // while the queue is full; `Status::MISSING` while no world runs or
   // on a build without the edits, the voxel read or the undo write. Any
-  // thread. Since minor 87.
+  // thread.
   EnshwickStatus (*transaction_commit)(EnshwickModHandle me,
                                        const struct EnshwickTransactionOp *ops,
                                        uint32_t count,
@@ -3894,13 +3807,12 @@ typedef struct EnshwickHostApi {
   // already undoing; `Status::REFUSED` for an id this mod did not get,
   // one the loader forgot, one undone, one whose undo data is gone, or
   // while the transactions in work already claim the loader's cap of
-  // undo data. Any thread. Since minor 87.
+  // undo data. Any thread.
   EnshwickStatus (*transaction_undo)(EnshwickModHandle me, uint64_t id);
   // Writes where transaction `id` of this mod stands to `out`, a
   // `TransactionInfo` with its header. `Status::BAD_ARGS` for a null
   // `out`; `Status::MISSING` for an id this mod did not get or one the
-  // loader forgot (it keeps the newest few thousand). Any thread. Since
-  // minor 87.
+  // loader forgot (it keeps the newest few thousand). Any thread.
   EnshwickStatus (*transaction_status)(EnshwickModHandle me,
                                        uint64_t id,
                                        struct EnshwickTransactionInfo *out);
@@ -3911,7 +3823,7 @@ typedef struct EnshwickHostApi {
   // player. A refusal fails it with `Status::REFUSED` and the reason in
   // `TransactionInfo::refusal`; nothing is written. The check runs at
   // its first step on the server's game thread, never at the commit.
-  // `Status::BAD_ARGS` for an `actor` of 0. Any thread. Since minor 89.
+  // `Status::BAD_ARGS` for an `actor` of 0. Any thread.
   EnshwickStatus (*transaction_commit_for)(EnshwickModHandle me,
                                            uint32_t actor,
                                            const struct EnshwickTransactionOp *ops,
@@ -3920,12 +3832,11 @@ typedef struct EnshwickHostApi {
   // `Status::OK` on the server's game thread at a quiet moment while a
   // world runs, where a mod may read live components that no system
   // writes meanwhile; `Status::WRONG_THREAD` on another thread or
-  // inside a step, `Status::MISSING` while no world runs. Since
-  // minor 90.
+  // inside a step, `Status::MISSING` while no world runs.
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
   // Asks the loader to keep a copy of the client's fog of war for this
   // mod. Client only (`Status::MISSING` on a dedicated server).
-  // Allowed during `enshwick_mod_init` only. Since minor 94.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*fog_open)(EnshwickModHandle me);
   // Writes the fog's `FogInfo` to `info`, then copies the box of
   // `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
@@ -3935,7 +3846,7 @@ typedef struct EnshwickHostApi {
   // open it; `Status::OUTSIDE_WORLD` for a box past the image;
   // `Status::BAD_ARGS` for a null `info`, or a null or short `out`
   // for a box of pixels. The loader may refresh the copy meanwhile:
-  // compare `version`. Since minor 94.
+  // compare `version`.
   EnshwickStatus (*fog_read)(EnshwickModHandle me,
                              struct EnshwickFogInfo *info,
                              uint32_t x,
@@ -3949,7 +3860,7 @@ typedef struct EnshwickHostApi {
   // `Status::REFUSED` for another name, or a name and major served
   // twice, `Status::BAD_ARGS` for a spec that does not read. Allowed
   // during `enshwick_mod_init` only: `Status::TOO_LATE` once every mod
-  // is initialised. Since minor 95.
+  // is initialised.
   EnshwickStatus (*serve_call)(EnshwickModHandle me,
                                const struct EnshwickCallSpec *spec,
                                EnshwickCallFn callback,
@@ -3961,7 +3872,7 @@ typedef struct EnshwickHostApi {
   // `Status::REFUSED` when the mod asked for the name and major already
   // with another spec, `Status::BAD_ARGS` for a spec that does not read
   // or a null `out`. Allowed during `enshwick_mod_init` only:
-  // `Status::TOO_LATE` once every mod is initialised. Since minor 95.
+  // `Status::TOO_LATE` once every mod is initialised.
   EnshwickStatus (*find_call)(EnshwickModHandle me,
                               const struct EnshwickCallSpec *spec,
                               uint32_t *out);
@@ -3971,7 +3882,7 @@ typedef struct EnshwickHostApi {
   // is unmatched or before every mod is initialised, `Status::REFUSED`
   // when the serving mod or its handler is off, `Status::BAD_ARGS` for
   // a null pointer or an id the mod was not given, or what the handler
-  // answers. Any thread. Since minor 95.
+  // answers. Any thread.
   EnshwickStatus (*call)(EnshwickModHandle me, uint32_t id, const void *input, void *output);
   // Writes the entities of the props transaction `id` of this mod placed
   // and still holds, oldest first, up to `capacity` of them at `out`,
@@ -3979,7 +3890,7 @@ typedef struct EnshwickHostApi {
   // after the one that placed it. `out` may be null with `capacity` 0 to
   // learn the number. `Status::BAD_ARGS` for a null `count`;
   // `Status::MISSING` for an id this mod did not get or one the loader
-  // forgot. Any thread. Since minor 96.
+  // forgot. Any thread.
   EnshwickStatus (*transaction_entities)(EnshwickModHandle me,
                                          uint64_t id,
                                          uint32_t *out,
@@ -3992,7 +3903,7 @@ typedef struct EnshwickHostApi {
   // a corner that is not finite or a `max` below `min`;
   // `Status::MISSING` while no world is loaded or on a build without
   // the zone list. On the server's game thread at a quiet moment only:
-  // `Status::WRONG_THREAD` elsewhere or inside a step. Since minor 96.
+  // `Status::WRONG_THREAD` elsewhere or inside a step.
   EnshwickStatus (*world_persists)(EnshwickModHandle me,
                                    const double (*min)[3],
                                    const double (*max)[3],
@@ -4006,7 +3917,7 @@ typedef struct EnshwickHostApi {
   // count, and a null `count` is not written. On the server's game
   // thread at a quiet moment (`Status::WRONG_THREAD` elsewhere or
   // inside a step); `Status::MISSING` while no world runs or when the
-  // scene does not read on this build. Since minor 97.
+  // scene does not read on this build.
   EnshwickStatus (*map_markers)(EnshwickModHandle me,
                                 struct EnshwickMapMarkerInfo *out,
                                 uint32_t entry_size,
@@ -4049,24 +3960,22 @@ typedef struct EnshwickManifest {
   // How many rows `builds` points at.
   size_t build_count;
   // The name players read, such as `Survivors per Altar`; empty for the
-  // id. Since minor 36.
+  // id.
   struct EnshwickStr name;
-  // One sentence on what the mod does. Since minor 36.
+  // One sentence on what the mod does.
   struct EnshwickStr description;
-  // The authors' names. Since minor 36.
+  // The authors' names.
   const struct EnshwickStr *authors;
-  // How many names `authors` points at. Since minor 36.
+  // How many names `authors` points at.
   size_t author_count;
-  // An SPDX licence expression, such as `MIT OR Apache-2.0`. Since minor
-  // 36.
+  // An SPDX licence expression, such as `MIT OR Apache-2.0`.
   struct EnshwickStr license;
-  // Where players read about the mod, an `https://` address. Since minor
-  // 36.
+  // Where players read about the mod, an `https://` address.
   struct EnshwickStr homepage;
   // The schemas of the extension points the mod defines, as TOML that
   // `cargo enshwick point` reads; empty for none. The same text sits in
   // the DLL's `.enshpt` section, so a tool reads it without running the
-  // mod. Since minor 71.
+  // mod.
   struct EnshwickStr points;
 } EnshwickManifest;
 
@@ -4107,7 +4016,7 @@ typedef struct EnshwickPlayerDeathData {
   uint16_t reserved;
   // For a hit, the attacker of the last hit the player took, from its
   // `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other
-  // causes, or when the history names none. Since minor 62.
+  // causes, or when the history names none.
   uint32_t killer_entity;
   // Zero.
   uint32_t reserved_tail;

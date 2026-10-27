@@ -4,20 +4,20 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
-    AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
-    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
-    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
-    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec,
-    MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle,
-    PointLink, PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn,
-    ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn,
-    SpawnRequest, StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource,
-    Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest,
-    TerrainEdit, TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
-    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarZoneFn,
+    BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, BuildInfo, BuildRights,
+    CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn,
+    DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn,
+    EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
+    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
+    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MapMarkerInfo, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -64,12 +64,12 @@ pub struct HostApi {
     pub settings: extern "system" fn(me: ModHandle, defaults: Str, out: *mut Str) -> Status,
     /// Publishes the service `spec` describes, table and layout, for other
     /// mods; [`Status::REFUSED`] when another mod publishes its name and
-    /// major. Allowed during `enshwick_mod_init` only. Since minor 47.
+    /// major. Allowed during `enshwick_mod_init` only.
     pub publish: extern "system" fn(me: ModHandle, spec: *const ServiceSpec) -> Status,
     /// Finds the service `wanted` describes, its table null, and checks
     /// that the published layout starts with the wanted one; writes the
     /// table and its publisher to `out`, and on [`Status::MISSING`] or
-    /// [`Status::REFUSED`] the reason. Since minor 47.
+    /// [`Status::REFUSED`] the reason.
     pub service: extern "system" fn(
         me: ModHandle,
         wanted: *const ServiceSpec,
@@ -82,24 +82,23 @@ pub struct HostApi {
     /// path stays valid for the process.
     pub data_dir: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
     /// The most detailed level kept for the mod's lines; the mod skips
-    /// formatting anything more detailed. Since minor 1.
+    /// formatting anything more detailed.
     pub log_level: extern "system" fn(me: ModHandle) -> Level,
     /// Calls `callback` with `user` on every `event` for the mod, on the
     /// thread that raises it, until the mod is off; allowed during
-    /// `enshwick_mod_init` only. Since minor 2.
+    /// `enshwick_mod_init` only.
     pub subscribe: extern "system" fn(
         me: ModHandle,
         event: Event,
         callback: EventFn,
         user: *mut c_void,
     ) -> Status,
-    /// The ECS type hash of a reflected component type, by name. Since minor 3.
+    /// The ECS type hash of a reflected component type, by name.
     pub type_hash: extern "system" fn(type_name: Str, out: *mut u32) -> Status,
     /// A read-only pointer to `entity`'s component of type `type_hash`, valid
     /// until the game thread moves on; on the server's game thread only.
     /// For the static half of an ECS type, such as `FuelSetup`, it is the
-    /// set-up data the entity's template holds (since minor 94; the
-    /// dynamic half's data before). Since minor 3.
+    /// set-up data the entity's template holds.
     pub component: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -107,14 +106,14 @@ pub struct HostApi {
         out: *mut *const c_void,
     ) -> Status,
     /// The template GUID of `entity`, in file order; on the server's game
-    /// thread only. Since minor 3.
+    /// thread only.
     pub entity_template:
         extern "system" fn(me: ModHandle, entity: u32, out: *mut [u8; 16]) -> Status,
     /// The connected player whose character is `entity`; on the server's game
-    /// thread only. Since minor 3.
+    /// thread only.
     pub player: extern "system" fn(me: ModHandle, entity: u32, out: *mut PlayerInfo) -> Status,
     /// Up to `capacity` connected players with characters in the world, and
-    /// how many there are; on the server's game thread only. Since minor 3.
+    /// how many there are; on the server's game thread only.
     /// Every entry is as large as the header of the first one says.
     pub players: extern "system" fn(
         me: ModHandle,
@@ -125,7 +124,7 @@ pub struct HostApi {
     /// Serves the resource `key` as `patch` makes it from the resource
     /// `base`, built the first time the game reads it: a new resource when
     /// the keys differ, a changed vanilla one when they are equal. Allowed
-    /// during `enshwick_mod_init` only; one mod per key. Since minor 4.
+    /// during `enshwick_mod_init` only; one mod per key.
     pub serve_resource: extern "system" fn(
         me: ModHandle,
         key: *const ResourceKey,
@@ -135,12 +134,12 @@ pub struct HostApi {
     ) -> Status,
     /// Adds the text of `LocaTag` `id` in `language` (`LanguageId`, 0 for any
     /// language without its own); the client shows it wherever the game asks
-    /// for that tag. Allowed during `enshwick_mod_init` only. Since minor 4.
+    /// for that tag. Allowed during `enshwick_mod_init` only.
     pub add_text: extern "system" fn(me: ModHandle, id: u32, language: u32, text: Str) -> Status,
     /// Up to `capacity` loaded mods, the loader first, and how many there
     /// are. Entries are `entry_size` bytes apart, the caller's
     /// `size_of::<ModInfo>()`; the loader fills what both sides know of each
-    /// and its own [`Header`]. Since minor 5.
+    /// and its own [`Header`].
     pub mods: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
@@ -153,17 +152,17 @@ pub struct HostApi {
     /// over them: the server's while this client is joined to a server that
     /// advertises values for the mod, else an empty string. A server
     /// advertises the `synced` of each join mod. The text written stays valid
-    /// for the life of the process. Since minor 6.
+    /// for the life of the process.
     pub sync: extern "system" fn(me: ModHandle, synced: Str, out: *mut Str) -> Status,
     /// Writes where the game's code section (`.text`) is loaded and how many
-    /// bytes it spans. Since minor 7.
+    /// bytes it spans.
     pub code_range: extern "system" fn(start: *mut u64, len: *mut u64) -> Status,
     /// Replaces `len` bytes of game code at `address`, which must read
     /// `expected` at arming, with `replacement`; both point at `len` bytes
     /// valid for the call. The loader writes the patch with the hooks, refuses
     /// one that overlaps another patch, and skips one that overlaps hooked
     /// bytes or no longer reads `expected`, turning the mod off. Allowed
-    /// during `enshwick_mod_init` only. Since minor 7.
+    /// during `enshwick_mod_init` only.
     pub patch_code: extern "system" fn(
         me: ModHandle,
         address: u64,
@@ -173,31 +172,26 @@ pub struct HostApi {
     ) -> Status,
     /// The most recipes one workshop takes on the running game: 512, the
     /// game's own list size, or [`u32::MAX`] once the loader has lifted that
-    /// limit at arming. Since minor 7.
+    /// limit at arming.
     pub workshop_recipes: extern "system" fn() -> u32,
     /// 1 while this process runs a game server: always on the dedicated
     /// server, on the client while it hosts a game, solo play included.
-    /// Since minor 8.
     pub hosting: extern "system" fn() -> u8,
     /// The entity world of the game server this process runs, the value a
     /// system context of that world holds at `ecs.context_entity_world`; 0
-    /// while none runs or before its first step. Since minor 8.
+    /// while none runs or before its first step.
     pub server_world: extern "system" fn() -> u64,
-    /// Retired in minor 68, when chat commands left the platform: always
-    /// [`Status::MISSING`]. The slot keeps the table's layout.
-    pub retired_command: extern "system" fn(me: ModHandle) -> Status,
     /// Sends `text` to the chat of the player whose account key is `to`, or of
     /// everyone for 0, from any thread; the server posts it after the next
-    /// step. Lines past 1024 bytes are cut. Since minor 9.
+    /// step. Lines past 1024 bytes are cut.
     pub chat: extern "system" fn(me: ModHandle, to: u64, text: Str) -> Status,
     /// Gives `entity` the name `text`, as a player's rename does: shown on
     /// hover, sent to every client and saved with the world; cut at 255
-    /// bytes, removed when empty. On the server's game thread only. Since
-    /// minor 9.
+    /// bytes, removed when empty. On the server's game thread only.
     pub set_label: extern "system" fn(me: ModHandle, entity: u32, text: Str) -> Status,
     /// Calls `callback` with `user` before the server applies a player's
     /// rename of an entity; any filter returning 0 refuses it. Allowed during
-    /// `enshwick_mod_init` only. Since minor 9.
+    /// `enshwick_mod_init` only.
     pub rename_filter:
         extern "system" fn(me: ModHandle, callback: RenameCallFn, user: *mut c_void) -> Status,
     /// Up to `capacity` of the server's join mods that the last refused join
@@ -207,7 +201,7 @@ pub struct HostApi {
     /// client's DLL path when it has the mod (empty otherwise), and the name
     /// and homepage the server advertises. The strings stay valid for the
     /// process. Empty before a refused
-    /// join; see [`Event::JOIN_REFUSED`]. Since minor 10.
+    /// join; see [`Event::JOIN_REFUSED`].
     pub join_missing: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
@@ -217,23 +211,23 @@ pub struct HostApi {
     ) -> Status,
     /// Runs a handler before the instruction at an address inside a game
     /// function, with the registers there; allowed during
-    /// `enshwick_mod_init` only. Since minor 11.
+    /// `enshwick_mod_init` only.
     pub hook_at: extern "system" fn(me: ModHandle, spec: *const MidHookSpec) -> Status,
     /// Asks for inventory transactions and item data; allowed during
     /// `enshwick_mod_init` only. [`Status::MISSING`] when this game build
     /// lacks a piece of them. Requests run in the game server: the dedicated
-    /// server, or the client while it hosts. Since minor 12.
+    /// server, or the client while it hosts.
     pub inventory_open: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the static data of the item `item`, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches;
     /// [`Status::MISSING`] for an unknown item, or while no world runs.
-    /// Any thread. Since minor 12.
+    /// Any thread.
     pub item_info: extern "system" fn(me: ModHandle, item: u32, out: *mut ItemData) -> Status,
     /// Queues `request`, from any thread, for the game's inventory system,
     /// which runs it as one transaction: all or nothing. `done` gets the
     /// result with `user` on the game thread after a later step, unless the
     /// mod is off by then. On an error status nothing is queued and `done` is
-    /// never called. Since minor 12.
+    /// never called.
     pub inventory_submit: extern "system" fn(
         me: ModHandle,
         request: *const InventoryRequest,
@@ -244,25 +238,24 @@ pub struct HostApi {
     /// calls it, on a thread of its own or the game thread, whenever it
     /// writes its status summary (`logs/enshwick/status.log`, `/enshwick
     /// status`) and shows its lines under the mod. Allowed during
-    /// `enshwick_mod_init` only. Since minor 13.
+    /// `enshwick_mod_init` only.
     pub status: extern "system" fn(me: ModHandle, callback: StatusFn, user: *mut c_void) -> Status,
     /// Runs the console line `line` as the server's console, an
     /// administrator with no character, and writes its reply to `out`, valid
     /// until the next call on this thread: `enshwick ...` for the loader's
     /// own tools, or a mod's id and the text form of one of its
     /// [actions](HostApi::actions). On the server's game thread only;
-    /// [`Status::MISSING`] when nothing answers the line's first word. Since
-    /// minor 13, with actions since minor 68.
+    /// [`Status::MISSING`] when nothing answers the line's first word.
     pub run_console: extern "system" fn(me: ModHandle, line: Str, out: *mut Str) -> Status,
     /// Asks the loader to follow the Flame Altars of the server's world, for
     /// [`HostApi::altars`] and [`Event::ALTARS_CHANGED`]. Allowed during
-    /// `enshwick_mod_init` only. Since minor 15.
+    /// `enshwick_mod_init` only.
     pub altars_open: extern "system" fn(me: ModHandle) -> Status,
     /// Up to `capacity` altars of the server's world and how many there are.
     /// Entries are `entry_size` bytes apart, the caller's
     /// `size_of::<AltarInfo>()`; the loader fills what both sides know of
     /// each and its own [`Header`]. Any thread; empty while no world runs.
-    /// [`Status::REFUSED`] for a mod that did not open altars. Since minor 15.
+    /// [`Status::REFUSED`] for a mod that did not open altars.
     pub altars: extern "system" fn(
         me: ModHandle,
         out: *mut AltarInfo,
@@ -270,18 +263,10 @@ pub struct HostApi {
         capacity: u32,
         count: *mut u32,
     ) -> Status,
-    /// Retired in minor 78, when altar zone sizes became a chain any mod
-    /// joins ([`HostApi::altar_zone_filter`]): always [`Status::REFUSED`].
-    /// The slot keeps the table's layout.
-    pub altar_zones_control: extern "system" fn(me: ModHandle) -> Status,
-    /// Retired in minor 78 with [`HostApi::altar_zones_control`]: always
-    /// [`Status::REFUSED`]. The slot keeps the table's layout.
-    pub set_altar_zones:
-        extern "system" fn(me: ModHandle, sizes: *const AltarZoneSize, count: usize) -> Status,
     /// Calls `callback` with `user` when the game refuses a placement whose
     /// box does not lie in one building zone; any filter returning 1 accepts
     /// it after all. Runs on both sides, since a client predicts placement.
-    /// Allowed during `enshwick_mod_init` only. Since minor 15.
+    /// Allowed during `enshwick_mod_init` only.
     pub zone_check_filter:
         extern "system" fn(me: ModHandle, callback: ZoneCheckFn, user: *mut c_void) -> Status,
     /// Makes `callback` with `user` the answer to the game's survivor
@@ -290,40 +275,39 @@ pub struct HostApi {
     /// threads, in the dedicated server or a hosting client, and for
     /// [`SurvivorLookup::CURSOR`](super::SurvivorLookup::CURSOR) on a client alone too. Allowed during
     /// `enshwick_mod_init` only; [`Status::MISSING`] on a build that lacks a
-    /// piece. Since minor 16.
+    /// piece.
     pub survivor_lookup:
         extern "system" fn(me: ModHandle, callback: SurvivorLookupFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` after a survivor's own bed check kept its
     /// bed; any filter returning 0 clears it. Server's worker threads.
-    /// Allowed during `enshwick_mod_init` only. Since minor 16.
+    /// Allowed during `enshwick_mod_init` only.
     pub survivor_bed_check:
         extern "system" fn(me: ModHandle, callback: BedCheckFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` before a summoning staff spawns or moves
     /// a survivor; any filter returning 1 makes the use take the item.
-    /// Server's game thread. Allowed during `enshwick_mod_init` only. Since
-    /// minor 16.
+    /// Server's game thread. Allowed during `enshwick_mod_init` only.
     pub summon_filter:
         extern "system" fn(me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status,
     /// Files item `item` as a summoning staff of the survivor `survivor`, so
     /// the game treats it as that survivor's staff, on both sides. Allowed
-    /// during `enshwick_mod_init` only. Since minor 16.
+    /// during `enshwick_mod_init` only.
     pub summon_item: extern "system" fn(me: ModHandle, item: u32, survivor: u32) -> Status,
     /// Makes `callback` with `user` merge the statuses the client's survivor
     /// menu shows for a survivor with several entities. Client only; one mod
-    /// at a time. Allowed during `enshwick_mod_init` only. Since minor 16.
+    /// at a time. Allowed during `enshwick_mod_init` only.
     pub survivor_status:
         extern "system" fn(me: ModHandle, callback: SurvivorStatusFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` before a player's interaction that
     /// [`Interaction`](super::Interaction) names; any filter returning 0 refuses it. Runs in the
     /// server's world only, on the thread of the system that checks it.
     /// Allowed during `enshwick_mod_init` only; [`Status::MISSING`] on a
-    /// build that lacks a piece. Since minor 17.
+    /// build that lacks a piece.
     pub interaction_filter:
         extern "system" fn(me: ModHandle, callback: InteractionFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` when the game asks whether a character
     /// unlocked skill node `node`; the first filter that answers decides.
     /// Runs on both sides, on the asking thread. Allowed during
-    /// `enshwick_mod_init` only. Since minor 18.
+    /// `enshwick_mod_init` only.
     pub skill_override: extern "system" fn(
         me: ModHandle,
         node: u32,
@@ -333,34 +317,28 @@ pub struct HostApi {
     /// Calls `callback` with `user` when a comfort provider registers its
     /// comfort; filters run in load order, each on the last one's value.
     /// Server's worker threads. Allowed during `enshwick_mod_init` only.
-    /// Since minor 18.
     pub comfort_filter:
         extern "system" fn(me: ModHandle, callback: ComfortFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` before the server applies the
     /// characters' gained experience, once per batch; filters run in load
     /// order. Server's worker threads. Allowed during `enshwick_mod_init`
-    /// only. Since minor 18.
+    /// only.
     pub experience_filter:
         extern "system" fn(me: ModHandle, callback: ExperiencePassFn, user: *mut c_void) -> Status,
-    /// Retired in minor 82, when the altar limit became a chain any mod
-    /// joins ([`HostApi::altar_limit_filter`]): always [`Status::REFUSED`].
-    /// The slot keeps the table's layout.
-    pub altar_limit:
-        extern "system" fn(me: ModHandle, callback: AltarLimitFn, user: *mut c_void) -> Status,
     /// Lets the game group 32 altar zones into its 16 bases instead of 16
     /// zones, refusing an altar that would start a 17th base; the patches
     /// count as the mod's own. [`Status::MISSING`] when this build's code is
     /// not the one the loader knows: the game keeps 16. Allowed during
-    /// `enshwick_mod_init` only. Since minor 19.
+    /// `enshwick_mod_init` only.
     pub raise_base_limit: extern "system" fn(me: ModHandle) -> Status,
     /// Writes how many altar zones and bases the game's last grouping found;
     /// [`Status::MISSING`] before the first one or without the raised limit.
-    /// Any thread. Since minor 19.
+    /// Any thread.
     pub base_zones: extern "system" fn(me: ModHandle, zones: *mut u32, bases: *mut u32) -> Status,
     /// Calls `callback` with `user` on every game event of the reflected
     /// type whose hash is `type_hash`, or on every game event for 0, on
     /// the server's game thread before the systems of the next step run.
-    /// Allowed during `enshwick_mod_init` only. Since minor 20.
+    /// Allowed during `enshwick_mod_init` only.
     pub game_event: extern "system" fn(
         me: ModHandle,
         type_hash: u32,
@@ -369,7 +347,7 @@ pub struct HostApi {
     ) -> Status,
     /// Up to `capacity` entities of the server's world that have a component
     /// of the reflected type `type_hash` and a place in the world, and how
-    /// many there are. On the server's game thread only. Since minor 21.
+    /// many there are. On the server's game thread only.
     pub entities: extern "system" fn(
         me: ModHandle,
         type_hash: u32,
@@ -380,18 +358,17 @@ pub struct HostApi {
     /// Asks the server to destroy `entity` after the systems of the next
     /// step; [`Status::REFUSED`] for a player's character,
     /// [`Status::MISSING`] for an entity not in the world. On the server's
-    /// game thread only. Since minor 21.
+    /// game thread only.
     pub destroy: extern "system" fn(me: ModHandle, entity: u32) -> Status,
     /// Asks the server to save the world now, as its timed saves do;
     /// [`Event::WORLD_SAVED`] follows once the save is on disk. A save under
     /// way counts as asked; [`Status::REFUSED`] while the world may not be
     /// saved, as before it has loaded. On the server's game thread only.
-    /// Since minor 21.
     pub save_world: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the key of the world the server runs: its save file's name and
     /// a hash of its folder, `[a-z0-9_-]`, valid for the process.
     /// [`Status::MISSING`] before the server has read or written the world.
-    /// Any thread. Since minor 21.
+    /// Any thread.
     pub world_key: extern "system" fn(me: ModHandle, out: *mut Str) -> Status,
     /// A writable pointer to `entity`'s component of the reflected type
     /// `type_hash`, valid until the game thread returns to the game; the
@@ -399,9 +376,9 @@ pub struct HostApi {
     /// the game sends it to clients and saves it. [`Status::REFUSED`] for a
     /// copy the game keeps for clients (`Network*`, `Client*`), which it
     /// overwrites; [`Status::STATIC_HALF`] for the static half of an ECS
-    /// type, the template's set-up data (since minor 94);
+    /// type, the template's set-up data;
     /// [`Status::MISSING`] when the entity lacks the component. On the
-    /// server's game thread only. Since minor 22.
+    /// server's game thread only.
     pub component_write: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -414,33 +391,33 @@ pub struct HostApi {
     /// allows, which the server's own systems raise: [`Status::REFUSED`]
     /// for any other or when the step's stream is full,
     /// [`Status::BAD_ARGS`] for a size that is not the type's. On the
-    /// server's game thread only. Since minor 23.
+    /// server's game thread only.
     pub emit:
         extern "system" fn(me: ModHandle, type_hash: u32, data: *const u8, size: u32) -> Status,
     /// Asks the server to move an entity as its admin teleport does, after
     /// the next step; [`Status::MISSING`] for an entity not in the world,
     /// [`Status::REFUSED`] for one the game's teleport does not move, as a
     /// prop: it moves actors and characters.
-    /// On the server's game thread only. Since minor 23.
+    /// On the server's game thread only.
     pub teleport: extern "system" fn(me: ModHandle, request: *const TeleportRequest) -> Status,
     /// Asks the server to spawn an entity from a template, as its admin
     /// spawn does, and writes the new entity's id to `out`; the entity is in
     /// the world after the next step. [`Status::BAD_ARGS`] for a zero
     /// template; a template the game does not know spawns nothing. On the
-    /// server's game thread only. Since minor 24.
+    /// server's game thread only.
     pub spawn:
         extern "system" fn(me: ModHandle, request: *const SpawnRequest, out: *mut u32) -> Status,
     /// Calls `callback` with `user` on each player's craft request in the
     /// server's world, on the game thread before the crafting system reads
     /// it; any filter returning 0 refuses it, and nothing is made or taken.
-    /// Allowed during `enshwick_mod_init` only. Since minor 25.
+    /// Allowed during `enshwick_mod_init` only.
     pub craft_filter:
         extern "system" fn(me: ModHandle, callback: CraftCheckFn, user: *mut c_void) -> Status,
     /// Calls `callback` with `user` after the game's cursor check allows a
     /// placement; any filter returning 0 refuses it as the game refuses a
     /// placement without permission. Runs on both sides, on the cursor
     /// systems' worker threads: the server's check decides, a client's
-    /// shows. Allowed during `enshwick_mod_init` only. Since minor 25.
+    /// shows. Allowed during `enshwick_mod_init` only.
     pub build_filter:
         extern "system" fn(me: ModHandle, callback: BuildCheckFn, user: *mut c_void) -> Status,
     /// Opens the mod's channel `name`, 1 to 64 bytes, between its server
@@ -448,7 +425,7 @@ pub struct HostApi {
     /// message on it with `user`: on the server's game thread, on a client
     /// on the thread that takes the server's chat. Join mods only
     /// ([`Status::REFUSED`] for another), since both ends must run the mod.
-    /// Allowed during `enshwick_mod_init` only. Since minor 26.
+    /// Allowed during `enshwick_mod_init` only.
     pub net_channel: extern "system" fn(
         me: ModHandle,
         name: Str,
@@ -462,7 +439,6 @@ pub struct HostApi {
     /// that runs Enshwick for 0. Any thread. [`Status::MISSING`] while the
     /// peer cannot take messages, [`Status::REFUSED`] over the peer's rate,
     /// [`Status::BAD_ARGS`] for too many bytes or another mod's channel.
-    /// Since minor 26.
     pub net_send: extern "system" fn(
         me: ModHandle,
         channel: u32,
@@ -472,38 +448,36 @@ pub struct HostApi {
     ) -> Status,
     /// [`Status::OK`] when `peer` takes messages: a player's client that
     /// runs Enshwick, on the server; the server, for [`NetMessage::SERVER`](super::NetMessage::SERVER)
-    /// on a client. [`Status::MISSING`] otherwise. Any thread. Since minor
-    /// 26.
+    /// on a client. [`Status::MISSING`] otherwise. Any thread.
     pub net_ready: extern "system" fn(me: ModHandle, peer: u64) -> Status,
     /// Shows `text`, cut at 255 bytes, on the screen of the player with
     /// account key `key`, as the game shows its own "can't do that"
     /// messages; [`Status::MISSING`] when the player's client lacks
     /// Enshwick and cannot show it, and nothing is sent. On the server's
-    /// game thread only. Since minor 27.
+    /// game thread only.
     pub notify: extern "system" fn(me: ModHandle, key: u64, text: Str) -> Status,
     /// Writes the clock of the server's world, as far as the [`Header`]
     /// `out` starts with says the caller's struct reaches. On the server's
-    /// game thread only. Since minor 28.
+    /// game thread only.
     pub time_of_day: extern "system" fn(me: ModHandle, out: *mut DaytimeInfo) -> Status,
     /// Sets the clock of the server's world to `time`, game nanoseconds of
     /// the day, taken modulo 24 hours; clients follow after the next step.
-    /// On the server's game thread only. Since minor 28.
+    /// On the server's game thread only.
     pub set_time_of_day: extern "system" fn(me: ModHandle, time: i64) -> Status,
     /// Lets the mod change how fast the clock runs, with
     /// [`HostApi::set_time_speed`]. Allowed during `enshwick_mod_init` only.
-    /// Since minor 28.
     pub time_speed_control: extern "system" fn(me: ModHandle) -> Status,
     /// Sets the mod's factor on the clock's speed, from 0 (stopped) to 1000;
     /// the clock runs at the game's own speed times every mod's factor.
     /// [`Status::REFUSED`] for a mod without
     /// [`HostApi::time_speed_control`], [`Status::BAD_ARGS`] for a factor
-    /// out of range. On the server's game thread only. Since minor 28.
+    /// out of range. On the server's game thread only.
     pub set_time_speed: extern "system" fn(me: ModHandle, factor: f32) -> Status,
     /// Copies the server's live game settings, `keen::ecs::GameSettings`,
     /// into `out`, `size` bytes, which must be the type's reflected size
     /// ([`Status::BAD_ARGS`] otherwise), and writes the preset the server
     /// runs (`GameSettingsPreset`) to `preset`. On the server's game thread
-    /// only. Since minor 29.
+    /// only.
     pub game_settings:
         extern "system" fn(me: ModHandle, out: *mut u8, size: u32, preset: *mut u32) -> Status,
     /// Replaces the server's live game settings with `data`, the type's
@@ -511,18 +485,17 @@ pub struct HostApi {
     /// see them from the next step and every client gets them; the preset
     /// becomes custom. Until the server stops: nothing writes them to disk.
     /// [`Status::BAD_ARGS`] for a wrong size or a day or night length of
-    /// zero or less. On the server's game thread only. Since minor 29.
+    /// zero or less. On the server's game thread only.
     pub set_game_settings: extern "system" fn(me: ModHandle, data: *const u8, size: u32) -> Status,
     /// Calls `callback` with `user` on damage about to reach an entity's
     /// health in the server's world, before the game applies it: hits,
     /// falls and the shroud; what the filters leave in the
     /// [`DamageCheck`](super::DamageCheck) is what the game applies. Runs on the game's worker
     /// threads, in load order. Allowed during `enshwick_mod_init` only.
-    /// Since minor 30.
     pub damage_filter:
         extern "system" fn(me: ModHandle, callback: DamageFilterFn, user: *mut c_void) -> Status,
     /// Up to `capacity` buff and debuff types of the running game, and how
-    /// many there are. On the server's game thread only. Since minor 31.
+    /// many there are. On the server's game thread only.
     /// Every entry is as large as the header of the first one says.
     pub buff_types: extern "system" fn(
         me: ModHandle,
@@ -532,7 +505,7 @@ pub struct HostApi {
     ) -> Status,
     /// Up to `capacity` buffs `entity` has, and how many there are;
     /// [`Status::MISSING`] for an entity that holds no buffs. On the
-    /// server's game thread only. Since minor 31.
+    /// server's game thread only.
     /// Every entry is as large as the header of the first one says.
     pub buffs: extern "system" fn(
         me: ModHandle,
@@ -546,20 +519,19 @@ pub struct HostApi {
     /// is renewed to that duration. [`Status::MISSING`] for an entity that
     /// holds no buffs, [`Status::BAD_ARGS`] for an unknown type,
     /// [`Status::REFUSED`] for a type removed in this step, which the game
-    /// clears only in the next. On the server's game thread only. Since
-    /// minor 31.
+    /// clears only in the next. On the server's game thread only.
     pub apply_buff: extern "system" fn(me: ModHandle, request: *const BuffRequest) -> Status,
     /// Removes every buff of type `id` from `entity`, as the game cleanses
     /// one: it goes in the next step. Writes 1 to `removed` when the entity
     /// had it, else 0; [`Status::MISSING`] for an entity that holds no
-    /// buffs. On the server's game thread only. Since minor 31.
+    /// buffs. On the server's game thread only.
     pub remove_buff:
         extern "system" fn(me: ModHandle, entity: u32, id: u32, removed: *mut u8) -> Status,
     /// Writes knowledge `id` of the player whose character is `entity`, or
     /// of the world for 0 or for an id of the world's;
     /// [`Status::MISSING`] for an id the game does not know,
     /// [`Status::REFUSED`] for a player not in the game. On the server's
-    /// game thread only. Since minor 32.
+    /// game thread only.
     pub knowledge:
         extern "system" fn(me: ModHandle, entity: u32, id: u32, out: *mut KnowledgeInfo) -> Status,
     /// Grants knowledge `id`, of `kind`, to the player whose character is
@@ -570,22 +542,21 @@ pub struct HostApi {
     /// [`KnowledgeInfo::FLAGS`]. [`Status::BAD_ARGS`] for an unknown id,
     /// a kind that is not the id's or a bit the game does not expect,
     /// [`Status::REFUSED`] for a player not in the
-    /// game or a full queue. On the server's game thread only. Since minor
-    /// 32.
+    /// game or a full queue. On the server's game thread only.
     pub grant_knowledge:
         extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
     /// Up to `capacity` quest ids of the running game, and how many there
-    /// are. On the server's game thread only. Since minor 32.
+    /// are. On the server's game thread only.
     pub quests:
         extern "system" fn(me: ModHandle, out: *mut u32, capacity: u32, count: *mut u32) -> Status,
     /// Writes how clear, rainy, snowy and stormy it is at `position`, in
     /// 32.32 fixed-point metres, as weights that add up to 1, as the game's
-    /// systems weigh it. On the server's game thread only. Since minor 33.
+    /// systems weigh it. On the server's game thread only.
     pub weather_at:
         extern "system" fn(me: ModHandle, position: *const [i64; 3], out: *mut [f32; 4]) -> Status,
     /// Up to `capacity` current weather fronts of the server's world, one per
     /// layer that has one, and how many there are. On the server's game
-    /// thread only. Since minor 33.
+    /// thread only.
     /// Every entry is as large as the header of the first one says.
     pub weather_fronts: extern "system" fn(
         me: ModHandle,
@@ -597,10 +568,10 @@ pub struct HostApi {
     /// `effect` ([`WeatherFront::NONE`] for clear skies) where a layer has
     /// one, clear skies elsewhere, for `duration` game nanoseconds or the
     /// game's own for 0; `u32::MAX` lets the game choose anew. Clients
-    /// follow. On the server's game thread only. Since minor 33.
+    /// follow. On the server's game thread only.
     pub set_weather: extern "system" fn(me: ModHandle, effect: u32, duration: i64) -> Status,
     /// Up to `capacity` terrain materials of the running game, and how many
-    /// there are. On the server's game thread only. Since minor 34.
+    /// there are. On the server's game thread only.
     /// Every entry is as large as the header of the first one says.
     pub terrain_materials: extern "system" fn(
         me: ModHandle,
@@ -615,35 +586,33 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for an edit out of range;
     /// [`Status::OUTSIDE_WORLD`] for one that reaches past the world's edge
     /// or above the height the loader takes, [`Status::NOT_LOADED`] unless
-    /// every column of the box it can write is loaded, writing nothing
-    /// (both since minor 87). On the server's game thread only. Since minor
-    /// 34.
+    /// every column of the box it can write is loaded, writing nothing. On
+    /// the server's game thread only.
     pub terrain_edit:
         extern "system" fn(me: ModHandle, edit: *const TerrainEdit, amount: *mut f32) -> Status,
     /// Hands the loader the mod's settings schema, `schema`, the TOML text
     /// of a [`config::Schema`](crate::config::Schema); a later call replaces
     /// it. The loader answers `enshwick config` on the console from it and checks values against it
     /// before it writes them. [`Status::BAD_ARGS`] for text that is not a
-    /// schema. Any time. Since minor 35.
+    /// schema. Any time.
     pub config_schema: extern "system" fn(me: ModHandle, schema: Str) -> Status,
     /// Calls `callback` with `user` after a summoning staff's use spawned or
     /// moved a survivor, with [`Summon::consumed`](super::Summon::consumed) set; its return value is
     /// ignored. On the thread of the use, as [`HostApi::summon_filter`].
-    /// Allowed during `enshwick_mod_init` only. Since minor 37.
+    /// Allowed during `enshwick_mod_init` only.
     pub summoned:
         extern "system" fn(me: ModHandle, callback: SummonFn, user: *mut c_void) -> Status,
     /// Opens the item data kind `id`, `name` for the mod's own
     /// (`<mod>:<name>`) or `mod:name` for any mod's, each side 1 to 64 of
     /// `[a-z0-9_-]`, and writes its index to `out`; every mod gets the same
-    /// index for one id. Allowed during `enshwick_mod_init` only. Since
-    /// minor 38.
+    /// index for one id. Allowed during `enshwick_mod_init` only.
     pub item_data_open: extern "system" fn(me: ModHandle, id: Str, out: *mut u32) -> Status,
     /// Copies the value of kind `kind` on the item entity `pide` holding
     /// item `item` into `out`, at most `capacity` bytes, and writes its
     /// length to `len`; [`Status::MISSING`] when it has none or its entity
     /// holds another item, [`Status::BAD_ARGS`] when `capacity` is short,
     /// with `len` written. On the server the server's values, on a client
-    /// what the server sent. Any thread. Since minor 38.
+    /// what the server sent. Any thread.
     pub item_data_get: extern "system" fn(
         me: ModHandle,
         kind: u32,
@@ -657,7 +626,7 @@ pub struct HostApi {
     /// `item` to `len` bytes at `data`, at most 512, or removes it for 0;
     /// the clients that run Enshwick get the change. [`Status::REFUSED`]
     /// on a client alone, [`Status::MISSING`] before the world has loaded.
-    /// Any thread. Since minor 38.
+    /// Any thread.
     pub item_data_set: extern "system" fn(
         me: ModHandle,
         kind: u32,
@@ -671,15 +640,14 @@ pub struct HostApi {
     /// callback draws with [`HostApi::ui_widget`]. Client only
     /// ([`Status::MISSING`] on a server); when the interface could not be
     /// linked, the callback never runs. Allowed during `enshwick_mod_init`
-    /// only. Since minor 39.
+    /// only.
     pub ui_frame:
         extern "system" fn(me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status,
     /// Draws `widget` in the frame `frame` names and writes back its
     /// `index`, `value` and `result`. Only inside the mod's frame callback
     /// ([`Status::WRONG_THREAD`] elsewhere); [`Status::REFUSED`] for a
     /// widget outside a window or an [`UiWidget::END`] without one;
-    /// [`Status::MISSING`] for a widget this game build lacks. Since minor
-    /// 39.
+    /// [`Status::MISSING`] for a widget this game build lacks.
     pub ui_widget: extern "system" fn(me: ModHandle, frame: u64, widget: *mut UiWidget) -> Status,
     /// Queues `dialog` and calls `callback` with the answer and `user` once
     /// the player gives it; dialogs show one at a time, in order. Any
@@ -687,7 +655,7 @@ pub struct HostApi {
     /// interface could not be linked, the dialog shows as a system message
     /// box. [`Status::REFUSED`] when too many wait; [`Status::WRONG_THREAD`]
     /// for [`UiDialog::WAITING`] on the thread that draws the interface. On
-    /// an error status `callback` is never called. Since minor 39.
+    /// an error status `callback` is never called.
     pub ui_dialog: extern "system" fn(
         me: ModHandle,
         dialog: *const UiDialog,
@@ -698,31 +666,30 @@ pub struct HostApi {
     /// HUD in game, hidden with it; the callback draws labels and bars with
     /// [`HostApi::ui_widget`] at their `anchor`. Client only
     /// ([`Status::MISSING`] on a server). Allowed during
-    /// `enshwick_mod_init` only. Since minor 40.
+    /// `enshwick_mod_init` only.
     pub ui_hud: extern "system" fn(me: ModHandle, callback: UiFrameFn, user: *mut c_void) -> Status,
     /// Replaces the mod's markers on the client's map with the `count` at
     /// `markers`, copied; none clears them. Any thread. Client only
     /// ([`Status::MISSING`] on a server); [`Status::BAD_ARGS`] past 256
-    /// markers. Since minor 40.
+    /// markers.
     /// Every entry is as large as the header of the first one says.
     pub ui_markers:
         extern "system" fn(me: ModHandle, markers: *const UiMarker, count: u32) -> Status,
     /// Makes `callback` with `user` the mod's check of a new settings text,
     /// which the loader runs before it writes a change from the console or the
     /// Mods screen; a refusal keeps the file. Allowed during
-    /// `enshwick_mod_init` only. Since minor 41.
+    /// `enshwick_mod_init` only.
     pub config_check:
         extern "system" fn(me: ModHandle, callback: ConfigCheckFn, user: *mut c_void) -> Status,
     /// Hands the loader the mod's texts, a TOML table per language code as
     /// [`crate::i18n::Texts`] reads them, for the loader's own screens: the
     /// Mods screen labels the mod's settings with them. A later call
-    /// replaces them. Since minor 43.
+    /// replaces them.
     pub texts: extern "system" fn(me: ModHandle, toml: Str) -> Status,
     /// Serves `len` bytes at `data` as game content, the pixels of a
     /// texture the mod serves, and writes the content hash a resource names
     /// them by to `out`; the same bytes give the same hash. The loader
-    /// keeps the bytes for the life of the process. Any thread. Since minor
-    /// 44.
+    /// keeps the bytes for the life of the process. Any thread.
     pub content_serve:
         extern "system" fn(me: ModHandle, data: *const u8, len: u32, out: *mut [u32; 4]) -> Status,
     /// Copies the game's own content `hash` from its archive into `out`, at
@@ -730,7 +697,7 @@ pub struct HostApi {
     /// [`Status::MISSING`] for a hash the archive lacks or keeps
     /// compressed, [`Status::BAD_ARGS`] when `capacity` is short, with
     /// `len` written. Reads the archive's files, never the game's memory.
-    /// Any thread. Since minor 44.
+    /// Any thread.
     pub content_read: extern "system" fn(
         me: ModHandle,
         hash: *const [u32; 4],
@@ -741,7 +708,7 @@ pub struct HostApi {
     /// [`Status::OK`] when this client shows the UI images mods serve: the
     /// content and UI registry links run and the registry knows the served
     /// images; [`Status::MISSING`] otherwise, and always on a server. Any
-    /// thread. Since minor 44.
+    /// thread.
     pub icons_ready: extern "system" fn(me: ModHandle) -> Status,
     /// Defines the stat kind `id` with `def`, or opens it with a null
     /// `def`, and writes its index and key to `out`. A mod defines kinds in
@@ -750,7 +717,6 @@ pub struct HostApi {
     /// gets the same index for one id. [`Status::BAD_ARGS`] for a malformed
     /// id or definition, [`Status::REFUSED`] for a kind defined twice or in
     /// another mod's namespace. Allowed during `enshwick_mod_init` only.
-    /// Since minor 45.
     pub stat_open: extern "system" fn(
         me: ModHandle,
         id: Str,
@@ -759,23 +725,22 @@ pub struct HostApi {
     ) -> Status,
     /// Writes the definition of stat `stat` to `def` and its full id to
     /// `id`, a string the loader keeps for the process; [`Status::MISSING`]
-    /// for a kind opened but never defined. Any thread. Since minor 45.
+    /// for a kind opened but never defined. Any thread.
     pub stat_info:
         extern "system" fn(me: ModHandle, stat: u32, def: *mut StatDefData, id: *mut Str) -> Status,
     /// Writes the value of stat `stat` on `entity` to `out`: its default
     /// when nothing modifies it. Values are worked out on the server after
     /// each step a source changed; a client answers defaults. Any thread,
-    /// without locks. Since minor 45.
+    /// without locks.
     pub stat_value:
         extern "system" fn(me: ModHandle, entity: u32, stat: u32, out: *mut f32) -> Status,
     /// Sets or removes a modifier the mod keeps on an entity; the value
     /// follows after the next step. [`Status::REFUSED`] on a client alone,
     /// or for a saved modifier on an entity that is no player. Any thread.
-    /// Since minor 45.
     pub stat_modify: extern "system" fn(me: ModHandle, request: *const StatModify) -> Status,
     /// Gives the buff type `buff` the `count` modifiers at `modifiers`:
     /// they count toward every watched entity that has the buff. Allowed
-    /// during `enshwick_mod_init` only. Since minor 45.
+    /// during `enshwick_mod_init` only.
     pub stat_buff: extern "system" fn(
         me: ModHandle,
         buff: u32,
@@ -784,12 +749,12 @@ pub struct HostApi {
     ) -> Status,
     /// Calls `callback` with `user` for every stat value that changed on a
     /// watched entity, on the game thread after the step that changed it.
-    /// Allowed during `enshwick_mod_init` only. Since minor 45.
+    /// Allowed during `enshwick_mod_init` only.
     pub stats_changed:
         extern "system" fn(me: ModHandle, callback: StatChangeFn, user: *mut c_void) -> Status,
     /// Writes up to `capacity` modifiers that count toward stat `stat` on
     /// `entity`, in the order they apply, and how many there are to
-    /// `count`; every stat for `u32::MAX`. Any thread. Since minor 45.
+    /// `count`; every stat for `u32::MAX`. Any thread.
     pub stat_sources: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -800,18 +765,18 @@ pub struct HostApi {
     ) -> Status,
     /// Watches `entity` for the items it wears and the buffs it has, or
     /// stops for `watch` 0: players are always watched, and so is every
-    /// entity a mod keeps a modifier on. Any thread. Since minor 45.
+    /// entity a mod keeps a modifier on. Any thread.
     pub stat_watch: extern "system" fn(me: ModHandle, entity: u32, watch: u8) -> Status,
     /// Defines the mod event `spec` describes, named `<id>:<name>` after
     /// the defining mod, and writes the id [`HostApi::send_event`] takes;
     /// [`Status::REFUSED`] for a name outside the mod's id or defined
-    /// twice. Allowed during `enshwick_mod_init` only. Since minor 47.
+    /// twice. Allowed during `enshwick_mod_init` only.
     pub define_event:
         extern "system" fn(me: ModHandle, spec: *const EventSpec, out: *mut u32) -> Status,
     /// Calls `callback` with `user` and the event's data on every mod event
     /// `spec` names, once its definition, checked against `spec`'s layout
     /// when every mod is initialised, matches. Allowed during
-    /// `enshwick_mod_init` only. Since minor 47.
+    /// `enshwick_mod_init` only.
     pub subscribe_event: extern "system" fn(
         me: ModHandle,
         spec: *const EventSpec,
@@ -821,11 +786,10 @@ pub struct HostApi {
     /// Hands `data` to every subscriber of the mod's own event `event`, on
     /// this thread, before it returns; reaches no one before every mod is
     /// initialised. [`Status::REFUSED`] for an event another mod defined.
-    /// Any thread. Since minor 47.
+    /// Any thread.
     pub send_event: extern "system" fn(me: ModHandle, event: u32, data: *const c_void) -> Status,
     /// Defines the affix `id` in the mod's namespace with `def` and writes
     /// its index and key to `out`. Allowed during `enshwick_mod_init` only.
-    /// Since minor 48.
     pub affix_open: extern "system" fn(
         me: ModHandle,
         id: Str,
@@ -836,12 +800,11 @@ pub struct HostApi {
     /// category, replacing those it had, and writes how many to `count`;
     /// [`Status::REFUSED`] for a [`AffixRoll::ONCE`] roll of an item that
     /// rolled before, or off the server. On the server's game thread only.
-    /// Since minor 48.
     pub affix_roll:
         extern "system" fn(me: ModHandle, roll: *const AffixRoll, count: *mut u32) -> Status,
     /// Writes up to `capacity` lines of what the item gives, its own
     /// modifiers first and then each affix's, and how many to `count`. On a
-    /// client, from what the server sent. Any thread. Since minor 48.
+    /// client, from what the server sent. Any thread.
     pub item_lines: extern "system" fn(
         me: ModHandle,
         pide: u32,
@@ -851,7 +814,7 @@ pub struct HostApi {
         count: *mut u32,
     ) -> Status,
     /// Writes the text key and rarity of affix `affix` (an index) to `text`
-    /// and `rarity`. Any thread. Since minor 48.
+    /// and `rarity`. Any thread.
     pub affix_info:
         extern "system" fn(me: ModHandle, affix: u32, text: *mut Str, rarity: *mut u8) -> Status,
     /// Registers the mod's migrations, `set`, copied: the loader runs the
@@ -859,15 +822,13 @@ pub struct HostApi {
     /// world's files when the world loads, once per world, and records what
     /// ran in `mod-data/enshwick/migrations.toml`. [`Status::REFUSED`] for
     /// a second call or a migration that failed on the settings file, with
-    /// the reason logged. Allowed during `enshwick_mod_init` only. Since
-    /// minor 49.
+    /// the reason logged. Allowed during `enshwick_mod_init` only.
     pub migrate: extern "system" fn(me: ModHandle, set: *const MigrationSet) -> Status,
     /// Declares the content id `id`, `<mod>:<name>` in the mod's own
     /// namespace, and writes its GUID to `out`; [`Status::REFUSED`] for a
     /// malformed id, one outside the namespace, or one whose game id
     /// another content id has, which turns the mod off with both ids and
-    /// both mods named. Allowed during `enshwick_mod_init` only. Since
-    /// minor 50.
+    /// both mods named. Allowed during `enshwick_mod_init` only.
     pub declare_content: extern "system" fn(me: ModHandle, id: Str, out: *mut [u8; 16]) -> Status,
     /// Opens the entity data kind `id`, as [`HostApi::item_data_open`] opens
     /// an item kind, and writes its index to `out`; with
@@ -875,13 +836,13 @@ pub struct HostApi {
     /// values. [`HostApi::item_data_get`] and [`HostApi::item_data_set`]
     /// read and write it with `item` 0; a set runs on the server's game
     /// thread. [`Status::REFUSED`] for an id opened as an item kind. Allowed
-    /// during `enshwick_mod_init` only. Since minor 52.
+    /// during `enshwick_mod_init` only.
     pub entity_data_open:
         extern "system" fn(me: ModHandle, id: Str, flags: EntityDataFlags, out: *mut u32) -> Status,
     /// Lists the mods in `mods/` that a present mod replaces (see
     /// [`Relation::REPLACES`](super::Relation::REPLACES)), which the loader never started, as
     /// [`HostApi::mods`] lists the loaded ones, with
-    /// [`ModInfo::replaced_by`] set. Any thread. Since minor 54.
+    /// [`ModInfo::replaced_by`] set. Any thread.
     pub replaced: extern "system" fn(
         me: ModHandle,
         out: *mut ModInfo,
@@ -895,25 +856,23 @@ pub struct HostApi {
     /// and the last answer decides. It runs on the server's worker threads,
     /// in the dedicated server or a hosting client. [`Status::MISSING`] on
     /// a build without the input site. Allowed during `enshwick_mod_init`
-    /// only. Since minor 55.
+    /// only.
     pub knowledge_input_filter:
         extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
     /// The game language the client last asked a text in, as the game
     /// numbers them (see [`crate::i18n::Language`]); `0`, the fallback, on a
-    /// server and before the client's first text. Any thread. Since minor
-    /// 56.
+    /// server and before the client's first text. Any thread.
     pub language: extern "system" fn(me: ModHandle) -> u32,
     /// Replaces the live game settings with `data` as
     /// [`HostApi::set_game_settings`] does, and keeps the fields with a
     /// byte set in `mask` (as long as `data`) with the running world: the
     /// loader applies them again each time the world loads, by the end of
     /// its first step. [`Status::MISSING`] while no world runs.
-    /// On the server's game thread only. Since minor 57.
+    /// On the server's game thread only.
     pub keep_game_settings:
         extern "system" fn(me: ModHandle, data: *const u8, mask: *const u8, size: u32) -> Status,
     /// Forgets the game settings kept for the running world and puts back
-    /// the values it loaded with. On the server's game thread only. Since
-    /// minor 57.
+    /// the values it loaded with. On the server's game thread only.
     pub forget_game_settings: extern "system" fn(me: ModHandle) -> Status,
     /// Takes knowledge `id`, of `kind`, back from the player whose character
     /// is `entity`, or from the world for 0 or an id of the world's, and has
@@ -924,7 +883,6 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for an unknown id, a kind that is not the id's or
     /// a bit past 31, [`Status::REFUSED`] for a player not in the game or
     /// whose save has not loaded yet. On the server's game thread only.
-    /// Since minor 59.
     pub revoke_knowledge:
         extern "system" fn(me: ModHandle, entity: u32, id: u32, kind: u32, value: u32) -> Status,
     /// Grants knowledge `id` of a player's, as [`HostApi::grant_knowledge`]
@@ -934,7 +892,7 @@ pub struct HostApi {
     /// has loaded in this world; the loader keeps waiting changes with the
     /// world. [`Status::BAD_ARGS`] for an unknown id, an id of the world's
     /// or a kind that is not the id's, [`Status::MISSING`] while no world
-    /// runs. On the server's game thread only. Since minor 59.
+    /// runs. On the server's game thread only.
     pub account_knowledge: extern "system" fn(
         me: ModHandle,
         key: u64,
@@ -948,7 +906,7 @@ pub struct HostApi {
     /// references, and writes its length to `len`; [`Status::MISSING`] for
     /// a key the archive lacks, [`Status::BAD_ARGS`] when `capacity` is
     /// short, with `len` written. Reads the archive's files, never the
-    /// game's memory. Any thread. Since minor 61.
+    /// game's memory. Any thread.
     pub resource_read: extern "system" fn(
         me: ModHandle,
         key: *const ResourceKey,
@@ -962,7 +920,7 @@ pub struct HostApi {
     /// game's does. Read from the game's archive, the first call for a
     /// language reads its table. [`Status::MISSING`] for a tag the game
     /// lacks, and always on a server, whose archive has no texts. Any
-    /// thread. Since minor 61.
+    /// thread.
     pub game_text:
         extern "system" fn(me: ModHandle, id: u32, language: u32, out: *mut Str) -> Status,
     /// During `enshwick_mod_init`, by a mod that serves `key`: keeps the
@@ -975,7 +933,6 @@ pub struct HostApi {
     /// base was not kept, [`Status::REFUSED`] when the new build differs in length, which the
     /// game's copy cannot take, [`Status::BAD_ARGS`] for a key the mod does
     /// not serve. Each rebuild keeps the patches' new bytes for the process.
-    /// Since minor 63.
     pub rebuild_resource: extern "system" fn(me: ModHandle, key: *const ResourceKey) -> Status,
     /// Adds the calling mod's rule that disables recipes (`disable` 1), or
     /// takes its own rule of that kind and name back (`disable` 0). `name`
@@ -983,25 +940,25 @@ pub struct HostApi {
     /// workshop, as `kind` says, in the forms the loader's recipe file
     /// takes; the loader resolves it against the recipe registry and logs a
     /// name it cannot resolve. The server's recipe file wins over every
-    /// mod's rules. Any thread; applied within a second. Since minor 64.
+    /// mod's rules. Any thread; applied within a second.
     pub recipe_rule:
         extern "system" fn(me: ModHandle, kind: RecipeRuleKind, name: Str, disable: u32) -> Status,
     /// Writes 1 to `out` when the recipe with game id `recipe` is disabled
     /// in this process now, else 0: on a client joined to a server, by the
-    /// server's rules. Any thread. Since minor 64.
+    /// server's rules. Any thread.
     pub recipe_disabled: extern "system" fn(me: ModHandle, recipe: u32, out: *mut u32) -> Status,
     /// Defines the extension point `spec` describes, named
     /// `<id>:<point>` after the defining mod, and writes its id and the
     /// count of its live links to `out`; [`Status::REFUSED`] for a name
     /// outside the mod's id or defined twice. Allowed during
-    /// `enshwick_mod_init` only. Since minor 65.
+    /// `enshwick_mod_init` only.
     pub define_point:
         extern "system" fn(me: ModHandle, spec: *const PointSpec, out: *mut PointHandle) -> Status,
     /// Attaches `callback` with `user` to the extension point `link`
     /// names, in the order it asks for. Matched against the point's
     /// definition once every mod is initialised; a point no running mod
     /// defines, or one whose layout or mode differs, leaves the link inert.
-    /// Allowed during `enshwick_mod_init` only. Since minor 65.
+    /// Allowed during `enshwick_mod_init` only.
     pub attach_point: extern "system" fn(
         me: ModHandle,
         link: *const PointLink,
@@ -1012,7 +969,6 @@ pub struct HostApi {
     /// `value`, which holds the mod's own answer, on this thread, and writes
     /// to `verdict` whether the answer was kept, changed or refused.
     /// [`Status::REFUSED`] for a point another mod defined. Any thread.
-    /// Since minor 65.
     pub run_point: extern "system" fn(
         me: ModHandle,
         point: u32,
@@ -1025,7 +981,7 @@ pub struct HostApi {
     /// use, to run one a player picked in the interface or the console
     /// named, and for the hints a player has at hand. One registration per
     /// mod. Allowed during
-    /// `enshwick_mod_init` only. Since minor 66.
+    /// `enshwick_mod_init` only.
     pub actions: extern "system" fn(me: ModHandle, callback: ActionFn, user: *mut c_void) -> Status,
     /// Writes the first `capacity` of the running build's game event types
     /// to `out`, null or room for `capacity` entries each as large as the
@@ -1035,7 +991,7 @@ pub struct HostApi {
     /// process. A null `count` gives [`Status::BAD_ARGS`] after the entries
     /// are written; a handle the loader never gave out gives
     /// [`Status::BAD_ARGS`] and a mod that is off [`Status::FAULTED`], with
-    /// nothing written. Any thread. Since minor 72.
+    /// nothing written. Any thread.
     pub event_types: extern "system" fn(
         me: ModHandle,
         out: *mut EventTypeInfo,
@@ -1046,14 +1002,14 @@ pub struct HostApi {
     /// from the item's static data; [`Status::MISSING`] while the game has
     /// not loaded the item, which on a dedicated server comes after its
     /// recipe registry is first built, and while the loader serves no
-    /// resource. Any thread. Since minor 73.
+    /// resource. Any thread.
     pub recipe_kind: extern "system" fn(me: ModHandle, item: u32, out: *mut RecipeKind) -> Status,
     /// Reports whether the mod's feature `name` runs on this game build:
     /// off for the reason `off`, or on when `off` is empty. The loader
     /// logs it and shows it in the status summary and on the Mods screen; a
     /// later report of the same name replaces the earlier one.
     /// [`Status::BAD_ARGS`] for an empty name. Both strings are borrowed for
-    /// the call. Any thread. Since minor 74.
+    /// the call. Any thread.
     pub feature: extern "system" fn(me: ModHandle, name: Str, off: Str) -> Status,
     /// Declares that the calling mod multiplies `rate`, so the loader arms
     /// what the rate needs; its factor is 1 until
@@ -1063,7 +1019,7 @@ pub struct HostApi {
     /// mod without [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN). A second declaration of the same rate is
     /// [`Status::OK`]. [`Status::TOO_LATE`] after `enshwick_mod_init`,
     /// [`Status::FAULTED`] for a mod that is off. Allowed during
-    /// `enshwick_mod_init` only. Since minor 75.
+    /// `enshwick_mod_init` only.
     pub rate: extern "system" fn(me: ModHandle, rate: RateId) -> Status,
     /// Puts `factor` in force as the calling mod's factor for `rate`: the
     /// game uses the product of every declaring mod's factor, held to 0 to
@@ -1072,7 +1028,7 @@ pub struct HostApi {
     /// mod did not declare, [`Status::FAULTED`] for a mod that is off. Any
     /// thread; neither allocates nor locks once every mod is initialised,
     /// except for a recipe output rate, whose change builds the recipe
-    /// registry again. Since minor 75.
+    /// registry again.
     pub set_rate: extern "system" fn(me: ModHandle, rate: RateId, factor: f32) -> Status,
     /// Declares a change of a vanilla value. The loader merges the changes
     /// of every mod once their `init` ran: a set in load order, the last
@@ -1081,7 +1037,7 @@ pub struct HostApi {
     /// resource the first time the game reads it, on each side from its own
     /// mods. [`Status::BAD_ARGS`] for a null `change`, an unknown field or
     /// operation and a value outside the field's range; [`Status::MISSING`]
-    /// when the build does not reflect the field. Init only. Since minor 76.
+    /// when the build does not reflect the field. Init only.
     pub change_data: extern "system" fn(me: ModHandle, change: *const DataChange) -> Status,
     /// Calls `callback` with `user` before every wait of the engine's event
     /// loop on its handles, on the thread that waits, and writes to `found`
@@ -1089,7 +1045,7 @@ pub struct HostApi {
     /// whose code is not what its table expects, or that the mod hooked
     /// already is left out. [`Status::BAD_ARGS`] for a null `found`, before
     /// anything is hooked. Handlers run in load order. Allowed during
-    /// `enshwick_mod_init` only. Since minor 77.
+    /// `enshwick_mod_init` only.
     pub loop_wait: extern "system" fn(
         me: ModHandle,
         callback: LoopWaitFn,
@@ -1102,7 +1058,7 @@ pub struct HostApi {
     /// place, else 0. [`Status::BAD_ARGS`] for a null `found`, before
     /// anything is hooked. Handlers run in load order, each on the last one's wait. On
     /// the game thread of the server loop. Allowed during `enshwick_mod_init`
-    /// only. Since minor 77.
+    /// only.
     pub server_wait: extern "system" fn(
         me: ModHandle,
         callback: ServerWaitFn,
@@ -1115,7 +1071,7 @@ pub struct HostApi {
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
-    /// `enshwick_mod_init` only. Since minor 77.
+    /// `enshwick_mod_init` only.
     pub task_workers: extern "system" fn(
         me: ModHandle,
         foreground: u32,
@@ -1129,13 +1085,13 @@ pub struct HostApi {
     /// 0 counts as 0, a `height` below one cell keeps the height before it,
     /// and the altar and level stay. It opens altars too, and may call the
     /// host, such as [`HostApi::altars`]. On the server's game thread.
-    /// Allowed during `enshwick_mod_init` only. Since minor 78.
+    /// Allowed during `enshwick_mod_init` only.
     pub altar_zone_filter:
         extern "system" fn(me: ModHandle, callback: AltarZoneFn, user: *mut c_void) -> Status,
     /// Asks the loader to size the altar zones again on the server's next
     /// step, as when a mod's settings change what its filter answers. Any
     /// thread, also during init. [`Status::REFUSED`] for a mod without an
-    /// altar zone filter. Since minor 78.
+    /// altar zone filter.
     pub altar_zones_changed: extern "system" fn(me: ModHandle) -> Status,
     /// Calls `callback` with `user` when the game asks how many altars a
     /// Flame level allows, on whichever thread asks: the placement cursor
@@ -1145,8 +1101,7 @@ pub struct HostApi {
     /// the answer within the zones the game can group
     /// ([`HostApi::base_limit`]). A filter runs often: keep it cheap; it may
     /// call the host. [`Status::TOO_LATE`] after `enshwick_mod_init`,
-    /// [`Status::MISSING`] on a build without the game's lookup. Since minor
-    /// 82.
+    /// [`Status::MISSING`] on a build without the game's lookup.
     pub altar_limit_filter: extern "system" fn(
         me: ModHandle,
         callback: AltarLimitFilterFn,
@@ -1156,7 +1111,6 @@ pub struct HostApi {
     /// its own, or the loader's maximum once [`HostApi::raise_base_limit`] is
     /// in force, from `enshwick_mod_ready` on, with the zones its own
     /// grouping takes. [`Status::BAD_ARGS`] for a null `out`. Any thread.
-    /// Since minor 82.
     pub base_limit: extern "system" fn(me: ModHandle, out: *mut BaseLimitInfo) -> Status,
     /// Reads the voxels of the server's world in the box of `size` voxels
     /// from `min`, in voxels of half a metre from the world's corner, into
@@ -1166,12 +1120,12 @@ pub struct HostApi {
     /// [`Status::OK`]. [`Status::BAD_ARGS`] for a null pointer, an empty
     /// box, one past [`Voxel::END`], more than [`Voxel::READ_MAX`] voxels or
     /// a `capacity` below them; [`Status::OUTSIDE_WORLD`] for a box past
-    /// the world's edge or above the height the loader takes (since minor
-    /// 87); [`Status::NOT_LOADED`] while part of the box is not loaded
+    /// the world's edge or above the height the loader takes;
+    /// [`Status::NOT_LOADED`] while part of the box is not loaded
     /// yet, which starts loading it; [`Status::MISSING`] before a world
     /// runs or on a build without the read. On the server's game thread at
     /// a quiet moment only, as the world's writes: [`Status::WRONG_THREAD`]
-    /// inside a step. Since minor 84.
+    /// inside a step.
     pub voxel_read: extern "system" fn(
         me: ModHandle,
         min: *const [u32; 3],
@@ -1190,7 +1144,7 @@ pub struct HostApi {
     /// length; [`Status::MISSING`] when the build does not reflect the
     /// field; [`Status::REFUSED`] for a field clients read in a mod without
     /// [`ManifestFlags::JOIN`](super::ManifestFlags::JOIN); [`Status::TOO_LATE`] after
-    /// `enshwick_mod_init`. Since minor 85.
+    /// `enshwick_mod_init`.
     pub declare_change:
         extern "system" fn(me: ModHandle, change: *const DataChange, out: *mut ChangeId) -> Status,
     /// Puts `value` in force for the calling mod's change `id` by `op`:
@@ -1207,7 +1161,7 @@ pub struct HostApi {
     /// not build again in place (the value is in force for what did build
     /// and for every first read, the rest until a restart). Any
     /// thread; it allocates and builds resources, so it is no per-frame
-    /// call. Since minor 85.
+    /// call.
     pub set_change:
         extern "system" fn(me: ModHandle, id: ChangeId, op: ChangeOp, value: f64) -> Status,
     /// Fills `check.refusal` with whether the server lets the player whose
@@ -1222,7 +1176,7 @@ pub struct HostApi {
     /// `max` below `min`; [`Status::MISSING`] while no world is loaded or on
     /// a build without the checks. On the server's game thread at a quiet
     /// moment only, outside a step or in a game event:
-    /// [`Status::WRONG_THREAD`] inside a step. Since minor 86.
+    /// [`Status::WRONG_THREAD`] inside a step.
     pub build_rights: extern "system" fn(me: ModHandle, check: *mut BuildRights) -> Status,
     /// Queues the `count` changes at `ops` as one transaction of the
     /// server's world and writes its id to `id`: the loader writes them in
@@ -1237,7 +1191,7 @@ pub struct HostApi {
     /// committed earlier fails with it before writing); [`Status::REFUSED`]
     /// while the queue is full; [`Status::MISSING`] while no world runs or
     /// on a build without the edits, the voxel read or the undo write. Any
-    /// thread. Since minor 87.
+    /// thread.
     pub transaction_commit: extern "system" fn(
         me: ModHandle,
         ops: *const TransactionOp,
@@ -1257,13 +1211,12 @@ pub struct HostApi {
     /// already undoing; [`Status::REFUSED`] for an id this mod did not get,
     /// one the loader forgot, one undone, one whose undo data is gone, or
     /// while the transactions in work already claim the loader's cap of
-    /// undo data. Any thread. Since minor 87.
+    /// undo data. Any thread.
     pub transaction_undo: extern "system" fn(me: ModHandle, id: u64) -> Status,
     /// Writes where transaction `id` of this mod stands to `out`, a
     /// [`TransactionInfo`] with its header. [`Status::BAD_ARGS`] for a null
     /// `out`; [`Status::MISSING`] for an id this mod did not get or one the
-    /// loader forgot (it keeps the newest few thousand). Any thread. Since
-    /// minor 87.
+    /// loader forgot (it keeps the newest few thousand). Any thread.
     pub transaction_status:
         extern "system" fn(me: ModHandle, id: u64, out: *mut TransactionInfo) -> Status,
     /// As [`HostApi::transaction_commit`], for the player whose character
@@ -1273,7 +1226,7 @@ pub struct HostApi {
     /// player. A refusal fails it with [`Status::REFUSED`] and the reason in
     /// [`TransactionInfo::refusal`]; nothing is written. The check runs at
     /// its first step on the server's game thread, never at the commit.
-    /// [`Status::BAD_ARGS`] for an `actor` of 0. Any thread. Since minor 89.
+    /// [`Status::BAD_ARGS`] for an `actor` of 0. Any thread.
     pub transaction_commit_for: extern "system" fn(
         me: ModHandle,
         actor: u32,
@@ -1284,12 +1237,11 @@ pub struct HostApi {
     /// [`Status::OK`] on the server's game thread at a quiet moment while a
     /// world runs, where a mod may read live components that no system
     /// writes meanwhile; [`Status::WRONG_THREAD`] on another thread or
-    /// inside a step, [`Status::MISSING`] while no world runs. Since
-    /// minor 90.
+    /// inside a step, [`Status::MISSING`] while no world runs.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Asks the loader to keep a copy of the client's fog of war for this
     /// mod. Client only ([`Status::MISSING`] on a dedicated server).
-    /// Allowed during `enshwick_mod_init` only. Since minor 94.
+    /// Allowed during `enshwick_mod_init` only.
     pub fog_open: extern "system" fn(me: ModHandle) -> Status,
     /// Writes the fog's [`FogInfo`] to `info`, then copies the box of
     /// `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
@@ -1299,7 +1251,7 @@ pub struct HostApi {
     /// open it; [`Status::OUTSIDE_WORLD`] for a box past the image;
     /// [`Status::BAD_ARGS`] for a null `info`, or a null or short `out`
     /// for a box of pixels. The loader may refresh the copy meanwhile:
-    /// compare `version`. Since minor 94.
+    /// compare `version`.
     pub fog_read: extern "system" fn(
         me: ModHandle,
         info: *mut FogInfo,
@@ -1315,7 +1267,7 @@ pub struct HostApi {
     /// [`Status::REFUSED`] for another name, or a name and major served
     /// twice, [`Status::BAD_ARGS`] for a spec that does not read. Allowed
     /// during `enshwick_mod_init` only: [`Status::TOO_LATE`] once every mod
-    /// is initialised. Since minor 95.
+    /// is initialised.
     pub serve_call: extern "system" fn(
         me: ModHandle,
         spec: *const CallSpec,
@@ -1329,7 +1281,7 @@ pub struct HostApi {
     /// [`Status::REFUSED`] when the mod asked for the name and major already
     /// with another spec, [`Status::BAD_ARGS`] for a spec that does not read
     /// or a null `out`. Allowed during `enshwick_mod_init` only:
-    /// [`Status::TOO_LATE`] once every mod is initialised. Since minor 95.
+    /// [`Status::TOO_LATE`] once every mod is initialised.
     pub find_call:
         extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
     /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
@@ -1338,7 +1290,7 @@ pub struct HostApi {
     /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
     /// when the serving mod or its handler is off, [`Status::BAD_ARGS`] for
     /// a null pointer or an id the mod was not given, or what the handler
-    /// answers. Any thread. Since minor 95.
+    /// answers. Any thread.
     pub call: extern "system" fn(
         me: ModHandle,
         id: u32,
@@ -1351,7 +1303,7 @@ pub struct HostApi {
     /// after the one that placed it. `out` may be null with `capacity` 0 to
     /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
     /// [`Status::MISSING`] for an id this mod did not get or one the loader
-    /// forgot. Any thread. Since minor 96.
+    /// forgot. Any thread.
     pub transaction_entities: extern "system" fn(
         me: ModHandle,
         id: u64,
@@ -1366,7 +1318,7 @@ pub struct HostApi {
     /// a corner that is not finite or a `max` below `min`;
     /// [`Status::MISSING`] while no world is loaded or on a build without
     /// the zone list. On the server's game thread at a quiet moment only:
-    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. Since minor 96.
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step.
     pub world_persists: extern "system" fn(
         me: ModHandle,
         min: *const [f64; 3],
@@ -1382,7 +1334,7 @@ pub struct HostApi {
     /// count, and a null `count` is not written. On the server's game
     /// thread at a quiet moment ([`Status::WRONG_THREAD`] elsewhere or
     /// inside a step); [`Status::MISSING`] while no world runs or when the
-    /// scene does not read on this build. Since minor 97.
+    /// scene does not read on this build.
     pub map_markers: extern "system" fn(
         me: ModHandle,
         out: *mut MapMarkerInfo,
