@@ -233,6 +233,8 @@ pub(crate) struct State {
     pub(crate) stats: super::stats::FakeStats,
     /// Extension points the mod defined and links it attached.
     pub(crate) points: super::points::FakePoints,
+    /// Calls the mod serves and asks for.
+    pub(crate) calls: super::calls::FakeCalls,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
     pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
@@ -440,6 +442,7 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         summon_items: Vec::new(),
         stats: super::stats::FakeStats::default(),
         points: super::points::FakePoints::default(),
+        calls: super::calls::FakeCalls::default(),
         survivor_status: None,
         interaction_filters: Vec::new(),
         skills: Vec::new(),
@@ -683,4 +686,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     transaction_status,
     transaction_commit_for,
     world_quiet,
+    serve_call: super::calls::serve_call,
+    find_call: super::calls::find_call,
+    call: super::calls::call,
 };

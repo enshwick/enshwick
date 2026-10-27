@@ -9,6 +9,7 @@
 //! point reaches and checks its own layout against the hashes the owner's
 //! build wrote.
 
+mod calls;
 mod luau;
 
 use std::fmt::Write as _;
@@ -16,6 +17,7 @@ use std::fmt::Write as _;
 use enshwick_gamedata::reflect::{Image, ImageError, Layout};
 use serde::Deserialize;
 
+pub use calls::rust_call;
 pub use luau::{luau, luau_event};
 
 /// The section of a mod DLL that holds its point schemas.
@@ -41,6 +43,14 @@ pub enum Error {
         what: &'static str,
         /// The value.
         value: String,
+    },
+    /// The server serves no such call.
+    #[error("{owner} serves no call {name}")]
+    NoCall {
+        /// The server's id.
+        owner: String,
+        /// The call asked for.
+        name: String,
     },
     /// The owner defines no such point.
     #[error("{owner} defines no point {name}")]
@@ -112,6 +122,9 @@ pub struct Schema {
     /// Its mod events.
     #[serde(default)]
     event: Vec<EventSchema>,
+    /// The calls it serves.
+    #[serde(default)]
+    call: Vec<calls::CallSchema>,
     /// The types its points reach.
     #[serde(default, rename = "type")]
     types: Vec<TypeSchema>,
@@ -274,6 +287,21 @@ impl Schema {
         self.event.iter().map(|e| e.name.as_str())
     }
 
+    /// The names of the calls it serves.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cargo_enshwick::points::Schema;
+    ///
+    /// let schema = Schema::parse("schema = 1\nmod = \"you.stalls\"\nversion = \"1.0.0\"")?;
+    /// assert_eq!(schema.calls().count(), 0);
+    /// # Ok::<(), cargo_enshwick::points::Error>(())
+    /// ```
+    pub fn calls(&self) -> impl Iterator<Item = &str> {
+        self.call.iter().map(|c| c.name.as_str())
+    }
+
     /// Refuses every value that would leave its place in generated code.
     fn check(&self) -> Result<(), Error> {
         let invalid = |what: &'static str, value: &str| Error::Invalid {
@@ -297,6 +325,17 @@ impl Schema {
             }
             if !(is_type(&point.output) && (!is_named(&point.output) || is_ident(&point.output))) {
                 return Err(invalid("output type", &point.output));
+            }
+        }
+        for call in &self.call {
+            if !is_point_name(&call.name) {
+                return Err(invalid("call name", &call.name));
+            }
+            if !is_ident(&call.input) {
+                return Err(invalid("input type", &call.input));
+            }
+            if !(is_type(&call.output) && (!is_named(&call.output) || is_ident(&call.output))) {
+                return Err(invalid("output type", &call.output));
             }
         }
         for event in &self.event {

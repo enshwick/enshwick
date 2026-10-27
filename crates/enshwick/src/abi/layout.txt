@@ -1,4 +1,4 @@
-abi 2.94
+abi 2.95
 ActionCall size 144 align 8
     header at 0 size 8
     kind at 8 size 4
@@ -140,6 +140,12 @@ BuildingData size 52 align 4
     replay at 21 size 1
     template at 22 size 16
     position at 40 size 12
+CallSpec size 64 align 8
+    header at 0 size 8
+    name at 8 size 16
+    major at 24 size 4
+    input at 32 size 16
+    output at 48 size 16
 CallerFrame size 72 align 8
     rsp at 0 size 8
     rbx at 8 size 8
@@ -264,7 +270,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1344 align 8
+HostApi size 1368 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -432,6 +438,9 @@ HostApi size 1344 align 8
     world_quiet at 1320 size 8
     fog_open at 1328 size 8
     fog_read at 1336 size 8
+    serve_call at 1344 size 8
+    find_call at 1352 size 8
+    call at 1360 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

@@ -301,6 +301,10 @@ name = "task_workers"
 required-features = ["test"]
 
 [[test]]
+name = "calls"
+required-features = ["test"]
+
+[[test]]
 name = "events_described"
 required-features = ["test"]
 

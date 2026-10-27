@@ -6,18 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront, ZoneCheckFn,
+    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
+    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1309,5 +1309,40 @@ pub struct HostApi {
         height: u32,
         out: *mut u8,
         capacity: u32,
+    ) -> Status,
+    /// Serves the call `spec` describes with `callback` and `user`, named
+    /// `<id>:<call>` after the serving mod or one of its former ids;
+    /// [`Status::REFUSED`] for another name, or a name and major served
+    /// twice, [`Status::BAD_ARGS`] for a spec that does not read. Allowed
+    /// during `enshwick_mod_init` only: [`Status::TOO_LATE`] once every mod
+    /// is initialised. Since minor 95.
+    pub serve_call: extern "system" fn(
+        me: ModHandle,
+        spec: *const CallSpec,
+        callback: CallFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Asks for the call `spec` describes and writes its id to `out`.
+    /// Matched against the served call by name and major once every mod is
+    /// initialised: the input and the answer must agree field by field and
+    /// in size, or the call stays unmatched with the reason in the log.
+    /// [`Status::REFUSED`] when the mod asked for the name and major already
+    /// with another spec, [`Status::BAD_ARGS`] for a spec that does not read
+    /// or a null `out`. Allowed during `enshwick_mod_init` only:
+    /// [`Status::TOO_LATE`] once every mod is initialised. Since minor 95.
+    pub find_call:
+        extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
+    /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
+    /// server's handler reads `input` and writes the answer to `output`,
+    /// both as large as the spec says. [`Status::MISSING`] while the call
+    /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
+    /// when the serving mod or its handler is off, [`Status::BAD_ARGS`] for
+    /// a null pointer or an id the mod was not given, or what the handler
+    /// answers. Any thread. Since minor 95.
+    pub call: extern "system" fn(
+        me: ModHandle,
+        id: u32,
+        input: *const c_void,
+        output: *mut c_void,
     ) -> Status,
 }

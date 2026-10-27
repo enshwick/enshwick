@@ -151,3 +151,51 @@ impl_headed!(EventSpec);
 /// A mod's handler for a mod event: the event's data, valid for the call,
 /// and the pointer given at subscription.
 pub type ModEventFn = unsafe extern "system" fn(data: *const c_void, user: *mut c_void);
+
+/// A described service, a call: one function from an input struct to an
+/// answer, which one mod serves and others call, or the call a mod asks for.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{CallSpec, Header, Layout, Str};
+///
+/// let none = Layout { fields: core::ptr::null(), count: 0, size: 0 };
+/// let spec = CallSpec {
+///     header: Header::of::<CallSpec>(),
+///     name: Str::new("you.trading-post:price-of"),
+///     major: 1,
+///     input: none,
+///     output: none,
+/// };
+/// assert_eq!(spec.major, 1);
+/// ```
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
+pub struct CallSpec {
+    /// Size and version of this struct.
+    pub header: Header,
+    /// The call's name, `<serving mod id>:<what>`.
+    pub name: Str,
+    /// The incompatible version: calls of two majors share nothing.
+    pub major: u32,
+    /// The input's fields and size.
+    pub input: Layout,
+    /// The answer, one field, and its size.
+    pub output: Layout,
+}
+
+impl_headed!(CallSpec);
+
+/// A mod's handler for a call it serves.
+///
+/// It gets the input, valid for the call, the answer to write, as large as
+/// the spec's output, and the pointer given at serving, and answers
+/// [`Status::OK`](super::Status::OK) only once the whole answer is written.
+/// It runs on the caller's thread, any thread, possibly on several at once
+/// and inside another call, and must not unwind.
+pub type CallFn = unsafe extern "system" fn(
+    input: *const c_void,
+    output: *mut c_void,
+    user: *mut c_void,
+) -> super::Status;

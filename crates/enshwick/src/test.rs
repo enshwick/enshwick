@@ -75,6 +75,7 @@
 //! # Ok::<(), &str>(())
 //! ```
 
+mod calls;
 mod content;
 mod events;
 mod gameplay;

@@ -38,6 +38,10 @@ mod unwind;
 ///   defines, each an [`#[event]`](macro@crate::event) type; their schemas
 ///   go into the manifest, where `cargo enshwick event` reads them for a
 ///   Luau mod;
+/// - `calls: [Type, ...]`: the [calls](crate::services::Call) the mod
+///   serves, each a [`#[call]`](macro@crate::call) input; their schemas go
+///   into the manifest, where `cargo enshwick call` reads them to write
+///   other mods' declarations;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,
 ///   symbols and constants the mod pins itself for those game builds.
 ///
@@ -99,6 +103,7 @@ macro_rules! manifest {
         $(, was: [$($was:literal),* $(,)?])?
         $(, points: [$($point:ty),* $(,)?])?
         $(, events: [$($event:ty),* $(,)?])?
+        $(, calls: [$($call:ty),* $(,)?])?
         $(, builds: [$({
             side: $bside:ident,
             guid: $guid:literal,
@@ -178,6 +183,7 @@ macro_rules! manifest {
                 "schema = 1\nmod = \"", $id, "\"\nversion = \"", VERSION, "\"\n",
                 $($(<$point as $crate::points::Point>::SCHEMA,)*)?
                 $($(<$event as $crate::services::ModEvent>::SCHEMA,)*)?
+                $($(<$call as $crate::services::Call>::SCHEMA,)*)?
             ),
         );
         #[cfg_attr(windows, unsafe(link_section = ".enshpt"))]

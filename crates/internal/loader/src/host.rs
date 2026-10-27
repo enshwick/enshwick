@@ -28,6 +28,7 @@ use entries::build::{
     build, caller_frame, constant, data_dir, event_types, field_offset, log_level, symbol, system,
     type_hash, type_size,
 };
+use entries::calls::{call, find_call, serve_call};
 use entries::content::{
     add_text, change_data, content_read, content_serve, declare_change, entity_data_open,
     game_text, icons_ready, item_data_get, item_data_open, item_data_set, rebuild_resource,
@@ -781,6 +782,9 @@ pub(crate) static API: HostApi = HostApi {
     world_quiet,
     fog_open,
     fog_read,
+    serve_call,
+    find_call,
+    call,
 };
 
 /// The loader and the calling mod, when the mod is on.

@@ -8,6 +8,17 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Calls, described services: `#[call]` declares one function from a
+  `repr(C)` input to an answer, `Load::serve_call` serves it and
+  `Load::caller` gives a `Caller` that runs it from any thread
+  (`services::Call`, `CallError`); `manifest!(calls: [..])` puts its schema
+  into the manifest. `DescribedCall`, `Load::described_caller` and
+  `Load::serve_described_call` do the same with bytes, for a runtime that
+  knows a call from its schema. The loader matches callers by name, major,
+  fields and sizes once every mod is initialised (`HostApi::serve_call`,
+  `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
+  them (`Installed::serve_call`, `call`, `served_calls`). A call's input
+  and answer have no padding, which `Shape::PADDING_FREE` reports.
 - `Load::on_described_mod_event` and `Load::define_described_event`
   (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
   event described at run time, its data as bytes in the definer's layout;
@@ -142,6 +153,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- The loader's profile names the survivors feature `survivors`; it showed a
+  mod id.
 - The loader and the fake leave a mod event subscription idle when it
   reads more bytes than the definer sends.
 - `World::component` and `World::get` read the static half of a component

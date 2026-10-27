@@ -23,6 +23,8 @@ mod bases;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
+#[cfg(windows)]
+mod calls;
 pub mod carry;
 #[cfg(windows)]
 mod catalogue;

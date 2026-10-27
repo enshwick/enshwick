@@ -32,6 +32,7 @@ macro_rules! headed {
             BuildInfo,
             BuildRights,
             BuildingData,
+            CallSpec,
             ChunkData,
             Comfort,
             CraftCheck,

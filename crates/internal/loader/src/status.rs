@@ -167,6 +167,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         links: {
             let mut links = crate::services::lines(loader);
             links.extend(crate::points::lines(loader));
+            links.extend(crate::calls::lines(loader));
             links
         },
         served: crate::content::summary(),
