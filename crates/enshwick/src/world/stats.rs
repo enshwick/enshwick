@@ -5,6 +5,7 @@
 //! values in the order of the game's attribute container.
 
 use crate::Entity;
+pub use crate::abi::SkillNode;
 use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError, WritableType};
@@ -99,56 +100,6 @@ pub struct Skill {
     pub node: SkillNode,
     /// Its level, from 1, for nodes that level up; 0 for the others.
     pub level: u8,
-}
-
-/// A node of the game's skill tree by its id, as [`Skill::node`] names the
-/// nodes a character unlocked.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::world::SkillNode;
-///
-/// let node = SkillNode::from(0x2a_u32);
-/// assert_eq!(node.get(), 0x2a);
-/// assert_eq!(u32::from(node), 0x2a);
-/// assert_eq!(node, SkillNode::new(0x2a));
-/// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SkillNode(u32);
-
-impl SkillNode {
-    /// The node the game numbers `id`, in a `const` too.
-    ///
-    /// # Examples
-    ///
-    /// See [`SkillNode`].
-    #[must_use]
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// The game's number for the node.
-    ///
-    /// # Examples
-    ///
-    /// See [`SkillNode`].
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-impl From<u32> for SkillNode {
-    fn from(id: u32) -> Self {
-        Self(id)
-    }
-}
-
-impl From<SkillNode> for u32 {
-    fn from(node: SkillNode) -> Self {
-        node.0
-    }
 }
 
 /// A character's level and experience, from [`World::progress`].

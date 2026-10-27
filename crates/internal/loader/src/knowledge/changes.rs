@@ -254,7 +254,7 @@ pub(crate) fn revoke(
     RAISED.relock().push(KnowledgeData {
         header: Header::of::<KnowledgeData>(),
         entity: if player { Entity(entity) } else { Entity(0) },
-        id,
+        id: enshwick::abi::KnowledgeId::new(id),
         value: new,
     });
     Ok(())

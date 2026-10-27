@@ -105,7 +105,7 @@ impl World {
     /// ```
     /// fn clear(world: &enshwick::world::World, drop: enshwick::Entity) {
     ///     if let Err(why) = world.destroy(drop) {
-    ///         enshwick::warn!("entity {} stays: {why}", drop.0);
+    ///         enshwick::warn!("entity {} stays: {why}", drop);
     ///     }
     /// }
     /// ```

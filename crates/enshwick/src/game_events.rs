@@ -155,7 +155,7 @@ impl EventType {
     ///     let dead = died.field::<Entity>(load, "deadEntityId")?;
     ///     load.on_raw_game_event(died, move |event| {
     ///         if let Some(entity) = event.get(dead) {
-    ///             enshwick::info!("entity {} died", entity.0);
+    ///             enshwick::info!("entity {} died", entity);
     ///         }
     ///     })
     /// }

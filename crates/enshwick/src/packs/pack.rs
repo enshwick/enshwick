@@ -838,7 +838,7 @@ pub(super) fn drops(
         let mut meter_of = Vec::new();
         for item in &e.items {
             if let Some((guid, kind)) = reader.reference(file, text, at, item, "item", "") {
-                ids.push(crate::ItemId::new(guid.id()));
+                ids.push(crate::ItemId::new(guid.fnv1a()));
                 let own = (kind == Ref::Own)
                     .then(|| items.iter().find(|i| Guid::try_named(&i.id) == Some(guid)))
                     .flatten();

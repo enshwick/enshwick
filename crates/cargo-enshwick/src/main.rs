@@ -181,7 +181,7 @@ fn ids(names: &[String]) -> anyhow::Result<String> {
             let guid = Guid::try_named(name).with_context(|| {
                 format!("{name:?} is no content id: <mod>:<name>, the mod side a mod id, the name 1 to 128 of [a-z0-9_./-]")
             })?;
-            Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.id()))
+            Ok(format!("{name}  {guid}  {id} {id:#010x}", id = guid.fnv1a()))
         })
         .collect();
     Ok(lines?.join("\n"))
@@ -280,7 +280,7 @@ mod tests {
             line,
             format!(
                 "you.lockers:locker  67842cb8-d551-542b-8765-fe1af9c28aca  {0} {0:#010x}",
-                guid.id()
+                guid.fnv1a()
             )
         );
         assert!(ids(&["safe".to_owned()]).is_err());

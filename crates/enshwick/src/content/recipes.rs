@@ -404,13 +404,13 @@ mod tests {
         assert_eq!(count, 2);
         let copy = recipes + 0xa8;
         assert_eq!(&built.bytes()[copy..copy + 16], &RECIPE.0);
-        assert_eq!(u32_at(built.bytes(), copy + 0x10), RECIPE.id());
-        assert_eq!(u32_at(built.bytes(), copy + 0x5c), RECIPE.id());
+        assert_eq!(u32_at(built.bytes(), copy + 0x10), RECIPE.fnv1a());
+        assert_eq!(u32_at(built.bytes(), copy + 0x5c), RECIPE.fnv1a());
         let (inputs, _) = built.array(copy + 0x28).unwrap();
         assert_eq!(u32_at(built.bytes(), inputs + 0x14), 10);
         let (outputs, _) = built.array(copy + 0x30).unwrap();
         assert_eq!(&built.bytes()[outputs..outputs + 16], &LOCKER.0);
-        assert_eq!(u32_at(built.bytes(), outputs + 0x10), LOCKER.id());
+        assert_eq!(u32_at(built.bytes(), outputs + 0x10), LOCKER.fnv1a());
         let (name, len) = built.array(copy + 0x78).unwrap();
         assert_eq!(&built.bytes()[name..name + len as usize], b"Chest");
         let (inputs, _) = built.array(recipes + 0x28).unwrap();

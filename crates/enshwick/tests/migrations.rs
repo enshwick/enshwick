@@ -10,7 +10,7 @@ mod tests {
     use enshwick::content::{Guid, Id, types};
     use enshwick::migrations::{Migrations, current_id};
     use enshwick::test::FakeHost;
-    use enshwick::{Load, Mod, Off};
+    use enshwick::{ItemId, Load, Mod, Off};
 
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const OLD_LOCKER: Guid = Guid::parse("8a3f6e21-5c4b-4d7e-9f10-2b7c5e6a9d31");
@@ -163,7 +163,13 @@ mod tests {
     fn the_item_s_id_is_declared_and_old_stacks_read_as_it() {
         let loader = start();
         assert_eq!(loader.content_ids(), ["you.lockers:locker"]);
-        assert_eq!(current_id(OLD_LOCKER.id()), LOCKER.id());
-        assert_eq!(current_id(CHEST.id()), CHEST.id());
+        assert_eq!(
+            current_id(ItemId::from_guid(OLD_LOCKER)),
+            ItemId::from_guid(LOCKER)
+        );
+        assert_eq!(
+            current_id(ItemId::from_guid(CHEST)),
+            ItemId::from_guid(CHEST)
+        );
     }
 }

@@ -94,10 +94,12 @@ const WALK_END_AT: usize = 8;
 /// The placement cursor's first bytes, up to `and dword [rcx], 0xfffc9581`.
 const CURSOR: &str = "48 8B C4 4C 89 48 20 4C 89 40 18 55 56 57 41 55 41 57 48 8D A8 88 FE FF FF \
                       48 81 EC 50 02 00 00 81 21 81 95 FC FF";
-/// In the cursor: an altar (`item+0x43`) is refused when `max_altars(ctx
-/// balancing, flame level)` is not above the altar count.
-const CURSOR_ALTAR: &str = "80 7F 43 00 0F B6 9D A0 01 00 00 74 ?? F6 C3 10 75 ?? 41 81 0F 00 40 00 00 \
+/// In the cursor: an altar (the item's flag at `bases.item_altar`) is refused
+/// when `max_altars(ctx balancing, flame level)` is not above the altar count.
+const CURSOR_ALTAR: &str = "80 7F ?? 00 0F B6 9D A0 01 00 00 74 ?? F6 C3 10 75 ?? 41 81 0F 00 40 00 00 \
                             48 8B 96 ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 8B 52 14 E8";
+/// The altar flag's offset in `CURSOR_ALTAR`'s `cmp byte [rdi+flag], 0`.
+const CURSOR_ALTAR_FLAG_AT: usize = 2;
 const CURSOR_BALANCING_AT: usize = 35;
 const CURSOR_SPAN: usize = 0x400;
 
@@ -281,6 +283,23 @@ pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
 
 type Patch = (usize, Vec<u8>, Vec<u8>);
 
+/// The cursor's altar check in `code`, which must test the altar flag at
+/// `item_altar`, the offset the detour reads.
+fn cursor_altar(code: &[u8], item_altar: usize) -> Result<usize, String> {
+    let altar = crate::code::find(code, CURSOR_ALTAR)?;
+    let tested = code
+        .get(altar + CURSOR_ALTAR_FLAG_AT)
+        .copied()
+        .ok_or("the cursor is cut")?;
+    if usize::from(tested) == item_altar {
+        Ok(altar)
+    } else {
+        Err(format!(
+            "the cursor tests the altar flag at {tested:#x}, the table names {item_altar:#x}"
+        ))
+    }
+}
+
 /// The sites as offsets into `code`, and the patches they need.
 fn find_sites(code: &[u8], fields: Fields) -> Result<(Sites, Vec<Patch>), String> {
     let find = |pattern: &str| crate::code::find(code, pattern);
@@ -301,7 +320,7 @@ fn find_sites(code: &[u8], fields: Fields) -> Result<(Sites, Vec<Patch>), String
         *walk = find(pattern)?;
     }
     let cursor = find(CURSOR)?;
-    let altar = find(CURSOR_ALTAR)?;
+    let altar = cursor_altar(code, fields.item_altar)?;
     if !(cursor..cursor + CURSOR_SPAN).contains(&altar) {
         return Err("the cursor's altar check is not in the cursor".into());
     }
@@ -656,6 +675,37 @@ mod tests {
         limit.allowed = limit.allowed.saturating_add(limit.vanilla);
         limit.vanilla = 0;
         limit.flame_level = 99;
+    }
+
+    /// The cursor's altar check with the altar flag at `flag` in the item,
+    /// between filler bytes.
+    fn cursor_with_flag(flag: u8) -> Vec<u8> {
+        let mut code = vec![0xCC; 8];
+        code.extend_from_slice(&[
+            0x80, 0x7F, flag, 0x00, 0x0F, 0xB6, 0x9D, 0xA0, 0x01, 0x00, 0x00,
+        ]);
+        code.extend_from_slice(&[0x74, 0x05, 0xF6, 0xC3, 0x10, 0x75, 0x05]);
+        code.extend_from_slice(&[0x41, 0x81, 0x0F, 0x00, 0x40, 0x00, 0x00]);
+        code.extend_from_slice(&[0x48, 0x8B, 0x96, 0x10, 0x02, 0x00, 0x00]);
+        code.extend_from_slice(&[0x48, 0x8B, 0x8E, 0x18, 0x02, 0x00, 0x00]);
+        code.extend_from_slice(&[0x8B, 0x52, 0x14, 0xE8, 0, 0, 0, 0]);
+        code.extend_from_slice(&[0xCC; 8]);
+        code
+    }
+
+    #[test]
+    fn the_cursor_altar_check_is_found_with_the_flag_where_the_table_puts_it() {
+        assert_eq!(cursor_altar(&cursor_with_flag(0x43), 0x43), Ok(8));
+        assert_eq!(cursor_altar(&cursor_with_flag(0x47), 0x47), Ok(8));
+    }
+
+    #[test]
+    fn a_cursor_testing_another_flag_than_the_table_s_is_refused() {
+        let refused = cursor_altar(&cursor_with_flag(0x47), 0x43).unwrap_err();
+        assert!(
+            refused.contains("0x47") && refused.contains("0x43"),
+            "{refused}"
+        );
     }
 
     #[test]

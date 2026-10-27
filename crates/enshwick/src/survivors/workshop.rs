@@ -13,7 +13,7 @@ use super::SurvivorId;
 /// use enshwick::survivors::WorkshopSurvivor;
 ///
 /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-/// assert_eq!(smith.template().id(), smith.id().0);
+/// assert_eq!(smith.template().fnv1a(), smith.id().0);
 /// # Ok::<(), &str>(())
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -49,14 +49,14 @@ impl WorkshopSurvivor {
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-    /// assert_eq!(WorkshopSurvivor::by_staff(enshwick::ItemId::new(smith.staff().id())), Some(smith));
+    /// assert_eq!(WorkshopSurvivor::by_staff(enshwick::ItemId::from_guid(smith.staff())), Some(smith));
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
     pub fn by_staff(item: crate::ItemId) -> Option<&'static Self> {
         WORKSHOP_SURVIVORS
             .iter()
-            .find(|s| s.staff.id() == item.get())
+            .find(|s| s.staff.fnv1a() == item.get())
     }
 
     /// The short name, lower case with underscores, as the survivor is
@@ -99,7 +99,7 @@ impl WorkshopSurvivor {
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-    /// assert_eq!(smith.staff().id(), 786_532_879);
+    /// assert_eq!(enshwick::ItemId::from_guid(smith.staff()).get(), 786_532_879);
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
@@ -136,7 +136,7 @@ impl WorkshopSurvivor {
     /// use enshwick::survivors::WorkshopSurvivor;
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-    /// assert_eq!(smith.template().id(), smith.id().0);
+    /// assert_eq!(smith.template().fnv1a(), smith.id().0);
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
@@ -197,7 +197,7 @@ mod tests {
         let mut keys = std::collections::BTreeSet::new();
         for survivor in WORKSHOP_SURVIVORS {
             assert_eq!(
-                survivor.template().id(),
+                survivor.template().fnv1a(),
                 survivor.id().0,
                 "{}",
                 survivor.key()
@@ -205,6 +205,6 @@ mod tests {
             assert!(keys.insert(survivor.key()));
         }
         let fisher = WORKSHOP_SURVIVORS.iter().find(|s| s.key() == "fisher");
-        assert_eq!(fisher.map(|s| s.staff().id()), Some(2_684_532_648));
+        assert_eq!(fisher.map(|s| s.staff().fnv1a()), Some(2_684_532_648));
     }
 }

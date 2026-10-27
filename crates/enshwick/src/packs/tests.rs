@@ -153,7 +153,7 @@ fn a_drop_s_meter_follows_its_items() {
     let drop = &pack.drops()[0];
     assert_eq!(
         drop.items,
-        [crate::ItemId::new(Guid::named("staffs:staff").id())]
+        [crate::ItemId::new(Guid::named("staffs:staff").fnv1a())]
     );
     assert_eq!(drop.from.kinds, Kinds::CONTAINERS);
     assert_eq!(drop.meter.map(|m| m.of), Some(3));

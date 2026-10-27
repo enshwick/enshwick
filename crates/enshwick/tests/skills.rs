@@ -5,6 +5,7 @@
 mod tests {
     use enshwick::abi::{Header, SkillCheck, Status};
     use enshwick::progress::{Skill, SkillGate};
+    use enshwick::world::SkillNode;
     use enshwick::{Load, Mod, Off};
 
     struct Flyer;
@@ -27,7 +28,7 @@ mod tests {
     fn check(node: u32) -> SkillCheck {
         SkillCheck {
             header: Header::of::<SkillCheck>(),
-            node,
+            node: SkillNode::new(node),
             gate: SkillCheck::FLY_MODE,
             unlocked: 0,
             reserved: [0; 3],

@@ -262,6 +262,7 @@ impl Load<'_> {
         let id = skill.id();
         let node =
             u32::try_from(self.constant(id)?).map_err(|_| Off::new(format!("{id}: not a node")))?;
+        let node = crate::abi::SkillNode::new(node);
         let host = self.host();
         crate::load::hand_over(
             handler,

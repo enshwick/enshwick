@@ -172,16 +172,16 @@ pub(crate) struct State {
     /// The buffs of each entity that holds buffs.
     pub(crate) buffs: std::collections::HashMap<u32, Vec<ActiveBuff>>,
     /// Knowledge values by `(character or 0, id)`.
-    pub(crate) knowledge: Vec<(u32, KnowledgeInfo)>,
+    pub(crate) knowledge: Vec<(Option<crate::Entity>, KnowledgeInfo)>,
     /// The grants the mod asked for: character, id, kind, value.
-    pub(crate) grants: Vec<(u32, u32, u32, u32)>,
+    pub(crate) grants: Vec<(Option<crate::Entity>, crate::abi::KnowledgeId, u32, u32)>,
     /// The revokes the mod asked for: character, id, kind, value.
-    pub(crate) revokes: Vec<(u32, u32, u32, u32)>,
+    pub(crate) revokes: Vec<(Option<crate::Entity>, crate::abi::KnowledgeId, u32, u32)>,
     /// The changes the mod asked for accounts: key, id, kind, value,
     /// whether a revoke.
-    pub(crate) account_changes: Vec<(crate::PlayerKey, u32, u32, u32, bool)>,
+    pub(crate) account_changes: Vec<(crate::PlayerKey, crate::abi::KnowledgeId, u32, u32, bool)>,
     /// The quest ids the fake knows.
-    pub(crate) quests: Vec<u32>,
+    pub(crate) quests: Vec<crate::abi::KnowledgeId>,
     /// The weather weights everywhere and the fronts, settable.
     pub(crate) weather: Option<([f32; 4], Vec<WeatherFront>)>,
     /// The weather the mod started: effect and duration.
@@ -244,7 +244,7 @@ pub(crate) struct State {
     pub(crate) calls: super::calls::FakeCalls,
     pub(crate) survivor_status: Option<(SurvivorStatusFn, usize)>,
     pub(crate) interaction_filters: Vec<(InteractionFn, usize)>,
-    pub(crate) skills: Vec<(u32, SkillCheckFn, usize)>,
+    pub(crate) skills: Vec<(crate::abi::SkillNode, SkillCheckFn, usize)>,
     pub(crate) comfort_filters: Vec<(ComfortFn, usize)>,
     /// The rates the mod declared, with the factor it set for each.
     pub(crate) rates: Vec<(crate::abi::RateId, f32)>,
