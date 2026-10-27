@@ -23,8 +23,8 @@ game update that moves a field changes this crate, not the mods.
   uses it, or in the code of a symbol it names (`via`), at its start or
   once `within` a number of bytes from it. The slots of
   attributes name their `attribute` and come from the game's archive, which
-  the loader reads on every build. A value only its own build holds, such
-  as a slot in a function table, says `carried = false` and is left out.
+  the loader reads on every build. A value only its own build holds says
+  `carried = false` and is left out.
   What neither finds stays missing, and only the features and mods that
   need it turn off.
 - [`cargo enshwick pin`](https://github.com/enshwick/enshwick/blob/main/crates/cargo-enshwick/README.md#porting-build-rows-pin)
