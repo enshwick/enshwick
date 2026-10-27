@@ -167,6 +167,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `#[point]` and `#[event]` refuse an input, answer or data with padding,
+  as `#[call]` does, since a described link or listener reads every byte:
+  add the bytes as fields. The example trading post's `price` gains a
+  `count`.
 - `Map::markers` reads the markers the scene places from the game's data
   through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.97), once
   per scene; `MapMarker` no longer names an entity (#573).
@@ -190,6 +194,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A Luau mod's answer to a point and its mod events take an enum over a
+  64-bit integer, `usize` and `isize` included, as a number both ways;
+  before, every such value was refused.
 - The loader's profile names the survivors feature `survivors`; it showed a
   mod id.
 - The loader and the fake leave a mod event subscription idle when it

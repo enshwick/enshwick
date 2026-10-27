@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Changed
+
+- `#[point]` and `#[event]` fail the build on padding in a point's input or
+  answer or an event's data, with the message `#[call]` gives.
+
 ### Fixed
 
 - A `#[script]` method whose closure parameter lends its argument (`&T`)

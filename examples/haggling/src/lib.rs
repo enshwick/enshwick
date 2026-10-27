@@ -122,6 +122,7 @@ mod tests {
     fn price(player: u64, item: u32, deal: Deal) -> Price {
         Price {
             item,
+            count: 1,
             player,
             character: Entity(10),
             deal,

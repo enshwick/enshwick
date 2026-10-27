@@ -9,7 +9,7 @@ input = "Price"
 doc = "A \"fair\" price, in coins."
 output = "u32"
 output_layout = "14918346923295848190"
-layout = ["13059086432849901944", "4757988806913211573", "3608188286181557718"]
+layout = ["13059086432849901944", "4757988806913211573", "3608188286181557718", "13924221380763841713", "3252260880205171709"]
 [[type]]
 name = "Price"
 doc = "A \"fair\" price, in coins."
@@ -26,6 +26,14 @@ type = "Deal"
 name = "own"
 doc = "Whether the stall is the player's own."
 type = "bool"
+[[type.field]]
+name = "row"
+doc = "The stall's row."
+type = "u8"
+[[type.field]]
+name = "place"
+doc = "The stall's place in its row."
+type = "u16"
 [[type]]
 name = "Deal"
 doc = "What a player does at a stall."
