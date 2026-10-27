@@ -240,7 +240,7 @@ pub(crate) fn arm(
     let thunk = counting.thunk();
     let hops = counting.hops(chains);
     let code_len = (count * thunk + hops * TIMED_THUNK).div_ceil(PAGE) * PAGE;
-    let slots_len = (count + hops) * size_of::<usize>();
+    let slots_len = ((count + hops) * size_of::<usize>()).next_multiple_of(align_of::<Counter>());
     let counters_len = (count + hops) * size_of::<Counter>();
     let functions_len = (count + hops) * size_of::<RuntimeFunction>();
     let data_len = (slots_len + counters_len + functions_len + UNWIND.len()).div_ceil(PAGE) * PAGE;
@@ -263,7 +263,7 @@ pub(crate) fn arm(
     let counter_start = unsafe { data_start.add(slots_len) };
     #[expect(
         clippy::cast_ptr_alignment,
-        reason = "the slots end on an 8-byte boundary"
+        reason = "the slot area is rounded up to the counters' alignment"
     )]
     let counter_base = counter_start.cast::<Counter>();
     // SAFETY: the data pages hold at least `slots_len + counters_len +

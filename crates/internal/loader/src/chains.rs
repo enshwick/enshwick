@@ -88,7 +88,11 @@ impl<F: Copy> Next<F> {
 }
 
 /// Calls through a thunk, beside its slot; the thunk writes them.
-#[repr(C)]
+///
+/// Each counter fills 128 bytes, so threads in neighbouring thunks never
+/// share a cache line: x86 cores fetch lines in pairs, and Apple's cores
+/// have 128-byte lines.
+#[repr(C, align(128))]
 #[derive(Debug, Default)]
 pub struct Counter {
     /// Calls since arming.
@@ -607,5 +611,14 @@ mod tests {
         assert_eq!(value(original_slot), 0xff);
         assert_eq!(Counter::estimate(1000, 4, 400), Some(100_000.0));
         assert_eq!(Counter::estimate(1000, 0, 0), None);
+    }
+
+    #[test]
+    fn neighbouring_counters_never_share_a_cache_line_pair() {
+        let counters = [Counter::default(), Counter::default()];
+        let first = core::ptr::from_ref(&counters[0]).addr();
+        let second = core::ptr::from_ref(&counters[1]).addr();
+        assert_eq!(first % 128, 0);
+        assert_eq!(second - first, 128);
     }
 }
