@@ -43,6 +43,19 @@ use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::map::CONTEXT_STATE.id(),
+    pinned::map::ENTRY_COLOR.id(),
+    pinned::map::ENTRY_LABEL.id(),
+    pinned::map::ENTRY_POSITION.id(),
+    pinned::map::ENTRY_SIZE.id(),
+    pinned::map::ENTRY_TYPE.id(),
+    pinned::map::ENTRY_VISIBILITY.id(),
+    pinned::map::LIST.id(),
+    pinned::map::LIST_CAPACITY.id(),
+    pinned::map::LIST_COUNT.id(),
+    pinned::map::REGISTRY.id(),
+    pinned::map::REGISTRY_BLOB.id(),
+    pinned::map::STATE_PLAY_DATA.id(),
     pinned::ui::ACTION_BOUND.id(),
     pinned::ui::ACTION_EXTENT.id(),
     pinned::ui::ACTION_NEW.id(),

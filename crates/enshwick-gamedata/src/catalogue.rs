@@ -286,6 +286,22 @@ pub const MAP_MARKER: &str = "map_marker";
 pub const MAP_MARKER_ID: &str = "map_marker.marker_id";
 /// The id of a map marker's type reference, `markerType`, a GUID.
 pub const MAP_MARKER_TYPE: &str = "map_marker.marker_type";
+/// The id of a marker type in the marker type registry, `MapMarkerType`,
+/// whose size is its stride there.
+pub const MARKER_TYPE: &str = "map_marker_type";
+/// The id of a marker type's id, a `u32`.
+pub const MARKER_TYPE_ID: &str = "map_marker_type.marker_id";
+/// The id of a marker type's flag for players' own markers, a byte.
+pub const MARKER_TYPE_CUSTOM: &str = "map_marker_type.is_custom_marker_type";
+/// The id of a marker type's flag for showing above the fog, a byte.
+pub const MARKER_TYPE_ABOVE_FOG: &str = "map_marker_type.show_above_fog_of_war";
+/// The id of a marker type's flag for showing a label, a byte.
+pub const MARKER_TYPE_LABEL: &str = "map_marker_type.show_label";
+/// The id of the marker types in the registry resource, a blob array of
+/// [`MARKER_TYPE`].
+pub const MARKER_REGISTRY_TYPES: &str = "map_marker_registry.types";
+/// The id of the visibility of a marker the map shows.
+pub const MARKER_VISIBLE: &str = "map_marker_visibility_type.visible";
 /// The id of a scene chunk's resource type, which lists what it spawns.
 pub const SCENE_CHUNK: &str = "scene_chunk";
 /// The id of a scene chunk's template references, a blob array of GUIDs.

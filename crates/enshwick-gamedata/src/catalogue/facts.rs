@@ -1428,6 +1428,37 @@ pub const FACTS: &[(&str, Fact)] = &[
         "map_marker.marker_type",
         offset("keen::ecs::MapMarker", "markerType"),
     ),
+    ("map_marker_type", Fact::Type("keen::MapMarkerType")),
+    (
+        "map_marker_type.marker_id",
+        offset("keen::MapMarkerType", "markerId"),
+    ),
+    (
+        "map_marker_type.is_custom_marker_type",
+        offset("keen::MapMarkerType", "isCustomMarkerType"),
+    ),
+    (
+        "map_marker_type.show_above_fog_of_war",
+        offset("keen::MapMarkerType", "showAboveFogOfWar"),
+    ),
+    (
+        "map_marker_type.show_label",
+        offset("keen::MapMarkerType", "showLabel"),
+    ),
+    (
+        "map_marker_registry.types",
+        Fact::Path(&[
+            ("keen::MapMarkerRegistryResource", "mapMarkers"),
+            ("keen::MapMarkerMap", "values"),
+        ]),
+    ),
+    (
+        "map_marker_visibility_type.visible",
+        Fact::Constant {
+            ty: "keen::ecs::MapMarkerVisibilityType",
+            name: "Visible",
+        },
+    ),
     ("scene_chunk", Fact::Type("keen::SceneEntityChunkResource")),
     (
         "scene_chunk.templates",
