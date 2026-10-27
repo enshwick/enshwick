@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 93
+#define ENSHWICK_ABI_MINOR 94
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -515,6 +515,42 @@ typedef struct EnshwickBuildingData {
 // Torn down.
 #define EnshwickBuildingData_TORN_DOWN 2
 
+// One field of a service table or mod event, as its layout hash sees it.
+//
+// Frozen: written as an array.
+typedef struct EnshwickLayoutField {
+  // The field's name.
+  struct EnshwickStr name;
+  // The hash of the field's name, the shape of its type, its size,
+  // alignment and offset.
+  uint64_t hash;
+} EnshwickLayoutField;
+
+// The layout of a service table or mod event, field by field.
+typedef struct EnshwickLayout {
+  // The fields, in declaration order.
+  const struct EnshwickLayoutField *fields;
+  // How many `fields` points at.
+  uint32_t count;
+  // The size of the whole type.
+  uint32_t size;
+} EnshwickLayout;
+
+// A described service, a call: one function from an input struct to an
+// answer, which one mod serves and others call, or the call a mod asks for.
+typedef struct EnshwickCallSpec {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The call's name, `<serving mod id>:<what>`.
+  struct EnshwickStr name;
+  // The incompatible version: calls of two majors share nothing.
+  uint32_t major;
+  // The input's fields and size.
+  struct EnshwickLayout input;
+  // The answer, one field, and its size.
+  struct EnshwickLayout output;
+} EnshwickCallSpec;
+
 // The game caller's context at entry of a hook chain: its stack pointer and
 // callee-saved registers, for links that tell callers apart.
 typedef struct EnshwickCallerFrame {
@@ -910,27 +946,6 @@ typedef uint32_t EnshwickEvent;
 // Deaths the game keeps no record of, such as freezing or an
 // administrator's kill, raise none. Server only. Since minor 60.
 #define EnshwickEvent_PLAYER_DIED 20
-
-// One field of a service table or mod event, as its layout hash sees it.
-//
-// Frozen: written as an array.
-typedef struct EnshwickLayoutField {
-  // The field's name.
-  struct EnshwickStr name;
-  // The hash of the field's name, the shape of its type, its size,
-  // alignment and offset.
-  uint64_t hash;
-} EnshwickLayoutField;
-
-// The layout of a service table or mod event, field by field.
-typedef struct EnshwickLayout {
-  // The fields, in declaration order.
-  const struct EnshwickLayoutField *fields;
-  // How many `fields` points at.
-  uint32_t count;
-  // The size of the whole type.
-  uint32_t size;
-} EnshwickLayout;
 
 // A mod event a mod defines, or the one it subscribes to.
 typedef struct EnshwickEventSpec {
@@ -2607,6 +2622,12 @@ typedef struct EnshwickTransactionInfo {
 // again.
 #define EnshwickTransactionInfo_UNDO_REFUSED 6
 
+// A mod's handler for a call it serves: the input, valid for the call,
+// the answer to write, as large as the spec's output, and the pointer
+// given at serving; `Status::OK` once the answer is
+// written.
+typedef EnshwickStatus (*EnshwickCallFn)(const void *input, void *output, void *user);
+
 // The table of services the loader offers a mod.
 //
 // Fields are only ever appended; a mod checks `Header::covers` before it
@@ -3810,6 +3831,29 @@ typedef struct EnshwickHostApi {
   // inside a step, `Status::MISSING` while no world runs. Since
   // minor 90.
   EnshwickStatus (*world_quiet)(EnshwickModHandle me);
+  // Serves the call `spec` describes with `callback` and `user`, named
+  // `<id>:<call>` after the serving mod; `Status::REFUSED` for a name
+  // outside the mod's id, or a name and major served twice. Allowed
+  // during `enshwick_mod_init` only. Since minor 94.
+  EnshwickStatus (*serve_call)(EnshwickModHandle me,
+                               const struct EnshwickCallSpec *spec,
+                               EnshwickCallFn callback,
+                               void *user);
+  // Asks for the call `spec` describes and writes its id to `out`.
+  // Matched against the served call by name and major once every mod is
+  // initialised: the input and the answer must agree field by field and
+  // in size, or the call stays unmatched with the reason in the log.
+  // Allowed during `enshwick_mod_init` only. Since minor 94.
+  EnshwickStatus (*find_call)(EnshwickModHandle me,
+                              const struct EnshwickCallSpec *spec,
+                              uint32_t *out);
+  // Runs the call `id` from `HostApi::find_call` on this thread: the
+  // server's handler reads `input` and writes the answer to `output`,
+  // both as large as the spec says. `Status::MISSING` while the call
+  // is unmatched or before every mod is initialised, `Status::REFUSED`
+  // when the serving mod is off, or what the handler answers. Any
+  // thread. Since minor 94.
+  EnshwickStatus (*call)(EnshwickModHandle me, uint32_t id, const void *input, void *output);
 } EnshwickHostApi;
 
 // The data of `Event::KNOWLEDGE_CHANGED`.

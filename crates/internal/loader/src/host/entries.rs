@@ -1,6 +1,7 @@
 //! The functions of the host table, by domain.
 
 pub(crate) mod build;
+pub(crate) mod calls;
 pub(crate) mod content;
 pub(crate) mod gameplay;
 pub(crate) mod hooks;

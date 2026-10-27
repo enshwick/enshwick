@@ -111,6 +111,19 @@ enum Command {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Writes the declaration of another mod's call, read from the server's
+    /// DLL without running it, for a mod that calls it.
+    Call {
+        /// The call, `<mod id>:<call>`.
+        name: String,
+        /// The server's DLL, a folder with its DLL in it or in its `mods/`,
+        /// or a schema file (`.toml`) the server published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the declaration is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Writes the Luau definitions of the API, which luau-lsp reads, for
     /// the loader this tool was built with.
     Luau {
@@ -222,6 +235,7 @@ fn main() -> ExitCode {
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
         Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
+        Command::Call { name, from, out } => point::run_call(&name, &from, out.as_deref()),
         Command::Types {
             names,
             from,

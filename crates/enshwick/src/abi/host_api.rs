@@ -6,18 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront, ZoneCheckFn,
+    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header,
+    HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -1283,4 +1283,33 @@ pub struct HostApi {
     /// inside a step, [`Status::MISSING`] while no world runs. Since
     /// minor 90.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
+    /// Serves the call `spec` describes with `callback` and `user`, named
+    /// `<id>:<call>` after the serving mod; [`Status::REFUSED`] for a name
+    /// outside the mod's id, or a name and major served twice. Allowed
+    /// during `enshwick_mod_init` only. Since minor 94.
+    pub serve_call: extern "system" fn(
+        me: ModHandle,
+        spec: *const CallSpec,
+        callback: CallFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Asks for the call `spec` describes and writes its id to `out`.
+    /// Matched against the served call by name and major once every mod is
+    /// initialised: the input and the answer must agree field by field and
+    /// in size, or the call stays unmatched with the reason in the log.
+    /// Allowed during `enshwick_mod_init` only. Since minor 94.
+    pub find_call:
+        extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
+    /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
+    /// server's handler reads `input` and writes the answer to `output`,
+    /// both as large as the spec says. [`Status::MISSING`] while the call
+    /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
+    /// when the serving mod is off, or what the handler answers. Any
+    /// thread. Since minor 94.
+    pub call: extern "system" fn(
+        me: ModHandle,
+        id: u32,
+        input: *const c_void,
+        output: *mut c_void,
+    ) -> Status,
 }

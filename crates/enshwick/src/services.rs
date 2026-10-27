@@ -10,6 +10,7 @@
 //! user that needs a field the publisher lacks is refused with the field's
 //! name. A change to a field already published is a new major version.
 
+mod calls;
 mod described;
 
 use core::marker::PhantomData;
@@ -18,6 +19,9 @@ use crate::Host;
 use crate::abi::{Layout, LayoutField, Str};
 use crate::shape::ShapeHasher;
 
+#[cfg(feature = "test")]
+pub(crate) use calls::run_typed;
+pub use calls::{Call, CallError, Caller, DescribedCall, DescribedCaller};
 pub use described::{DescribedEmitter, DescribedEvent};
 
 /// A table of functions a mod publishes for others.

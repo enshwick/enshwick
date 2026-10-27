@@ -42,6 +42,7 @@
 - [State and data folders](state.md)
 - [Migrations](migrations.md)
 - [Services between mods](services.md)
+- [Calls between mods](calls.md)
 - [Extending other mods](extending.md)
 
 # Writing a mod in Luau

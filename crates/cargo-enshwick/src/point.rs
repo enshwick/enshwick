@@ -133,3 +133,37 @@ pub(crate) fn run_event(name: &str, from: &Path, out: Option<&Path>) -> anyhow::
         from.display()
     ))
 }
+
+/// Writes the Rust declaration of the call `name`, `<mod id>:<call>`, read
+/// from the server's DLL or schema file in `from`, to `out` or as the result.
+///
+/// # Errors
+///
+/// When no DLL there serves the call, or its schema does not read.
+pub(crate) fn run_call(name: &str, from: &Path, out: Option<&Path>) -> anyhow::Result<String> {
+    let (owner, _) = name
+        .split_once(':')
+        .with_context(|| format!("{name:?} is no call: <mod id>:<call>"))?;
+    for (dll, text) in schemas(from)? {
+        let schema = Schema::parse(&text).with_context(|| dll.display().to_string())?;
+        if schema.calls().any(|c| c == name) {
+            let code = cargo_enshwick::points::rust_call(&schema, name)?;
+            return match out {
+                Some(path) => {
+                    std::fs::write(path, &code).with_context(|| path.display().to_string())?;
+                    Ok(format!(
+                        "wrote {name} of {} {} to {}",
+                        schema.owner(),
+                        schema.version(),
+                        path.display()
+                    ))
+                }
+                None => Ok(code.trim_end().to_owned()),
+            };
+        }
+    }
+    Err(anyhow!(
+        "no DLL in {} serves the call {name} of {owner}",
+        from.display()
+    ))
+}
