@@ -8,11 +8,19 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `ReadPackError::TooLarge` names the `limit` the file broke, and
+  `PackFiles::read_dir` refuses a pack with more than `MAX_ICONS` icons
+  (`ReadPackError::TooManyIcons`) or an icon over `MAX_ICON_FILE`; icon
+  PNGs past `icons::MAX_SIDE` pixels do not decode (#596).
+- `mods::join_missing` leaves out an entry with new text once the loader
+  keeps 64 KiB of text servers advertised (#596).
 - `declare_mod!` exports the five functions under their C names only
   outside test builds, so one test binary can declare several mods.
 
 ### Fixed
 
+- A server rates the settings queries, setting changes and actions queries
+  of a player who is no administrator, 2 a second in bursts of 8 (#596).
 - Settings errors name the key and the expected type, and the line where
   the text is at hand, never the value: the settings check's reason, the
   settings read at start, table settings, join values, migrations, and
