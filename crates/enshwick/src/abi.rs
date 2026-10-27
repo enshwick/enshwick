@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 2;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 93;
+pub const ABI_MINOR: u16 = 94;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -479,7 +479,7 @@ impl Status {
     /// The component type is the static half of its ECS type: the set-up
     /// values the entity's template holds and every entity of that template
     /// shares, which a write would change for all of them. A mod built
-    /// before minor 93 reads it as an unknown failure. Since minor 93.
+    /// before minor 94 reads it as an unknown failure. Since minor 94.
     pub const STATIC_HALF: Self = Self(10);
 
     /// Whether this is [`Status::OK`].

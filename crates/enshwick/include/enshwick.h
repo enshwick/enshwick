@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 93
+#define ENSHWICK_ABI_MINOR 94
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -1063,7 +1063,7 @@ typedef uint32_t EnshwickStatus;
 // The component type is the static half of its ECS type: the set-up
 // values the entity's template holds and every entity of that template
 // shares, which a write would change for all of them. A mod built
-// before minor 93 reads it as an unknown failure. Since minor 93.
+// before minor 94 reads it as an unknown failure. Since minor 94.
 #define EnshwickStatus_STATIC_HALF 10
 
 // An opaque handle the loader gives each mod; every call names its caller
@@ -2684,7 +2684,7 @@ typedef struct EnshwickHostApi {
   // A read-only pointer to `entity`'s component of type `type_hash`, valid
   // until the game thread moves on; on the server's game thread only.
   // For the static half of an ECS type, such as `FuelSetup`, it is the
-  // set-up data the entity's template holds (since minor 93; the
+  // set-up data the entity's template holds (since minor 94; the
   // dynamic half's data before). Since minor 3.
   EnshwickStatus (*component)(EnshwickModHandle me,
                               uint32_t entity,
@@ -2966,7 +2966,7 @@ typedef struct EnshwickHostApi {
   // the game sends it to clients and saves it. `Status::REFUSED` for a
   // copy the game keeps for clients (`Network*`, `Client*`), which it
   // overwrites; `Status::STATIC_HALF` for the static half of an ECS
-  // type, the template's set-up data (since minor 93);
+  // type, the template's set-up data (since minor 94);
   // `Status::MISSING` when the entity lacks the component. On the
   // server's game thread only. Since minor 22.
   EnshwickStatus (*component_write)(EnshwickModHandle me,
