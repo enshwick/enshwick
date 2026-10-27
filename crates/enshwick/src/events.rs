@@ -1,4 +1,5 @@
-//! Typed loader events for [`Load::on`](crate::Load::on).
+//! Typed loader events, and the [`Kind`] that [`Load::on`](crate::Load::on)
+//! takes for them and for the typed [game events](crate::game_events).
 //!
 //! Events from the server are raised on its game thread: keep handlers short,
 //! and leave slow work to a thread of the mod's own. On a client they come
@@ -16,33 +17,63 @@ use crate::abi::{
     BuildingData, ChunkData, Event, KnowledgeData, PlayerData, PlayerDeathData, QuestData, TickData,
 };
 
-mod sealed {
+pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
-/// An event with its data type; implemented by the types in this module only.
+/// An event [`Load::on`](crate::Load::on) subscribes to: a loader event of
+/// this module or a typed game event of [`game_events`](crate::game_events);
+/// implemented by those types only.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::events::{Kind, PlayerJoined};
+/// use enshwick::game_events::EntityDiedEvent;
+///
+/// fn watch<E: Kind>(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     load.on::<E>(|_| enshwick::debug!("{}", core::any::type_name::<E>()))
+/// }
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     watch::<PlayerJoined>(load)?;
+///     watch::<EntityDiedEvent>(load)
+/// }
+/// ```
+pub trait Kind: sealed::Sealed + 'static {
+    /// What a handler gets: an ABI struct or `()` for a loader event, the
+    /// event itself for a game event.
+    type Data: 'static;
+
+    /// Resolves what the event needs on this build and subscribes `handler`.
+    #[doc(hidden)]
+    fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+    where
+        F: Fn(&Self::Data) + Send + Sync + 'static;
+}
+
+/// A loader event, raised under its [`Event`] constant by the loader and by
+/// the fake host's `raise`; implemented by the types in this module only.
 ///
 /// # Examples
 ///
 /// ```
 /// use enshwick::abi::Event;
-/// use enshwick::events::{Kind, PlayerJoined};
+/// use enshwick::events::{LoaderEvent, PlayerJoined};
 ///
 /// assert!(PlayerJoined::EVENT == Event::PLAYER_JOINED);
 /// ```
-pub trait Kind: sealed::Sealed + 'static {
+pub trait LoaderEvent: Kind<Data: Copy> {
     /// The raw event.
     const EVENT: Event;
-    /// What a handler gets: an ABI struct, or `()` for events without data.
-    type Data: Copy + 'static;
 
     /// The event's data from the raw pointer the loader passes; `None` when
     /// it is missing.
     ///
     /// # Safety
     ///
-    /// - `raw` is null or the pointer the loader passed with [`Kind::EVENT`]:
-    ///   a [`Kind::Data`] the loader wrote, readable for the size its header
+    /// - `raw` is null or the pointer the loader passed with
+    ///   [`LoaderEvent::EVENT`]: a [`Kind::Data`] the loader wrote, readable for the size its header
     ///   states; no alignment is needed.
     /// - No other thread writes that struct during the call.
     unsafe fn data(raw: *const c_void) -> Option<Self::Data>;
@@ -73,8 +104,18 @@ macro_rules! without_data {
         impl sealed::Sealed for $name {}
 
         impl Kind for $name {
-            const EVENT: Event = Event::$event;
             type Data = ();
+
+            fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+            where
+                F: Fn(&()) + Send + Sync + 'static,
+            {
+                load.on_raw_event(Event::$event, move |_raw| handler(&()))
+            }
+        }
+
+        impl LoaderEvent for $name {
+            const EVENT: Event = Event::$event;
 
             unsafe fn data(_raw: *const c_void) -> Option<()> {
                 Some(())
@@ -96,8 +137,8 @@ macro_rules! with_data {
                 |raw: *const c_void| -> Option<crate::script::Value> {
                     // SAFETY: `EventKind::read` passes on the loader's pointer
                     // for this event with no other thread writing its data, by
-                    // its `# Safety`, which is what `Kind::data` asks for.
-                    unsafe { <$name as Kind>::data(raw) }.map(crate::script::IntoScript::into_value)
+                    // its `# Safety`, which is what `LoaderEvent::data` asks for.
+                    unsafe { <$name as LoaderEvent>::data(raw) }.map(crate::script::IntoScript::into_value)
                 },
             ),
         )*];
@@ -114,8 +155,26 @@ macro_rules! with_data {
         impl sealed::Sealed for $name {}
 
         impl Kind for $name {
-            const EVENT: Event = Event::$event;
             type Data = $data;
+
+            fn subscribe<F>(load: &mut crate::Load<'_>, handler: F) -> Result<(), crate::Off>
+            where
+                F: Fn(&$data) + Send + Sync + 'static,
+            {
+                load.on_raw_event(Event::$event, move |raw| {
+                    // SAFETY: this closure is subscribed under
+                    // `Event::$event`, this type's `LoaderEvent::EVENT`, and
+                    // `EventFn` has the loader pass that event's data, null or
+                    // valid with no other thread writing it for the call.
+                    if let Some(data) = unsafe { <$name as LoaderEvent>::data(raw) } {
+                        handler(&data);
+                    }
+                })
+            }
+        }
+
+        impl LoaderEvent for $name {
+            const EVENT: Event = Event::$event;
 
             unsafe fn data(raw: *const c_void) -> Option<$data> {
                 // SAFETY: the caller guarantees `raw` is null or this event's

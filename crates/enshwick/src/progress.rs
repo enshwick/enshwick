@@ -8,8 +8,7 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     // Fly mode for everyone, the skill tree untouched.
-//!     let node = load.skill_node(Skill::AirborneArchitect)?;
-//!     load.on_skill(node, |check| (check.gate == SkillGate::FlyMode).then_some(true))
+//!     load.on_skill(Skill::AirborneArchitect, |check| (check.gate == SkillGate::FlyMode).then_some(true))
 //! }
 //! ```
 
@@ -60,8 +59,8 @@ const _: () = {
     assert!(offset_of!(Experience, gained) == offset_of!(ExperienceRow, gained));
 };
 
-/// A skill node the API names, for [`Load::skill_node`]; the loader knows
-/// each one's node per game build.
+/// A skill the API names, for [`Load::on_skill`]; the loader knows each
+/// one's node per game build.
 ///
 /// # Examples
 ///
@@ -96,15 +95,14 @@ pub enum SkillGate {
     Other,
 }
 
-/// The game asking whether a character unlocked a skill node.
+/// The game asking whether a character unlocked a skill.
 ///
 /// # Examples
 ///
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SkillCheck {
-    /// The node.
-    pub node: u32,
     /// Who asks.
     pub gate: SkillGate,
     /// The game's own answer.
@@ -176,7 +174,6 @@ where
         return 0;
     };
     let call = SkillCheck {
-        node: check.node,
         gate: if check.gate == RawSkillCheck::FLY_MODE {
             SkillGate::FlyMode
         } else {
@@ -246,36 +243,25 @@ where
 }
 
 impl Load<'_> {
-    /// The node of `skill` on the running build, for [`Load::on_skill`].
+    /// Answers the game's checks of `skill`: `Some(true)` unlocks it for
+    /// that check, `Some(false)` locks it, `None` keeps the game's answer. It
+    /// runs on both sides, on the checking thread, and only for `skill`.
     ///
     /// # Errors
     ///
-    /// [`Off`] on a build whose table lacks the skill.
+    /// [`Off`] after init, on a build whose table lacks the skill's node, or
+    /// on a build that lacks the check.
     ///
     /// # Examples
     ///
     /// See the [module](self).
-    pub fn skill_node(&self, skill: Skill) -> Result<u32, Off> {
-        let id = skill.id();
-        u32::try_from(self.constant(id)?).map_err(|_| Off::new(format!("{id}: not a node")))
-    }
-
-    /// Answers the game's checks of skill node `node`: `Some(true)` unlocks
-    /// it for that check, `Some(false)` locks it, `None` keeps the game's
-    /// answer. It runs on both sides, on the checking thread, and only for
-    /// `node`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] after init or on a build that lacks the check.
-    ///
-    /// # Examples
-    ///
-    /// See the [module](self).
-    pub fn on_skill<F>(&mut self, node: u32, handler: F) -> Result<(), Off>
+    pub fn on_skill<F>(&mut self, skill: Skill, handler: F) -> Result<(), Off>
     where
         F: Fn(&SkillCheck) -> Option<bool> + Send + Sync + 'static,
     {
+        let id = skill.id();
+        let node =
+            u32::try_from(self.constant(id)?).map_err(|_| Off::new(format!("{id}: not a node")))?;
         let host = self.host();
         crate::load::hand_over(
             handler,

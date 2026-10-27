@@ -488,5 +488,6 @@ pub struct PlayerData {
 impl_headed!(PlayerData);
 
 /// A mod's handler for an [`Event`]: the event, its data (null for events
-/// without data, valid for the call) and the pointer given at subscription.
+/// without data, valid for the call, and no other thread writes it during
+/// the call) and the pointer given at subscription.
 pub type EventFn = unsafe extern "system" fn(event: Event, data: *const c_void, user: *mut c_void);

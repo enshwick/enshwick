@@ -1170,7 +1170,8 @@ typedef struct EnshwickServiceFound {
 } EnshwickServiceFound;
 
 // A mod's handler for an `Event`: the event, its data (null for events
-// without data, valid for the call) and the pointer given at subscription.
+// without data, valid for the call, and no other thread writes it during
+// the call) and the pointer given at subscription.
 typedef void (*EnshwickEventFn)(EnshwickEvent event, const void *data, void *user);
 
 // A game resource's key: its GUID in memory order, its type hash and part.
@@ -2898,8 +2899,9 @@ typedef struct EnshwickHostApi {
   // entry has the server's version, `ManifestFlags::JOIN`, `off` 1, the
   // client's DLL path when it has the mod (empty otherwise), and the name
   // and homepage the server advertises. The strings stay valid for the
-  // process. Empty before a refused
-  // join; see `Event::JOIN_REFUSED`. Since minor 10.
+  // process; once 64 KiB of advertised text is kept, an entry with new
+  // text is left out. Empty before a refused join; see
+  // `Event::JOIN_REFUSED`. Since minor 10.
   EnshwickStatus (*join_missing)(EnshwickModHandle me,
                                  struct EnshwickModInfo *out,
                                  uint32_t entry_size,

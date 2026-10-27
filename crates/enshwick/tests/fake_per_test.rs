@@ -7,8 +7,10 @@ mod tests {
     use enshwick::test::FakeHost;
     use enshwick::{Load, Mod, Off};
 
-    #[derive(serde::Deserialize)]
+    /// Test settings.
+    #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
     struct Settings {
+        /// A rate.
         rate: u32,
     }
 
@@ -22,7 +24,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let settings: Settings = load.settings("rate = 1\n")?;
+            let settings: Settings = load.config()?;
             Ok(Self {
                 rate: settings.rate,
             })

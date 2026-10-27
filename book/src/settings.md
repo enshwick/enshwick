@@ -283,37 +283,6 @@ the mod, without a newer key, should still load.
 [`enshwick-game-rates`](https://github.com/enshwick/mod-game-rates)
 reads this setting as `comfort_multiplier`, beside its recipe rates.
 
-## Untyped settings
-
-[`load.settings(DEFAULTS)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
-reads the same file into any `serde::Deserialize` type. When the file is
-missing, the loader writes `DEFAULTS` there as is, so write `DEFAULTS` as the
-commented file a player should see, and make sure your type accepts it.
-
-```rust
-const DEFAULTS: &str = "\
-# Altars allowed at each Flame level.
-altars_per_flame_level = [2, 4, 8]
-";
-
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Settings {
-    altars_per_flame_level: Vec<u8>,
-}
-
-fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let settings: Settings = load.settings(DEFAULTS)?;
-    enshwick::info!("table {:?}", settings.altars_per_flame_level);
-    Ok(())
-}
-```
-
-Untyped settings have no validation hook, no join values, no schema for the
-console and the screens, and no `on_config_change`; subscribe to
-[`events::SettingsChanged`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/events.rs)
-and read the file again yourself if you need changes at run time.
-
 ## Changes while the game runs
 
 [`load.on_config_change(|settings: Settings| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)

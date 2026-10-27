@@ -65,7 +65,7 @@ summed in this order:
    `stats.set_item(item, &stats)` writes it, on the server. The items an
    entity wears are its equipment: armour, rings, the ranged weapon and the
    shield. Clients that run Enshwick get every item's stats.
-2. **Buffs**: `load.buff_modifiers(buff, &modifiers)` gives every entity
+2. **Buffs**: `load.add_buff_modifiers(buff, &modifiers)` gives every entity
    that has the buff type the modifiers while it has it.
 3. **Mods**: `stats.set(entity, key, modifier, lasting)` keeps a modifier
    under the mod's own key; the same key and stat replace the one before,

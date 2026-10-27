@@ -264,7 +264,7 @@ impl Effects {
             })
         };
         let npc = (|| {
-            let ty = load.event_type(ids::NPC_COMMAND_EVENT)?;
+            let ty = load.game_event_type(ids::NPC_COMMAND_EVENT)?;
             Ok::<_, Off>(NpcCommand {
                 ty,
                 kind: ty.field_by_id(load, ids::NPC_COMMAND_EVENT_TYPE)?,
@@ -273,7 +273,7 @@ impl Effects {
             })
         })();
         let toggle = (|| {
-            let ty = load.event_type(ids::SET_TOGGLE_STATE_EVENT)?;
+            let ty = load.game_event_type(ids::SET_TOGGLE_STATE_EVENT)?;
             Ok::<_, Off>(SetToggle {
                 ty,
                 sender: ty.field_by_id(load, ids::SET_TOGGLE_STATE_EVENT_SENDER_ID)?,
@@ -282,7 +282,7 @@ impl Effects {
             })
         })();
         let threat = (|| {
-            let ty = load.event_type(ids::ADD_THREAT_TARGET_EVENT)?;
+            let ty = load.game_event_type(ids::ADD_THREAT_TARGET_EVENT)?;
             Ok::<_, Off>(AddThreat {
                 ty,
                 attacker: ty.field_by_id(load, ids::ADD_THREAT_TARGET_EVENT_ATTACKER_ID)?,
@@ -291,7 +291,7 @@ impl Effects {
             })
         })();
         let ping = (|| {
-            let ty = load.event_type(ids::UI_PING_EVENT)?;
+            let ty = load.game_event_type(ids::UI_PING_EVENT)?;
             Ok::<_, Off>(Ping {
                 ty,
                 sender: ty.field_by_id(load, ids::UI_PING_EVENT_SENDER_ENTITY_ID)?,
@@ -436,7 +436,7 @@ impl Effects {
     /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let effects = load.effects();
-    ///     let ping = load.event_type("keen::ecs::UiPingEvent")?;
+    ///     let ping = load.game_event_type("keen::ecs::UiPingEvent")?;
     ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
     ///     actions.add(Action::new("ping-origin", "Ping the world origin").admins(), move |_request| {
     ///         let bytes = vec![0u8; ping.size() as usize];

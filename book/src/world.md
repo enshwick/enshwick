@@ -111,7 +111,7 @@ use enshwick::game_events::LevelUpEvent;
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     // A level up restores the character's health.
-    load.on_game::<LevelUpEvent>(move |gained| {
+    load.on::<LevelUpEvent>(move |gained| {
         let max = world.vitals(gained.player_entity_id).map_or(0, |v| v.health.max);
         if let Err(why) = world.set_health(gained.player_entity_id, max) {
             enshwick::debug!("no heal: {why}");
