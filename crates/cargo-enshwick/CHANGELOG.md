@@ -6,6 +6,21 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo enshwick call <call>` writes the Rust declaration of another mod's
+  call from the server's schema (`cargo_enshwick::points::rust_call`).
+- `cargo enshwick event <event>` writes a mod event's Luau module from the
+  owner's schema (`cargo_enshwick::points::luau_event`).
+- `cargo enshwick point --luau` writes a point's Luau module for a Luau mod
+  (`cargo_enshwick::points::luau`), with each field's place in the owner's
+  layout.
+- `cargo enshwick new --data` shows a selection of items by category in
+  the commented `items.toml` (#558).
+- `cargo_enshwick::luau::definitions` writes the API's Luau definitions
+  (#543); `cargo enshwick luau` writes them to a file, and
+  `cargo enshwick new --luau` starts a Luau mod (#545).
+
 ## [1.0.0-alpha.7] - 2026-10-26
 
 Released beside `enshwick` 1.0.0-alpha.7, with no changes of its own.

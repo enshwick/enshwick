@@ -5,6 +5,9 @@ use std::process::Command;
 
 use anyhow::{Context as _, anyhow, bail};
 
+/// The game's executables, one per side, as a game folder holds them.
+pub(crate) const GAME_EXECUTABLES: [&str; 2] = ["enshrouded_server.exe", "enshrouded.exe"];
+
 /// What `cargo metadata` says about the workspace, as far as installing goes.
 #[derive(Debug, serde::Deserialize)]
 struct Metadata {
@@ -27,13 +30,11 @@ struct Target {
 
 /// Builds the chosen mod and copies it to `<game>/mods/<package>.dll`.
 pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<String> {
-    if !["enshrouded.exe", "enshrouded_server.exe"]
-        .iter()
-        .any(|exe| game.join(exe).is_file())
-    {
+    if !GAME_EXECUTABLES.iter().any(|exe| game.join(exe).is_file()) {
         bail!(
-            "{} holds neither enshrouded.exe nor enshrouded_server.exe",
-            game.display()
+            "{} holds none of {}",
+            game.display(),
+            GAME_EXECUTABLES.join(", ")
         );
     }
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());

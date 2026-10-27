@@ -78,15 +78,17 @@ impl World {
     /// The props whose position lies in the box between corners `a` and
     /// `b`, in metres, edges included, by entity: what a player placed
     /// there from an item, told apart by the template the item places,
-    /// not the things a world comes with. The engine walks every entity with a `UsedItem`,
-    /// so call it now and then, not every step.
+    /// not the things a world comes with. Creatures placed from items
+    /// (animals, pets, survivors) and flame altars are no props and are
+    /// left out; the entity calls reach them. The engine walks every
+    /// entity with a `UsedItem`, so call it now and then, not every step.
     ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for a corner that is not finite;
     /// [`WorldError::WrongThread`] off the server's game thread or inside a
     /// step; [`WorldError::Missing`] before a world runs or on a game build
-    /// without the reads.
+    /// without the reads, the marks of creatures and altars included.
     ///
     /// # Examples
     ///
@@ -102,6 +104,7 @@ impl World {
     pub fn props_in(self, a: [f64; 3], b: [f64; 3]) -> Result<Vec<Prop>, WorldError> {
         let (low, high) = span(a, b).ok_or(WorldError::Refused)?;
         let orientation = self.0.orientation.ok_or(WorldError::Missing)?;
+        let no_props = self.0.no_props.ok_or(WorldError::Missing)?;
         let mut templates = Templates::default();
         let mut props: Vec<Prop> = self
             .placed_with(self.0.used_item.hash())?
@@ -109,6 +112,12 @@ impl World {
             .map(|place| (Entity(place.entity), crate::ecs::metres(place.position)))
             .filter(|(_, at)| (0..3).all(|axis| (low[axis]..=high[axis]).contains(&at[axis])))
             .filter_map(|(entity, position)| {
+                if no_props
+                    .iter()
+                    .any(|&marks| self.component(entity, marks).is_some())
+                {
+                    return None;
+                }
                 let item = ItemId::new(self.used_item(entity)?);
                 let placed = templates.placed_by(self, item)?;
                 if self.template(entity) != Some(placed) {
@@ -140,7 +149,7 @@ impl World {
 
     /// Every entity with a component of type `hash` and a place in the
     /// world, as the loader answers.
-    pub(super) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
+    pub(crate) fn placed_with(self, hash: u32) -> Result<Vec<EntityPlace>, WorldError> {
         let entities = self.0.host.api().entities;
         let mut capacity = 1024u32;
         loop {

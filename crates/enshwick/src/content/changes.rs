@@ -23,9 +23,11 @@ use crate::{Load, Off};
 
 mod items;
 mod live;
+mod recipes;
 
 pub use items::{ItemTraits, Items, ItemsChange};
 pub use live::{ChangeHandle, SetChangeError, Target};
+pub use recipes::{RecipeTraits, Recipes, RecipesChange};
 
 /// The largest factor a [`Value::Times`] takes.
 pub const MAX_FACTOR: f64 = 100.0;
@@ -98,6 +100,12 @@ pub enum Field {
     /// The weight of an item among the ones a fill table picks from, 0 to
     /// 1000000; the entry is the item.
     Weight,
+    /// The workshop a recipe is made at, by the game's id for it,
+    /// [`WorkshopId::id`](crate::content::workshops::WorkshopId::id); the
+    /// entry is a recipe, and the value is only ever set, by
+    /// [`Change::station`]. The crafting menu lists the recipe at its new
+    /// station alone; it takes effect when the game starts.
+    Station,
 }
 
 impl Field {
@@ -119,6 +127,7 @@ impl Field {
         Self::Count,
         Self::SpawnProbability,
         Self::Weight,
+        Self::Station,
     ];
 
     /// The name a data pack writes, such as `max_stack`.
@@ -149,6 +158,7 @@ impl Field {
             Self::Count => "count",
             Self::SpawnProbability => "spawn_probability",
             Self::Weight => "weight",
+            Self::Station => "station",
         }
     }
 
@@ -174,7 +184,11 @@ impl Field {
             | Self::EnergyOutput
             | Self::ComfortAmount => Entry::Item,
             Self::StackSize | Self::Count | Self::SpawnProbability | Self::Weight => Entry::Loot,
-            Self::Output | Self::Cost | Self::Ingredient | Self::CraftingDuration => Entry::Recipe,
+            Self::Output
+            | Self::Cost
+            | Self::Ingredient
+            | Self::CraftingDuration
+            | Self::Station => Entry::Recipe,
         }
     }
 
@@ -190,6 +204,7 @@ impl Field {
             Self::Armor | Self::EnergyOutput | Self::Weight => (0.0, 1_000_000.0),
             Self::SpawnProbability => (0.0, 1.0),
             Self::ComfortAmount => (0.0, 1000.0),
+            Self::Station => (0.0, 4_294_967_295.0),
         }
     }
 
@@ -213,7 +228,8 @@ impl Field {
             | Self::EnergyOutput
             | Self::ComfortAmount
             | Self::StackSize
-            | Self::Count => true,
+            | Self::Count
+            | Self::Station => true,
             Self::CraftingDuration
             | Self::DamageMod
             | Self::SpeedMod
@@ -257,6 +273,9 @@ impl Field {
                 field: self,
                 value: v,
             }),
+            Value::Times(_) if matches!(self, Self::Station) => {
+                Err(ValueError::SetOnly { field: self })
+            }
             Value::Times(f) if matches!(self, Self::Slots) && f < 1.0 => {
                 Err(ValueError::Shrinks { field: self })
             }
@@ -342,6 +361,7 @@ impl Field {
             Self::Count => DataField::LOOT_COUNT,
             Self::SpawnProbability => DataField::LOOT_SPAWN_PROBABILITY,
             Self::Weight => DataField::LOOT_WEIGHT,
+            Self::Station => DataField::RECIPE_STATION,
         }
     }
 
@@ -458,6 +478,12 @@ pub enum ValueError {
         /// The field.
         field: Field,
     },
+    /// A factor for a field that takes only a set.
+    #[error("{field} takes only a set, never a factor")]
+    SetOnly {
+        /// The field.
+        field: Field,
+    },
     /// A set for a field that takes only a factor.
     #[error("{field} takes only a factor: {{ times = x }}")]
     FactorOnly {
@@ -476,7 +502,9 @@ pub enum ValueError {
     },
     /// A field whose change alters a resource's length, which a change set
     /// after init cannot.
-    #[error("{field} is no field a mod sets after init: its change alters a recipe's length")]
+    #[error(
+        "{field} is no field a mod sets after init: its change alters a recipe's length or the menus built at start"
+    )]
     NotLive {
         /// The field.
         field: Field,
@@ -484,6 +512,13 @@ pub enum ValueError {
     /// A selection of items for a field it does not reach.
     #[error("{field} is no field a selection of items changes")]
     NotSelectable {
+        /// The field.
+        field: Field,
+    },
+    /// A selection of recipes for a field it does not reach: an item's,
+    /// a loot table's, or one ingredient's.
+    #[error("{field} is no field a selection of recipes changes")]
+    NotRecipeSelectable {
         /// The field.
         field: Field,
     },
@@ -505,11 +540,13 @@ pub enum ValueError {
 /// See the [module](self).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Change {
-    /// The vanilla entry, such as an item's GUID.
+    /// The vanilla entry, such as an item's GUID, or a fill table's for
+    /// [`Change::in_table`].
     pub entry: Guid,
     /// What changes.
     pub field: Field,
-    /// The item inside the entry, for [`Field::Ingredient`].
+    /// The item inside the entry: a recipe's ingredient for
+    /// [`Field::Ingredient`], or a fill table's item.
     pub item: Option<Guid>,
     /// How.
     pub value: Value,
@@ -529,6 +566,55 @@ impl Change {
             item: None,
             value,
         }
+    }
+
+    /// The change of `field` of the item `item` in the one fill table
+    /// `table` alone, a `DefaultInventoryResource` such as
+    /// [`Vanilla::loot_table`](crate::content::vanilla::Vanilla::loot_table)
+    /// finds; `field` is [`Field::Count`], [`Field::SpawnProbability`] or
+    /// [`Field::Weight`]. It applies after the item's changes of every table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    ///
+    /// let (table, fur) = (Guid([1; 16]), Guid([2; 16]));
+    /// let change = Change::in_table(table, fur, Field::Count, Value::Times(2.0));
+    /// assert_eq!((change.entry, change.item), (table, Some(fur)));
+    /// assert!(change.check().is_ok());
+    /// assert!(Change::in_table(table, fur, Field::StackSize, Value::Set(2.0)).check().is_err());
+    /// ```
+    #[must_use]
+    pub const fn in_table(table: Guid, item: Guid, field: Field, value: Value) -> Self {
+        Self {
+            entry: table,
+            field,
+            item: Some(item),
+            value,
+        }
+    }
+
+    /// The change that moves the recipe `recipe` to the workshop
+    /// `workshop`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::Guid;
+    /// use enshwick::content::changes::{Change, Field, Value};
+    /// use enshwick::content::workshops::WorkshopId;
+    ///
+    /// let kiln = WorkshopId::new(Guid([9; 16]));
+    /// let change = Change::station(Guid([1; 16]), kiln);
+    /// assert_eq!(change.field, Field::Station);
+    /// assert_eq!(change.value, Value::Set(f64::from(kiln.id())));
+    /// assert!(change.check().is_ok());
+    /// ```
+    #[must_use]
+    pub fn station(recipe: Guid, workshop: crate::content::workshops::WorkshopId) -> Self {
+        Self::new(recipe, Field::Station, Value::Set(f64::from(workshop.id())))
     }
 
     /// The change of how many of `item` the recipe `recipe` takes.
@@ -571,7 +657,11 @@ impl Change {
     /// assert_eq!(change.check().unwrap_err().to_string(), "ingredient needs an item");
     /// ```
     pub fn check(&self) -> Result<(), ValueError> {
-        let wants_item = self.field == Field::Ingredient;
+        let fill_table = matches!(
+            self.field,
+            Field::Count | Field::SpawnProbability | Field::Weight
+        );
+        let wants_item = self.field == Field::Ingredient || (fill_table && self.item.is_some());
         if wants_item != self.item.is_some() {
             return Err(ValueError::Item {
                 field: self.field,

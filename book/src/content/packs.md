@@ -27,7 +27,8 @@ content. A pack changes vanilla values only through
 item, recipe or table, never gives one another id, and never writes the
 game's files or saves.
 
-A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod).
+A mod can carry a pack too, see [Packs in a mod](#packs-in-a-mod). A pack
+with a `main.luau` is a [Luau mod](../luau.md).
 
 The repository's `examples/` folder holds three packs to start from:
 `you.material-stacks`, `you.recipe-cost-and-time` and `you.storage-slots`.
@@ -61,6 +62,7 @@ homepage = "https://example.com/lanterns"
 | `side` | `both` (the default), `server` or `client` |
 | `join` | whether server and players must run the same pack to play together; on unless `false`, and required for a pack that adds or changes anything players' games read (everything but loot) |
 | `requires` | mods and packs it needs, with a version requirement each |
+| `[[setting]]` | a setting of a [Luau mod](../luau.md#settings), one table each |
 
 ## Names and references
 
@@ -130,7 +132,7 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 | Field | Meaning | Values |
 | --- | --- | --- |
 | `max_stack` | how many of the item one inventory slot holds | 1 to 65535 |
-| `slots` | how many slots the container the item places holds, never fewer than it has | 8 to 128, in steps of 8 |
+| `slots` | how many slots the container the item places holds, or the backpack it is, never fewer than it has | 8 to 128, in steps of 8 |
 | `damage_mod` | a weapon's damage factor | 0 to 100 |
 | `speed_mod` | a weapon's attack speed factor | 0 to 10 |
 | `armor` | every armour value of the item, scaled only: `{ times = x }` | a factor |
@@ -141,6 +143,44 @@ sets the value; `{ times = x }` multiplies it, with `x` from 0 to 100.
 A change that names no item, changes nothing, gives a value out of range or
 changes one field of one item a second time is a problem at its line, like
 every other.
+
+A stack size or container slots can also change for every vanilla item a
+selection picks, read from the game's data when the game starts:
+
+```toml
+[[change]]
+category = ["Materials", "Ammunition"]
+max_stack = { times = 4 }
+
+[[change]]
+items = "stackable"
+max_stack = { times = 2 }
+
+[[change]]
+items = "containers"
+slots = { times = 2 }
+
+[[change]]
+items = ["Material_T1_Wood_Logs"]
+max_stack = 999
+```
+
+| Selection | Picks |
+| --- | --- |
+| `category = [...]` | every item of these categories, by the game's names: `Customization`, `Equipment`, `Weapons`, `Tools`, `Instrument`, `FishingRod`, `BuildTools`, `Consumables`, `Ammunition`, `Materials`, `Blueprints`, `Currency`, `Collectibles`, `AnimalFood`, `PetFood`, `WeaponGem`, `ColorPalette` |
+| `items = "stackable"` | every item one slot already holds more than one of |
+| `items = "containers"` | every item that places a container |
+| `items = "backpacks"` | every backpack, an item worn in the game's `Backpack` slot |
+
+A selection changes only `max_stack` and `slots`. A stack size reaches only
+items that stack and keep no state of their own, such as durability, so
+weapons and armour stay at one; slots reach only items that place a
+container or are backpacks. A backpack's size reaches only backpacks made
+after the change: one a player has keeps the size it was made with, which
+the save holds. An item the pack also names in `items` keeps that change alone,
+so the last table above sets Wood Logs to 999 while other materials take
+four times their size. A change gives `items` or `category`, never both. The
+pack's log says how many items each selection reached.
 
 The stats change only on items that have them: a `damage_mod` on an item
 that deals no damage is left, and the pack's log says so. A weapon deals the
@@ -186,12 +226,52 @@ where it is defined, so naming one here is a problem.
 | `cost` | how many of each ingredient it takes | 1 to 65535 |
 | `time` | how long it takes, in seconds; 0 is at once | 0 to 86400 |
 | `ingredients` | how many of each named ingredient it takes: 0 takes it out, and one the recipe lacks is added | 0 to 65535 each |
+| `station` | the crafting station it is made at, named by the station's item | a vanilla station |
 
 `cost` applies first, then `ingredients`, so a named ingredient wins over the
 cost. A scaled count of 1 or more stays at least 1. An ingredient that takes
 any item of a kind keeps its count. Most workbench recipes
 take no time; production stations such as the kiln do. A changed time
 reaches a production that runs already from its next step on.
+
+A change can also pick every vanilla recipe of some kinds, by what it
+makes, or every vanilla recipe made at some crafting stations, named by
+their items:
+
+```toml
+[[change]]
+kind = ["building-block", "roof"]
+cost = { times = 0.5 }
+
+[[change]]
+workshop = ["Prop_Production_T2_Kiln", "Prop_Production_T2_Smelter"]
+time = { times = 0.5 }
+```
+
+| Selection | Picks |
+| --- | --- |
+| `kind = [...]` | every recipe whose item is a `building-block`, `roof`, `overgrowth`, `terrain` or `other` |
+| `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
+
+A selection changes `output_count`, `cost`, `time` and `station`, never
+`ingredients`.
+A change gives one of `recipes` or `output`, `kind` and `workshop`. A recipe
+the pack also names in `recipes` or `output` keeps that change alone, and
+the pack's log says how many recipes each selection reached.
+
+`station` moves a recipe to another crafting station, such as charcoal
+from the kiln to the smelter:
+
+```toml
+[[change]]
+recipes = ["Material_T1_Factory_03_Charcoal"]
+station = "Prop_Production_T2_Smelter"
+```
+
+The player's crafting menu then lists the recipe at the new station alone.
+A move takes effect when the game starts, also in a development reload, and
+needs the game's data at hand to find the station. Two packs that move one
+recipe are a conflict like two sets: the later in load order wins.
 
 The server crafts by its own recipes and each player's crafting menu shows
 the player's own, so every side runs the same pack, which the join check
@@ -214,11 +294,9 @@ warn  [you.stacks] max_stack of 3f4093ae-75ed-4e5d-bd0b-784ba83b88f5 is 999 from
 
 A Rust mod declares the same changes with
 [`Load::change`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/changes.rs),
-during `init`. With `Load::change_items` it changes a stack size or
-container slots of every vanilla item a selection picks: the items of some
-categories, every item that stacks, or every item that places a container.
-The loader reads the selection from the game's data and merges one change
-per item in the mod's place in load order:
+during `init`. With `Load::change_items` and `Load::change_recipes` it
+makes the selections a pack makes. The loader reads the selection from the game's data and merges one
+change per item in the mod's place in load order, as it does for a pack:
 
 ```rust
 use enshwick::content::categories::ItemCategoryMask;
@@ -240,15 +318,17 @@ items it covers.
 The game cuts every stack above an item's stack size when a world loads and
 deletes the rest. So a world saved with a pack that raised a stack size
 depends on that pack. The first time such a world loads, the pack sets a
-[hold](../state.md#holds): if the world is opened again without the pack, the game
-stops before the world loads and the log says which pack and items:
+[hold](../state.md#holds) on that world: if the world is opened again without
+the pack, the game stops before the world loads and the log says which pack
+and items. Other worlds open without the pack as usual.
 
 ```text
-error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ...) and the mod does not run: the game stops before the world loads
+error you.stacks holds this game (it lets Material_T1_Wood_Logs and 12 more items stack past the game's own size (20 to 999); ..., in world mygame-1a2b3c4d) and the mod does not run: the game stops before the world loads
 ```
 
 To remove such a pack safely, split every stack larger than the game's size
-first, then delete `mod-data/<id>/hold.txt`. When several packs raise one
+first, then delete `mod-data/<id>/worlds/<key>/hold.txt`, the file the log
+names. When several packs raise one
 item, each of them holds. A pack that only lowers stack sizes sets no hold.
 Beside the holds, the loader keeps every raised size a world was saved
 with and never serves less, so a lower size never cuts a saved stack: see
@@ -332,6 +412,22 @@ Random loot fills world chests, corpses and animals by the item's labels;
 fill tables are the fixed lists a container names. A change reaches every
 fill table that lists the item. Only the server rolls loot, so a pack of
 loot changes alone may run `side = "server"` and turn `join` off.
+
+`table` narrows a change to the fill tables of some containers, named by
+their templates, and needs the game's data at hand:
+
+```toml
+[[change]]
+items = ["Material_T1_Resin"]
+table = ["LootContainer_Enemy_Corpse_Vukah"]
+count = { times = 2 }
+```
+
+Containers often share one table: the Vukah corpse and the Vukah warrior
+roll the same one, so the change above reaches both, and the change's
+source in the conflict report and the logs says how many containers share
+it. A change of one table applies after the item's changes of every table.
+`stack_size` belongs to random loot, which has no tables.
 
 A pack changes the table itself, before any roll, and each factor after it
 applies once. For items the game scales, the world's resource drop setting

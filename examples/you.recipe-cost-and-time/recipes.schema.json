@@ -46,6 +46,14 @@
             "$ref": "#/$defs/ValueEntry"
           }
         },
+        "kind": {
+          "description": "Every vanilla recipe whose output is of these kinds:\n`building-block`, `roof`, `overgrowth`, `terrain` or `other`.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
+        },
         "output": {
           "description": "Every vanilla recipe that makes one of these items.",
           "type": "array",
@@ -73,6 +81,13 @@
             "type": "string"
           }
         },
+        "station": {
+          "description": "The crafting station it is made at from the next start, named by the\nstation's item.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "time": {
           "description": "How long it takes, in seconds from 0 to 86400.",
           "anyOf": [
@@ -83,6 +98,14 @@
               "type": "null"
             }
           ]
+        },
+        "workshop": {
+          "description": "Every vanilla recipe made at these crafting stations, named by their\nitems.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false

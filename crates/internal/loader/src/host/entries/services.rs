@@ -161,7 +161,13 @@ pub(crate) extern "system" fn define_event(
         if out.is_null() {
             return Status::BAD_ARGS;
         }
-        let defined = crate::services::registry().define(index, &record.names(), name, fields);
+        let defined = crate::services::registry().define(
+            index,
+            &record.names(),
+            name,
+            fields,
+            spec.layout.size,
+        );
         match defined {
             // SAFETY: `HostApi::define_event` has the mod pass `out` null or
             // pointing at a writable, aligned `u32` that no other thread
@@ -203,6 +209,7 @@ pub(crate) extern "system" fn subscribe_event(
             index,
             name,
             fields,
+            spec.layout.size,
             callback,
             user.expose_provenance(),
         );
@@ -249,6 +256,8 @@ pub(crate) unsafe fn declared(spec: &api_frame::PointSpec) -> Option<crate::poin
         output,
         mode: spec.mode,
         refuse: spec.flags.contains(api_frame::PointFlags::REFUSE),
+        input_size: spec.input.size,
+        output_size: spec.output.size,
     })
 }
 

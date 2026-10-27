@@ -4,7 +4,7 @@
 //!
 //! A mod defines its affixes with [`Load::define_affix`]: the [`Modifier`](crate::stats::Modifier)s'
 //! ranges, a weight against the other affixes, a [`ItemRarity`], the item
-//! [`ItemCategoryMask`] it rolls on and an optional group whose affixes never roll
+//! [`ItemCategoryMask`](crate::content::categories::ItemCategoryMask) it rolls on and an optional group whose affixes never roll
 //! together. Every mod's affixes form one pool. [`Affixes::roll`] rolls an
 //! item from it on the server; [`Load::add_loot_affixes`] and
 //! [`Load::add_craft_affixes`] roll the items that drop from random loot or

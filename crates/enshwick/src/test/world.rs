@@ -50,6 +50,24 @@ impl FakeHost {
         self
     }
 
+    /// Makes the component type `type_hash` the static half of its ECS type,
+    /// the template's set-up data: reads find it as
+    /// [`FakeHost::component`] gives it, and writes are refused with
+    /// [`Status::STATIC_HALF`](crate::abi::Status::STATIC_HALF), as the loader
+    /// refuses them.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().static_half(0x139a_fbec).install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn static_half(mut self, type_hash: u32) -> Self {
+        self.static_halves.insert(type_hash);
+        self
+    }
+
     /// An entity in the world with a component of type `type_hash`, at
     /// `position` in metres, for [`World::entities`](crate::world::World::entities)
     /// and [`World::near`](crate::world::World::near).
@@ -92,6 +110,19 @@ impl FakeHost {
     reason = "the fake's state is process-wide; `self` proves it is installed"
 )]
 impl Installed {
+    /// Stops the world, as between two worlds: the world's reads answer
+    /// that none runs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.stop_world();
+    /// ```
+    pub fn stop_world(&self) {
+        table::with((), |s| s.edits.stopped = true);
+    }
+
     /// Sets the clock the fake's `time_of_day` reports; until then the
     /// clock is missing, as before a world runs.
     ///
@@ -590,6 +621,16 @@ pub(crate) struct FakeZones {
 }
 
 impl FakeZones {
+    /// Whether a save keeps changes in the box from `min` to `max`, as the
+    /// loader decides: wholly inside one building zone, half a metre in
+    /// from its edges.
+    pub(crate) fn kept(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        const MARGIN: f64 = 0.5;
+        self.building.iter().any(|zone| {
+            (0..3).all(|a| min[a] >= zone.min[a] + MARGIN && max[a] <= zone.max[a] - MARGIN)
+        })
+    }
+
     /// The refusal of an edit of the box from `min` to `max` by a player
     /// with the permission mask `permissions`, as the loader decides: the
     /// game's terrain tool rule for the permissions, then the building area

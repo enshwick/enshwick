@@ -314,6 +314,15 @@ pub(crate) extern "system" fn world_key(me: ModHandle, out: *mut Str) -> Status 
     })
 }
 
+pub(crate) extern "system" fn world_quiet(me: ModHandle) -> Status {
+    entry("world_quiet", || {
+        match caller(me).and_then(crate::world::quiet_world) {
+            Ok(()) => Status::OK,
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: u32,
@@ -321,8 +330,11 @@ pub(crate) extern "system" fn component_write(
     out: *mut *mut core::ffi::c_void,
 ) -> Status {
     entry("component_write", || {
-        match caller(me).and_then(|loader| crate::writes::component_mut(loader, entity, type_hash))
-        {
+        match caller_index(me).and_then(|(loader, index)| {
+            let data = crate::writes::component_mut(loader, entity, type_hash)?;
+            crate::conflicts::note_write(type_hash, index);
+            Ok(data)
+        }) {
             // SAFETY: `HostApi::component_write` has the mod pass `out` null or
             // pointing at a writable, aligned `c_void` that no other thread
             // touches during the call.
@@ -696,6 +708,39 @@ pub(crate) extern "system" fn build_rights(
             Status::OK
         } else {
             Status::BAD_ARGS
+        }
+    })
+}
+
+pub(crate) extern "system" fn world_persists(
+    me: ModHandle,
+    min: *const [f64; 3],
+    max: *const [f64; 3],
+    kept: *mut u8,
+) -> Status {
+    entry("world_persists", || {
+        if min.is_null() || max.is_null() || kept.is_null() {
+            return Status::BAD_ARGS;
+        }
+        // SAFETY: `HostApi::world_persists` has the mod pass `min` readable
+        // for three `f64`, borrowed for the call; non-null by the check
+        // before it.
+        let low = unsafe { min.read_unaligned() };
+        // SAFETY: as for `min`, `max` readable for three `f64`.
+        let high = unsafe { max.read_unaligned() };
+        let edit = match crate::rights::EditBox::between(low, high) {
+            Ok(edit) => edit,
+            Err(status) => return status,
+        };
+        match caller(me).and_then(|loader| crate::rights::kept_by_save(loader, edit)) {
+            Ok(saved) => {
+                // SAFETY: `HostApi::world_persists` has the mod pass `kept`
+                // writable for one byte, untouched by other threads during the
+                // call; non-null by the check before it.
+                unsafe { kept.write(u8::from(saved)) };
+                Status::OK
+            }
+            Err(status) => status,
         }
     })
 }

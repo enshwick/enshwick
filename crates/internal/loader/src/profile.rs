@@ -58,10 +58,12 @@ pub enum Feature {
     Migrations,
     /// Links on other mods' extension points.
     Points,
+    /// Calls the mod serves to others.
+    Calls,
 }
 
 /// How many features there are.
-pub const FEATURES: usize = 19;
+pub const FEATURES: usize = 20;
 
 impl Feature {
     /// The feature in the report.
@@ -79,7 +81,7 @@ impl Feature {
             Self::Damage => "damage filter",
             Self::Progress => "progress filters",
             Self::Renames => "rename filter",
-            Self::Survivors => "you.market-stalls",
+            Self::Survivors => "survivors",
             Self::Altars => "altars",
             Self::Stats => "stats",
             Self::Inventory => "inventory",
@@ -87,6 +89,7 @@ impl Feature {
             Self::Resources => "resources",
             Self::Migrations => "migrations",
             Self::Points => "extension points",
+            Self::Calls => "calls",
         }
     }
 
@@ -110,6 +113,7 @@ impl Feature {
         Self::Resources,
         Self::Migrations,
         Self::Points,
+        Self::Calls,
     ];
 }
 

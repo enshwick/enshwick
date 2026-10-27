@@ -13,7 +13,11 @@ use enshwick::content::containers::{ContainerLayout, container_slots, resize_con
 use enshwick::content::loot_tables::{
     LootLayout, change_fill_table, change_random_loot, fill_items,
 };
-use enshwick::content::recipes::{RECIPE_REGISTRY, RecipeChanges, RecipeLayout, change_recipes_in};
+use enshwick::content::menu::{MenuLayout, UI_BUNDLE, move_recipes};
+use enshwick::content::recipes::{
+    RECIPE_REGISTRY, RecipeChanges, RecipeLayout, change_recipes_in, recipe_workshops,
+};
+use enshwick::content::workshops::WorkshopId;
 use enshwick::state::Hold;
 use enshwick_gamedata::catalogue;
 use rustc_hash::FxHashMap;
@@ -23,12 +27,13 @@ use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
 use super::{
-    Conflict, Declared, HoldStep, ItemOffsets, Kept, Key, Merged, Pending, Raised, TraitOffsets,
-    UNSET, credited, edit_item, expand, grouped, grown_slots, hold_reason, hold_step, merge,
-    served, template_slots, traits_of,
+    Conflict, Declared, HoldStep, ItemOffsets, Kept, Key, Merged, Pending, Picked, Raised,
+    Selectable, TraitOffsets, UNSET, credited, edit_item, expand, grouped, grown_slots,
+    hold_reason, hold_step, merge, served, template_slots, traits_of,
 };
 use enshwick::abi::ChangeId;
-use enshwick::content::changes::{ItemTraits, ItemsChange, Value};
+use enshwick::content::changes::{ItemTraits, ItemsChange, RecipeTraits, RecipesChange, Value};
+use enshwick::content::recipes::RecipeKind;
 
 /// The domain's state: changes as mods declare them, what the end of init
 /// sealed, and the stack sizes raised so far.
@@ -216,12 +221,20 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let at = |id: &str| {
         catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
     };
+    let backpack = at(catalogue::ITEM_PID_ENTITY)
+        .zip(at(catalogue::ITEM_SLOT))
+        .zip(
+            catalogue::constant(catalogue::EQUIPMENT_SLOT_BACKPACK, &loader.reflection)
+                .and_then(|value| u8::try_from(value).ok()),
+        )
+        .map(|((pid, slot), value)| (pid, slot, value));
     let offsets = (|| {
         Some(TraitOffsets {
             max_stack: at(catalogue::ITEM_MAX_STACK)?,
             category: at(catalogue::ITEM_CATEGORY)?,
             flags: at(catalogue::ITEM_FLAGS)?,
             placed: at(catalogue::ITEM_PLACED_ENTITY)?,
+            backpack,
         })
     })();
     let (Some(offsets), Some(archive)) = (offsets, crate::archive::game()) else {
@@ -302,14 +315,14 @@ fn requires(loader: &Loader, a: ModIndex, b: ModIndex) -> bool {
 /// Reports each set another mod overrides in both mods' logs and the
 /// conflict report.
 fn report(loader: &Loader, conflicts: &[Conflict]) {
+    let mut lines = Vec::new();
     for (conflict, more) in grouped(conflicts) {
-        let line = conflict.describe(|m| id(loader, m));
-        let line = if more == 0 {
-            line
-        } else {
-            format!("{line}, and the same for {more} more items")
-        };
+        let mut line = conflict.describe(|m| id(loader, m));
+        if more > 0 {
+            line = format!("{line}, and the same for {more} more items");
+        }
         let level = if conflict.intended {
+            line.push_str(", on purpose: it requires that mod");
             Level::INFO
         } else {
             Level::WARN
@@ -317,23 +330,9 @@ fn report(loader: &Loader, conflicts: &[Conflict]) {
         for owner in [conflict.winner.owner, conflict.overridden.owner] {
             crate::log::write(level, &id(loader, owner), &line);
         }
-        let feature = match conflict.key.item {
-            Some(item) => format!("{} {item} of {}", conflict.key.field, conflict.key.entry),
-            None => format!("{} of {}", conflict.key.field, conflict.key.entry),
-        };
-        crate::conflicts::note(
-            feature.clone(),
-            conflict.overridden.owner,
-            crate::conflicts::Mode::Exclusive,
-            Status::REFUSED,
-        );
-        crate::conflicts::note(
-            feature,
-            conflict.winner.owner,
-            crate::conflicts::Mode::Exclusive,
-            Status::OK,
-        );
+        lines.push(line);
     }
+    crate::conflicts::set_fields(lines);
 }
 
 /// The items whose own values some change of `merged` changes: every item
@@ -410,13 +409,7 @@ pub(crate) fn serve(
 ) -> Vec<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
     let mut open = CHANGES.declared.relock();
     let pending = std::mem::take(&mut *open);
-    let selects = pending.iter().any(|p| matches!(p, Pending::Each { .. }));
-    let items = if selects {
-        vanilla_items(loader)
-    } else {
-        Vec::new()
-    };
-    let (declared, picked) = expand(pending, &items);
+    let (declared, picked) = expand_from_game(loader, pending);
     for p in picked {
         let level = if p.count == 0 {
             Level::WARN
@@ -427,8 +420,15 @@ pub(crate) fn serve(
             level,
             &id(loader, p.owner),
             &format!(
-                "{} {}: changes {} vanilla items",
-                p.field, p.source, p.count
+                "{} {}: changes {} vanilla {}",
+                p.field,
+                p.source,
+                p.count,
+                if p.field.entry() == Entry::Recipe {
+                    "recipes"
+                } else {
+                    "items"
+                }
             ),
         );
     }
@@ -484,6 +484,7 @@ pub(crate) fn serve(
     if let Some(patch) = recipe_patch(loader) {
         patches.push(patch);
     }
+    patches.extend(menu_patch(loader));
     patches.extend(container_patches(loader));
     patches.extend(loot_patches(loader));
     let _first = sealed
@@ -492,39 +493,156 @@ pub(crate) fn serve(
     patches
 }
 
-/// Takes `changes` as mod `owner`'s changes from now on, for a development
-/// reload: merges every change again, reports the overridden sets, and
-/// builds each resource the loader patches again in place; how many it
-/// rebuilt.
+/// Takes `changes` and the changes of every item and recipe the selections
+/// pick as mod `owner`'s changes from now on, for a development reload:
+/// merges every change again, reports the overridden sets, and builds each
+/// resource the loader patches again in place; how many it rebuilt.
 ///
 /// # Errors
 ///
 /// What takes a restart: a change of an entry the loader did not patch at
-/// start, or a rebuild that changes a resource's length, such as an
-/// ingredient taken out or added.
-pub(crate) fn reload(owner: ModIndex, changes: Vec<(Change, String)>) -> Result<usize, String> {
+/// start, a recipe's station, or a rebuild that changes a resource's
+/// length, such as an ingredient taken out or added.
+pub(crate) fn reload(
+    owner: ModIndex,
+    changes: Vec<(Change, String)>,
+    items: Vec<(ItemsChange, String)>,
+    recipes: Vec<(RecipesChange, String)>,
+) -> Result<usize, String> {
     let sealed = CHANGES
         .sealed
         .get()
         .ok_or_else(|| "no changes were in force at start".to_owned())?;
+    let one = changes.into_iter().map(|(change, source)| {
+        Pending::One(Declared {
+            owner,
+            change,
+            source,
+            live: None,
+        })
+    });
+    let each = items.into_iter().map(|(change, source)| Pending::Each {
+        owner,
+        change,
+        source,
+        live: None,
+    });
+    let of_recipes = recipes
+        .into_iter()
+        .map(|(change, source)| Pending::Recipes {
+            owner,
+            change,
+            source,
+        });
+    let pending: Vec<Pending> = one.chain(each).chain(of_recipes).collect();
+    let (mine, _) = expand_from_game(sealed.loader, pending);
     let patched = {
         let mut declared = sealed.declared.relock();
-        let next = super::replace_owner(
-            &declared,
-            owner,
-            changes
-                .into_iter()
-                .map(|(change, source)| Declared {
-                    owner,
-                    change,
-                    source,
-                    live: None,
-                })
-                .collect(),
-        );
+        let next = super::replace_owner(&declared, owner, mine);
         apply(sealed, &mut declared, next)?
     };
     rebuild(&patched)
+}
+
+/// Expands `pending` over the vanilla items and recipes the game's data
+/// holds, reading only what its selections need.
+fn expand_from_game(loader: &Loader, pending: Vec<Pending>) -> (Vec<Declared>, Vec<Picked>) {
+    let selectable = Selectable {
+        items: if pending.iter().any(|p| matches!(p, Pending::Each { .. })) {
+            vanilla_items(loader)
+        } else {
+            Vec::new()
+        },
+        recipes: if pending.iter().any(|p| matches!(p, Pending::Recipes { .. })) {
+            vanilla_recipes(loader)
+        } else {
+            Vec::new()
+        },
+    };
+    expand(pending, &selectable)
+}
+
+/// Every vanilla recipe with the kind of what it makes and its workshop,
+/// from the game's archive; none when the build does not reflect the
+/// recipes or the items' equipment slots, or the archive does not read.
+fn vanilla_recipes(loader: &Loader) -> Vec<(Guid, RecipeTraits)> {
+    let off = || {
+        crate::log!(
+            WARN,
+            "changes of selected recipes are off: this build does not reflect what they read, or the game's archive does not read"
+        );
+        Vec::new()
+    };
+    let facts = catalogue::Reflected(&loader.reflection);
+    let at = |id: &str| {
+        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let (Ok(layout), Some(archive), Some(id_at), Some(slot_at)) = (
+        RecipeLayout::resolve(&facts),
+        crate::archive::game(),
+        at(catalogue::ITEM_ID),
+        at(catalogue::ITEM_SLOT),
+    ) else {
+        return off();
+    };
+    let Some(index) = archive
+        .resource(&RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY))
+        .and_then(|registry| crate::recipes::Index::read(&layout, &registry))
+    else {
+        return off();
+    };
+    let slots: FxHashMap<u64, RecipeKind> = catalogue::recipe_kind_slots(&loader.reflection)
+        .into_iter()
+        .map(|(value, kind)| {
+            (
+                value,
+                RecipeKind::from(enshwick::abi::RecipeKind::from(kind)),
+            )
+        })
+        .collect();
+    let kinds: FxHashMap<u32, RecipeKind> = archive
+        .keys_of(crate::catalogue::types::ITEM_INFO)
+        .into_iter()
+        .filter_map(|key| {
+            let bytes = archive.resource(&key)?;
+            let id = u32::from_le_bytes(bytes.get(id_at..id_at + 4)?.try_into().ok()?);
+            let kind = slots.get(&u64::from(*bytes.get(slot_at)?))?;
+            Some((id, *kind))
+        })
+        .collect();
+    index
+        .recipes()
+        .iter()
+        .map(|recipe| {
+            let kind = recipe
+                .outputs
+                .first()
+                .and_then(|item| kinds.get(item))
+                .copied()
+                .unwrap_or(RecipeKind::Other);
+            (
+                recipe.guid,
+                RecipeTraits {
+                    kind,
+                    workshop: recipe.workshop,
+                },
+            )
+        })
+        .collect()
+}
+
+/// Records mod `owner`'s `change` of every recipe a selection picks, from
+/// `source`; refused once init is over.
+pub(crate) fn declare_recipes(owner: ModIndex, change: RecipesChange, source: String) -> Status {
+    if CHANGES.sealed.get().is_some() {
+        return Status::TOO_LATE;
+    }
+    CHANGES.declared.relock().push(Pending::Recipes {
+        owner,
+        change,
+        source,
+    });
+    Status::OK
 }
 
 /// Puts `next` in force as every change: merges it and reports the
@@ -555,6 +673,13 @@ fn apply(
     if !merged.entries(Entry::Recipe).is_empty() && !patched.contains(&recipes) {
         return Err("recipes change for the first time, which takes a restart".to_owned());
     }
+    let stations = |merged: &Merged| stations(merged, |_| true);
+    if stations(&merged) != stations(&sealed.merged()) {
+        return Err(
+            "a recipe moves to another station, which takes a restart: the menus are built at start"
+                .to_owned(),
+        );
+    }
     let templates = sealed.templates.get();
     let slotted = merged
         .entries(Entry::Item)
@@ -568,10 +693,19 @@ fn apply(
         }
     }
     let looted = sealed.loot_items.get();
-    for item in merged.entries(Entry::Loot) {
+    for item in merged.loot_items() {
         if !looted.is_some_and(|items| items.contains(&item)) {
             return Err(format!(
                 "the loot of {item} changes for the first time, which takes a restart"
+            ));
+        }
+    }
+    let fill = catalogue::type_hash(catalogue::LOOT_FILL_TABLE);
+    for (table, _) in merged.table_items() {
+        let key = fill.map(|hash| table.key_by_hash(hash));
+        if !key.is_some_and(|key| patched.contains(&key)) {
+            return Err(format!(
+                "the loot table {table} changes for the first time, which takes a restart"
             ));
         }
     }
@@ -614,13 +748,16 @@ fn loot_patches(
     let Some(sealed) = CHANGES.sealed.get() else {
         return Vec::new();
     };
-    let items: FxHashMap<u32, Guid> = sealed
-        .merged()
-        .entries(Entry::Loot)
+    let merged = sealed.merged();
+    let scoped = merged.table_items();
+    let items: FxHashMap<u32, Guid> = merged
+        .loot_items()
         .into_iter()
+        .chain(scoped.iter().map(|(_, item)| *item))
         .map(|item| (item.id(), item))
         .collect();
-    let _first = sealed.loot_items.set(items.values().copied().collect());
+    let alone: Vec<Guid> = scoped.iter().map(|(table, _)| *table).collect();
+    let _first = sealed.loot_items.set(merged.loot_items());
     if items.is_empty() {
         return Vec::new();
     }
@@ -643,6 +780,7 @@ fn loot_patches(
             layout,
             items,
             fill,
+            table: Guid(key.guid),
         }));
         let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
         patches.push((key, build_loot as enshwick::abi::ResourcePatchFn, user));
@@ -652,11 +790,12 @@ fn loot_patches(
     }
     let mut tables = 0;
     for key in archive.keys_of(fill) {
-        let names = archive.resource(&key).is_some_and(|table| {
-            fill_items(&layout, &table)
-                .iter()
-                .any(|id| items.contains_key(id))
-        });
+        let names = alone.contains(&Guid(key.guid))
+            || archive.resource(&key).is_some_and(|table| {
+                fill_items(&layout, &table)
+                    .iter()
+                    .any(|id| items.contains_key(id))
+            });
         if names {
             add(key, true);
             tables += 1;
@@ -677,6 +816,9 @@ struct LootPatch {
     layout: LootLayout,
     items: &'static FxHashMap<u32, Guid>,
     fill: bool,
+    /// The table's GUID: changes of this table alone apply after the
+    /// changes of every table.
+    table: Guid,
 }
 
 /// The loader's patch of a loot table: the base with the values the
@@ -700,7 +842,14 @@ unsafe extern "system" fn build_loot(
         let merged = sealed.merged();
         let value = |id: u32, field: Field, base: f64| {
             let item = *patch.items.get(&id)?;
-            merged.value(Key::new(item, field), base, |m| on(sealed.loader, m))
+            let on = |m| on(sealed.loader, m);
+            let every = merged.value(Key::new(item, field), base, on);
+            let here = Key {
+                entry: patch.table,
+                field,
+                item: Some(item),
+            };
+            merged.value(here, every.unwrap_or(base), on).or(every)
         };
         if patch.fill {
             change_fill_table(&patch.layout, &bytes, &value)
@@ -740,8 +889,11 @@ fn container_patches(
         return Vec::new();
     }
     let facts = catalogue::Reflected(&loader.reflection);
-    let placed = catalogue::constant(catalogue::ITEM_PLACED_ENTITY, &loader.reflection)
-        .and_then(|at| usize::try_from(at).ok());
+    let at = |id: &str| {
+        catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
+    };
+    let placed = at(catalogue::ITEM_PLACED_ENTITY);
+    let own = at(catalogue::ITEM_PID_ENTITY);
     let (Ok(layout), Some(placed), Some(archive)) = (
         ContainerLayout::resolve(&facts),
         placed,
@@ -755,15 +907,24 @@ fn container_patches(
     };
     let mut templates: Vec<(Guid, Vec<Guid>)> = Vec::new();
     for item in items {
-        let template = archive
-            .resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO))
-            .and_then(|info| info.get(placed..placed + 16)?.try_into().ok())
-            .map(Guid)
-            .filter(|template| template.0 != [0; 16]);
+        let info = archive.resource(&item.key_by_hash(crate::catalogue::types::ITEM_INFO));
+        let holds = |template: &Guid| {
+            archive
+                .resource(&template.key_by_hash(crate::catalogue::types::TEMPLATE))
+                .is_some_and(|data| container_slots(&layout, &data).is_some())
+        };
+        let template = info.as_deref().and_then(|info| {
+            [Some(placed), own]
+                .into_iter()
+                .flatten()
+                .filter_map(|at| info.get(at..at + 16)?.try_into().ok().map(Guid))
+                .filter(|template| template.0 != [0; 16])
+                .find(holds)
+        });
         let Some(template) = template else {
             crate::log!(
                 WARN,
-                "container slots of {item} are not changed: it is no vanilla item that places a container"
+                "container slots of {item} are not changed: it is no vanilla item that places a container or carries one"
             );
             continue;
         };
@@ -916,6 +1077,104 @@ fn recipe_patch(
     let key = RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY);
     let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
     Some((key, build_recipes as enshwick::abi::ResourcePatchFn, user))
+}
+
+/// Every recipe some change of `merged` from a mod `on` lets through moves,
+/// with the game id of the workshop it moves to, sorted.
+fn stations(merged: &Merged, on: impl Fn(ModIndex) -> bool + Copy) -> Vec<(Guid, u32)> {
+    let mut moved: Vec<(Guid, u32)> = merged
+        .entries(Entry::Recipe)
+        .into_iter()
+        .filter_map(|recipe| {
+            let id = merged.value(Key::new(recipe, Field::Station), 0.0, on)?;
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "Field::resolve keeps a station a whole number from 0 to u32::MAX"
+            )]
+            Some((recipe, id as u32))
+        })
+        .collect();
+    moved.sort_unstable_by_key(|(recipe, _)| recipe.0);
+    moved
+}
+
+/// The loader's patch of the client's crafting menu, when some mod moves a
+/// recipe to another station: each moved recipe is listed at its new
+/// station alone.
+fn menu_patch(
+    loader: &'static Loader,
+) -> Option<(ResourceKey, enshwick::abi::ResourcePatchFn, *mut c_void)> {
+    let sealed = CHANGES.sealed.get()?;
+    if loader.side != enshwick::abi::Side::CLIENT || stations(&sealed.merged(), |_| true).is_empty()
+    {
+        return None;
+    }
+    let facts = catalogue::Reflected(&loader.reflection);
+    let workshops = RecipeLayout::resolve(&facts).ok().and_then(|layout| {
+        let registry = crate::archive::game()?
+            .resource(&RECIPE_REGISTRY.key_by_hash(crate::catalogue::types::RECIPE_REGISTRY))?;
+        recipe_workshops(&layout, &registry)
+    });
+    let (Ok(layout), Some(workshops)) = (MenuLayout::resolve(&facts), workshops) else {
+        crate::log!(
+            WARN,
+            "recipes moved to other stations stay listed where they were: this build does not reflect the crafting menu"
+        );
+        return None;
+    };
+    let patch: &'static MenuPatch = Box::leak(Box::new(MenuPatch { layout, workshops }));
+    let key = UI_BUNDLE.key_by_hash(crate::catalogue::types::UI_BUNDLE);
+    let user = core::ptr::from_ref(patch).cast_mut().cast::<c_void>();
+    Some((key, build_menu as enshwick::abi::ResourcePatchFn, user))
+}
+
+/// What the loader's patch of the crafting menu needs.
+struct MenuPatch {
+    layout: MenuLayout,
+    /// Every workshop some vanilla recipe is made at.
+    workshops: Vec<WorkshopId>,
+}
+
+/// The loader's patch of the crafting menu: the base with every recipe the
+/// mods still on move listed at its new station alone.
+unsafe extern "system" fn build_menu(
+    base: *const u8,
+    base_len: usize,
+    user: *mut c_void,
+    out: *mut *const u8,
+    out_len: *mut usize,
+) -> Status {
+    // SAFETY: `user` is the `MenuPatch` `menu_patch` leaked, which lives for
+    // the process.
+    let patch = unsafe { &*user.cast::<MenuPatch>() };
+    let mut bytes = vec![0; base_len];
+    // SAFETY: `ResourcePatchFn` hands `base_len` readable bytes at `base`,
+    // unchanged for the call.
+    unsafe { enshwick::raw::read_bytes_at(base, 0, &mut bytes) };
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let sealed = CHANGES.sealed.get()?;
+        let moves: Vec<(Guid, WorkshopId)> = stations(&sealed.merged(), |m| on(sealed.loader, m))
+            .into_iter()
+            .filter_map(|(recipe, id)| {
+                let workshop = patch.workshops.iter().find(|w| w.id() == id)?;
+                Some((recipe, *workshop))
+            })
+            .collect();
+        move_recipes(&patch.layout, &bytes, &moves)
+    }));
+    let Ok(Some(built)) = built else {
+        return Status::REFUSED;
+    };
+    // The game reads the resource for the life of the process.
+    let built: &'static [u8] = Box::leak(built.into_boxed_slice());
+    // SAFETY: `run_patches` passes `out` pointing at a local `*const u8`,
+    // writable for the call.
+    unsafe { out.write(built.as_ptr()) };
+    // SAFETY: `run_patches` passes `out_len` pointing at a local `usize`,
+    // writable for the call.
+    unsafe { out_len.write(built.len()) };
+    Status::OK
 }
 
 /// What the loader's patch of the recipe registry needs.
@@ -1156,8 +1415,10 @@ fn keep_sizes(loader: &Loader) {
 
 /// On the side that keeps the world: keeps the stack sizes in force when it
 /// loads and saves, and when it loads sets the hold of every pack that
-/// raised a stack size, and releases that of every other pack still on. A
-/// mod with code keeps its own hold.
+/// raised a stack size on that world, and releases that of every other pack
+/// still on. A pack's hold of the whole data folder, from before holds knew
+/// worlds, goes once the world is known. A mod with code keeps its own
+/// hold.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
     if event == Event::WORLD_SAVED {
         keep_sizes(loader);
@@ -1167,12 +1428,24 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
     keep_sizes(loader);
     let raised = CHANGES.raised.relock().clone().unwrap_or_default();
+    let world = crate::saves::world_key(loader);
     for (index, record) in loader.mods.iter().enumerate() {
         let index = ModIndex::new(index);
         if !on(loader, index) {
             continue;
         }
-        let hold = Hold::new(&loader.data_dir.join(&record.id));
+        let dir = loader.data_dir.join(&record.id);
+        let hold = match world {
+            Some(world) => {
+                if record.pack
+                    && let Err(why) = Hold::new(&dir).clear()
+                {
+                    crate::log::write(Level::WARN, &record.id, &format!("hold not kept: {why}"));
+                }
+                Hold::for_world(&dir, world)
+            }
+            None => Hold::new(&dir),
+        };
         let result = match hold_step(record.pack, raised.get(&index)) {
             HoldStep::Set(reason) => hold.set(&reason),
             HoldStep::Release => hold.clear(),
@@ -1190,7 +1463,7 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
     let recipes = || RecipeLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok();
     match field {
         Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
-        Field::Output | Field::Cost | Field::Ingredient => recipes(),
+        Field::Output | Field::Cost | Field::Ingredient | Field::Station => recipes(),
         Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
         Field::StackSize | Field::Count | Field::SpawnProbability | Field::Weight => {
             LootLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()

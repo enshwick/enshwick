@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 
 use enshwick::abi::ChangeId;
 use enshwick::content::Guid;
-use enshwick::content::changes::{Change, Field, Value};
+use enshwick::content::changes::{Change, Entry, Field, Value};
 
 use crate::mod_index::ModIndex;
 
@@ -22,12 +22,12 @@ mod select;
 
 #[cfg(windows)]
 pub(crate) use game::{
-    LiveTarget, declare, declare_change, declare_items, has_live, reachable, reload, serve,
-    set_change, wanted, world_event,
+    LiveTarget, declare, declare_change, declare_items, declare_recipes, has_live, reachable,
+    reload, serve, set_change, wanted, world_event,
 };
 pub use kept::{KEPT_FILE, Kept, hold_reason, served};
 pub use live::{UNSET, keeps_bases, set_live, set_pending};
-pub use select::{Pending, Picked, TraitOffsets, expand, grouped, traits_of};
+pub use select::{Pending, Picked, Selectable, TraitOffsets, expand, grouped, traits_of};
 
 /// A change one mod declared, with where it came from.
 #[derive(Clone, Debug, PartialEq)]
@@ -152,7 +152,7 @@ impl Merged {
     /// The entries some mod changes with a field of kind `kind`, each
     /// once, in no set order.
     #[must_use]
-    pub fn entries(&self, kind: enshwick::content::changes::Entry) -> Vec<Guid> {
+    pub fn entries(&self, kind: Entry) -> Vec<Guid> {
         let mut entries: Vec<Guid> = self
             .values
             .keys()
@@ -162,6 +162,36 @@ impl Merged {
         entries.sort_unstable_by_key(|guid| guid.0);
         entries.dedup();
         entries
+    }
+
+    /// The items some mod changes the loot of in every table, each once,
+    /// sorted.
+    #[must_use]
+    pub fn loot_items(&self) -> Vec<Guid> {
+        let mut items: Vec<Guid> = self
+            .values
+            .keys()
+            .filter(|key| key.field.entry() == Entry::Loot && key.item.is_none())
+            .map(|key| key.entry)
+            .collect();
+        items.sort_unstable_by_key(|guid| guid.0);
+        items.dedup();
+        items
+    }
+
+    /// Every fill table some mod changes an item of alone, with those
+    /// items, each once, sorted.
+    #[must_use]
+    pub fn table_items(&self) -> Vec<(Guid, Guid)> {
+        let mut pairs: Vec<(Guid, Guid)> = self
+            .values
+            .keys()
+            .filter(|key| key.field.entry() == Entry::Loot)
+            .filter_map(|key| Some((key.entry, key.item?)))
+            .collect();
+        pairs.sort_unstable_by_key(|(table, item)| (table.0, item.0));
+        pairs.dedup();
+        pairs
     }
 
     /// Every key of `entry` some mod changes, in no set order.
@@ -512,6 +542,34 @@ mod tests {
     }
 
     #[test]
+    fn loot_changes_of_one_table_stay_apart_from_those_of_every_table() {
+        let (table, fur, meat) = (Guid([7; 16]), Guid([1; 16]), Guid([2; 16]));
+        let declared = [
+            Declared {
+                owner: ModIndex::new(0),
+                change: Change::new(fur, Field::Count, Value::Times(2.0)),
+                source: String::new(),
+                live: None,
+            },
+            Declared {
+                owner: ModIndex::new(0),
+                change: Change::in_table(table, meat, Field::Weight, Value::Set(5.0)),
+                source: String::new(),
+                live: None,
+            },
+        ];
+        let (merged, _) = merge(&declared, |_, _| false);
+        assert_eq!(merged.loot_items(), [fur]);
+        assert_eq!(merged.table_items(), [(table, meat)]);
+        let in_table = Key {
+            entry: table,
+            field: Field::Weight,
+            item: Some(meat),
+        };
+        assert_eq!(merged.value(in_table, 1.0, |_| true), Some(5.0));
+    }
+
+    #[test]
     fn a_later_set_wins_and_the_overridden_one_is_reported() {
         let all = [
             declared(0, WOOD, Value::Set(100.0), "items.toml:1"),
@@ -587,10 +645,7 @@ mod tests {
             merged.value(Key::new(STONE, Field::MaxStackSize), 20.0, |_| true),
             None
         );
-        assert_eq!(
-            merged.entries(enshwick::content::changes::Entry::Item),
-            [WOOD]
-        );
+        assert_eq!(merged.entries(Entry::Item), [WOOD]);
     }
 
     #[test]

@@ -1,15 +1,21 @@
-//! Where mods meet: game functions several mods hook, features several mods
-//! filter or one mod holds, resources several mods patch.
+//! Where mods meet, and game code a mod changed outside the API.
+//!
+//! Mods meet on game functions several hook, code patches that overlap,
+//! features several filter or one holds, resources several patch, and
+//! vanilla values and components several write.
 //!
 //! The report names who, in which order, and whether they chain or one holds
 //! it; the status summary and `enshwick conflicts` show it.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::sync::Mutex;
 
 use enshwick::abi::Status;
+use rustc_hash::FxHashSet;
 
+use crate::code_watch::CodeChange;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
@@ -49,7 +55,31 @@ pub struct Claim {
     pub granted: bool,
 }
 
-static CLAIMS: Mutex<Vec<Claim>> = Mutex::new(Vec::new());
+/// What the loader found where mods meet.
+#[derive(Debug)]
+struct Found {
+    claims: Vec<Claim>,
+    /// Where `.text` starts from the image base, and the code changed
+    /// outside the API.
+    code: (usize, Vec<CodeChange>),
+    /// The vanilla values one mod's set overrides another's, in words.
+    fields: Vec<String>,
+    /// The components each mod wrote, by type hash.
+    writes: Vec<(u32, ModIndex)>,
+}
+
+static FOUND: Mutex<Found> = Mutex::new(Found {
+    claims: Vec::new(),
+    code: (0, Vec::new()),
+    fields: Vec::new(),
+    writes: Vec::new(),
+});
+
+thread_local! {
+    /// The component writes this thread has already reported, so a repeated
+    /// write takes no lock.
+    static WRITTEN: RefCell<FxHashSet<(u32, ModIndex)>> = RefCell::default();
+}
 
 /// Records mod `owner`'s claim on `feature` and passes the loader's answer
 /// on; only grants and refusals count.
@@ -60,7 +90,7 @@ pub fn note(
     status: Status,
 ) -> Status {
     if status.is_ok() || status == Status::REFUSED {
-        CLAIMS.relock().push(Claim {
+        FOUND.relock().claims.push(Claim {
             feature: feature.into(),
             owner,
             mode,
@@ -73,7 +103,81 @@ pub fn note(
 /// Every claim, in order.
 #[must_use]
 pub fn claims() -> Vec<Claim> {
-    CLAIMS.relock().clone()
+    FOUND.relock().claims.clone()
+}
+
+/// Keeps the game code changed outside the API, found while the loader
+/// started, with where `.text` starts from the image base.
+pub fn set_code_changes(text_rva: usize, changes: Vec<CodeChange>) {
+    FOUND.relock().code = (text_rva, changes);
+}
+
+/// The game code changed outside the API, as [`set_code_changes`] kept it.
+#[must_use]
+pub fn code_changes() -> (usize, Vec<CodeChange>) {
+    FOUND.relock().code.clone()
+}
+
+/// Replaces the lines on vanilla values one mod's set overrides another's,
+/// after each merge of the declared changes.
+pub fn set_fields(lines: Vec<String>) {
+    FOUND.relock().fields = lines;
+}
+
+/// The lines on vanilla values one mod's set overrides another's.
+#[must_use]
+pub fn fields() -> Vec<String> {
+    FOUND.relock().fields.clone()
+}
+
+/// Notes that mod `owner` wrote a component of type `hash`; a write this
+/// thread noted before costs a lookup and no lock, and a thread shutting
+/// down notes nothing.
+pub fn note_write(hash: u32, owner: ModIndex) {
+    let new = WRITTEN.try_with(|seen| seen.borrow_mut().insert((hash, owner)));
+    if new == Ok(true) {
+        let mut found = FOUND.relock();
+        if !found.writes.contains(&(hash, owner)) {
+            found.writes.push((hash, owner));
+        }
+    }
+}
+
+/// Every component type several mods write, with the writers in the order
+/// they first wrote it.
+#[must_use]
+pub fn shared_writes() -> Vec<(u32, Vec<ModIndex>)> {
+    let found = FOUND.relock();
+    let mut shared: Vec<(u32, Vec<ModIndex>)> = Vec::new();
+    for &(hash, owner) in &found.writes {
+        match shared.iter_mut().find(|(h, _)| *h == hash) {
+            Some((_, owners)) => owners.push(owner),
+            None => shared.push((hash, vec![owner])),
+        }
+    }
+    shared.retain(|(_, owners)| owners.len() >= 2);
+    shared
+}
+
+/// The report's lines on components several mods write, with each type
+/// named by `type_name` and each mod by `name`.
+#[must_use]
+pub fn write_report(
+    shared: &[(u32, Vec<ModIndex>)],
+    type_name: impl Fn(u32) -> String,
+    name: impl Fn(ModIndex) -> String,
+) -> Vec<String> {
+    shared
+        .iter()
+        .map(|(hash, owners)| {
+            let owners: Vec<String> = owners.iter().map(|o| name(*o)).collect();
+            format!(
+                "component {}: written by {}, the last write wins",
+                type_name(*hash),
+                owners.join(", ")
+            )
+        })
+        .collect()
 }
 
 /// One link on a hooked function, for the report.
@@ -160,16 +264,18 @@ pub fn report(
         }
         seen.push(feature);
         let on: Vec<&Claim> = claims.iter().filter(|c| c.feature == feature).collect();
-        let granted: Vec<String> = on
-            .iter()
-            .filter(|c| c.granted)
-            .map(|c| name(c.owner))
-            .collect();
-        let refused: Vec<String> = on
-            .iter()
-            .filter(|c| !c.granted)
-            .map(|c| name(c.owner))
-            .collect();
+        let owners = |granted: bool| {
+            let mut owners: Vec<String> = Vec::new();
+            for claim in on.iter().filter(|c| c.granted == granted) {
+                let owner = name(claim.owner);
+                if !owners.contains(&owner) {
+                    owners.push(owner);
+                }
+            }
+            owners
+        };
+        let granted = owners(true);
+        let refused = owners(false);
         if granted.len() < 2 && refused.is_empty() {
             continue;
         }
@@ -294,6 +400,41 @@ mod tests {
             [
                 "the item registry: patched by you.trading-post then you.market-stalls, each on the one before"
             ]
+        );
+    }
+
+    #[test]
+    fn components_several_mods_write_are_named_once_per_writer() {
+        let hash = 0x5eed_c0de;
+        for owner in [0, 1, 0, 1, 2] {
+            note_write(hash, ModIndex::new(owner));
+        }
+        note_write(0x0a10_0e00, ModIndex::new(0));
+        let shared: Vec<_> = shared_writes()
+            .into_iter()
+            .filter(|(h, _)| *h == hash || *h == 0x0a10_0e00)
+            .collect();
+        assert_eq!(
+            write_report(&shared, |h| format!("{h:#x}"), names),
+            [
+                "component 0x5eedc0de: written by you.trading-post, you.market-stalls, market, the last write wins"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_mod_refused_twice_on_one_patch_is_named_once() {
+        let claims = [(2, true), (0, false), (2, true), (0, false)].map(|(owner, granted)| {
+            claim(
+                "code patch at 0x10",
+                ModIndex::new(owner),
+                Mode::Exclusive,
+                granted,
+            )
+        });
+        assert_eq!(
+            report(&[], &claims, &[], names),
+            ["code patch at 0x10: market holds it; refused: you.trading-post"]
         );
     }
 }

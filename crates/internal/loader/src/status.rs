@@ -167,6 +167,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         links: {
             let mut links = crate::services::lines(loader);
             links.extend(crate::points::lines(loader));
+            links.extend(crate::calls::lines(loader));
             links
         },
         served: crate::content::summary(),
@@ -418,6 +419,33 @@ pub(crate) fn conflicts(loader: &Loader) -> Vec<String> {
         .map(|(key, owners)| (key, owners.into_iter().map(name).collect()))
         .collect();
     let mut lines = crate::conflicts::report(&hooks, &crate::conflicts::claims(), &resources, name);
+    lines.extend(crate::conflicts::fields());
+    lines.extend(crate::conflicts::write_report(
+        &crate::conflicts::shared_writes(),
+        |hash| component_name(loader, hash),
+        name,
+    ));
+    let (text_rva, changes) = crate::conflicts::code_changes();
+    lines.extend(crate::code_watch::report(&changes, |offset| {
+        hook_name(loader, loader.base + (text_rva + offset) as u64)
+    }));
     lines.extend(crate::points::conflicts(loader));
     lines
+}
+
+/// A component type's reflected name, or its hash where reflection has no
+/// type of that hash.
+fn component_name(loader: &Loader, hash: u32) -> String {
+    loader
+        .reflection
+        .type_names()
+        .find(|name| {
+            loader
+                .reflection
+                .type_info(name)
+                .ok()
+                .and_then(|info| crate::world::type_hash(info.va()))
+                == Some(hash)
+        })
+        .map_or_else(|| format!("{hash:#010x}"), str::to_owned)
 }

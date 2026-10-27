@@ -48,6 +48,7 @@ revision = 1
 "server.account_action" = { rva = 0x79_de40, pattern = "48 89 5C 24 18 48 89 74 24 20 55 57 41 54 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC ?? ?? ?? ?? 80 7A 14 02 48 8B FA" }
 "ecs.type_index" = { rva = 0x64_6ce0, pattern = "48 8D 94 24 ?? ?? ?? ?? 89 AC 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 85 C0 75 14 49 8D 8F ?? ?? ?? ??", rel = 16 }
 "ecs.component_read_raw" = { rva = 0x64_7b20, pattern = "48 89 5C 24 ?? 48 89 74 24 ?? 44 89 4C 24 ?? 57 48 83 EC 20 48 8D BA ?? ?? ?? ??" }
+"ecs.component_read_static" = { rva = 0x64_8a80, pattern = "48 89 5C 24 08 44 89 44 24 18 57 48 83 EC 20 48 8B FA 48 85 D2 74 76 48 8D 99 48 01 00 00 48 8B" }
 "ecs.entity_slot" = { rva = 0x64_9cd0, pattern = "48 8D 54 24 ?? 49 8B F0 E8 ?? ?? ?? ?? 48 3B 47 ?? 0F 83 ?? ?? ?? ?? 48 8B 57 ??", rel = 9 }
 "ecs.slot_root" = { rva = 0x93_7a70, pattern = "48 89 5C 24 ?? 48 89 6C 24 ?? 48 89 74 24 ?? 57 48 83 EC 30 48 8B C2" }
 "building.spawn_prop" = { rva = 0x21_eb70, pattern = "48 89 5C 24 ?? 55 56 57 41 56 41 57 48 8D 6C 24 ?? 48 81 EC 70 01 00 00" }
@@ -214,6 +215,11 @@ revision = 1
 "world.entities" = { value = 0xe1_5dc0, pattern = "48 83 EC 38 41 0F 10 01 48 81 C1 ?? ?? ?? ?? 4C 8D 4C 24 ?? 0F 29 44 24 ??", at = 11, size = 4 }
 "ecs.registry_type_map" = { value = 0x30, pattern = "45 85 F6 75 61 8B 6E ?? 49 8D 4F ?? 48 8D 94 24 ?? ?? ?? ?? 89 AC 24 ?? ?? ?? ?? E8 ?? ?? ?? ??", at = 11, size = 1 }
 "ecs.registry_type_map_fallback" = { value = 0x88, pattern = "48 85 C0 75 14 49 8D 8F ?? ?? ?? ?? 48 8D 94 24 ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F B7 08", at = 8, size = 4 }
+"ecs.registry_type_records" = { value = 0x8, pattern = "49 8B 47 08 4A 83 7C 10 30 00 74 07 66 45 89 01 44 03 C3 66 45 03 DC 74", at = 3, size = 1 }
+"ecs.registry_type_record_size" = { value = 0x100, pattern = "66 45 03 DC 74 14 48 FF C7 49 83 C1 02 49 81 C2 00 01 00 00 49 3B 7F 10 72 BC 66 41", at = 16, size = 4 }
+"ecs.registry_type_count" = { value = 0x10, pattern = "66 45 03 DC 74 14 48 FF C7 49 83 C1 02 49 81 C2 00 01 00 00 49 3B 7F 10 72 BC 66 41", at = 23, size = 1 }
+"ecs.type_record_static" = { value = 0x30, pattern = "49 8B 47 08 4A 83 7C 10 30 00 74 07 66 45 89 01 44 03 C3 66 45 03 DC 74", at = 8, size = 1 }
+"ecs.type_info_hash" = { value = 0x50, pattern = "49 8B 47 08 49 8B 4C 01 30 8B 41 50 89 42 04 66 C7 42 0A 00 00 49 FF C0", at = 11, size = 1 }
 "ecs.entity_map" = { value = 0x148, pattern = "44 89 44 24 ?? 48 8B 78 ?? 48 8D 8F ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 3B 87 ?? ?? ?? ?? 73 30", at = 12, size = 4 }
 "ecs.entity_map_capacity" = { value = 0x158, pattern = "48 8B 78 ?? 48 8D 8F ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 3B 87 ?? ?? ?? ?? 73 30 48 8B 8F ?? ?? ?? ?? 48 8D 04 C1", at = 19, size = 4 }
 "ecs.entity_records" = { value = 0x188, pattern = "48 8B 78 ?? 48 8D 8F ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 3B 87 ?? ?? ?? ?? 73 30 48 8B 8F ?? ?? ?? ?? 48 8D 04 C1 48 85 C0 74 20 48 8B 00 48 85 C0", at = 28, size = 4 }

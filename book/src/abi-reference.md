@@ -4,7 +4,8 @@ The loader and a mod talk through a C ABI: `repr(C)` structs, integer enums,
 `extern "system"` functions, strings borrowed for the call, and no unwinding
 across the boundary. Mods normally use the safe layer of `enshwick`; this
 chapter is for reading logs and the rare call to the raw table. The exact types and signatures are in the
-[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+[`abi` module's rustdoc](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs). The same types for
+C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 ## Versions
 
@@ -140,6 +141,8 @@ reason of the form `<what>: <why>`, such as
 | 7    | `WRONG_THREAD`  | Called from a thread the function does not serve                           | `called off the thread it serves`  |
 | 8    | `NOT_LOADED`    | The part of the world asked about is not loaded yet; try again in a second | `not loaded yet`                   |
 | 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
+| 10   | `STATIC_HALF`   | The static half of a component type: template data, never written          | `template data, never written`     |
+| 11   | `NOT_A_PROP`    | The entity is no prop: a creature, a flame altar or not placed             | `not a prop`                       |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -347,7 +350,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   | 73          |
 | `rate`                   | Declares a game rate the mod multiplies; init only                                                   | 75          |
 | `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             | 75          |
-| `change_data`            | Declares a change of a vanilla value, which the loader merges with every mod's; init only            | 76          |
+| `change_data`            | Declares a change of a vanilla value, or of each item or recipe a selection picks; init only         | 76          |
 | `feature`                | Reports one of the mod's features on or off for the log, status summary and Mods screen              | 74          |
 | `loop_wait`              | Runs a handler before every wait of the engine's event loop; init only                               | 77          |
 | `server_wait`            | Runs a handler where the server loop picks its wait, which it may change; init only                  | 77          |
@@ -360,7 +363,15 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `declare_change`         | Declares a change of a vanilla value whose value the mod sets later; init only                       | 85          |
 | `set_change`             | Puts the mod's value of a declared change in force, or takes it out; any thread                      | 85          |
 | `build_rights`           | Whether the server lets a player edit a box; game thread, quiet moment only, refused inside a step   | 86          |
-| `transaction_commit`     | Queues terrain edits, voxel writes, erases and blocks as one transaction, with undo; any thread      | 87          |
+| `transaction_commit`     | Queues terrain, voxels, erases, blocks and props as one transaction, with undo; any thread           | 87          |
 | `transaction_undo`       | Queues the undo of one of the mod's transactions, refused once its bricks changed; any thread        | 87          |
 | `transaction_status`     | Where one of the mod's transactions stands: queued, applied, undone, failed and why; any thread      | 87          |
 | `transaction_commit_for` | As `transaction_commit`, for a player whose rights the loader checks first; any thread               | 89          |
+| `world_quiet`            | Whether live components may be read now: server game thread, quiet moment, world running             | 90          |
+| `fog_open`               | Has the loader copy the client's fog of war for the mod; client, init only                           | 94          |
+| `fog_read`               | Copies a box of the client's fog of war and its size and version; any thread                         | 94          |
+| `serve_call`             | Serves a call, a described service named after the mod, with its input and answer; init only         | 95          |
+| `find_call`              | Asks for another mod's call by name and major, matched field by field after init; init only          | 95          |
+| `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 95          |
+| `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 96          |
+| `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 96          |

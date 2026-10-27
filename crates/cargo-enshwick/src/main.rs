@@ -15,6 +15,7 @@ mod new;
 mod pack;
 mod pin;
 mod point;
+mod types;
 
 /// Cargo runs a subcommand as `cargo-enshwick enshwick <args>`.
 #[derive(Debug, Parser)]
@@ -34,16 +35,20 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Creates a mod crate in `<dir>/<name>`, or with `--data` a data pack
-    /// folder in `<dir>/<id>`.
+    /// folder and with `--luau` a Luau mod folder in `<dir>/<id>`.
     New {
         /// The mod id, `<author>.<name>`: each part of `[a-z0-9-]`, the name
         /// starting with a letter; the name names the crate.
         id: String,
         /// Creates a data pack, TOML files and no code, instead of a crate.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "luau")]
         data: bool,
-        /// Where the mod runs; a mod runs on the server and a data pack on
-        /// both sides when left out.
+        /// Creates a Luau mod, a folder of scripts the loader runs, instead
+        /// of a crate.
+        #[arg(long)]
+        luau: bool,
+        /// Where the mod runs; a mod and a Luau mod run on the server and a
+        /// data pack on both sides when left out.
         #[arg(long, value_enum)]
         side: Option<Side>,
         /// The folder the crate is created in.
@@ -76,8 +81,8 @@ enum Command {
     /// Checks, describes and packages data packs.
     #[command(subcommand)]
     Pack(pack::Command),
-    /// Writes the Rust definition of another mod's extension point, read
-    /// from the owner's DLL without running it.
+    /// Writes the Rust definition of another mod's extension point, or with
+    /// `--luau` its Luau module, read from the owner's DLL without running it.
     Point {
         /// The point, `<mod id>:<point>`.
         name: String,
@@ -88,6 +93,61 @@ enum Command {
         /// The file to write; the definition is printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Writes the definition as a Luau module for a Luau mod instead of
+        /// Rust.
+        #[arg(long)]
+        luau: bool,
+    },
+    /// Writes the Luau module of another mod's event, read from the owner's
+    /// DLL without running it, for a Luau mod to subscribe with.
+    Event {
+        /// The event, `<mod id>:<event>`.
+        name: String,
+        /// The owner's DLL, a folder with its DLL in it or in its `mods/`,
+        /// or a schema file (`.toml`) the owner published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the module is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Writes the declaration of another mod's call, read from the server's
+    /// DLL without running it, for a mod that calls it.
+    Call {
+        /// The call, `<mod id>:<call>`.
+        name: String,
+        /// The server's DLL, a folder with its DLL in it or in its `mods/`,
+        /// or a schema file (`.toml`) the server published.
+        #[arg(long)]
+        from: PathBuf,
+        /// The file to write; the declaration is printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Writes the Luau definitions of the API, which luau-lsp reads, for
+    /// the loader this tool was built with.
+    Luau {
+        /// The file to write; the definitions are printed when omitted.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Writes Rust and Luau definitions of the game's own types, read from
+    /// the reflection data of a game executable: for structs the API does
+    /// not wrap. Prints the Rust module when no file is named.
+    Types {
+        /// The types, by full name such as `keen::ecs::Health`, or a
+        /// namespace ending in `::`; every runtime type when none is named.
+        /// The types they need come with them.
+        names: Vec<String>,
+        /// The game executable, or the game folder holding it.
+        #[arg(long)]
+        from: PathBuf,
+        /// The Rust module to write, such as `src/game.rs`.
+        #[arg(long)]
+        rust: Option<PathBuf>,
+        /// The Luau definitions to write, such as `game.d.luau`.
+        #[arg(long)]
+        luau: Option<PathBuf>,
     },
     /// Prints the GUID and game id of each content id, `<mod>:<name>`.
     Id {
@@ -120,6 +180,18 @@ fn ids(names: &[String]) -> anyhow::Result<String> {
     Ok(lines?.join("\n"))
 }
 
+/// Writes the Luau definitions to `out`, or returns them to print.
+fn luau_definitions(out: Option<&std::path::Path>) -> anyhow::Result<String> {
+    let text = cargo_enshwick::luau::definitions();
+    match out {
+        Some(path) => {
+            std::fs::write(path, text).with_context(|| path.display().to_string())?;
+            Ok(format!("wrote {}", path.display()))
+        }
+        None => Ok(text),
+    }
+}
+
 fn main() -> ExitCode {
     let Cargo::Enshwick(args) = Cargo::parse();
     let outcome = match args.command {
@@ -138,7 +210,15 @@ fn main() -> ExitCode {
             data: true,
             side,
             dir,
+            ..
         } => new::data::create(&dir, &id, side.unwrap_or(Side::Both)),
+        Command::New {
+            id,
+            luau: true,
+            side,
+            dir,
+            ..
+        } => new::luau::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::New { id, side, dir, .. } => new::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {
@@ -146,8 +226,22 @@ fn main() -> ExitCode {
             expect_version,
         } => manifest::show(&dll, expect_version.as_deref()).map_err(anyhow::Error::msg),
         Command::Id { names } => ids(&names),
-        Command::Point { name, from, out } => point::run(&name, &from, out.as_deref()),
+        Command::Point {
+            name,
+            from,
+            out,
+            luau,
+        } => point::run(&name, &from, out.as_deref(), luau),
         Command::Pack(command) => pack::run(&command),
+        Command::Luau { out } => luau_definitions(out.as_deref()),
+        Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
+        Command::Call { name, from, out } => point::run_call(&name, &from, out.as_deref()),
+        Command::Types {
+            names,
+            from,
+            rust,
+            luau,
+        } => types::run(&from, &names, rust.as_deref(), luau.as_deref()),
     };
     match outcome {
         Ok(done) => {

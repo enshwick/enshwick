@@ -20,6 +20,7 @@ use rustc_hash::{FxHashMap, FxHashSet, FxHasher};
 use super::block::Block;
 use super::cover::{self, BRICK_VOXELS, Brick, Bricks};
 use super::paste::{Erase, Paste};
+use super::props::Prop;
 use crate::mod_index::ModIndex;
 use crate::voxels::WorldExtent;
 
@@ -34,6 +35,33 @@ pub(crate) trait Voxels {
     /// Places `block` for `actor` (0 for none) and announces it; an error
     /// means nothing was written.
     fn place(&mut self, block: &Block, actor: u32) -> Result<(), Status>;
+    /// Spawns `prop` for `actor` (0 for none) and announces it; the new
+    /// entity, in the world from the next step.
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status>;
+    /// The prop `entity` is, and the kinds of state it holds that a
+    /// respawn would lose, as bits; [`Status::MISSING`] when it is no prop.
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status>;
+    /// Holds the prop `entity` against players until its destroy: no
+    /// opening, moving items in or out, Quick Stash or dismantling; the
+    /// game's systems of the next step run with it held.
+    fn hold_prop(&mut self, entity: u32) -> Result<(), Status>;
+    /// `Ok` while the prop `entity` is still held and the filter that
+    /// keeps players from it is on; [`Status::MISSING`] otherwise, when a
+    /// destroy would go unguarded.
+    fn still_held(&mut self, entity: u32) -> Result<(), Status>;
+    /// Lets players reach the prop `entity` again, as before
+    /// [`Voxels::hold_prop`].
+    fn release_prop(&mut self, entity: u32);
+    /// The start state of the prop `entity` as bytes to compare: what a
+    /// fresh prop of its kind holds and a player or time may change, a
+    /// logic trigger's settings and a plant's level; `None` for a prop with
+    /// none, [`Status::MISSING`] while it is not in the world.
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status>;
+    /// Whether a prop like `prop` stands where it stood.
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status>;
+    /// Removes the prop `entity` for `actor` (0 for none), as the game tears
+    /// one down, and announces it.
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status>;
     /// Announces that `erase` tore down building voxels for `actor` (0 for
     /// none); called only when it cleared some and wrote every brick.
     fn erased(&mut self, erase: &Erase, actor: u32);
@@ -77,28 +105,38 @@ pub(crate) enum Change {
     Erase(Erase),
     /// A building block placed.
     Block(Box<Block>),
+    /// A prop placed.
+    PlaceProp(Prop),
+    /// A prop removed; refused when it holds state, unless `discard_state`.
+    RemoveProp { entity: u32, discard_state: bool },
 }
 
 impl Change {
-    /// The bricks it can write; [`Status::BAD_ARGS`] for a change the
+    /// The bricks it can write, or where a prop goes; `None` for a removal,
+    /// whose place the step reads. [`Status::BAD_ARGS`] for a change the
     /// loader refuses.
-    fn bricks(&self) -> Result<Bricks, Status> {
-        match self {
-            Self::Terrain(edit) => cover::check(edit),
-            Self::Voxels(paste) => Ok(paste.bricks()),
-            Self::Erase(erase) => Ok(erase.bricks()),
-            Self::Block(block) => Ok(block.region.bricks()),
-        }
+    fn bricks(&self) -> Result<Option<Bricks>, Status> {
+        Ok(Some(match self {
+            Self::Terrain(edit) => cover::check(edit)?,
+            Self::Voxels(paste) => paste.bricks(),
+            Self::Erase(erase) => erase.bricks(),
+            Self::Block(block) => block.region.bricks(),
+            Self::PlaceProp(prop) => prop.bricks(),
+            Self::RemoveProp { .. } => return Ok(None),
+        }))
     }
 
-    /// The box it can write, in metres, lowest and highest corner.
-    fn reach(&self) -> ([f64; 3], [f64; 3]) {
-        match self {
+    /// The box it can write, in metres, lowest and highest corner; a
+    /// removal's is its prop's.
+    fn reach(&self, removed: Option<&Prop>) -> Option<([f64; 3], [f64; 3])> {
+        Some(match self {
             Self::Terrain(edit) => cover::reach(edit),
             Self::Voxels(paste) => paste.region().metres(),
             Self::Erase(erase) => erase.region().metres(),
             Self::Block(block) => block.region.metres(),
-        }
+            Self::PlaceProp(prop) => prop.reach(),
+            Self::RemoveProp { .. } => removed?.reach(),
+        })
     }
 }
 
@@ -106,15 +144,62 @@ impl Change {
 #[derive(Debug)]
 struct Op {
     change: Change,
-    bricks: Bricks,
+    bricks: Option<Bricks>,
+}
+
+impl Op {
+    /// What it costs a step's budget: its bricks, or 1 for a prop.
+    fn cost(&self) -> usize {
+        self.bricks.map_or(1, |bricks| match self.change {
+            Change::PlaceProp(_) => 1,
+            _ => bricks.count(),
+        })
+    }
+}
+
+/// What a written change left for its undo.
+#[derive(Debug)]
+enum Done {
+    /// The earlier voxels of each brick it wrote.
+    Bricks(Vec<(Brick, Image)>),
+    /// A prop it placed, as `entity`, and its start state when it first
+    /// stood in the world.
+    Placed {
+        entity: u32,
+        prop: Prop,
+        settings: Settings,
+    },
+    /// A prop it removed, and the kinds of state the prop held then.
+    Removed { prop: Prop, holds: u32 },
+}
+
+/// The start state of a prop a transaction placed, a logic trigger's
+/// settings and a plant's level, as it was the first step the prop stood
+/// in the world, before a player or time could change it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Settings {
+    /// Not read: the prop did not stand in the world within the wait limit,
+    /// or the read failed; an undo cannot tell what changed.
+    Unread,
+    /// Read: the bytes, `None` for a prop with no start state.
+    Read(Option<Vec<u8>>),
+}
+
+impl Done {
+    fn bricks(&self) -> &[(Brick, Image)] {
+        match self {
+            Self::Bricks(bricks) => bricks,
+            _ => &[],
+        }
+    }
 }
 
 /// What a step works on: a transaction's changes and undo data.
 #[derive(Debug, Default)]
 struct Work {
     ops: Vec<Op>,
-    /// The earlier voxels of the bricks of each change written, in order.
-    written: Vec<Vec<(Brick, Image)>>,
+    /// What each change written left for its undo, in order.
+    done: Vec<Done>,
     /// A hash of what each brick holds now, as far as the transaction
     /// knows: what it left there, or what its undo wrote back.
     now: FxHashMap<Brick, u64>,
@@ -129,11 +214,26 @@ struct Work {
     actor: Option<u32>,
     /// The game's reason the server refused its actor, 0 for none.
     refusal: u32,
+    /// The kinds of state a prop held that stopped it, as bits; 0 for none.
+    holds: u32,
+    /// The props it holds against players until it destroys them.
+    held: Vec<u32>,
 }
 
 impl Work {
+    /// The entities of the props it placed and still holds.
+    fn created(&self) -> Vec<u32> {
+        self.done
+            .iter()
+            .filter_map(|done| match done {
+                Done::Placed { entity, .. } => Some(*entity),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn kept(&self) -> usize {
-        self.written.iter().map(Vec::len).sum()
+        self.done.iter().map(|done| done.bricks().len()).sum()
     }
 }
 
@@ -158,6 +258,14 @@ struct Record {
     undo_asked: bool,
     /// The game's reason the server refused its actor, 0 for none.
     refusal: u32,
+    /// The kinds of state a prop held that stopped it, as bits.
+    holds: u32,
+    /// The entities of the props it placed, as of the last return of its
+    /// work.
+    created: Vec<u32>,
+    /// Whether it keeps what its undo needs, as of the last return of its
+    /// work.
+    undoable: bool,
 }
 
 impl Record {
@@ -186,10 +294,12 @@ impl Record {
     /// Drops its undo data.
     fn drop_work(&mut self) {
         if let Some(work) = &mut self.work {
-            work.written.clear();
+            work.done.clear();
             work.now.clear();
         }
         self.kept = 0;
+        self.created.clear();
+        self.undoable = false;
     }
 }
 
@@ -308,11 +418,18 @@ impl Ledger {
             .map(|change| change.bricks().map(|bricks| Op { change, bricks }))
             .collect::<Result<Vec<_>, _>>()?;
         if let Some(extent) = self.extent
-            && !ops.iter().all(|op| op.bricks.inside(extent))
+            && !ops
+                .iter()
+                .all(|op| op.bricks.is_none_or(|bricks| bricks.inside(extent)))
         {
             return Err(Status::OUTSIDE_WORLD);
         }
-        let bound = ops.iter().map(|op| op.bricks.count()).sum::<usize>();
+        let bound = ops
+            .iter()
+            .filter(|op| !matches!(op.change, Change::PlaceProp(_) | Change::RemoveProp { .. }))
+            .filter_map(|op| op.bricks)
+            .map(Bricks::count)
+            .sum::<usize>();
         if bound > self.limits.bricks {
             return Err(Status::BAD_ARGS);
         }
@@ -345,6 +462,9 @@ impl Ledger {
             kept: 0,
             undo_asked: false,
             refusal: 0,
+            holds: 0,
+            created: Vec::new(),
+            undoable: false,
         });
         self.work.push_back(id);
         Ok(id)
@@ -365,13 +485,14 @@ impl Ledger {
                 return Ok(());
             }
             TransactionInfo::PENDING if record.applied == 0 => {
+                record.holds = 0;
                 record.settle(TransactionInfo::UNDONE, Status::OK);
                 self.work.retain(|&queued| queued != id);
                 return Ok(());
             }
             TransactionInfo::PENDING => false,
             TransactionInfo::APPLIED | TransactionInfo::UNDO_REFUSED | TransactionInfo::FAILED
-                if record.kept > 0 =>
+                if record.undoable =>
             {
                 if claimed + record.kept > cap {
                     return Err(Status::REFUSED);
@@ -381,9 +502,11 @@ impl Ledger {
             _ => return Err(Status::REFUSED),
         };
         record.settle(TransactionInfo::UNDOING, Status::OK);
+        record.holds = 0;
         if let Some(work) = &mut record.work {
             work.undo_checked = false;
             work.waits = 0;
+            work.holds = 0;
         }
         if queue {
             self.work.push_back(id);
@@ -407,7 +530,19 @@ impl Ledger {
             bricks: record.kept as u64,
             refusal: record.refusal,
             reserved: 0,
+            holds: record.holds,
+            created: u32::try_from(record.created.len()).unwrap_or(u32::MAX),
         })
+    }
+
+    /// The entities of the props transaction `id` of `owner` placed and
+    /// still holds, oldest first; `None` for an id unknown or forgotten.
+    pub(crate) fn entities(&self, owner: ModIndex, id: u64) -> Option<Vec<u32>> {
+        let record = self
+            .records
+            .get(self.index(id)?)
+            .filter(|record| record.owner == owner)?;
+        Some(record.created.clone())
     }
 
     /// Bricks of undo data held over all transactions.
@@ -517,9 +652,12 @@ impl Ledger {
             return false;
         };
         let record = &mut self.records[index];
-        record.applied = task.work.written.len();
+        record.applied = task.work.done.len();
         record.kept = task.work.kept();
         record.refusal = task.work.refusal;
+        record.holds = task.work.holds;
+        record.created = task.work.created();
+        record.undoable = !task.work.done.is_empty();
         record.work = Some(task.work);
         let asked = core::mem::take(&mut record.undo_asked);
         let go_on = match outcome {
@@ -558,7 +696,7 @@ impl Ledger {
             if kept + bricks <= limit {
                 return;
             }
-            if index == keep || record.working() || record.kept == 0 {
+            if index == keep || record.working() || !record.undoable {
                 continue;
             }
             kept -= record.kept;
@@ -590,10 +728,16 @@ fn write_over(
 impl Task {
     /// Runs the task against the world for what is left of the pass.
     pub(crate) fn run(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
-        match self.mode {
+        let outcome = match self.mode {
             Mode::Apply => self.apply(world, pass),
             Mode::Undo => self.take_back(world, pass),
+        };
+        if matches!(outcome, Outcome::Done(..)) {
+            for entity in self.work.held.drain(..) {
+                world.release_prop(entity);
+            }
         }
+        outcome
     }
 
     fn apply(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
@@ -601,149 +745,409 @@ impl Task {
         let failed = |reason| Outcome::Done(TransactionInfo::FAILED, reason);
         if !work.started {
             work.started = true;
-            let inside = pass
-                .extent
-                .map(|extent| work.ops.iter().all(|op| op.bricks.inside(extent)));
-            if inside != Some(true) {
-                return failed(inside.map_or(Status::MISSING, |_| Status::OUTSIDE_WORLD));
+            if let Some(outcome) = work.first_check(world, pass) {
+                return outcome;
             }
-            if let Some(actor) = work.actor {
-                for op in &work.ops {
-                    let (min, max) = op.change.reach();
-                    match world.rights(actor, min, max) {
-                        Ok(0) => {}
-                        Ok(refusal) => {
-                            work.refusal = refusal;
-                            return failed(Status::REFUSED);
-                        }
-                        Err(reason) => return failed(reason),
+            match work.hold_removals(world) {
+                Ok(false) => {}
+                Ok(true) => return Outcome::Later,
+                Err(reason) => return failed(reason),
+            }
+        }
+        while let Some(op) = work.ops.get(work.done.len()) {
+            let cost = op.cost();
+            if pass.spent > 0 && pass.spent + cost > pass.budget {
+                return Outcome::Again;
+            }
+            let actor = work.actor.unwrap_or(0);
+            match &op.change {
+                Change::PlaceProp(prop) => match world.spawn_prop(prop, actor) {
+                    Ok(entity) => work.done.push(Done::Placed {
+                        entity,
+                        prop: *prop,
+                        settings: Settings::Unread,
+                    }),
+                    Err(reason) => return failed(reason),
+                },
+                &Change::RemoveProp {
+                    entity,
+                    discard_state,
+                } => {
+                    if let Err(reason) = work.remove(world, entity, discard_state, actor) {
+                        return failed(reason);
                     }
                 }
-            }
-            let mut columns = FxHashSet::default();
-            for brick in work.ops.iter().flat_map(|op| op.bricks.columns()) {
-                let [x, _, z] = brick.0;
-                if columns.insert([x, z]) {
-                    pass.probes += 1;
-                    if let Err(reason) = world.loaded(brick) {
+                change => {
+                    let Some(bricks) = op.bricks else {
+                        return failed(Status::MISSING);
+                    };
+                    let images = bricks
+                        .iter()
+                        .map(|brick| world.read(brick).map(|image| (brick, image)))
+                        .collect::<Result<Vec<_>, _>>();
+                    let images = match images {
+                        Ok(images) => images,
+                        Err(reason) => return failed(reason),
+                    };
+                    let mut lost = match change {
+                        Change::Terrain(edit) => match world.edit(edit) {
+                            Ok(()) => None,
+                            Err(reason) => return failed(reason),
+                        },
+                        Change::Block(block) => match world.place(block, actor) {
+                            Ok(()) => None,
+                            Err(reason) => return failed(reason),
+                        },
+                        Change::Voxels(paste) => write_over(world, &images, |brick, image| {
+                            paste.overlay(brick, image);
+                        }),
+                        Change::Erase(erase) => {
+                            let mut cleared = 0;
+                            let lost = write_over(world, &images, |brick, image| {
+                                cleared += erase.overlay(brick, image);
+                            });
+                            if lost.is_none() && cleared > 0 {
+                                world.erased(erase, actor);
+                            }
+                            lost
+                        }
+                        Change::PlaceProp(_) | Change::RemoveProp { .. } => None,
+                    };
+                    for (brick, _) in &images {
+                        match world.read(*brick) {
+                            Ok(now) => {
+                                work.now.insert(*brick, hash(&now));
+                            }
+                            Err(reason) => {
+                                work.now.remove(brick);
+                                lost.get_or_insert(reason);
+                            }
+                        }
+                    }
+                    work.done.push(Done::Bricks(images));
+                    if let Some(reason) = lost {
+                        pass.spent += cost;
                         return failed(reason);
                     }
                 }
             }
-        }
-        while let Some(op) = work.ops.get(work.written.len()) {
-            let cost = op.bricks.count();
-            if pass.spent > 0 && pass.spent + cost > pass.budget {
-                return Outcome::Again;
-            }
-            let images = op
-                .bricks
-                .iter()
-                .map(|brick| world.read(brick).map(|image| (brick, image)))
-                .collect::<Result<Vec<_>, _>>();
-            let images = match images {
-                Ok(images) => images,
-                Err(reason) => return failed(reason),
-            };
-            let actor = work.actor.unwrap_or(0);
-            let mut lost = match &op.change {
-                Change::Terrain(edit) => match world.edit(edit) {
-                    Ok(()) => None,
-                    Err(reason) => return failed(reason),
-                },
-                Change::Block(block) => match world.place(block, actor) {
-                    Ok(()) => None,
-                    Err(reason) => return failed(reason),
-                },
-                Change::Voxels(paste) => write_over(world, &images, |brick, image| {
-                    paste.overlay(brick, image);
-                }),
-                Change::Erase(erase) => {
-                    let mut cleared = 0;
-                    let lost = write_over(world, &images, |brick, image| {
-                        cleared += erase.overlay(brick, image);
-                    });
-                    if lost.is_none() && cleared > 0 {
-                        world.erased(erase, actor);
-                    }
-                    lost
-                }
-            };
-            for (brick, _) in &images {
-                match world.read(*brick) {
-                    Ok(now) => {
-                        work.now.insert(*brick, hash(&now));
-                    }
-                    Err(reason) => {
-                        work.now.remove(brick);
-                        lost.get_or_insert(reason);
-                    }
-                }
-            }
-            work.written.push(images);
             pass.spent += cost;
-            if let Some(reason) = lost {
-                return failed(reason);
-            }
         }
-        Outcome::Done(TransactionInfo::APPLIED, Status::OK)
+        work.read_settings(world, pass)
     }
 
     fn take_back(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Outcome {
         let work = &mut self.work;
-        let refused = |work: &mut Work, reason| {
-            work.undo_checked = false;
-            work.waits = 0;
-            Outcome::Done(TransactionInfo::UNDO_REFUSED, reason)
-        };
         if !work.undo_checked {
-            let bricks: FxHashSet<Brick> = work.written.iter().flatten().map(|(b, _)| *b).collect();
-            for brick in bricks {
-                let reason = match (work.now.get(&brick), world.read(brick)) {
-                    (Some(left), Ok(now)) if hash(&now) == *left => continue,
-                    (_, Err(reason)) => reason,
-                    _ => Status::REFUSED,
-                };
-                return refused(work, reason);
+            if let Err((reason, holds)) = work.undo_check(world) {
+                return work.refuse_undo(reason, holds);
             }
             work.undo_checked = true;
+            let placed: Vec<u32> = work
+                .done
+                .iter()
+                .filter_map(|done| match done {
+                    Done::Placed { entity, .. } => Some(*entity),
+                    _ => None,
+                })
+                .collect();
+            for entity in placed {
+                if let Err(reason) = world.hold_prop(entity) {
+                    return work.refuse_undo(reason, 0);
+                }
+                work.held.push(entity);
+            }
+            if !work.held.is_empty() {
+                return Outcome::Later;
+            }
         }
-        while let Some(op) = work.written.last_mut() {
-            let Some((brick, image)) = op.last() else {
-                work.written.pop();
-                continue;
-            };
+        while let Some(done) = work.done.last_mut() {
             if pass.spent >= pass.budget {
                 return Outcome::Again;
             }
-            let brick = *brick;
-            let expected = work.now.get(&brick).copied();
-            let result = world.read(brick).and_then(|now| {
-                if Some(hash(&now)) == expected {
-                    world.write(brick, image)
-                } else {
-                    Err(Status::REFUSED)
-                }
-            });
-            match result {
-                Ok(()) => {
-                    work.now.insert(brick, hash(image));
-                    op.pop();
-                    pass.spent += 1;
-                    work.waits = 0;
-                }
-                Err(Status::NOT_LOADED) => {
-                    work.waits += 1;
-                    if work.waits >= pass.waits {
-                        return refused(work, Status::NOT_LOADED);
+            match done {
+                Done::Bricks(bricks) => {
+                    let Some((brick, image)) = bricks.last() else {
+                        work.done.pop();
+                        continue;
+                    };
+                    let brick = *brick;
+                    let expected = work.now.get(&brick).copied();
+                    let result = world.read(brick).and_then(|now| {
+                        if Some(hash(&now)) == expected {
+                            world.write(brick, image)
+                        } else {
+                            Err(Status::REFUSED)
+                        }
+                    });
+                    match result {
+                        Ok(()) => {
+                            work.now.insert(brick, hash(image));
+                            bricks.pop();
+                            pass.spent += 1;
+                            work.waits = 0;
+                        }
+                        Err(Status::NOT_LOADED) => {
+                            work.waits += 1;
+                            if work.waits >= pass.waits {
+                                return work.refuse_undo(Status::NOT_LOADED, 0);
+                            }
+                            return Outcome::Later;
+                        }
+                        Err(reason) => return work.refuse_undo(reason, 0),
                     }
-                    return Outcome::Later;
                 }
-                Err(reason) => return refused(work, reason),
+                Done::Placed {
+                    entity,
+                    prop,
+                    settings,
+                } => {
+                    let entity = *entity;
+                    if let Err((reason, holds)) = still_placed(world, entity, prop, settings) {
+                        return work.refuse_undo(reason, holds);
+                    }
+                    if let Err(reason) = world.still_held(entity) {
+                        return work.refuse_undo(reason, 0);
+                    }
+                    if let Err(reason) = world.remove_prop(entity, work.actor.unwrap_or(0)) {
+                        return work.refuse_undo(reason, 0);
+                    }
+                    work.held.retain(|&held| held != entity);
+                    work.done.pop();
+                    pass.spent += 1;
+                }
+                &mut Done::Removed { prop, holds } => {
+                    if let Err((reason, holds)) = still_removed(world, &prop, holds) {
+                        return work.refuse_undo(reason, holds);
+                    }
+                    if let Err(reason) = world.spawn_prop(&prop, work.actor.unwrap_or(0)) {
+                        return work.refuse_undo(reason, 0);
+                    }
+                    work.done.pop();
+                    pass.spent += 1;
+                }
             }
         }
         work.now.clear();
+        work.holds = 0;
         Outcome::Done(TransactionInfo::UNDONE, Status::OK)
+    }
+}
+
+/// `Ok` while the prop the transaction placed as `entity` is still there
+/// as it placed it and holds no state, its start state as it first was;
+/// the reason and the kinds of state otherwise.
+fn still_placed(
+    world: &mut impl Voxels,
+    entity: u32,
+    prop: &Prop,
+    settings: &Settings,
+) -> Result<(), (Status, u32)> {
+    const START: u32 = TransactionInfo::HOLDS_LOGIC_GRAPH_TRIGGER | TransactionInfo::HOLDS_GROWTH;
+    match world.read_prop(entity) {
+        Ok((now, holds)) if now.same_place(prop) => {
+            let holds = if holds & START != 0 && settings_kept(world, entity, settings) {
+                holds & !START
+            } else {
+                holds
+            };
+            if holds == 0 {
+                Ok(())
+            } else {
+                Err((Status::REFUSED, holds))
+            }
+        }
+        Ok(_) | Err(Status::NOT_A_PROP) => Err((Status::REFUSED, 0)),
+        Err(reason) => Err((reason, 0)),
+    }
+}
+
+/// Whether the start state of `entity` is still the one read the first
+/// step it stood in the world.
+fn settings_kept(world: &mut impl Voxels, entity: u32, settings: &Settings) -> bool {
+    match settings {
+        Settings::Read(Some(first)) => {
+            matches!(world.start_state(entity), Ok(Some(now)) if now == *first)
+        }
+        Settings::Read(None) | Settings::Unread => false,
+    }
+}
+
+/// `Ok` while the prop the transaction removed can come back as it was:
+/// it held no state a respawn would lose, and its place is free.
+fn still_removed(world: &mut impl Voxels, prop: &Prop, holds: u32) -> Result<(), (Status, u32)> {
+    if holds != 0 {
+        return Err((Status::REFUSED, holds));
+    }
+    match world.prop_at(prop) {
+        Ok(false) => Ok(()),
+        Ok(true) => Err((Status::REFUSED, 0)),
+        Err(reason) => Err((reason, 0)),
+    }
+}
+
+impl Work {
+    /// The checks of a transaction's first step, before it writes anything:
+    /// inside the world, the props it removes, its actor's rights and its
+    /// columns loaded; the outcome that stops it, or `None`.
+    fn first_check(&mut self, world: &mut impl Voxels, pass: &mut Pass) -> Option<Outcome> {
+        let failed = |reason| Some(Outcome::Done(TransactionInfo::FAILED, reason));
+        let inside = pass.extent.map(|extent| {
+            self.ops
+                .iter()
+                .all(|op| op.bricks.is_none_or(|bricks| bricks.inside(extent)))
+        });
+        if inside != Some(true) {
+            return failed(inside.map_or(Status::MISSING, |_| Status::OUTSIDE_WORLD));
+        }
+        let mut removed = Vec::with_capacity(self.ops.len());
+        for op in &self.ops {
+            let prop = match op.change {
+                Change::RemoveProp {
+                    entity,
+                    discard_state,
+                } => match world.read_prop(entity) {
+                    Ok((prop, holds)) if holds == 0 || discard_state => Some(prop),
+                    Ok((_, holds)) => {
+                        self.holds = holds;
+                        return failed(Status::REFUSED);
+                    }
+                    Err(reason) => return failed(reason),
+                },
+                _ => None,
+            };
+            removed.push(prop);
+        }
+        if let Some(actor) = self.actor {
+            for (op, prop) in self.ops.iter().zip(&removed) {
+                let Some((min, max)) = op.change.reach(prop.as_ref()) else {
+                    return failed(Status::MISSING);
+                };
+                match world.rights(actor, min, max) {
+                    Ok(0) => {}
+                    Ok(refusal) => {
+                        self.refusal = refusal;
+                        return failed(Status::REFUSED);
+                    }
+                    Err(reason) => return failed(reason),
+                }
+            }
+        }
+        let mut columns = FxHashSet::default();
+        let bricks = self.ops.iter().filter_map(|op| op.bricks);
+        for brick in bricks.flat_map(Bricks::columns) {
+            let [x, _, z] = brick.0;
+            if columns.insert([x, z]) {
+                pass.probes += 1;
+                if let Err(reason) = world.loaded(brick) {
+                    return failed(reason);
+                }
+            }
+        }
+        None
+    }
+
+    /// The checks of an undo before it writes anything: every brick holds
+    /// what the transaction left, every prop it placed is there without
+    /// state, every prop it removed can come back.
+    fn undo_check(&self, world: &mut impl Voxels) -> Result<(), (Status, u32)> {
+        let bricks: FxHashSet<Brick> = self
+            .done
+            .iter()
+            .flat_map(|done| done.bricks().iter().map(|(brick, _)| *brick))
+            .collect();
+        for brick in bricks {
+            match (self.now.get(&brick), world.read(brick)) {
+                (Some(left), Ok(now)) if hash(&now) == *left => {}
+                (_, Err(reason)) => return Err((reason, 0)),
+                _ => return Err((Status::REFUSED, 0)),
+            }
+        }
+        for done in &self.done {
+            match done {
+                Done::Bricks(_) => {}
+                Done::Placed {
+                    entity,
+                    prop,
+                    settings,
+                } => still_placed(world, *entity, prop, settings)?,
+                Done::Removed { prop, holds } => still_removed(world, prop, *holds)?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Holds every prop it removes against players, for the step before
+    /// it removes them; whether it holds any.
+    fn hold_removals(&mut self, world: &mut impl Voxels) -> Result<bool, Status> {
+        let removals = self.ops.iter().filter_map(|op| match op.change {
+            Change::RemoveProp { entity, .. } => Some(entity),
+            _ => None,
+        });
+        for entity in removals {
+            world.hold_prop(entity)?;
+            self.held.push(entity);
+        }
+        Ok(!self.held.is_empty())
+    }
+
+    /// Removes the prop `entity` held since the step before, checking
+    /// again that it holds no state unless `discard_state`.
+    fn remove(
+        &mut self,
+        world: &mut impl Voxels,
+        entity: u32,
+        discard_state: bool,
+        actor: u32,
+    ) -> Result<(), Status> {
+        let (prop, holds) = world.read_prop(entity)?;
+        if holds != 0 && !discard_state {
+            self.holds = holds;
+            return Err(Status::REFUSED);
+        }
+        world.still_held(entity)?;
+        world.remove_prop(entity, actor)?;
+        self.held.retain(|&held| held != entity);
+        self.done.push(Done::Removed { prop, holds });
+        Ok(())
+    }
+
+    /// Reads the start state of every prop it placed once the prop
+    /// stands in the world, waiting a step at a time up to the wait limit;
+    /// applied once read, or at the limit, with those unread kept unread.
+    fn read_settings(&mut self, world: &mut impl Voxels, pass: &Pass) -> Outcome {
+        let mut waiting = false;
+        for done in &mut self.done {
+            if let Done::Placed {
+                entity,
+                settings: settings @ Settings::Unread,
+                ..
+            } = done
+            {
+                match world.start_state(*entity) {
+                    Ok(bytes) => *settings = Settings::Read(bytes),
+                    Err(Status::MISSING) => waiting = true,
+                    Err(_) => {}
+                }
+            }
+        }
+        if waiting {
+            self.waits += 1;
+            if self.waits < pass.waits {
+                return Outcome::Later;
+            }
+        }
+        self.waits = 0;
+        Outcome::Done(TransactionInfo::APPLIED, Status::OK)
+    }
+
+    /// Stops an undo for `reason`, with the kinds of state `holds` that
+    /// stopped it; asking again checks afresh.
+    fn refuse_undo(&mut self, reason: Status, holds: u32) -> Outcome {
+        self.undo_checked = false;
+        self.waits = 0;
+        self.holds = holds;
+        Outcome::Done(TransactionInfo::UNDO_REFUSED, reason)
     }
 }
 

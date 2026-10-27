@@ -203,6 +203,9 @@ pub(crate) extern "system" fn entities(
     if !crate::test::table::on_game_thread() {
         return Status::WRONG_THREAD;
     }
+    if with(true, |s| s.edits.stopped) {
+        return Status::MISSING;
+    }
     let found: Vec<EntityPlace> = with(Vec::new(), |s| {
         s.host
             .placed
@@ -216,6 +219,19 @@ pub(crate) extern "system" fn entities(
         unsafe { out.wrapping_add(i).write(*place) };
     }
     put(count, u32::try_from(found.len()).unwrap_or(u32::MAX))
+}
+
+pub(crate) extern "system" fn world_quiet(_me: ModHandle) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    with(Status::MISSING, |s| {
+        if s.edits.stopped {
+            Status::MISSING
+        } else {
+            Status::OK
+        }
+    })
 }
 
 pub(crate) extern "system" fn destroy(_me: ModHandle, entity: u32) -> Status {
@@ -259,6 +275,9 @@ pub(crate) extern "system" fn component_write(
     let address = with(Err(Status::MISSING), |s| {
         if s.host.refused_writes.contains(&type_hash) {
             return Err(Status::REFUSED);
+        }
+        if s.host.static_halves.contains(&type_hash) {
+            return Err(Status::STATIC_HALF);
         }
         let address = s
             .host
@@ -703,4 +722,32 @@ pub(crate) extern "system" fn build_rights(
     } else {
         Status::BAD_ARGS
     }
+}
+
+pub(crate) extern "system" fn world_persists(
+    _me: ModHandle,
+    min: *const [f64; 3],
+    max: *const [f64; 3],
+    kept: *mut u8,
+) -> Status {
+    if min.is_null() || max.is_null() || kept.is_null() {
+        return Status::BAD_ARGS;
+    }
+    // SAFETY: the safe layer passes `min` pointing at three live `f64` for
+    // the call, non-null by the check before it.
+    let low = unsafe { min.read_unaligned() };
+    // SAFETY: as for `min`, `max` points at three live `f64`.
+    let high = unsafe { max.read_unaligned() };
+    let finite = low.iter().chain(&high).all(|v| v.is_finite());
+    if !finite || (0..3).any(|a| high[a] < low[a]) {
+        return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let saved = with(false, |s| s.host.zones.kept(low, high));
+    // SAFETY: the safe layer passes `kept` writable for one byte for the
+    // call, non-null by the check before it.
+    unsafe { kept.write(u8::from(saved)) };
+    Status::OK
 }

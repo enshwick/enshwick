@@ -13,14 +13,16 @@
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let scripts = Scripts::new().with("main.luau", "enshwick.log.info('hello')");
-//!     enshwick_luau::start(load, "you.hello", scripts, Limits::default())?;
+//!     enshwick_luau::start(load, "you.hello", scripts, None, Limits::default())?;
 //!     Ok(())
 //! }
 //! ```
 
 mod bridge;
 mod files;
+mod points;
 mod run;
+mod subscribe;
 
-pub use files::{MAIN, Scripts};
-pub use run::{Limits, Runtime, Usage, start};
+pub use files::Scripts;
+pub use run::{Limits, ReloadError, Runtime, Usage, start};

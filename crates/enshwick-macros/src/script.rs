@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt as _;
 use syn::spanned::Spanned as _;
 use syn::{
     Data, DeriveInput, Fields, FieldsNamed, FnArg, GenericArgument, Ident, ImplItem, ImplItemFn,
@@ -51,7 +52,7 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
         let field = f
             .ident
             .as_ref()
-            .map(ToString::to_string)
+            .map(|i| i.unraw().to_string())
             .unwrap_or_default();
         let doc = schema_doc(&f.attrs);
         let ty = &f.ty;
@@ -65,7 +66,7 @@ fn derive_record(input: &DeriveInput, named: &FieldsNamed) -> TokenStream {
         let count = shown.len();
         let fields = shown.iter().map(|f| {
             let field = &f.ident;
-            let label = field.as_ref().map(ToString::to_string).unwrap_or_default();
+            let label = field.as_ref().map(|i| i.unraw().to_string()).unwrap_or_default();
             quote!(#field: ::enshwick::__private::argument(&mut fields, #label)?)
         });
         quote! {

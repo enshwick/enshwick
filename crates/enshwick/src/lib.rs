@@ -100,6 +100,7 @@ pub mod knowledge;
 mod load;
 mod locks;
 pub mod loot;
+pub mod map;
 pub mod migrations;
 pub mod mods;
 pub mod net;
@@ -194,6 +195,30 @@ pub use enshwick_macros::Script;
 /// }
 /// ```
 pub use enshwick_macros::Shape;
+/// Declares a call, a described service: one function from the input
+/// struct to an answer, which this mod serves and others call. The struct
+/// becomes `repr(C)` and implements [`services::Call`] with a layout hash
+/// per field and one for the answer, which the loader checks for every
+/// caller.
+///
+/// `#[call(name = "<server id>:<call>", output = <type>, version = <major>)]`;
+/// `version` is 1 when left out. A changed field or answer is a new major.
+/// Every type in it has a [`trait@Shape`].
+///
+/// # Examples
+///
+/// ```
+/// #[enshwick::call(name = "you.trading-post:price-of", output = u32)]
+/// #[derive(Clone, Copy, Debug)]
+/// pub struct PriceOf {
+///     pub item: u32,
+/// }
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+///     load.serve_call(|input: &PriceOf| input.item * 10)
+/// }
+/// ```
+pub use enshwick_macros::call;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
 /// field.

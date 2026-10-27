@@ -55,6 +55,55 @@ impl ItemCategoryMask {
     /// Colour palettes.
     pub const COLOR_PALETTE: Self = Self(1 << 16);
 
+    /// Every category by the game's own name for it, the reflected
+    /// `keen::ItemCategory` constant, in the order of their numbers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::categories::ItemCategoryMask;
+    ///
+    /// assert!(ItemCategoryMask::NAMES.contains(&("Materials", ItemCategoryMask::MATERIALS)));
+    /// ```
+    pub const NAMES: &[(&str, Self)] = &[
+        ("Customization", Self::CUSTOMIZATION),
+        ("Equipment", Self::EQUIPMENT),
+        ("Weapons", Self::WEAPONS),
+        ("Tools", Self::TOOLS),
+        ("Instrument", Self::INSTRUMENT),
+        ("FishingRod", Self::FISHING_ROD),
+        ("BuildTools", Self::BUILD_TOOLS),
+        ("Consumables", Self::CONSUMABLES),
+        ("Ammunition", Self::AMMUNITION),
+        ("Materials", Self::MATERIALS),
+        ("Blueprints", Self::BLUEPRINTS),
+        ("Currency", Self::CURRENCY),
+        ("Collectibles", Self::COLLECTIBLES),
+        ("AnimalFood", Self::ANIMAL_FOOD),
+        ("PetFood", Self::PET_FOOD),
+        ("WeaponGem", Self::WEAPON_GEM),
+        ("ColorPalette", Self::COLOR_PALETTE),
+    ];
+
+    /// The category the game names `name`, as [`ItemCategoryMask::NAMES`]
+    /// lists them; `None` for a name the game does not use.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::content::categories::ItemCategoryMask;
+    ///
+    /// assert_eq!(ItemCategoryMask::named("FishingRod"), Some(ItemCategoryMask::FISHING_ROD));
+    /// assert_eq!(ItemCategoryMask::named("fishing rod"), None);
+    /// ```
+    #[must_use]
+    pub fn named(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .find(|(game, _)| *game == name)
+            .map(|&(_, mask)| mask)
+    }
+
     /// Whether every category of `other` is here.
     ///
     /// # Examples
@@ -92,5 +141,19 @@ impl core::ops::BitOr for ItemCategoryMask {
 
     fn bitor(self, other: Self) -> Self {
         self.union(other)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_category_is_found_by_the_game_s_name_and_one_bit() {
+        for &(name, mask) in ItemCategoryMask::NAMES {
+            assert_eq!(ItemCategoryMask::named(name), Some(mask));
+            assert_eq!(mask.0.count_ones(), 1, "{name}");
+        }
+        assert_eq!(ItemCategoryMask::named("Material"), None);
     }
 }

@@ -22,6 +22,8 @@ struct Declared {
     output: Vec<(String, u64)>,
     mode: crate::abi::PointMode,
     refuse: bool,
+    input_size: u32,
+    output_size: u32,
 }
 
 impl Declared {
@@ -39,6 +41,8 @@ impl Declared {
             output: fields(P::OUTPUT),
             mode: P::MODE.to_abi(),
             refuse: P::REFUSE,
+            input_size: u32::try_from(size_of::<P>()).unwrap_or(u32::MAX),
+            output_size: u32::try_from(size_of::<P::Output>()).unwrap_or(u32::MAX),
         }
     }
 
@@ -48,6 +52,8 @@ impl Declared {
             && crate::services::compare(&view(&link.input), &view(&self.input)).is_ok()
             && self.output == link.output
             && (self.mode, self.refuse) == (link.mode, link.refuse)
+            && link.input_size <= self.input_size
+            && link.output_size == self.output_size
     }
 }
 
@@ -103,6 +109,8 @@ fn declared(spec: *const PointSpec) -> Option<Declared> {
         output,
         mode: spec.mode,
         refuse: spec.flags.contains(crate::abi::PointFlags::REFUSE),
+        input_size: spec.input.size,
+        output_size: spec.output.size,
     })
 }
 

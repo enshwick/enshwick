@@ -101,6 +101,12 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
                     "a shared struct is `#[repr(C)]` or `#[repr(transparent)]`",
                 ));
             }
+            if reprs.iter().any(|r| r == "packed" || r == "align") {
+                return Err(syn::Error::new_spanned(
+                    ident,
+                    "a shared struct is plain `#[repr(C)]`: other languages lay it out from its fields, so `packed` and `align` are refused",
+                ));
+            }
             let newtype = matches!(&data.fields, Fields::Unnamed(f) if f.unnamed.len() == 1);
             if !values.is_empty() && !newtype {
                 return Err(syn::Error::new_spanned(
@@ -162,6 +168,7 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
             ));
         }
     };
+    let padding_free = padding_free(&input.data);
     Ok(quote! {
         // SAFETY: the hash covers the type's name, size and alignment, and
         // every field with its shape and offset, every variant with its
@@ -171,9 +178,24 @@ pub(super) fn expand_shape(input: &DeriveInput) -> syn::Result<proc_macro2::Toke
                 .layout::<Self>()
                 #parts
                 .finish();
+            const PADDING_FREE: bool = #padding_free;
             #schema
         }
     })
+}
+
+/// The `PADDING_FREE` of a derived [`Shape`]: an enum's every byte is its
+/// integer's; a struct's fields fill it and have no padding of their own.
+fn padding_free(data: &Data) -> proc_macro2::TokenStream {
+    let shape = quote!(::enshwick::Shape);
+    let Data::Struct(data) = data else {
+        return quote!(true);
+    };
+    let types: Vec<&syn::Type> = data.fields.iter().map(|f| &f.ty).collect();
+    quote! {
+        true #(&& <#types as #shape>::PADDING_FREE)*
+            && 0 #(+ ::core::mem::size_of::<#types>())* == ::core::mem::size_of::<Self>()
+    }
 }
 
 /// The `SCHEMA_NAME` and `SCHEMA_TYPES` of a derived [`Shape`]: the type's

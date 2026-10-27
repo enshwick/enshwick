@@ -6,18 +6,18 @@ use core::ffi::c_void;
 use crate::abi::{
     ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo, AltarLimitFilterFn, AltarLimitFn,
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
-    BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
-    CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
-    InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
-    KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
-    ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
-    PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn,
-    ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront, ZoneCheckFn,
+    BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp, ComfortFn,
+    ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags,
+    EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn,
+    Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine,
+    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 
 /// The table of services the loader offers a mod.
@@ -97,7 +97,9 @@ pub struct HostApi {
     pub type_hash: extern "system" fn(type_name: Str, out: *mut u32) -> Status,
     /// A read-only pointer to `entity`'s component of type `type_hash`, valid
     /// until the game thread moves on; on the server's game thread only.
-    /// Since minor 3.
+    /// For the static half of an ECS type, such as `FuelSetup`, it is the
+    /// set-up data the entity's template holds (since minor 94; the
+    /// dynamic half's data before). Since minor 3.
     pub component: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -396,8 +398,10 @@ pub struct HostApi {
     /// loader marks the component changed, as the game's own writes do, so
     /// the game sends it to clients and saves it. [`Status::REFUSED`] for a
     /// copy the game keeps for clients (`Network*`, `Client*`), which it
-    /// overwrites; [`Status::MISSING`] when the entity lacks the component.
-    /// On the server's game thread only. Since minor 22.
+    /// overwrites; [`Status::STATIC_HALF`] for the static half of an ECS
+    /// type, the template's set-up data (since minor 94);
+    /// [`Status::MISSING`] when the entity lacks the component. On the
+    /// server's game thread only. Since minor 22.
     pub component_write: extern "system" fn(
         me: ModHandle,
         entity: u32,
@@ -1106,14 +1110,18 @@ pub struct HostApi {
         found: *mut u32,
     ) -> Status,
     /// Caps the worker threads of the task system's default and background
-    /// groups as it starts, 0 leaving a group as the game sizes it; with
+    /// groups (`foreground` and `background`) as it starts, 0 leaving a group as the game sizes it; with
     /// several mods the lowest cap wins. Writes 1 to `found` when a cap is
     /// hooked and the task system starts after the hooks arm, which only the
     /// dedicated server does, else 0. [`Status::BAD_ARGS`] for a null
     /// `found`, before anything is hooked. Allowed during
     /// `enshwick_mod_init` only. Since minor 77.
-    pub task_workers:
-        extern "system" fn(me: ModHandle, default: u32, background: u32, found: *mut u32) -> Status,
+    pub task_workers: extern "system" fn(
+        me: ModHandle,
+        foreground: u32,
+        background: u32,
+        found: *mut u32,
+    ) -> Status,
     /// Calls `callback` with `user` for every altar of the server's world
     /// when the loader sizes the altar zones: after altars change and after
     /// [`HostApi::altar_zones_changed`]. Each filter, in load order, sees the
@@ -1272,5 +1280,97 @@ pub struct HostApi {
         ops: *const TransactionOp,
         count: u32,
         id: *mut u64,
+    ) -> Status,
+    /// [`Status::OK`] on the server's game thread at a quiet moment while a
+    /// world runs, where a mod may read live components that no system
+    /// writes meanwhile; [`Status::WRONG_THREAD`] on another thread or
+    /// inside a step, [`Status::MISSING`] while no world runs. Since
+    /// minor 90.
+    pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
+    /// Asks the loader to keep a copy of the client's fog of war for this
+    /// mod. Client only ([`Status::MISSING`] on a dedicated server).
+    /// Allowed during `enshwick_mod_init` only. Since minor 94.
+    pub fog_open: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes the fog's [`FogInfo`] to `info`, then copies the box of
+    /// `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
+    /// most `capacity` bytes; a box of no pixels copies nothing. Any thread.
+    /// [`Status::MISSING`] while the client is in no world, when this build
+    /// lacks the fog, or after the loader stopped copying it; [`Status::REFUSED`] for a mod that did not
+    /// open it; [`Status::OUTSIDE_WORLD`] for a box past the image;
+    /// [`Status::BAD_ARGS`] for a null `info`, or a null or short `out`
+    /// for a box of pixels. The loader may refresh the copy meanwhile:
+    /// compare `version`. Since minor 94.
+    pub fog_read: extern "system" fn(
+        me: ModHandle,
+        info: *mut FogInfo,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        out: *mut u8,
+        capacity: u32,
+    ) -> Status,
+    /// Serves the call `spec` describes with `callback` and `user`, named
+    /// `<id>:<call>` after the serving mod or one of its former ids;
+    /// [`Status::REFUSED`] for another name, or a name and major served
+    /// twice, [`Status::BAD_ARGS`] for a spec that does not read. Allowed
+    /// during `enshwick_mod_init` only: [`Status::TOO_LATE`] once every mod
+    /// is initialised. Since minor 95.
+    pub serve_call: extern "system" fn(
+        me: ModHandle,
+        spec: *const CallSpec,
+        callback: CallFn,
+        user: *mut c_void,
+    ) -> Status,
+    /// Asks for the call `spec` describes and writes its id to `out`.
+    /// Matched against the served call by name and major once every mod is
+    /// initialised: the input and the answer must agree field by field and
+    /// in size, or the call stays unmatched with the reason in the log.
+    /// [`Status::REFUSED`] when the mod asked for the name and major already
+    /// with another spec, [`Status::BAD_ARGS`] for a spec that does not read
+    /// or a null `out`. Allowed during `enshwick_mod_init` only:
+    /// [`Status::TOO_LATE`] once every mod is initialised. Since minor 95.
+    pub find_call:
+        extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
+    /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
+    /// server's handler reads `input` and writes the answer to `output`,
+    /// both as large as the spec says. [`Status::MISSING`] while the call
+    /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
+    /// when the serving mod or its handler is off, [`Status::BAD_ARGS`] for
+    /// a null pointer or an id the mod was not given, or what the handler
+    /// answers. Any thread. Since minor 95.
+    pub call: extern "system" fn(
+        me: ModHandle,
+        id: u32,
+        input: *const c_void,
+        output: *mut c_void,
+    ) -> Status,
+    /// Writes the entities of the props transaction `id` of this mod placed
+    /// and still holds, oldest first, up to `capacity` of them at `out`,
+    /// and their number to `count`; a prop is in the world from the step
+    /// after the one that placed it. `out` may be null with `capacity` 0 to
+    /// learn the number. [`Status::BAD_ARGS`] for a null `count`;
+    /// [`Status::MISSING`] for an id this mod did not get or one the loader
+    /// forgot. Any thread. Since minor 96.
+    pub transaction_entities: extern "system" fn(
+        me: ModHandle,
+        id: u64,
+        out: *mut u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
+    /// Writes to `kept` 1 when a save keeps changes in the box from `min`
+    /// to `max`, in metres, and 0 when not: the game saves a world only
+    /// inside its bases' zones, so the box must lie wholly inside one, half
+    /// a metre in from its edges. [`Status::BAD_ARGS`] for a null pointer,
+    /// a corner that is not finite or a `max` below `min`;
+    /// [`Status::MISSING`] while no world is loaded or on a build without
+    /// the zone list. On the server's game thread at a quiet moment only:
+    /// [`Status::WRONG_THREAD`] elsewhere or inside a step. Since minor 96.
+    pub world_persists: extern "system" fn(
+        me: ModHandle,
+        min: *const [f64; 3],
+        max: *const [f64; 3],
+        kept: *mut u8,
     ) -> Status,
 }

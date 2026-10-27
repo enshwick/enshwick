@@ -519,6 +519,10 @@ pub const FACTS: &[(&str, Fact)] = &[
         offset("keen::ecs::TemplateResource", "components"),
     ),
     (
+        "template.name",
+        offset("keen::ecs::TemplateResource", "name"),
+    ),
+    (
         "template_collection",
         Fact::Type("keen::ecs::TemplateCollectionResource"),
     ),
@@ -882,6 +886,10 @@ pub const FACTS: &[(&str, Fact)] = &[
     ("npc", Fact::Type("keen::ecs::ActiveNpcState")),
     ("animal", Fact::Type("keen::ecs::Animal")),
     ("loot_fill", Fact::Type("keen::ecs::DefaultInventory")),
+    (
+        "loot_fill.table",
+        offset("keen::ecs::DefaultInventory", "defaultInventory"),
+    ),
     ("resource_node", Fact::Type("keen::ecs::MiningNode")),
     ("game_settings", Fact::Type(GAME_SETTINGS)),
     (
@@ -1401,6 +1409,184 @@ pub const FACTS: &[(&str, Fact)] = &[
     (
         "building_terraforming_config.hardness",
         offset("keen::BuildingTerraformingConfig", "hardness"),
+    ),
+    ("map_marker", Fact::Type("keen::ecs::MapMarker")),
+    (
+        "map_marker.marker_id",
+        offset("keen::ecs::MapMarker", "markerId"),
+    ),
+    (
+        "map_marker.marker_type",
+        offset("keen::ecs::MapMarker", "markerType"),
+    ),
+    ("player_waypoint", Fact::Type("keen::ecs::PlayerWaypoint")),
+    (
+        "player_waypoint.enabled",
+        offset("keen::ecs::PlayerWaypoint", "enabled"),
+    ),
+    (
+        "player_waypoint.waypoint_position",
+        offset("keen::ecs::PlayerWaypoint", "waypointPosition"),
+    ),
+    (
+        "disable_random_loot_on_destroy",
+        Fact::Type("keen::ecs::DisableRandomLootOnDestroy"),
+    ),
+    ("level", Fact::Type("keen::ecs::Level")),
+    (
+        "level.data_storage",
+        offset("keen::ecs::Level", "dataStorage"),
+    ),
+    ("growth", Fact::Type("keen::ecs::Growth")),
+    ("factory_station", Fact::Type("keen::ecs::FactoryStation")),
+    (
+        "factory_station.state",
+        offset("keen::ecs::FactoryStation", "state"),
+    ),
+    (
+        "factory_station.running_recipe",
+        offset("keen::ecs::FactoryStation", "runningRecipe"),
+    ),
+    (
+        "factory_station.next_recipe",
+        offset("keen::ecs::FactoryStation", "nextRecipe"),
+    ),
+    ("npc_bed", Fact::Type("keen::ecs::NpcBed")),
+    (
+        "npc_bed.associated_npc",
+        offset("keen::ecs::NpcBed", "associatedNpc"),
+    ),
+    (
+        "store_associated_npc_ids",
+        Fact::Type("keen::ecs::StoreAssociatedNpcIds"),
+    ),
+    (
+        "store_associated_npc_ids.npc_ids",
+        offset("keen::ecs::StoreAssociatedNpcIds", "npcIds"),
+    ),
+    (
+        "custom_player_string",
+        Fact::Type("keen::ecs::CustomPlayerString"),
+    ),
+    (
+        "custom_player_string.string_id",
+        offset("keen::ecs::CustomPlayerString", "stringId"),
+    ),
+    (
+        "logic_entity_placed_event",
+        Fact::Type("keen::ecs::LogicEntityPlacedEvent"),
+    ),
+    (
+        "logic_entity_placed_event.placed_by_player_id",
+        offset("keen::ecs::LogicEntityPlacedEvent", "placedByPlayerId"),
+    ),
+    (
+        "logic_entity_placed_event.placed_logic_entity_id",
+        offset("keen::ecs::LogicEntityPlacedEvent", "placedLogicEntityId"),
+    ),
+    (
+        "item_info.placement_box_min",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "placementAABBmin"),
+        ]),
+    ),
+    (
+        "item_info.placement_box_max",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "placementAABBmax"),
+        ]),
+    ),
+    (
+        "item_flag.is_logic_entity",
+        enum_constant("keen::ItemFlag", "IsLogicEntity"),
+    ),
+    ("fuel_charges", Fact::Type("keen::ecs::Fuel")),
+    (
+        "fuel_charges.data_storage",
+        offset("keen::ecs::Fuel", "dataStorage"),
+    ),
+    (
+        "logic_graph_node_connected",
+        Fact::Type("keen::ecs::LogicGraphNodeConnected"),
+    ),
+    (
+        "logic_graph_node_connected.writer_graph_id",
+        offset("keen::ecs::LogicGraphNodeConnected", "writerGraphId"),
+    ),
+    (
+        "logic_graph_node_connected.has_reader_graphs",
+        offset("keen::ecs::LogicGraphNodeConnected", "hasReaderGraphs"),
+    ),
+    (
+        "logic_graph_trigger",
+        Fact::Type("keen::ecs::LogicGraphTrigger"),
+    ),
+    (
+        "logic_graph_trigger.trigger_config",
+        offset("keen::ecs::LogicGraphTrigger", "triggerConfig"),
+    ),
+    (
+        "logic_trigger_shape",
+        Fact::Type("keen::ecs::LogicTriggerShape"),
+    ),
+    ("animal_saved", Fact::Type("keen::ecs::AnimalSaved")),
+    (
+        "base_id_component",
+        Fact::Type("keen::ecs::BaseIdComponent"),
+    ),
+    (
+        "item_info.requires_altar_slot",
+        Fact::Path(&[
+            ("keen::ItemInfo", "equipment"),
+            ("keen::EquipmentSetup", "requiresAltarSlot"),
+        ]),
+    ),
+    (
+        "active_npc_state_saved",
+        Fact::Type("keen::ecs::ActiveNpcStateSaved"),
+    ),
+    ("item_flag.is_npc", enum_constant("keen::ItemFlag", "IsNpc")),
+    (
+        "item_flag.is_animal",
+        enum_constant("keen::ItemFlag", "IsAnimal"),
+    ),
+    (
+        "inventory_crafting_stock",
+        Fact::Type("keen::ecs::InventoryCraftingStock"),
+    ),
+    (
+        "fuel_setup.automatic_refill_enabled",
+        Fact::Path(&[
+            ("keen::ecs::FuelSetup", "automaticRefill"),
+            ("keen::ecs::FuelRefillSetup", "enabled"),
+        ]),
+    ),
+    (
+        "fuel_setup.rain_refill_enabled",
+        Fact::Path(&[
+            ("keen::ecs::FuelSetup", "rainRefill"),
+            ("keen::ecs::FuelRefillSetup", "enabled"),
+        ]),
+    ),
+    (
+        "dynamic_inventory_crafting_stock",
+        Fact::Type("keen::ecs::DynamicInventoryCraftingStock"),
+    ),
+    (
+        "dynamic_inventory_crafting_stock.override_is_set",
+        offset(
+            "keen::ecs::DynamicInventoryCraftingStock",
+            "canReceiveAreaDepositOverrideIsSet",
+        ),
+    ),
+    (
+        "dynamic_inventory_crafting_stock.override",
+        offset(
+            "keen::ecs::DynamicInventoryCraftingStock",
+            "canReceiveAreaDepositOverride",
+        ),
     ),
 ];
 

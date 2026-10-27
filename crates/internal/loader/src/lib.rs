@@ -23,6 +23,8 @@ mod bases;
 #[cfg(windows)]
 mod buffs;
 pub mod builds;
+#[cfg(windows)]
+mod calls;
 pub mod carry;
 #[cfg(windows)]
 mod catalogue;
@@ -33,6 +35,7 @@ mod chat;
 mod clones;
 #[cfg(windows)]
 mod code;
+pub mod code_watch;
 pub mod configure;
 pub mod conflicts;
 pub mod console;
@@ -60,6 +63,9 @@ pub mod errors;
 #[cfg(windows)]
 mod events;
 pub mod features;
+#[cfg(windows)]
+mod fog;
+pub mod fog_image;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the game's features run behind fuses")
@@ -147,6 +153,7 @@ mod points;
 pub mod profile;
 #[cfg(windows)]
 mod progress;
+pub mod prop_holds;
 #[cfg(windows)]
 mod rate_links;
 #[cfg_attr(
@@ -191,6 +198,8 @@ mod spawns;
 mod standins;
 #[cfg(windows)]
 mod start;
+#[cfg(windows)]
+mod static_halves;
 #[cfg(windows)]
 pub use start::{DryMod, DryRun, DryRunError, dry_run};
 #[cfg(windows)]

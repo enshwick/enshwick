@@ -1,6 +1,7 @@
 //! The game's side of transactions: brick reads, terrain edits, blocks, rights and undo writes.
 
 mod blocks;
+mod props;
 
 use enshwick::abi::{BuildRights, Header, Status, TerrainEdit};
 
@@ -8,11 +9,13 @@ use super::block::Block;
 use super::cover::{BRICK, BRICK_VOXELS, Brick};
 use super::ledger::{Image, Voxels};
 use super::paste::Erase;
+use super::props::Prop;
 use super::record::UndoRecord;
 use crate::host::Loader;
 use crate::pinned;
 use crate::voxels::ReadBox;
 pub(crate) use blocks::resolve;
+pub(crate) use props::resolve as resolve_prop;
 
 /// The editor's undo write: puts the voxels of `record`'s box back through
 /// the same write as an edit, which marks them for clients and the save;
@@ -110,6 +113,47 @@ impl Voxels for Game<'_> {
         Ok(())
     }
 
+    fn spawn_prop(&mut self, prop: &Prop, actor: u32) -> Result<u32, Status> {
+        let entity = props::spawn(self.loader, prop, actor)?;
+        self.events.prop_placed(self.loader, prop, entity, actor);
+        Ok(entity)
+    }
+
+    fn read_prop(&mut self, entity: u32) -> Result<(Prop, u32), Status> {
+        props::read(self.loader, entity)
+    }
+
+    fn start_state(&mut self, entity: u32) -> Result<Option<Vec<u8>>, Status> {
+        props::start_state(self.loader, entity)
+    }
+
+    fn hold_prop(&mut self, entity: u32) -> Result<(), Status> {
+        props::hold(self.loader, entity)
+    }
+
+    fn still_held(&mut self, entity: u32) -> Result<(), Status> {
+        if super::holds().still_held(entity, crate::interactions::filter_off()) {
+            Ok(())
+        } else {
+            Err(Status::MISSING)
+        }
+    }
+
+    fn release_prop(&mut self, entity: u32) {
+        props::release(self.loader, entity);
+    }
+
+    fn prop_at(&mut self, prop: &Prop) -> Result<bool, Status> {
+        props::stands(self.loader, prop)
+    }
+
+    fn remove_prop(&mut self, entity: u32, actor: u32) -> Result<(), Status> {
+        let (prop, _) = props::read(self.loader, entity)?;
+        props::remove(self.loader, entity)?;
+        self.events.prop_removed(self.loader, &prop, actor);
+        Ok(())
+    }
+
     fn erased(&mut self, erase: &Erase, actor: u32) {
         self.events.torn_down(self.loader, erase.region(), actor);
     }
@@ -146,5 +190,33 @@ impl Voxels for Game<'_> {
         // borrowed past the call and only read.
         unsafe { (self.undo_apply)(self.editor, &raw const record, self.alloc) };
         Ok(())
+    }
+}
+
+/// Puts back the Quick Stash `deposits` of props no longer held,
+/// by entity. On the game thread.
+pub(crate) fn restore_deposits(deposits: &[(u32, crate::prop_holds::Stash)]) {
+    let Some(loader) = crate::host::loader() else {
+        return;
+    };
+    for &(entity, before) in deposits {
+        props::set_deposit(loader, entity, before);
+    }
+}
+
+/// Around one call of the game's save: with `saving`, puts back the Quick
+/// Stash of the magic chests held, so a save keeps it as players left it;
+/// after it, turns it off again. Plain boxes take no
+/// Quick Stash and are never written. The game's `server.save_step`
+/// runs on the game thread after the step's systems and before the
+/// post-step, with none running (server 399, client 426), a quiet moment
+/// `props::set_deposit` checks before every write.
+pub(crate) fn saving(saving: bool) {
+    let Some(loader) = crate::host::loader() else {
+        return;
+    };
+    for (entity, before) in super::holds().deposits() {
+        let value = if saving { before } else { props::STASH_OFF };
+        props::set_deposit(loader, entity, value);
     }
 }

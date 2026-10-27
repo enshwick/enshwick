@@ -27,6 +27,7 @@
 - [Weather and chunks](weather.md)
 - [Terrain](terrain.md)
 - [Altars and bases](altars.md)
+- [The map](map.md)
 - [Survivors](survivors.md)
 - [Interactions](interactions.md)
 - [Crafting and building vetoes](vetoes.md)
@@ -41,11 +42,17 @@
 - [State and data folders](state.md)
 - [Migrations](migrations.md)
 - [Services between mods](services.md)
+- [Calls between mods](calls.md)
 - [Extending other mods](extending.md)
+
+# Writing a mod in Luau
+
+- [Luau mods](luau.md)
 
 # Reaching into the game
 
 - [Finding the game](finding-the-game.md)
+- [The game's own types](game-types.md)
 - [Hooks](hooks.md)
 - [Mid-function hooks](mid-function-hooks.md)
 - [Code patches](code-patches.md)
@@ -82,4 +89,5 @@
 # Reference
 
 - [ABI reference](abi-reference.md)
+- [Mods in C](mods-in-c.md)
 - [FAQ and troubleshooting](faq.md)

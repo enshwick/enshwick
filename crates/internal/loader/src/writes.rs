@@ -83,10 +83,14 @@ pub(crate) fn component_mut(
         return Err(Status::BAD_ARGS);
     }
     crate::world::server()?;
-    let (world, index) = crate::world::type_index(loader, hash)?;
+    let at = crate::world::type_at(loader, hash)?;
     if refused(loader).contains(&hash) {
         return Err(Status::REFUSED);
     }
+    if crate::world::names_static(loader, &at, hash) {
+        return Err(Status::STATIC_HALF);
+    }
+    let (world, index) = (at.world, at.index);
     let mut out = [0usize; 2];
     // SAFETY: the server's entity world on its game thread between steps,
     // where no system runs; the tracker lies inside the entity world, and

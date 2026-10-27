@@ -2,7 +2,9 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget};
+use crate::abi::{
+    FogInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget,
+};
 use crate::test::table::{State, text, with};
 
 /// table it sees for the process, so it is one static.
@@ -250,6 +252,64 @@ pub(crate) extern "system" fn ui_dialog(
             return Status::REFUSED;
         }
         s.dialogs.push((shown, callback, user.expose_provenance()));
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn fog_open(_me: ModHandle) -> Status {
+    with(Status::MISSING, |s| {
+        if s.host.side == Side::SERVER {
+            return Status::MISSING;
+        }
+        s.fog_opened = true;
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn fog_read(
+    _me: ModHandle,
+    info: *mut FogInfo,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    out: *mut u8,
+    capacity: u32,
+) -> Status {
+    let wanted = width != 0 && height != 0;
+    if info.is_null() || (wanted && out.is_null()) {
+        return Status::BAD_ARGS;
+    }
+    with(Status::MISSING, |s| {
+        if !s.fog_opened {
+            return Status::REFUSED;
+        }
+        let Some((found, pixels)) = s.host.fog.as_ref() else {
+            return Status::MISSING;
+        };
+        // SAFETY: the safe layer passes a writable `FogInfo` for the call.
+        unsafe { info.write(*found) };
+        if !wanted {
+            return Status::OK;
+        }
+        let inside = |start: u32, size: u32, limit: u32| {
+            start.checked_add(size).is_some_and(|end| end <= limit)
+        };
+        if !inside(x, width, found.width) || !inside(y, height, found.height) {
+            return Status::OUTSIDE_WORLD;
+        }
+        let (row, rows) = (width as usize, height as usize);
+        if (capacity as usize) < row * rows {
+            return Status::BAD_ARGS;
+        }
+        for r in 0..rows {
+            let start = (y as usize + r) * found.width as usize + x as usize;
+            let to = out.wrapping_add(r * row);
+            // SAFETY: the safe layer passes `capacity` writable bytes at
+            // `out`, at least `row * rows` (checked above), so `row` bytes
+            // at `to` lie inside them.
+            unsafe { core::ptr::copy_nonoverlapping(pixels[start..start + row].as_ptr(), to, row) };
+        }
         Status::OK
     })
 }

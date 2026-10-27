@@ -34,6 +34,7 @@ toml_edit.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 arrayvec.workspace = true
+enshwick-luau.workspace = true
 iced-x86.workspace = true
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -78,4 +79,8 @@ harness = false
 
 [[bench]]
 name = "item_kinds"
+harness = false
+
+[[bench]]
+name = "prop_holds_quiet"
 harness = false

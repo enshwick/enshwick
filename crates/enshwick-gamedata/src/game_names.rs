@@ -196,6 +196,22 @@ mod tests {
     }
 
     #[test]
+    fn the_category_names_packs_read_are_the_game_s_names() {
+        let mut game: Vec<&str> = GAME_NAMES
+            .iter()
+            .filter(|row| row.api_type == "ItemCategoryMask" && !row.game_member.is_empty())
+            .map(|row| row.game_member)
+            .collect();
+        let mut ours: Vec<&str> = super::ItemCategoryMask::NAMES
+            .iter()
+            .map(|(name, _)| *name)
+            .collect();
+        game.sort_unstable();
+        ours.sort_unstable();
+        assert_eq!(ours, game);
+    }
+
+    #[test]
     fn every_listed_api_name_is_the_game_s_name() {
         for row in GAME_NAMES {
             if row.api_member.is_empty() {

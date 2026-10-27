@@ -81,6 +81,13 @@ pub const ITEM_CATEGORY: &str = "item_info.category";
 /// item's static data.
 pub const ITEM_PLACED_ENTITY: &str = "item_info.placed_entity";
 
+/// The id of the offset of the template of an item's own entity, a GUID, in
+/// an item's static data; a backpack's inventory sits there.
+pub const ITEM_PID_ENTITY: &str = "item_info.pid_entity";
+
+/// The id of the `Backpack` member of the game's equipment slots.
+pub const EQUIPMENT_SLOT_BACKPACK: &str = "equipment_slot.backpack";
+
 /// The id of the flag, a byte, that says an item places building voxels.
 pub const ITEM_BUILDING_VOXEL: &str = "item_info.building_voxel";
 /// The id of the voxel material an item places, a `u8`: 0x80 and up for a
@@ -153,6 +160,126 @@ pub const BUILDING_TERRAFORMING_CONFIG: &str = "building_terraforming_config";
 pub const BUILDING_CONFIG_MATERIAL: &str = "building_terraforming_config.building_material";
 /// The id of a building config's hardness, a `u8`.
 pub const BUILDING_CONFIG_HARDNESS: &str = "building_terraforming_config.hardness";
+
+/// The id of the tag that keeps a prop from dropping random loot when it
+/// is destroyed.
+pub const DISABLE_RANDOM_LOOT_ON_DESTROY: &str = "disable_random_loot_on_destroy";
+/// The id of the `Level` attribute and of its `u32` values: the level,
+/// then its most.
+pub const LEVEL: &str = "level";
+/// The id of a `Level`'s values.
+pub const LEVEL_DATA: &str = "level.data_storage";
+/// The id of a plant's `Growth`.
+pub const GROWTH: &str = "growth";
+/// The id of a production station and of its state (a `u8`, 0 for no
+/// recipe) and running and next recipe (`u32` each, 0 for none).
+pub const FACTORY_STATION: &str = "factory_station";
+/// The id of a production station's state.
+pub const FACTORY_STATE: &str = "factory_station.state";
+/// The id of a production station's running recipe.
+pub const FACTORY_RUNNING: &str = "factory_station.running_recipe";
+/// The id of a production station's next recipe.
+pub const FACTORY_NEXT: &str = "factory_station.next_recipe";
+/// The id of a survivor bed and of its survivor, a `u32`, 0 for none.
+pub const NPC_BED: &str = "npc_bed";
+/// The id of a survivor bed's survivor.
+pub const NPC_BED_NPC: &str = "npc_bed.associated_npc";
+/// The id of the survivors a station keeps, and of their two `u32`s.
+pub const STORE_NPCS: &str = "store_associated_npc_ids";
+/// The id of a station's two survivors.
+pub const STORE_NPCS_IDS: &str = "store_associated_npc_ids.npc_ids";
+/// The id of a player's text on a prop, and of its `u64` id, 0 for none.
+pub const CUSTOM_PLAYER_STRING: &str = "custom_player_string";
+/// The id of a player's text's id.
+pub const CUSTOM_PLAYER_STRING_ID: &str = "custom_player_string.string_id";
+/// The id of the event that tells who placed a logic prop.
+pub const LOGIC_ENTITY_PLACED_EVENT: &str = "logic_entity_placed_event";
+/// The ids of that event's fields: who placed it, then the prop.
+pub const LOGIC_ENTITY_PLACED_FIELDS: [&str; 2] = [
+    "logic_entity_placed_event.placed_by_player_id",
+    "logic_entity_placed_event.placed_logic_entity_id",
+];
+/// The ids of an item's placement box, before it turns: the lowest and
+/// the highest corner, `f32` on each axis.
+pub const ITEM_PLACEMENT_BOX: [&str; 2] =
+    ["item_info.placement_box_min", "item_info.placement_box_max"];
+/// The id of the bit of an item's flags that marks a logic prop.
+pub const ITEM_FLAG_IS_LOGIC_ENTITY: &str = "item_flag.is_logic_entity";
+/// The id of a prop's saved `Fuel`, whose values hold its charges now
+/// and most, two `i32`.
+pub const FUEL_CHARGES: &str = "fuel_charges";
+/// The id of a `Fuel`'s charges.
+pub const FUEL_CHARGES_DATA: &str = "fuel_charges.data_storage";
+/// The id of a prop's `FuelSetup`.
+pub const FUEL_SETUP: &str = "fuel_setup";
+/// The id of a `FuelSetup`'s most charges, an `i32`.
+pub const FUEL_SETUP_MAX: &str = "fuel_setup.max";
+/// The id of the share of its charges a fresh prop starts with, an `f32`.
+pub const FUEL_SETUP_INITIAL: &str = "fuel_setup.start";
+/// The id of a logic prop's wiring.
+pub const LOGIC_CONNECTED: &str = "logic_graph_node_connected";
+/// The id of the `u32` graph a logic prop writes to, 0 for none.
+pub const LOGIC_CONNECTED_WRITER: &str = "logic_graph_node_connected.writer_graph_id";
+/// The id of the byte that tells a logic prop has readers.
+pub const LOGIC_CONNECTED_READERS: &str = "logic_graph_node_connected.has_reader_graphs";
+/// The id of a logic trigger's settings.
+pub const LOGIC_TRIGGER: &str = "logic_graph_trigger";
+/// The id of the `u32` settings a logic trigger uses, which a player's
+/// change of them replaces.
+pub const LOGIC_TRIGGER_CONFIG: &str = "logic_graph_trigger.trigger_config";
+/// The id of a logic trigger's area.
+pub const LOGIC_TRIGGER_SHAPE: &str = "logic_trigger_shape";
+/// The id of an animal's saved state, which marks a creature placed from
+/// an item.
+pub const ANIMAL_SAVED: &str = "animal_saved";
+/// The id of the component that marks a flame altar, which owns a base.
+pub const BASE_ID: &str = "base_id_component";
+/// The id of the byte of an item that takes an altar slot: the flame
+/// altar's item, which founds a base.
+pub const ITEM_REQUIRES_ALTAR_SLOT: &str = "item_info.requires_altar_slot";
+/// The id of a survivor's saved state, which marks a creature placed from
+/// an item.
+pub const ACTIVE_NPC_STATE_SAVED: &str = "active_npc_state_saved";
+/// The id of the bit of an item's flags that marks a survivor.
+pub const ITEM_FLAG_IS_NPC: &str = "item_flag.is_npc";
+/// The id of the bit of an item's flags that marks an animal.
+pub const ITEM_FLAG_IS_ANIMAL: &str = "item_flag.is_animal";
+/// The id of the component that lets Quick Stash put items into a
+/// container: magic chests have it, plain boxes do not.
+pub const CRAFTING_STOCK: &str = "inventory_crafting_stock";
+/// The ids of the bools that make a prop's `Fuel` refill on its own: over
+/// time, as a well does, and from rain, as a water barrel does.
+pub const FUEL_REFILLS: [&str; 2] = [
+    "fuel_setup.automatic_refill_enabled",
+    "fuel_setup.rain_refill_enabled",
+];
+/// The id of a container's per-chest Quick Stash switch a player sets.
+pub const STASH_SWITCH: &str = "dynamic_inventory_crafting_stock";
+/// The id of the switch's byte that tells a player set it.
+pub const STASH_SWITCH_SET: &str = "dynamic_inventory_crafting_stock.override_is_set";
+/// The id of the switch's byte: 0 keeps Quick Stash out while it is set.
+pub const STASH_SWITCH_ON: &str = "dynamic_inventory_crafting_stock.override";
+/// The id of the component that names the item an entity was placed from.
+pub const USED_ITEM: &str = "used_item";
+/// The id of an entity's place in the world.
+pub const CURRENT_TRANSFORM: &str = "current_transform";
+/// The id of the transform inside a [`CURRENT_TRANSFORM`].
+pub const CURRENT_TRANSFORM_TRANSFORM: &str = "current_transform.transform";
+/// The id of a transform's orientation, a quaternion of four `f32`.
+pub const WORLD_TRANSFORM_ORIENTATION: &str = "world_transform.orientation";
+/// The id of an entity's inventory setup and of its links (`u32`
+/// entities), their categories (bytes) and its initialized byte.
+pub const INVENTORY_SETUP: &str = "inventory_setup";
+/// The id of an inventory setup's linked entities.
+pub const INVENTORY_SETUP_LINKS: &str = "inventory_setup.links";
+/// The id of an inventory setup's link categories.
+pub const INVENTORY_SETUP_CATEGORIES: &str = "inventory_setup.categories";
+/// The id of an inventory setup's initialized byte.
+pub const INVENTORY_SETUP_INITIALIZED: &str = "inventory_setup.initialized";
+/// The id of a sub-inventory's stacks.
+pub const INVENTORY: &str = "inventory";
+/// The id of a stack in an inventory, its `u32` item first.
+pub const ITEM_STACK: &str = "item_stack";
 
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";
