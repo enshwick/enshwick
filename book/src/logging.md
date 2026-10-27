@@ -213,18 +213,51 @@ in game.
 
 The summary and `enshwick conflicts` on the console list where mods meet:
 
-| Line                                                      | Means                                                           |
-| --------------------------------------------------------- | --------------------------------------------------------------- |
-| `hook <function>: a (priority 0) then b (priority 5)`     | both link the function, in that running order, each calling on  |
-| `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`, and `b`'s link was refused      |
-| `<filter>: a, b, chained in load order`                   | both filter it, such as interactions or damage; each may refuse |
-| `skill override: a, b, asked in load order`               | the first answer decides                                        |
-| `<feature>: a holds it; refused: b`                       | one mod at a time, such as the altar limit                      |
-| `the item registry: patched by a then b`                  | both change one resource, each patch on the one before          |
-| `point <name>: a then b, each may change the answer`      | both extend one [extension point](extending.md), in that order  |
-| `...; b changed the answer a had set, 3 times`            | `b` overturned `a`'s answer that often since start              |
+| Line | Means |
+| --- | --- |
+| `hook <function>: a (priority 0) then b (priority 5)` | both link the function, in that running order, each calling on |
+| `hook <function>: ...; b refused, a holds it exclusively` | `a` linked it with `EXCLUSIVE`, and `b`'s link was refused |
+| `code patch at <address>: a holds it; refused: b` | `b` asked to [patch](code-patches.md) bytes `a` patches already |
+| `<filter>: a, b, chained in load order` | both filter it, such as interactions or damage; each may refuse |
+| `skill override: a, b, asked in load order` | the first answer decides |
+| `<feature>: a holds it; refused: b` | one mod at a time, such as the altar limit |
+| `the item registry: patched by a then b` | both change one resource, each patch on the one before |
+| `max_stack of <item> is 999 from b, which overrides 100 from a` | both set one [vanilla value](content/packs.md); the later in load order wins |
+| `component <type>: written by a, b, the last write wins` | both [write](world.md#writing-components) that component of entities |
+| `point <name>: a then b, each may change the answer` | both extend one [extension point](extending.md), in that order |
+| `...; b changed the answer a had set, 3 times` | `b` overturned `a`'s answer that often since start |
+| `game code at <place>, 5 bytes: changed outside the API by a.dll while it loaded` | see below |
 
 `conflicts: none` means no two mods share anything.
+
+### Code changed outside the API
+
+A mod that writes game code itself, with a hooking library of its own or by
+hand, passes none of the checks above. The loader finds such changes anyway:
+it keeps a copy of the game's code section while it starts and compares it
+after each DLL in `mods/` loads, after each mod's `init` and after each
+`ready`. A change found is put down to the DLL or mod that ran last, logged as
+a warning in the loader's log and listed with the conflicts:
+
+| Line ends with | The change came |
+| --- | --- |
+| `by another program before enshwick started` | before the loader, from a DLL in `mods/chain/` or another program |
+| `by a.dll while it loaded` | while that DLL loaded, from its own start-up code |
+| `by another program while enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
+| `by you.mod in its init` or `in its ready` | while that mod's `init` or `ready` ran |
+| `by another program after every init, before enshwick armed its hooks` | between the last `init` and arming, from a thread of some mod or another program |
+
+The copy starts from the executable on disk, so code changed before the
+loader started shows too; when the file's code does not read as the code in
+memory, as for an encrypted executable, the copy starts when the loader does.
+Two names on one line mean two mods wrote the same bytes, and the later one
+won.
+
+The loader's own writes are never listed: its hooks and the code patches
+mods ask for through the API, and the jump that holds the server's entry
+point until the loader is ready. A thread's write is put down to whatever
+ran last before the next comparison. Changes made after the last `ready`,
+and changes to game data rather than code, are not seen.
 
 ## Faults
 
