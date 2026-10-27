@@ -131,6 +131,14 @@ impl Voxels for Game<'_> {
         props::hold(self.loader, entity)
     }
 
+    fn still_held(&mut self, entity: u32) -> Result<(), Status> {
+        if super::holds().still_held(entity, crate::interactions::filter_off()) {
+            Ok(())
+        } else {
+            Err(Status::MISSING)
+        }
+    }
+
     fn release_prop(&mut self, entity: u32) {
         props::release(self.loader, entity);
     }
@@ -198,7 +206,10 @@ pub(crate) fn restore_deposits(deposits: &[(u32, u8)]) {
 
 /// Around one call of the game's save: with `saving`, puts back the Quick
 /// Stash settings of the props held, so a save keeps them as players left
-/// them; after it, turns them off again. On the thread that saves.
+/// them; after it, turns them off again. The game's `server.save_step`
+/// runs on the game thread after the step's systems and before the
+/// post-step, with none running (server 399, client 426), a quiet moment
+/// `props::set_deposit` checks before every write.
 pub(crate) fn saving(saving: bool) {
     let Some(loader) = crate::host::loader() else {
         return;

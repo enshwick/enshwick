@@ -62,6 +62,8 @@ struct World {
     creatures: FxHashSet<u32>,
     /// Whether the facts the state reads need fail to resolve.
     facts_missing: bool,
+    /// Whether the filter that keeps players from held props went off.
+    filter_off: bool,
 }
 
 impl World {
@@ -134,6 +136,13 @@ impl Voxels for World {
 
     fn hold_prop(&mut self, entity: u32) -> Result<(), Status> {
         self.held.insert(entity);
+        Ok(())
+    }
+
+    fn still_held(&mut self, entity: u32) -> Result<(), Status> {
+        if self.filter_off || !self.held.contains(&entity) {
+            return Err(Status::MISSING);
+        }
         Ok(())
     }
 
@@ -1549,4 +1558,41 @@ fn a_placed_crop_that_has_grown_stays() {
         (info.state, info.holds),
         (TransactionInfo::UNDO_REFUSED, TransactionInfo::HOLDS_GROWTH)
     );
+}
+
+#[test]
+fn a_filter_gone_off_during_the_hold_stops_the_destroy() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    world.props.insert(40, prop(20.0));
+    let id = ledger.commit(ME, None, vec![remove(40, false)]).unwrap();
+    ledger.step(&mut world, 1000);
+    world.filter_off = true;
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::FAILED, Status::MISSING)
+    );
+    assert_eq!(world.props.len(), 1, "nothing goes unguarded");
+    assert!(world.held.is_empty());
+}
+
+#[test]
+fn a_filter_gone_off_during_an_undo_s_hold_keeps_the_prop() {
+    let mut world = World::new();
+    let mut ledger = Ledger::new(LIMITS);
+    let id = ledger
+        .commit(ME, None, vec![Change::PlaceProp(prop(20.0))])
+        .unwrap();
+    settle(&mut ledger, &mut world, id);
+    ledger.undo(ME, id).unwrap();
+    ledger.step(&mut world, 1000);
+    world.filter_off = true;
+    ledger.step(&mut world, 1000);
+    assert_eq!(
+        state(&ledger, id),
+        (TransactionInfo::UNDO_REFUSED, Status::MISSING)
+    );
+    assert_eq!(world.props.len(), 1);
+    assert!(world.held.is_empty());
 }

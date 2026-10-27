@@ -109,6 +109,13 @@ impl PropHolds {
         Ok(())
     }
 
+    /// Whether `entity` is held and the hold still keeps players out: every
+    /// hook linked and the filter's fuse on (`fuse_off` false).
+    #[must_use]
+    pub fn still_held(&self, entity: u32, fuse_off: bool) -> bool {
+        !fuse_off && self.linked.load(Ordering::Acquire) && self.is_held(entity)
+    }
+
     /// Notes the Quick Stash setting `before` of the held `entity`, which
     /// its release puts back.
     pub fn note_deposit(&self, entity: u32, before: u8) {
@@ -253,6 +260,17 @@ mod tests {
         assert_eq!(holds.release(7), Some(1));
         assert!(holds.quiet());
         assert!(!holds.is_held(7));
+    }
+
+    #[test]
+    fn a_hold_stops_keeping_players_out_when_the_fuse_blows_or_a_link_goes() {
+        let holds = linked();
+        holds.hold(7, false).unwrap();
+        assert!(holds.still_held(7, false));
+        assert!(!holds.still_held(7, true), "the fuse blew");
+        assert!(!holds.still_held(8, false), "never held");
+        holds.linked(0, false);
+        assert!(!holds.still_held(7, false));
     }
 
     #[test]

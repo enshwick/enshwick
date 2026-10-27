@@ -45,6 +45,10 @@ pub(crate) trait Voxels {
     /// opening, moving items in or out, Quick Stash or dismantling; the
     /// game's systems of the next step run with it held.
     fn hold_prop(&mut self, entity: u32) -> Result<(), Status>;
+    /// `Ok` while the prop `entity` is still held and the filter that
+    /// keeps players from it is on; [`Status::MISSING`] otherwise, when a
+    /// destroy would go unguarded.
+    fn still_held(&mut self, entity: u32) -> Result<(), Status>;
     /// Lets players reach the prop `entity` again, as before
     /// [`Voxels::hold_prop`].
     fn release_prop(&mut self, entity: u32);
@@ -902,6 +906,9 @@ impl Task {
                     if let Err((reason, holds)) = still_placed(world, entity, prop, settings) {
                         return work.refuse_undo(reason, holds);
                     }
+                    if let Err(reason) = world.still_held(entity) {
+                        return work.refuse_undo(reason, 0);
+                    }
                     if let Err(reason) = world.remove_prop(entity, work.actor.unwrap_or(0)) {
                         return work.refuse_undo(reason, 0);
                     }
@@ -1098,6 +1105,7 @@ impl Work {
             self.holds = holds;
             return Err(Status::REFUSED);
         }
+        world.still_held(entity)?;
         world.remove_prop(entity, actor)?;
         self.held.retain(|&held| held != entity);
         self.done.push(Done::Removed { prop, holds });

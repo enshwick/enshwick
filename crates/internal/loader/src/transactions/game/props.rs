@@ -359,8 +359,12 @@ pub(super) fn release(loader: &Loader, entity: u32) {
 }
 
 /// Writes `value` into the Quick Stash setting of `entity`, when it has
-/// one. On the game thread at a quiet moment.
+/// one; nothing off the game thread or inside a step, where systems may
+/// read it.
 pub(crate) fn set_deposit(loader: &Loader, entity: u32, value: u8) {
+    if crate::world::server().is_err() {
+        return;
+    }
     let (Ok(stock), Ok(deposit_at)) = (
         type_of(loader, catalogue::CRAFTING_STOCK),
         offset(loader, catalogue::CRAFTING_STOCK_DEPOSIT),
@@ -369,9 +373,10 @@ pub(crate) fn set_deposit(loader: &Loader, entity: u32, value: u8) {
     };
     if let Some(data) = data(loader, entity, stock) {
         // SAFETY: `data` is the entity's live `InventoryCraftingStock`, with
-        // its Quick Stash byte at the reflected offset, written on the game
-        // thread at a quiet moment, where the game's own writer, the
-        // player's switch action, does not run.
+        // its Quick Stash byte at the reflected offset; `world::server`
+        // checked the game thread at a quiet moment, outside any step's
+        // systems, so neither the game's own writer, the player's switch
+        // action, nor a reader runs.
         unsafe { enshwick::raw::write_at(data.cast_mut(), deposit_at, value) };
     }
 }
