@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.8] - 2026-10-27
+
 ### Added
 
 - `Image::relocations` lists the 64-bit addresses Windows moves when it

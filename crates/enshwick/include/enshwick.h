@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 2
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 97
+#define ENSHWICK_ABI_MINOR 98
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -2713,6 +2713,20 @@ typedef struct EnshwickTransactionInfo {
 // and inside another call, and must not unwind.
 typedef EnshwickStatus (*EnshwickCallFn)(const void *input, void *output, void *user);
 
+// A map marker of the scene the server runs, one of the list
+// `HostApi::map_markers` writes.
+typedef struct EnshwickMapMarkerInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Where it stands, in metres, y up.
+  double position[3];
+  // Its `markerType` reference, a GUID in memory order; zero for none.
+  uint8_t marker_type[16];
+  // Its label's text tag (`markerId`), a GUID in memory order; zero for
+  // none.
+  uint8_t label[16];
+} EnshwickMapMarkerInfo;
+
 // The table of services the loader offers a mod.
 //
 // Fields are only ever appended; a mod checks `Header::covers` before it
@@ -3994,6 +4008,21 @@ typedef struct EnshwickHostApi {
                                    const double (*min)[3],
                                    const double (*max)[3],
                                    uint8_t *kept);
+  // Up to `capacity` map markers of the scene the server runs and how
+  // many there are: what the scene's global chunk places, read from the
+  // game's archive once per scene on a thread of the loader's;
+  // `Status::NOT_LOADED` until that read is done. Entries are `entry_size` bytes apart,
+  // the caller's `size_of::<MapMarkerInfo>()`, at least a `Header`
+  // (`Status::BAD_ARGS` below it); a null `out` asks only for the
+  // count, and a null `count` is not written. On the server's game
+  // thread at a quiet moment (`Status::WRONG_THREAD` elsewhere or
+  // inside a step); `Status::MISSING` while no world runs or when the
+  // scene does not read on this build. Since minor 97.
+  EnshwickStatus (*map_markers)(EnshwickModHandle me,
+                                struct EnshwickMapMarkerInfo *out,
+                                uint32_t entry_size,
+                                uint32_t capacity,
+                                uint32_t *count);
   // Asks the game for the account action `action` on `account`, as its
   // administrators' account actions do: `AccountActionType::KICK`
   // removes a player online, `AccountActionType::BAN` puts the account
@@ -4006,7 +4035,7 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for account 0 or an action this loader does not
   // know; `Status::MISSING` while no server runs or on a build that
   // lacks the action. On the server's game thread between steps only:
-  // `Status::WRONG_THREAD` elsewhere. Since minor 97.
+  // `Status::WRONG_THREAD` elsewhere. Since minor 98.
   EnshwickStatus (*account_action)(EnshwickModHandle me,
                                    EnshwickAccountActionType action,
                                    uint64_t account);

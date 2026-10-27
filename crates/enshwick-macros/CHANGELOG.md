@@ -6,6 +6,18 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.8] - 2026-10-27
+
+### Changed
+
+- `#[point]` and `#[event]` fail the build on padding in a point's input or
+  answer or an event's data, with the message `#[call]` gives (#587).
+
+### Fixed
+
+- A `#[script]` method whose closure parameter lends its argument (`&T`)
+  hands the script a copy instead of failing to compile (#581).
+
 ## [1.0.0-alpha.7] - 2026-10-26
 
 Released beside `enshwick` 1.0.0-alpha.7, with no changes of its own.

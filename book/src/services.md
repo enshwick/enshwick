@@ -53,6 +53,9 @@ pub struct Sold {
 - Every field's type implements [`Shape`](#shapes): its structural hash
   reaches into the type, so a change inside it refuses the link with the name
   of the outer field.
+- An event's data has no padding, since a [Luau mod](luau.md#mod-events)
+  hears it as bytes: the build fails on a gap, and its bytes become fields of
+  their own.
 
 Pass plain data across a table or in an event: integers, floats, `repr(C)`
 structs, and pointers with a length the caller owns. An event is `Copy`.

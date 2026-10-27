@@ -27,7 +27,10 @@ global `enshwick`.
 1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with
    `pack.toml`, a `main.luau` that greets each player who joins, a README,
    and `types/enshwick.d.luau`, the API's definitions for the editor.
-   `--side` sets where it runs, the server when left out.
+   `--side` sets where it runs, the server when left out. With
+   `--game <game folder>` it also writes `types/game.d.luau`, the
+   [game's own types](game-types.md), such as the fields
+   `enshwick.on_game_type` hands a handler.
 2. Open the folder in an editor with the
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) extension. The
    folder's `.vscode/settings.json` points it at the definitions, so every
@@ -38,11 +41,15 @@ global `enshwick`.
    luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau main.luau
    ```
 
+   With the game's types, add `--definitions:@game=types/game.d.luau`.
+
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
 The repository's `examples/you.welcome` is a Luau mod to start from.
 `cargo enshwick luau --out types/enshwick.d.luau` writes the definitions
-again for the loader the tool was built with, after an update.
+again for the loader the tool was built with, after an update, and
+`cargo enshwick types --from <game folder> --luau types/game.d.luau` the
+game's types after a game update.
 
 ## What a script reaches
 
@@ -64,8 +71,10 @@ end)
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
+| `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod) |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
 | `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
+| `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
 | `enshwick.scheduler` | `next_tick`, `after` and `every` run a function on the game thread; an `every` task stops when it returns `false` |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
@@ -96,6 +105,32 @@ reaches Luau and the definitions with no other change.
 A call that fails raises a Luau error with the call's name and the
 reason, such as `enshwick.world.broadcast: text: expected a string, got a
 number`. `pcall` catches it.
+
+## Inventories
+
+`enshwick.inventory` reads and changes inventories on the server, as
+[`Inventories`](inventories.md) does in Rust. `slots` and `count` read at
+once; `give`, `take`, `destroy_slot`, `move_slot` and `move_all` run in the
+game's next inventory step and hand the outcome to a function:
+
+```luau
+local GIFT = 3073 -- an item id from the game's data
+
+enshwick.on("PlayerJoined", function(player)
+    local held = enshwick.inventory.count(player.entity, GIFT)
+    enshwick.inventory.give(player.entity, GIFT, 10, function(outcome)
+        if outcome.done ~= "Committed" then
+            enshwick.log.warn(`no gift for {player.entity}: {outcome.done}`)
+        end
+    end)
+    enshwick.log.info(`{player.entity} held {held} before the gift`)
+end)
+```
+
+`outcome.done` is `Committed`, `RolledBack`, `Unavailable`, `TimedOut` or
+`Refused`, and each entry of `outcome.ops` has the operation's `error` by
+name and the count it fell short by. A slot is a `string` key, as `slots`
+returns it in `at`.
 
 ## Game events
 
@@ -188,6 +223,45 @@ only. `define_event` raises an error for a new event, or for changed
 fields, after the start: either takes the next start. A `send` before
 `main.luau` has finished reaches no one.
 
+## Calling another mod
+
+A Luau mod calls another mod's [call](calls.md) through the module this
+command writes:
+
+```bash
+cargo enshwick call <server>:<call> --from <server DLL> --luau --out calls/<call>.luau
+```
+
+`enshwick.caller` at the top level of `main.luau` returns the function that
+runs it once the start is over:
+
+```luau
+local price_of = enshwick.caller(require("./calls/price_of"))
+
+enshwick.on("WorldSaved", function()
+    local coins, why = price_of({ item = 7, count = 1 })
+    if coins then
+        enshwick.log.info(`item 7 sells for {coins}`)
+    else
+        enshwick.log.warn(`no price: {why}`)
+    end
+end)
+```
+
+The function answers nil and why not: `unmatched` when no running mod serves the
+call as described or the start is not over, `off` when the server or its handler
+is, and `failed` when its handler failed. A call asked for after the start
+raises an error, and so does a reload that describes an asked call differently:
+either change takes the next start.
+
+The input's fields are numbers, booleans, entities and GUIDs. The runtime works
+out each field's layout hash from its name, type and offset and refuses a
+module whose hashes do not match, so a module edited by hand no longer reaches
+the server. A call whose input holds a value type or an enum is for Rust mods
+only: `cargo enshwick call --luau` refuses it, since a script could forge such a
+field's description and send the server a value its type forbids. The answer
+may be of any type.
+
 ## Settings
 
 A Luau mod declares its settings in `pack.toml`, one `[[setting]]` table
@@ -270,10 +344,11 @@ inside a step stay in Rust: a Luau mod sees their results through events.
 
 ## Change scripts while the game runs
 
-With `dev_reload = true` in the loader's settings, the loader watches a Luau
-mod's scripts that exist when the game starts; a script added later is not
-watched, but a change to `main.luau` or another watched script reloads it
-too. When one changes, it runs `main.luau` again in a new VM: handlers of
+With `dev_reload = true` in the loader's settings, the loader looks at a Luau
+mod's folder every second: a script added, removed, renamed or changed, in
+any subfolder the mod may hold scripts in, counts as a change. A new mod
+folder waits for the next start. On a change the loader runs `main.luau`
+again in a new VM: handlers of
 events subscribed at start move to the new scripts, and tasks of the old ones
 stop. A handler of an event the old scripts did not subscribe runs from the
 next start, and the log says so. When the new scripts fail, the old ones keep

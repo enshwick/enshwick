@@ -17,6 +17,8 @@ mod tests {
     pub(crate) struct Sold {
         /// The item.
         pub(crate) item: u32,
+        /// How many.
+        pub(crate) count: u32,
         /// The buyer's account.
         pub(crate) player: u64,
     }
@@ -47,8 +49,8 @@ mod tests {
             load.on_described_mod_event(&described(size), |data| {
                 SEEN.lock().unwrap().push(data.to_vec());
             })?;
-            // SAFETY: the fields are a `u32` and a `u64`, for which any bytes
-            // are valid.
+            // SAFETY: the fields are two `u32` and a `u64`, for which any
+            // bytes are valid.
             let send = unsafe { load.define_described_event(&described(16)) }?;
             let mut data = [0u8; 16];
             data[..4].copy_from_slice(&3u32.to_le_bytes());
@@ -61,8 +63,11 @@ mod tests {
     enshwick::declare_mod!(Watcher);
 
     fn start(size: u32) -> enshwick::test::Installed {
-        *SIZE.lock().unwrap() = size;
+        // After the install, which tests take in turn: set earlier, another
+        // test's size or events could take this one's place.
         let loader = enshwick::test::FakeHost::new().install();
+        *SIZE.lock().unwrap() = size;
+        SEEN.lock().unwrap().clear();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Watcher)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
@@ -72,7 +77,14 @@ mod tests {
     #[test]
     fn a_described_handler_gets_the_typed_event_s_bytes() {
         let loader = start(16);
-        assert_eq!(loader.send_mod_event(&Sold { item: 7, player: 9 }), 1);
+        assert_eq!(
+            loader.send_mod_event(&Sold {
+                item: 7,
+                count: 1,
+                player: 9
+            }),
+            1
+        );
         let seen = SEEN.lock().unwrap().clone();
         assert_eq!(seen.len(), 1);
         assert_eq!(&seen[0][..4], &7u32.to_le_bytes());
@@ -89,7 +101,14 @@ mod tests {
     #[test]
     fn a_handler_reading_past_the_event_gets_nothing() {
         let loader = start(64);
-        assert_eq!(loader.send_mod_event(&Sold { item: 7, player: 9 }), 0);
+        assert_eq!(
+            loader.send_mod_event(&Sold {
+                item: 7,
+                count: 1,
+                player: 9
+            }),
+            0
+        );
     }
 
     #[test]

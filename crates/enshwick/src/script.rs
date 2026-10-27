@@ -959,6 +959,7 @@ pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<Log>(),
     Namespace::of::<crate::world::World>(),
     Namespace::of::<crate::schedule::Scheduler>(),
+    Namespace::of::<crate::inventory::Inventories>(),
 ];
 
 /// The mod's log as a script writes to it: one line per call, under the

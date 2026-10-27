@@ -158,6 +158,45 @@ fn executable(from: &Path) -> anyhow::Result<PathBuf> {
         })
 }
 
+/// The catalogue of the game executable `from` names, and the executable's
+/// name and build fingerprint, for the written files' header.
+fn read(from: &Path) -> anyhow::Result<(Catalogue, String)> {
+    let exe = executable(from)?;
+    let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
+    let image =
+        Image::parse(&bytes, Layout::File, None).with_context(|| exe.display().to_string())?;
+    let catalogue = catalogue(&Reflection::scan(&image));
+    if catalogue.is_empty() {
+        bail!("{} holds no reflection data", exe.display());
+    }
+    let mut source = exe
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    if let Some(fingerprint) = image.fingerprint() {
+        let guid = fingerprint
+            .guid()
+            .iter()
+            .fold(String::new(), |mut hex, byte| {
+                let _ = write!(hex, "{byte:02x}");
+                hex
+            });
+        let _ = write!(source, " {guid}-{}", fingerprint.age());
+    }
+    Ok((catalogue, source))
+}
+
+/// The Luau definitions of every runtime type of the game executable
+/// `from` names, as `cargo enshwick types --luau` writes them.
+///
+/// # Errors
+///
+/// When the executable does not read or holds no reflection data.
+pub(crate) fn luau_definitions(from: &Path) -> anyhow::Result<String> {
+    let (catalogue, source) = read(from)?;
+    let chosen = select(&catalogue, &[])?;
+    Ok(luau::render(&catalogue, &chosen, &source))
+}
+
 /// Writes the definitions of the types `wanted` names, read from the game
 /// executable `from` names, to `rust` and `luau`; the Rust module is the
 /// result when neither is given.
@@ -172,28 +211,8 @@ pub(crate) fn run(
     rust: Option<&Path>,
     luau: Option<&Path>,
 ) -> anyhow::Result<String> {
-    let exe = executable(from)?;
-    let bytes = std::fs::read(&exe).with_context(|| exe.display().to_string())?;
-    let image =
-        Image::parse(&bytes, Layout::File, None).with_context(|| exe.display().to_string())?;
-    let catalogue = catalogue(&Reflection::scan(&image));
-    if catalogue.is_empty() {
-        bail!("{} holds no reflection data", exe.display());
-    }
+    let (catalogue, source) = read(from)?;
     let chosen = select(&catalogue, wanted)?;
-    let mut source = exe
-        .file_name()
-        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-    if let Some(fingerprint) = image.fingerprint() {
-        let guid = fingerprint
-            .guid()
-            .iter()
-            .fold(String::new(), |mut hex, byte| {
-                let _ = write!(hex, "{byte:02x}");
-                hex
-            });
-        let _ = write!(source, " {guid}-{}", fingerprint.age());
-    }
     if rust.is_none() && luau.is_none() {
         return Ok(rust::render(&catalogue, &chosen, &source));
     }

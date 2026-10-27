@@ -348,7 +348,6 @@ impl Field {
             (_, Some(max)) if n > max => max,
             _ => return None,
         };
-        let was = value.to_string();
         *value = match value {
             #[expect(
                 clippy::cast_possible_truncation,
@@ -358,7 +357,7 @@ impl Field {
             _ => toml::Value::Float(bound),
         };
         Some(format!(
-            "{key} = {was} is outside {}; {value} applies",
+            "{key} is outside {}; {value} applies",
             self.accepts()
         ))
     }
@@ -659,14 +658,26 @@ impl Schema {
     ///
     /// # Errors
     ///
-    /// [`ConfigError::Parse`] when `text` is not one.
+    /// [`ConfigError::Parse`] when `text` is not one, or when a field's or
+    /// group's key has an empty part, such as `auth..token`: the file's
+    /// readers would not agree where it lives.
     ///
     /// # Examples
     ///
     /// See [`Schema`].
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        toml::from_str(text)
-            .map_err(|e| ConfigError::Parse(format!("settings schema: {}", e.message())))
+        let schema: Self = toml::from_str(text)
+            .map_err(|e| ConfigError::Parse(format!("settings schema: {}", e.message())))?;
+        let keys = schema.fields.iter().map(|f| &f.key);
+        if let Some(key) = keys
+            .chain(schema.groups.iter().map(|g| &g.key))
+            .find(|key| key.split('.').any(str::is_empty))
+        {
+            return Err(ConfigError::Parse(format!(
+                "settings schema: the key `{key}` has an empty part"
+            )));
+        }
+        Ok(schema)
     }
 
     /// Checks every field of `settings` that has a value against its

@@ -136,13 +136,61 @@ pub enum RecordError {
     Io(#[from] std::io::Error),
 }
 
+/// Where a settings text stops being TOML, told without any value from it.
+///
+/// It names the line, the key that line starts with when it starts outside
+/// every string, and the parser's reason, which holds no text of the file.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[error(
+    "line {line}{}: {reason}",
+    .key.as_ref().map_or_else(String::new, |key| format!(", key {key}"))
+)]
+pub struct SyntaxError {
+    line: usize,
+    key: Option<String>,
+    reason: String,
+}
+
+impl SyntaxError {
+    /// The place of `error` in the settings file `text` it was parsed from.
+    fn in_document(text: &str, error: &toml_edit::TomlError) -> Self {
+        let mut found = Self::in_value(text, error);
+        found.key = error.span().and_then(|span| key_of_line(text, span.start));
+        found
+    }
+
+    /// The place of `error` in `text`, one value: no key to name.
+    fn in_value(text: &str, error: &toml_edit::TomlError) -> Self {
+        let start = error.span().map_or(0, |span| span.start);
+        let before = text.as_bytes().get(..start).unwrap_or(text.as_bytes());
+        Self {
+            line: before.split(|&b| b == b'\n').count(),
+            key: None,
+            reason: error.message().trim_end().to_owned(),
+        }
+    }
+}
+
+/// The plain key the line holding byte `at` of `text` starts with; `None`
+/// unless the text before that line is a whole document, which proves the
+/// line does not start inside a string, an array or an inline table.
+fn key_of_line(text: &str, at: usize) -> Option<String> {
+    let head = text.get(..at)?;
+    let line_start = head.rfind('\n').map_or(0, |i| i + 1);
+    text[..line_start].parse::<DocumentMut>().ok()?;
+    let (key, _) = text[line_start..].split_once('=')?;
+    let key = key.trim();
+    let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | ' ');
+    (!key.is_empty() && key.chars().all(plain)).then(|| key.to_owned())
+}
+
 /// Why a migration step failed.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MigrationError {
     /// The settings file is no TOML.
     #[error("settings: {0}")]
-    Settings(toml_edit::TomlError),
+    Settings(SyntaxError),
     /// The mod's map gave no value for a setting.
     #[error("setting {key}: {reason}")]
     SettingMap {
@@ -157,7 +205,7 @@ pub enum MigrationError {
         /// The setting.
         key: String,
         /// Why the value does not parse.
-        reason: toml_edit::TomlError,
+        reason: SyntaxError,
     },
     /// A setting taken from another mod is not `<mod id>:<key>`.
     #[error("setting {0}: not <mod id>:<key>")]
@@ -168,7 +216,7 @@ pub enum MigrationError {
         /// The other mod.
         id: String,
         /// Why its file does not parse.
-        reason: toml_edit::TomlError,
+        reason: SyntaxError,
     },
     /// A part of the path to a taken setting is a value, not a table.
     #[error("setting {key}: {part} is not a table")]
@@ -192,7 +240,7 @@ pub enum MigrationError {
     /// The migrated settings would not read back, such as a key nested
     /// deeper than the reader takes; the file is left as it was.
     #[error("settings after the migration: {0}")]
-    Unreadable(toml_edit::TomlError),
+    Unreadable(SyntaxError),
     /// A file could not be written or removed.
     #[error("{file}: {reason}")]
     File {
@@ -359,7 +407,9 @@ pub fn apply_settings(
     map: MapFn<'_>,
     source: SourceFn<'_>,
 ) -> Result<String, MigrationError> {
-    let mut doc: DocumentMut = text.parse().map_err(MigrationError::Settings)?;
+    let mut doc: DocumentMut = text
+        .parse()
+        .map_err(|e| MigrationError::Settings(SyntaxError::in_document(text, &e)))?;
     for (step_index, step) in migration.steps.iter().enumerate() {
         match step.kind {
             MigrationStep::TAKE_SETTING => take(&mut doc, &step.from, &step.to, source)?,
@@ -385,9 +435,9 @@ pub fn apply_settings(
                     }
                 })?;
                 let mut parsed: toml_edit::Value =
-                    new.parse().map_err(|reason| MigrationError::SettingValue {
+                    new.parse().map_err(|e| MigrationError::SettingValue {
                         key: step.from.clone(),
-                        reason,
+                        reason: SyntaxError::in_value(&new, &e),
                     })?;
                 *parsed.decor_mut() = value.decor().clone();
                 *value = parsed;
@@ -398,7 +448,7 @@ pub fn apply_settings(
     let migrated = doc.to_string();
     migrated
         .parse::<DocumentMut>()
-        .map_err(MigrationError::Unreadable)?;
+        .map_err(|e| MigrationError::Unreadable(SyntaxError::in_document(&migrated, &e)))?;
     Ok(migrated)
 }
 
@@ -418,12 +468,10 @@ fn take(
     let Some(text) = source(id) else {
         return Ok(());
     };
-    let other: DocumentMut = text
-        .parse()
-        .map_err(|reason| MigrationError::OtherSettings {
-            id: id.to_owned(),
-            reason,
-        })?;
+    let other: DocumentMut = text.parse().map_err(|e| MigrationError::OtherSettings {
+        id: id.to_owned(),
+        reason: SyntaxError::in_document(&text, &e),
+    })?;
     let mut item = other.as_item();
     for part in key.split('.') {
         match item.get(part) {

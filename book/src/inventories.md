@@ -78,6 +78,9 @@ Both return a
 | `durability(pide)` | An item entity's durability as clients see it: a `Bar` with `current` and `max`; `None` for an item without durability. |
 | `meter(pide)` | An item entity's [meter](content/items.md#meters), a `Bar`; `None` for an item without one. |
 
+`Inventories::slots` and `Inventories::count` read the same as `read()` does,
+without the `Reader`; a [Luau mod](luau.md#inventories) reads through them.
+
 A [`Slot`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/inventory.rs)
 holds `at` (its `SlotRef`), `category` (equipment, currency, ordinary
 storage, ...), `item` (the item id, 0 for none), `count` and `pide`
@@ -260,6 +263,13 @@ nothing, `|_| {}`, is fine when you poll.
 The inventory system runs once per online player each step. With nobody
 online it does not run at all, and requests wait until they time out after
 30 seconds.
+
+The loader runs requests from a [mid-function hook](mid-function-hooks.md)
+in that per-player loop. It arms the hook when a mod asks for inventories,
+and on every dedicated server, whose console gives items. It runs once per
+online player each step; while no request waits, a pass costs the stub's
+[few nanoseconds](mid-function-hooks.md#cost), three atomic loads and one
+read of game memory.
 
 ## On a hosting client
 

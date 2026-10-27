@@ -152,6 +152,7 @@ fn answer(loader: &Loader, tool: Tool<'_>) -> String {
         Tool::Placed(args) => super::tools::placed(args),
         Tool::Reload(args) => super::tools::reload(loader, args),
         Tool::Account(act, args) => super::tools::account(loader, act, args),
+        Tool::Order(order, args) => super::world_orders::order(loader, order, args),
         Tool::About(id) => loader
             .mods
             .iter()

@@ -77,8 +77,10 @@ impl __Values {
     ///
     /// [`ConfigError::Parse`] when `text` is not one.
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
-        let mut document: toml::Table = toml::from_str(&format!("synced = {text}"))
-            .map_err(|e| ConfigError::Parse(format!("values: {}", e.message())))?;
+        let document = format!("synced = {text}");
+        let mut document: toml::Table = toml::from_str(&document).map_err(|e| {
+            ConfigError::Parse(format!("values: {}", super::reason(Some(&document), &e)))
+        })?;
         match document.remove("synced") {
             Some(toml::Value::Table(table)) if document.is_empty() => Ok(Self(table)),
             _ => Err(ConfigError::Parse("values: not an inline table".to_owned())),
@@ -98,7 +100,7 @@ impl __Values {
             .get(key)
             .map(|value| {
                 value.clone().try_into().map_err(|e: toml::de::Error| {
-                    ConfigError::Parse(format!("value {key}: {}", e.message()))
+                    ConfigError::Parse(format!("value {key}: {}", super::reason(None, &e)))
                 })
             })
             .transpose()

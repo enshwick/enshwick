@@ -136,7 +136,7 @@ fn checks(
 
 #[cfg(test)]
 mod tests {
-    use super::super::Schema;
+    use super::super::{Error, Schema};
     use super::rust_call;
 
     const SCHEMA: &str = r#"schema = 1
@@ -201,6 +201,25 @@ value = 1
         let schema = Schema::parse(text).unwrap();
         let code = rust_call(&schema, "you.stalls:rent").unwrap();
         assert_eq!(code, include_str!("../../tests/fixtures/stalls_rent.rs"));
+    }
+
+    #[test]
+    fn the_luau_module_of_the_fixture_is_the_one_the_runtime_is_tested_with() {
+        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+        let schema = Schema::parse(text).unwrap();
+        let code = super::super::luau_call(&schema, "you.stalls:fee").unwrap();
+        assert_eq!(code, include_str!("../../tests/fixtures/stalls_fee.luau"));
+    }
+
+    #[test]
+    fn a_luau_module_refuses_a_value_type_or_enum_in_the_input() {
+        let text = include_str!("../../tests/fixtures/stalls.calls.toml");
+        let schema = Schema::parse(text).unwrap();
+        let error = super::super::luau_call(&schema, "you.stalls:rent").unwrap_err();
+        assert!(
+            matches!(&error, Error::ScriptInput { field, ty, .. } if field == "deal" && ty == "Deal"),
+            "{error}"
+        );
     }
 
     #[test]

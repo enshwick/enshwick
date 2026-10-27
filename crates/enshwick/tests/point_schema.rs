@@ -25,6 +25,10 @@ pub struct Price {
     pub deal: Deal,
     /// Whether the stall is the player's own.
     pub own: bool,
+    /// The stall's row.
+    pub row: u8,
+    /// The stall's place in its row.
+    pub place: u16,
 }
 
 /// The definition `cargo enshwick point` writes from that schema.
@@ -76,7 +80,9 @@ mod tests {
             [
                 ("character", "enshwick.entity"),
                 ("deal", "Deal"),
-                ("own", "bool")
+                ("own", "bool"),
+                ("row", "u8"),
+                ("place", "u16")
             ]
         );
         let deal = &types[1];

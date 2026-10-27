@@ -375,4 +375,5 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `call`                   | Runs an asked call on this thread: the server's handler reads the input and writes the answer        | 95          |
 | `transaction_entities`   | The props one of the mod's transactions placed and still holds; any thread                           | 96          |
 | `world_persists`         | Whether a save keeps changes in a box: inside one base's zone; game thread                           | 96          |
-| `account_action`         | Kicks, bans or unbans an account; a ban of an account not online goes onto the list; game thread     | 97          |
+| `map_markers`            | The markers the scene places, read from the game's data once per scene; game thread, quiet           | 97          |
+| `account_action`         | Kicks, bans or unbans an account; a ban of an account not online goes onto the list; game thread     | 98          |

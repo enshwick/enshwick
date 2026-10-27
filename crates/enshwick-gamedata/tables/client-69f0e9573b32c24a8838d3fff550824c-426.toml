@@ -816,3 +816,6 @@ revision = 1
 "map.fog_tiles" = { value = 0x18, pattern = "F3 44 0F 11 44 24 20 49 C1 E8 20 03 CD 48 C1 E1 0A 49 03 4E 18 E8 ?? ??", at = 20, size = 1 }
 "map.fog_tile_shift" = { value = 0xa, pattern = "F3 44 0F 11 44 24 20 49 C1 E8 20 03 CD 48 C1 E1 0A 49 03 4E 18 E8 ?? ??", at = 16, size = 1 }
 "map.fog_tile_edge_shift" = { value = 0x5, pattern = "F3 48 0F 2C D0 0F 57 C0 C1 EA 05 F3 0F 5F C1 41 0F 28 C9 F3 0F 58", at = 10, size = 1 }
+"world.scene_chunks" = { value = 0xebc028, pattern = "48 8B 99 28 C0 EB 00 48 89 78 E0 33 FF 0F 29 70 B8 0F 57 F6 48 89 70 E8", at = 3, size = 4 }
+"world.scene_chunks.scene" = { value = 0x68, pattern = "48 8B 03 48 33 43 68 48 0B D0 0F 84 ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F 10 43 68 48 8B 43", at = 24, size = 1 }
+"world.scene_chunks.count" = { value = 0x28, pattern = "48 8B 43 28 48 85 C0 74 20 48 8B 53 20 0F 28 D6 48 69 C8 B0 00 00 00 48", at = 3, size = 1 }

@@ -11,8 +11,43 @@ Each entry names the pull request that made the change.
 - `World::account_action` asks the game to kick, ban or unban an account
   (`AccountAction`); a ban of an account that is not online goes straight
   onto the server's ban list (`HostApi::account_action`,
-  `AccountActionType`, ABI minor 97). The fake keeps a ban list
-  (`Installed::banned`, `removed`).
+  `AccountActionType`, ABI minor 98). The fake keeps a ban list
+  (`Installed::banned`, `removed`) (#586).
+
+### Changed
+
+- `declare_mod!` exports the five functions under their C names only
+  outside test builds, so one test binary can declare several mods.
+
+### Fixed
+
+- Settings errors name the key and the expected type, and the line where
+  the text is at hand, never the value: the settings check's reason, the
+  settings read at start, table settings, join values, migrations, and
+  `ConfigError` and `MigrationError` made from a TOML error. The warning for
+  a value held to its range no longer shows the old value (#594, #595).
+- `Schema::parse` refuses a field or group key with an empty part, such as
+  `auth..token`, and `Load::table_config` a field with an empty key; the
+  loader refuses such a schema, and the mod's warning names the key (#593).
+
+## [1.0.0-alpha.8] - 2026-10-27
+
+### Added
+
+- `packs::script_files` lists the scripts `PackFiles::read_dir` would read,
+  without reading them. The loader lists a Luau mod's scripts each time it
+  looks, so a script added, removed or renamed while the game runs reloads
+  the mod with `dev_reload` as an edited one does (#585).
+- A Luau mod reads and changes inventories through `enshwick.inventory`:
+  `slots`, `count`, `item_info`, `give`, `take`, `destroy_slot`,
+  `move_slot` and `move_all`, the done function getting the `Outcome` as a
+  table with `Done` and `OpError` by name. `Inventories::slots` and
+  `Inventories::count` read an inventory on the server's game thread
+  without a `Reader` (#581).
+- A Luau mod calls another mod's call with `enshwick.caller(description)`,
+  from the module `cargo enshwick call --luau` writes; the input's fields
+  are numbers, booleans, entities and GUIDs, each checked against its
+  layout hash (#577).
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread
@@ -23,12 +58,12 @@ Each entry names the pull request that made the change.
   fields and sizes once every mod is initialised (`HostApi::serve_call`,
   `find_call`, `call`, `CallSpec`, ABI minor 95). The fake serves and calls
   them (`Installed::serve_call`, `call`, `served_calls`). A call's input
-  and answer have no padding, which `Shape::PADDING_FREE` reports.
+  and answer have no padding, which `Shape::PADDING_FREE` reports (#574).
 - `Load::on_described_mod_event` and `Load::define_described_event`
   (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
   event described at run time, its data as bytes in the definer's layout;
   `manifest!(events: [..])` puts the schema of each listed `#[event]` into
-  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it.
+  the manifest, and `ModEvent::SCHEMA` and `DESCRIBED` carry it (#571).
 - `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
   copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
   read what the player has uncovered, as a `FogState` and `FogImage`; the
@@ -59,7 +94,7 @@ Each entry names the pull request that made the change.
 - `Load::extend_described_point` links into an extension point described at
   run time (`points::DescribedPoint`, `DescribedField`), the input and the
   answer as bytes in the owner's layout, as a script's schema gives them;
-  the loader checks the layout hashes as for a typed link.
+  the loader checks the layout hashes as for a typed link (#569).
 - `Load::change_recipes` changes the output count, cost or time of every
   vanilla recipe a selection picks: `Recipes::Kind` by what the recipe
   makes, `Recipes::Workshop` by where it is made, read from the game's
@@ -73,7 +108,7 @@ Each entry names the pull request that made the change.
   format (`MAP_SNAPSHOT_FORMAT`) (#560).
 - `script::game_events` lists every typed game event for script languages
   (`GameEventKind`); the game event structs, masks and values convert for
-  scripts (a mask as its bit names, a value as its name).
+  scripts (a mask as its bit names, a value as its name) (#565).
 - `load.map()` returns the `Map` of the game server: `Map::markers` and
   `Map::markers_in` list the world's map markers, each a `MapMarker` with
   its position, its `MapMarkerTypeId` (the key of the game's marker type
@@ -85,9 +120,9 @@ Each entry names the pull request that made the change.
 - `Load::table_config` reads settings described by a `config::Schema` at
   run time, with the file, checks, stages, Mods screen and join values of a
   typed `Config`; `config::TableConfig::on_change` follows them, and
-  `Schema::template` writes the file.
+  `Schema::template` writes the file (#561).
 - A pack's `pack.toml` declares settings in `[[setting]]` tables
-  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read.
+  (`PackSetting`, `PackManifest::settings_schema`), checked as it is read (#561).
 - `World::can_build` tells whether the server lets a player edit a box:
   `CanEditWorld`, and `CanEditBase` inside a building zone, as the game's
   terrain tools decide, plus two tests from the game's building cursor, the
@@ -158,6 +193,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `#[point]` and `#[event]` refuse an input, answer or data with padding,
+  as `#[call]` does, since a described link or listener reads every byte:
+  add the bytes as fields. The example trading post's `price` gains a
+  `count` (#587).
+- `Map::markers` reads the markers the scene places from the game's data
+  through the new `map_markers` entry and `MapMarkerInfo` (ABI 2.97), once
+  per scene; `MapMarker` no longer names an entity (#573).
 - An item a mod or pack changes by name keeps that change over its own
   selection of the same field, so a selection can leave out exceptions
   (#558).
@@ -178,10 +220,15 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- A Luau mod's answer to a point and its mod events take an enum over a
+  64-bit integer, `usize` and `isize` included, as a number both ways;
+  before, every such value was refused (#587).
 - The loader's profile names the survivors feature `survivors`; it showed a
-  mod id.
+  mod id (#574).
 - The loader and the fake leave a mod event subscription idle when it
-  reads more bytes than the definer sends.
+  reads more bytes than the definer sends (#571).
+- `Map::markers` listed no marker on a dedicated server, whose marker
+  entities the entity walk does not find (#573).
 - `World::component` and `World::get` read the static half of a component
   type, such as `FuelSetup`, as the template's set-up values; they gave the
   data of its dynamic half, `DynamicFuelSetup`, before (#568).

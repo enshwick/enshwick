@@ -54,6 +54,10 @@ enum Command {
         /// The folder the crate is created in.
         #[arg(long, default_value = ".")]
         dir: PathBuf,
+        /// The game executable, or the game folder holding it, whose own
+        /// types a Luau mod gets beside the API's.
+        #[arg(long, requires = "luau", conflicts_with = "data")]
+        game: Option<PathBuf>,
     },
     /// Shows what a built mod DLL says about itself: id, version, side and
     /// dependencies. Loads the DLL, which runs its code: only for DLLs you
@@ -123,6 +127,9 @@ enum Command {
         /// The file to write; the declaration is printed when omitted.
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Writes the call's Luau module for a Luau mod instead.
+        #[arg(long)]
+        luau: bool,
     },
     /// Writes the Luau definitions of the API, which luau-lsp reads, for
     /// the loader this tool was built with.
@@ -217,8 +224,9 @@ fn main() -> ExitCode {
             luau: true,
             side,
             dir,
+            game,
             ..
-        } => new::luau::create(&dir, &id, side.unwrap_or(Side::Server)),
+        } => new::luau::create(&dir, &id, side.unwrap_or(Side::Server), game.as_deref()),
         Command::New { id, side, dir, .. } => new::create(&dir, &id, side.unwrap_or(Side::Server)),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {
@@ -235,7 +243,12 @@ fn main() -> ExitCode {
         Command::Pack(command) => pack::run(&command),
         Command::Luau { out } => luau_definitions(out.as_deref()),
         Command::Event { name, from, out } => point::run_event(&name, &from, out.as_deref()),
-        Command::Call { name, from, out } => point::run_call(&name, &from, out.as_deref()),
+        Command::Call {
+            name,
+            from,
+            out,
+            luau,
+        } => point::run_call(&name, &from, out.as_deref(), luau),
         Command::Types {
             names,
             from,
@@ -271,5 +284,19 @@ mod tests {
             )
         );
         assert!(ids(&["safe".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn the_game_s_types_come_only_with_a_luau_mod() {
+        let parse = |args: &[&str]| {
+            Cargo::try_parse_from(
+                ["cargo", "enshwick", "new", "you.greeter"]
+                    .iter()
+                    .chain(args),
+            )
+        };
+        assert!(parse(&["--luau", "--game", "game"]).is_ok());
+        assert!(parse(&["--game", "game"]).is_err());
+        assert!(parse(&["--data", "--game", "game"]).is_err());
     }
 }

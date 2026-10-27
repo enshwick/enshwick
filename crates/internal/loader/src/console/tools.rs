@@ -161,6 +161,6 @@ fn refused(act: Act, refusal: &Refusal) -> String {
 }
 
 /// Why the world did not read.
-fn unread(status: Status) -> String {
+pub(super) fn unread(status: Status) -> String {
     texts::fill("console.unread", &[("status", &format!("{status:?}"))])
 }

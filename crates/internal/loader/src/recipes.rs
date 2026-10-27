@@ -568,10 +568,10 @@ pub fn find<'a>(index: &'a Index, names: &Names, text: &str) -> Vec<&'a Recipe> 
 /// A recipe in words: name, GUID, workshop and what it makes.
 #[must_use]
 pub fn describe(recipe: &Recipe, names: &Names) -> String {
-    let made: Vec<&str> = recipe
+    let made: Vec<String> = recipe
         .outputs
         .iter()
-        .filter_map(|&o| names.item_name(o))
+        .filter_map(|&o| names.item_name(o).map(|name| format!("{name} (item {o})")))
         .collect();
     format!(
         "{} ({}) at {}{}",
@@ -812,8 +812,8 @@ mod tests {
         assert_eq!(
             describe(&index.recipes[1], &names),
             format!(
-                "Tool_Torch01_T0_bench ({}) at Craftingstation_Workbench, makes Tool_Torch01_T0",
-                index.recipes[1].guid
+                "Tool_Torch01_T0_bench ({}) at Craftingstation_Workbench, makes Tool_Torch01_T0 (item {})",
+                index.recipes[1].guid, index.recipes[1].outputs[0]
             )
         );
     }
@@ -855,7 +855,8 @@ mod tests {
         assert_eq!(
             describe(found[0], &names),
             format!(
-                "you.lanterns:lantern.recipe ({copy}) at Craftingstation_Workbench, makes you.lanterns:lantern"
+                "you.lanterns:lantern.recipe ({copy}) at Craftingstation_Workbench, makes you.lanterns:lantern (item {})",
+                found[0].outputs[0]
             )
         );
     }

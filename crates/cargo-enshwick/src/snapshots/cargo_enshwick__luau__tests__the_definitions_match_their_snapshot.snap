@@ -102,6 +102,9 @@ export type CraftRecipeSuccessEvent = {
 	recipe_id: number,
 }
 
+--- How a request ended.
+export type Done = "Committed" | "RolledBack" | "Unavailable" | "TimedOut" | "Refused"
+
 --- An entity died, with who killed it as far as the engine kept track, read while the dead entity is still in the world.
 export type EntityDiedEvent = {
 	--- The entity that died.
@@ -154,6 +157,18 @@ export type HitEvent = {
 	target_faction: number,
 }
 
+--- An item's static data.
+export type ItemInfo = {
+	--- The item id.
+	id: number,
+	--- How many fit one stack.
+	max_stack_size: number,
+	--- `ItemInfo` flags, see `ItemData`.
+	flags: number,
+	--- The game's `ItemCategory`: 1 equipment (armour and rings), 2 weapons, 3 tools, and so on.
+	category: number,
+}
+
 --- The data of `Event::KNOWLEDGE_CHANGED`.
 export type KnowledgeData = {
 	--- The player's character, or 0 for the world's knowledge.
@@ -184,6 +199,25 @@ export type LootInteractionEvent = {
 
 --- How a notice reached a player, from `World::notify`.
 export type Notice = "OnScreen" | "Chat"
+
+--- Why an operation failed.
+export type OpError = "NotRun" | "InvalidState" | "OutOfMemory" | "Other"
+
+--- The result of one operation.
+export type OpResult = {
+	--- Why it failed; `None` when it ran without an error.
+	error: OpError?,
+	--- How much of the count the operation could not do.
+	remaining: number,
+}
+
+--- What became of a request, with a result per operation once it ran.
+export type Outcome = {
+	--- How it ended.
+	done: Done,
+	--- One per operation when the request ran, else empty.
+	ops: {OpResult},
+}
 
 --- A connected player, as the server sees them.
 export type Player = {
@@ -243,6 +277,20 @@ export type RevivedPlayerEvent = {
 	target_entity_id: number,
 	--- Who revived them.
 	source_entity_id: number?,
+}
+
+--- One slot and what it holds.
+export type Slot = {
+	--- Where the slot is.
+	at: string,
+	--- The sub-inventory's category.
+	category: number,
+	--- The item id, 0 for none.
+	item: number,
+	--- How many.
+	count: number,
+	--- The item's own entity, for items with durability or a level.
+	pide: number?,
 }
 
 --- The data of `Event::TICKED`.
@@ -307,6 +355,8 @@ declare enshwick: {
 	refuse: {},
 	--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
 	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
+	--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau.
+	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
 	--- The mod's settings in force, as its `pack.toml` declares them under `[[setting]]`; read them again in a `SettingsChanged` handler.
@@ -349,5 +399,24 @@ declare enshwick: {
 		after: (delay: number, task: () -> ()) -> (),
 		--- Runs `task` about every `period`, the first time a period from now, until it returns `ControlFlow::Break`, which a script's task does by returning `false`.
 		every: (period: number, task: () -> boolean?) -> (),
+	},
+	--- Inventories on the server: their slots and counts, and items given, taken and moved.
+	inventory: {
+		--- The static data of `item`; `None` for an unknown item, or while no world runs. Any thread.
+		item_info: (item: number) -> ItemInfo?,
+		--- Every slot of the inventory `root`, as `Reader::slots` reads it on the server's game thread; empty elsewhere.
+		slots: (root: number) -> {Slot},
+		--- How many items `item` the inventory `root` holds, as `Reader::count` reads it on the server's game thread; 0 elsewhere.
+		count: (root: number, item: number) -> number,
+		--- Gives `count` new items `item` to the inventory `to`, all or nothing, with the game's pickup message.
+		give: (to: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
+		--- Takes `count` items `item` from the inventory `from`, all or nothing.
+		take: (from: number, item: number, count: number, done: (arg1: Outcome) -> ()) -> (),
+		--- Destroys the stack in `slot`.
+		destroy_slot: (slot: string, done: (arg1: Outcome) -> ()) -> (),
+		--- Moves the stack in `slot`, or `amount` of it, into the inventory `to`; what does not fit stays in the source.
+		move_slot: (slot: string, to: number, amount: number?, done: (arg1: Outcome) -> ()) -> (),
+		--- Moves every stack of the inventory `from` into `to`, as the game's "take all" does; what does not fit stays in the source. The source's action bar, equipment and locked slots stay; use `Op::MoveAll` in a `Batch` to include them.
+		move_all: (from: number, to: number, done: (arg1: Outcome) -> ()) -> (),
 	},
 }

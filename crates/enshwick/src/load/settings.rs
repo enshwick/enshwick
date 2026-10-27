@@ -1,7 +1,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{Event, Status, Str};
-use crate::config::{Config, ConfigError, Stage};
+use crate::config::{Config, ConfigError, Stage, reason};
 use crate::host::Host;
 use crate::locks::Relock;
 
@@ -34,7 +34,8 @@ impl Load<'_> {
     /// ```
     pub fn settings<T: serde::de::DeserializeOwned>(&mut self, defaults: &str) -> Result<T, Off> {
         let text = self.host.settings_text(defaults)?;
-        toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))
+        toml::from_str(&text)
+            .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))
     }
 
     /// The mod's typed settings: `mod-configs/<id>.toml`, written from
@@ -192,7 +193,7 @@ pub(super) unsafe extern "system" fn check_text<T: Config>(
             // SAFETY: the loader passes the text for the call.
             let text = unsafe { text.as_str() }.unwrap_or("");
             let checked = toml::from_str::<T>(text)
-                .map_err(ConfigError::from)
+                .map_err(|e| ConfigError::Parse(reason(Some(text), &e)))
                 .and_then(|settings| settings.validate());
             let Err(reason) = checked else {
                 return Status::OK;
@@ -216,14 +217,14 @@ pub(super) unsafe extern "system" fn check_text<T: Config>(
 /// the server even where `stages` held this side's.
 pub(super) fn read_config<T: Config>(host: Host, stages: impl FnOnce(&mut T)) -> Result<T, Off> {
     let text = host.settings_text(&T::template())?;
-    let mut table: toml::Table =
-        toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
+    let mut table: toml::Table = toml::from_str(&text)
+        .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))?;
     for held in T::schema().clamp(&mut table) {
         crate::warn!("settings: {held}");
     }
     let mut settings: T = toml::Value::Table(table)
         .try_into()
-        .map_err(|e: toml::de::Error| Off::new(format!("settings: {}", e.message())))?;
+        .map_err(|e: toml::de::Error| Off::new(format!("settings: {}", reason(None, &e))))?;
     settings
         .validate()
         .map_err(|why| Off::new(format!("settings: {why}")))?;

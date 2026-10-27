@@ -221,6 +221,9 @@ macro_rules! manifest {
 /// [`abi::exports`](crate::abi::exports), each catching panics.
 ///
 /// Also adds `instance()` to the type, the mod's state once initialised.
+/// In a test build (`cfg(test)`) the functions are not exported under their
+/// C names, so several mods can be declared in one test binary; a test
+/// reaches them by their Rust path.
 /// A mod built with `panic = "abort"` fails to compile: the loader turns a
 /// panicking mod off only while the panic unwinds.
 ///
@@ -258,13 +261,13 @@ macro_rules! declare_mod {
         }
 
         /// The interface major this mod was built for.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_abi() -> u32 {
             ::core::primitive::u32::from($crate::abi::ABI_MAJOR)
         }
 
         /// The mod's static manifest.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_query() -> *const $crate::abi::Manifest {
             $crate::__private::query::<$ty>()
         }
@@ -276,7 +279,7 @@ macro_rules! declare_mod {
         /// - `api` points at the loader's table, alive and unchanged for the
         ///   process.
         /// - `me` is the handle the loader gave this mod.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(test), unsafe(no_mangle))]
         pub unsafe extern "system" fn enshwick_mod_init(
             api: *const $crate::abi::HostApi,
             me: $crate::abi::ModHandle,
@@ -291,7 +294,7 @@ macro_rules! declare_mod {
         /// # Safety
         ///
         /// - `enshwick_mod_init` of this mod returned OK before the call.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(test), unsafe(no_mangle))]
         pub unsafe extern "system" fn enshwick_mod_ready(
             _api: *const $crate::abi::HostApi,
             _me: $crate::abi::ModHandle,
@@ -300,7 +303,7 @@ macro_rules! declare_mod {
         }
 
         /// Stops the mod before a development reload unloads it.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_shutdown() {
             $crate::__private::shutdown::<$ty>(&__ENSHWICK_INSTANCE);
         }

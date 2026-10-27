@@ -14,8 +14,8 @@ pub struct Rent {
     pub deal: Deal,
     /// Whether the stall is the player's own.
     pub own: bool,
-    /// The stall's row.
-    pub row: u8,
+    /// What the stall sells.
+    pub stall: Stall,
     /// The stall's place in its row.
     pub place: u16,
 }
@@ -33,6 +33,16 @@ impl Deal {
     pub const SELL: Self = Self(1);
 }
 
+/// What a stall sells.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enshwick::Shape)]
+pub enum Stall {
+    /// Food.
+    Food = 1,
+    /// Tools.
+    Tools = 2,
+}
+
 const _: () = {
     assert!(
         <Rent as enshwick::services::Call>::LAYOUT[0].hash == 0xb53b_31eb_b124_3978,
@@ -47,8 +57,8 @@ const _: () = {
         "`own` differs from the server's",
     );
     assert!(
-        <Rent as enshwick::services::Call>::LAYOUT[3].hash == 0xc13c_c592_7653_f4b1,
-        "`row` differs from the server's",
+        <Rent as enshwick::services::Call>::LAYOUT[3].hash == 0xcb92_cc90_faad_3662,
+        "`stall` differs from the server's",
     );
     assert!(
         <Rent as enshwick::services::Call>::LAYOUT[4].hash == 0x2d22_5a0a_1187_4bfd,

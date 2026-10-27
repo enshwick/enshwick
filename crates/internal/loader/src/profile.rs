@@ -153,7 +153,8 @@ pub fn call<R>(owner: ModIndex, feature: Feature, f: impl FnOnce() -> R) -> R {
     let outer = RUNNING.replace(marker);
     let result = match BUCKETS
         .get()
-        .and_then(|b| b.get(owner.get() * FEATURES + feature as usize))
+        .zip(owner.get().checked_mul(FEATURES))
+        .and_then(|(b, at)| b.get(at.checked_add(feature as usize)?))
     {
         None => f(),
         Some(bucket) => timed(bucket, f),
@@ -453,6 +454,12 @@ mod tests {
             samples,
             ticks,
         }
+    }
+
+    #[test]
+    fn the_loader_s_own_callbacks_run_untimed_while_mods_are_timed() {
+        start(1);
+        assert_eq!(call(ModIndex::LOADER, Feature::Inventory, || 7), 7);
     }
 
     #[test]
