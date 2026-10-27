@@ -25,6 +25,14 @@ const LIVE_ENTRY: BanFields = BanFields {
     date: 0xc8,
 };
 
+/// Where the config keeps its list of live entries: the pointer and the
+/// count, a `u64` (server 399, client 426, read in the add). Only the game
+/// thread changes the count.
+const LIST_ENTRIES: usize = 0x38;
+const LIST_COUNT: usize = 0x40;
+/// The most entries [`holds`] reads, far past any ban list a server keeps.
+const LIST_MAX: u64 = 1 << 20;
+
 /// Where the add steps through its list by the entry's size, and the
 /// instruction there, `add rax, 0xd0`: the check that this build's entry
 /// is [`LIVE_ENTRY`]'s size (server 399, client 426).
@@ -34,7 +42,7 @@ const ADD_STRIDE: [u8; 6] = [0x48, 0x05, 0xd0, 0x00, 0x00, 0x00];
 /// The game's add: the config object that holds the list, and an entry it
 /// copies. It takes the list's lock, leaves an account already listed
 /// alone, and marks the config changed (server 399, client 426).
-type AddFn = unsafe extern "system" fn(config: *mut u8, entry: *const u64) -> bool;
+type AddFn = unsafe extern "system" fn(config: *mut u8, entry: *const u64) -> u8;
 
 /// The add and the entry's layout on this build.
 #[derive(Debug)]
@@ -112,7 +120,7 @@ fn find(loader: &Loader) -> Result<BanList, String> {
 /// # Errors
 ///
 /// [`Status::MISSING`] when this build lacks the add, the config or the
-/// entry's layout, or no config is set up; [`Status::WRONG_THREAD`] off
+/// entry's layout, no config is set up, or the game's list did not grow; [`Status::WRONG_THREAD`] off
 /// the game thread.
 pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
     const EMPTY: &[u8; 1] = b"\0";
@@ -137,12 +145,19 @@ pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
     // add takes the config's lock itself and only reads `entry`, which
     // holds the live entry's size, aligned to 8, with both names empty
     // and pointing at a live byte, and outlives the call.
-    let _listed = unsafe {
+    let listed = unsafe {
         (list.add)(
             core::ptr::with_exposed_provenance_mut(config),
             entry.as_ptr(),
         )
     };
+    if listed == 0 {
+        crate::log!(
+            WARN,
+            "account {account:016x} not put on the ban list: the game's list did not grow"
+        );
+        return Err(Status::MISSING);
+    }
     // SAFETY: the live server on its game thread, which alone writes this
     // flag; the game's own handler sets the byte at the table's
     // `server.ban_list_changed` to 1 after a ban the same way.
@@ -150,4 +165,35 @@ pub(crate) fn add(loader: &Loader, account: u64) -> Result<(), Status> {
     super::remember_offline_ban(account);
     crate::log!(INFO, "account {account:016x} put on the ban list");
     Ok(())
+}
+
+/// Whether the game's ban list holds `account` now, on the game thread;
+/// `None` when it does not read.
+pub(crate) fn holds(loader: &Loader, account: u64) -> Option<bool> {
+    let list = ban_list(loader)?;
+    let server = crate::world::reader().ok()?;
+    // SAFETY: as in `add`: the live server on its game thread, with its
+    // config object's pointer at the table's `server.config`.
+    let config: usize = unsafe { crate::memory::read(server, list.config) };
+    if config == 0 {
+        return None;
+    }
+    // SAFETY: the non-null config holds its list's entry pointer and count at
+    // `LIST_ENTRIES` and `LIST_COUNT` (server 399, client 426); only the game
+    // thread, this one, changes them.
+    let entries: usize = unsafe { crate::memory::read(config, LIST_ENTRIES) };
+    // SAFETY: as for `entries`.
+    let count: u64 = unsafe { crate::memory::read(config, LIST_COUNT) };
+    if entries == 0 || count > LIST_MAX {
+        return (count == 0).then_some(false);
+    }
+    let count = usize::try_from(count).ok()?;
+    Some((0..count).any(|i| {
+        // SAFETY: entry `i` of `count` lies at `i * size` in the list the
+        // config owns, each starting with its `u64` account (`LIVE_ENTRY`,
+        // whose size the add's stride check confirmed on this build).
+        let key: u64 =
+            unsafe { crate::memory::read(entries, i * LIVE_ENTRY.size + LIVE_ENTRY.account) };
+        key == account
+    }))
 }

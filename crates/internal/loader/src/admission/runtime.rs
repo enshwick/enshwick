@@ -174,14 +174,20 @@ fn with_gate<R>(serving: &Serving, f: impl FnOnce(&mut Gate) -> R) -> R {
 
 /// Forgets every player, when a hosted game ends.
 pub(crate) fn forget() {
+    crate::console::forget_offline_bans();
     *STATE.gate.relock() = None;
     STATE.busy.store(false, Ordering::Release);
 }
 
 /// The player `key` entered the world; on the game thread.
 pub(crate) fn joined(key: u64) {
-    if key != 0 && crate::console::banned_offline(key) {
-        refuse_banned(key);
+    if key != 0
+        && crate::console::banned_offline(key)
+        && STATE
+            .fuse
+            .run("a banned account's join", || refuse_banned(key))
+            .unwrap_or(false)
+    {
         return;
     }
     let Some(serving) = STATE.serving.get() else {
@@ -212,31 +218,43 @@ pub(crate) fn joined(key: u64) {
 /// while not online: the game checks joins only against its session's own
 /// list, filled from the ban list when hosting starts. The session's kick
 /// with its ban adds the account there for the rest of the run, also for a
-/// player who joined with an administrator's password.
-fn refuse_banned(key: u64) {
+/// player who joined with an administrator's password. Whether the player
+/// was removed; an account the game's own unban took off the list since is
+/// forgotten and stays.
+fn refuse_banned(key: u64) -> bool {
+    let Some(loader) = crate::host::loader() else {
+        return false;
+    };
+    if !crate::console::still_banned(loader, key) {
+        crate::console::forget_offline_ban(key);
+        return false;
+    }
     let Some(kick) = STATE.kick.get().and_then(Option::as_ref) else {
         crate::log!(
             WARN,
             "{key:016x} is on the ban list but joined: this build lacks the session's kick"
         );
-        return;
-    };
-    let Some(loader) = crate::host::loader() else {
-        return;
+        return false;
     };
     let host = STATE
         .serving
         .get()
         .and_then(|serving| with_gate(serving, |gate| gate.host));
     match disconnect(loader, kick, key, host, true) {
-        Ok(machine) => crate::log!(
-            INFO,
-            "{key:016x} is on the ban list: removed and banned (machine {machine})"
-        ),
-        Err(why) => crate::log!(
-            WARN,
-            "{key:016x} is on the ban list but could not be removed: {why}"
-        ),
+        Ok(machine) => {
+            crate::log!(
+                INFO,
+                "{key:016x} is on the ban list: removed and banned (machine {machine})"
+            );
+            true
+        }
+        Err(why) => {
+            crate::log!(
+                WARN,
+                "{key:016x} is on the ban list but could not be removed: {why}"
+            );
+            false
+        }
     }
 }
 

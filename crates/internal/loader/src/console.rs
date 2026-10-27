@@ -135,6 +135,19 @@ pub(crate) fn forget_offline_ban(account: u64) {
         .retain(|&banned| banned != account);
 }
 
+/// Forgets every offline ban, when a hosted game ends.
+#[cfg(windows)]
+pub(crate) fn forget_offline_bans() {
+    STATE.offline_bans.relock().clear();
+}
+
+/// Whether the game's ban list still holds `account`; true when it does
+/// not read, so a ban stays in force.
+#[cfg(windows)]
+pub(crate) fn still_banned(loader: &crate::host::Loader, account: u64) -> bool {
+    ban_list::holds(loader, account).unwrap_or(true)
+}
+
 /// Whether `account` went onto the ban list while not online this run, so
 /// its join must be refused.
 #[cfg(windows)]
