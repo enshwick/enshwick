@@ -6,7 +6,7 @@ use core::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 
 use crate::abi::{Event, Level, Status, Str};
-use crate::config::{ConfigError, Schema, Stage};
+use crate::config::{ConfigError, Schema, Stage, reason};
 use crate::host::Host;
 use crate::locks::Relock;
 use crate::{Load, Off};
@@ -231,8 +231,8 @@ impl TableConfig {
     /// the server's join values over them while this client is joined.
     fn read(&self, stages: impl FnOnce(&mut Kept, &mut toml::Table)) -> Result<toml::Table, Off> {
         let text = self.host.settings_text(&self.schema.template())?;
-        let mut table: toml::Table =
-            toml::from_str(&text).map_err(|e| Off::new(format!("settings: {}", e.message())))?;
+        let mut table: toml::Table = toml::from_str(&text)
+            .map_err(|e| Off::new(format!("settings: {}", reason(Some(&text), &e))))?;
         for held in self.schema.clamp(&mut table) {
             self.host.log(Level::WARN, &format!("settings: {held}"));
         }
@@ -297,8 +297,9 @@ impl TableConfig {
     /// Puts the join values `server` over `table` and checks them; an error
     /// leaves `table` as it was.
     fn with_server(&self, table: &mut toml::Table, server: &str) -> Result<(), ConfigError> {
-        let parsed: toml::Table = toml::from_str(&format!("v = {server}"))
-            .map_err(|e| ConfigError::Parse(e.message().to_owned()))?;
+        let text = format!("v = {server}");
+        let parsed: toml::Table =
+            toml::from_str(&text).map_err(|e| ConfigError::Parse(reason(Some(&text), &e)))?;
         let Some(toml::Value::Table(values)) = parsed.get("v") else {
             return Err(ConfigError::Parse(
                 "the join values are no table".to_owned(),
@@ -385,7 +386,7 @@ unsafe extern "system" fn check_table(text: Str, why: *mut Str, user: *mut c_voi
             // SAFETY: the loader passes the text for the call.
             let text = unsafe { text.as_str() }.unwrap_or("");
             let checked = toml::from_str::<toml::Table>(text)
-                .map_err(ConfigError::from)
+                .map_err(|e| ConfigError::Parse(reason(Some(text), &e)))
                 .and_then(|table| schema.check(&table));
             let Err(reason) = checked else {
                 return Status::OK;

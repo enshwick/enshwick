@@ -71,8 +71,9 @@ impl From<String> for MigrationError {
 }
 
 impl From<toml::de::Error> for MigrationError {
+    /// The key and the type `error` expected, never the value it found.
     fn from(error: toml::de::Error) -> Self {
-        Self(error.message().to_owned())
+        Self(crate::config::reason(None, &error))
     }
 }
 
@@ -733,5 +734,18 @@ mod tests {
                 .check()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn a_map_that_fails_to_read_a_value_never_names_it() {
+        #[derive(Debug, serde::Deserialize)]
+        #[expect(dead_code, reason = "only read to fail")]
+        struct Pin {
+            pin: u32,
+        }
+
+        let error =
+            super::MigrationError::from(toml::from_str::<Pin>("pin = \"hunter2\"").unwrap_err());
+        assert_eq!(error.to_string(), "key pin: expected u32");
     }
 }

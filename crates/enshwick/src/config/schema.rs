@@ -348,7 +348,6 @@ impl Field {
             (_, Some(max)) if n > max => max,
             _ => return None,
         };
-        let was = value.to_string();
         *value = match value {
             #[expect(
                 clippy::cast_possible_truncation,
@@ -358,7 +357,7 @@ impl Field {
             _ => toml::Value::Float(bound),
         };
         Some(format!(
-            "{key} = {was} is outside {}; {value} applies",
+            "{key} is outside {}; {value} applies",
             self.accepts()
         ))
     }
