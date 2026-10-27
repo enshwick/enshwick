@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A Luau mod reads and changes inventories through `enshwick.inventory`:
+  `slots`, `count`, `item_info`, `give`, `take`, `destroy_slot`,
+  `move_slot` and `move_all`, the done function getting the `Outcome` as a
+  table with `Done` and `OpError` by name. `Inventories::slots` and
+  `Inventories::count` read an inventory on the server's game thread
+  without a `Reader`.
 - Calls, described services: `#[call]` declares one function from a
   `repr(C)` input to an answer, `Load::serve_call` serves it and
   `Load::caller` gives a `Caller` that runs it from any thread

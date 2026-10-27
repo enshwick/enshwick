@@ -14,7 +14,7 @@ use crate::ecs::Entity;
 /// assert_eq!(slot.0, 0x3_0000_0041);
 /// assert_eq!((slot.inventory(), slot.index()), (Entity(0x41), 3));
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, crate::Script)]
 pub struct SlotRef(pub u64);
 
 impl SlotRef {
@@ -60,7 +60,7 @@ impl SlotRef {
 ///
 /// assert_ne!(InventoryCategory::GENERIC, InventoryCategory::EQUIPMENT);
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, crate::Script)]
 pub struct InventoryCategory(pub u8);
 
 impl InventoryCategory {
@@ -89,7 +89,7 @@ impl InventoryCategory {
 /// let slot = Slot { at: SlotRef::new(Entity(9), 0), category: InventoryCategory::GENERIC, item: 0, count: 0, pide: None };
 /// assert!(slot.is_empty());
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct Slot {
     /// Where the slot is.
     pub at: SlotRef,
@@ -124,7 +124,7 @@ impl Slot {
 ///     inventories.item_info(item).is_some_and(|info| info.max_stack_size > 1 && !info.has_pide())
 /// }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, crate::Script)]
 pub struct ItemInfo {
     /// The item id.
     pub id: u32,

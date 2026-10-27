@@ -64,6 +64,18 @@ pub struct Inventories {
     errors: OpErrors,
 }
 
+impl crate::script::Bound for Inventories {
+    const NAME: &'static str = "inventory";
+    const DOC: &'static str =
+        "Inventories on the server: their slots and counts, and items given, taken and moved.";
+    const PARTS: &'static [&'static [crate::script::Function<Self>]] = &[Self::SCRIPT_STOCK];
+
+    fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.inventories()
+    }
+}
+
+#[crate::script(stock)]
 impl Inventories {
     pub(crate) fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let host = load.host();
@@ -154,6 +166,7 @@ impl Inventories {
     ///
     /// See [`ItemInfo`].
     #[must_use]
+    #[script]
     pub fn item_info(&self, item: u32) -> Option<ItemInfo> {
         let mut out = ItemData {
             header: Header::of::<ItemData>(),
@@ -229,6 +242,38 @@ impl Inventories {
         ticket
     }
 
+    /// Every slot of the inventory `root`, as [`Reader::slots`] reads it
+    /// on the server's game thread; empty elsewhere.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn first_item(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) -> Option<u32> {
+    ///     inventories.slots(player).into_iter().find(|s| !s.is_empty()).map(|s| s.item)
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub fn slots(&self, root: Entity) -> Vec<Slot> {
+        self.read().slots(root)
+    }
+
+    /// How many items `item` the inventory `root` holds, as [`Reader::count`]
+    /// reads it on the server's game thread; 0 elsewhere.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn coins(inventories: &enshwick::inventory::Inventories, player: enshwick::ecs::Entity) -> u32 {
+    ///     inventories.count(player, 0x0c01)
+    /// }
+    /// ```
+    #[must_use]
+    #[script]
+    pub fn count(&self, root: Entity, item: u32) -> u32 {
+        self.read().count(root, item)
+    }
+
     /// Completes `pending` with `done` on the game thread after the next step.
     fn later(&self, pending: Pending, done: Done) {
         self.scheduler
@@ -249,6 +294,7 @@ impl Inventories {
     ///     });
     /// }
     /// ```
+    #[script]
     pub fn give(
         &self,
         to: Entity,
@@ -276,6 +322,7 @@ impl Inventories {
     ///     inventories.take(player, 0x0c01, 5, |outcome| enshwick::info!("paid: {}", outcome.is_committed()));
     /// }
     /// ```
+    #[script]
     pub fn take(
         &self,
         from: Entity,
@@ -295,6 +342,7 @@ impl Inventories {
     ///     inventories.destroy_slot(slot, |_| {});
     /// }
     /// ```
+    #[script]
     pub fn destroy_slot(
         &self,
         slot: SlotRef,
@@ -313,6 +361,7 @@ impl Inventories {
     ///     inventories.move_slot(slot, player, None, |_| {});
     /// }
     /// ```
+    #[script]
     pub fn move_slot(
         &self,
         slot: SlotRef,
@@ -331,6 +380,7 @@ impl Inventories {
     /// # Examples
     ///
     /// See [`Inventories`].
+    #[script]
     pub fn move_all(
         &self,
         from: Entity,
