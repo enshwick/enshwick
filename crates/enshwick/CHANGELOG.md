@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `load.fog_of_war()` returns the client's `FogOfWar`, which the loader
+  copies as the game uncovers it: `FogOfWar::state`, `read` and `coverage`
+  read what the player has uncovered, as a `FogState` and `FogImage`; the
+  `fog_open` and `fog_read` entries and `FogInfo` (ABI 2.94) (#564).
 - `Change::in_table` changes an item's count, chance or weight in one fill
   table alone, after its changes of every table; `Vanilla::loot_table`
   finds the table a container template rolls, with how many containers

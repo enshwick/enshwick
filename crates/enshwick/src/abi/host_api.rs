@@ -8,7 +8,7 @@ use crate::abi::{
     AltarZoneFn, AltarZoneSize, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn,
     BuildInfo, BuildRights, CallerFrame, ChangeId, ChangeOp, ComfortFn, ConfigCheckFn,
     CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo, EntityDataFlags, EntityPlace, Event,
-    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, GameEventFn, Header, HookSpec,
+    EventFn, EventSpec, EventTypeInfo, ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec,
     InteractionFn, InventoryRequest, InventoryResultFn, ItemData, ItemLine, KnowledgeInfo,
     KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites, MidHookSpec, MigrationSet, ModEventFn,
     ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec,
@@ -1287,4 +1287,27 @@ pub struct HostApi {
     /// inside a step, [`Status::MISSING`] while no world runs. Since
     /// minor 90.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
+    /// Asks the loader to keep a copy of the client's fog of war for this
+    /// mod. Client only ([`Status::MISSING`] on a dedicated server).
+    /// Allowed during `enshwick_mod_init` only. Since minor 94.
+    pub fog_open: extern "system" fn(me: ModHandle) -> Status,
+    /// Writes the fog's [`FogInfo`] to `info`, then copies the box of
+    /// `width` × `height` pixels at (`x`, `y`) into `out`, row by row, at
+    /// most `capacity` bytes; a box of no pixels copies nothing. Any thread.
+    /// [`Status::MISSING`] while the client is in no world, when this build
+    /// lacks the fog, or after the loader stopped copying it; [`Status::REFUSED`] for a mod that did not
+    /// open it; [`Status::OUTSIDE_WORLD`] for a box past the image;
+    /// [`Status::BAD_ARGS`] for a null `info`, or a null or short `out`
+    /// for a box of pixels. The loader may refresh the copy meanwhile:
+    /// compare `version`. Since minor 94.
+    pub fog_read: extern "system" fn(
+        me: ModHandle,
+        info: *mut FogInfo,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        out: *mut u8,
+        capacity: u32,
+    ) -> Status,
 }

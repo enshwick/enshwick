@@ -220,6 +220,20 @@ impl Load<'_> {
         crate::map::Map::resolve(self)
     }
 
+    /// The client's fog of war, which the loader copies for the mod from
+    /// now on; a mod asks for it during `init`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] on a dedicated server, which has no fog, or after `init`.
+    ///
+    /// # Examples
+    ///
+    /// See [`FogOfWar`](crate::map::FogOfWar).
+    pub fn fog_of_war(&mut self) -> Result<crate::map::FogOfWar, Off> {
+        crate::map::FogOfWar::open(self)
+    }
+
     /// Inventory reads and transactions in the game server, dedicated or
     /// hosted by the client; a mod asks for them during `init`.
     ///
