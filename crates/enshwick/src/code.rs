@@ -4,7 +4,11 @@
 //! be anything, such as the parts of an instruction that change between game
 //! builds. [`Load::find_code`](crate::Load::find_code) searches the game's
 //! code for one and asks for exactly one match, so a patch never lands on the
-//! wrong place.
+//! wrong place. [`find_each_unique`] searches for many at once.
+
+mod each;
+
+pub use each::find_each_unique;
 
 /// A byte pattern with wildcards.
 ///

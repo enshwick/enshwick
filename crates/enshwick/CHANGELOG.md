@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `code::find_each_unique` finds many patterns in one pass over the code,
+  each with the result `Pattern::find_unique` gives.
+
 ### Changed
 
 - `declare_mod!` exports the five functions under their C names only
