@@ -190,10 +190,7 @@ mod tests {
         let refused = inventories.submit(&Batch::new(), record);
         assert!(loader.inventory_requests().is_empty());
         assert!(!refused.is_done());
-        let tick = TickData {
-            header: enshwick::abi::Header::of::<TickData>(),
-            step: 1,
-        };
+        let tick = TickData::new(1);
         assert_eq!(loader.raise::<Ticked>(&tick), 1);
         assert_eq!(
             refused.outcome().map(|o| o.done),

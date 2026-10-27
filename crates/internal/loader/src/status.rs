@@ -205,6 +205,12 @@ pub(crate) fn start(loader: &'static Loader) {
             loop {
                 std::thread::sleep(POLL);
                 crate::crash::reassert();
+                if crate::diag::counting()
+                    && !crate::profile::tsc_hz_kept()
+                    && let Some(hz) = crate::patch::tsc_hz()
+                {
+                    crate::profile::keep_tsc_hz(hz);
+                }
                 let minutes = crate::diag::status_minutes();
                 let due = minutes > 0 && Instant::now() >= next;
                 if REQUESTED.swap(false, Ordering::AcqRel) || due {

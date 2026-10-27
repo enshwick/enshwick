@@ -3,7 +3,7 @@
 use std::sync::atomic::Ordering;
 
 use enshwick::abi as api_frame;
-use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str};
+use enshwick::abi::{Event, EventFn, Header, Level, ModHandle, Status, Str, TickHandle};
 
 use crate::host::join::keep;
 use crate::host::memory::{get_headed, put, put_headed, text};
@@ -479,5 +479,51 @@ pub(crate) extern "system" fn subscribe(
         let mut subscriptions = loader.subscriptions.relock();
         subscriptions.push(subscription);
         Status::OK
+    })
+}
+
+pub(crate) extern "system" fn subscribe_tick(
+    me: ModHandle,
+    every_nanos: u64,
+    callback: EventFn,
+    user: *mut core::ffi::c_void,
+    out: *mut TickHandle,
+) -> Status {
+    entry("subscribe_tick", || {
+        let (loader, index, _) = match calling(me) {
+            Ok(found) => found,
+            Err(status) => return status,
+        };
+        if out.is_null() {
+            return Status::BAD_ARGS;
+        }
+        if loader.delivery.get().is_some() && !crate::reload::reinitialising(index.get()) {
+            return Status::TOO_LATE;
+        }
+        let generation = crate::reload::generation(index.get());
+        let Some(handle) = crate::ticks::TICKS.add(index, generation, every_nanos, callback, user)
+        else {
+            return Status::REFUSED;
+        };
+        // SAFETY: `out` is non-null by the check before it and, by
+        // `HostApi::subscribe_tick`, the caller's and writable for a handle.
+        unsafe { out.write_unaligned(handle) };
+        Status::OK
+    })
+}
+
+pub(crate) extern "system" fn set_tick_every(
+    me: ModHandle,
+    handle: TickHandle,
+    every_nanos: u64,
+) -> Status {
+    entry("set_tick_every", || match calling(me) {
+        Ok((_, index, _)) => crate::ticks::TICKS.set_every(
+            handle,
+            index,
+            crate::reload::generation(index.get()),
+            every_nanos,
+        ),
+        Err(status) => status,
     })
 }
