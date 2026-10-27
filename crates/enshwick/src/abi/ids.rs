@@ -225,6 +225,70 @@ pub struct SkillNode(pub u32);
 #[serde(transparent)]
 pub struct KnowledgeId(pub u32);
 
+/// A buff type of the game by its id, the [`Guid::fnv1a`] of its GUID, to
+/// apply, find or remove one buff.
+///
+/// [`Guid::fnv1a`]: crate::content::Guid::fnv1a
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::buffs::BuffTypeId;
+///
+/// const WARMTH: BuffTypeId = BuffTypeId::named("my-mod:warmth");
+/// assert_eq!(WARMTH.to_string(), WARMTH.get().to_string());
+/// ```
+#[repr(transparent)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    bytemuck::Zeroable,
+    bytemuck::Pod,
+)]
+#[serde(transparent)]
+pub struct BuffTypeId(pub u32);
+
+/// A survivor of the game by its id, the [`Guid::fnv1a`] of its template's
+/// GUID, to tell survivors apart in lookups, bed checks and summons.
+///
+/// [`Guid::fnv1a`]: crate::content::Guid::fnv1a
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::survivors::SurvivorId;
+///
+/// let blacksmith = SurvivorId::new(1_201_801_546);
+/// assert_eq!(blacksmith.get(), 1_201_801_546);
+/// ```
+#[repr(transparent)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    serde::Serialize,
+    serde::Deserialize,
+    bytemuck::Zeroable,
+    bytemuck::Pod,
+)]
+#[serde(transparent)]
+pub struct SurvivorId(pub u32);
+
 impl From<RecipeId> for KnowledgeId {
     fn from(recipe: RecipeId) -> Self {
         Self(recipe.0)
@@ -315,6 +379,27 @@ macro_rules! guid_ids {
             pub const fn from_guid(guid: crate::content::Guid) -> Self {
                 Self(guid.fnv1a())
             }
+
+            /// The id of the resource a mod serves under the content id `id`
+            /// (`<mod>:<name>`); a malformed literal fails the build when
+            /// used in a constant.
+            ///
+            /// # Panics
+            ///
+            /// On a malformed id.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use enshwick::content::Id;
+            ///
+            #[doc = concat!("const WARMTH: enshwick::abi::", stringify!($id), " = enshwick::abi::", stringify!($id), "::named(\"my-mod:warmth\");")]
+            #[doc = concat!("assert_eq!(WARMTH, enshwick::abi::", stringify!($id), "::from_guid(Id::new(\"my-mod:warmth\").guid()));")]
+            /// ```
+            #[must_use]
+            pub const fn named(id: &str) -> Self {
+                Self::from_guid(crate::content::Guid::named(id))
+            }
         }
     )*};
 }
@@ -326,9 +411,11 @@ id_conversions!(
     RecipeId(u32),
     SkillNode(u32),
     KnowledgeId(u32),
+    BuffTypeId(u32),
+    SurvivorId(u32),
 );
 
-guid_ids!(ItemId, RecipeId, KnowledgeId);
+guid_ids!(ItemId, RecipeId, KnowledgeId, BuffTypeId, SurvivorId);
 
 const _: () = {
     assert!(size_of::<Entity>() == size_of::<u32>() && align_of::<Entity>() == align_of::<u32>());
@@ -345,6 +432,14 @@ const _: () = {
     assert!(
         size_of::<KnowledgeId>() == size_of::<u32>()
             && align_of::<KnowledgeId>() == align_of::<u32>()
+    );
+    assert!(
+        size_of::<BuffTypeId>() == size_of::<u32>()
+            && align_of::<BuffTypeId>() == align_of::<u32>()
+    );
+    assert!(
+        size_of::<SurvivorId>() == size_of::<u32>()
+            && align_of::<SurvivorId>() == align_of::<u32>()
     );
 };
 
@@ -392,6 +487,24 @@ mod tests {
         assert_eq!(SkillNode::new(0x2a).to_string(), "42");
         assert_eq!(KnowledgeId::new(29).to_string(), "29");
         assert_eq!(format!("{:>6}", ItemId::new(7)), "     7");
+    }
+
+    #[test]
+    fn a_named_id_is_the_id_of_its_content_guid() {
+        let id = crate::content::Id::new("my-mod:warmth");
+        assert_eq!(
+            BuffTypeId::named("my-mod:warmth"),
+            BuffTypeId::from_guid(id.guid())
+        );
+        assert_eq!(
+            SurvivorId::named("my-mod:smith").get(),
+            crate::content::Guid::named("my-mod:smith").fnv1a()
+        );
+        assert_eq!(
+            ItemId::named("my-mod:warmth").get(),
+            BuffTypeId::named("my-mod:warmth").get()
+        );
+        assert_eq!(SurvivorId::new(7).to_string(), "7");
     }
 
     #[test]

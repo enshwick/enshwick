@@ -437,10 +437,10 @@ pub(crate) extern "system" fn affix_info(
 pub(crate) extern "system" fn summon_item(
     me: ModHandle,
     item: enshwick::ItemId,
-    survivor: u32,
+    survivor: enshwick::abi::SurvivorId,
 ) -> Status {
     entry("summon_item", || match caller_index(me) {
-        Ok((loader, _)) => crate::survivors::register_item(loader, item.get(), survivor),
+        Ok((loader, _)) => crate::survivors::register_item(loader, item.get(), survivor.get()),
         Err(status) => status,
     })
 }
@@ -727,11 +727,11 @@ pub(crate) extern "system" fn apply_buff(
 pub(crate) extern "system" fn remove_buff(
     me: ModHandle,
     entity: Entity,
-    id: u32,
+    id: enshwick::abi::BuffTypeId,
     removed: *mut u8,
 ) -> Status {
     entry("remove_buff", || {
-        match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id)) {
+        match caller(me).and_then(|loader| crate::buffs::remove(loader, entity, id.get())) {
             // SAFETY: `HostApi::remove_buff` has the mod pass `removed` null or
             // pointing at a writable, aligned `u8` that no other thread touches
             // during the call.

@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `BuffTypeId` and `SurvivorId` are ABI ids (ABI 3.3): the buff and
+  survivor structs and `HostApi::remove_buff`, `summon_item` and the
+  survivor status merge take them, and they print as their number. Every
+  id the game derives from a GUID has `named` (#PR).
+- `loot::LootContainerId`, the game's name for a loot roll's node and
+  labels; `Roll::node` and `Roll::labels` are `None` where the game has
+  none, and `Source::with_nodes` and `with_labels` take the ids (#PR).
+
 - Every id type prints as its number (`Display`): `Entity`, `ItemId`,
   `PlayerKey`, `RecipeId`, `AffixId`, `SkillNode` and `KnowledgeId` go
   into a log line as they are (#615).
