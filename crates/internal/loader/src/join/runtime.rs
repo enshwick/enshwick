@@ -205,10 +205,10 @@ fn refused(missing: &[crate::admission::Need], reply: &[u8], names: &super::Name
         .collect();
     let dialog = super::refusal::dialog(missing, &off, names, &pages);
     // Mods that are off on the client are the player's to turn on.
-    let wanted: Vec<crate::host::Wanted> = missing
+    let wanted: Vec<crate::join::missing::Wanted> = missing
         .iter()
         .filter(|need| !off.by_player.contains(&need.id) && !off.this_game.contains(&need.id))
-        .map(|need| crate::host::Wanted {
+        .map(|need| crate::join::missing::Wanted {
             name: super::name(reply, &need.id),
             page: pages.get(&need.id).cloned().unwrap_or_default(),
             id: need.id.clone(),

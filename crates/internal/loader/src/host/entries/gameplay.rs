@@ -41,18 +41,6 @@ pub(crate) extern "system" fn altars(
     })
 }
 
-pub(crate) extern "system" fn altar_zones_control(_me: ModHandle) -> Status {
-    Status::REFUSED
-}
-
-pub(crate) extern "system" fn set_altar_zones(
-    _me: ModHandle,
-    _sizes: *const api_frame::AltarZoneSize,
-    _count: usize,
-) -> Status {
-    Status::REFUSED
-}
-
 pub(crate) extern "system" fn altar_zone_filter(
     me: ModHandle,
     callback: api_frame::AltarZoneFn,
@@ -532,14 +520,6 @@ pub(crate) extern "system" fn experience_filter(
         ),
         Err(status) => status,
     })
-}
-
-pub(crate) extern "system" fn altar_limit(
-    _me: ModHandle,
-    _callback: api_frame::AltarLimitFn,
-    _user: *mut core::ffi::c_void,
-) -> Status {
-    Status::REFUSED
 }
 
 pub(crate) extern "system" fn altar_limit_filter(

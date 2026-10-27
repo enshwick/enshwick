@@ -156,15 +156,13 @@ pub struct Summon {
     /// The target cell.
     pub target: [i64; 3],
     /// The slot the used item lies in, `sub-inventory | index << 32`.
-    /// Since minor 37.
     pub slot: u64,
-    /// The used item's own entity, 0 for an item without one. Since minor
-    /// 37.
+    /// The used item's own entity, 0 for an item without one.
     pub pide: u32,
     /// The used item's meter as clients see it, current and maximum;
-    /// `[0, 0]` for an item without one. Since minor 37.
+    /// `[0, 0]` for an item without one.
     pub meter: [u16; 2],
-    /// After the use: 1 when it took the item. Since minor 37.
+    /// After the use: 1 when it took the item.
     pub consumed: u8,
     /// Zero.
     pub reserved: [u8; 3],
@@ -176,7 +174,7 @@ impl Summon {
     /// A filter's answer: the use takes the item.
     pub const TAKE: u8 = 1;
     /// A filter's answer: the use is refused; nothing spawns, moves or is
-    /// taken. Since minor 42.
+    /// taken.
     pub const REFUSE: u8 = 2;
 }
 

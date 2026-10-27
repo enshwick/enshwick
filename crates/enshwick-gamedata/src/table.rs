@@ -208,6 +208,11 @@ impl Table {
             .symbols
             .into_iter()
             .map(|(id, value)| {
+                if id.strip_suffix(".bytes").is_some() {
+                    return Err(TableError::Toml(format!(
+                        "{id}: pinned bytes are a constant, not a symbol"
+                    )));
+                }
                 let (rva, text, locate) = match value {
                     SymbolValue::Plain(rva) => (rva, None, Locate::At(0)),
                     SymbolValue::Full(full) => {

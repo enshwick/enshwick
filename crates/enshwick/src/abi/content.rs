@@ -121,37 +121,29 @@ impl DataField {
     /// How long a recipe takes, in seconds; the entry is a recipe.
     pub const RECIPE_TIME: Self = Self(5);
     /// How many slots the container an item places holds; the entry is the
-    /// item. Since minor 80.
+    /// item.
     pub const CONTAINER_SLOTS: Self = Self(6);
-    /// A weapon's damage factor; the entry is the item. Since minor 81.
+    /// A weapon's damage factor; the entry is the item.
     pub const DAMAGE_MOD: Self = Self(7);
-    /// A weapon's attack speed factor; the entry is the item. Since minor 81.
+    /// A weapon's attack speed factor; the entry is the item.
     pub const SPEED_MOD: Self = Self(8);
     /// Every armour value of an item, scaled only; the entry is the item.
-    /// Since minor 81.
     pub const ARMOR: Self = Self(9);
     /// How long an item burns as fuel, in seconds; the entry is the item.
-    /// Since minor 81.
     pub const BURN_TIME: Self = Self(10);
-    /// The energy an item gives as fuel; the entry is the item. Since
-    /// minor 81.
+    /// The energy an item gives as fuel; the entry is the item.
     pub const ENERGY_OUTPUT: Self = Self(11);
-    /// The comfort a placed item gives; the entry is the item. Since
-    /// minor 81.
+    /// The comfort a placed item gives; the entry is the item.
     pub const COMFORT_AMOUNT: Self = Self(12);
     /// The stack size random loot rolls for an item; the entry is the item.
-    /// Since minor 82.
     pub const LOOT_STACK_SIZE: Self = Self(13);
-    /// The count fill tables give of an item; the entry is the item. Since
-    /// minor 82.
+    /// The count fill tables give of an item; the entry is the item.
     pub const LOOT_COUNT: Self = Self(14);
-    /// The chance fill tables give an item; the entry is the item. Since
-    /// minor 82.
+    /// The chance fill tables give an item; the entry is the item.
     pub const LOOT_SPAWN_PROBABILITY: Self = Self(15);
-    /// The weight of an item in fill tables; the entry is the item. Since
-    /// minor 82.
+    /// The weight of an item in fill tables; the entry is the item.
     pub const LOOT_WEIGHT: Self = Self(16);
-    /// The workshop a recipe is made at, by its game id. Since minor 93.
+    /// The workshop a recipe is made at, by its game id.
     pub const RECIPE_STATION: Self = Self(17);
 }
 
@@ -175,7 +167,7 @@ impl ChangeOp {
     pub const TIMES: Self = Self(1);
     /// The mod's value is taken out, as if it never set one; `value` is
     /// ignored. Only [`HostApi::set_change`](super::HostApi::set_change)
-    /// takes it. Since minor 85.
+    /// takes it.
     pub const RESET: Self = Self(2);
 }
 
@@ -233,16 +225,15 @@ pub struct DataChange {
     /// of conflicts; may be empty.
     pub source: Str,
     /// The item the field names inside its entry, such as a recipe's
-    /// ingredient; all zero for none. Since minor 79.
+    /// ingredient; all zero for none.
     pub item: [u8; 16],
     /// Which vanilla entries the change reaches: `entry` alone, or every
     /// item or recipe a selection picks, with `entry` all zero but for
-    /// [`DataSelect::WORKSHOP`]. Since minor 83.
+    /// [`DataSelect::WORKSHOP`].
     pub select: DataSelect,
     /// The item categories [`DataSelect::CATEGORY`] picks, a bit per the
     /// game's `ItemCategory`, or the [`RecipeKind`] code
-    /// [`DataSelect::RECIPE_KIND`] picks; 0 for any other selection. Since
-    /// minor 83.
+    /// [`DataSelect::RECIPE_KIND`] picks; 0 for any other selection.
     pub categories: u32,
 }
 
@@ -262,7 +253,7 @@ impl_headed!(DataChange);
 pub struct DataSelect(pub u32);
 
 impl DataSelect {
-    /// The entry the change names, as before minor 83.
+    /// The entry the change names.
     pub const ENTRY: Self = Self(0);
     /// Every item of the categories in [`DataChange::categories`].
     pub const CATEGORY: Self = Self(1);
@@ -271,12 +262,12 @@ impl DataSelect {
     /// Every item that places a container.
     pub const CONTAINERS: Self = Self(3);
     /// Every recipe whose output is of the kind whose
-    /// [`RecipeKind`] code is [`DataChange::categories`]. Since minor 91.
+    /// [`RecipeKind`] code is [`DataChange::categories`].
     pub const RECIPE_KIND: Self = Self(4);
     /// Every recipe made at the workshop whose GUID is
-    /// [`DataChange::entry`]. Since minor 91.
+    /// [`DataChange::entry`].
     pub const WORKSHOP: Self = Self(5);
-    /// Every backpack. Since minor 92.
+    /// Every backpack.
     pub const BACKPACKS: Self = Self(6);
 }
 

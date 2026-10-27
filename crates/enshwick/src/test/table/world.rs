@@ -3,9 +3,9 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle, PlayerInfo,
-    RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, Voxel, WeatherFront,
+    AccountActionType, DaytimeInfo, EntityPlace, EventTypeInfo, GameEventFn, Header, ModHandle,
+    PlayerInfo, RenameCallFn, Side, SpawnRequest, Status, StatusFn, Str, TeleportRequest,
+    TerrainEdit, TerrainMaterialInfo, Voxel, WeatherFront,
 };
 use crate::test::table::{found, put, put_list, text, with};
 
@@ -773,4 +773,43 @@ pub(crate) extern "system" fn world_persists(
     // call, non-null by the check before it.
     unsafe { kept.write(u8::from(saved)) };
     Status::OK
+}
+
+pub(crate) extern "system" fn account_action(
+    _me: ModHandle,
+    action: AccountActionType,
+    account: u64,
+) -> Status {
+    if account == 0 || action.0 > AccountActionType::UN_BAN.0 {
+        return Status::BAD_ARGS;
+    }
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    with(Status::MISSING, |s| {
+        if s.edits.stopped {
+            return Status::MISSING;
+        }
+        let online = s.host.players.iter().position(|p| p.key == account);
+        let admin = s
+            .host
+            .players
+            .iter()
+            .any(|p| p.key == account && p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
+        match action {
+            AccountActionType::UN_BAN => s.banned.retain(|&banned| banned != account),
+            _ if admin => return Status::REFUSED,
+            AccountActionType::KICK if online.is_none() => return Status::REFUSED,
+            _ => {
+                if action == AccountActionType::BAN && !s.banned.contains(&account) {
+                    s.banned.push(account);
+                }
+                if let Some(at) = online {
+                    s.host.players.remove(at);
+                    s.removed.push(account);
+                }
+            }
+        }
+        Status::OK
+    })
 }

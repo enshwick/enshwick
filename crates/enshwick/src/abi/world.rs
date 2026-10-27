@@ -331,7 +331,6 @@ pub struct DamageCheck {
     pub source: u32,
     /// Who dealt a hit, the root of the impact that hit (the archer for an
     /// arrow), or `source` when the game names none; 0 for other causes.
-    /// Since minor 45.
     pub attacker: u32,
     /// A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
     /// fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
@@ -756,18 +755,16 @@ impl TransactionOp {
     /// A terrain add, dig or flatten: `data` points at a [`TerrainEdit`]
     /// without [`TerrainEdit::DRY_RUN`].
     pub const TERRAIN: u32 = 1;
-    /// Voxels written over a box: `data` points at a [`VoxelWrite`]. Since
-    /// minor 89.
+    /// Voxels written over a box: `data` points at a [`VoxelWrite`].
     pub const VOXELS: u32 = 2;
     /// The building voxels of a box cleared to air: `data` points at a
-    /// [`VoxelRegion`]. Since minor 89.
+    /// [`VoxelRegion`].
     pub const ERASE: u32 = 3;
-    /// A building block placed: `data` points at a [`BlockPlace`]. Since
-    /// minor 89.
+    /// A building block placed: `data` points at a [`BlockPlace`].
     pub const BLOCK: u32 = 4;
-    /// A prop placed: `data` points at a [`PropPlace`]. Since minor 96.
+    /// A prop placed: `data` points at a [`PropPlace`].
     pub const PLACE_PROP: u32 = 5;
-    /// A prop removed: `data` points at a [`PropRemove`]. Since minor 96.
+    /// A prop removed: `data` points at a [`PropRemove`].
     pub const REMOVE_PROP: u32 = 6;
 }
 
@@ -976,17 +973,16 @@ pub struct TransactionInfo {
     pub bricks: u64,
     /// When the server refused the player the transaction acts for, its
     /// reason, one of the [`BuildRights`] refusals; [`BuildRights::ALLOWED`]
-    /// otherwise. Since minor 89.
+    /// otherwise.
     pub refusal: u32,
     /// Zero.
     pub reserved: u32,
     /// When a prop's state stopped it, or stopped its last undo, the kinds
     /// of state the prop holds, a set of the `HOLDS_` bits; 0 otherwise.
-    /// Since minor 96.
     pub holds: u32,
     /// The props it placed and still holds, which
     /// [`HostApi::transaction_entities`](super::HostApi::transaction_entities)
-    /// lists. Since minor 96.
+    /// lists.
     pub created: u32,
 }
 
@@ -1076,4 +1072,28 @@ impl MapMarkerInfo {
         marker_type: [0; 16],
         label: [0; 16],
     };
+}
+
+/// An account action of [`HostApi::account_action`](super::HostApi::account_action),
+/// with the values of the game's own `AccountActionType`.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::AccountActionType;
+///
+/// assert_ne!(AccountActionType::BAN, AccountActionType::UN_BAN);
+/// ```
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct AccountActionType(pub u8);
+
+impl AccountActionType {
+    /// Removes a player online from the game.
+    pub const KICK: Self = Self(0);
+    /// Puts the account on the ban list, and removes its player when
+    /// online.
+    pub const BAN: Self = Self(1);
+    /// Takes the account off the ban list.
+    pub const UN_BAN: Self = Self(2);
 }

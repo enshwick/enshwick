@@ -3,11 +3,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarLimitFn, AltarZoneFn, AltarZoneSize,
-    BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn,
-    DamageFilterFn, ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn,
-    ModHandle, RateId, Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
-    ZoneCheckFn,
+    ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest,
+    BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header,
+    InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status,
+    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -30,18 +29,6 @@ pub(crate) extern "system" fn altars(
         return Status::REFUSED;
     };
     list(&altars, out, entry_size, capacity, count)
-}
-
-pub(crate) extern "system" fn altar_zones_control(_me: ModHandle) -> Status {
-    Status::REFUSED
-}
-
-pub(crate) extern "system" fn set_altar_zones(
-    _me: ModHandle,
-    _sizes: *const AltarZoneSize,
-    _count: usize,
-) -> Status {
-    Status::REFUSED
 }
 
 pub(crate) extern "system" fn altar_zone_filter(
@@ -193,14 +180,6 @@ pub(crate) extern "system" fn experience_filter(
             .push((callback, user.expose_provenance()));
         Status::OK
     })
-}
-
-pub(crate) extern "system" fn altar_limit(
-    _me: ModHandle,
-    _callback: AltarLimitFn,
-    _user: *mut c_void,
-) -> Status {
-    Status::REFUSED
 }
 
 pub(crate) extern "system" fn altar_limit_filter(

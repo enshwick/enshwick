@@ -116,7 +116,7 @@ impl FakeHost {
         self
     }
 
-    /// A loaded mod `enshwick::mods()` lists, in order; the loader
+    /// A loaded mod `enshwick::mods::all()` lists, in order; the loader
     /// itself comes first in the game.
     ///
     /// # Examples

@@ -1,6 +1,6 @@
 //! Game events: the ECS events the server's systems raise, such as a hit,
-//! a death or a level gained, observed typed as a [`Kind`] or by reflected
-//! type.
+//! a death or a level gained, observed typed through
+//! [`Load::on`](crate::Load::on) or by reflected type.
 //!
 //! Every game event passes the event streams the engine moves at the
 //! start of each simulation step. The loader copies the ones a mod asked for
@@ -9,7 +9,7 @@
 //! [`World`](crate::world::World) reads work in the handler. On a client they
 //! come from the built-in server while it hosts a game.
 //!
-//! An event arrives as raw bytes in the engine's layout; a [`Kind`] reads
+//! An event arrives as raw bytes in the engine's layout; a typed event reads
 //! them for the running build, as [`Field`]s resolved by name do at the low
 //! level.
 
@@ -25,8 +25,8 @@ use crate::{Load, Off};
 pub use kinds::{
     AcceptOfferedInteractionEvent, Block, BuildingPickUpEvent, BuildingPlaceEvent,
     BuildingTearDownEvent, CraftRecipeEvent, CraftRecipeSuccessEvent, EntityDiedEvent,
-    FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, Kind, LevelUpEvent,
-    LootInteractionEvent, RevivedPlayerEvent, XpGainedEvent,
+    FlameAltarEvent, HandleEquipmentSlotChangedEvent, HitEvent, LevelUpEvent, LootInteractionEvent,
+    RevivedPlayerEvent, XpGainedEvent,
 };
 pub use values::{
     AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
@@ -36,11 +36,12 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// Every typed game event: the one list that seals [`Kind`] for each, so a
-/// type implements it only from here, and that scripts read.
+/// Every typed game event: the one list that seals
+/// [`events::Kind`](crate::events::Kind) for each, so a type implements it
+/// only from here, and that scripts read.
 macro_rules! typed_kinds {
     ($($kind:ident),* $(,)?) => {
-        $(impl kinds::sealed::Sealed for $kind {})*
+        $(impl crate::events::sealed::Sealed for $kind {})*
 
         /// Every typed game event, for script languages.
         pub(crate) const SCRIPT_KINDS: &[crate::script::GameEventKind] =
@@ -71,7 +72,7 @@ typed_kinds!(
 ///
 /// ```
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let died = load.event_type("keen::ecs::EntityDiedEvent")?;
+///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
 ///     assert_eq!(died.name(), "keen::ecs::EntityDiedEvent");
 ///     Ok(())
 /// }
@@ -109,7 +110,7 @@ impl EventType {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?.hash();
+    ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?.hash();
     ///     load.on_every_raw_game_event(move |event| {
     ///         if event.type_hash() == died {
     ///             enshwick::debug!("an entity died");
@@ -128,7 +129,7 @@ impl EventType {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     assert_eq!(load.event_type("keen::ecs::EntityDiedEvent")?.size(), 16);
+    ///     assert_eq!(load.game_event_type("keen::ecs::EntityDiedEvent")?.size(), 16);
     ///     Ok(())
     /// }
     /// ```
@@ -150,7 +151,7 @@ impl EventType {
     /// use enshwick::ecs::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?;
+    ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
     ///     let dead = died.field::<Entity>(load, "deadEntityId")?;
     ///     load.on_raw_game_event(died, move |event| {
     ///         if let Some(entity) = event.get(dead) {
@@ -177,7 +178,7 @@ impl EventType {
     /// use enshwick::ecs::Entity;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let hit = load.event_type("keen::ecs::HitEvent")?;
+    ///     let hit = load.game_event_type("keen::ecs::HitEvent")?;
     ///     let attacker = hit.inherited_field::<Entity>(load, "keen::ecs::BaseHitEvent", "rootSourceId")?;
     ///     let _ = attacker;
     ///     Ok(())
@@ -212,12 +213,12 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let types = load.event_types()?;
+    ///     let types = load.game_event_types()?;
     ///     enshwick::info!("{} game event types on this build", types.len());
     ///     Ok(())
     /// }
     /// ```
-    pub fn event_types(&self) -> Result<Vec<EventType>, Off> {
+    pub fn game_event_types(&self) -> Result<Vec<EventType>, Off> {
         let api = self.host().api();
         let me = self.host().handle();
         let mut count = 0;
@@ -388,7 +389,7 @@ impl<T> Field<T> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let died = load.event_type("keen::ecs::EntityDiedEvent")?;
+    ///     let died = load.game_event_type("keen::ecs::EntityDiedEvent")?;
     ///     assert_eq!(died.field::<u32>(load, "deadEntityId")?.offset(), 8);
     ///     Ok(())
     /// }

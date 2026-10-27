@@ -255,7 +255,7 @@ export type PlayerDeathData = {
 	deadly_shroud: number,
 	--- 1 when the player drowned.
 	drowned: number,
-	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other causes, or when the history names none. Since minor 62.
+	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `crate::game_events::EntityDiedEvent` reads it; 0 for other causes, or when the history names none.
 	killer_entity: number,
 }
 

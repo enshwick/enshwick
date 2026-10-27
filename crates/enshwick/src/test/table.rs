@@ -38,19 +38,18 @@ use content::{
     recipe_disabled, recipe_kind, recipe_rule, resource_read, serve_resource, set_change,
 };
 use gameplay::{
-    account_knowledge, altar_limit, altar_limit_filter, altar_zone_filter, altar_zones_changed,
-    altar_zones_control, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
-    buffs, build_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
-    grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
-    raise_base_limit, rate, remove_buff, revoke_knowledge, set_altar_zones, set_rate,
-    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
-    survivor_status, zone_check_filter,
+    account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
+    altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
+    comfort_filter, craft_filter, damage_filter, experience_filter, grant_knowledge,
+    interaction_filter, knowledge, knowledge_input_filter, quests, raise_base_limit, rate,
+    remove_buff, revoke_knowledge, set_rate, skill_override, summon_filter, summon_item, summoned,
+    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
 use mods::{
     config_check, config_schema, fault, join_missing, language, log, migrate, mods, replaced,
-    retired_command, settings, sync, texts,
+    settings, sync, texts,
 };
 use net::{net_channel, net_ready, net_send};
 pub(crate) use services::view;
@@ -63,13 +62,13 @@ use transactions::{
 };
 use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
 use world::{
-    actions, build_rights, chat, component, component_write, destroy, emit, entities,
-    entity_template, event_types, feature, forget_game_settings, game_event, game_settings,
-    hosting, keep_game_settings, map_markers, notify, player, players, rename_filter, run_console,
-    save_world, server_world, set_game_settings, set_label, set_time_of_day, set_time_speed,
-    set_weather, spawn, status, teleport, terrain_edit, terrain_materials, time_of_day,
-    time_speed_control, voxel_read, weather_at, weather_fronts, world_key, world_persists,
-    world_quiet,
+    account_action, actions, build_rights, chat, component, component_write, destroy, emit,
+    entities, entity_template, event_types, feature, forget_game_settings, game_event,
+    game_settings, hosting, keep_game_settings, map_markers, notify, player, players,
+    rename_filter, run_console, save_world, server_world, set_game_settings, set_label,
+    set_time_of_day, set_time_speed, set_weather, spawn, status, teleport, terrain_edit,
+    terrain_materials, time_of_day, time_speed_control, voxel_read, weather_at, weather_fronts,
+    world_key, world_persists, world_quiet,
 };
 
 /// A submitted inventory request and where its result goes.
@@ -136,6 +135,10 @@ pub(crate) struct State {
     pub(crate) destroyed: Vec<u32>,
     /// How many saves the mod asked for.
     pub(crate) saves: usize,
+    /// The accounts on the fake server's ban list, in the order banned.
+    pub(crate) banned: Vec<u64>,
+    /// The accounts the mod removed from the game, by kick or ban, in order.
+    pub(crate) removed: Vec<u64>,
     /// The components the mod asked to write, `(entity, type hash)`.
     pub(crate) writes: Vec<(u32, u32)>,
     /// The game events the mod raised: type hash and bytes.
@@ -396,6 +399,8 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         console: Vec::new(),
         destroyed: Vec::new(),
         saves: 0,
+        banned: Vec::new(),
+        removed: Vec::new(),
         writes: Vec::new(),
         emits: Vec::new(),
         teleports: Vec::new(),
@@ -558,7 +563,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     workshop_recipes,
     hosting,
     server_world,
-    retired_command,
     chat,
     set_label,
     rename_filter,
@@ -571,8 +575,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_console,
     altars_open,
     altars,
-    altar_zones_control,
-    set_altar_zones,
     zone_check_filter,
     survivor_lookup,
     survivor_bed_check,
@@ -583,7 +585,6 @@ pub(crate) static TABLE: HostApi = HostApi {
     skill_override,
     comfort_filter,
     experience_filter,
-    altar_limit,
     raise_base_limit,
     base_zones,
     game_event,
@@ -699,4 +700,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     call: super::calls::call,
     transaction_entities,
     world_persists,
+    account_action,
 };

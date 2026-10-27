@@ -167,7 +167,7 @@ Every method of `FakeHost` takes and returns the builder.
 | `placed(type_hash, entity, at)`       | An entity with a component and a place, for `World::entities` and `World::near`.                      |
 | `world_key(key)`                      | The key of the running world, for `World::key` and world stores.                                      |
 | `player(info)`                        | A connected player with a character in the world.                                                     |
-| `loaded(info)`                        | A loaded mod that `enshwick::mods()` lists.                                                           |
+| `loaded(info)`                        | A loaded mod that `enshwick::mods::all()` lists.                                                      |
 | `join_missing(info)`                  | A server mod that `enshwick::mods::join_missing()` lists.                                             |
 | `replaced(info)`                      | A mod another mod replaces, which `enshwick::mods::replaced()` lists.                                 |
 | `console_answer(word, answer)`        | The answer to console lines starting with `word`, which another mod or the loader gives.              |
