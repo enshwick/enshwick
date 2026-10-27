@@ -12,9 +12,13 @@ use super::names::{camel, is_luau_name, split, unique};
 use super::{Catalogue, Ty};
 
 /// The Luau definitions of the `chosen` items of `catalogue`, read from
-/// `source`.
+/// `source`; no type takes a name of the API's definitions, which a Luau mod
+/// loads beside them.
 pub(crate) fn render(catalogue: &Catalogue, chosen: &BTreeSet<String>, source: &str) -> String {
-    let names = luau_names(chosen);
+    let reserved: BTreeSet<String> = cargo_enshwick::luau::type_names()
+        .map(str::to_owned)
+        .collect();
+    let names = luau_names(chosen, &reserved);
     let mut out = format!(
         "-- The game's own types, written by `cargo enshwick types` from the\n\
          -- reflection data of `{source}`. Write it again for another game build.\n"
@@ -112,8 +116,11 @@ fn luau_type(
 }
 
 /// The Luau name of every chosen item: its short name, with as many of its
-/// namespaces as keep it apart from the others.
-fn luau_names(chosen: &BTreeSet<String>) -> BTreeMap<&str, String> {
+/// namespaces as keep it apart from the others and from `reserved`.
+fn luau_names<'a>(
+    chosen: &'a BTreeSet<String>,
+    reserved: &BTreeSet<String>,
+) -> BTreeMap<&'a str, String> {
     let parts: Vec<(&str, Vec<String>)> = chosen
         .iter()
         .map(|full| {
@@ -124,19 +131,20 @@ fn luau_names(chosen: &BTreeSet<String>) -> BTreeMap<&str, String> {
         })
         .collect();
     let name_of = |words: &[String], depth: usize| words[words.len() - depth..].join("_");
-    let mut taken = BTreeSet::new();
+    let mut taken = reserved.clone();
     parts
         .iter()
         .map(|(full, words)| {
             let mut depth = 1;
             while depth < words.len()
-                && parts
-                    .iter()
-                    .filter(|(_, other)| {
-                        other.len() >= depth && name_of(other, depth) == name_of(words, depth)
-                    })
-                    .count()
-                    > 1
+                && (reserved.contains(&name_of(words, depth))
+                    || parts
+                        .iter()
+                        .filter(|(_, other)| {
+                            other.len() >= depth && name_of(other, depth) == name_of(words, depth)
+                        })
+                        .count()
+                        > 1)
             {
                 depth += 1;
             }

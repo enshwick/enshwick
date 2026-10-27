@@ -27,7 +27,10 @@ global `enshwick`.
 1. Run `cargo enshwick new --luau you.greeter`. It makes the folder with
    `pack.toml`, a `main.luau` that greets each player who joins, a README,
    and `types/enshwick.d.luau`, the API's definitions for the editor.
-   `--side` sets where it runs, the server when left out.
+   `--side` sets where it runs, the server when left out. With
+   `--game <game folder>` it also writes `types/game.d.luau`, the
+   [game's own types](game-types.md), such as the fields
+   `enshwick.on_game_type` hands a handler.
 2. Open the folder in an editor with the
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) extension. The
    folder's `.vscode/settings.json` points it at the definitions, so every
@@ -38,11 +41,15 @@ global `enshwick`.
    luau-lsp analyze --definitions:@enshwick=types/enshwick.d.luau main.luau
    ```
 
+   With the game's types, add `--definitions:@game=types/game.d.luau`.
+
 4. Copy the folder into the game's `mods/` folder as `mods/you.greeter/`.
 
 The repository's `examples/you.welcome` is a Luau mod to start from.
 `cargo enshwick luau --out types/enshwick.d.luau` writes the definitions
-again for the loader the tool was built with, after an update.
+again for the loader the tool was built with, after an update, and
+`cargo enshwick types --from <game folder> --luau types/game.d.luau` the
+game's types after a game update.
 
 ## What a script reaches
 
