@@ -61,10 +61,10 @@ impl InventoryOp {
     /// Replaces the stack in slot `target` with `count` new items `item`,
     /// each with its own entity, given to the inventory in `other`'s low
     /// half and asked for the same slot; `other`'s high half holds the
-    /// `f32` fill of their meter. Since minor 42.
+    /// `f32` fill of their meter.
     pub const RENEW: u32 = 6;
     /// For [`InventoryOp::GIVE`]: `other` holds the fill of each new item's
-    /// meter, the game's own per-item fuel fill. Since minor 37.
+    /// meter, the game's own per-item fuel fill.
     pub const FILLED: u32 = 2;
 }
 
@@ -211,15 +211,15 @@ pub struct ItemData {
     /// How many fit one stack.
     pub max_stack: u16,
     /// The game's `ItemCategory`: 1 equipment, 2 weapons, 3 tools and so
-    /// on. Since minor 48; zero before.
+    /// on.
     pub category: u8,
-    /// The game's `ItemRarity` of the type. Since minor 48; zero before.
+    /// The game's `ItemRarity` of the type.
     pub rarity: u8,
     /// `ItemInfo` flags: [`ItemData::HAS_PIDE`] and the others on this type.
     pub flags: u32,
     /// The GUID of the template a player places from the item, its
     /// `equipment.placedEntity`, in file order; all zero for an item that
-    /// places nothing. Since minor 88; zero before.
+    /// places nothing.
     pub placed_entity: [u8; 16],
 }
 

@@ -89,32 +89,6 @@ impl AltarInfo {
     };
 }
 
-/// The size [`HostApi::set_altar_zones`](super::HostApi::set_altar_zones)
-/// took for one altar before minor 78; the retired entry refuses it.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::abi::AltarZoneSize;
-///
-/// let size = AltarZoneSize { altar: 4096, level: 2, reserved: [0; 3], grow: 6, height: 120 };
-/// assert_eq!(size.grow, 6);
-/// ```
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct AltarZoneSize {
-    /// The altar's entity.
-    pub altar: u32,
-    /// The level the size was worked out for.
-    pub level: u8,
-    /// Zero.
-    pub reserved: [u8; 3],
-    /// Cells added on every horizontal side.
-    pub grow: i64,
-    /// The zone's height in cells.
-    pub height: i64,
-}
-
 /// One altar's zone as the loader sizes it, handed to every altar zone
 /// filter in load order.
 ///
