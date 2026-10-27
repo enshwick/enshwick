@@ -12,12 +12,12 @@ Each entry names the pull request that made the change.
   a `TickPeriod`, whose `set_every` changes the period while the game runs;
   `Load::on_every_step` runs one on every server step. A step a handler
   skips never enters the mod (`HostApi::subscribe_tick`,
-  `HostApi::set_tick_every`, `TickHandle`, ABI 3.2).
+  `HostApi::set_tick_every`, `TickHandle`, ABI 3.2) (#614).
 - `TickData` carries the steps and the time since the handler's last call,
   the average step interval and, with timed diagnostics, the mod's recent
   cost per handler call: `elapsed_steps`, `elapsed`, `step_interval` and
-  `cost`, with `TickData::new` and `with_elapsed` for tests (ABI 3.2).
-- The fake host runs steps as the loader does with `Installed::tick`.
+  `cost`, with `TickData::new` and `with_elapsed` for tests (ABI 3.2) (#614).
+- The fake host runs steps as the loader does with `Installed::tick` (#614).
 
 ### Changed
 
@@ -25,14 +25,14 @@ Each entry names the pull request that made the change.
   `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's
   `enshwick.on("Ticked", ...)` and the scheduler, whose `next_tick` runs on
   its next pass, within that period. `Load::on_every_step` keeps the old
-  timing.
+  timing (#614).
 - Breaking: `StepClock::step(instant)` is `StepClock::advance(elapsed,
   steps)`, and the mod's step clock moves by the time its ticks carry,
-  without reading the clock itself.
+  without reading the clock itself (#614).
 - The loader reads the clock once per server step and hands that reading
-  to every part of the step that needs the time.
+  to every part of the step that needs the time (#614).
 - `abi::read_headed` copies a struct in one move when the writer's struct
-  covers all of it, so a larger event struct costs a handler no more.
+  covers all of it, so a larger event struct costs a handler no more (#614).
 
 ## [1.0.0-alpha.9] - 2026-10-27
 
