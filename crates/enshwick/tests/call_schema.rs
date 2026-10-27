@@ -25,6 +25,10 @@ pub struct Rent {
     pub deal: Deal,
     /// Whether the stall is the player's own.
     pub own: bool,
+    /// The stall's row.
+    pub row: u8,
+    /// The stall's place in its row.
+    pub place: u16,
 }
 
 /// The declaration `cargo enshwick call` writes from that schema.

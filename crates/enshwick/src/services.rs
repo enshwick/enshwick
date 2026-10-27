@@ -19,9 +19,9 @@ use crate::Host;
 use crate::abi::{Layout, LayoutField, Str};
 use crate::shape::ShapeHasher;
 
-#[cfg(feature = "test")]
-pub(crate) use calls::run_typed;
 pub use calls::{Call, CallError, Caller, DescribedCall, DescribedCaller};
+#[cfg(feature = "test")]
+pub(crate) use calls::{Served, run_typed};
 pub use described::{DescribedEmitter, DescribedEvent};
 
 /// A table of functions a mod publishes for others.

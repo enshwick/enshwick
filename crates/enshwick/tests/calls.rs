@@ -18,6 +18,10 @@ mod tests {
         pub(crate) item: u32,
         /// Whether the seller is a regular.
         pub(crate) regular: bool,
+        /// The item's grade.
+        pub(crate) grade: u8,
+        /// How many the seller sells.
+        pub(crate) count: u16,
     }
 
     /// The rent of a stall, which another mod serves.
@@ -37,9 +41,14 @@ mod tests {
     /// What `init` asked for: the typed callers and the described one.
     type Callers = (Caller<Rent>, Caller<RentLater>, DescribedCaller);
 
-    static CALLERS: Mutex<Option<Callers>> = Mutex::new(None);
+    /// A rate the mod serves from a description, as a script engine would.
+    #[enshwick::call(name = "you.trading-post:rate", output = u32)]
+    #[derive(Clone, Copy, Debug)]
+    pub(crate) struct Rate {
+        pub(crate) item: u32,
+    }
 
-    fn described_rent() -> DescribedCall {
+    fn described<C: Call>(input_size: u32, output_size: u32) -> DescribedCall {
         let fields = |layout: &[enshwick::abi::LayoutField]| {
             layout
                 .iter()
@@ -48,12 +57,14 @@ mod tests {
                 .collect()
         };
         DescribedCall::new(
-            Rent::NAME,
-            1,
-            (fields(Rent::LAYOUT), 2),
-            (fields(Rent::OUTPUT), 8),
+            C::NAME,
+            C::MAJOR,
+            (fields(C::LAYOUT), input_size),
+            (fields(C::OUTPUT), output_size),
         )
     }
+
+    static CALLERS: Mutex<Option<Callers>> = Mutex::new(None);
 
     struct Post;
 
@@ -71,10 +82,19 @@ mod tests {
                     input.item * 10
                 }
             })?;
+            // SAFETY: the answer is a `u32`, for which any bytes are valid.
+            unsafe {
+                load.serve_described_call(&described::<Rate>(4, 4), |input, output| {
+                    let item = u32::from_le_bytes(input.try_into().unwrap_or_default());
+                    assert!(item != 13, "an unlucky item");
+                    output.copy_from_slice(&(item * 2).to_le_bytes());
+                    item != 0
+                })?;
+            }
             let rent = load.caller::<Rent>()?;
             let later = load.caller::<RentLater>()?;
             // SAFETY: the input is a `u16`, for which any bytes are valid.
-            let described = unsafe { load.described_caller(&described_rent()) }?;
+            let described = unsafe { load.described_caller(&described::<Rent>(2, 8)) }?;
             *CALLERS.lock().unwrap() = Some((rent, later, described));
             Ok(Self)
         }
@@ -97,40 +117,61 @@ mod tests {
     #[test]
     fn another_mod_calls_what_the_mod_serves() {
         let loader = start();
-        assert_eq!(loader.served_calls(), ["you.trading-post:price-of v2"]);
+        assert_eq!(
+            loader.served_calls(),
+            ["you.trading-post:price-of v2", "you.trading-post:rate v1"]
+        );
         assert_eq!(
             loader.call(&PriceOf {
                 item: 3,
-                regular: false
+                regular: false,
+                grade: 0,
+                count: 1,
             }),
             Ok(30)
         );
         assert_eq!(
             loader.call(&PriceOf {
                 item: 3,
-                regular: true
+                regular: true,
+                grade: 0,
+                count: 1,
             }),
             Ok(36)
         );
     }
 
     #[test]
-    fn a_panicking_handler_fails_its_call_alone() {
+    fn a_panicking_handler_fails_its_call_and_turns_off() {
         let loader = start();
         assert_eq!(
             loader.call(&PriceOf {
                 item: 13,
-                regular: false
+                regular: false,
+                grade: 0,
+                count: 1,
             }),
             Err(CallError::Failed)
         );
         assert_eq!(
             loader.call(&PriceOf {
                 item: 1,
-                regular: false
+                regular: false,
+                grade: 0,
+                count: 1,
             }),
-            Ok(10)
+            Err(CallError::Off)
         );
+    }
+
+    #[test]
+    fn a_described_server_answers_a_typed_caller() {
+        let loader = start();
+        assert_eq!(loader.call(&Rate { item: 4 }), Ok(8));
+        assert_eq!(loader.call(&Rate { item: 0 }), Err(CallError::Failed));
+        assert_eq!(loader.call(&Rate { item: 5 }), Ok(10));
+        assert_eq!(loader.call(&Rate { item: 13 }), Err(CallError::Failed));
+        assert_eq!(loader.call(&Rate { item: 5 }), Err(CallError::Off));
     }
 
     #[test]

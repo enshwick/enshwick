@@ -1284,9 +1284,11 @@ pub struct HostApi {
     /// minor 90.
     pub world_quiet: extern "system" fn(me: ModHandle) -> Status,
     /// Serves the call `spec` describes with `callback` and `user`, named
-    /// `<id>:<call>` after the serving mod; [`Status::REFUSED`] for a name
-    /// outside the mod's id, or a name and major served twice. Allowed
-    /// during `enshwick_mod_init` only. Since minor 94.
+    /// `<id>:<call>` after the serving mod or one of its former ids;
+    /// [`Status::REFUSED`] for another name, or a name and major served
+    /// twice, [`Status::BAD_ARGS`] for a spec that does not read. Allowed
+    /// during `enshwick_mod_init` only: [`Status::TOO_LATE`] once every mod
+    /// is initialised. Since minor 94.
     pub serve_call: extern "system" fn(
         me: ModHandle,
         spec: *const CallSpec,
@@ -1297,15 +1299,19 @@ pub struct HostApi {
     /// Matched against the served call by name and major once every mod is
     /// initialised: the input and the answer must agree field by field and
     /// in size, or the call stays unmatched with the reason in the log.
-    /// Allowed during `enshwick_mod_init` only. Since minor 94.
+    /// [`Status::REFUSED`] when the mod asked for the name and major already
+    /// with another spec, [`Status::BAD_ARGS`] for a spec that does not read
+    /// or a null `out`. Allowed during `enshwick_mod_init` only:
+    /// [`Status::TOO_LATE`] once every mod is initialised. Since minor 94.
     pub find_call:
         extern "system" fn(me: ModHandle, spec: *const CallSpec, out: *mut u32) -> Status,
     /// Runs the call `id` from [`HostApi::find_call`] on this thread: the
     /// server's handler reads `input` and writes the answer to `output`,
     /// both as large as the spec says. [`Status::MISSING`] while the call
     /// is unmatched or before every mod is initialised, [`Status::REFUSED`]
-    /// when the serving mod is off, or what the handler answers. Any
-    /// thread. Since minor 94.
+    /// when the serving mod or its handler is off, [`Status::BAD_ARGS`] for
+    /// a null pointer or an id the mod was not given, or what the handler
+    /// answers. Any thread. Since minor 94.
     pub call: extern "system" fn(
         me: ModHandle,
         id: u32,

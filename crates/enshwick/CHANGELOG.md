@@ -17,7 +17,8 @@ Each entry names the pull request that made the change.
   knows a call from its schema. The loader matches callers by name, major,
   fields and sizes once every mod is initialised (`HostApi::serve_call`,
   `find_call`, `call`, `CallSpec`, ABI minor 94). The fake serves and calls
-  them (`Installed::serve_call`, `call`, `served_calls`).
+  them (`Installed::serve_call`, `call`, `served_calls`). A call's input
+  and answer have no padding, which `Shape::PADDING_FREE` reports.
 - `Load::on_described_mod_event` and `Load::define_described_event`
   (`services::DescribedEvent`, `DescribedEmitter`) hear and send a mod
   event described at run time, its data as bytes in the definer's layout;

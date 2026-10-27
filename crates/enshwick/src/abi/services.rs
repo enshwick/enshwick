@@ -187,10 +187,13 @@ pub struct CallSpec {
 
 impl_headed!(CallSpec);
 
-/// A mod's handler for a call it serves: the input, valid for the call,
-/// the answer to write, as large as the spec's output, and the pointer
-/// given at serving; [`Status::OK`](super::Status::OK) once the answer is
-/// written.
+/// A mod's handler for a call it serves.
+///
+/// It gets the input, valid for the call, the answer to write, as large as
+/// the spec's output, and the pointer given at serving, and answers
+/// [`Status::OK`](super::Status::OK) only once the whole answer is written.
+/// It runs on the caller's thread, any thread, possibly on several at once
+/// and inside another call, and must not unwind.
 pub type CallFn = unsafe extern "system" fn(
     input: *const c_void,
     output: *mut c_void,

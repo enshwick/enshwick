@@ -376,7 +376,7 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
     parse_macro_input!(args with settings);
     let item = parse_macro_input!(item as syn::ItemStruct);
     let ident = item.ident.clone();
-    let expanded = (|| {
+    let expanded = (|| -> syn::Result<TokenStream> {
         let output = output
             .ok_or_else(|| syn::Error::new_spanned(&ident, "name the answer: `output = <type>`"))?;
         let major = version.map_or_else(|| quote!(1), |v| quote!(#v));
@@ -397,7 +397,30 @@ pub fn call(args: TokenStream, item: TokenStream) -> TokenStream {
             type Output = #output;
             #schema
         };
-        expand_declaration(&item, name, &extra, &quote!(services::Call))
+        let declared = proc_macro2::TokenStream::from(expand_declaration(
+            &item,
+            name,
+            &extra,
+            &quote!(services::Call),
+        )?);
+        let types: Vec<&Type> = item.fields.iter().map(|f| &f.ty).collect();
+        let shape = quote!(::enshwick::Shape);
+        Ok(quote! {
+            #declared
+
+            const _: () = {
+                assert!(
+                    true #(&& <#types as #shape>::PADDING_FREE)*
+                        && 0 #(+ ::core::mem::size_of::<#types>())* == ::core::mem::size_of::<#ident>(),
+                    "a call's input has padding, which another language would read uninitialised: add the bytes as fields",
+                );
+                assert!(
+                    <#output as #shape>::PADDING_FREE,
+                    "a call's answer has padding, which another language would read uninitialised: add the bytes as fields",
+                );
+            };
+        }
+        .into())
     })();
     expanded.unwrap_or_else(|e| e.to_compile_error().into())
 }

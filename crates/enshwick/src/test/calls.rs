@@ -199,7 +199,7 @@ impl Installed {
         C: Call,
         F: Fn(&C) -> C::Output + Send + Sync + 'static,
     {
-        let user = Box::into_raw(Box::new(handler));
+        let user = Box::into_raw(Box::new(crate::services::Served::new(C::NAME, handler)));
         with((), |s| {
             s.calls.others.push(Served {
                 declared: Declared::of::<C>(),

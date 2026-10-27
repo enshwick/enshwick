@@ -11,6 +11,7 @@
 
 use core::ffi::c_void;
 use core::marker::PhantomData;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::abi::{CallSpec, Header, Layout, LayoutField, Status, Str};
 use crate::load::{hand_over, ok};
@@ -70,29 +71,21 @@ pub unsafe trait Call: Copy + 'static {
 ///
 /// assert_eq!(CallError::Unmatched.to_string(), "no running mod serves the call as declared here");
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, thiserror::Error)]
 #[non_exhaustive]
 pub enum CallError {
     /// No running mod serves it as declared here, or not every mod is
     /// initialised yet; the log says why once every mod is.
+    #[error("no running mod serves the call as declared here")]
     Unmatched,
-    /// The serving mod is off.
+    /// The serving mod is off, or its handler, which a panic turns off
+    /// until the next start.
+    #[error("the serving mod or its handler is off")]
     Off,
-    /// The server's handler panicked or refused.
+    /// The server's handler panicked or refused this call.
+    #[error("the server's handler failed")]
     Failed,
 }
-
-impl core::fmt::Display for CallError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
-            Self::Unmatched => "no running mod serves the call as declared here",
-            Self::Off => "the serving mod is off",
-            Self::Failed => "the server's handler failed",
-        })
-    }
-}
-
-impl std::error::Error for CallError {}
 
 /// The error a call's status stands for, or `None` for success.
 fn error_of(status: Status) -> Option<CallError> {
@@ -329,7 +322,7 @@ impl DescribedCaller {
 }
 
 /// A described server's handler and its sizes.
-struct Server<F> {
+struct Described<F> {
     input_size: usize,
     output_size: usize,
     run: F,
@@ -369,7 +362,7 @@ impl Load<'_> {
         let host = self.host();
         let spec = spec::<C>();
         hand_over(
-            handler,
+            Served::new(C::NAME, handler),
             |user| (host.api().serve_call)(host.handle(), &raw const spec, run_typed::<C, F>, user),
             &format!(
                 "call {} v{}: named after another mod or served twice",
@@ -455,11 +448,14 @@ impl Load<'_> {
         F: Fn(&[u8], &mut [u8]) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
-        let server = Server {
-            input_size: usize::try_from(call.input_size).unwrap_or(0),
-            output_size: usize::try_from(call.output_size).unwrap_or(0),
-            run: handler,
-        };
+        let server = Served::new(
+            &call.name,
+            Described {
+                input_size: usize::try_from(call.input_size).unwrap_or(0),
+                output_size: usize::try_from(call.output_size).unwrap_or(0),
+                run: handler,
+            },
+        );
         call.with_spec(|spec| {
             hand_over(
                 server,
@@ -509,70 +505,103 @@ impl Load<'_> {
     }
 }
 
-/// Runs a typed server; `user` is the handler boxed by [`Load::serve_call`],
-/// alive for the process. A panic fails the call and leaves the mod on.
+/// A server's handler, and whether a panic turned it off.
+pub(crate) struct Served<F> {
+    name: String,
+    off: AtomicBool,
+    run: F,
+}
+
+impl<F> Served<F> {
+    /// `run`, serving the call `name`.
+    pub(crate) fn new(name: &str, run: F) -> Self {
+        Self {
+            name: name.to_owned(),
+            off: AtomicBool::new(false),
+            run,
+        }
+    }
+
+    /// Turns the handler off after its first panic, saying so once.
+    fn panicked(&self) -> Status {
+        if !self.off.swap(true, Ordering::AcqRel) {
+            crate::warn!(
+                "call {}: the handler panicked and is off until the next start; calls answer that the server is off",
+                self.name
+            );
+        }
+        Status::FAULTED
+    }
+}
+
+/// Runs a typed server; `user` is the [`Served`] boxed by
+/// [`Load::serve_call`], alive for the process. The first panic turns the
+/// handler off and leaves the mod on.
 pub(crate) unsafe extern "system" fn run_typed<C: Call, F: Fn(&C) -> C::Output>(
     input: *const c_void,
     output: *mut c_void,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: `user` is the leaked `Box<F>` this function was served with.
-    let handler = unsafe { &*user.cast::<F>() };
+    // SAFETY: `user` is the leaked `Box<Served<F>>` this function was served
+    // with.
+    let served = unsafe { &*user.cast::<Served<F>>() };
+    if served.off.load(Ordering::Acquire) {
+        return Status::REFUSED;
+    }
     if input.is_null() || output.is_null() {
         return Status::BAD_ARGS;
     }
     // SAFETY: the loader matched the caller's input to `C` field by field
-    // and in size, the caller's bytes are a valid `C` (a typed caller's own,
-    // or a described caller's under its safety contract), live for the
-    // call, and may be unaligned.
+    // and in size, `#[call]` refuses padding so every byte is initialised,
+    // the caller's bytes are a valid `C` (a typed caller's own, or a
+    // described caller's under its safety contract), live for the call, and
+    // may be unaligned.
     let input = unsafe { input.cast::<C>().read_unaligned() };
     let output = output.cast::<C::Output>();
-    let Ok(answer) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler(&input)))
+    let Ok(answer) =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (served.run)(&input)))
     else {
-        crate::warn!("call {}: the handler panicked; this call failed", C::NAME);
-        return Status::FAULTED;
+        return served.panicked();
     };
     // SAFETY: the loader matched the caller's answer to `C::Output` field by
     // field and in size; the caller's buffer lives for the call, written by
-    // nothing else meanwhile, and may be unaligned.
+    // nothing else meanwhile, and may be unaligned. `#[call]` refuses
+    // padding, so a described caller reads only initialised bytes.
     unsafe { output.write_unaligned(answer) };
     Status::OK
 }
 
-/// Runs a described server; `user` is the [`Server`] boxed by
-/// [`Load::serve_described_call`], alive for the process.
+/// Runs a described server; `user` is the [`Served`] boxed by
+/// [`Load::serve_described_call`], alive for the process, its sizes beside
+/// the handler.
 unsafe extern "system" fn run_described<F: Fn(&[u8], &mut [u8]) -> bool>(
     input: *const c_void,
     output: *mut c_void,
     user: *mut c_void,
 ) -> Status {
-    // SAFETY: `user` is the leaked `Box<Server<F>>` this function was
+    // SAFETY: `user` is the leaked `Box<Served<Described<F>>>` this function was
     // served with.
-    let server = unsafe { &*user.cast::<Server<F>>() };
+    let served = unsafe { &*user.cast::<Served<Described<F>>>() };
+    if served.off.load(Ordering::Acquire) {
+        return Status::REFUSED;
+    }
     if input.is_null() || output.is_null() {
         return Status::BAD_ARGS;
     }
+    let sized = &served.run;
     // SAFETY: the loader matched the caller's input to the description in
-    // size, so `input_size` bytes are readable for the call.
-    let input = unsafe { core::slice::from_raw_parts(input.cast::<u8>(), server.input_size) };
-    let mut answer = vec![0u8; server.output_size];
-    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        (server.run)(input, &mut answer)
-    }));
-    match ran {
-        Ok(true) => {
-            // SAFETY: the loader matched the caller's answer to the
-            // description in size, so `output_size` bytes are writable,
-            // written by nothing else meanwhile.
-            unsafe {
-                core::ptr::copy_nonoverlapping(answer.as_ptr(), output.cast::<u8>(), answer.len());
-            }
-            Status::OK
-        }
+    // size, so `input_size` bytes are readable for the call, and initialised:
+    // `#[call]` refuses padding in a typed caller's input.
+    let input = unsafe { core::slice::from_raw_parts(input.cast::<u8>(), sized.input_size) };
+    // SAFETY: the loader matched the caller's answer to the description in
+    // size, so `output_size` bytes are writable for the call, written by
+    // nothing else meanwhile.
+    unsafe { core::ptr::write_bytes(output.cast::<u8>(), 0, sized.output_size) };
+    // SAFETY: the same bytes, zeroed just before, so initialised.
+    let answer = unsafe { core::slice::from_raw_parts_mut(output.cast::<u8>(), sized.output_size) };
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (sized.run)(input, answer))) {
+        Ok(true) => Status::OK,
         Ok(false) => Status::FAULTED,
-        Err(_) => {
-            crate::warn!("a described call's handler panicked; this call failed");
-            Status::FAULTED
-        }
+        Err(_) => served.panicked(),
     }
 }

@@ -14,6 +14,10 @@ pub struct Rent {
     pub deal: Deal,
     /// Whether the stall is the player's own.
     pub own: bool,
+    /// The stall's row.
+    pub row: u8,
+    /// The stall's place in its row.
+    pub place: u16,
 }
 
 /// What a player does at a stall.
@@ -41,6 +45,14 @@ const _: () = {
     assert!(
         <Rent as enshwick::services::Call>::LAYOUT[2].hash == 0x3212_dc21_1893_c5d6,
         "`own` differs from the server's",
+    );
+    assert!(
+        <Rent as enshwick::services::Call>::LAYOUT[3].hash == 0xc13c_c592_7653_f4b1,
+        "`row` differs from the server's",
+    );
+    assert!(
+        <Rent as enshwick::services::Call>::LAYOUT[4].hash == 0x2d22_5a0a_1187_4bfd,
+        "`place` differs from the server's",
     );
     assert!(
         <Rent as enshwick::services::Call>::OUTPUT[0].hash == 0x4685_e569_0ab2_dfdc,

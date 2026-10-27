@@ -20,8 +20,8 @@ schema goes into the server's DLL:
 pub struct PriceOf {
     /// The item.
     pub item: u32,
-    /// Whether the seller sold here before.
-    pub regular: bool,
+    /// How many the seller sells.
+    pub count: u32,
 }
 
 fn manifest() -> &'static enshwick::abi::Manifest {
@@ -35,6 +35,9 @@ fn manifest() -> &'static enshwick::abi::Manifest {
 - Every type in the input and the answer has a [`Shape`](services.md#shapes)
   that a schema describes: numbers, `bool`, `Entity`, `Guid`, and the mod's own
   structs, enums and value types.
+- The input and the answer have no padding, since another language reads them as
+  bytes. The build fails on a gap: add its bytes as fields of their own, such as
+  a `u8` and a `u16` between a `bool` and the next `u32`.
 
 ## Serving
 
@@ -47,19 +50,20 @@ takes only what is safe from any thread:
 # #[derive(Clone, Copy, Debug)]
 # pub struct PriceOf {
 #     pub item: u32,
-#     pub regular: bool,
+#     pub count: u32,
 # }
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.serve_call(|input: &PriceOf| {
-        let coins = input.item * 10;
-        if input.regular { coins + coins / 5 } else { coins }
+        let coins = input.item * 10 * input.count;
+        if input.count >= 10 { coins - coins / 10 } else { coins }
     })
 }
 ```
 
-A panic in the handler fails that call with a warning in the log; the mod stays
-on. The status summary lists each served call with the mods that call it, and
-the profile counts the handler's time against the server.
+A panic in the handler fails that call and turns the handler off until the next
+start, with a warning in the log. Later calls answer that the server is off, and
+the rest of the mod stays on. The status summary lists each served call with the
+mods that call it, and the profile counts the handler's time against the server.
 
 ## Calling
 
@@ -81,13 +85,13 @@ then gives a `Caller`, which is `Copy` and runs the call from any thread:
 # #[derive(Clone, Copy, Debug)]
 # pub struct PriceOf {
 #     pub item: u32,
-#     pub regular: bool,
+#     pub count: u32,
 # }
 use enshwick::services::CallError;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let price_of = load.caller::<PriceOf>()?;
-    load.on::<enshwick::events::WorldLoaded>(move |_| match price_of.call(&PriceOf { item: 7, regular: false }) {
+    load.on::<enshwick::events::WorldLoaded>(move |_| match price_of.call(&PriceOf { item: 7, count: 1 }) {
         Ok(coins) => enshwick::info!("item 7 sells for {coins}"),
         Err(CallError::Unmatched) => enshwick::info!("no trading post here"),
         Err(other) => enshwick::warn!("the trading post: {other}"),
