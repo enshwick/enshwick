@@ -26,7 +26,9 @@
 //! player's flags, and never an id that gives experience or skill points or
 //! a quest. By default it watches, logging the rest and letting it
 //! through; enforcing, it refuses the rest. A mod widens or narrows it with
-//! [`Load::on_knowledge_input`].
+//! `Load::on_knowledge_input`. The input filter and the revokes need the
+//! `unstable` feature: what a vanilla client asks for, and how it takes a
+//! revoke, are not yet seen in the running game.
 //!
 //! Every call belongs on the server's game thread, from a game event, a
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
@@ -35,31 +37,29 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Arg, Outcome, Value};
-//! use enshwick::knowledge::{Grant, KnowledgeId};
+//! use enshwick::knowledge::{Grant, Knowledge, KnowledgeId};
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let knowledge = load.knowledge();
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     let learn = Action::new("learn", "Learn a recipe")
-//!         .admins()
-//!         .arg(Arg::number("Recipe id", 0.0..=f64::from(u32::MAX), 1.0));
-//!     actions.add(learn, move |request| {
-//!         let [Value::Number(recipe)] = request.args else {
-//!             return Outcome::refused("Name a recipe");
-//!         };
-//!         Outcome::done(format!("{:?}", knowledge.grant(request.player.entity, KnowledgeId::new(*recipe as u32), Grant::Flag(0))))
-//!     })
+//! fn learn(knowledge: &Knowledge, player: enshwick::Entity, recipe: KnowledgeId) -> Result<(), enshwick::WorldError> {
+//!     knowledge.grant(player, recipe, Grant::Flag(0))
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Knowledge, enshwick::Off> {
+//!     Ok(load.knowledge())
 //! }
 //! ```
 
+#[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
+#[cfg(feature = "unstable")]
+use crate::Off;
 use crate::WorldError;
 pub use crate::abi::KnowledgeId;
-use crate::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
+#[cfg(feature = "unstable")]
+use crate::abi::KnowledgeInput;
+use crate::abi::{Header, KnowledgeInfo, Status};
 use crate::{Entity, PlayerKey};
-use crate::{Host, Load, Off};
+use crate::{Host, Load};
 
 /// What a knowledge value is.
 ///
@@ -176,9 +176,12 @@ pub enum Grant {
 
 /// What a revoke takes back, by the kind of the knowledge.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`Knowledge::revoke`].
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Revoke {
@@ -190,6 +193,7 @@ pub enum Revoke {
     Unflag(u32),
 }
 
+#[cfg(feature = "unstable")]
 impl Revoke {
     const fn raw(self) -> (u32, u32) {
         match self {
@@ -317,6 +321,8 @@ impl Knowledge {
     /// [`KnowledgeChanged`](crate::events::KnowledgeChanged) reports it
     /// after the next step.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`WorldError::Refused`] for an id the game does not know, a revoke
@@ -334,6 +340,7 @@ impl Knowledge {
     ///     let _taken = knowledge.revoke(player, recipe.into(), Revoke::Unflag(1));
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn revoke(
         &self,
         player: Entity,
@@ -353,6 +360,8 @@ impl Knowledge {
     /// Takes knowledge `id` of the world's back, as [`Knowledge::revoke`]
     /// does.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// As for [`Knowledge::revoke`]; a player's id is refused.
@@ -366,12 +375,13 @@ impl Knowledge {
     ///     let _taken = knowledge.revoke_world(place, Revoke::Clear);
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn revoke_world(&self, id: KnowledgeId, revoke: Revoke) -> Result<(), WorldError> {
         self.revoke(Entity(0), id, revoke)
     }
 
     /// Grants knowledge `id` of a player's to the account whose
-    /// [`Player::key`](crate::world::Player::key) is `account`, as
+    /// `Player::key` is `account`, as
     /// [`Knowledge::grant`] does: now when its character is in the game,
     /// else once its next character has loaded in this world. The loader
     /// keeps waiting changes with the world, so they outlast restarts.
@@ -404,9 +414,11 @@ impl Knowledge {
     }
 
     /// Takes knowledge `id` of a player's back from the account whose
-    /// [`Player::key`](crate::world::Player::key) is `account`, as
+    /// `Player::key` is `account`, as
     /// [`Knowledge::revoke`] does, now or once its next character has
     /// loaded in this world, as [`Knowledge::grant_account`] waits.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -421,6 +433,7 @@ impl Knowledge {
     ///     let _queued = knowledge.revoke_account(account, recipe.into(), Revoke::Unflag(1));
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn revoke_account(
         &self,
         account: PlayerKey,
@@ -497,9 +510,12 @@ impl Knowledge {
 
 /// Why the loader's knowledge guard refuses a client's request.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
-/// See [`Load::on_knowledge_input`].
+/// See `Load::on_knowledge_input`.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Refusal {
@@ -523,6 +539,7 @@ pub enum Refusal {
     Other(u32),
 }
 
+#[cfg(feature = "unstable")]
 impl Refusal {
     const fn from_raw(raw: u32) -> Option<Self> {
         Some(match raw {
@@ -541,11 +558,14 @@ impl Refusal {
 }
 
 /// Knowledge a client asks the server for in its input, from
-/// [`Load::on_knowledge_input`].
+/// `Load::on_knowledge_input`.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
-/// See [`Load::on_knowledge_input`].
+/// See `Load::on_knowledge_input`.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct KnowledgeRequest {
@@ -566,6 +586,7 @@ pub struct KnowledgeRequest {
     pub allowed: bool,
 }
 
+#[cfg(feature = "unstable")]
 unsafe extern "system" fn run_input<F>(call: *const KnowledgeInput, user: *mut c_void) -> u8
 where
     F: Fn(&KnowledgeRequest) -> bool,
@@ -613,9 +634,11 @@ impl Load<'_> {
     /// more than the guard or allow what it refuses. A filter's refusal
     /// stands whatever the guard's mode; a guard that only watches lets
     /// through what it would refuse, so `filter` sees it allowed, with the
-    /// reason in [`KnowledgeRequest::refusal`]. A refused request changes
+    /// reason in `KnowledgeRequest::refusal`. A refused request changes
     /// nothing and is not asked again. It runs on the server's worker
     /// threads, rarely: only when a client asks.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -634,6 +657,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn on_knowledge_input<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&KnowledgeRequest) -> bool + Send + Sync + 'static,

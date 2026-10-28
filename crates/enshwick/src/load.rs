@@ -123,7 +123,6 @@ off_from!(
     crate::altars::ResizeError,
     crate::code::FindError,
     crate::code::PatternError,
-    crate::console::RunError,
     crate::content::vanilla::VanillaError,
     crate::inventory::BatchError,
     crate::item_data::SetError,
@@ -137,6 +136,9 @@ off_from!(
     crate::ui::UiError,
     crate::WorldError,
 );
+
+#[cfg(feature = "unstable")]
+off_from!(crate::console::RunError);
 
 impl From<ConfigError> for Off {
     /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text
@@ -248,6 +250,8 @@ impl Load<'_> {
     /// The server's [`World`](crate::world::World): reads, queries and
     /// requests; on a client, the built-in server's while it hosts a game.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the game build lacks a type the reads need.
@@ -255,12 +259,15 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`World`](crate::world::World).
+    #[cfg(feature = "unstable")]
     pub fn world(&mut self) -> Result<crate::world::World, Off> {
         crate::world::World::resolve(self)
     }
 
     /// The map's markers and the players' waypoints in the game server,
     /// dedicated or hosted by the client.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -269,12 +276,15 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`Map`](crate::map::Map).
+    #[cfg(feature = "unstable")]
     pub fn map(&mut self) -> Result<crate::map::Map, Off> {
         crate::map::Map::resolve(self)
     }
 
     /// The client's fog of war, which the loader copies for the mod from
     /// now on; a mod asks for it during `init`.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -283,6 +293,7 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See [`FogOfWar`](crate::map::FogOfWar).
+    #[cfg(feature = "unstable")]
     pub fn fog_of_war(&mut self) -> Result<crate::map::FogOfWar, Off> {
         crate::map::FogOfWar::open(self)
     }

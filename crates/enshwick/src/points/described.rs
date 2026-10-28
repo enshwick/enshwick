@@ -12,6 +12,8 @@ use crate::{Load, Off};
 /// A field of a described input or answer: its name and the layout hash the
 /// owner's build wrote for it.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See [`DescribedPoint`].
@@ -41,6 +43,8 @@ impl DescribedField {
 
 /// Another mod's extension point as its schema describes it, for a link
 /// that reads the input and writes the answer as bytes.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -140,6 +144,8 @@ impl DescribedPoint {
 }
 
 /// What a described link answers.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///

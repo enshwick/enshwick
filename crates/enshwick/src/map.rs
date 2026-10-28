@@ -1,6 +1,8 @@
 //! The world's map as the server knows it: its markers, its frame and
 //! each player's waypoint.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! A marker is a `MapMarker` the world comes with: a town, a ruin, a
 //! dungeon, a Flame shrine, a quest area, as the scene's own data places
 //! it. Its type is a key into the game's marker type registry, an open set

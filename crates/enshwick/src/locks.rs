@@ -2,7 +2,9 @@
 //! taken again with its state kept, its poison cleared and the place logged.
 
 use std::panic::Location;
-use std::sync::{Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Mutex, MutexGuard};
+#[cfg(feature = "unstable")]
+use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Takes a lock under the poison policy.
 pub trait Relock<T: ?Sized> {
@@ -11,6 +13,7 @@ pub trait Relock<T: ?Sized> {
 }
 
 /// Takes a read-write lock under the poison policy.
+#[cfg(feature = "unstable")]
 pub(crate) trait RelockRw<T: ?Sized> {
     /// The read guard, also after a thread panicked holding the lock.
     fn relock_read(&self) -> RwLockReadGuard<'_, T>;
@@ -30,6 +33,7 @@ impl<T: ?Sized> Relock<T> for Mutex<T> {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl<T: ?Sized> RelockRw<T> for RwLock<T> {
     #[track_caller]
     #[inline]
@@ -83,6 +87,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn a_poisoned_read_write_lock_keeps_its_state_and_heals() {
         let lock = RwLock::new(1);
         let _panicked = std::panic::catch_unwind(|| {

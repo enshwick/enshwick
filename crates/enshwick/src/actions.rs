@@ -1,6 +1,8 @@
 //! Player actions: what a player asks a mod to do, declared once and offered
 //! in the game's interface.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! A mod declares each action with its id, its label, who may use it, what
 //! it acts on and its arguments as typed choices, and handles it on the
 //! server. The platform does the rest:

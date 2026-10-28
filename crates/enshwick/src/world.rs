@@ -1,6 +1,8 @@
 //! The server's world: components, entities and players, their queries and
 //! writes, chat, saves, build rights and [`Transaction`]s.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! Most calls belong on the server's game thread, from a game event or a
 //! [`Scheduler`](crate::schedule::Scheduler) task, and each says what it does
 //! elsewhere. On a client the server is the built-in one, while it hosts a
@@ -38,7 +40,7 @@ pub use prop_state::{HeldState, PropState};
 pub(crate) use props::span;
 pub use props::{CapturedProp, Prop, WorldTransform};
 pub use rename::Rename;
-pub use stats::{Meter, Progress, Skill, SkillNode, Vitals};
+pub use stats::{Meter, Progress, Skill, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
 /// A reflected component type a mod may write, resolved once at init with
@@ -309,7 +311,7 @@ pub struct World(&'static Resolved);
 
 impl crate::script::Bound for World {
     const NAME: &'static str = "world";
-    const DOC: &'static str = "The server's world: players, chat, notices and positions.";
+    const DOC: &'static str = "The server's world: players, chat, notices and positions. Unstable: may change in any release.";
     const PARTS: &'static [&'static [crate::script::Function<Self>]] =
         &[Self::SCRIPT_PLAYERS, Self::SCRIPT_THINGS];
 

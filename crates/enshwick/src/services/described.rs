@@ -13,6 +13,8 @@ use crate::{Host, Load, Off};
 /// A mod event as its schema describes it, for code that reads and writes
 /// its data as bytes.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -74,6 +76,8 @@ impl DescribedEvent {
 }
 
 /// Sends a described mod event this mod defined, from any thread.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///

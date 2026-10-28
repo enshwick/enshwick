@@ -104,6 +104,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 ## Map markers
 
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
 [`Ui::set_markers`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ui/map.rs)
 shows the mod's markers on the map, at most 256, each with a position in
 metres, a label and one of the game's eight custom marker colours; the next

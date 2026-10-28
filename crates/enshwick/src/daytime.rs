@@ -15,14 +15,13 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
+//! use enshwick::events::WorldLoaded;
+//!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let clock = load.clock();
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("noon", "Set the time to noon").admins(), move |_request| {
-//!         match clock.set_hours(12.0) {
-//!             Ok(()) => Outcome::done("It is noon"),
-//!             Err(why) => Outcome::refused(format!("No noon: {why}")),
+//!     load.on::<WorldLoaded>(move |()| {
+//!         if let Err(why) = clock.set_hours(12.0) {
+//!             enshwick::warn!("no noon: {why}");
 //!         }
 //!     })
 //! }
@@ -165,12 +164,14 @@ impl Clock {
 /// # Examples
 ///
 /// ```
-/// use enshwick::actions::{Action, Outcome};
+/// use enshwick::events::WorldLoaded;
+///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     let speed = load.clock_speed()?;
-///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-///     actions.add(Action::new("slow-time", "Halve the clock's speed").admins(), move |_request| {
-///         Outcome::done(format!("{:?}", speed.set(0.5)))
+///     load.on::<WorldLoaded>(move |()| {
+///         if let Err(why) = speed.set(0.5) {
+///             enshwick::warn!("the clock keeps its speed: {why}");
+///         }
 ///     })
 /// }
 /// ```

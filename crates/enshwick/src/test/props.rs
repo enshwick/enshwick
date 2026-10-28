@@ -5,6 +5,7 @@ use crate::Entity;
 use crate::ItemId;
 use crate::abi::{PropRemove, Status, TransactionInfo};
 use crate::test::FakeChange;
+#[cfg(feature = "unstable")]
 use crate::world::HeldState;
 
 /// Half the side of the box the fake checks a player's rights for around a
@@ -33,7 +34,7 @@ pub(crate) struct FakeProp {
 impl FakeHost {
     /// A prop standing in the fake's world: `entity`, placed from `item`, at
     /// `at` in metres, holding no state until
-    /// [`Installed::set_prop_state`].
+    /// `Installed::set_prop_state`.
     ///
     /// # Examples
     ///
@@ -190,6 +191,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().prop(Entity(40), ItemId::new(30), [50.0; 3]).install();
     /// loader.set_prop_state(Entity(40), &[HeldState::Inventory]);
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn set_prop_state(&self, entity: Entity, kinds: &[HeldState]) {
         let holds = kinds.iter().fold(0, |bits, kind| bits | kind.bit());
         table::with((), |s| {

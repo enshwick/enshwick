@@ -1,0 +1,70 @@
+# Stability
+
+From 1.0 the `enshwick` crate follows
+[Semantic Versioning](https://semver.org/), so a mod built against 1.x still
+builds against every later 1.y and loads in a 1.y loader. Only the `unstable`
+feature stands outside that promise: what it holds may change in any release, a
+patch included.
+
+## What is stable
+
+Everything the crate offers without a feature:
+
+- the mod and its loader: `Load`, `Host`, settings, texts, state and migrations;
+- hooks, game memory, events and game events;
+- the server's world calls outside `world`: altars, buffs, daytime, effects,
+  game settings, rates, damage, terrain, voxels and weather, whose errors share
+  one type, `enshwick::WorldError`;
+- inventories, item and entity data, stats and affixes;
+- content and data packs;
+- services, mod events, extension points, messages and the interface.
+
+## What `unstable` holds
+
+| Part                                                                                                                                    | Why it is unstable                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `world`: `World`, its players, chat, notices, component writes, transactions, captures, kicks, bans and the allowlist                   | young; world edits and build rights rest on engine facts not yet seen in the running game                |
+| `map`, `Load::fog_of_war` and the map markers of `ui`                                                                                   | young; the map frame, the fog and how markers show are not yet seen in the client                        |
+| `actions` and `console`                                                                                                                 | young                                                                                                    |
+| `script`, `#[derive(Script)]` and `#[script]`                                                                                           | the binding of Rust types to Luau, still growing with it                                                 |
+| Calls: `#[call]`, `Load::serve_call`, `Load::caller`, `services::Call` and the described calls, events and points a script runtime uses | young                                                                                                    |
+| `Effects::teleport` and `Effects::ping`                                                                                                 | whether a client keeps a teleported player in place, and shows a ping the server raised, is not yet seen |
+| `Knowledge::revoke` and its kin, `Load::on_knowledge_input`                                                                             | how a vanilla client takes a revoke, and what it asks for, is not yet seen                               |
+| `Load::request_base_limits`                                                                                                             | young                                                                                                    |
+
+The API reference marks each of these items "Unstable". Turn the feature on in
+the mod's `Cargo.toml`:
+
+```toml
+[dependencies]
+enshwick = { version = "1", features = ["unstable"] }
+```
+
+An unstable item leaves the feature once it has settled and, where it rests on
+the game, once the running game has shown it. Some chapters use player actions
+or the world only to show a stable call in context; those lines need the
+feature, the call itself does not.
+
+## Luau
+
+A Luau mod has no features to turn on. The definitions in `enshwick.d.luau` mark
+the unstable parts "Unstable": the `world` namespace and `enshwick.caller`. They
+may change in any release, as their Rust counterparts do.
+
+## The ABI
+
+The loader and the mods talk through one C ABI, whatever features a mod turns
+on. An unstable call is a slot of the same table as a stable one. From 1.0:
+
+- `ABI_MAJOR` changes only with an incompatible change, and with it the crate's
+  major. A loader refuses a mod built for another major.
+- `ABI_MINOR` grows when the loader's table or a struct gains fields at its end,
+  and with it the crate's minor. No slot or field goes away or moves. A loader
+  refuses a mod of a newer minor and runs every older one of its major.
+- A loader that only adds game builds is a patch release and changes neither
+  number.
+
+An unstable call may change its safe wrapper in any release. Its ABI slot
+changes only under the rules above, so a mod built with `unstable` keeps
+loading; whether it still builds against a newer crate is what the feature does
+not promise.

@@ -131,7 +131,7 @@ impl NewItem {
 /// The game keeps it on the item's own entity as the water pouch keeps its
 /// water: it saves it with the world, sends it to players and draws it as a
 /// bar on the item's slot. Read and change it with
-/// [`World::item_meter`](crate::world::World::item_meter); set it for each
+/// `World::item_meter`; set it for each
 /// new item with [`Op::Give`](crate::inventory::Op::Give)'s `fill` or a
 /// [`Drop`](crate::loot::Drop)'s fill.
 ///

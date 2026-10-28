@@ -71,13 +71,16 @@ end)
 | `enshwick.on_game_type(type, fields, handler)` | a game event by its reflected type, with the fields named |
 | `enshwick.extend(point, handler)` | a link into another mod's [extension point](#extending-another-mod) |
 | `enshwick.on_mod_event(event, handler)`, `enshwick.define_event(event)` | [mod events](#mod-events), heard and sent |
-| `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod) |
+| `enshwick.caller(call)` | a function that runs [another mod's call](#calling-another-mod); unstable |
 | `enshwick.log` | `info`, `warn` and `error` write a line to the mod's log; `print` writes as `info` |
-| `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md) |
+| `enshwick.world` | the connected players, chat, notices and positions of [the world](world.md); unstable |
 | `enshwick.inventory` | slots and counts of [inventories](inventories.md), and items given, taken and moved, on the server |
 | `enshwick.settings()` | the mod's [settings](#settings) in force, as a table |
 | `enshwick.scheduler` | `next_tick`, `after` and `every` run a function on the game thread; an `every` task stops when it returns `false` |
 | `require("./name")` | another script of the same folder, as Luau resolves it |
+
+The rows marked unstable may change in any release, as the Rust parts behind
+them do ([Stability](stability.md)); a script uses them with no switch.
 
 Names are the Rust API's: `enshwick.world.notify_all` is
 `World::notify_all`, and the event `PlayerJoined` is `events::PlayerJoined`.
@@ -226,6 +229,9 @@ fields, after the start: either takes the next start. A `send` before
 `main.luau` has finished reaches no one.
 
 ## Calling another mod
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 A Luau mod calls another mod's [call](calls.md) through the module this
 command writes:

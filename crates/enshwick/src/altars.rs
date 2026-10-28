@@ -886,6 +886,8 @@ impl Load<'_> {
     /// up to `bases` bases; values below the game's own count as the game's,
     /// and the largest request of every mod holds.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] after init, or for a value past the most the loader takes

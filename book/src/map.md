@@ -1,5 +1,8 @@
 # The map
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 [`load.map()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/map.rs)
 returns the `Map` of the game server, dedicated or hosted by a client: the
 markers the world comes with, its frame and the waypoint each player sets. It is

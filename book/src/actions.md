@@ -1,5 +1,8 @@
 # Player actions
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 A mod that lets players or administrators do something, such as letting a
 friend open a chest or picking a reward, declares it once as an action, and
 the platform offers it in the game's own interface:
