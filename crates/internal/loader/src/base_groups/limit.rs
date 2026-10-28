@@ -8,7 +8,7 @@
 
 /// The altar zones the game's own grouping puts into bases.
 pub(crate) const VANILLA_ZONES: u32 = 16;
-/// The most bases the game holds.
+/// The most bases the game's own array holds.
 pub(crate) const MAX_BASES: u32 = 16;
 /// Altar zones and bases: what the game groups, or what a mod asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -31,14 +31,14 @@ impl Limits {
         bases: MAX_BASES,
     };
     /// The most a mod may ask for: every zone the game lists, in the bases
-    /// its array holds.
+    /// its array and the window behind it hold.
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "the game lists at most 255 zones"
+        reason = "the game lists at most 255 zones, and a u8 indexes its bases"
     )]
     pub(crate) const MOST: Self = Self {
         zones: super::grouping::MAX_LISTED as u32,
-        bases: MAX_BASES,
+        bases: super::window::MOST as u32,
     };
 
     /// Whether neither value passes `most`'s.

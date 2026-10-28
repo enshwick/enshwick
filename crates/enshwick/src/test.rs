@@ -165,6 +165,18 @@ pub fn address<F: FnPtr>(function: F) -> u64 {
     address as u64
 }
 
+/// Whether the fake's game build has the base code the loader hooks to
+/// raise the base limits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BaseCode {
+    /// The platform knows it.
+    Known,
+    /// The platform raises the zones but cannot hold bases past 16.
+    ZonesOnly,
+    /// An unknown build: the game keeps its own limits.
+    Unknown,
+}
+
 /// What the fake loader answers: a builder, installed with
 /// [`FakeHost::install`].
 ///
@@ -221,6 +233,7 @@ pub struct FakeHost {
     workshop_recipes: u32,
     items: HashMap<u32, ItemData>,
     no_inventories: bool,
+    base_code: BaseCode,
     console_answers: HashMap<String, String>,
     placed: Vec<(u32, EntityPlace)>,
     world_key: Option<String>,
@@ -307,6 +320,7 @@ impl FakeHost {
             workshop_recipes: 512,
             items: HashMap::new(),
             no_inventories: false,
+            base_code: BaseCode::Known,
             console_answers: HashMap::new(),
             placed: Vec::new(),
             world_key: None,

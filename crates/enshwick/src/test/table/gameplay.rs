@@ -201,17 +201,27 @@ pub(crate) extern "system" fn altar_limit_filter(
 /// game's.
 const VANILLA: (u32, u32) = (16, 16);
 /// The most altar zones and bases a mod may ask for, as the loader's.
-const MOST: (u32, u32) = (255, 16);
+const MOST: (u32, u32) = (255, 179);
 /// What raising the base limit asks for.
 const RAISED: (u32, u32) = (32, 16);
 
 /// The zones and bases the fake's game groups, as the loader's: the game's
 /// own, or the mod's largest request once its hooks are armed.
 pub(crate) fn zones_and_bases() -> (u32, u32) {
+    let most = most();
     with(None, |s| {
         s.base_limit.requested.filter(|_| s.base_limit.armed)
     })
-    .unwrap_or(VANILLA)
+    .map_or(VANILLA, |(zones, bases)| (zones, bases.min(most.1)))
+}
+
+/// The most a mod may ask for, as the loader's: its own most, or 16 bases
+/// once arming finds a build that keeps them.
+fn most() -> (u32, u32) {
+    let kept = with(false, |s| {
+        s.base_limit.armed && s.host.base_code == crate::test::BaseCode::ZonesOnly
+    });
+    if kept { (MOST.0, VANILLA.1) } else { MOST }
 }
 
 /// Takes a request for `zones` and `bases`, as the loader does: refused
@@ -224,6 +234,9 @@ fn request(zones: u32, bases: u32) -> Status {
         if s.base_limit.armed {
             return Status::TOO_LATE;
         }
+        if s.host.base_code == crate::test::BaseCode::Unknown {
+            return Status::MISSING;
+        }
         let (old_zones, old_bases) = s.base_limit.requested.unwrap_or(VANILLA);
         s.base_limit.requested = Some((
             zones.max(old_zones).max(VANILLA.0),
@@ -235,6 +248,7 @@ fn request(zones: u32, bases: u32) -> Status {
 
 pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo) -> Status {
     let (zones, bases) = zones_and_bases();
+    let (max_zones, max_bases) = most();
     let limit = BaseLimitInfo {
         header: Header::of::<BaseLimitInfo>(),
         zones,
@@ -242,8 +256,8 @@ pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo
         vanilla_zones: VANILLA.0,
         reserved: 0,
         vanilla_bases: VANILLA.1,
-        max_zones: MOST.0,
-        max_bases: MOST.1,
+        max_zones,
+        max_bases,
     };
     // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
     // its header set, writable for the call.

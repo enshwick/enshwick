@@ -17,9 +17,46 @@ use crate::abi::SkillCheck;
 use crate::abi::Summon;
 use crate::abi::SurvivorLookup;
 
+use super::FakeHost;
 use super::Installed;
 use super::stats;
 use super::table;
+
+impl FakeHost {
+    /// Plays a game build whose base code the platform does not know:
+    /// `raise_base_limit` and `request_base_limits` answer
+    /// [`Status::MISSING`](super::Status::MISSING), and the game keeps its
+    /// own limits.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().without_base_limit().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_base_limit(mut self) -> Self {
+        self.base_code = super::BaseCode::Unknown;
+        self
+    }
+
+    /// Plays a game build whose zone code the platform knows but not all of
+    /// the code bases past 16 need: requests up to the most go through, and
+    /// once the mod is armed the game holds at most 16 bases, which
+    /// `altars::base_limit` reads as `bases` and `max_bases`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().without_bases_past_16().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_bases_past_16(mut self) -> Self {
+        self.base_code = super::BaseCode::ZonesOnly;
+        self
+    }
+}
 
 #[expect(
     clippy::unused_self,
@@ -703,17 +740,18 @@ impl Installed {
         limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
     }
 
-    /// Whether the mod raised the base limit.
+    /// The largest altar zones and bases the mod asked for, each at least
+    /// the game's own; `None` until it asks.
     ///
     /// # Examples
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(!loader.base_limit_raised());
+    /// assert_eq!(loader.requested_base_limits(), None);
     /// ```
     #[must_use]
-    pub fn base_limit_raised(&self) -> bool {
-        table::with(false, |s| s.base_limit.requested.is_some())
+    pub fn requested_base_limits(&self) -> Option<(u32, u32)> {
+        table::with(None, |s| s.base_limit.requested)
     }
 
     /// Makes the last grouping find `zones` altar zones in `bases` bases.
