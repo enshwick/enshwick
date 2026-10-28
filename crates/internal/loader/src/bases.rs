@@ -22,14 +22,16 @@
 //! and on take window indices behind the game's array ([`past16`]); either
 //! every site of that is armed too, or the game keeps 16 bases with the
 //! zones raised. The server's object holds the bases the mods asked for, the
-//! client's every base the window holds, so a modded client joined to a
-//! server never holds fewer bases than the server and needs no join rule of
-//! its own; the placement cursor refuses an altar past the asked limit.
+//! client's every base the window holds, so a modded client with the window
+//! armed groups every base the server does and needs no join rule of its
+//! own; a client whose window could not arm groups 16 and its log says so.
+//! The placement cursor refuses an altar past the asked limit.
 
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
+mod cursor;
 #[cfg(test)]
 mod fake;
 mod heap;
@@ -44,11 +46,11 @@ use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
-use enshwick::raw::{read_at, write_at};
+use enshwick::raw::read_at;
 
 use self::members::{Game, Side, side_of};
 use crate::base_groups::grouping::Grouped;
-use crate::base_groups::limit::{self, Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
+use crate::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
 use crate::base_groups::window::{self, Kind};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
@@ -560,7 +562,7 @@ pub(crate) fn link(loader: &'static Loader) {
             asked.bases
         );
         if ASKED.asked_past_16() {
-            past16::link(loader);
+            past16::link(loader, sites.fields);
         }
     } else {
         crate::log!(WARN, "bases keep 16 altar zones: a link was refused");
@@ -704,6 +706,13 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
         u32::try_from(listed).unwrap_or(u32::MAX - 1),
         Ordering::Relaxed,
     );
+    if grouped.len() > window::VANILLA {
+        let entered = members::take_entries_while_lent();
+        crate::log!(
+            DEBUG,
+            "{count} bases grouped; whole-array calls while the count was lent: {entered}"
+        );
+    }
     let current = known.load();
     if current.bases == count
         && current.zones.len() == listed
@@ -903,68 +912,8 @@ unsafe extern "system" fn check(
     // SAFETY: the cursor's own arguments, each non-null by the check before it,
     // on the cursor's thread after the original ran.
     let _done = BASES_FUSE.run("the placement check", || unsafe {
-        refuse_past_limit(flags, ctx, transform, item);
+        cursor::refuse_past_limit(flags, ctx, transform, item);
     });
-}
-
-/// Sets the cursor's "too many altars" bit for an altar whose zone would
-/// stand apart from every base once the game holds as many as it may.
-///
-/// # Safety
-///
-/// - `flags`, `ctx`, `transform` and `item` are the placement cursor's
-///   own, non-null arguments, live for the call.
-/// - Called on the cursor's thread after the original ran, which alone
-///   writes `flags` meanwhile.
-unsafe fn refuse_past_limit(
-    flags: *mut u32,
-    ctx: *const u8,
-    transform: *const i64,
-    item: *const u8,
-) {
-    let (Some(sites), Some((_, zones)), Some(engine)) =
-        (SITES.get(), known(), crate::ecs::resolved())
-    else {
-        return;
-    };
-    let fields = sites.fields;
-    // SAFETY: the caller guarantees the cursor's live item definition; its
-    // u8 altar flag sits at the build table's `bases.item_altar`.
-    let altar = unsafe { read_at::<u8>(item, fields.item_altar) } != 0;
-    // SAFETY: the caller guarantees the cursor's live u32 flags word.
-    let reached =
-        unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } & fields.max_altars_reached;
-    if !altar || reached != 0 {
-        return;
-    }
-    let most = u32::try_from(ASKED.bases(Kind::Server)).unwrap_or(MAX_BASES);
-    if zones.bases < most {
-        return;
-    }
-    // SAFETY: the caller guarantees the cursor's live context; its balancing
-    // registry word sits at the offset the `CURSOR_ALTAR` pattern read from
-    // the cursor's own code.
-    let balancing = unsafe { read_at::<u64>(ctx, sites.balancing) };
-    if balancing == 0 {
-        return;
-    }
-    // SAFETY: `balancing` is the running cursor's non-zero balancing
-    // registry word, used on the cursor's thread.
-    let Some(size) = (unsafe { engine.zone_size(balancing, 1) }) else {
-        return;
-    };
-    // SAFETY: the caller guarantees the cursor's live transform, which
-    // starts with the position, three i64.
-    let fixed = unsafe { read_at::<[i64; 3]>(transform.cast(), 0) };
-    let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
-    if zones.refuses(&candidate, most) {
-        // SAFETY: the caller guarantees the cursor's live u32 flags word.
-        let refused =
-            unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } | fields.max_altars_reached;
-        // SAFETY: the caller guarantees the cursor's live u32 flags word,
-        // which only the cursor's thread writes meanwhile.
-        unsafe { write_at(flags.cast(), 0, refused) };
-    }
 }
 
 #[cfg(test)]

@@ -171,6 +171,8 @@ pub fn address<F: FnPtr>(function: F) -> u64 {
 pub(crate) enum BaseCode {
     /// The platform knows it.
     Known,
+    /// The platform raises the zones but cannot hold bases past 16.
+    ZonesOnly,
     /// An unknown build: the game keeps its own limits.
     Unknown,
 }

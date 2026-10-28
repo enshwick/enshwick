@@ -13,7 +13,7 @@
 //! table instead. Facts from server 399 and client 426, where both bodies
 //! are the same.
 
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
@@ -132,6 +132,17 @@ impl Side {
     /// Forgets the table's object, which then reads its own masks.
     pub(super) fn forget(&self) {
         self.owner.store(0, Ordering::Release);
+    }
+}
+
+/// Forgets the side table of `obj`, which the game is about to free, so an
+/// object made later at the same address reads its own masks until its
+/// first grouping.
+pub(super) fn forget_object(obj: *const u8) {
+    for side in &SIDES {
+        let _gone = side
+            .owner
+            .compare_exchange(obj.addr(), 0, Ordering::AcqRel, Ordering::Relaxed);
     }
 }
 
@@ -287,16 +298,32 @@ pub(super) unsafe fn planned(obj: *const u8, fields: Fields, cap: usize) -> usiz
 }
 
 /// Our grouping of `game`'s listed zones into at most `cap` bases.
+///
+/// Allocates the zone boxes and the answer, which would take some 17 KB of
+/// a game thread's stack; it runs only when the zone list changes.
 fn plan(game: &Game, cap: usize) -> Grouped {
-    let mut boxes = [Aabb {
-        min: [0.0; 3],
-        max: [0.0; 3],
-    }; MAX_LISTED];
-    let listed = game.listed();
-    for (z, slot) in boxes.iter_mut().enumerate().take(listed) {
-        *slot = game.zone(z);
+    let listed = game.listed().min(MAX_LISTED);
+    let boxes: Vec<Aabb> = (0..listed).map(|z| game.zone(z)).collect();
+    grouping::group(&boxes, cap)
+}
+
+/// Set while the grouping lends the count to the game's new base code for a
+/// window record, and how often a whole-array function was entered
+/// meanwhile, which must stay 0.
+static COUNT_LENT: AtomicBool = AtomicBool::new(false);
+static ENTERED_WHILE_LENT: AtomicU32 = AtomicU32::new(0);
+
+/// Counts an entry of a whole-array function, when the count is lent.
+pub(super) fn note_entry() {
+    if COUNT_LENT.load(Ordering::Relaxed) {
+        ENTERED_WHILE_LENT.fetch_add(1, Ordering::Relaxed);
     }
-    grouping::group(&boxes[..listed], cap)
+}
+
+/// How many whole-array functions were entered while the count was lent,
+/// since the last call.
+pub(super) fn take_entries_while_lent() -> u32 {
+    ENTERED_WHILE_LENT.swap(0, Ordering::Relaxed)
 }
 
 /// Gives the bases the grouping on `obj` left our boxes and zones, starting
@@ -350,16 +377,22 @@ pub(super) unsafe fn settle(
         // SAFETY: the caller guarantees a live object; its u32 count sits at
         // the build table's `bases.count`.
         let count = unsafe { read_at::<u32>(obj, fields.count) };
-        // SAFETY: the same count, which no reader sees meanwhile: the
-        // grouping's thread runs beside none.
+        COUNT_LENT.store(true, Ordering::Relaxed);
+        // SAFETY: the live object's u32 count at `bases.count`. No reader
+        // sees the lent value: the game runs its grouping in the world's
+        // serial update beside no system (server 399 and client 426, medium
+        // confidence), and `note_entry` counts any whole-array function
+        // entered meanwhile, so a server copy can show it stays 0.
         unsafe { write_at(obj, fields.count, at) };
         // SAFETY: the game's new base code, which takes the count as the
         // record to fill and raises it, on record `i` of the window the
         // caller guarantees initialised and released, with zone `first`'s
         // entry of the list.
         unsafe { new_base(obj, game.zone_entry(base.first), first) };
-        // SAFETY: the same count, back to the array's.
+        // SAFETY: the live object's u32 count at `bases.count`, back to the
+        // array's.
         unsafe { write_at(obj, fields.count, count) };
+        COUNT_LENT.store(false, Ordering::Relaxed);
     }
     for (n, base) in bases.iter().enumerate() {
         let i = window::index(n)?;

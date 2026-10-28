@@ -135,7 +135,7 @@ unsafe fn grow(list: *mut u8, wanted: i64, width: usize) -> u8 {
     let need = usize::try_from(-wanted).unwrap();
     // SAFETY: the test list's fields.
     let len = usize::try_from(unsafe { read_at::<u64>(list, 8) }).unwrap();
-    // SAFETY: the same list.
+    // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
     let data = unsafe { read_at::<usize>(list, 0) } as *const u8;
     let mut room = vec![0u8; need * 2 * width].into_boxed_slice();
     if len > 0 {
@@ -144,9 +144,9 @@ unsafe fn grow(list: *mut u8, wanted: i64, width: usize) -> u8 {
         room[..len * width].copy_from_slice(old);
     }
     let room = Box::leak(room);
-    // SAFETY: the same list.
+    // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
     unsafe { write_at(list, 0, room.as_mut_ptr() as usize) };
-    // SAFETY: the same list.
+    // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
     unsafe { write_at(list, 0x10, (need * 2) as u64) };
     1
 }
@@ -168,7 +168,7 @@ pub(super) unsafe extern "system" fn new_base(obj: *mut u8, zone: *const u8, ind
         // SAFETY: the record's list: data, length, capacity, grower.
         unsafe { write_at(obj, list, [0u64; 3]) };
         let grower = grow_u32 as unsafe extern "system" fn(*mut u8, i64, u64) -> u8;
-        // SAFETY: the same list.
+        // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
         unsafe { write_at(obj, list + 0x18, (grower as *const ()).addr()) };
     }
 }
@@ -186,14 +186,60 @@ pub(super) fn apart(n: u8) -> Vec<Aabb> {
     (0..n).map(|i| square(f32::from(i) * 100.0, 0.0)).collect()
 }
 
+/// The grower the fake constructor puts into each record's first list.
+pub(super) const CONSTRUCTED_GROWER: u64 = 0x1_4020_09f0;
+
+/// The game's constructor as the research reads it, for the fields the
+/// tests check: each of the 16 records' first list grower and the box
+/// corners.
+pub(super) unsafe extern "system" fn ctor(obj: *mut u8) -> *mut u8 {
+    for i in 0..window::VANILLA {
+        let at = record(i);
+        // SAFETY: the scratch block holds 16 records; the first list's grower.
+        unsafe { write_at(obj, at + 0x18, CONSTRUCTED_GROWER) };
+        // SAFETY: the same record's box, low corner.
+        unsafe { write_at(obj, at + 0xf0, [f32::MAX; 3]) };
+        // SAFETY: the same record's box, high corner.
+        unsafe { write_at(obj, at + 0x100, [-f32::MAX; 3]) };
+    }
+    obj
+}
+
+unsafe extern "system" fn nothing(_at: *mut u8) {}
+
+unsafe extern "system" fn slot_made(_slot: *mut u8, _allocator: usize, _entries: u64, _grows: u8) {}
+
+/// The window's game code for objects of [`twenty_bases`]: the fake
+/// constructor, and a teardown, slot init and slot free that do nothing.
+const CODE: super::lifecycle::Code = super::lifecycle::Code {
+    ctor,
+    teardown: nothing,
+    slot_init: slot_made,
+    slot_free: nothing,
+};
+
+impl Drop for Fake {
+    fn drop(&mut self) {
+        let obj = self.ptr();
+        // SAFETY: the fake object, about to be freed; the fake code frees
+        // nothing.
+        unsafe { super::lifecycle::destroy(obj, &CODE) };
+        super::members::forget_object(obj);
+    }
+}
+
 /// A server object grouped into one base per zone of [`apart`], 20 bases:
-/// 16 in the array and indices 93 to 96 of the window.
+/// 16 in the array and indices 93 to 96 of the window, each with its stock
+/// slot made.
 pub(super) fn twenty_bases() -> Fake {
     let mut fake = Fake::new(1, &apart(20));
     let obj = fake.ptr();
-    let ready = |_: usize| {};
-    // SAFETY: the fake object, its window zeroed, which the fake new base
-    // code takes as released.
+    // SAFETY: the fake object of the grown size, fresh.
+    assert!(unsafe { super::lifecycle::init(obj, &CODE) });
+    // SAFETY: the same object, windowed, live for the call.
+    let ready = unsafe { super::lifecycle::ready(obj, CODE) }.unwrap();
+    // SAFETY: the fake object, its window initialised, which the fake new
+    // base code takes as released.
     let bases =
         unsafe { super::members::settle(obj, FIELDS, window::MOST, new_base, Some(&ready)) };
     assert_eq!(bases.map(|b| b.len()), Some(20));

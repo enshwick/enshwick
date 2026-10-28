@@ -106,7 +106,7 @@ mod tests {
         }
 
         fn holding(zones: Vec<Aabb>, most: usize) -> Self {
-            let bases = group(&zones, most).to_vec();
+            let bases = group(&zones, most);
             Self { zones, bases }
         }
 

@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, Side};
 
+use super::Fields;
 use super::lifecycle::{self, Code, CtorFn, SlotFreeFn, SlotInitFn, TeardownFn};
 use super::loops;
 use crate::base_groups::window;
@@ -43,7 +44,7 @@ const CTOR: &str = "45 33 D2 48 8D 51 30 4C 89 11 48 8D 42 60 44 88 51 08 4C 8D 
 const TEARDOWN: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 \
                         48 83 EC 20 48 8D B1 00 13 00 00";
 /// The server object's destroy, `fn(obj)`, null-safe, and where it calls
-/// the stock slot free.
+/// the stock map free.
 const SERVER_DESTROY: &str = "40 56 48 83 EC 30 48 8B F1 48 85 C9 0F 84 ?? ?? ?? ?? \
                               48 89 5C 24 40 48 89 6C 24 48";
 const SLOT_FREE_AT: usize = 0xa8;
@@ -51,9 +52,48 @@ const SLOT_FREE_AT: usize = 0xa8;
 const CLIENT_DESTROY: &str = "41 57 48 83 EC 30 4C 8B F9 48 85 C9 0F 84 ?? ?? ?? ?? \
                               48 89 5C 24 40 48 89 6C 24 48";
 const CALL: u8 = 0xE8;
+/// The base count the window's code reads, `[obj+0x24]` in the count
+/// getter and the cleanups.
+pub(super) const COUNT_AT: usize = 0x24;
 
 type CreateFn = unsafe extern "system" fn(allocator: *mut u8, part: *mut u8) -> *mut u8;
 type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
+
+/// Why a site of the window is not found.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub(super) enum SiteError {
+    /// A pattern does not match once.
+    #[error("{0}")]
+    Pattern(String),
+    /// The code ends before the bytes at an offset.
+    #[error("the code ends before {0:#x}")]
+    Cut(usize),
+    /// An anchor holds no call.
+    #[error("{at:#x} holds {found:#04x}, not a call")]
+    NotACall { at: usize, found: u8 },
+    /// A call leaves the code section.
+    #[error("the call at {0:#x} leaves the code")]
+    CallLeaves(usize),
+    /// A create allocates another size than the game's.
+    #[error("a create loads {found:02X?}, not the size {size:#x}")]
+    Size { found: Vec<u8>, size: u32 },
+    /// An anchor holds another instruction than the expected load.
+    #[error("{at:#x} holds {found:02X?}, not the expected load")]
+    NotALoad { at: usize, found: Vec<u8> },
+    /// The client's base list calls another getter than the count's.
+    #[error("the base list's count getter is not the expected one")]
+    Getter,
+    /// The build table's base layout is not the one the window is laid out
+    /// for.
+    #[error("the bases' records are {stride:#x} apart with the count at {count:#x}")]
+    Layout { stride: usize, count: usize },
+}
+
+impl From<String> for SiteError {
+    fn from(why: String) -> Self {
+        Self::Pattern(why)
+    }
+}
 
 /// Every site of the window.
 #[derive(Debug)]
@@ -86,7 +126,10 @@ impl Sites {
 }
 
 static SITES: OnceLock<Sites> = OnceLock::new();
-/// Set at arming when every site is hooked and every patch written.
+/// Set at link when every site of ours is linked and every patch
+/// registered: a target another owner hooks does not stand for ours.
+static LINKED: AtomicBool = AtomicBool::new(false);
+/// Set at arming when every site is linked, hooked and patched.
 static ARMED: AtomicBool = AtomicBool::new(false);
 /// Set at arming, armed or not.
 static SETTLED: AtomicBool = AtomicBool::new(false);
@@ -124,19 +167,23 @@ pub(super) fn sites() -> Option<&'static Sites> {
 }
 
 /// The offset `call` at `at` in `code` jumps to, after checking its opcode.
-pub(super) fn call_target(code: &[u8], at: usize) -> Result<usize, String> {
+pub(super) fn call_target(code: &[u8], at: usize) -> Result<usize, SiteError> {
     let bytes: [u8; 5] = code
         .get(at..at + 5)
         .and_then(|b| b.try_into().ok())
-        .ok_or("a call is past the code")?;
+        .ok_or(SiteError::Cut(at))?;
     if bytes[0] != CALL {
-        return Err(format!("{at:#x} holds {:#04x}, not a call", bytes[0]));
+        return Err(SiteError::NotACall {
+            at,
+            found: bytes[0],
+        });
     }
     let rel = i32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
-    (at + 5)
-        .checked_add_signed(isize::try_from(rel).map_err(|e| e.to_string())?)
+    isize::try_from(rel)
+        .ok()
+        .and_then(|rel| (at + 5).checked_add_signed(rel))
         .filter(|&to| to < code.len())
-        .ok_or_else(|| format!("the call at {at:#x} leaves the code"))
+        .ok_or(SiteError::CallLeaves(at))
 }
 
 /// The patch that grows the object a create at `create` allocates, whose
@@ -147,18 +194,19 @@ fn size_patch(
     create: usize,
     at: usize,
     size: u32,
-) -> Result<CodePatch, String> {
+) -> Result<CodePatch, SiteError> {
     let mut expected = [MOV_EDX, 0, 0, 0, 0];
     expected[1..].copy_from_slice(&size.to_le_bytes());
     let found = code
         .get(create + at..create + at + expected.len())
-        .ok_or("a create is cut")?;
+        .ok_or(SiteError::Cut(create + at))?;
     if found != expected {
-        return Err(format!(
-            "a create loads {found:02X?}, not the size {size:#x}"
-        ));
+        return Err(SiteError::Size {
+            found: found.to_vec(),
+            size,
+        });
     }
-    let grown = u32::try_from(window::BLOCK).map_err(|e| e.to_string())?;
+    let grown = u32::try_from(window::BLOCK).unwrap_or(u32::MAX);
     let mut replacement = expected;
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
@@ -170,9 +218,16 @@ fn size_patch(
     })
 }
 
-/// Finds every site in `code`, which starts at `start`.
-fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, String> {
-    let find = |pattern: &str| crate::code::find(code, pattern);
+/// Finds every site in `code`, which starts at `start`, for a base layout
+/// of `fields`; the client's base list only on a `client`.
+fn find(code: &[u8], start: usize, client: bool, fields: Fields) -> Result<Sites, SiteError> {
+    if fields.stride != window::RECORD || fields.count != COUNT_AT {
+        return Err(SiteError::Layout {
+            stride: fields.stride,
+            count: fields.count,
+        });
+    }
+    let find = |pattern: &str| crate::code::find(code, pattern).map_err(SiteError::from);
     let server_create = find(SERVER_CREATE)?;
     let client_create = find(CLIENT_CREATE)?;
     let server_destroy = find(SERVER_DESTROY)?;
@@ -189,8 +244,6 @@ fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, String> {
     let patches: Vec<CodePatch> = patches.into_iter().chain(loops.patches()).collect();
     let at = |offset: usize| (start + offset) as u64;
     let address = |offset: usize| start + offset;
-    // SAFETY: each address is the start of the game function its pattern
-    // or call anchor found, whose signature is the type it becomes.
     let code_of = Code {
         // SAFETY: the constructor its pattern finds, `fn(obj) -> obj`.
         ctor: unsafe { core::mem::transmute::<usize, CtorFn>(address(ctor)) },
@@ -199,7 +252,7 @@ fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, String> {
         // SAFETY: the stock slot init the server's create calls at
         // `SLOT_INIT_AT`.
         slot_init: unsafe { core::mem::transmute::<usize, SlotInitFn>(address(slot_init)) },
-        // SAFETY: the stock slot free the server's destroy calls at
+        // SAFETY: the stock map free the server's destroy calls at
         // `SLOT_FREE_AT`.
         slot_free: unsafe { core::mem::transmute::<usize, SlotFreeFn>(address(slot_free)) },
     };
@@ -215,18 +268,20 @@ fn find(code: &[u8], start: usize, client: bool) -> Result<Sites, String> {
 }
 
 /// Finds and links every site and registers the size patches, when a mod
-/// asked for more than 16 bases; a miss is logged and leaves 16.
-pub(super) fn link(loader: &'static Loader) {
+/// asked for more than 16 bases, for a base layout of `fields`; a miss is
+/// logged with the build and leaves 16.
+pub(super) fn link(loader: &'static Loader, fields: Fields) {
+    let build = &loader.build.name;
     let (Some(text), Some(code)) = (
         crate::code::text(loader.base),
         crate::code::text_bytes(loader.base),
     ) else {
         return;
     };
-    let sites = match find(code, text.0, loader.side == Side::CLIENT) {
+    let sites = match find(code, text.0, loader.side == Side::CLIENT, fields) {
         Ok(sites) => SITES.get_or_init(|| sites),
         Err(reason) => {
-            crate::log!(WARN, "bases keep 16: {reason}");
+            crate::log!(WARN, "bases keep 16 on {build}: {reason}");
             return;
         }
     };
@@ -234,7 +289,7 @@ pub(super) fn link(loader: &'static Loader) {
     if !status.is_ok() {
         crate::log!(
             WARN,
-            "bases keep 16: the size patches were refused ({})",
+            "bases keep 16 on {build}: the size patches were refused ({})",
             status.0
         );
         return;
@@ -280,25 +335,31 @@ pub(super) fn link(loader: &'static Loader) {
     .into_iter()
     .chain(loops::link(loader, &sites.loops))
     .filter(|(_, status)| !status.is_ok())
-    .inspect(|(name, status)| crate::log!(WARN, "bases keep 16: {name} refused ({})", status.0))
+    .inspect(|(name, status)| {
+        crate::log!(
+            WARN,
+            "bases keep 16 on {build}: {name} refused ({})",
+            status.0
+        );
+    })
     .count();
-    if refused == 0 {
-        crate::log!(INFO, "bases past 16 found");
-    }
+    LINKED.store(refused == 0, Ordering::Release);
 }
 
 /// Settles, before arming writes anything, whether bases past 16 are armed:
-/// every site among the `hooked` targets and every size patch written.
+/// every site linked by us, among the `hooked` targets, and every size
+/// patch written.
 pub(super) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
-    let armed = SITES.get().is_some_and(|sites| {
-        sites.targets().all(|at| hooked.contains(&at))
-            && sites.patches.iter().all(|mine| {
-                patches
-                    .iter()
-                    .zip(verdicts)
-                    .any(|(p, v)| p.address == mine.address && *v == Verdict::Write)
-            })
-    });
+    let armed = LINKED.load(Ordering::Acquire)
+        && SITES.get().is_some_and(|sites| {
+            sites.targets().all(|at| hooked.contains(&at))
+                && sites.patches.iter().all(|mine| {
+                    patches
+                        .iter()
+                        .zip(verdicts)
+                        .any(|(p, v)| p.address == mine.address && *v == Verdict::Write)
+                })
+        });
     if SITES.get().is_some() && !armed {
         crate::log!(
             WARN,
@@ -328,7 +389,8 @@ unsafe fn created(obj: *mut u8) {
     }
 }
 
-/// Frees the window of an object a destroy is about to free.
+/// Frees the window of an object a destroy is about to free, and forgets
+/// its side table.
 ///
 /// # Safety
 ///
@@ -337,6 +399,7 @@ unsafe fn destroying(obj: *mut u8) {
     let Some(sites) = SITES.get() else {
         return;
     };
+    super::members::forget_object(obj);
     // SAFETY: the caller guarantees the live object the game destroys, or
     // null, which `destroy` finds windowed never; it ignores the fuse, so an
     // object windowed before a panic still frees its window.
@@ -387,6 +450,7 @@ unsafe extern "system" fn destroy_client(obj: *mut u8) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bases::fake::FIELDS;
 
     #[test]
     fn a_call_anchor_resolves_to_its_target_and_anything_else_is_refused() {
@@ -395,10 +459,13 @@ mod tests {
         code[0x20..0x25].copy_from_slice(&[0xE8, 0xF0, 0xFF, 0xFF, 0xFF]);
         assert_eq!(call_target(&code, 0x10), Ok(0x20));
         assert_eq!(call_target(&code, 0x20), Ok(0x15));
-        assert!(call_target(&code, 0x00).is_err(), "no call there");
+        assert_eq!(
+            call_target(&code, 0x00),
+            Err(SiteError::NotACall { at: 0, found: 0xCC })
+        );
         code[0x30..0x35].copy_from_slice(&[0xE8, 0x00, 0x10, 0, 0]);
-        assert!(call_target(&code, 0x30).is_err(), "out of the code");
-        assert!(call_target(&code, 0x3e).is_err(), "cut");
+        assert_eq!(call_target(&code, 0x30), Err(SiteError::CallLeaves(0x30)));
+        assert_eq!(call_target(&code, 0x3e), Err(SiteError::Cut(0x3e)));
     }
 
     /// Every site is found once in the game's executables that
@@ -416,21 +483,43 @@ mod tests {
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
-            let sites = find(code, 0, client).unwrap_or_else(|why| panic!("{variable}: {why}"));
+            let sites =
+                find(code, 0, client, FIELDS).unwrap_or_else(|why| panic!("{variable}: {why}"));
             assert_eq!(sites.patches.len(), 2 + usize::from(client), "{variable}");
             assert_eq!(sites.targets().count(), 14, "{variable}");
-            assert!(find(code, 0, !client).is_err() || client, "{variable}");
+            assert!(
+                client || find(code, 0, true, FIELDS).is_err(),
+                "{variable} has no client base list"
+            );
         }
     }
 
     #[test]
-    fn a_size_patch_grows_the_object_and_checks_the_vanilla_size() {
+    fn a_layout_other_than_the_window_s_is_refused_before_any_search() {
+        let other = Fields {
+            stride: 0x138,
+            ..FIELDS
+        };
+        assert_eq!(
+            find(&[], 0, false, other).map(|_| ()),
+            Err(SiteError::Layout {
+                stride: 0x138,
+                count: 0x24
+            })
+        );
+    }
+
+    #[test]
+    fn a_grown_size_checks_the_vanilla_size_first() {
         let mut code = vec![0x90; 0x60];
         code[0x30..0x35].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
-        let patch = size_patch(&code, 0x1000, 0, 0x30, SERVER_SIZE).unwrap();
-        assert_eq!(patch.address, 0x1030);
-        assert_eq!(*patch.expected, [0xBA, 0x70, 0x20, 0, 0]);
-        assert_eq!(*patch.replacement, [0xBA, 0x30, 0x30, 0x01, 0]);
-        assert!(size_patch(&code, 0x1000, 0, 0x30, CLIENT_SIZE).is_err());
+        let grown = size_patch(&code, 0x1000, 0, 0x30, SERVER_SIZE).unwrap();
+        assert_eq!(grown.address, 0x1030);
+        assert_eq!(*grown.expected, [0xBA, 0x70, 0x20, 0, 0]);
+        assert_eq!(*grown.replacement, [0xBA, 0x30, 0x30, 0x01, 0]);
+        assert!(matches!(
+            size_patch(&code, 0x1000, 0, 0x30, CLIENT_SIZE),
+            Err(SiteError::Size { .. })
+        ));
     }
 }

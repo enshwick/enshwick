@@ -1,8 +1,6 @@
 //! The bases altar zones form: zones that touch, directly or through other
 //! zones, share one base, as the game groups them.
 
-use arrayvec::ArrayVec;
-
 use super::limit::Aabb;
 
 /// The most zones the game lists in a world.
@@ -93,13 +91,16 @@ pub(crate) struct Base {
 /// The most bases a grouping holds: the game's array and the window.
 pub(crate) const MAX_GROUPED: usize = super::window::MOST;
 
-/// Bases as a grouping leaves them, on the stack.
-pub(crate) type Grouped = ArrayVec<Base, MAX_GROUPED>;
+/// Bases as a grouping leaves them. On the heap: up to [`MAX_GROUPED`]
+/// bases are about 11 KB, too much for the game threads' stacks, and a
+/// grouping runs only when the world's zone list changes, so the one
+/// allocation costs nothing that matters.
+pub(crate) type Grouped = Vec<Base>;
 
 /// Groups `boxes`, the game's zone list, into at most `max_bases` bases in
 /// the game's order: by their first zone. The zones of further groups stay
-/// apart, in no base; zones past [`MAX_LISTED`] are ignored. Allocates
-/// nothing.
+/// apart, in no base; zones past [`MAX_LISTED`] are ignored. Allocates the
+/// answer once.
 #[must_use]
 pub(crate) fn group(boxes: &[Aabb], max_bases: usize) -> Grouped {
     let boxes = &boxes[..boxes.len().min(MAX_LISTED)];
@@ -116,7 +117,7 @@ pub(crate) fn group(boxes: &[Aabb], max_bases: usize) -> Grouped {
         }
     }
     let max_bases = max_bases.min(MAX_GROUPED);
-    let mut bases = Grouped::new();
+    let mut bases = Grouped::with_capacity(max_bases.min(boxes.len()));
     for (i, zone) in boxes.iter().enumerate() {
         let first = root(&mut parent, i);
         if let Some(base) = bases.iter_mut().find(|base| base.first == first) {

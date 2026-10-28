@@ -117,6 +117,11 @@ fn constructed(ctor: CtorFn) -> &'static [u8; window::RECORD] {
     })
 }
 
+/// Whether window index `i` of `obj` has its stock slot made.
+pub(super) fn has_slot(obj: *const u8, i: usize) -> bool {
+    (window::WINDOW..window::INDICES).contains(&i) && windowed(obj).is_some_and(|w| w.has_slot(i))
+}
+
 /// Fills every window record of the freshly created object `obj` as the
 /// constructor fills a record, and keeps it as windowed; `false` when there
 /// is no room to keep it, and its window stays unused.
@@ -127,6 +132,14 @@ fn constructed(ctor: CtorFn) -> &'static [u8; window::RECORD] {
 ///   has just returned, on the create's thread, before any other code has
 ///   it.
 pub(super) unsafe fn init(obj: *mut u8, code: &Code) -> bool {
+    // An entry left by an object at this address whose destroy we missed
+    // names slots this block does not hold.
+    for stale in &WINDOWED {
+        let _gone =
+            stale
+                .owner
+                .compare_exchange(obj.addr(), 0, Ordering::AcqRel, Ordering::Relaxed);
+    }
     let Some(entry) = WINDOWED.iter().find(|w| {
         w.owner
             .compare_exchange(0, obj.addr(), Ordering::AcqRel, Ordering::Relaxed)
@@ -170,9 +183,14 @@ pub(super) unsafe fn release(obj: *mut u8, code: &Code) {
 }
 
 /// What readies window index `i` of `obj` before a base starts there: makes
-/// the index's stock slot the first time, on either side, since a stock
-/// reader may reach any index point in base answers; `None` when the
-/// object's window is not initialised.
+/// the index's stock slot the first time; `None` when the object's window is
+/// not initialised.
+///
+/// The client's object gets slots too, though only the server's has them in
+/// the game's array: the index readers that update a slot take whatever
+/// index point in base answers, and a slot with no buckets is fatal to
+/// them, so no index may come without its slot on either side. A slot costs
+/// about 12 KB, made only for indices in use.
 ///
 /// # Safety
 ///
@@ -220,7 +238,8 @@ pub(super) unsafe fn destroy(obj: *mut u8, code: &Code) {
         // SAFETY: slot `i` is one `ready` made through the game's init, in
         // the window of the live object, freed once here.
         unsafe { (code.slot_free)(slot) };
-        // SAFETY: the same slot, zeroed so nothing frees it twice.
+        // SAFETY: slot `i` in the window of the live object, its map just
+        // freed, zeroed so nothing frees it twice.
         unsafe { slot.write_bytes(0, window::SLOT) };
     }
     entry.owner.store(0, Ordering::Release);
@@ -241,30 +260,14 @@ mod tests {
     use enshwick::raw::write_at;
 
     use super::*;
+    use crate::bases::fake::{CONSTRUCTED_GROWER, ctor};
     use crate::locks::Relock;
 
     /// What the fake game code was called with, in order.
     static CALLS: Mutex<Vec<(&'static str, usize)>> = Mutex::new(Vec::new());
 
-    /// The constructor's record fields the tests check: list A's grower and
-    /// the box's corners.
+    /// The constructor's record field the tests check: list A's grower.
     const GROWER: usize = 0x18;
-    const LOW: usize = 0xf0;
-    const HIGH: usize = 0x100;
-
-    unsafe extern "system" fn ctor(obj: *mut u8) -> *mut u8 {
-        CALLS.relock().push(("ctor", obj.addr()));
-        for i in 0..window::VANILLA {
-            let record = window::RECORDS + i * window::RECORD;
-            // SAFETY: the scratch block holds 16 records.
-            unsafe { write_at(obj, record + GROWER, 0x1_4020_09f0_u64) };
-            // SAFETY: the same record.
-            unsafe { write_at(obj, record + LOW, [f32::MAX; 3]) };
-            // SAFETY: the same record.
-            unsafe { write_at(obj, record + HIGH, [-f32::MAX; 3]) };
-        }
-        obj
-    }
 
     unsafe extern "system" fn teardown(first: *mut u8) {
         CALLS.relock().push(("teardown", first.addr()));
@@ -322,13 +325,33 @@ mod tests {
             let at = window::RECORDS + i * window::RECORD;
             assert_eq!(&bytes[at..at + window::RECORD], made, "record {i}");
         }
-        assert_eq!(made[GROWER..GROWER + 8], 0x1_4020_09f0_u64.to_le_bytes());
+        assert_eq!(made[GROWER..GROWER + 8], CONSTRUCTED_GROWER.to_le_bytes());
         assert!(made[0x50..0x90].iter().all(|&b| b == 0), "zeroed first");
         let header = window::RECORDS + 15 * window::RECORD;
         assert_eq!(bytes[header], 0x55, "the array is the game's");
-        assert!(
-            calls("ctor").len() <= 1,
-            "the constructor runs once a process"
+    }
+
+    #[test]
+    fn a_new_object_at_a_missed_one_s_address_starts_with_no_slots() {
+        fresh();
+        let mut block = garbage();
+        let obj = block.as_mut_ptr().cast::<u8>();
+        // SAFETY: a fresh block of the grown size.
+        assert!(unsafe { init(obj, &CODE) });
+        // SAFETY: the windowed block, alive for the call.
+        let readied = unsafe { ready(obj, CODE) }.unwrap();
+        readied(100);
+        assert!(has_slot(obj, 100));
+        // Its destroy was missed; a new object comes at the same address.
+        // SAFETY: the same block, taken as a fresh one.
+        assert!(unsafe { init(obj, &CODE) });
+        assert!(!has_slot(obj, 100), "the old entry is gone");
+        assert_eq!(
+            WINDOWED
+                .iter()
+                .filter(|w| w.owner.load(Ordering::Relaxed) == obj.addr())
+                .count(),
+            1
         );
     }
 
@@ -353,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn the_server_makes_a_window_stock_slot_once_and_frees_it_at_destroy() {
+    fn a_window_stock_slot_is_made_once_and_freed_at_destroy() {
         fresh();
         let mut block = garbage();
         let obj = block.as_mut_ptr().cast::<u8>();

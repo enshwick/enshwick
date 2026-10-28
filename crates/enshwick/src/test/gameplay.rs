@@ -39,6 +39,23 @@ impl FakeHost {
         self.base_code = super::BaseCode::Unknown;
         self
     }
+
+    /// Plays a game build whose zone code the platform knows but not all of
+    /// the code bases past 16 need: requests up to the most go through, and
+    /// once the mod is armed the game holds at most 16 bases, which
+    /// `altars::base_limit` reads as `bases` and `max_bases`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let loader = enshwick::test::FakeHost::new().without_bases_past_16().install();
+    /// # let _ = loader;
+    /// ```
+    #[must_use]
+    pub fn without_bases_past_16(mut self) -> Self {
+        self.base_code = super::BaseCode::ZonesOnly;
+        self
+    }
 }
 
 #[expect(

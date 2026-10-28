@@ -110,9 +110,10 @@ game keeps 16. The loader's hooks go in together or not at all: when one
 cannot be armed, the game keeps 16. Bases past 16 need more of the game's
 code than the zones do: where the loader cannot arm all of it, the game
 keeps 16 bases with the zones raised, the log says what was missing, and
-`max_bases` reads 16. A server holds the bases its mods asked for; a client
-groups every base it can, so a client joined to a server never holds fewer. `altars::grouping()` tells how many zones
-and bases the last grouping found, `altars::base_limit()` the most the game
+`max_bases` reads 16. A server holds the bases its mods asked for. A joined
+client with bases past 16 armed groups every base the server does; one
+whose bases past 16 could not arm groups 16, and its log says so.
+`altars::grouping()` tells how many zones and bases the last grouping found, `altars::base_limit()` the most the game
 groups now, and `BaseLimit::past_vanilla` whether a world needs the raised
 limit to open.
 

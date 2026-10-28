@@ -98,3 +98,39 @@ mod unknown_build {
         assert_eq!((limit.zones, limit.bases), (16, 16));
     }
 }
+
+#[cfg(test)]
+#[cfg(feature = "unstable")]
+mod zones_only {
+    use enshwick::abi::Status;
+    use enshwick::{Load, Mod, Off};
+
+    struct ManyBases;
+
+    impl Mod for ManyBases {
+        fn manifest() -> &'static enshwick::abi::Manifest {
+            enshwick::manifest!(id: "you.many-bases", side: BOTH)
+        }
+
+        fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+            assert!(load.request_base_limits(64, 179)?);
+            Ok(Self)
+        }
+    }
+
+    enshwick::declare_mod!(ManyBases);
+
+    #[test]
+    fn a_build_without_bases_past_16_raises_the_zones_and_keeps_16_bases() {
+        let loader = enshwick::test::FakeHost::new()
+            .without_bases_past_16()
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert_eq!(loader.requested_base_limits(), Some((64, 179)));
+        let limit = enshwick::altars::base_limit().unwrap();
+        assert_eq!((limit.zones, limit.bases), (64, 16));
+        assert_eq!((limit.max_zones, limit.max_bases), (255, 16));
+    }
+}

@@ -12,8 +12,10 @@ Each entry names the pull request that made the change.
   game's bases objects and keeps bases past 16 behind its array, on both
   sides, and `BaseLimit::max_bases` reads 179, or 16 on a build where the
   loader cannot arm every site it needs. A server holds the bases its mods
-  asked for, a client every base it can. `FakeHost::without_base_limit`
-  plays a build without the base code, and
+  asked for; a joined client with bases past 16 armed groups every base the
+  server does, and one without groups 16. `FakeHost::without_base_limit`
+  plays a build without the base code, `FakeHost::without_bases_past_16` a
+  build that raises the zones but keeps 16 bases, and
   `Installed::requested_base_limits` tells the largest request; it replaces
   `base_limit_raised`. The docs of `altars::grouping` and
   `altars::base_limit` name both requests (#647).
