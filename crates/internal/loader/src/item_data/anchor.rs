@@ -139,14 +139,18 @@ impl Index {
 }
 
 /// A record read from a file that has not found its entity: its kind, its
-/// anchor, what the entity was (the template's id or the item it held) and
-/// its value.
+/// anchor, what the entity was (the template's id or the item it held), its
+/// value, and whether it is aside.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Pending {
     pub(crate) kind: u32,
     pub(crate) anchor: Anchor,
     pub(crate) check: u32,
     pub(crate) value: Box<[u8]>,
+    /// Never matched again: a record that once failed to name exactly one
+    /// entity, whose place a later entity may take. Kept so no value is
+    /// lost; a person may still give it back by hand.
+    pub(crate) aside: bool,
 }
 
 /// What a pass over the pending records found.
@@ -154,20 +158,25 @@ pub(crate) struct Pending {
 pub(crate) struct Outcome {
     /// Records with their entity: kind, entity, record.
     pub(crate) found: Vec<(u32, u32, Pending)>,
-    /// Records kept aside, written back as they were.
+    /// Records aside from now on, written back as they were.
     pub(crate) left: Vec<Pending>,
-    /// Of `left`: keys the world or the file holds more than once.
+    /// Of `left`: places the world or the file holds more than once.
     pub(crate) ambiguous: usize,
-    /// Of `left`: records with a session id only.
-    pub(crate) session: usize,
+    /// Of `left`: places no entity holds.
+    pub(crate) missing: usize,
     /// Of `left`: records whose entity already had a value of the kind.
     pub(crate) replaced: usize,
+    /// Of `left`: records aside before this pass, session ids among them.
+    pub(crate) earlier: usize,
 }
 
-/// Finds each pending record's entity. `held(root, link, slot)` is the
-/// item entity in that slot and the item it holds; `taken(kind, entity)`
-/// whether the entity already has a value of the kind. A record attaches
-/// only to the one entity its key names; anything less certain stays aside.
+/// Finds each pending record's entity, once per load, when the world holds
+/// every entity its save holds (a load creates them all before the
+/// first step). `held(root, link, slot)` is the item entity in that slot and
+/// the item it holds; `taken(kind, entity)` whether the entity already has a
+/// value of the kind. A record attaches only to the one entity its place
+/// names; every other record is aside from now on, since a later entity may
+/// take its place.
 pub(crate) fn resolve(
     pending: Vec<Pending>,
     index: &Index,
@@ -175,18 +184,24 @@ pub(crate) fn resolve(
     taken: impl Fn(u32, u32) -> bool,
 ) -> Outcome {
     let mut uses: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
-    for record in &pending {
+    for record in pending.iter().filter(|r| !r.aside) {
         *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
     let mut outcome = Outcome::default();
-    for record in pending {
+    for mut record in pending {
         let target = match record.anchor {
-            Anchor::Session(_) => {
-                outcome.session += 1;
+            _ if record.aside => {
+                outcome.earlier += 1;
                 outcome.left.push(record);
                 continue;
             }
-            // The file names one key twice: neither record is certain.
+            Anchor::Session(_) => {
+                outcome.earlier += 1;
+                record.aside = true;
+                outcome.left.push(record);
+                continue;
+            }
+            // The file names one place twice: neither record is certain.
             _ if uses[&(record.kind, record.anchor)] > 1 => Some(Found::Many),
             Anchor::Placed(placed) => index.find(&placed),
             Anchor::Held { root, link, slot } => match index.find(&root) {
@@ -196,18 +211,18 @@ pub(crate) fn resolve(
                 other => other,
             },
         };
-        match target {
-            Some(Found::One(entity)) if taken(record.kind, entity) => {
-                outcome.replaced += 1;
-                outcome.left.push(record);
+        let count = match target {
+            Some(Found::One(entity)) if !taken(record.kind, entity) => {
+                outcome.found.push((record.kind, entity, record));
+                continue;
             }
-            Some(Found::One(entity)) => outcome.found.push((record.kind, entity, record)),
-            Some(Found::Many) => {
-                outcome.ambiguous += 1;
-                outcome.left.push(record);
-            }
-            None => outcome.left.push(record),
-        }
+            Some(Found::One(_)) => &mut outcome.replaced,
+            Some(Found::Many) => &mut outcome.ambiguous,
+            None => &mut outcome.missing,
+        };
+        *count += 1;
+        record.aside = true;
+        outcome.left.push(record);
     }
     outcome
 }
@@ -237,6 +252,7 @@ mod tests {
             anchor,
             check,
             value: Box::new([value]),
+            aside: false,
         }
     }
 
@@ -289,7 +305,7 @@ mod tests {
 
     #[test]
     fn records_find_their_entities_after_a_load_renumbers_them() {
-        // Q-007: ten chests saved ahead of the older ones move every older
+        // Ten chests saved ahead of the older ones move every older
         // chest up by ten; the keys follow the chests, not the ids.
         let records: Vec<Pending> = (0..10)
             .map(|n| pending(0, Anchor::Placed(chest(n)), 1, u8::try_from(n).unwrap()))
@@ -380,7 +396,7 @@ mod tests {
     }
 
     #[test]
-    fn session_ids_and_missing_entities_stay_aside_unchanged() {
+    fn session_ids_and_missing_entities_go_aside_with_their_place_kept() {
         let records = vec![
             pending(0, Anchor::Session(1043), 1, 1),
             pending(0, Anchor::Placed(chest(9)), 1, 2),
@@ -391,9 +407,43 @@ mod tests {
             |_, _, _| None,
             |_, _| false,
         );
-        assert_eq!(outcome.left, records);
-        assert_eq!(outcome.session, 1);
-        assert_eq!(outcome.ambiguous, 0);
+        let aside: Vec<Pending> = records
+            .into_iter()
+            .map(|r| Pending { aside: true, ..r })
+            .collect();
+        assert_eq!(outcome.left, aside);
+        assert_eq!((outcome.earlier, outcome.missing), (1, 1));
+    }
+
+    #[test]
+    fn a_record_aside_never_matches_again_even_when_its_place_holds_one_entity() {
+        // A chest of two on one place is gone, or a new chest stands where a
+        // missing one stood: the place now names one entity, maybe not its
+        // owner's.
+        let mut index = Index::default();
+        index.add(chest(1), 1027);
+        let record = Pending {
+            aside: true,
+            ..pending(0, Anchor::Placed(chest(1)), 1, 1)
+        };
+        let outcome = resolve(vec![record.clone()], &index, |_, _, _| None, |_, _| false);
+        assert!(outcome.found.is_empty());
+        assert_eq!(outcome.left, [record]);
+        assert_eq!(outcome.earlier, 1);
+    }
+
+    #[test]
+    fn a_record_aside_does_not_make_a_live_record_on_its_place_ambiguous() {
+        let mut index = Index::default();
+        index.add(chest(1), 1027);
+        let old = Pending {
+            aside: true,
+            ..pending(0, Anchor::Placed(chest(1)), 1, 1)
+        };
+        let now = pending(0, Anchor::Placed(chest(1)), 1, 2);
+        let outcome = resolve(vec![old, now], &index, |_, _, _| None, |_, _| false);
+        assert_eq!(outcome.found.len(), 1);
+        assert_eq!(outcome.found[0].2.value[0], 2);
     }
 
     #[test]

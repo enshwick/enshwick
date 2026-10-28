@@ -40,8 +40,7 @@ Within a session the value stays with the item across moves between
 inventories and trades. Once the entity holds another item, the value reads
 as missing, and the server drops it when the world saves. When the game
 destroys the item, as a craft that uses it up does, the server drops its
-values after that step and tells the clients. An item in an area that is not
-loaded keeps its values.
+values after that step and tells the clients.
 
 A load numbers item entities anew, as it does every
 [entity](entity-data.md#the-entity-and-its-value). When the world saves,

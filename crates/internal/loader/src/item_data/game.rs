@@ -36,6 +36,7 @@ struct Layout {
     links: usize,
     inventory: u32,
     stack: usize,
+    stack_item: usize,
     stack_pide: usize,
 }
 
@@ -73,6 +74,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 links: at(names::INVENTORY_SETUP_LINKS)?,
                 inventory: ty(names::INVENTORY)?,
                 stack: usize::try_from(stack.size()).ok()?,
+                stack_item: field(names::type_name(names::ITEM_STACK), "id")?,
                 stack_pide: at(names::ITEM_STACK_PIDE)?,
             };
             // Every read lies inside the reflected type it reads.
@@ -80,7 +82,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 |name: &str| usize::try_from(loader.reflection.type_info(name).ok()?.size()).ok();
             let inside = layout.transform_at + TRANSFORM_KEY
                 <= usize::try_from(transform_type.size()).ok()?
-                && layout.stack_pide + 4 <= layout.stack
+                && layout.stack_pide.max(layout.stack_item) + 4 <= layout.stack
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
                 && layout.slot_index < size(ITEM_STATE)?
                 && layout.owner_entity + 4 <= size(names::type_name(names::OWNER))?
@@ -149,9 +151,13 @@ pub(crate) fn held(loader: &Loader, pide: u32) -> Option<(Option<Anchor>, u32)> 
     // id holds its `u32` inventory entity at `slot_entity` (in bounds, checked
     // by `layout`); read on the game thread (checked by `world::component`).
     let inventory = unsafe { read_at::<u32>(state, layout.slot_entity) };
-    // SAFETY: as for `inventory`, the slot byte at `slot_index`.
+    // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
+    // id holds its slot byte at `slot_index` (in bounds, checked by
+    // `layout`); read on the game thread (checked by `world::component`).
     let slot = unsafe { read_at::<u8>(state, layout.slot_index) };
-    // SAFETY: as for `inventory`, the `u32` `itemId` at `item`.
+    // SAFETY: `state` is the entity's live `ItemState`, which holds its `u32`
+    // `itemId` at `item` (in bounds, checked by `layout`); read on the game
+    // thread (checked by `world::component`).
     let item = unsafe { read_at::<u32>(state, layout.item) };
     let root = match component(loader, inventory, layout.owner) {
         // SAFETY: `owner` is the inventory's live `OwnerRelationship`, its
@@ -186,11 +192,15 @@ pub(crate) fn in_slot(loader: &Loader, root: u32, link: u8, slot: u8) -> Option<
     let at = usize::from(slot) * layout.stack;
     // SAFETY: `stacks` is the inventory's live `Inventory`, `SLOTS` stacks of
     // the reflected `ItemStack` size from offset 0 (checked by `layout`) and
-    // `slot < SLOTS`; a stack starts with its `u32` item; read on the game
+    // `slot < SLOTS`; the stack holds its `u32` item id at the reflected
+    // `stack_item`, inside the stack (checked by `layout`); read on the game
     // thread (checked by `world::component`).
-    let item = unsafe { read_at::<u32>(stacks, at) };
-    // SAFETY: as for `item`; the stack holds its `u32` PIDE at `stack_pide`,
-    // inside the stack (checked by `layout`).
+    let item = unsafe { read_at::<u32>(stacks, at + layout.stack_item) };
+    // SAFETY: `stacks` is the inventory's live `Inventory`, `SLOTS` stacks of
+    // the reflected `ItemStack` size from offset 0 (checked by `layout`) and
+    // `slot < SLOTS`; the stack holds its `u32` PIDE at `stack_pide`, inside
+    // the stack (checked by `layout`); read on the game thread (checked by
+    // `world::component`).
     let pide = unsafe { read_at::<u32>(stacks, at + layout.stack_pide) };
     (pide != 0).then_some((pide, item))
 }

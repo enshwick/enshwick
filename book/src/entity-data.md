@@ -66,10 +66,11 @@ a mod keeps nothing by entity id in its own files.
 The server keeps each value under its entity's place instead: the template
 and the exact transform, which the save holds bit for bit. After the first
 step of a loaded world, every value finds its entity again by that place.
-A value whose place holds no entity waits in the file for a later load. A
-place that two entities share, such as two chests a mod spawned at one
-point, names neither for certain: its value stays aside in the file and
-the log says how many did. Nothing is given to another entity on a guess.
+A value whose place names no entity for certain goes aside: its place holds
+no entity, or two entities share it, such as two chests a mod spawned at
+one point. A value aside stays in the world's file, attached to nothing
+and never matched again, since a later entity may take its place. The log
+says how many went aside. Nothing is given to another entity on a guess.
 
 Only an entity the save keeps in place can carry a value: a placed prop, an
 altar, a container, a survivor. A player's character is not one, so `set`
@@ -84,7 +85,7 @@ thing:
   missing;
 - the server drops every such value when the world saves.
 
-An entity in an area that is not loaded keeps its values.
+An entity the world no longer holds when it saves, gone without a destroy the server saw, has its values set aside.
 
 Reads on other threads answer from what the server keeps, until that next
 check.
