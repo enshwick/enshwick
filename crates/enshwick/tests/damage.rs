@@ -39,7 +39,7 @@ mod tests {
             target: enshwick::Entity(target),
             source: enshwick::Entity(source),
             attacker: enshwick::Entity(0),
-            amounts: [0.0; 13],
+            amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
             total: 0.0,
         }
     }
@@ -52,27 +52,33 @@ mod tests {
         assert_eq!(status, Status::OK);
 
         let mut hit = check(DamageCheck::HIT, 2, 9);
-        hit.amounts[0] = 30.0;
-        hit.amounts[3] = 5.0;
-        hit.amounts[7] = 4.0;
+        hit.amounts[DamageTypeNew::PhysicalCut.index()] = 30.0;
+        hit.amounts[DamageTypeNew::MagicalFire.index()] = 5.0;
+        hit.amounts[DamageTypeNew::Healing.index()] = 4.0;
         let after = loader.damage(hit);
-        assert!((after.amounts[0] - 10.0).abs() < f32::EPSILON, "cut capped");
         assert!(
-            (after.amounts[3] - 10.0).abs() < f32::EPSILON,
+            (after.amounts[DamageTypeNew::PhysicalCut.index()] - 10.0).abs() < f32::EPSILON,
+            "cut capped"
+        );
+        assert!(
+            (after.amounts[DamageTypeNew::MagicalFire.index()] - 10.0).abs() < f32::EPSILON,
             "fire doubled"
         );
         assert!(
-            (after.amounts[7] - 4.0).abs() < f32::EPSILON,
+            (after.amounts[DamageTypeNew::Healing.index()] - 4.0).abs() < f32::EPSILON,
             "healing kept"
         );
 
         let mut own = check(DamageCheck::HIT, 2, 2);
-        own.amounts[2] = 12.0;
-        own.amounts[7] = 3.0;
+        own.amounts[DamageTypeNew::PhysicalBlunt.index()] = 12.0;
+        own.amounts[DamageTypeNew::Healing.index()] = 3.0;
         let after = loader.damage(own);
-        assert!(after.amounts[2].abs() < f32::EPSILON, "cancelled");
         assert!(
-            (after.amounts[7] - 3.0).abs() < f32::EPSILON,
+            after.amounts[DamageTypeNew::PhysicalBlunt.index()].abs() < f32::EPSILON,
+            "cancelled"
+        );
+        assert!(
+            (after.amounts[DamageTypeNew::Healing.index()] - 3.0).abs() < f32::EPSILON,
             "a cancel keeps healing"
         );
 

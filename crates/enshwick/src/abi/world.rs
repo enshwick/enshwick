@@ -298,6 +298,10 @@ impl DaytimeInfo {
     pub const DAY: u32 = 1;
 }
 
+/// The damage types of a hit, one per value of the game's `DamageTypeNew`:
+/// the length of [`DamageCheck::amounts`].
+pub const DAMAGE_TYPES: usize = 13;
+
 /// Damage about to reach an entity's health, handed to the filters
 /// registered with [`HostApi::damage_filter`](super::HostApi::damage_filter), which may change it.
 ///
@@ -312,7 +316,7 @@ impl DaytimeInfo {
 ///     target: enshwick::Entity(2),
 ///     source: enshwick::Entity(0),
 ///     attacker: enshwick::Entity(0),
-///     amounts: [0.0; 13],
+///     amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
 ///     total: 40.0,
 /// };
 /// fall.total *= 0.5;
@@ -336,11 +340,11 @@ pub struct DamageCheck {
     /// Who dealt a hit, the root of the impact that hit (the archer for an
     /// arrow), or `source` when the game names none; 0 for other causes.
     pub attacker: Entity,
-    /// A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
-    /// fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
-    /// stone 10, metal 11, explosion 12), after the target's resistances
-    /// and before its armour; healing is what heals. Zero for other causes.
-    pub amounts: [f32; 13],
+    /// A hit's damage by type, in the game's order of its damage types
+    /// ([`DamageTypeNew::index`](crate::damage::DamageTypeNew::index)), after
+    /// the target's resistances and before its armour; healing is what
+    /// heals. Zero for other causes.
+    pub amounts: [f32; DAMAGE_TYPES],
     /// The health the damage takes, for causes other than a hit; for a hit,
     /// the sum of its damage types but healing, which the loader does not
     /// read back.
