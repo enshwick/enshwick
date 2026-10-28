@@ -403,6 +403,47 @@ pub(crate) fn after_step(loader: &Loader) {
     }
 }
 
+/// A player's character `entity` leaves, its items still in the world: the
+/// values on them go aside, kept in the world's file, rather than be dropped
+/// when the game destroys the items it removes with the character. No load
+/// finds a character's items by place, so they never attach again.
+pub(crate) fn player_left(loader: &Loader, entity: u32) {
+    if !wanted() || !serves() {
+        return;
+    }
+    let mut server = SERVER.relock();
+    let Some(server) = server.as_mut() else {
+        return;
+    };
+    let mut left = Vec::new();
+    server.values.retain(|&(kind, pide), record| {
+        if scope(kind, record.anchor) != Some(Scope::Item) {
+            return true;
+        }
+        let Some(held) = game::held(loader, pide).filter(|held| held.root == entity) else {
+            return true;
+        };
+        left.push(Pending {
+            kind,
+            anchor: Anchor::Session(pide),
+            check: held.item,
+            value: core::mem::take(&mut record.value),
+            aside: true,
+        });
+        false
+    });
+    if left.is_empty() {
+        return;
+    }
+    crate::log!(
+        INFO,
+        "mod data: {} values on a leaving player's items set aside in the world's file",
+        left.len()
+    );
+    server.pending.append(&mut left);
+    server.changed = true;
+}
+
 /// The placed things whose templates the `pending` records name, by key;
 /// `None` when any part of the walk does not read, since a thing missing
 /// from the index would set its records aside for good.
@@ -669,7 +710,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
             item,
             loader
                 .and_then(|loader| game::held(loader, pide))
-                .and_then(|(anchor, _)| anchor),
+                .and_then(|held| held.anchor),
         ),
         Scope::Entity => {
             crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
@@ -970,7 +1011,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
             Some(Scope::Item) => {
-                Some(game::held(loader, entity).map(|(anchor, item)| (item, anchor)))
+                Some(game::held(loader, entity).map(|held| (held.item, held.anchor)))
             }
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),

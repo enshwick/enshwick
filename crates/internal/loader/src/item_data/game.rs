@@ -149,10 +149,11 @@ fn link_of(loader: &Loader, layout: &Layout, root: u32, inventory: u32) -> Optio
     })
 }
 
-/// Where the item entity `pide` sits, as an anchor, and the item it holds;
-/// `None` for an entity the world does not hold, and no anchor for an item
-/// in no placed thing's inventory, such as a player's.
-pub(crate) fn held(loader: &Loader, pide: u32) -> Option<(Option<Anchor>, u32)> {
+/// Where the item entity `pide` sits, as an anchor, the item it holds and
+/// the root whose inventory holds it; `None` for an entity the world does
+/// not hold. The anchor is `None` for an item in no placed thing's
+/// inventory, such as a player's.
+pub(crate) fn held(loader: &Loader, pide: u32) -> Option<Held> {
     let layout = layout(loader)?;
     let state = component(loader, pide, layout.item_state)?;
     // SAFETY: `state` is the entity's live `ItemState`, whose reflected slot
@@ -175,8 +176,20 @@ pub(crate) fn held(loader: &Loader, pide: u32) -> Option<(Option<Anchor>, u32)> 
     };
     let anchor = link_of(loader, layout, root, inventory)
         .zip(placed(loader, root))
-        .map(|(link, root)| Anchor::Held { root, link, slot });
-    Some((anchor, item))
+        .map(|(link, placed)| Anchor::Held {
+            root: placed,
+            link,
+            slot,
+        });
+    Some(Held { anchor, item, root })
+}
+
+/// An item entity's place: its anchor, the item it holds and its root.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Held {
+    pub(crate) anchor: Option<Anchor>,
+    pub(crate) item: u32,
+    pub(crate) root: u32,
 }
 
 /// The item entity in slot `slot` of the inventory at `link` of `root`, and
