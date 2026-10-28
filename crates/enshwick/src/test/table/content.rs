@@ -302,6 +302,10 @@ pub(crate) extern "system" fn item_data_set(
         unsafe { core::slice::from_raw_parts(data, len as usize) }.to_vec()
     };
     with(Status::MISSING, |s| {
+        // The world's save keeps no player's character in place.
+        if !value.is_empty() && s.host.players.iter().any(|p| p.entity == pide) {
+            return Status::NOT_KEPT;
+        }
         if value.is_empty() {
             s.item_values.remove(&(kind, pide.0));
         } else {

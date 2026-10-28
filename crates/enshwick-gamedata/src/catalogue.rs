@@ -280,6 +280,13 @@ pub const INVENTORY_SETUP_INITIALIZED: &str = "inventory_setup.initialized";
 pub const INVENTORY: &str = "inventory";
 /// The id of a stack in an inventory, its `u32` item first.
 pub const ITEM_STACK: &str = "item_stack";
+/// The id of a transform's position, three 32.32 fixed-point `i64`.
+pub const WORLD_TRANSFORM_POSITION: &str = "world_transform.position";
+/// The id of a stack's `u32` item entity, its PIDE.
+pub const ITEM_STACK_PIDE: &str = "item_stack.pide";
+/// The id of the component that relates an entity to its owner, the
+/// owner's `u32` entity alone.
+pub const OWNER: &str = "owner";
 /// The id of a map marker's type, `MapMarker`.
 pub const MAP_MARKER: &str = "map_marker";
 /// The id of a map marker's label text tag, `markerId`, a GUID.

@@ -4,10 +4,16 @@
 //!
 //! An item with an entity of its own, its PIDE (see
 //! [`Slot::pide`](crate::inventory::Slot::pide)), is an [`ItemInstance`]:
-//! the entity and the item id it holds. The game saves an item's entity
-//! under its id, so a value stays with its item across saves, moves and
-//! trades; it reads as missing once the entity holds another item, and the
-//! server drops values of items that are gone when the world saves.
+//! the entity and the item id it holds. Within a session a value stays with
+//! its item across moves and trades; it reads as missing once the entity
+//! holds another item, and the server drops values of items that are gone
+//! when the world saves. A load numbers item entities anew, so the server
+//! keeps a value under the item's place when the world saves: the placed
+//! container and the slot it lies in. After the next load the value finds
+//! the item in that slot again. An item a load cannot find there, such as
+//! one in a player's inventory, keeps its value while the world holds it:
+//! once its player leaves or the server stops, the value goes aside in the
+//! world's file at the next save.
 //!
 //! The server keeps the values, in `mod-data/enshwick/worlds/<key>/`, never
 //! in the game's save, and sends every change to the clients that run
@@ -115,6 +121,11 @@ pub enum SetError {
     /// The entity does not exist.
     #[error("no such entity")]
     NoEntity,
+    /// Nothing finds the entity again after the world's next load: a
+    /// player's character, an entity with no place in the world, or any
+    /// entity on a game build whose layouts the loader does not read.
+    #[error("the entity is not found again after a load")]
+    NotKept,
     /// The item has no entity, or the loader refused for another reason.
     #[error("mod data refused (status {0})")]
     Refused(u32),
@@ -229,6 +240,7 @@ where
             Status::OK => Ok(()),
             Status::REFUSED => Err(SetError::NotServer),
             Status::MISSING => Err(SetError::NoWorld),
+            Status::NOT_KEPT => Err(SetError::NotKept),
             other => Err(SetError::Refused(other.0)),
         }
     }

@@ -36,13 +36,20 @@ is that entity and the item id it holds; `ItemInstance::of(&slot)` takes it
 from an [inventory](inventories.md) slot, or gives `None` for an empty slot or
 an item without an entity of its own.
 
-The game saves an item's entity under its id and creates it with the same
-id on load, so the value stays with the item across saves, moves between
+Within a session the value stays with the item across moves between
 inventories and trades. Once the entity holds another item, the value reads
 as missing, and the server drops it when the world saves. When the game
 destroys the item, as a craft that uses it up does, the server drops its
-values after that step and tells the clients. An item in an area that is not
-loaded keeps its values.
+values after that step and tells the clients.
+
+A load numbers item entities anew, as it does every
+[entity](entity-data.md#the-entity-and-its-value). When the world saves,
+the server keeps each value under the item's place: the placed container,
+which of its inventories, and the slot. After the next load the value finds
+the item in that slot again, if it holds the same item. An item in a
+player's inventory has no such place: its value lasts while the world
+holds the item. Once its player leaves or the server stops, the value goes
+aside in the world's file at the next save.
 
 ## Kinds
 

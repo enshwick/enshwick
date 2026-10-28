@@ -366,7 +366,7 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     part!("knowledge steps", crate::knowledge::after_step(loader));
     part!("death steps", crate::deaths::after_step(loader));
     part!("survivor steps", crate::survivors::after_step(loader));
-    part!("item data steps", crate::item_data::after_step());
+    part!("item data steps", crate::item_data::after_step(loader));
     part!(
         "game settings steps",
         crate::game_settings::after_step(loader)
