@@ -599,6 +599,8 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             crate::remote::forget_player(data.key.get());
             crate::admission::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
+                // Before the game removes the character: its items still read.
+                crate::item_data::player_left(loader, data.entity.0);
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
         }
