@@ -694,7 +694,7 @@ pub mod __private {
                 }
             },
             Ok(Err(off)) => {
-                host.log(Level::WARN, &format!("off: {off}"));
+                host.fault(off.to_reason());
                 Status::REFUSED
             }
             Err(_) => {
@@ -736,7 +736,7 @@ pub mod __private {
         match outcome {
             Ok(Ok(())) => Status::OK,
             Ok(Err(off)) => {
-                host.log(Level::WARN, &format!("off: {off}"));
+                host.fault(off.to_reason());
                 Status::REFUSED
             }
             Err(_) => {
