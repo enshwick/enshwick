@@ -107,7 +107,7 @@ pub struct MapPoint {
     pub position: [f64; 3],
     /// Its [`MapMarkerTypeId`](super::MapMarkerTypeId) key.
     pub marker_type: Option<u32>,
-    /// Its label's text id, [`Guid::id`](crate::content::Guid::id) of the
+    /// Its label's text id, [`Guid::fnv1a`](crate::content::Guid::fnv1a) of the
     /// tag.
     pub label: Option<u32>,
 }

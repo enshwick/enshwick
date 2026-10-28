@@ -236,7 +236,7 @@ impl Source {
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Drop {
-    /// The items' game ids, [`Guid::id`](crate::content::Guid::id) of their
+    /// The items' game ids, [`ItemId::from_guid`](crate::ItemId::from_guid) of their
     /// GUIDs; a drop that hits gives one of them, each as likely.
     pub items: Vec<ItemId>,
     /// The chance per roll, from 0 to 1.
