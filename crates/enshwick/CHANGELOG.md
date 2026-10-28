@@ -79,6 +79,10 @@ Each entry names the pull request that made the change.
   the `Config` derive takes any error that converts into `ConfigError`
   (`String`, `&str` or a `ConfigError`) (#620).
 
+### Fixed
+
+- The Mods screen shows a secret setting as "(secret)" and never its value.
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added
