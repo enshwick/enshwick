@@ -328,7 +328,7 @@ impl Schema {
             return Err(invalid("version", &self.version));
         }
         let named = |name: &str| self.types.iter().any(|t| t.name == name);
-        let is_type = |ty: &str| PRIMITIVES.contains(&ty) || BUILT_IN.contains(&ty) || named(ty);
+        let is_type = |ty: &str| PRIMITIVES.contains(&ty) || built_in(ty).is_some() || named(ty);
         for point in &self.point {
             if !is_point_name(&point.name) {
                 return Err(invalid("point name", &point.name));
@@ -399,14 +399,81 @@ const ENUM_REPRS: [&str; 10] = [
 const PRIMITIVES: [&str; 11] = [
     "u8", "u16", "u32", "u64", "i8", "i16", "i32", "i64", "f32", "f64", "bool",
 ];
-/// The API's own types a schema names by their schema names.
-const BUILT_IN: [&str; 5] = [
-    "enshwick.entity",
-    "enshwick.guid",
-    "enshwick.item_id",
-    "enshwick.player_key",
-    "enshwick.recipe_id",
+/// An API type a schema names by its schema name: its Rust path, layout,
+/// the read the Luau runtime takes for it and its Luau type.
+struct BuiltIn {
+    name: &'static str,
+    rust: &'static str,
+    size: u64,
+    align: u64,
+    read: &'static str,
+    luau: &'static str,
+}
+
+/// The API's own types a schema names, the one list every writer reads.
+const BUILT_IN: [BuiltIn; 7] = [
+    BuiltIn {
+        name: "enshwick.entity",
+        rust: "enshwick::Entity",
+        size: 4,
+        align: 4,
+        read: "entity",
+        luau: "number",
+    },
+    BuiltIn {
+        name: "enshwick.guid",
+        rust: "enshwick::content::Guid",
+        size: 16,
+        align: 1,
+        read: "guid",
+        luau: "string",
+    },
+    BuiltIn {
+        name: "enshwick.item_id",
+        rust: "enshwick::ItemId",
+        size: 4,
+        align: 4,
+        read: "item_id",
+        luau: "number",
+    },
+    BuiltIn {
+        name: "enshwick.knowledge_id",
+        rust: "enshwick::knowledge::KnowledgeId",
+        size: 4,
+        align: 4,
+        read: "knowledge_id",
+        luau: "number",
+    },
+    BuiltIn {
+        name: "enshwick.player_key",
+        rust: "enshwick::PlayerKey",
+        size: 8,
+        align: 8,
+        read: "player_key",
+        luau: "string",
+    },
+    BuiltIn {
+        name: "enshwick.recipe_id",
+        rust: "enshwick::RecipeId",
+        size: 4,
+        align: 4,
+        read: "recipe_id",
+        luau: "number",
+    },
+    BuiltIn {
+        name: "enshwick.skill_node",
+        rust: "enshwick::world::SkillNode",
+        size: 4,
+        align: 4,
+        read: "skill_node",
+        luau: "number",
+    },
 ];
+
+/// The API type the schema name `name` names.
+fn built_in(name: &str) -> Option<&'static BuiltIn> {
+    BUILT_IN.iter().find(|b| b.name == name)
+}
 
 /// Whether `text` is a plain Rust identifier.
 fn is_ident(text: &str) -> bool {
@@ -459,14 +526,7 @@ pub fn from_dll(bytes: &[u8]) -> Result<Option<String>, Error> {
 
 /// The Rust path of a schema type name.
 fn rust_type(name: &str) -> String {
-    match name {
-        "enshwick.entity" => "enshwick::Entity".to_owned(),
-        "enshwick.guid" => "enshwick::content::Guid".to_owned(),
-        "enshwick.item_id" => "enshwick::ItemId".to_owned(),
-        "enshwick.player_key" => "enshwick::PlayerKey".to_owned(),
-        "enshwick.recipe_id" => "enshwick::RecipeId".to_owned(),
-        other => other.to_owned(),
-    }
+    built_in(name).map_or_else(|| name.to_owned(), |b| b.rust.to_owned())
 }
 
 /// Whether `name` is a type the schema itself describes.

@@ -19,6 +19,9 @@ Each entry names the pull request that made the change.
   (ABI 3.2) (#615).
 - `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
   give the game's id of a GUID with its type, in a constant too (#615).
+- `KnowledgeId` and `SkillNode` have a `Shape`, so services, events and
+  points carry them; a Luau script changes an answer of any id type
+  (#619).
 - `Load::on_tick` runs a tick handler on a period of wall time and returns
   a `TickPeriod`, whose `set_every` changes the period while the game runs;
   `Load::on_every_step` runs one on every server step. A step a handler
