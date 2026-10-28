@@ -100,7 +100,8 @@ order, sees the level, the game's own count and the count so far, and sets
 game groups only 16 zones into its 16 bases; `load.raise_base_limit()` lets
 it group every zone it lists, allows up to 32 altars a level, and refuses an
 altar that would start a 17th base with the game's own "too many altars".
-With the `unstable` feature, `load.request_base_limits(zones, bases)` allows
+With the `unstable` feature ([Stability](stability.md)),
+`load.request_base_limits(zones, bases)` allows
 up to `zones` altars a level, at most 255, every zone the game lists; the
 largest request of every mod holds, and a value past
 `base_limit().max_zones` or `max_bases` turns the mod off. Both return

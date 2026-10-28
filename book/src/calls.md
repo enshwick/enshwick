@@ -1,5 +1,8 @@
 # Calls between mods
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 A **call** is a described service: one function from an input struct to an
 answer. One mod serves it and other mods call it. The input is a `repr(C)`
 struct, so the server's schema describes the call whole. A mod in any language

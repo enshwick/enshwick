@@ -98,7 +98,7 @@ impl FakeHost {
     }
 
     /// The key of the world the server runs, for
-    /// [`World::key`](crate::world::World::key) and world stores.
+    /// `World::key` and world stores.
     ///
     /// # Examples
     ///
@@ -235,7 +235,7 @@ impl FakeHost {
 
     /// The answer to console lines whose first word is `word`, which
     /// another mod or the loader gives, when the mod runs such a line with
-    /// [`console::run`](crate::console::run). A line whose first word has no
+    /// `console::run`. A line whose first word has no
     /// answer here goes to the mod's own actions, as if the word were its id.
     ///
     /// # Examples
@@ -331,7 +331,7 @@ impl Installed {
         Some(ask(callback, user, kind, player, language, action, args))
     }
 
-    /// The lines the mod ran with [`console::run`](crate::console::run), in
+    /// The lines the mod ran with `console::run`, in
     /// order.
     ///
     /// # Examples

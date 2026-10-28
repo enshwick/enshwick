@@ -41,7 +41,7 @@ call:
 | `npc_command(npc, NpcCommandType::Reset)` | `NpcCommandEvent` | the survivor drops the order and goes back to its routine |
 | `set_toggle(sender, signal, on)` | `SetToggleStateEvent` | the logic signal switches, as a lever drives a door |
 | `add_threat(attacker, target, threat)` | `AddThreatTargetEvent` | the enemy takes notice of the target |
-| `ping(sender, at)` | `UiPingEvent` | a ping on the map and in the world, from the sender |
+| `ping(sender, at)` | `UiPingEvent` | a ping on the map and in the world, from the sender; unstable, needs the `unstable` feature |
 
 `emit_raw(ty, bytes)` raises an event from its whole reflected layout, for
 the same allowed types; the loader refuses any other type, and a size that
@@ -70,6 +70,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ```
 
 ## Teleports
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 `teleport(entity, position, how)` moves an entity as the game's admin
 teleport does: after the next step the entity jumps to `position`, in metres,

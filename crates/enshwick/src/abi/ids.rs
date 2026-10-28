@@ -168,13 +168,13 @@ pub struct PlayerKey(pub u64);
 pub struct RecipeId(pub u32);
 
 /// A node of the game's skill tree by its id, as
-/// [`Skill::node`](crate::world::Skill::node) names the nodes a character
+/// `Skill::node` names the nodes a character
 /// unlocked and a skill check names the node it asks about.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::world::SkillNode;
+/// use enshwick::abi::SkillNode;
 ///
 /// let node = SkillNode::from(0x2a_u32);
 /// assert_eq!(node.get(), 0x2a);

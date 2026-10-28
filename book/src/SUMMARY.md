@@ -88,6 +88,7 @@
 
 # Reference
 
+- [Stability](stability.md)
 - [ABI reference](abi-reference.md)
 - [Mods in C](mods-in-c.md)
 - [FAQ and troubleshooting](faq.md)

@@ -2,6 +2,8 @@
 //! administrator with no character, such as each line of a dedicated
 //! server's command file.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! A line is `enshwick ...` for the loader's own tools (`enshwick help`
 //! lists them), or a mod's id followed by the text form of one of its
 //! [actions](crate::actions), such as `you.lockers access Ann on`. Players never

@@ -1,5 +1,8 @@
 # The world
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 [`load.world()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)
 returns a
 [`World`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs):

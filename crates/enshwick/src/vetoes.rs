@@ -95,7 +95,7 @@ impl Load<'_> {
     /// Runs `filter` on each player's craft request in the server's world,
     /// before the crafting system reads it; returning `false` refuses it,
     /// and nothing is made or taken. It runs on the game thread, where
-    /// [`World`](crate::world::World) reads work, in the dedicated server or
+    /// `World` reads work, in the dedicated server or
     /// a hosting client.
     ///
     /// # Errors

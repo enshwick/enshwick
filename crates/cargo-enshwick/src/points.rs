@@ -470,7 +470,7 @@ const BUILT_IN: [BuiltIn; 9] = [
     },
     BuiltIn {
         name: "enshwick.skill_node",
-        rust: "enshwick::world::SkillNode",
+        rust: "enshwick::abi::SkillNode",
         size: 4,
         align: 4,
         read: "skill_node",

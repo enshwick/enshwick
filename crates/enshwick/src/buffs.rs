@@ -15,23 +15,15 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Arg, Outcome, Value};
 //! use core::time::Duration;
-//! use enshwick::buffs::{Apply, BuffTypeId};
+//! use enshwick::buffs::{Apply, BuffTypeId, Buffs};
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let buffs = load.buffs();
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     let bless = Action::new("bless", "A buff for a minute")
-//!         .admins()
-//!         .arg(Arg::number("Buff id", 0.0..=f64::from(u32::MAX), 1.0));
-//!     actions.add(bless, move |request| {
-//!         let [Value::Number(id)] = request.args else {
-//!             return Outcome::refused("Name a buff");
-//!         };
-//!         let how = Apply::new().lasting(Duration::from_mins(1));
-//!         Outcome::done(format!("{:?}", buffs.apply(request.player.entity, BuffTypeId(*id as u32), how)))
-//!     })
+//! fn bless(buffs: &Buffs, player: enshwick::Entity, id: BuffTypeId) -> Result<(), enshwick::WorldError> {
+//!     buffs.apply(player, id, Apply::new().lasting(Duration::from_mins(1)))
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Buffs, enshwick::Off> {
+//!     Ok(load.buffs())
 //! }
 //! ```
 

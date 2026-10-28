@@ -19,31 +19,14 @@ chapters! {
     Lifecycle => "concepts/lifecycle.md",
     SidesAndHosting => "concepts/sides-and-hosting.md",
     JoinCheck => "concepts/join-check.md",
-    Threads => "concepts/threads.md",
     Settings => "settings.md",
     Logging => "logging.md",
     Events => "events.md",
-    GameEvents => "game-events.md",
-    World => "world.md",
-    Effects => "effects.md",
-    Daytime => "daytime.md",
-    GameSettings => "game-settings.md",
     Rates => "rates.md",
     Damage => "damage.md",
-    Buffs => "buffs.md",
-    Knowledge => "knowledge.md",
-    Weather => "weather.md",
-    Terrain => "terrain.md",
     Altars => "altars.md",
-    Map => "map.md",
-    Survivors => "survivors.md",
     Interactions => "interactions.md",
-    Vetoes => "vetoes.md",
     Progress => "progress.md",
-    Actions => "actions.md",
-    Chat => "chat.md",
-    Messages => "messages.md",
-    Interface => "interface.md",
     State => "state.md",
     Services => "services.md",
     Luau => "luau.md",
@@ -60,7 +43,6 @@ chapters! {
     Recipes => "content/recipes.md",
     DisabledRecipes => "content/disabled-recipes.md",
     Workshops => "content/workshops.md",
-    Loot => "content/loot.md",
     RandomLoot => "content/random-loot.md",
     Resources => "content/resources.md",
     Texts => "content/texts.md",
@@ -70,10 +52,10 @@ chapters! {
     Inventories => "inventories.md",
     ItemData => "item-data.md",
     EntityData => "entity-data.md",
-    Stats => "stats.md",
     Affixes => "affixes.md",
     Releasing => "releasing.md",
     Servers => "servers.md",
+    Stability => "stability.md",
     AbiReference => "abi-reference.md",
     ModsInC => "mods-in-c.md",
     Faq => "faq.md",
@@ -84,7 +66,7 @@ chapters! {
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Testing;
 
-#[cfg(feature = "test")]
+#[cfg(all(feature = "test", feature = "unstable"))]
 #[doc = include_str!("../../../book/src/calls.md")]
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Calls;
@@ -98,3 +80,30 @@ struct Extending;
 #[doc = include_str!("../../../book/src/migrations.md")]
 #[expect(dead_code, reason = "the doc comment carries the chapter")]
 struct Migrations;
+
+// Chapters whose examples use unstable calls, if only to show a stable one
+// in context, run only with the `unstable` feature.
+#[cfg(feature = "unstable")]
+mod unstable {
+    chapters! {
+        Threads => "concepts/threads.md",
+        GameEvents => "game-events.md",
+        World => "world.md",
+        Effects => "effects.md",
+        Daytime => "daytime.md",
+        GameSettings => "game-settings.md",
+        Buffs => "buffs.md",
+        Knowledge => "knowledge.md",
+        Weather => "weather.md",
+        Terrain => "terrain.md",
+        Map => "map.md",
+        Survivors => "survivors.md",
+        Vetoes => "vetoes.md",
+        Actions => "actions.md",
+        Chat => "chat.md",
+        Messages => "messages.md",
+        Interface => "interface.md",
+        Loot => "content/loot.md",
+        Stats => "stats.md",
+    }
+}

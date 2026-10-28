@@ -30,13 +30,25 @@
 //! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`migrations`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
-//! | The server's world | [`world`], [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`map`], [`terrain`], [`voxels`], [`weather`] |
-//! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`], [`actions`], [`console`] |
+//! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
+//! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`] |
 //! | Game rules | [`damage`], [`loot`], [`rates`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
 //! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
-//! | Interface and scripts | [`ui`], [`script`](mod@script) |
+//! | Interface | [`ui`] |
+#![cfg_attr(
+    feature = "unstable",
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`actions`], [`console`], [`script`](mod@script) |"
+)]
+#![cfg_attr(
+    not(feature = "unstable"),
+    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `actions`, `console`, `script` |"
+)]
 //! | Tests | `test`, with the `test` feature |
+//!
+//! Items marked unstable may change in any release; everything else keeps
+//! the compatibility rules of the version. The book's Stability chapter
+//! names what is unstable and why.
 //!
 //! # Features
 //!
@@ -83,6 +95,7 @@
 //!
 //! enshwick::declare_mod!(Hello);
 //! ```
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// The version of this crate, which a mod's generated `Cargo.toml` pins.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -92,6 +105,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 extern crate self as enshwick;
 
 pub mod abi;
+#[cfg(feature = "unstable")]
 pub mod actions;
 pub mod affixes;
 pub mod altars;
@@ -100,6 +114,7 @@ mod book;
 pub mod buffs;
 pub mod code;
 pub mod config;
+#[cfg(feature = "unstable")]
 pub mod console;
 pub mod content;
 pub mod damage;
@@ -124,6 +139,7 @@ pub mod knowledge;
 mod load;
 mod locks;
 pub mod loot;
+#[cfg(feature = "unstable")]
 pub mod map;
 pub mod migrations;
 pub mod mods;
@@ -137,7 +153,18 @@ pub mod raw;
 #[cfg(doctest)]
 mod refused;
 pub mod schedule;
+#[cfg(feature = "unstable")]
 pub mod script;
+// Without `unstable` the binding stays inside, so the crate's own types keep
+// their derives; only a script runtime, which turns the feature on, reads
+// them.
+#[cfg(not(feature = "unstable"))]
+#[expect(
+    unreachable_pub,
+    dead_code,
+    reason = "the script binding is public only with `unstable`"
+)]
+mod script;
 pub mod services;
 pub mod shape;
 pub mod state;
@@ -152,6 +179,7 @@ pub mod ui;
 pub mod vetoes;
 pub mod voxels;
 pub mod weather;
+#[cfg(feature = "unstable")]
 pub mod world;
 mod world_error;
 
@@ -160,6 +188,8 @@ pub use enshwick_macros::Config;
 /// Describes a type for script languages through [`script::Typed`],
 /// [`script::IntoScript`] and, when every field is shown,
 /// [`script::FromScript`].
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// A struct with named fields is a record of its public fields; fields of
 /// type `Header` and fields named with a leading `_` or `reserved` are left
@@ -183,6 +213,7 @@ pub use enshwick_macros::Config;
 /// assert_eq!(Sale::from_value(value)?, Sale { price: 5 });
 /// # Ok::<(), enshwick::script::Error>(())
 /// ```
+#[cfg(feature = "unstable")]
 pub use enshwick_macros::Script;
 /// Derives [`trait@Shape`] for a type that crosses between mods inside a
 /// [`#[service]`](macro@service), [`#[event]`](macro@event) or
@@ -227,6 +258,8 @@ pub use enshwick_macros::Shape;
 /// per field and one for the answer, which the loader checks for every
 /// caller.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// `#[call(name = "<server id>:<call>", output = <type>, version = <major>)]`;
 /// `version` is 1 when left out. A changed field or answer is a new major.
 /// Every type in it has a [`trait@Shape`].
@@ -244,6 +277,7 @@ pub use enshwick_macros::Shape;
 ///     load.serve_call(|input: &PriceOf| input.item * 10)
 /// }
 /// ```
+#[cfg(feature = "unstable")]
 pub use enshwick_macros::call;
 /// Declares a mod event other mods subscribe to: the struct becomes
 /// `repr(C)` and implements [`services::ModEvent`] with a layout hash per
@@ -326,6 +360,8 @@ pub use enshwick_macros::point;
 /// languages: `#[script(<part>)]` adds the constant `SCRIPT_<PART>`, a list
 /// of [`script::Function`] a [`script::Bound`] type names in its parts.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// A method takes `self` or `&self` and has a doc comment. Parameters and
 /// the return type implement [`script::FromScript`] and
 /// [`script::IntoScript`]; `&T` reads a `T`; an `impl Fn(A) -> R` parameter
@@ -335,6 +371,7 @@ pub use enshwick_macros::point;
 /// # Examples
 ///
 /// See [`script::Function`].
+#[cfg(feature = "unstable")]
 pub use enshwick_macros::script;
 /// Declares a service table other mods use: the struct becomes `repr(C)`
 /// and implements [`services::Service`] with a layout hash per field, which
@@ -366,6 +403,8 @@ pub use enshwick_macros::script;
 /// }
 /// ```
 pub use enshwick_macros::service;
+#[cfg(not(feature = "unstable"))]
+pub(crate) use enshwick_macros::{Script, script};
 pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};

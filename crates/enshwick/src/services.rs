@@ -10,7 +10,9 @@
 //! user that needs a field the publisher lacks is refused with the field's
 //! name. A change to a field already published is a new major version.
 
+#[cfg(feature = "unstable")]
 mod calls;
+#[cfg(feature = "unstable")]
 mod described;
 
 use core::marker::PhantomData;
@@ -19,9 +21,11 @@ use crate::Host;
 use crate::abi::{Layout, LayoutField, Str};
 use crate::shape::ShapeHasher;
 
+#[cfg(feature = "unstable")]
 pub use calls::{Call, CallError, Caller, DescribedCall, DescribedCaller};
-#[cfg(feature = "test")]
+#[cfg(all(feature = "test", feature = "unstable"))]
 pub(crate) use calls::{Served, run_typed};
+#[cfg(feature = "unstable")]
 pub use described::{DescribedEmitter, DescribedEvent};
 
 /// A table of functions a mod publishes for others.

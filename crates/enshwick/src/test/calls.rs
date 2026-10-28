@@ -5,6 +5,7 @@
 use core::ffi::c_void;
 
 use crate::abi::{CallFn, CallSpec, ModHandle, Status};
+#[cfg(feature = "unstable")]
 use crate::services::{Call, CallError};
 
 use super::Installed;
@@ -22,6 +23,7 @@ struct Declared {
     output_size: u32,
 }
 
+#[cfg(feature = "unstable")]
 impl Declared {
     fn of<C: Call>() -> Self {
         let fields = |layout: &[crate::abi::LayoutField]| {
@@ -194,6 +196,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.serve_call(|input: &PriceOf| input.item * 10);
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn serve_call<C, F>(&self, handler: F)
     where
         C: Call,
@@ -230,6 +233,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// assert_eq!(loader.call(&PriceOf { item: 1 }), Err(CallError::Unmatched));
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn call<C: Call>(&self, input: &C) -> Result<C::Output, CallError> {
         let wanted = Declared::of::<C>();
         let server = with(None, |s| {
