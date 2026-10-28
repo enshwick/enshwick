@@ -17,7 +17,7 @@ Each entry names the pull request that made the change.
   `DeadlyFog` (`DamageCheck::FOG`, `DEADLY_FOG`) replace `Shroud` and
   `ShroudDeath`. `BedCheck` names `npc_id` and `bed_id`. The zone check is
   `Load::on_building_zone_check` with `BuildingZoneCheck`
-  (`HostApi::building_zone_check_filter`) (#PR).
+  (`HostApi::building_zone_check_filter`) (#635).
 
 ## [1.0.0-alpha.10] - 2026-10-28
 
