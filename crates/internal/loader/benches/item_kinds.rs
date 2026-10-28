@@ -56,7 +56,7 @@ fn kinds(c: &mut Criterion) {
         });
     });
     let classes = classes();
-    let tags = [[0xc0; 16], [0xc1; 16], DECOR];
+    let tags = [[0xc1; 16], [0xc2; 16], DECOR];
     group.bench_function("class_of_a_prop_by_its_tags", |b| {
         b.iter(|| classes.classify(black_box(3), black_box(tags)));
     });

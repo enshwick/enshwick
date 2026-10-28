@@ -6,6 +6,11 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `COMFORT_FURNITURE_ITEM_TAG` and its row in `RECIPE_KIND_TAGS`; an earlier
+  row wins for an item with two kind tags (#628).
+
 ## [1.0.0-alpha.10] - 2026-10-28
 
 ### Added

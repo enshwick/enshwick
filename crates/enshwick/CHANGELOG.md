@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
+  code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
+  item tag of the game's Comfort Furniture crafting group; a prop with the
+  Decorative tag too stays `Decorative` (#628).
+
 ### Changed
 
 - A mod whose `init` returns `Err(Off)` hands the loader its reason: the
