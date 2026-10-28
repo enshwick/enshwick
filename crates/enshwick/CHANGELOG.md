@@ -54,11 +54,11 @@ Each entry names the pull request that made the change.
   its entities anew; `Prop` has none either, and a `Capture` keeps
   `CapturedProp`, the item and transform without the entity. Entity data
   refuses an entity no load finds again, a player's character, with
-  `SetError::NotKept` (`Status::NOT_KEPT`, ABI 3.5) (#PR).
+  `SetError::NotKept` (`Status::NOT_KEPT`, ABI 3.5) (#631).
 - Entity and item data keep each value under its entity's place, the
   template and transform or the container and slot, and find it again
   after a load; a value no place names for certain stays aside in the
-  world's file (#PR).
+  world's file (#631).
 - Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
   structs, `HostApi::remove_buff`, `summon_item` and the survivor status
   merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a
@@ -124,7 +124,7 @@ Each entry names the pull request that made the change.
 - After a restart that followed any added or removed entity, an entity or
   item data value could land on another entity of the same template; values
   now follow their entity's place. Values of a file written before this
-  stay aside, attached to nothing (#PR).
+  stay aside, attached to nothing (#631).
 - The Mods screen shows a secret setting as "(secret)" and never its value.
 
 ## [1.0.0-alpha.9] - 2026-10-27
