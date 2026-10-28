@@ -8,6 +8,7 @@ use enshwick::Entity;
 use enshwick::inventory::InventoryCategory;
 use enshwick::raw::read_at;
 
+use crate::catalogue::{self, ids};
 use crate::host::Loader;
 
 use crate::transactions::props::{LINKS, SLOTS};
@@ -36,27 +37,16 @@ static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
 fn layout(loader: &Loader) -> Option<Layout> {
     *LAYOUT.get_or_init(|| {
-        let reflection = &loader.reflection;
-        let ty = |name: &str| {
-            let info = reflection.type_info(name).ok()?;
-            crate::world::type_hash(info.va())
-        };
-        let offset = |ty: &str, field: &str| {
-            reflection
-                .field_offset(ty, field)
-                .ok()
-                .and_then(|v| usize::try_from(v).ok())
-        };
-        let data = offset("keen::ItemStack", "data")?;
+        let count = catalogue::offset(loader, ids::ITEM_STACK_COUNT)?;
         Some(Layout {
-            setup: ty("keen::ecs::InventorySetup")?,
-            inventory: ty("keen::ecs::Inventory")?,
-            links: offset("keen::ecs::InventorySetup", "linksEntities")?,
-            categories: offset("keen::ecs::InventorySetup", "linksCategories")?,
-            initialized: offset("keen::ecs::InventorySetup", "isInitialized")?,
-            stack: usize::try_from(reflection.type_info("keen::ItemStack").ok()?.size()).ok()?,
-            count: data,
-            pide: data + size_of::<u32>(),
+            setup: catalogue::component_hash(loader, ids::INVENTORY_SETUP)?,
+            inventory: catalogue::component_hash(loader, ids::INVENTORY)?,
+            links: catalogue::offset(loader, ids::INVENTORY_SETUP_LINKS)?,
+            categories: catalogue::offset(loader, ids::INVENTORY_SETUP_CATEGORIES)?,
+            initialized: catalogue::offset(loader, ids::INVENTORY_SETUP_INITIALIZED)?,
+            stack: catalogue::size(loader, ids::ITEM_STACK)?,
+            count,
+            pide: count + size_of::<u32>(),
         })
     })
 }

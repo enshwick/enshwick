@@ -49,10 +49,9 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .get_or_init(|| {
             let constant = |name: Constant| loader.build.constant(name.id());
             let slot = |name: Constant| constant(name).and_then(|v| usize::try_from(v).ok());
-            let set = |ty: &str, [root, max, adder]: [Constant; 3]| {
-                let info = loader.reflection.type_info(ty).ok()?;
+            let set = |id: &str, [root, max, adder]: [Constant; 3]| {
                 Some(Set {
-                    ty: crate::world::type_hash(info.va())?,
+                    ty: crate::catalogue::component_hash(loader, id)?,
                     root: u32::try_from(constant(root)?).ok()?,
                     max: slot(max)?,
                     adder: slot(adder)?,
@@ -65,7 +64,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                     count: slot(pinned::ecs::ATTRIBUTE_COUNT)?,
                     sets: [
                         set(
-                            "keen::ecs::Health",
+                            crate::catalogue::ids::ATTRIBUTE_SET_HEALTH,
                             [
                                 pinned::attribute::HEALTH,
                                 pinned::attribute::HEALTH_MAX_SLOT,
@@ -73,7 +72,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                             ],
                         )?,
                         set(
-                            "keen::ecs::Stamina",
+                            crate::catalogue::ids::ATTRIBUTE_SET_STAMINA,
                             [
                                 pinned::attribute::STAMINA,
                                 pinned::attribute::STAMINA_MAX_SLOT,
@@ -81,7 +80,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                             ],
                         )?,
                         set(
-                            "keen::ecs::Mana",
+                            crate::catalogue::ids::ATTRIBUTE_SET_MANA,
                             [
                                 pinned::attribute::MANA,
                                 pinned::attribute::MANA_MAX_SLOT,

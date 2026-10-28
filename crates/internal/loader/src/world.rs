@@ -528,11 +528,7 @@ pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Stat
 /// Where `entity` stands, in 32.32 fixed-point metres, from its
 /// `CurrentTransform`; on the server's game thread.
 pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]> {
-    let info = loader
-        .reflection
-        .type_info("keen::ecs::CurrentTransform")
-        .ok()?;
-    let hash = type_hash(info.va())?;
+    let hash = crate::catalogue::component_hash(loader, crate::catalogue::ids::CURRENT_TRANSFORM)?;
     let data = component(loader, entity, hash).ok()?;
     // SAFETY: `data` is the non-null data of the entity's live
     // `CurrentTransform` (checked by `component`), which starts with its
@@ -541,13 +537,15 @@ pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]
     Some(unsafe { enshwick::raw::read_at::<[i64; 3]>(data.cast(), 0) })
 }
 
-/// The reflected component that names the item an entity was placed from.
-const USED_ITEM: &str = "keen::ecs::UsedItem";
-
 /// The item `entity` was placed from, from its `UsedItem`; on the server's
 /// game thread.
 pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
-    let info = loader.reflection.type_info(USED_ITEM).ok()?;
+    let info = loader
+        .reflection
+        .type_info(crate::catalogue::type_name(
+            crate::catalogue::ids::USED_ITEM,
+        ))
+        .ok()?;
     if info.size() != 4 {
         return None;
     }
