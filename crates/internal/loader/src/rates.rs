@@ -6,8 +6,9 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::__private::modify_recipes_in;
 use enshwick::abi::{RateId, Status};
-use enshwick::content::recipes::{RecipeKind, RecipeLayout, RecipeView, modify_recipes_in};
+use enshwick::content::recipes::{RecipeKind, RecipeLayout, RecipeView};
 pub(crate) use enshwick::rates::scale_whole;
 use enshwick::rates::{ExperienceGroup, Rate, combine, is_valid_factor};
 

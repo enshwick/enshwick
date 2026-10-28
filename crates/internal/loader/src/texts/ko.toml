@@ -43,6 +43,8 @@
 "row.restart" = "{label} (게임을 다시 시작할 때)"
 "row.server" = "{label} (서버가 설정함)"
 "row.text" = "{label}: {value} (mod-configs/{id}.toml에서 수정)"
+"row.text.hint" = "입력한 뒤 Enter 키를 누르세요"
+"row.value" = "{label}: {value}"
 "world.belongs" = "이 설정은 이 월드에 속합니다."
 "world.next" = "여기서 바꾼 내용은 다음에 불러오는 월드에 들어갑니다."
 "change.next" = "{id} {key} = {value}: 다음에 불러오는 월드에 저장했습니다."

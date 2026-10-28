@@ -80,7 +80,8 @@ impl RecipeRuleKind {
 pub struct RecipeKind(pub u32);
 
 impl RecipeKind {
-    /// None of the kinds below: equipment, props, materials and the rest.
+    /// None of the kinds below: equipment, functional props, materials and
+    /// the rest.
     pub const OTHER: Self = Self(0);
     /// A building block.
     pub const BUILDING_BLOCK: Self = Self(1);
@@ -90,6 +91,8 @@ impl RecipeKind {
     pub const OVERGROWTH: Self = Self(3);
     /// A terrain material.
     pub const TERRAIN: Self = Self(4);
+    /// A placed prop the game files under its Decorative crafting group.
+    pub const DECORATIVE: Self = Self(5);
 }
 
 /// The vanilla value a [`DataChange`] changes; the field says what its

@@ -11,8 +11,8 @@ pub use facts::FACTS;
 
 use crate::reflect::{Reflection, TypeInfo};
 use enshwick::Off;
-use enshwick::content::EngineFacts;
 use enshwick::content::recipes::RecipeKind;
+use enshwick::content::{EngineFacts, Guid};
 
 /// How one engine fact is found.
 ///
@@ -355,6 +355,62 @@ pub const RECIPE_KINDS: &[(&str, RecipeKind)] = &[
     ("OvergrowthMaterial", RecipeKind::Overgrowth),
     ("TerrainMaterial", RecipeKind::Terrain),
 ];
+
+/// The id of the offset of an item's tags in its static data, a blob array
+/// of [`ITEM_TAG_WEIGHT`].
+pub const ITEM_TAGS: &str = "item_info.tags";
+/// The id of the type of one entry of an item's tags, whose size is its
+/// stride.
+pub const ITEM_TAG_WEIGHT: &str = "item_tag_weight";
+/// The id of the offset of the tag, a GUID, in one entry of an item's tags.
+pub const ITEM_TAG_WEIGHT_TAG: &str = "item_tag_weight.tag";
+
+/// The item tag behind the crafting menu's Decorative group.
+///
+/// The game files a placed prop under that group by this tag on its item.
+/// Game data, read from build 410's crafting menu definitions; the dedicated
+/// server has no menu, so the item's tag is what both sides share. On server
+/// build 399, 685 of the 2536 vanilla recipes make an item with it.
+pub const DECORATIVE_ITEM_TAG: Guid = Guid::parse("ee3b266d-83e7-4239-8bdd-8e58fe12e9d1");
+
+/// The kinds an item in a slot of no kind of its own takes from its tags.
+///
+/// Each row is the name of the constant of [`SLOT_TYPE`] the item's
+/// equipment slot holds, the item tag and the kind. A row of
+/// [`RECIPE_KINDS`] wins over these. A new kind by tag is a row here.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::content::recipes::RecipeKind;
+/// use enshwick_gamedata::catalogue::RECIPE_KIND_TAGS;
+///
+/// assert!(RECIPE_KIND_TAGS.iter().any(|&(_, _, kind)| kind == RecipeKind::Decorative));
+/// ```
+pub const RECIPE_KIND_TAGS: &[(&str, Guid, RecipeKind)] =
+    &[("BuildTool", DECORATIVE_ITEM_TAG, RecipeKind::Decorative)];
+
+/// The slot value each row of [`RECIPE_KIND_TAGS`] has in `reflection`,
+/// with its tag and kind; a constant the build does not reflect is left out.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::catalogue::recipe_kind_tags;
+/// use enshwick_gamedata::reflect::Reflection;
+///
+/// fn tags(reflection: &Reflection<'_>) -> usize {
+///     recipe_kind_tags(reflection).len()
+/// }
+/// ```
+#[must_use]
+pub fn recipe_kind_tags(reflection: &Reflection<'_>) -> Vec<(u64, Guid, RecipeKind)> {
+    let slot = type_name(SLOT_TYPE);
+    RECIPE_KIND_TAGS
+        .iter()
+        .filter_map(|&(name, tag, kind)| Some((reflection.enum_value(slot, name).ok()?, tag, kind)))
+        .collect()
+}
 
 /// The slot value each row of [`RECIPE_KINDS`] has in `reflection`, with
 /// its kind; a constant the build does not reflect is left out.
@@ -709,6 +765,66 @@ mod tests {
         assert!(matches!(fact(SLOT_TYPE), Some(Fact::Type(_))));
         assert!(matches!(fact(ITEM_ID), Some(Fact::Offset { .. })));
         assert!(matches!(fact(ITEM_SLOT), Some(Fact::Path(_))));
+    }
+
+    #[test]
+    fn a_tag_kind_is_a_kind_no_slot_gives_and_its_layout_is_catalogued() {
+        for &(slot, tag, kind) in RECIPE_KIND_TAGS {
+            assert!(
+                RECIPE_KINDS
+                    .iter()
+                    .all(|&(name, k)| name != slot && k != kind)
+            );
+            assert_ne!(kind, RecipeKind::Other);
+            assert_ne!(tag, Guid([0; 16]));
+        }
+        assert!(matches!(fact(ITEM_TAGS), Some(Fact::Offset { .. })));
+        assert!(matches!(fact(ITEM_TAG_WEIGHT), Some(Fact::Type(_))));
+        assert!(matches!(
+            fact(ITEM_TAG_WEIGHT_TAG),
+            Some(Fact::Offset { .. })
+        ));
+    }
+
+    #[test]
+    fn the_decorative_tag_reads_as_the_game_data_writes_it() {
+        assert_eq!(
+            DECORATIVE_ITEM_TAG.to_string(),
+            "ee3b266d-83e7-4239-8bdd-8e58fe12e9d1"
+        );
+    }
+
+    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
+    /// (skipped without them), an item's tags are a blob array of tag
+    /// entries, each holding its tag as a 16-byte GUID, and every slot of
+    /// the tag kinds resolves.
+    #[test]
+    fn the_item_tags_are_reflected_as_guids() {
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image =
+                crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let Some(Fact::Offset { ty, field, .. }) = fact(ITEM_TAGS) else {
+                panic!("{ITEM_TAGS} is not an offset");
+            };
+            let tags = reflection.type_info(ty).unwrap().fields();
+            let tags = tags.iter().find(|f| f.name() == field).unwrap();
+            let array = reflection.type_info(tags.type_name().unwrap()).unwrap();
+            assert_eq!(array.kind(), crate::reflect::Kind::BlobArray, "{var}");
+            assert_eq!(array.inner(), Some(type_name(ITEM_TAG_WEIGHT)), "{var}");
+            let Some(Fact::Offset { ty, field, .. }) = fact(ITEM_TAG_WEIGHT_TAG) else {
+                panic!("{ITEM_TAG_WEIGHT_TAG} is not an offset");
+            };
+            let entry = reflection.type_info(ty).unwrap().fields();
+            let tag = entry.iter().find(|f| f.name() == field).unwrap();
+            let tag = reflection.type_info(tag.type_name().unwrap()).unwrap();
+            assert_eq!(tag.size(), 16, "{var}: {}", tag.name());
+            assert_eq!(recipe_kind_tags(&reflection).len(), RECIPE_KIND_TAGS.len());
+        }
     }
 
     /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names

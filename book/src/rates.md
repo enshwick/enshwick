@@ -85,8 +85,9 @@ does not join ([the join check](concepts/join-check.md)).
 ## Recipe output
 
 The loader applies the `RecipeOutput` rates in its own patch of the recipe
-registry, after every mod's `modify_recipes` patch, so a mod that sets a
-recipe's count sees it multiplied. A dedicated server loads its items after
+registry, after every mod's own recipe patch, so a mod that sets a recipe's
+count sees it multiplied. The kinds are those of
+[Recipe kinds](content/recipes.md#recipe-kinds). A dedicated server loads its items after
 it first builds the registry, so the loader builds the registry again when a
 world loads, and again whenever a mod changes a recipe output factor.
 
