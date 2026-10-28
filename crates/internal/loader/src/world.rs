@@ -267,8 +267,8 @@ struct Layout {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
-/// Player slots in game, for the joined-player reads.
-const SLOT_IN_GAME: u8 = 3;
+/// The slot state of a player in the world, for the joined-player reads.
+pub(crate) const SLOT_IN_GAME: u8 = 3;
 /// Names longer than this are not a client's name.
 const MAX_NAME: usize = 0x100;
 
@@ -592,8 +592,7 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
         .collect())
 }
 
-/// Player slots [`player_entities`] reads; the game has 16.
-pub(crate) const MAX_PLAYERS: usize = 64;
+use crate::admission::MAX_PLAYERS;
 
 /// The character entity of each player in game, as [`players`] lists them,
 /// without their names and permissions.

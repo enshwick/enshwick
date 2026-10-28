@@ -20,8 +20,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
-/// The game's own number of recipes per workshop.
-const WORKSHOP_RECIPES: usize = 512;
+use enshwick::content::recipes::WORKSHOP_RECIPES;
 
 /// The check before a recipe joins its workshop's list, the same on server
 /// and client: `movzx eax, word [rdx+0x1000]; mov ecx, 0x200; cmp ax, cx;

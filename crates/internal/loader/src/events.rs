@@ -61,8 +61,7 @@ const STATE_SHUTDOWN: u8 = 6;
 /// game-systems holder and the world, after `set_state` enters it (server
 /// 399, client 426). The name is enshwick's.
 const STATE_TEAR_DOWN: u8 = 7;
-/// The slot state of a player in the world.
-const SLOT_IN_GAME: u8 = 3;
+use crate::world::SLOT_IN_GAME;
 /// Slots the joined set can hold; the game has 16.
 const MAX_SLOTS: usize = 32;
 

@@ -24,8 +24,7 @@ use crate::remote::Message;
 pub const PREFIX: &str = "/enshwick-net ";
 /// The version of the frame protocol.
 pub const PROTOCOL: u8 = 2;
-/// The largest message a mod may send, in bytes.
-pub const MAX_MESSAGE: usize = 4096;
+pub use enshwick::net::MAX_MESSAGE;
 /// The most frames one message takes.
 pub const MAX_PARTS: usize = 8;
 /// Message bytes in one frame: a line holds 1024 bytes, less the prefix,
