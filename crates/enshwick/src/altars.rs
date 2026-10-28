@@ -856,13 +856,12 @@ impl Load<'_> {
         )
     }
 
-    /// Lets the game group altar zones up to the loader's maximum
-    /// ([`base_limit`]) into its bases, refusing an altar that would start a
-    /// base past theirs; `Ok(false)` when the platform does not recognise
-    /// this build's code, and the game keeps its own. The patches
-    /// count as the mod's own and go in only with the loader's hooks that
-    /// guard them: when one of either cannot be armed, none goes in, the game
-    /// keeps 16 and the mod is turned off.
+    /// Lets the game group every listed altar zone into its bases, up to 32
+    /// altars a Flame level in 16 bases, refusing an altar that would start a
+    /// 17th base; `Ok(false)` when the platform does not recognise this
+    /// build's code, and the game keeps its own. The loader's hooks go in
+    /// together: when one cannot be armed, none does and the game keeps 16,
+    /// which [`base_limit`] tells from [`Mod::ready`](crate::Mod::ready) on.
     ///
     /// # Errors
     ///
@@ -883,10 +882,9 @@ impl Load<'_> {
         armed((host.api().raise_base_limit)(host.handle()))
     }
 
-    /// Lets the game group up to `zones` altar zones into up to `bases`
-    /// bases, refusing an altar that would start a base past them; values
-    /// below the game's own count as the game's, and the largest request of
-    /// every mod holds. Otherwise as [`Load::raise_base_limit`].
+    /// As [`Load::raise_base_limit`], up to `zones` altars a Flame level in
+    /// up to `bases` bases; values below the game's own count as the game's,
+    /// and the largest request of every mod holds.
     ///
     /// # Errors
     ///

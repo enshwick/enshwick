@@ -33,7 +33,7 @@ use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
 use enshwick::raw::{read_at, write_at};
 
-use self::members::Game;
+use self::members::{Game, kind};
 use crate::base_groups::grouping::{Grouped, MAX_GROUPED};
 use crate::base_groups::limit::{self, Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
 use crate::chains::Next;
@@ -122,8 +122,11 @@ impl Fields {
             max_altars_reached: u32::try_from(f(pinned::bases::MAX_ALTARS_REACHED)?)
                 .map_err(|e| e.to_string())?,
         };
-        if fields.members < fields.zone_size || fields.zone_high + 12 > fields.zone_size {
-            return Err("the bases' fields do not fit a box before each mask".into());
+        if fields.zone_size != members::ZONE_ENTRY
+            || fields.members < fields.zone_size
+            || fields.zone_high + 12 > fields.zone_size
+        {
+            return Err("the bases' fields are not the zone boxes the lookups copy".into());
         }
         Ok(fields)
     }
@@ -530,18 +533,6 @@ fn chain_limit<'a>(
     limit.allowed.min(u8::try_from(zones).unwrap_or(u8::MAX))
 }
 
-/// The kind byte of bases object `bases`, as an index of the per-kind
-/// state: the client's object 0, the server's 1.
-///
-/// # Safety
-///
-/// - `bases` is a live, non-null bases object.
-unsafe fn kind(bases: *const u8) -> usize {
-    // SAFETY: the caller guarantees a live object; its kind byte sits at
-    // `members::KIND_AT`.
-    usize::from(unsafe { read_at::<u8>(bases, members::KIND_AT) } & 1)
-}
-
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     if let Some(planned) = (!bases.is_null())
         // SAFETY: `bases` is the grouping's own, non-null bases object.
@@ -570,7 +561,8 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
         members::settle(bases, sites.fields, ASKED.bases(), ADD_BASE_NEXT.get())
     });
     match settled.flatten() {
-        // SAFETY: as above.
+        // SAFETY: `bases` is non-null by the filter and is the object the
+        // game's grouping and `settle` have just filled, on this thread.
         Some(grouped) => unsafe { keep(bases, sites.fields, &grouped) },
         None => BASES_FUSE.blow("the base grouping's count"),
     }
@@ -586,7 +578,8 @@ unsafe fn keep(bases: *const u8, fields: Fields, grouped: &Grouped) {
     let Some(known) = ZONES.get() else {
         return;
     };
-    // SAFETY: the caller's guarantee.
+    // SAFETY: `keep`'s caller guarantees a live object just grouped, on the
+    // grouping's thread, which no reader runs beside.
     let game = unsafe { Game::new(bases, fields) };
     let listed = crate::base_groups::lookup::Bases::listed(&game);
     let zone = |i: usize| Zone {
@@ -635,7 +628,8 @@ unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) 
         // bases object the grouping passes; its u32 base count sits at the
         // build table's `bases.count`.
         let started = unsafe { read_at::<u32>(bases, count) };
-        // SAFETY: as above.
+        // SAFETY: `bases` is non-null by the filter and is the live object
+        // the grouping passes to its new base code.
         let planned = &PLANNED[unsafe { kind(bases) }];
         if started == 0
             && let Some(fields) = SITES.get().map(|sites| sites.fields)
@@ -666,7 +660,8 @@ unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) 
 ///   run beside.
 unsafe fn view(bases: *const u8) -> Option<Game> {
     let sites = SITES.get().filter(|_| raised() && !BASES_FUSE.is_off())?;
-    // SAFETY: the caller's guarantee.
+    // SAFETY: `bases` is non-null by the check, and `view`'s caller
+    // guarantees a live object read beside no grouping.
     (!bases.is_null()).then(|| unsafe { Game::new(bases, sites.fields) })
 }
 
@@ -710,6 +705,7 @@ unsafe extern "system" fn in_base(bases: *const u8, i: u64, point: *const [f32; 
     // SAFETY: the lookup's own object, live, on a thread beside no grouping.
     let game = unsafe { view(bases) };
     if let (Some(p), Some(game), Ok(i)) = (p, game, usize::try_from(i))
+        && i < crate::base_groups::lookup::Bases::count(&game)
         && let Some(inside) = BASES_FUSE.run("a base lookup", || members::in_base(&game, i, p))
     {
         return inside;
@@ -755,6 +751,8 @@ unsafe extern "system" fn zones_at(
     // SAFETY: the lookup's own object, live, on a thread beside no grouping.
     let game = unsafe { view(bases) };
     if let (Some(p), Some(game), false) = (p, game, out.is_null() || list.is_null()) {
+        // SAFETY: the game's live zone box container.
+        let len = unsafe { members::list_len(list) };
         // SAFETY: the lookup's own answer and the game's live zone box
         // container with its own grow callback.
         let done = BASES_FUSE.run("a zone list lookup", || unsafe {
@@ -763,6 +761,9 @@ unsafe extern "system" fn zones_at(
         if done.is_some() {
             return out;
         }
+        // SAFETY: the same container, whose boxes past `len` the game's own
+        // lookup appends again.
+        unsafe { members::set_list_len(list, len) };
     }
     // SAFETY: this detour runs only as the lookup's link, so the slot holds
     // the next function of that signature; the game's arguments pass

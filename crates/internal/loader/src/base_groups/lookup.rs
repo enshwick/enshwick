@@ -91,6 +91,7 @@ mod tests {
     use crate::base_groups::grouping::{Base, group};
 
     /// A world: its zone list and the bases the grouping made of it.
+    #[derive(Debug)]
     struct World {
         zones: Vec<Aabb>,
         bases: Vec<Base>,
@@ -177,6 +178,76 @@ mod tests {
         let world = world();
         let zones: Vec<usize> = zones_at(&world, [5.0, 5.0, 5.0]).unwrap().collect();
         assert_eq!(zones, (0..40).collect::<Vec<_>>());
+    }
+
+    /// The game's lookups as they read a base's 32-bit mask.
+    mod by_mask {
+        use super::*;
+
+        fn mask(world: &World, i: usize) -> u32 {
+            world.bases[i].zones.low_mask()
+        }
+
+        fn members(world: &World, i: usize) -> impl Iterator<Item = usize> + '_ {
+            (0..32).filter(move |&m| mask(world, i) >> m & 1 == 1)
+        }
+
+        pub(super) fn in_base(world: &World, i: usize, p: [f32; 3]) -> bool {
+            world.bases[i].bounds.holds(p)
+                && (mask(world, i).is_power_of_two()
+                    || members(world, i).any(|m| world.zones[m].holds(p)))
+        }
+
+        pub(super) fn base_at(world: &World, p: [f32; 3]) -> Option<usize> {
+            (0..world.bases.len()).find(|&i| in_base(world, i, p))
+        }
+
+        pub(super) fn holder_at(world: &World, p: [f32; 3]) -> Option<Holder> {
+            (0..world.bases.len()).find_map(|i| {
+                if mask(world, i).is_power_of_two() {
+                    world.bases[i].bounds.holds(p).then_some(Holder::Base(i))
+                } else {
+                    members(world, i)
+                        .find(|&m| world.zones[m].holds(p))
+                        .map(Holder::Zone)
+                }
+            })
+        }
+    }
+
+    fn worlds() -> impl proptest::strategy::Strategy<Value = (World, Vec<[f32; 3]>)> {
+        use proptest::prelude::*;
+        let zones = prop::collection::vec((0u8..30, 0u8..30, 1u8..5), 0..=32).prop_map(|cells| {
+            cells
+                .into_iter()
+                .map(|(x, z, half)| {
+                    let (x, z, half) = (f32::from(x) * 2.0, f32::from(z) * 2.0, f32::from(half));
+                    Aabb {
+                        min: [x - half, -half, z - half],
+                        max: [x + half, half, z + half],
+                    }
+                })
+                .collect::<Vec<_>>()
+        });
+        let points = prop::collection::vec((-6i8..66, -6i8..6, -6i8..66), 1..40).prop_map(|ps| {
+            ps.into_iter()
+                .map(|(x, y, z)| [x, y, z].map(f32::from))
+                .collect()
+        });
+        (zones.prop_map(World::new), points)
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn up_to_32_zones_the_lookups_answer_as_the_game_s_masks((world, points) in worlds()) {
+            for p in points {
+                proptest::prop_assert_eq!(base_at(&world, p), by_mask::base_at(&world, p));
+                proptest::prop_assert_eq!(holder_at(&world, p), by_mask::holder_at(&world, p));
+                for i in 0..world.bases.len() {
+                    proptest::prop_assert_eq!(in_base(&world, i, p), by_mask::in_base(&world, i, p));
+                }
+            }
+        }
     }
 
     #[test]

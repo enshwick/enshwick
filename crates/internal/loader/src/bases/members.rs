@@ -20,7 +20,22 @@ use crate::base_groups::limit::Aabb;
 use crate::base_groups::lookup::{self, Bases, Holder};
 
 /// The byte that tells the server's bases object (1) from the client's (0).
-pub(super) const KIND_AT: usize = 0x08;
+const KIND_AT: usize = 0x08;
+/// The size of a zone box, in the zone list, a base's record, the answer and
+/// the game's container alike.
+pub(super) const ZONE_ENTRY: usize = 0x20;
+
+/// The kind of bases object `obj` as an index of the per-kind state: the
+/// client's object 0, the server's 1.
+///
+/// # Safety
+///
+/// - `obj` is a live, non-null bases object.
+pub(super) unsafe fn kind(obj: *const u8) -> usize {
+    // SAFETY: the caller guarantees a live object; its kind byte sits at
+    // `KIND_AT`.
+    usize::from(unsafe { read_at::<u8>(obj, KIND_AT) } & 1)
+}
 /// The lookups' answer: an error byte, a u32 the game sets to 0, then the
 /// base index or the box that holds the point.
 const OUT_ERROR: usize = 0x0;
@@ -68,6 +83,11 @@ impl Side {
         })
     }
 
+    /// Fills the sets for `owner`. No reader runs meanwhile: the game runs
+    /// its grouping in the world's serial update, beside no system (server
+    /// 399 and client 426, medium confidence), so the owner is cleared and
+    /// set only to keep a lookup on another object off a half-filled table;
+    /// x86 keeps the stores in order.
     fn store(&self, owner: *const u8, bases: &Grouped) {
         self.owner.store(0, Ordering::Relaxed);
         for (i, words) in self.sets.iter().enumerate() {
@@ -102,11 +122,10 @@ impl Game {
     /// - `obj` is a live bases object of the build table's layout, for as
     ///   long as the view is used, with no grouping running meanwhile.
     pub(super) unsafe fn new(obj: *const u8, fields: Fields) -> Self {
-        // SAFETY: the caller guarantees a live bases object, whose kind byte
-        // sits at `KIND_AT`.
-        let kind = unsafe { read_at::<u8>(obj, KIND_AT) };
+        // SAFETY: the caller guarantees a live bases object.
+        let kind = unsafe { kind(obj) };
         let side = SIDES
-            .get(usize::from(kind))
+            .get(kind)
             .filter(|side| side.owner.load(Ordering::Acquire) == obj.addr());
         Self { obj, fields, side }
     }
@@ -126,7 +145,7 @@ impl Game {
         // SAFETY: callers pass a zone entry or a record's box, both in the
         // zone layout: the low corner first, the high one at `zone_high`.
         let min = unsafe { read_at::<[f32; 3]>(at, 0) };
-        // SAFETY: as above, the high corner at the build table's
+        // SAFETY: the same box, whose high corner sits at the build table's
         // `bases.zone_high`.
         let max = unsafe { read_at::<[f32; 3]>(at, self.fields.zone_high) };
         Aabb { min, max }
@@ -180,6 +199,9 @@ impl Bases for Game {
 /// the game leaves without an allocator, so its copy of the world's list
 /// stops at 16: hands it the object's allocator as the game hands it to each
 /// base's lists. Every destroy of the object frees the list through it.
+/// Grown, a regroup may move the list and free its old block, where the game
+/// left stale inline entries; that is safe because the game runs no reader
+/// beside its grouping (server 399 and client 426, medium confidence).
 ///
 /// # Safety
 ///
@@ -191,10 +213,11 @@ pub(super) unsafe fn let_zone_list_grow(obj: *mut u8, fields: Fields) {
     // starts at the build table's `bases.zone_list`, its allocator field at
     // `VEC_ALLOCATOR` in it.
     let given = unsafe { read_at::<usize>(obj, allocator_at) };
-    // SAFETY: as above, the world allocator at `OBJECT_ALLOCATOR`.
+    // SAFETY: the caller guarantees a live object; its world allocator sits at `OBJECT_ALLOCATOR`.
     let allocator = unsafe { read_at::<usize>(obj, OBJECT_ALLOCATOR) };
     if given == 0 && allocator != 0 {
-        // SAFETY: as above.
+        // SAFETY: the caller guarantees a live object and no reader before
+        // the copy; the list's allocator field sits at `allocator_at`.
         unsafe { write_at(obj, allocator_at, allocator | HANDED) };
     }
 }
@@ -208,7 +231,8 @@ pub(super) unsafe fn let_zone_list_grow(obj: *mut u8, fields: Fields) {
 /// - `obj` is the live bases object of a grouping that has just refilled its
 ///   zone list, on the grouping's thread.
 pub(super) unsafe fn planned(obj: *const u8, fields: Fields, cap: usize) -> usize {
-    // SAFETY: the caller's guarantee.
+    // SAFETY: the caller guarantees a live object whose zone list was just
+    // refilled, on the grouping's thread with no reader beside it.
     let game = unsafe { Game::new(obj, fields) };
     plan(&game, cap).len()
 }
@@ -240,7 +264,8 @@ pub(super) unsafe fn settle(
     cap: usize,
     new_base: super::AddBaseFn,
 ) -> Option<Grouped> {
-    // SAFETY: the caller's guarantee.
+    // SAFETY: the caller guarantees a live object the game's grouping has
+    // just filled, on its thread with no reader beside it.
     let game = unsafe { Game::new(obj, fields) };
     let bases = plan(&game, cap);
     for base in bases.iter().skip(game.count()) {
@@ -259,17 +284,16 @@ pub(super) unsafe fn settle(
         // inside the 16 records of the live object; its box starts with the
         // low corner.
         unsafe { write_at(bounds, 0, base.bounds.min) };
-        // SAFETY: as above, the high corner at the build table's
+        // SAFETY: the same box, whose high corner sits at the build table's
         // `bases.zone_high`.
         unsafe { write_at(bounds, fields.zone_high, base.bounds.max) };
-        // SAFETY: as above, record `i`'s u32 mask at the build table's
+        // SAFETY: record `i` is below the count new base reached, in the live object; its u32 mask sits at the build table's
         // `bases.members`.
         unsafe { write_at(obj, game.record(i) + fields.members, base.zones.low_mask()) };
     }
-    // SAFETY: the caller guarantees a live object, whose kind byte sits at
-    // `KIND_AT`.
-    let kind = unsafe { read_at::<u8>(obj, KIND_AT) };
-    if let Some(side) = SIDES.get(usize::from(kind)) {
+    // SAFETY: the caller guarantees a live object.
+    let kind = unsafe { kind(obj) };
+    if let Some(side) = SIDES.get(kind) {
         side.store(obj, &bases);
     }
     Some(bases)
@@ -290,7 +314,8 @@ pub(super) fn forget() {
 unsafe fn answer(out: *mut u8, error: u8) {
     // SAFETY: the caller guarantees a writable answer.
     unsafe { write_at(out, OUT_ERROR, error) };
-    // SAFETY: as above.
+    // SAFETY: the same answer, writable for at least 0x10 bytes; the zero
+    // word sits at `OUT_ZERO`.
     unsafe { write_at(out, OUT_ZERO, 0u32) };
 }
 
@@ -305,7 +330,7 @@ pub(super) unsafe fn base_at(out: *mut u8, game: &Game, p: [f32; 3]) {
     // SAFETY: the caller guarantees a writable answer.
     unsafe { answer(out, if found.is_some() { 0 } else { NOT_IN_A_BASE }) };
     let index = found.and_then(|i| u8::try_from(i).ok()).unwrap_or(0);
-    // SAFETY: as above, the index byte at `OUT_INDEX`.
+    // SAFETY: the caller guarantees an answer writable for 0x10 bytes; the index byte sits at `OUT_INDEX`.
     unsafe { write_at(out, OUT_INDEX, index) };
 }
 
@@ -324,9 +349,9 @@ pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
         // SAFETY: the caller guarantees a writable answer.
         unsafe { answer(out, NOT_IN_A_BASE) };
         let low = out.wrapping_add(OUT_BOX);
-        // SAFETY: as above, the box's low corner at `OUT_BOX`.
+        // SAFETY: the caller guarantees an answer writable for 0x30 bytes; the box's low corner sits at `OUT_BOX`.
         unsafe { write_at(low, 0, [f32::MAX; 3]) };
-        // SAFETY: as above, its high corner `zone_high` after it.
+        // SAFETY: the same answer; the box's high corner sits `zone_high` after its low one, inside the 0x30 bytes.
         unsafe { write_at(low, game.fields.zone_high, [-f32::MAX; 3]) };
         return;
     };
@@ -341,6 +366,30 @@ pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
     unsafe {
         core::ptr::copy_nonoverlapping(from, out.wrapping_add(OUT_BOX), game.fields.zone_size);
     }
+}
+
+/// How many boxes the game's container `vec` holds.
+///
+/// # Safety
+///
+/// - `vec` is the game's live zone box container.
+pub(super) unsafe fn list_len(vec: *const u8) -> u64 {
+    // SAFETY: the caller guarantees a live container; its u64 length sits at
+    // `VEC_LEN`.
+    unsafe { read_at::<u64>(vec, VEC_LEN) }
+}
+
+/// Cuts the game's container `vec` back to `len` boxes, `len` at most what
+/// it holds.
+///
+/// # Safety
+///
+/// - `vec` is the game's live, writable zone box container holding at least
+///   `len` boxes.
+pub(super) unsafe fn set_list_len(vec: *mut u8, len: u64) {
+    // SAFETY: the caller guarantees a writable container holding `len`
+    // boxes; its u64 length sits at `VEC_LEN`.
+    unsafe { write_at(vec, VEC_LEN, len) };
 }
 
 /// Appends the zones of the base holding `p` to the game's container `vec`,
@@ -361,16 +410,17 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
         // SAFETY: the caller guarantees a live container; its u64 length
         // and capacity sit at `VEC_LEN` and `VEC_CAP`.
         let len = unsafe { read_at::<u64>(vec, VEC_LEN) };
-        // SAFETY: as above.
+        // SAFETY: the same live container; its u64 capacity sits at
+        // `VEC_CAP`.
         let cap = unsafe { read_at::<u64>(vec, VEC_CAP) };
         if cap < len + 1 {
-            // SAFETY: as above, the allocator field at `VEC_ALLOCATOR`.
+            // SAFETY: the caller guarantees a live container; its allocator field sits at `VEC_ALLOCATOR`.
             if unsafe { read_at::<usize>(vec, VEC_ALLOCATOR) } == 0 {
-                // SAFETY: as above; the game's caller never reads the field,
+                // SAFETY: the same live container, whose caller never reads the field,
                 // and its grow and free reach the loader's heap through it.
                 unsafe { write_at(vec, VEC_ALLOCATOR, super::heap::handed()) };
             }
-            // SAFETY: as above, the grow callback at `VEC_GROW`, null or the
+            // SAFETY: the same live container; its grow callback sits at `VEC_GROW`, null or the
             // game's own.
             let grow = unsafe { read_ptr_at::<u8>(vec, VEC_GROW) };
             if grow.is_null() {
@@ -397,7 +447,7 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
         unsafe {
             core::ptr::copy_nonoverlapping(game.zone_entry(z), data.wrapping_add(at * size), size);
         }
-        // SAFETY: as above, the length at `VEC_LEN`.
+        // SAFETY: the same live container; its length sits at `VEC_LEN`.
         unsafe { write_at(vec, VEC_LEN, len + 1) };
     }
     // SAFETY: the caller guarantees a writable answer.
@@ -480,7 +530,7 @@ mod tests {
     unsafe extern "system" fn new_base(obj: *mut u8, zone: *const u8, index: u32) {
         // SAFETY: the fake object of the test.
         let i = unsafe { read_at::<u32>(obj, 0x24) };
-        // SAFETY: as above.
+        // SAFETY: the fake object's count, at 0x24 in its buffer.
         unsafe { write_at(obj, 0x24, i + 1) };
         let record = 0x30 + usize::try_from(i).unwrap() * 0x130;
         // SAFETY: a zone entry of the fake list and the record's box.
@@ -539,37 +589,121 @@ mod tests {
         assert_eq!((out[0], &out[4..8], out[8]), (0, &[0u8; 4][..], 0));
         assert!(in_base(&game, 0, [5.0, 5.0, 205.0]));
         assert!(!in_base(&game, 0, [150.0, 5.0, 150.0]));
-        // SAFETY: as above.
+        // SAFETY: a writable answer of 0x30 bytes.
         unsafe { base_at(out.as_mut_ptr(), &game, [1005.0, 5.0, 1005.0]) };
         assert_eq!((out[0], out[8]), (0, 1));
-        // SAFETY: as above.
+        // SAFETY: a writable answer of 0x30 bytes.
         unsafe { base_at(out.as_mut_ptr(), &game, [150.0, 5.0, 150.0]) };
         assert_eq!((out[0], out[8]), (NOT_IN_A_BASE, 0));
-        // SAFETY: as above, 0x30 bytes.
+        // SAFETY: a writable answer of 0x30 bytes.
         unsafe { holder_at(out.as_mut_ptr(), &game, [5.0, 5.0, 205.0]) };
         let zone_39: [u8; 0x20] = bytemuck::cast(fake.zones[39].0);
         assert_eq!(out[0], 0);
         assert_eq!(out[0x10..0x30], zone_39);
-        // SAFETY: as above.
+        // SAFETY: a writable answer of 0x30 bytes.
         unsafe { holder_at(out.as_mut_ptr(), &game, [150.0, 5.0, 150.0]) };
         assert_eq!(out[0], NOT_IN_A_BASE);
         assert_eq!(out[0x10..0x14], f32::MAX.to_le_bytes());
         assert_eq!(out[0x20..0x24], (-f32::MAX).to_le_bytes());
     }
 
-    /// The game's zone box container with an inline buffer of 16 boxes and
-    /// a grow callback, as its one caller builds it.
-    #[repr(C)]
+    /// The game's zone box container as its one caller builds it: 16 boxes
+    /// of inline room at +0x30, the game's grow callback, no allocator.
+    #[repr(C, align(16))]
     struct List {
         data: *mut Entry,
         len: u64,
         cap: u64,
         grow: Option<GrowFn>,
         allocator: usize,
+        inline: [Entry; 16],
     }
 
+    impl List {
+        fn new(grow: Option<GrowFn>) -> Box<Self> {
+            let mut list = Box::new(Self {
+                data: core::ptr::null_mut(),
+                len: 0,
+                cap: 16,
+                grow,
+                allocator: 0,
+                inline: [Entry([0.0; 8]); 16],
+            });
+            list.data = list.inline.as_mut_ptr();
+            list
+        }
+
+        /// Calls slot `at` of the vtable of the allocator the list names.
+        fn vtable_slot(&self, at: usize) -> usize {
+            let allocator = (self.allocator & !1) as *const u8;
+            // SAFETY: the list names the loader's heap, whose first word is
+            // its vtable.
+            let vtable = unsafe { read_ptr_at::<u8>(allocator, 0) };
+            // SAFETY: the vtable holds three function pointers.
+            unsafe { read_at::<usize>(vtable, at) }
+        }
+
+        /// The game's realloc as the research reads it: inline room for 16
+        /// when the allocator is handed, a heap block past it from the
+        /// allocator's vtable, the old block freed only above 16.
+        fn realloc(&mut self, new_cap: u64, may_fail: bool) -> bool {
+            if new_cap == self.cap {
+                return true;
+            }
+            let inline_room = if self.cap == 0 || self.allocator & 1 == 1 {
+                16
+            } else {
+                self.cap
+            };
+            let allocator = (self.allocator & !1) as *const u8;
+            let data = if new_cap == 0 {
+                core::ptr::null_mut()
+            } else if new_cap <= inline_room {
+                self.inline.as_mut_ptr()
+            } else {
+                assert!(may_fail || self.allocator & 1 == 1, "the game aborts here");
+                if self.allocator & 1 == 0 {
+                    return false;
+                }
+                // SAFETY: slot +0x8 of the loader's heap is its allocate.
+                let allocate: unsafe extern "system" fn(
+                    *const u8,
+                    usize,
+                    usize,
+                    u32,
+                    u8,
+                ) -> *mut u8 = unsafe { core::mem::transmute(self.vtable_slot(0x8)) };
+                let bytes = usize::try_from(new_cap).unwrap() * 0x20;
+                // SAFETY: the heap's allocate, called as the game calls it.
+                let block = unsafe { allocate(allocator, bytes, 0x10, 4, 0) };
+                if block.is_null() {
+                    return false;
+                }
+                block.cast()
+            };
+            let kept = self.len.min(new_cap);
+            if data != self.data && !data.is_null() && kept > 0 {
+                // SAFETY: both blocks hold at least `kept` boxes.
+                unsafe { core::ptr::copy(self.data, data, usize::try_from(kept).unwrap()) };
+            }
+            if !self.data.is_null() && self.cap > 16 && self.data != data {
+                // SAFETY: slot +0x10 of the loader's heap is its free.
+                let free: unsafe extern "system" fn(*const u8, *mut u8, usize) =
+                    unsafe { core::mem::transmute(self.vtable_slot(0x10)) };
+                // SAFETY: a block the heap handed this list, freed once.
+                unsafe { free(allocator, self.data.cast(), 0) };
+            }
+            self.data = data;
+            self.len = kept;
+            self.cap = new_cap;
+            true
+        }
+    }
+
+    /// The game's grow callback: the capacity doubles from at least 1 until
+    /// it holds `-wanted` boxes, then the realloc, which may fail.
     unsafe extern "system" fn grow(vec: *mut u8, wanted: i64, _exact: u64) -> u8 {
-        let wanted = usize::try_from(-wanted).unwrap();
+        let wanted = u64::try_from(-wanted).unwrap();
         #[expect(
             clippy::cast_ptr_alignment,
             reason = "the game hands back the test's own aligned container"
@@ -577,13 +711,11 @@ mod tests {
         let list = vec.cast::<List>();
         // SAFETY: the test's container, a `List` the test aligned.
         let list = unsafe { &mut *list };
-        let mut bigger = vec![Entry([0.0; 8]); wanted.next_power_of_two()];
-        let len = usize::try_from(list.len).unwrap();
-        // SAFETY: the old data holds `len` boxes.
-        bigger[..len].copy_from_slice(unsafe { core::slice::from_raw_parts(list.data, len) });
-        list.cap = u64::try_from(bigger.len()).unwrap();
-        list.data = Box::leak(bigger.into_boxed_slice()).as_mut_ptr();
-        1
+        let mut cap = list.cap.max(1);
+        while cap < wanted {
+            cap *= 2;
+        }
+        u8::from(list.realloc(cap, true))
     }
 
     #[test]
@@ -593,39 +725,32 @@ mod tests {
         // SAFETY: the fake object, with no base started yet.
         let _bases = unsafe { settle(obj, FIELDS, 16, new_base) }.unwrap();
         let game = fake.view();
-        let mut inline = [Entry([0.0; 8]); 16];
-        let mut list = List {
-            data: inline.as_mut_ptr(),
-            len: 0,
-            cap: 16,
-            grow: Some(grow),
-            allocator: 0,
-        };
+        let mut list = List::new(Some(grow));
         let mut out = [0xAAu8; 0x10];
-        let vec = (&raw mut list).cast::<u8>();
+        let vec = (&raw mut *list).cast::<u8>();
         // SAFETY: a writable answer and the test's container.
         unsafe { zones_at(out.as_mut_ptr(), vec, &game, [5.0, 5.0, 5.0]) };
         assert_eq!((out[0], &out[4..8]), (0, &[0u8; 4][..]));
-        assert_eq!(list.len, 40);
+        assert_eq!(
+            (list.len, list.cap),
+            (40, 64),
+            "16 inline, then 32, then 64"
+        );
         assert_eq!(list.allocator, super::super::heap::handed());
+        assert_ne!(list.data, list.inline.as_mut_ptr());
         // SAFETY: the container holds `len` boxes.
         let got = unsafe { core::slice::from_raw_parts(list.data, 40) };
+        assert_eq!(got[0].0, fake.zones[0].0, "the inline boxes moved along");
         assert_eq!(got[39].0, fake.zones[39].0);
-        let mut stuck = List {
-            grow: None,
-            ..List {
-                data: inline.as_mut_ptr(),
-                len: 0,
-                cap: 16,
-                grow: None,
-                allocator: 0,
-            }
-        };
-        // SAFETY: as above, with no grow callback.
+        assert!(list.realloc(0, false), "the caller's last free");
+        assert!(list.data.is_null());
+        let mut stuck = List::new(None);
+        // SAFETY: a writable answer and the test's container, with no grow
+        // callback.
         unsafe {
             zones_at(
                 out.as_mut_ptr(),
-                (&raw mut stuck).cast(),
+                (&raw mut *stuck).cast(),
                 &game,
                 [5.0, 5.0, 5.0],
             );
@@ -641,11 +766,11 @@ mod tests {
         unsafe { let_zone_list_grow(obj, FIELDS) };
         assert_eq!(fake.obj.0[0x1350..0x1358], [0; 8], "no allocator to hand");
         fake.obj.0[..8].copy_from_slice(&0x1000usize.to_le_bytes());
-        // SAFETY: as above, now with an allocator.
+        // SAFETY: the fake object, now with an allocator.
         unsafe { let_zone_list_grow(obj, FIELDS) };
         assert_eq!(fake.obj.0[0x1350..0x1358], 0x1001usize.to_le_bytes());
         fake.obj.0[0x1350..0x1358].copy_from_slice(&0x2001usize.to_le_bytes());
-        // SAFETY: as above.
+        // SAFETY: the fake object, whose list already has an allocator.
         unsafe { let_zone_list_grow(obj, FIELDS) };
         assert_eq!(
             fake.obj.0[0x1350..0x1358],

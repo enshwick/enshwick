@@ -110,7 +110,7 @@ mod tests {
         unsafe { block.write_bytes(0xAB, 32 * 0x20) };
         // SAFETY: a block of this heap, freed once.
         unsafe { (HEAP.vtable.free)(heap, block, 0) };
-        // SAFETY: as above.
+        // SAFETY: the loader's heap, asked for an alignment it refuses.
         assert!(unsafe { (HEAP.vtable.allocate)(heap, 8, 0x40, 4, 0) }.is_null());
     }
 }
