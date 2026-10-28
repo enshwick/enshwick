@@ -151,6 +151,10 @@ static KEPT: AtomicBool = AtomicBool::new(false);
 /// Whether a loaded world's records wait for its first step to find their
 /// entities.
 static FINDING: AtomicBool = AtomicBool::new(false);
+/// Whether the world's placed things did not read at the first step: its
+/// records wait unattached, so a value set now would claim a place one of
+/// them holds. The store refuses values until the next load.
+static UNREAD: AtomicBool = AtomicBool::new(false);
 /// Entities the game asked to destroy since the last step, each in the low
 /// word under its round in the high one, 0 for an empty slot; written from
 /// any thread without a lock. A slot from an earlier round is stale.
@@ -546,6 +550,7 @@ fn find_pending(loader: &Loader) {
         crate::net::item_data(0, &message);
     }
     let Some(attached) = attached else {
+        UNREAD.store(true, Ordering::Relaxed);
         crate::log!(
             WARN,
             "mod data: the world's placed things did not read on this game build; {} values wait as read and no mod data attaches this session",
@@ -649,6 +654,9 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     }
     if !serves() {
         return Err(Status::REFUSED);
+    }
+    if !value.is_empty() && UNREAD.load(Ordering::Relaxed) {
+        return Err(Status::NOT_KEPT);
     }
     let loader = crate::host::loader();
     let (item, anchor) = match spec.scope {
@@ -924,6 +932,7 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
                 key.as_deref().unwrap_or("?")
             );
             KEPT.store(false, Ordering::Relaxed);
+            UNREAD.store(false, Ordering::Relaxed);
             FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
             *SERVER.relock() = Some(Server {
