@@ -362,7 +362,8 @@ pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
     // SAFETY: the caller guarantees a writable answer.
     unsafe { answer(out, 0) };
     // SAFETY: `from` is a live box of the zone layout, `zone_size` bytes,
-    // and the answer holds that many at `OUT_BOX`; the two never overlap.
+    // which `Fields::read` holds to `ZONE_ENTRY`, and the answer holds that
+    // many at `OUT_BOX`; the two never overlap.
     unsafe {
         core::ptr::copy_nonoverlapping(from, out.wrapping_add(OUT_BOX), game.fields.zone_size);
     }
@@ -443,7 +444,8 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
             return;
         };
         // SAFETY: zone `z` is listed, `size` bytes in the live list, and box
-        // `len` of the container is room it owns; the two never overlap.
+        // `len` of the container is room it owns, its boxes `ZONE_ENTRY`
+        // bytes as `size` is by `Fields::read`; the two never overlap.
         unsafe {
             core::ptr::copy_nonoverlapping(game.zone_entry(z), data.wrapping_add(at * size), size);
         }
