@@ -27,7 +27,7 @@ use core::ffi::c_void;
 use crate::Entity;
 use crate::abi::{
     AltarInfo, AltarLimit as RawAltarLimit, AltarZone as RawAltarZone, Bounds,
-    BuildingZoneCheck as RawZoneCheck,
+    BuildingZoneCheck as RawBuildingZoneCheck,
 };
 use crate::{Host, Load, Off};
 
@@ -607,7 +607,7 @@ pub struct BuildingZoneCheck<'a> {
 }
 
 unsafe extern "system" fn run_building_zone_check<F>(
-    check: *const RawZoneCheck,
+    check: *const RawBuildingZoneCheck,
     user: *mut c_void,
 ) -> u8
 where
@@ -727,7 +727,7 @@ impl Load<'_> {
                     user,
                 )
             },
-            "zone checks",
+            "building zone checks",
         )
     }
 }

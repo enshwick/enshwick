@@ -241,7 +241,7 @@ export type PlayerData = {
 
 --- The data of the `PlayerDied` event.
 export type PlayerDeathData = {
-	--- The player's character; 0 when the account left in the same step.
+	--- The player's character; 0 when the account left in the same step. The name is enshwick's: the game's record holds the user instead.
 	entity: number,
 	--- What killed the player, the game's death cause: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
 	cause: number,

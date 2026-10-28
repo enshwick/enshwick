@@ -4,8 +4,13 @@
 /// An entity id, as the engine numbers entities: a character, a prop, an item
 /// with its own entity, anything the world holds.
 ///
-/// The engine's id 0 stands for no entity; the safe API hands it over as
-/// `None` in an `Option<Entity>`, never as an `Entity`.
+/// The id lasts one session: every load of a world numbers its entities
+/// anew, in the order of the save, so an id kept across a restart names
+/// another entity. It therefore has no serde form. Data that must outlast a
+/// restart goes in [entity data](crate::entity_data) or
+/// [item data](crate::item_data), which find their entities again after a
+/// load. The engine's id 0 stands for no entity; the safe API hands it over
+/// as `None` in an `Option<Entity>`, never as an `Entity`.
 ///
 /// # Examples
 ///
@@ -14,6 +19,15 @@
 ///
 /// let entity = Entity(1210);
 /// assert_eq!(entity.0, 1210);
+/// ```
+///
+/// A kept file cannot hold one:
+///
+/// ```compile_fail
+/// #[derive(serde::Serialize)]
+/// struct Owners {
+///     chest: enshwick::Entity,
+/// }
 /// ```
 #[repr(transparent)]
 #[derive(
@@ -26,14 +40,11 @@
     Hash,
     PartialOrd,
     Ord,
-    serde::Serialize,
-    serde::Deserialize,
     bytemuck::Zeroable,
     bytemuck::Pod,
     crate::Shape,
     crate::Script,
 )]
-#[serde(transparent)]
 #[shape(api = "entity")]
 pub struct Entity(pub u32);
 
@@ -544,16 +555,14 @@ mod tests {
     }
 
     #[test]
-    fn every_id_serializes_as_its_bare_number() {
-        assert_eq!(bytes(&Entity(1210)), bytes(&1210_u32));
+    fn every_lasting_id_serializes_as_its_bare_number() {
         assert_eq!(bytes(&ItemId::new(1_042)), bytes(&1_042_u32));
         assert_eq!(bytes(&PlayerKey::new(u64::MAX)), bytes(&u64::MAX));
         assert_eq!(bytes(&RecipeId::new(77)), bytes(&77_u32));
     }
 
     #[test]
-    fn every_id_deserializes_from_its_bare_number() {
-        assert_eq!(read::<Entity, _>(1210_u32), Entity(1210));
+    fn every_lasting_id_deserializes_from_its_bare_number() {
         assert_eq!(read::<ItemId, _>(9_u32), ItemId::new(9));
         assert_eq!(read::<PlayerKey, _>(u64::MAX), PlayerKey::new(u64::MAX));
         assert_eq!(read::<RecipeId, _>(77_u32), RecipeId::new(77));

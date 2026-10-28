@@ -26,9 +26,14 @@ pub enum RecipeKind {
     /// A terrain material.
     Terrain,
     /// A placed prop the game files under its Decorative crafting group,
-    /// from the item tag behind that group: decorations and much of the
-    /// furniture.
+    /// from the item tag behind that group: decorations and the
+    /// furniture outside [`RecipeKind::ComfortFurniture`].
     Decorative,
+    /// A placed prop the game files under its Comfort Furniture crafting
+    /// group, from the item tag behind that group: beds, chairs, tables,
+    /// lights, braziers, trophies, and some logic switches and instruments. A prop that also
+    /// carries the Decorative tag is [`RecipeKind::Decorative`].
+    ComfortFurniture,
     /// Anything else: equipment, functional props and materials among them.
     Other,
 }
@@ -50,6 +55,7 @@ impl RecipeKind {
         Self::Overgrowth,
         Self::Terrain,
         Self::Decorative,
+        Self::ComfortFurniture,
     ];
 
     /// The kind's name in a data pack, such as `building-block`.
@@ -69,6 +75,7 @@ impl RecipeKind {
             Self::Overgrowth => "overgrowth",
             Self::Terrain => "terrain",
             Self::Decorative => "decorative",
+            Self::ComfortFurniture => "comfort-furniture",
             Self::Other => "other",
         }
     }
@@ -106,6 +113,7 @@ impl RecipeKind {
             Self::Overgrowth => Abi::OVERGROWTH,
             Self::Terrain => Abi::TERRAIN,
             Self::Decorative => Abi::DECORATIVE,
+            Self::ComfortFurniture => Abi::COMFORT_FURNITURE,
             Self::Other => Abi::OTHER,
         }
     }
@@ -134,6 +142,7 @@ impl From<crate::abi::RecipeKind> for RecipeKind {
             Abi::OVERGROWTH => Self::Overgrowth,
             Abi::TERRAIN => Self::Terrain,
             Abi::DECORATIVE => Self::Decorative,
+            Abi::COMFORT_FURNITURE => Self::ComfortFurniture,
             _ => Self::Other,
         }
     }
@@ -167,6 +176,18 @@ mod tests {
                     .all(|k| k.code() != kind.code())
             );
         }
+    }
+
+    #[test]
+    fn comfort_furniture_has_a_kind_of_its_own() {
+        assert_eq!(
+            RecipeKind::named("comfort-furniture"),
+            Some(RecipeKind::ComfortFurniture)
+        );
+        assert_eq!(
+            RecipeKind::ComfortFurniture.code(),
+            crate::abi::RecipeKind::COMFORT_FURNITURE
+        );
     }
 
     #[test]

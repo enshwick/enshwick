@@ -688,6 +688,29 @@ enum Listed {
     Actions(Option<String>),
 }
 
+/// Paints a mod's heading, why it is off if it is, its description and
+/// credits.
+fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
+    let heading = if record.off.load(Ordering::Acquire) {
+        let name = record.label();
+        texts::fill("mods.off", &[("name", &name), ("version", &record.version)])
+    } else {
+        format!("{} {}", record.label(), record.version)
+    };
+    paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
+    if let Some(reason) = record.off_reason_shown() {
+        paint.label(reason.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
+    let description = record.description();
+    if !description.is_empty() {
+        paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
+    }
+    let credits = record.meta.credits();
+    if !credits.is_empty() {
+        paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
+}
+
 /// Draws a page of the mod list; what the player did.
 fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
@@ -722,22 +745,10 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     *first = listing.clamp_first(*first, mods.len());
     let shown = listing.shown(*first, mods.len());
     for (index, record) in mods.iter().enumerate().take(shown.end).skip(shown.start) {
-        let heading = if record.off.load(Ordering::Acquire) {
-            let name = record.label();
-            texts::fill("mods.off", &[("name", &name), ("version", &record.version)])
-        } else {
-            format!("{} {}", record.label(), record.version)
-        };
-        paint.label(heading.as_bytes(), UiWidget::STYLE_H3, false, false);
-        let description = record.description();
-        if !description.is_empty() {
-            paint.label(description.as_bytes(), UiWidget::STYLE_BODY, true, false);
-        }
-        let credits = record.meta.credits();
-        if !credits.is_empty() {
-            paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-        }
-        for feature in record.features.relock().iter() {
+        about(paint, record);
+        let features = record.features.relock().clone();
+        let features = crate::features::shown(&features, record.texts.relock().as_ref());
+        for feature in features {
             if let Some(reason) = &feature.off {
                 let line = texts::fill(
                     "mods.feature.off",

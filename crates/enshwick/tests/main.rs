@@ -36,6 +36,7 @@ mod hook_macro;
 mod hud;
 mod icons;
 mod icons_hidden;
+mod init_off;
 mod inventory;
 mod item_changes;
 mod item_data;

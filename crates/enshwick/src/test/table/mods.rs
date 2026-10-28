@@ -7,7 +7,12 @@ use crate::test::table::{found, put, text, with};
 
 pub(crate) extern "system" fn fault(_me: ModHandle, reason: Str) {
     let reason = text(reason);
-    with((), |s| s.faults.push(reason));
+    // The loader logs every turn-off with its reason.
+    let line = format!("off: {}", reason.replace('\t', " "));
+    with((), |s| {
+        s.faults.push(reason);
+        s.logs.push((Level::ERROR, line));
+    });
 }
 
 pub(crate) extern "system" fn log(_me: ModHandle, level: Level, message: Str) {

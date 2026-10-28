@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
+  code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
+  item tag of the game's Comfort Furniture crafting group; a prop with the
+  Decorative tag too stays `Decorative` (#628).
+
 ### Changed
 
 - Breaking: ABI 4.0. Filter inputs and the death record take the game's
@@ -13,16 +20,44 @@ Each entry names the pull request that made the change.
   is gone) and `CraftCheck` names its fields `crafting_operator_id`,
   `crafting_station_id`, `recipe_id` and a `u16` `recipe_amount`.
   `PlayerDeathData` has `cause_guid`, `was_deadly_fog` and the causes
-  `IMPACT`, `FALL_DAMAGE`, `FOG` and `SUFFOCATED`. `DamageCause::Fog` and
-  `DeadlyFog` (`DamageCheck::FOG`, `DEADLY_FOG`) replace `Shroud` and
-  `ShroudDeath`. `BedCheck` names `npc_id` and `bed_id`. The zone check is
+  `IMPACT`, `FALL_DAMAGE` and `FOG`. `DamageCause::Fog` and `DeadlyFog`
+  (`DamageCheck::FOG`, `DEADLY_FOG`) replace `Shroud` and `ShroudDeath`.
+  `BedCheck` names `npc_id` and `bed_id`. The zone check is
   `Load::on_building_zone_check` with `BuildingZoneCheck`
-  (`HostApi::building_zone_check_filter`) (#635).
+  (`HostApi::building_zone_check_filter`), and the fake host's
+  `building_zone_check` (#635).
+- A mod whose `init` returns `Err(Off)` hands the loader its reason: the
+  Mods screen shows it under the mod and the log names it, an `Off::text`
+  in the reader's language.
+- Breaking: `Entity` has no serde form, since each load of a world numbers
+  its entities anew; `Prop` has none either, and a `Capture` keeps
+  `CapturedProp`, the item and transform without the entity. Entity data
+  refuses an entity no load finds again, a player's character, with
+  `SetError::NotKept` (`Status::NOT_KEPT`, ABI 3.5) (#631).
+- Entity and item data keep each value under its entity's place, the
+  template and position as the save keeps them or the container and slot,
+  and find it again after a load; a value no place names for certain goes
+  aside in the world's file and never attaches again (#631).
+
+### Fixed
+
+- After a restart that followed any added or removed entity, an entity or
+  item data value could land on another entity of the same template; values
+  now follow their entity's place. Values of a file written before this
+  stay aside, attached to nothing (#631).
 
 ## [1.0.0-alpha.10] - 2026-10-28
 
 ### Added
 
+- `Off::text(key, args)` turns a feature off with a text of the mod's
+  texts: the Mods screen, the status summary and the log show it in the
+  reader's language. A `ConfigError::text` turned into an `Off` stays a
+  text (#630).
+- `Hold::set_text(reason, key, args)` sets a hold whose reason the log
+  shows in the reader's language while the mod's texts are loaded, and as
+  `reason` when they are not; a hold file of one line reads as before
+  (#630).
 - `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
   ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
   events carry them, and a Luau script reads and answers them as

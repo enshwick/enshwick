@@ -132,6 +132,7 @@ pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character; 0 when the account left in the same step.
+    /// The name is enshwick's: the game's record holds the user instead.
     pub entity: Entity,
     /// What killed the player, the game's death cause: 0
     /// [a hit](PlayerDeathData::IMPACT), 1

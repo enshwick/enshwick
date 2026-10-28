@@ -181,9 +181,10 @@ pub struct SpawnRequest {
 
 impl_headed!(SpawnRequest);
 
-/// A player's craft request, the game's `CraftRecipeEvent`, handed to the
-/// filters registered with
+/// A player's craft request, handed to the filters registered with
 /// [`HostApi::craft_filter`](super::HostApi::craft_filter) before the server crafts.
+///
+/// The name is enshwick's; the fields are the game's `CraftRecipeEvent`.
 ///
 /// # Examples
 ///

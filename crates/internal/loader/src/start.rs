@@ -85,7 +85,7 @@ fn enforce_holds(loader: &Loader) {
         .flat_map(ModRecord::names)
         .chain([crate::settings::LOADER_ID])
         .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false);
+    crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
 }
 
 /// Runs once, on the stub's thread.
@@ -378,6 +378,7 @@ fn records(
                 .map(|(_, note)| note.clone())
                 .collect(),
             off: AtomicBool::new(false),
+            off_reason: Mutex::new(None),
             settings: host::Kept::default(),
             synced: Mutex::new(None),
             server_synced: Mutex::new(None),

@@ -92,6 +92,8 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// as [`HostApi::survivor_bed_check`](super::HostApi::survivor_bed_check) hands it on. Cells are whole 0.5 m
 /// cells.
 ///
+/// The name is enshwick's: the game's bed check has none.
+///
 /// # Examples
 ///
 /// ```

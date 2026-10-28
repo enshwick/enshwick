@@ -490,6 +490,9 @@ impl Status {
     /// such as an animal, a pet or a survivor, which only the general
     /// entity calls reach.
     pub const NOT_A_PROP: Self = Self(11);
+    /// The entity has nothing the world's next load finds it again by: a
+    /// player's character, or an entity with no place in the world.
+    pub const NOT_KEPT: Self = Self(12);
 
     /// Whether this is [`Status::OK`].
     ///

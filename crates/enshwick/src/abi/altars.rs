@@ -132,6 +132,9 @@ pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mu
 /// single building zone, as [`HostApi::building_zone_check_filter`](super::HostApi::building_zone_check_filter) hands it on.
 /// Coordinates are 32.32 fixed-point metres.
 ///
+/// The name is enshwick's, after the game's building zone: the game's check
+/// has no name of its own.
+///
 /// # Examples
 ///
 /// ```

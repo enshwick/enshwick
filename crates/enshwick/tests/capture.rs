@@ -8,7 +8,9 @@ mod tests {
     use enshwick::ItemId;
     use enshwick::abi::Status;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
-    use enshwick::world::{CAPTURE_TILES, Capture, Prop, World, WorldError, WorldTransform};
+    use enshwick::world::{
+        CAPTURE_TILES, Capture, CapturedProp, Prop, World, WorldError, WorldTransform,
+    };
     use enshwick::{Load, Mod, Off};
 
     const TRANSFORM: u32 = 1;
@@ -241,8 +243,7 @@ mod tests {
         assert_eq!(capture.voxels().as_slice(), voxels.as_slice());
         assert_eq!(
             capture.props(),
-            [Prop {
-                entity: Entity(10),
+            [CapturedProp {
                 item: ItemId::new(5),
                 transform: WorldTransform {
                     position: [0.25, 0.5, 1.0],

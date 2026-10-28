@@ -143,6 +143,7 @@ reason of the form `<what>: <why>`, such as
 | 9    | `OUTSIDE_WORLD` | The box asked about leaves the world, past its edge or above its height    | `outside the world`                |
 | 10   | `STATIC_HALF`   | The static half of a component type: template data, never written          | `template data, never written`     |
 | 11   | `NOT_A_PROP`    | The entity is no prop: a creature, a flame altar or not placed             | `not a prop`                       |
+| 12   | `NOT_KEPT`      | Nothing finds the entity after a load: a player, or no place in the world  | `not found again after a load`     |
 
 `enshwick_mod_init` itself returns `OK`, `REFUSED` when `Mod::init` returned
 `Err(Off)`, or `FAULTED` when it panicked; the loader logs
@@ -174,14 +175,15 @@ declares each as a typedef:
 code, and a recipe selection of `change_data` and a recipe output `RateId`
 take one. A mod reads a code it does not know as `OTHER`.
 
-| Code | Constant         | The item a recipe makes                                    |
-| ---- | ---------------- | ---------------------------------------------------------- |
-| 0    | `OTHER`          | none of the kinds below                                    |
-| 1    | `BUILDING_BLOCK` | equipment slot `BlueprintMaterial_Default`                 |
-| 2    | `ROOF`           | equipment slot `BlueprintMaterial_Roof`                    |
-| 3    | `OVERGROWTH`     | equipment slot `OvergrowthMaterial`                        |
-| 4    | `TERRAIN`        | equipment slot `TerrainMaterial`                           |
-| 5    | `DECORATIVE`     | slot `BuildTool` with the Decorative menu group's item tag |
+| Code | Constant            | The item a recipe makes                                                                      |
+| ---- | ------------------- | -------------------------------------------------------------------------------------------- |
+| 0    | `OTHER`             | none of the kinds below                                                                      |
+| 1    | `BUILDING_BLOCK`    | equipment slot `BlueprintMaterial_Default`                                                   |
+| 2    | `ROOF`              | equipment slot `BlueprintMaterial_Roof`                                                      |
+| 3    | `OVERGROWTH`        | equipment slot `OvergrowthMaterial`                                                          |
+| 4    | `TERRAIN`           | equipment slot `TerrainMaterial`                                                             |
+| 5    | `DECORATIVE`        | slot `BuildTool` with the Decorative menu group's item tag                                   |
+| 6    | `COMFORT_FURNITURE` | slot `BuildTool` with the Comfort Furniture menu group's item tag and not the Decorative one |
 
 ## Events
 

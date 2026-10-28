@@ -277,10 +277,10 @@ impl Installed {
     /// use enshwick::abi::Bounds;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert!(!loader.zone_check(&[], Bounds::default(), 0));
+    /// assert!(!loader.building_zone_check(&[], Bounds::default(), 0));
     /// ```
     #[must_use]
-    pub fn zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
+    pub fn building_zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
         let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
         let call = BuildingZoneCheck {
             header: Header::of::<BuildingZoneCheck>(),

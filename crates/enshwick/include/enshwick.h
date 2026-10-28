@@ -43,8 +43,13 @@ typedef struct EnshwickHeader {
 // An entity id, as the engine numbers entities: a character, a prop, an item
 // with its own entity, anything the world holds.
 //
-// The engine's id 0 stands for no entity; the safe API hands it over as
-// `None` in an `Option<Entity>`, never as an `Entity`.
+// The id lasts one session: every load of a world numbers its entities
+// anew, in the order of the save, so an id kept across a restart names
+// another entity. It therefore has no serde form. Data that must outlast a
+// restart goes in entity data or
+// item data, which find their entities again after a
+// load. The engine's id 0 stands for no entity; the safe API hands it over
+// as `None` in an `Option<Entity>`, never as an `Entity`.
 typedef uint32_t EnshwickEntity;
 
 // A player's account by the number the game keeps for it, the same in every
@@ -323,6 +328,8 @@ typedef uint32_t EnshwickNpcId;
 // A survivor's own check that its bed is still its, after the game kept it,
 // as `HostApi::survivor_bed_check` hands it on. Cells are whole 0.5 m
 // cells.
+//
+// The name is enshwick's: the game's bed check has none.
 typedef struct EnshwickBedCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -545,6 +552,9 @@ typedef struct EnshwickBuildingData {
 // A placement the game refused because the object's box does not lie in a
 // single building zone, as `HostApi::building_zone_check_filter` hands it on.
 // Coordinates are 32.32 fixed-point metres.
+//
+// The name is enshwick's, after the game's building zone: the game's check
+// has no name of its own.
 typedef struct EnshwickBuildingZoneCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -666,9 +676,10 @@ typedef struct EnshwickComfort {
 // the crafting of one recipe.
 typedef uint32_t EnshwickRecipeId;
 
-// A player's craft request, the game's `CraftRecipeEvent`, handed to the
-// filters registered with
+// A player's craft request, handed to the filters registered with
 // `HostApi::craft_filter` before the server crafts.
+//
+// The name is enshwick's; the fields are the game's `CraftRecipeEvent`.
 typedef struct EnshwickCraftCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
@@ -1146,6 +1157,9 @@ typedef uint32_t EnshwickStatus;
 // such as an animal, a pet or a survivor, which only the general
 // entity calls reach.
 #define EnshwickStatus_NOT_A_PROP 11
+// The entity has nothing the world's next load finds it again by: a
+// player's character, or an entity with no place in the world.
+#define EnshwickStatus_NOT_KEPT 12
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.
@@ -2517,6 +2531,9 @@ typedef uint32_t EnshwickRecipeKind;
 #define EnshwickRecipeKind_TERRAIN 4
 // A placed prop the game files under its Decorative crafting group.
 #define EnshwickRecipeKind_DECORATIVE 5
+// A placed prop the game files under its Comfort Furniture crafting
+// group.
+#define EnshwickRecipeKind_COMFORT_FURNITURE 6
 
 // A game rate of `HostApi::rate` and
 // `HostApi::set_rate`, by the loader's stable
@@ -4192,6 +4209,7 @@ typedef struct EnshwickPlayerDeathData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character; 0 when the account left in the same step.
+  // The name is enshwick's: the game's record holds the user instead.
   EnshwickEntity entity;
   // What killed the player, the game's death cause: 0
   // a hit, 1
