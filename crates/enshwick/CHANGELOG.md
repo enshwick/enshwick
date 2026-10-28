@@ -83,6 +83,10 @@ Each entry names the pull request that made the change.
   text field, set on Enter. A game build without either keeps the pages
   and the read-only line, and the log names what is missing (#625).
 
+### Fixed
+
+- The Mods screen shows a secret setting as "(secret)" and never its value.
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added
