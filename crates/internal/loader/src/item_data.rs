@@ -155,6 +155,14 @@ static FINDING: AtomicBool = AtomicBool::new(false);
 /// records wait unattached, so a value set now would claim a place one of
 /// them holds. The store refuses values until the next load.
 static UNREAD: AtomicBool = AtomicBool::new(false);
+/// Whether a joined character waits for its inventories to fill.
+static JOINS: AtomicBool = AtomicBool::new(false);
+/// The joined characters whose carried records wait, each with the steps it
+/// may still wait.
+static JOINING: Mutex<Vec<(u32, u32)>> = Mutex::new(Vec::new());
+/// Steps a joined character's inventories may take to fill, some ten
+/// seconds; past it its records keep waiting for its next join.
+const JOIN_STEPS: u32 = 600;
 /// Entities the game asked to destroy since the last step, each in the low
 /// word under its round in the high one, 0 for an empty slot; written from
 /// any thread without a lock. A slot from an earlier round is stale.
@@ -376,6 +384,9 @@ pub(crate) fn after_step(loader: &Loader) {
     if FINDING.load(Ordering::Relaxed) {
         find_pending(loader);
     }
+    if JOINS.load(Ordering::Relaxed) {
+        find_carried(loader);
+    }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
         return;
     }
@@ -403,6 +414,130 @@ pub(crate) fn after_step(loader: &Loader) {
     }
 }
 
+/// A player's character `entity` joined: its carried records look for their
+/// items once its inventories fill.
+pub(crate) fn player_joined(entity: u32) {
+    if !wanted() || !serves() {
+        return;
+    }
+    let mut joining = JOINING.relock();
+    joining.retain(|&(e, _)| e != entity);
+    joining.push((entity, JOIN_STEPS));
+    JOINS.store(true, Ordering::Relaxed);
+}
+
+/// A player's character `entity` leaves, its items still in the world: the
+/// values on them wait for the character's next join under its GUID, or go
+/// aside where no GUID reads, rather than be dropped with the items.
+pub(crate) fn player_left(loader: &Loader, entity: u32) {
+    if !wanted() || !serves() {
+        return;
+    }
+    JOINING.relock().retain(|&(e, _)| e != entity);
+    let mut server = SERVER.relock();
+    let Some(server) = server.as_mut() else {
+        return;
+    };
+    let mut left = Vec::new();
+    server.values.retain(|&(kind, pide), record| {
+        if scope(kind, record.anchor) != Some(Scope::Item) {
+            return true;
+        }
+        let Some(held) = game::held(loader, pide).filter(|held| held.root == entity) else {
+            return true;
+        };
+        let carried = held
+            .anchor
+            .filter(|anchor| matches!(anchor, Anchor::Carried { .. }));
+        left.push(Pending {
+            kind,
+            anchor: carried.unwrap_or(Anchor::Session(pide)),
+            check: held.item,
+            value: core::mem::take(&mut record.value),
+            aside: carried.is_none(),
+        });
+        false
+    });
+    if left.is_empty() {
+        return;
+    }
+    let aside = left.iter().filter(|r| r.aside).count();
+    crate::log!(
+        INFO,
+        "mod data: {} values on a leaving character's items wait for its next join, {aside} set aside since its character does not read",
+        left.len() - aside
+    );
+    server.pending.append(&mut left);
+    server.changed = true;
+}
+
+/// Finds the carried records of the joined characters whose inventories
+/// have filled, on the game thread after a step.
+#[cold]
+fn find_carried(loader: &Loader) {
+    let ready: Vec<u32> = {
+        let mut joining = JOINING.relock();
+        let mut ready = Vec::new();
+        joining.retain_mut(|(entity, steps)| {
+            if game::ready(loader, *entity) {
+                ready.push(*entity);
+                return false;
+            }
+            *steps = steps.saturating_sub(1);
+            *steps > 0
+        });
+        JOINS.store(!joining.is_empty(), Ordering::Relaxed);
+        ready
+    };
+    for entity in ready {
+        let Some(character) = crate::world::character_of(loader, entity) else {
+            continue;
+        };
+        let mut server = SERVER.relock();
+        let Some(server) = server.as_mut() else {
+            return;
+        };
+        let taken: FxHashSet<(u32, u32)> = server.values.keys().copied().collect();
+        let outcome = anchor::resolve_carried(
+            std::mem::take(&mut server.pending),
+            character,
+            |link, slot| game::in_slot(loader, entity, link, slot),
+            |kind, pide| taken.contains(&(kind, pide)),
+        );
+        let found = outcome.found.len();
+        let aside = outcome.ambiguous + outcome.missing + outcome.replaced;
+        let mut message = Vec::new();
+        for (kind, pide, record) in outcome.found {
+            if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
+                encode(&mut message, &spec.id, pide, record.check, &record.value);
+                if message.len() > MESSAGE_BYTES {
+                    crate::net::item_data(0, &std::mem::take(&mut message));
+                }
+            }
+            server.values.insert(
+                (kind, pide),
+                Record {
+                    item: record.check,
+                    anchor: Some(record.anchor),
+                    value: record.value,
+                },
+            );
+        }
+        if !message.is_empty() {
+            crate::net::item_data(0, &message);
+        }
+        server.pending = outcome.left;
+        server.changed |= found + aside > 0;
+        KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
+        if found + aside > 0 {
+            crate::log!(
+                INFO,
+                "mod data: a joined character's items took {found} values back; {aside} set aside, their slot holding another item or none"
+            );
+        }
+    }
+}
+
 /// The placed things whose templates the `pending` records name, by key;
 /// `None` when any part of the walk does not read, since a thing missing
 /// from the index would set its records aside for good.
@@ -413,7 +548,7 @@ fn index(loader: &Loader, pending: &[Pending]) -> Option<Index> {
         .filter(|record| !record.aside)
         .filter_map(|record| match record.anchor {
             Anchor::Placed(placed) | Anchor::Held { root: placed, .. } => Some(placed.template()),
-            Anchor::Session(_) => None,
+            Anchor::Session(_) | Anchor::Carried { .. } => None,
         })
         .collect();
     if wanted.is_empty() {
@@ -669,7 +804,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
             item,
             loader
                 .and_then(|loader| game::held(loader, pide))
-                .and_then(|(anchor, _)| anchor),
+                .and_then(|held| held.anchor),
         ),
         Scope::Entity => {
             crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
@@ -933,6 +1068,8 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             );
             KEPT.store(false, Ordering::Relaxed);
             UNREAD.store(false, Ordering::Relaxed);
+            JOINING.relock().clear();
+            JOINS.store(false, Ordering::Relaxed);
             FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
             *SERVER.relock() = Some(Server {
@@ -970,7 +1107,7 @@ fn refresh(loader: &Loader, server: &mut Server) -> usize {
         // `Some(None)`: the world no longer holds the entity.
         let now = match scope(kind, record.anchor) {
             Some(Scope::Item) => {
-                Some(game::held(loader, entity).map(|(anchor, item)| (item, anchor)))
+                Some(game::held(loader, entity).map(|held| (held.item, held.anchor)))
             }
             Some(Scope::Entity) => match &placed {
                 Some(placed) if !placed.contains(&entity) => Some(None),

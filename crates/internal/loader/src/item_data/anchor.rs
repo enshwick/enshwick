@@ -6,11 +6,30 @@
 
 use rustc_hash::FxHashMap;
 
-/// The low bits of each 32.32 fixed-point axis the save clears: it keeps a
-/// position floored to 2^-14 m, and a loaded position is kept unchanged
-/// (server 399, proven for positive axes). Orientation is re-encoded by a
-/// codec not known, so it is no part of a key.
-const SAVED_GRAIN: i64 = (1 << 18) - 1;
+/// The save keeps each 32.32 fixed-point axis as a 128 m sector, the axis
+/// shifted right by `SECTOR_SHIFT` and clamped to `0..=MAX_SECTOR`, and a
+/// 21-bit offset in 2^-14 m steps, the axis shifted right by `GRAIN_SHIFT`;
+/// a load gives back `sector << 39 | offset << 18`, so every loaded axis lies
+/// in `[0, 32768 m)` and a loaded position keeps itself (server 399). The
+/// orientation is packed by its own codec and the scale into a byte, so
+/// neither is part of a key.
+const SECTOR_SHIFT: u32 = 39;
+const MAX_SECTOR: i64 = 255;
+const GRAIN_SHIFT: u32 = 18;
+const OFFSET_MASK: i64 = (1 << 21) - 1;
+
+/// `axis` as a load gives it back after a save.
+const fn as_saved(axis: i64) -> i64 {
+    let sector = axis >> SECTOR_SHIFT;
+    let sector = if sector < 0 {
+        0
+    } else if sector > MAX_SECTOR {
+        MAX_SECTOR
+    } else {
+        sector
+    };
+    (sector << SECTOR_SHIFT) | (((axis >> GRAIN_SHIFT) & OFFSET_MASK) << GRAIN_SHIFT)
+}
 
 /// A placed thing: its template GUID and where the save keeps it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,12 +40,12 @@ pub(crate) struct Placed {
 
 impl Placed {
     /// The key of a thing of `template` at `position`, 32.32 fixed-point
-    /// metres, floored as the save keeps it, so a thing spawned or moved
-    /// this session keys as it will after the next load.
+    /// metres, as the save keeps it, so a thing spawned or moved this
+    /// session keys as it will after the next load.
     pub(crate) fn new(template: [u8; 16], position: [i64; 3]) -> Self {
         Self {
             template,
-            position: position.map(|axis| axis & !SAVED_GRAIN),
+            position: position.map(as_saved),
         }
     }
 
@@ -65,11 +84,21 @@ pub(crate) enum Anchor {
     /// An item in slot `slot` of the inventory linked at `link` to the
     /// placed thing `root`.
     Held { root: Placed, link: u8, slot: u8 },
+    /// An item in slot `slot` of the inventory linked at `link` to the
+    /// character `character`, by its GUID. The character's own save keeps
+    /// its inventories in order and its items in their slots, and rebuilds
+    /// them when it joins (server 399).
+    Carried {
+        character: [u8; 16],
+        link: u8,
+        slot: u8,
+    },
 }
 
 const SESSION: u8 = 0;
 const PLACED: u8 = 1;
 const HELD: u8 = 2;
+const CARRIED: u8 = 3;
 
 impl Anchor {
     pub(crate) fn encode(&self, out: &mut Vec<u8>) {
@@ -85,6 +114,15 @@ impl Anchor {
             Self::Held { root, link, slot } => {
                 out.push(HELD);
                 root.encode(out);
+                out.extend_from_slice(&[*link, *slot]);
+            }
+            Self::Carried {
+                character,
+                link,
+                slot,
+            } => {
+                out.push(CARRIED);
+                out.extend_from_slice(character);
                 out.extend_from_slice(&[*link, *slot]);
             }
         }
@@ -103,6 +141,18 @@ impl Anchor {
                 let (root, rest) = Placed::decode(rest)?;
                 let (&[link, slot], rest) = rest.split_first_chunk::<2>()?;
                 Some((Self::Held { root, link, slot }, rest))
+            }
+            CARRIED => {
+                let (character, rest) = rest.split_first_chunk::<16>()?;
+                let (&[link, slot], rest) = rest.split_first_chunk::<2>()?;
+                Some((
+                    Self::Carried {
+                        character: *character,
+                        link,
+                        slot,
+                    },
+                    rest,
+                ))
             }
             _ => None,
         }
@@ -171,30 +221,84 @@ pub(crate) struct Outcome {
 }
 
 /// Finds each pending record's entity, once per load, when the world holds
-/// every entity its save holds (a load creates them all before the
-/// first step). `held(root, link, slot)` is the item entity in that slot and
-/// the item it holds; `taken(kind, entity)` whether the entity already has a
+/// every entity its save holds (a load creates them all before the first
+/// step). `held(root, link, slot)` is the item entity in that slot and the
+/// item it holds; `taken(kind, entity)` whether the entity already has a
 /// value of the kind. A record attaches only to the one entity its place
 /// names; every other record is aside from now on, since a later entity may
-/// take its place.
+/// take its place. Records carried by a character wait for it to join.
 pub(crate) fn resolve(
     pending: Vec<Pending>,
     index: &Index,
     held: impl Fn(u32, u8, u8) -> Option<(u32, u32)>,
     taken: impl Fn(u32, u32) -> bool,
 ) -> Outcome {
+    settle(
+        pending,
+        |record| !matches!(record.anchor, Anchor::Carried { .. }),
+        |record| match record.anchor {
+            Anchor::Placed(placed) => index.find(&placed),
+            Anchor::Held { root, link, slot } => match index.find(&root) {
+                Some(Found::One(root)) => held(root, link, slot)
+                    .filter(|&(_, item)| item == record.check)
+                    .map(|(pide, _)| Found::One(pide)),
+                other => other,
+            },
+            Anchor::Session(_) | Anchor::Carried { .. } => None,
+        },
+        taken,
+    )
+}
+
+/// Finds the items character `character` carried, once it has joined and
+/// its inventories are filled. `held(link, slot)` is the item entity in that
+/// slot of the character's inventories and the item it holds. A record
+/// attaches only where the same item lies in the same slot; every other
+/// record of the character is aside from now on.
+pub(crate) fn resolve_carried(
+    pending: Vec<Pending>,
+    character: [u8; 16],
+    held: impl Fn(u8, u8) -> Option<(u32, u32)>,
+    taken: impl Fn(u32, u32) -> bool,
+) -> Outcome {
+    settle(
+        pending,
+        |record| matches!(record.anchor, Anchor::Carried { character: c, .. } if c == character),
+        |record| match record.anchor {
+            Anchor::Carried { link, slot, .. } => held(link, slot)
+                .filter(|&(_, item)| item == record.check)
+                .map(|(pide, _)| Found::One(pide)),
+            _ => None,
+        },
+        taken,
+    )
+}
+
+/// One pass over `pending`: the records whose `turn` it is attach where
+/// `find` names one entity and go aside otherwise; the rest pass through as
+/// they were.
+fn settle(
+    pending: Vec<Pending>,
+    turn: impl Fn(&Pending) -> bool,
+    find: impl Fn(&Pending) -> Option<Found>,
+    taken: impl Fn(u32, u32) -> bool,
+) -> Outcome {
     let mut uses: FxHashMap<(u32, Anchor), usize> = FxHashMap::default();
-    for record in pending.iter().filter(|r| !r.aside) {
+    for record in pending.iter().filter(|r| !r.aside && turn(r)) {
         *uses.entry((record.kind, record.anchor)).or_default() += 1;
     }
     let mut outcome = Outcome::default();
     for mut record in pending {
+        if record.aside {
+            outcome.earlier += 1;
+            outcome.left.push(record);
+            continue;
+        }
+        if !turn(&record) {
+            outcome.left.push(record);
+            continue;
+        }
         let target = match record.anchor {
-            _ if record.aside => {
-                outcome.earlier += 1;
-                outcome.left.push(record);
-                continue;
-            }
             Anchor::Session(_) => {
                 outcome.earlier += 1;
                 record.aside = true;
@@ -203,13 +307,7 @@ pub(crate) fn resolve(
             }
             // The file names one place twice: neither record is certain.
             _ if uses[&(record.kind, record.anchor)] > 1 => Some(Found::Many),
-            Anchor::Placed(placed) => index.find(&placed),
-            Anchor::Held { root, link, slot } => match index.find(&root) {
-                Some(Found::One(root)) => held(root, link, slot)
-                    .filter(|&(_, item)| item == record.check)
-                    .map(|(pide, _)| Found::One(pide)),
-                other => other,
-            },
+            _ => find(&record),
         };
         let count = match target {
             Some(Found::One(entity)) if !taken(record.kind, entity) => {
@@ -264,6 +362,29 @@ mod tests {
         assert_eq!(spawned(0x20000), spawned(0));
         assert_ne!(spawned(0x40000), spawned(0), "one grain apart");
         assert_ne!(Placed::new(BED, at(3)), Placed::new(CHEST, at(3)));
+    }
+
+    #[test]
+    fn an_axis_outside_the_saved_range_keys_where_the_load_puts_it() {
+        // Quarter metres in 32.32 fixed point.
+        let quarters = |q: i64| q << 30;
+        // Server 399: a survivor saved at z = -0.5 m loads at z = 127.5 m.
+        assert_eq!(as_saved(quarters(-2)), quarters(510));
+        assert_eq!(as_saved(quarters(-4 * 128)), 0, "the sector clamps at 0");
+        assert_eq!(
+            as_saved(quarters(4 * 32_800)),
+            (255 << SECTOR_SHIFT) | quarters(4 * 32),
+            "and at 255"
+        );
+        for q in [0, 1, 511, 512, 14_937, 40_958] {
+            let fine = quarters(q) + 0x3_ffff;
+            assert_eq!(as_saved(fine), quarters(q), "{q}: floored to the grain");
+            assert_eq!(
+                as_saved(quarters(q)),
+                quarters(q),
+                "a loaded axis keeps itself"
+            );
+        }
     }
 
     #[test]
@@ -450,5 +571,88 @@ mod tests {
         );
         assert!(outcome.found.is_empty());
         assert_eq!((outcome.left.len(), outcome.replaced), (1, 1));
+    }
+
+    const ANN: [u8; 16] = [0xa1; 16];
+    const ANN_SECOND: [u8; 16] = [0xa2; 16];
+
+    fn carried(character: [u8; 16], link: u8, slot: u8, check: u32, value: u8) -> Pending {
+        pending(
+            0,
+            Anchor::Carried {
+                character,
+                link,
+                slot,
+            },
+            check,
+            value,
+        )
+    }
+
+    #[test]
+    fn a_carried_anchor_reads_back_as_written() {
+        let anchor = Anchor::Carried {
+            character: ANN,
+            link: 3,
+            slot: 7,
+        };
+        let mut bytes = Vec::new();
+        anchor.encode(&mut bytes);
+        assert_eq!(Anchor::decode(&bytes), Some((anchor, &[][..])));
+        assert_eq!(Anchor::decode(&bytes[..bytes.len() - 1]), None);
+    }
+
+    #[test]
+    fn carried_records_wait_through_the_world_s_first_step() {
+        let records = vec![carried(ANN, 0, 1, 77, 1)];
+        let outcome = resolve(
+            records.clone(),
+            &Index::default(),
+            |_, _, _| None,
+            |_, _| false,
+        );
+        assert!(outcome.found.is_empty());
+        assert_eq!(outcome.left, records, "neither attached nor aside");
+        assert_eq!(outcome.missing, 0);
+    }
+
+    #[test]
+    fn a_joining_character_finds_its_own_items_by_link_and_slot() {
+        let records = vec![
+            carried(ANN, 0, 1, 77, 1),
+            carried(ANN, 0, 2, 77, 2),
+            carried(ANN, 1, 0, 78, 3),
+            // The same account's other character keeps its records waiting.
+            carried(ANN_SECOND, 0, 1, 77, 4),
+        ];
+        let held = |link, slot| match (link, slot) {
+            (0, 1) => Some((2001, 77)),
+            // Played elsewhere: another item lies in the slot now.
+            (0, 2) => Some((2002, 90)),
+            _ => None,
+        };
+        let outcome = resolve_carried(records, ANN, held, |_, _| false);
+        let found: Vec<(u32, u8)> = outcome
+            .found
+            .iter()
+            .map(|(_, e, r)| (*e, r.value[0]))
+            .collect();
+        assert_eq!(found, [(2001, 1)]);
+        assert_eq!(outcome.missing, 2, "the changed slot and the empty one");
+        let waiting: Vec<u8> = outcome
+            .left
+            .iter()
+            .filter(|r| !r.aside)
+            .map(|r| r.value[0])
+            .collect();
+        assert_eq!(waiting, [4], "only the other character's record waits");
+    }
+
+    #[test]
+    fn two_records_on_one_carried_slot_both_go_aside() {
+        let records = vec![carried(ANN, 0, 1, 77, 1), carried(ANN, 0, 1, 77, 2)];
+        let outcome = resolve_carried(records, ANN, |_, _| Some((2001, 77)), |_, _| false);
+        assert!(outcome.found.is_empty());
+        assert_eq!(outcome.ambiguous, 2);
     }
 }
