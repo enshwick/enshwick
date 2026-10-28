@@ -43,6 +43,8 @@
 "row.restart" = "{label} (oyun yeniden başladığında)"
 "row.server" = "{label} (sunucu tarafından ayarlandı)"
 "row.text" = "{label}: {value} (mod-configs/{id}.toml dosyasını düzenleyin)"
+"row.text.hint" = "Yazın, ardından Enter'a basın"
+"row.value" = "{label}: {value}"
 "world.belongs" = "Bu ayarlar bu dünyaya aittir."
 "world.next" = "Buradaki değişiklikler yüklenecek bir sonraki dünyaya geçer."
 "change.next" = "{id} {key} = {value}: yüklenecek bir sonraki dünya için kaydedildi."
