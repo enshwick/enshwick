@@ -50,7 +50,7 @@ Each entry names the pull request that made the change.
   stay aside, attached to nothing (#631).
 - Item data on a leaving player's items goes aside in the world's file
   instead of being dropped with the items the game removes, and a place
-  keys exactly as the save keeps it, a negative axis included (#PR).
+  keys exactly as the save keeps it, a negative axis included (#640).
 
 ## [1.0.0-alpha.10] - 2026-10-28
 
