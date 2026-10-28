@@ -4,3 +4,4 @@
 pub(crate) mod grouping;
 pub(crate) mod limit;
 pub(crate) mod lookup;
+pub(crate) mod window;

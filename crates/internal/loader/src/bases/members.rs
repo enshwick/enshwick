@@ -6,18 +6,22 @@
 //! to every listed zone. Its grouping still runs, to release the old bases
 //! and copy the world's zone list, but it may start
 //! only the bases our grouping plans; after it, each base takes our box and
-//! zones, the mask its first 32. The four lookups that read the mask answer
-//! from the side table instead. Facts from server 399 and client 426, where
-//! both bodies are the same.
+//! zones, the mask its first 32. Bases past the game's 16 start at window
+//! indices ([`window`]) with the game's own new base code, the count set to
+//! the index for the call; the count stays at most 16 and the side table
+//! knows the rest. The four lookups that read the mask answer from the side
+//! table instead. Facts from server 399 and client 426, where both bodies
+//! are the same.
 
-use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use super::Fields;
-use crate::base_groups::grouping::{self, Grouped, MAX_GROUPED, MAX_LISTED, ZoneSet};
+use crate::base_groups::grouping::{self, Grouped, MAX_LISTED, ZoneSet};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::lookup::{self, Bases, Holder};
+use crate::base_groups::window::{self, Kind};
 
 /// The byte that tells the server's bases object (1) from the client's (0).
 const KIND_AT: usize = 0x08;
@@ -35,6 +39,20 @@ pub(super) unsafe fn kind(obj: *const u8) -> usize {
     // SAFETY: the caller guarantees a live object; its kind byte sits at
     // `KIND_AT`.
     usize::from(unsafe { read_at::<u8>(obj, KIND_AT) } & 1)
+}
+
+/// The side a bases object serves.
+///
+/// # Safety
+///
+/// - `obj` is a live, non-null bases object.
+pub(super) unsafe fn side_of(obj: *const u8) -> Kind {
+    // SAFETY: the caller's guarantee, passed on.
+    if unsafe { kind(obj) } == 1 {
+        Kind::Server
+    } else {
+        Kind::Client
+    }
 }
 /// The lookups' answer: an error byte, a u32 the game sets to 0, then the
 /// base index or the box that holds the point.
@@ -60,21 +78,30 @@ const HANDED: usize = 1;
 /// The callback that grows a zone box container to hold `-wanted` boxes.
 type GrowFn = unsafe extern "system" fn(vec: *mut u8, wanted: i64, exact: u64) -> u8;
 
-/// The zones of each base of one bases object, written only by the
-/// grouping, which the game never runs beside a lookup.
+/// The bases of one bases object and the zones of each, by record index,
+/// written only by the grouping, which the game never runs beside a lookup.
 #[derive(Debug)]
-struct Side {
+pub(super) struct Side {
     /// The object the sets belong to; another object reads its own masks.
     owner: AtomicUsize,
-    sets: [[AtomicU64; 4]; MAX_GROUPED],
+    /// How many bases there are; their indices are [`window::indices`] of
+    /// it.
+    bases: AtomicUsize,
+    sets: [[AtomicU64; 4]; window::INDICES],
 }
 
 impl Side {
     const fn new() -> Self {
         Self {
             owner: AtomicUsize::new(0),
-            sets: [const { [const { AtomicU64::new(0) }; 4] }; MAX_GROUPED],
+            bases: AtomicUsize::new(0),
+            sets: [const { [const { AtomicU64::new(0) }; 4] }; window::INDICES],
         }
+    }
+
+    /// The side table of a `kind` object.
+    pub(super) fn of(kind: Kind) -> &'static Self {
+        &SIDES[usize::from(kind == Kind::Server)]
     }
 
     fn set(&self, i: usize) -> ZoneSet {
@@ -91,14 +118,31 @@ impl Side {
     fn store(&self, owner: *const u8, bases: &Grouped) {
         self.owner.store(0, Ordering::Relaxed);
         for (i, words) in self.sets.iter().enumerate() {
-            let set = bases
-                .get(i)
+            let set = window::position(i)
+                .and_then(|n| bases.get(n))
                 .map_or_else(ZoneSet::default, |base| base.zones);
             for (word, value) in words.iter().zip(set.words()) {
                 word.store(value, Ordering::Relaxed);
             }
         }
+        self.bases.store(bases.len(), Ordering::Relaxed);
         self.owner.store(owner.addr(), Ordering::Release);
+    }
+
+    /// Forgets the table's object, which then reads its own masks.
+    pub(super) fn forget(&self) {
+        self.owner.store(0, Ordering::Release);
+    }
+}
+
+/// Forgets the side table of `obj`, which the game is about to free, so an
+/// object made later at the same address reads its own masks until its
+/// first grouping.
+pub(super) fn forget_object(obj: *const u8) {
+    for side in &SIDES {
+        let _gone = side
+            .owner
+            .compare_exchange(obj.addr(), 0, Ordering::AcqRel, Ordering::Relaxed);
     }
 }
 
@@ -157,12 +201,27 @@ impl Game {
     }
 }
 
-impl Bases for Game {
-    fn count(&self) -> usize {
+impl Game {
+    /// The game's own count, which never passes the 16 of its array.
+    fn game_count(&self) -> usize {
         // SAFETY: `Game::new`'s caller guarantees a live object; its u32 base
         // count sits at the build table's `bases.count`.
         let count = unsafe { read_at::<u32>(self.obj, self.fields.count) };
-        usize::try_from(count).map_or(MAX_GROUPED, |n| n.min(MAX_GROUPED))
+        usize::try_from(count).map_or(window::VANILLA, |n| n.min(window::VANILLA))
+    }
+
+    /// Whether `i` is the record index of one of the bases.
+    pub(super) fn holds_index(&self, i: usize) -> bool {
+        window::position(i).is_some_and(|n| n < self.count())
+    }
+}
+
+impl Bases for Game {
+    fn count(&self) -> usize {
+        self.side.map_or_else(
+            || self.game_count(),
+            |side| side.bases.load(Ordering::Relaxed),
+        )
     }
 
     fn bounds(&self, i: usize) -> Aabb {
@@ -170,17 +229,18 @@ impl Bases for Game {
     }
 
     fn members(&self, i: usize) -> ZoneSet {
-        self.side.map_or_else(
-            || {
-                // SAFETY: `i` is below the count, capped at the array's 16,
-                // so record `i`'s u32 mask lies in the live object at the
-                // build table's `bases.members`.
+        match self.side {
+            Some(side) => side.set(i),
+            None if i < window::VANILLA => {
+                // SAFETY: `i` is below the array's 16, so record `i`'s u32
+                // mask lies in the live object at the build table's
+                // `bases.members`.
                 let mask =
                     unsafe { read_at::<u32>(self.obj, self.record(i) + self.fields.members) };
                 ZoneSet::from_mask(mask)
-            },
-            |side| side.set(i),
-        )
+            }
+            None => ZoneSet::default(),
+        }
     }
 
     fn listed(&self) -> usize {
@@ -238,64 +298,118 @@ pub(super) unsafe fn planned(obj: *const u8, fields: Fields, cap: usize) -> usiz
 }
 
 /// Our grouping of `game`'s listed zones into at most `cap` bases.
+///
+/// Allocates the zone boxes and the answer, which would take some 17 KB of
+/// a game thread's stack; it runs only when the zone list changes.
 fn plan(game: &Game, cap: usize) -> Grouped {
-    let mut boxes = [Aabb {
-        min: [0.0; 3],
-        max: [0.0; 3],
-    }; MAX_LISTED];
-    let listed = game.listed();
-    for (z, slot) in boxes.iter_mut().enumerate().take(listed) {
-        *slot = game.zone(z);
+    let listed = game.listed().min(MAX_LISTED);
+    let boxes: Vec<Aabb> = (0..listed).map(|z| game.zone(z)).collect();
+    grouping::group(&boxes, cap)
+}
+
+/// Set while the grouping lends the count to the game's new base code for a
+/// window record, and how often a whole-array function was entered
+/// meanwhile, which must stay 0.
+static COUNT_LENT: AtomicBool = AtomicBool::new(false);
+static ENTERED_WHILE_LENT: AtomicU32 = AtomicU32::new(0);
+
+/// Counts an entry of a whole-array function, when the count is lent.
+pub(super) fn note_entry() {
+    if COUNT_LENT.load(Ordering::Relaxed) {
+        ENTERED_WHILE_LENT.fetch_add(1, Ordering::Relaxed);
     }
-    grouping::group(&boxes[..listed], cap)
+}
+
+/// How many whole-array functions were entered while the count was lent,
+/// since the last call.
+pub(super) fn take_entries_while_lent() -> u32 {
+    ENTERED_WHILE_LENT.swap(0, Ordering::Relaxed)
 }
 
 /// Gives the bases the grouping on `obj` left our boxes and zones, starting
-/// those it did not with `new_base`, and returns them.
+/// those it did not with `new_base`, and returns them. With `window`, the
+/// object holds window records released since its last grouping, and bases
+/// past 16 start there: `window` readies index `i` first, then the game's
+/// new base code runs with the count set to `i`, which it takes as the
+/// record to fill.
 ///
 /// # Safety
 ///
 /// - `obj` is the live bases object the game's grouping has just filled, on
 ///   the grouping's thread, with no reader meanwhile.
 /// - `new_base` is the game's own new base code, `fn(obj, zone, index)`.
+/// - With `window`, `obj` is a block of [`window::BLOCK`] bytes whose window
+///   records are initialised and released.
 pub(super) unsafe fn settle(
     obj: *mut u8,
     fields: Fields,
     cap: usize,
     new_base: super::AddBaseFn,
+    window: Option<&dyn Fn(usize)>,
 ) -> Option<Grouped> {
     // SAFETY: the caller guarantees a live object the game's grouping has
     // just filled, on its thread with no reader beside it.
     let game = unsafe { Game::new(obj, fields) };
+    let cap = if window.is_some() {
+        cap
+    } else {
+        cap.min(window::VANILLA)
+    };
     let bases = plan(&game, cap);
-    for base in bases.iter().skip(game.count()) {
+    let in_array = bases.len().min(window::VANILLA);
+    for base in bases.iter().take(in_array).skip(game.game_count()) {
         let first = u32::try_from(base.first).ok()?;
         // SAFETY: the game's new base code on its own object, with zone
         // `first`'s entry of the list it has just copied, below its length,
         // and the zone's index as the grouping passes it.
         unsafe { new_base(obj, game.zone_entry(base.first), first) };
     }
-    if game.count() != bases.len() {
+    if game.game_count() != in_array {
         return None;
     }
-    for (i, base) in bases.iter().enumerate() {
+    for (n, base) in bases.iter().enumerate().skip(window::VANILLA) {
+        let (Some(ready), Some(i)) = (window, window::index(n)) else {
+            return None;
+        };
+        let first = u32::try_from(base.first).ok()?;
+        ready(i);
+        let at = u32::try_from(i).ok()?;
+        // SAFETY: the caller guarantees a live object; its u32 count sits at
+        // the build table's `bases.count`.
+        let count = unsafe { read_at::<u32>(obj, fields.count) };
+        COUNT_LENT.store(true, Ordering::Relaxed);
+        // SAFETY: the live object's u32 count at `bases.count`. No reader
+        // sees the lent value: the game runs its grouping in the world's
+        // serial update beside no system (server 399 and client 426, medium
+        // confidence), and `note_entry` counts any whole-array function
+        // entered meanwhile, so a server copy can show it stays 0.
+        unsafe { write_at(obj, fields.count, at) };
+        // SAFETY: the game's new base code, which takes the count as the
+        // record to fill and raises it, on record `i` of the window the
+        // caller guarantees initialised and released, with zone `first`'s
+        // entry of the list.
+        unsafe { new_base(obj, game.zone_entry(base.first), first) };
+        // SAFETY: the live object's u32 count at `bases.count`, back to the
+        // array's.
+        unsafe { write_at(obj, fields.count, count) };
+        COUNT_LENT.store(false, Ordering::Relaxed);
+    }
+    for (n, base) in bases.iter().enumerate() {
+        let i = window::index(n)?;
         let bounds = game.bounds_at(i).cast_mut();
-        // SAFETY: record `i` is below the count the new base code reached,
-        // inside the 16 records of the live object; its box starts with the
-        // low corner.
+        // SAFETY: record `i` is one the new base code has just filled, in
+        // the array or the window of the live object; its box starts with
+        // the low corner.
         unsafe { write_at(bounds, 0, base.bounds.min) };
         // SAFETY: the same box, whose high corner sits at the build table's
         // `bases.zone_high`.
         unsafe { write_at(bounds, fields.zone_high, base.bounds.max) };
-        // SAFETY: record `i` is below the count new base reached, in the live object; its u32 mask sits at the build table's
-        // `bases.members`.
+        // SAFETY: the same record of the live object; its u32 mask sits at
+        // the build table's `bases.members`.
         unsafe { write_at(obj, game.record(i) + fields.members, base.zones.low_mask()) };
     }
     // SAFETY: the caller guarantees a live object.
-    let kind = unsafe { kind(obj) };
-    if let Some(side) = SIDES.get(kind) {
-        side.store(obj, &bases);
-    }
+    Side::of(unsafe { side_of(obj) }).store(obj, &bases);
     Some(bases)
 }
 
@@ -459,94 +573,7 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const FIELDS: Fields = Fields {
-        count: 0x24,
-        stride: 0x130,
-        members: 0x140,
-        zone_list: 0x1330,
-        zone_list_len: 0x1338,
-        zone_size: 0x20,
-        zone_high: 0x10,
-        item_altar: 0x43,
-        max_altars_reached: 0x4000,
-    };
-    const OBJECT: usize = 0x1560;
-
-    /// A bases object of the game's layout, 16-aligned as the game's.
-    #[repr(C, align(16))]
-    struct Object([u8; OBJECT]);
-
-    /// A zone entry: low corner, a word, high corner, a word.
-    #[repr(C, align(16))]
-    #[derive(Clone, Copy)]
-    struct Entry([f32; 8]);
-
-    struct Fake {
-        obj: Box<Object>,
-        zones: Vec<Entry>,
-    }
-
-    impl Fake {
-        fn new(kind: u8, boxes: &[Aabb]) -> Self {
-            let zones: Vec<Entry> = boxes
-                .iter()
-                .map(|b| {
-                    Entry([
-                        b.min[0], b.min[1], b.min[2], 7.0, b.max[0], b.max[1], b.max[2], 7.0,
-                    ])
-                })
-                .collect();
-            let mut fake = Self {
-                obj: Box::new(Object([0; OBJECT])),
-                zones,
-            };
-            fake.obj.0[KIND_AT] = kind;
-            let list = fake.zones.as_ptr() as usize;
-            fake.obj.0[0x1330..0x1338].copy_from_slice(&list.to_le_bytes());
-            fake.obj.0[0x1338..0x1340].copy_from_slice(&fake.zones.len().to_le_bytes());
-            fake
-        }
-
-        fn ptr(&mut self) -> *mut u8 {
-            self.obj.0.as_mut_ptr()
-        }
-
-        fn u32_at(&self, at: usize) -> u32 {
-            u32::from_le_bytes(self.obj.0[at..at + 4].try_into().unwrap())
-        }
-
-        fn f32s_at(&self, at: usize) -> [f32; 3] {
-            [0, 4, 8]
-                .map(|o| f32::from_le_bytes(self.obj.0[at + o..at + o + 4].try_into().unwrap()))
-        }
-
-        fn view(&mut self) -> Game {
-            // SAFETY: the fake object lives for the test, laid out as `FIELDS`.
-            unsafe { Game::new(self.ptr(), FIELDS) }
-        }
-    }
-
-    /// The game's new base code as the research reads it: the count up by
-    /// one, the zone's box copied whole, the zone's bit in the mask.
-    unsafe extern "system" fn new_base(obj: *mut u8, zone: *const u8, index: u32) {
-        // SAFETY: the fake object of the test.
-        let i = unsafe { read_at::<u32>(obj, 0x24) };
-        // SAFETY: the fake object's count, at 0x24 in its buffer.
-        unsafe { write_at(obj, 0x24, i + 1) };
-        let record = 0x30 + usize::try_from(i).unwrap() * 0x130;
-        // SAFETY: a zone entry of the fake list and the record's box.
-        unsafe { core::ptr::copy_nonoverlapping(zone, obj.wrapping_add(record + 0xf0), 0x20) };
-        // SAFETY: the record's mask.
-        unsafe { write_at(obj, record + 0x110, 1u32 << (index & 31)) };
-    }
-
-    fn square(x: f32, z: f32) -> Aabb {
-        Aabb {
-            min: [x, 0.0, z],
-            max: [x + 10.0, 10.0, z + 10.0],
-        }
-    }
+    use crate::bases::fake::{Entry, FIELDS, Fake, new_base, square};
 
     /// 40 zones that touch in an L, then one apart.
     fn l_and_one() -> Vec<Aabb> {
@@ -566,7 +593,7 @@ mod tests {
         // SAFETY: the fake object and its zone 0.
         unsafe { new_base(obj, fake.zones.as_ptr().cast(), 0) };
         // SAFETY: the fake object, filled as after the game's grouping.
-        let bases = unsafe { settle(obj, FIELDS, 16, new_base) }.unwrap();
+        let bases = unsafe { settle(obj, FIELDS, 16, new_base, None) }.unwrap();
         assert_eq!(bases.len(), 2);
         assert_eq!(fake.u32_at(0x24), 2);
         assert_eq!(fake.u32_at(0x140), u32::MAX, "zones 0 to 31 in the mask");
@@ -583,7 +610,7 @@ mod tests {
         let mut fake = Fake::new(0, &l_and_one());
         let obj = fake.ptr();
         // SAFETY: the fake object, with no base started yet.
-        let _bases = unsafe { settle(obj, FIELDS, 16, new_base) }.unwrap();
+        let _bases = unsafe { settle(obj, FIELDS, 16, new_base, None) }.unwrap();
         let game = fake.view();
         let mut out = [0xAAu8; 0x30];
         // SAFETY: a writable answer.
@@ -725,7 +752,7 @@ mod tests {
         let mut fake = Fake::new(1, &l_and_one());
         let obj = fake.ptr();
         // SAFETY: the fake object, with no base started yet.
-        let _bases = unsafe { settle(obj, FIELDS, 16, new_base) }.unwrap();
+        let _bases = unsafe { settle(obj, FIELDS, 16, new_base, None) }.unwrap();
         let game = fake.view();
         let mut list = List::new(Some(grow));
         let mut out = [0xAAu8; 0x10];
@@ -790,7 +817,55 @@ mod tests {
             unsafe { new_base(obj, core::ptr::from_ref(entry).cast(), z) };
         }
         // SAFETY: the fake object, with one base more than our plan.
-        assert!(unsafe { settle(obj, FIELDS, 16, new_base) }.is_none());
+        assert!(unsafe { settle(obj, FIELDS, 16, new_base, None) }.is_none());
+    }
+
+    fn twenty_apart() -> Vec<Aabb> {
+        crate::bases::fake::apart(20)
+    }
+
+    #[test]
+    fn bases_past_16_start_at_window_indices_with_the_count_kept_at_16() {
+        let mut fake = Fake::new(1, &twenty_apart());
+        let obj = fake.ptr();
+        let readied = core::cell::RefCell::new(Vec::new());
+        let ready = |i: usize| readied.borrow_mut().push(i);
+        // SAFETY: the fake object, with every window record zeroed, which
+        // the fake new base code takes as released.
+        let bases = unsafe { settle(obj, FIELDS, window::MOST, new_base, Some(&ready)) }.unwrap();
+        assert_eq!(bases.len(), 20);
+        assert_eq!(fake.u32_at(0x24), 16, "the count stays the array's");
+        assert_eq!(*readied.borrow(), [93, 94, 95, 96]);
+        for (n, i) in [(16usize, 93usize), (19, 96)] {
+            let record = 0x30 + i * 0x130;
+            assert_eq!(
+                fake.u32_at(record + 0x110),
+                1 << (n & 31),
+                "base {n}'s mask"
+            );
+            let x = f32::from(u8::try_from(n).unwrap()) * 100.0;
+            assert_eq!(fake.f32s_at(record + 0xf0), [x, 0.0, 0.0]);
+            assert_eq!(fake.f32s_at(record + 0x100), [x + 10.0, 10.0, 10.0]);
+        }
+        let game = fake.view();
+        assert_eq!(game.count(), 20);
+        assert!(game.holds_index(96) && !game.holds_index(97) && !game.holds_index(16));
+        let mut out = [0xAAu8; 0x10];
+        // SAFETY: a writable answer.
+        unsafe { base_at(out.as_mut_ptr(), &game, [1805.0, 5.0, 5.0]) };
+        assert_eq!((out[0], out[8]), (0, 95));
+        assert!(in_base(&game, 95, [1805.0, 5.0, 5.0]));
+    }
+
+    #[test]
+    fn without_a_window_a_grouping_keeps_16_bases() {
+        let mut fake = Fake::new(1, &twenty_apart());
+        let obj = fake.ptr();
+        // SAFETY: the fake object, with no base started yet.
+        let bases = unsafe { settle(obj, FIELDS, window::MOST, new_base, None) }.unwrap();
+        assert_eq!(bases.len(), 16);
+        assert_eq!(fake.view().count(), 16);
+        assert_eq!(fake.u32_at(0x30 + 93 * 0x130 + 0x110), 0);
     }
 
     #[test]
@@ -798,7 +873,7 @@ mod tests {
         let mut settled = Fake::new(1, &l_and_one());
         let obj = settled.ptr();
         // SAFETY: the fake object, with no base started yet.
-        let _bases = unsafe { settle(obj, FIELDS, 16, new_base) }.unwrap();
+        let _bases = unsafe { settle(obj, FIELDS, 16, new_base, None) }.unwrap();
         let mut other = Fake::new(1, &l_and_one());
         let obj = other.ptr();
         // SAFETY: the fake object and its zone 0.

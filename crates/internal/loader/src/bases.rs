@@ -17,13 +17,28 @@
 //! Either every hook is armed or the game keeps its 16 zones. The client
 //! runs one grouping for its own world and the server it hosts, on two
 //! bases objects, and the same hooks serve both.
+//!
+//! Past 16 bases, when a mod asks for more, the objects grow and bases 16
+//! and on take window indices behind the game's array ([`past16`]); either
+//! every site of that is armed too, or the game keeps 16 bases with the
+//! zones raised. The server's object holds the bases the mods asked for, the
+//! client's every base the window holds, so a modded client with the window
+//! armed groups every base the server does and needs no join rule of its
+//! own; a client whose window could not arm groups 16 and its log says so.
+//! The placement cursor refuses an altar past the asked limit.
 
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
+mod cursor;
+#[cfg(test)]
+mod fake;
 mod heap;
+mod lifecycle;
+mod loops;
 mod members;
+mod past16;
 
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -31,12 +46,14 @@ use std::sync::{Arc, OnceLock};
 
 use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
-use enshwick::raw::{read_at, write_at};
+use enshwick::raw::read_at;
 
-use self::members::{Game, kind};
-use crate::base_groups::grouping::{Grouped, MAX_GROUPED};
-use crate::base_groups::limit::{self, Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
+use self::members::{Game, Side, side_of};
+use crate::base_groups::grouping::Grouped;
+use crate::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
+use crate::base_groups::window::{self, Kind};
 use crate::chains::Next;
+use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered};
 use crate::registry::Registry;
 
@@ -165,9 +182,12 @@ type LimitFilter = Registered<AltarLimitFilterFn>;
 static SITES: OnceLock<Sites> = OnceLock::new();
 /// The mods' altar limit filters, in load order.
 static LIMITS: Registry<LimitFilter> = Registry::new();
-static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
-/// How many zones the world has, `u32::MAX` before the first grouping.
-static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
+/// The zones and bases of the last grouping, per bases object kind as
+/// [`kind_index`] numbers them.
+static ZONES: OnceLock<[ArcSwap<Zones>; 2]> = OnceLock::new();
+/// How many zones the world has, per kind, `u32::MAX` before the first
+/// grouping.
+static ZONE_COUNT: [AtomicU32; 2] = [const { AtomicU32::new(u32::MAX) }; 2];
 /// Set at arming when every site is hooked.
 static RAISED: AtomicBool = AtomicBool::new(false);
 /// The largest limits the mods asked for.
@@ -175,9 +195,28 @@ static ASKED: Asked = Asked {
     zones: AtomicU32::new(VANILLA_ZONES),
     bases: AtomicU32::new(MAX_BASES),
 };
-/// How many bases the running grouping may start, per bases object kind:
-/// set at its first new base, 16 until then.
-static PLANNED: [AtomicUsize; 2] = [const { AtomicUsize::new(MAX_GROUPED) }; 2];
+/// How many bases the game's own grouping may start, per bases object kind:
+/// set at its first new base, at most the array's 16, 16 until then.
+static PLANNED: [AtomicUsize; 2] = [const { AtomicUsize::new(window::VANILLA) }; 2];
+
+/// The per-kind state's index for a `kind` object.
+fn kind_index(kind: Kind) -> usize {
+    usize::from(kind == Kind::Server)
+}
+
+/// Whether bases past 16 are armed, on top of the raised zones.
+fn past_16() -> bool {
+    raised() && past16::armed()
+}
+
+/// The most bases any grouping holds now.
+fn most_bases() -> usize {
+    if past_16() {
+        window::MOST
+    } else {
+        window::VANILLA
+    }
+}
 
 /// The largest limits the mods asked for, each at least the game's own.
 #[derive(Debug)]
@@ -199,9 +238,15 @@ impl Asked {
         }
     }
 
-    fn bases(&self) -> usize {
-        usize::try_from(self.bases.load(Ordering::Relaxed))
-            .map_or(MAX_GROUPED, |n| n.min(MAX_GROUPED))
+    /// The most bases a grouping on a `kind` object holds: what was asked
+    /// on the server, every base the game can hold on the client.
+    fn bases(&self, kind: Kind) -> usize {
+        let asked = usize::try_from(self.bases.load(Ordering::Relaxed)).unwrap_or(usize::MAX);
+        window::cap(kind, asked, most_bases())
+    }
+
+    fn asked_past_16(&self) -> bool {
+        self.bases.load(Ordering::Relaxed) > MAX_BASES
     }
 }
 
@@ -278,9 +323,28 @@ pub(crate) fn add_limit(
 /// largest request once every hook is armed.
 pub(crate) fn base_limit() -> Limits {
     if raised() {
-        ASKED.limits()
+        let asked = ASKED.limits();
+        Limits {
+            bases: asked
+                .bases
+                .min(u32::try_from(most_bases()).unwrap_or(MAX_BASES)),
+            ..asked
+        }
     } else {
         Limits::VANILLA
+    }
+}
+
+/// The most a mod may ask for: every listed zone in every base the window
+/// holds, or the game's 16 bases once arming found them out of reach.
+pub(crate) fn most() -> Limits {
+    if past16::settled() && !past_16() {
+        Limits {
+            bases: MAX_BASES,
+            ..Limits::MOST
+        }
+    } else {
+        Limits::MOST
     }
 }
 
@@ -328,7 +392,10 @@ fn find(loader: &Loader) -> Status {
                 cursor: at(sites.cursor),
                 ..sites
             });
-            let _first = ZONES.set(ArcSwap::from_pointee(Zones::default()));
+            let _first = ZONES.set([
+                ArcSwap::from_pointee(Zones::default()),
+                ArcSwap::from_pointee(Zones::default()),
+            ]);
             Status::OK
         }
         Err(reason) => {
@@ -383,11 +450,12 @@ fn find_sites(code: &[u8], fields: Fields) -> Result<Sites, String> {
 
 /// Settles, before arming writes anything, whether the limit is raised:
 /// every site among the `hooked` targets.
-pub(crate) fn arming(hooked: &[u64]) {
+pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]) {
     let raised = SITES
         .get()
         .is_some_and(|sites| sites.targets().iter().all(|at| hooked.contains(at)));
     RAISED.store(raised, Ordering::Release);
+    past16::arming(patches, verdicts, hooked);
 }
 
 fn raised() -> bool {
@@ -399,16 +467,30 @@ pub(crate) fn zones() -> Option<(u32, u32)> {
     if !raised() {
         return None;
     }
-    let count = ZONE_COUNT.load(Ordering::Relaxed);
-    let known = ZONES.get()?;
-    (count != u32::MAX).then(|| (count, known.load().bases))
+    let (count, known) = known()?;
+    Some((count, known.bases))
+}
+
+/// The last grouping's zone count and zones: the server's, which decides,
+/// or the client's on a client that hosts none.
+fn known() -> Option<(u32, Arc<Zones>)> {
+    let zones = ZONES.get()?;
+    [Kind::Server, Kind::Client].into_iter().find_map(|kind| {
+        let at = kind_index(kind);
+        let count = ZONE_COUNT[at].load(Ordering::Relaxed);
+        (count != u32::MAX).then(|| (count, zones[at].load_full()))
+    })
 }
 
 pub(crate) fn forget() {
     if let Some(zones) = ZONES.get() {
-        zones.store(Arc::new(Zones::default()));
+        for kind in zones {
+            kind.store(Arc::new(Zones::default()));
+        }
     }
-    ZONE_COUNT.store(u32::MAX, Ordering::Relaxed);
+    for count in &ZONE_COUNT {
+        count.store(u32::MAX, Ordering::Relaxed);
+    }
     members::forget();
 }
 
@@ -479,6 +561,9 @@ pub(crate) fn link(loader: &'static Loader) {
             asked.zones,
             asked.bases
         );
+        if ASKED.asked_past_16() {
+            past16::link(loader, sites.fields);
+        }
     } else {
         crate::log!(WARN, "bases keep 16 altar zones: a link was refused");
     }
@@ -534,11 +619,10 @@ fn chain_limit<'a>(
 }
 
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
-    if let Some(planned) = (!bases.is_null())
-        // SAFETY: `bases` is the grouping's own, non-null bases object.
-        .then(|| &PLANNED[unsafe { kind(bases) }])
-    {
-        planned.store(MAX_GROUPED, Ordering::Relaxed);
+    // SAFETY: `bases` is the grouping's own bases object when not null.
+    let kind = (!bases.is_null()).then(|| unsafe { side_of(bases) });
+    if let Some(kind) = kind {
+        PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
     }
     if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null()) {
         // SAFETY: `bases` is the grouping's own live object, non-null by the
@@ -551,20 +635,51 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     // holds the next function of that signature; the game's arguments pass
     // unchanged.
     unsafe { GROUP_NEXT.get()(bases, world) };
-    let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null()) else {
+    let (Some(sites), Some(kind)) = (SITES.get().filter(|_| raised()), kind) else {
         return;
     };
-    // SAFETY: `bases` is non-null by the filter before it and is the bases
+    // SAFETY: `bases` is non-null, since `kind` is known, and is the bases
     // object the grouping has just filled, on the grouping's thread; the
     // game's new base code is what `ADD_BASE_NEXT` holds past our link.
     let settled = BASES_FUSE.run("the base grouping", || unsafe {
-        members::settle(bases, sites.fields, ASKED.bases(), ADD_BASE_NEXT.get())
+        regroup(bases, kind, sites)
     });
-    match settled.flatten() {
-        // SAFETY: `bases` is non-null by the filter and is the object the
-        // game's grouping and `settle` have just filled, on this thread.
-        Some(grouped) => unsafe { keep(bases, sites.fields, &grouped) },
-        None => BASES_FUSE.blow("the base grouping's count"),
+    if let Some(grouped) = settled.flatten() {
+        // SAFETY: `bases` is non-null and is the object the game's grouping
+        // and `settle` have just filled, on this thread.
+        unsafe { keep(bases, kind, sites.fields, &grouped) };
+    } else {
+        Side::of(kind).forget();
+        BASES_FUSE.blow("the base grouping's count");
+    }
+}
+
+/// Releases the window records of `bases`, as the game's grouping has just
+/// released its own, and settles our grouping on it.
+///
+/// # Safety
+///
+/// - `bases` is the live `kind` object the game's grouping has just filled,
+///   on the grouping's thread.
+unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> {
+    let window = past16::sites().map(past16::Sites::code);
+    let ready = window.and_then(|code| {
+        // SAFETY: the caller guarantees the live object on the grouping's
+        // thread, which no reader runs beside.
+        unsafe { lifecycle::release(bases, &code) };
+        // SAFETY: the same object, live while `settle` uses the answer.
+        unsafe { lifecycle::ready(bases, code) }
+    });
+    // SAFETY: the caller's guarantees; `ready` is there only for an object
+    // whose window `release` has just released.
+    unsafe {
+        members::settle(
+            bases,
+            sites.fields,
+            ASKED.bases(kind),
+            ADD_BASE_NEXT.get(),
+            ready.as_ref().map(|f| f as &dyn Fn(usize)),
+        )
     }
 }
 
@@ -574,8 +689,8 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
 ///
 /// - `bases` is the non-null bases object the grouping has just filled,
 ///   live for the call, on the grouping's thread.
-unsafe fn keep(bases: *const u8, fields: Fields, grouped: &Grouped) {
-    let Some(known) = ZONES.get() else {
+unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) {
+    let Some(known) = ZONES.get().map(|zones| &zones[kind_index(kind)]) else {
         return;
     };
     // SAFETY: `keep`'s caller guarantees a live object just grouped, on the
@@ -587,10 +702,17 @@ unsafe fn keep(bases: *const u8, fields: Fields, grouped: &Grouped) {
         based: grouped.iter().any(|base| base.zones.contains(i)),
     };
     let count = u32::try_from(grouped.len()).unwrap_or(u32::MAX);
-    ZONE_COUNT.store(
+    ZONE_COUNT[kind_index(kind)].store(
         u32::try_from(listed).unwrap_or(u32::MAX - 1),
         Ordering::Relaxed,
     );
+    if grouped.len() > window::VANILLA {
+        let entered = members::take_entries_while_lent();
+        crate::log!(
+            DEBUG,
+            "{count} bases grouped; whole-array calls while the count was lent: {entered}"
+        );
+    }
     let current = known.load();
     if current.bases == count
         && current.zones.len() == listed
@@ -609,7 +731,7 @@ unsafe fn keep(bases: *const u8, fields: Fields, grouped: &Grouped) {
             crate::log!(
                 WARN,
                 "{listed} altar zones in {count} bases: {apart} stand apart from every base, since the game holds {} bases; they allow building but no base features until they touch a base's zone",
-                ASKED.bases()
+                ASKED.bases(kind)
             );
         } else {
             crate::log!(INFO, "{listed} altar zones in {count} bases");
@@ -630,18 +752,19 @@ unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) 
         let started = unsafe { read_at::<u32>(bases, count) };
         // SAFETY: `bases` is non-null by the filter and is the live object
         // the grouping passes to its new base code.
-        let planned = &PLANNED[unsafe { kind(bases) }];
+        let kind = unsafe { side_of(bases) };
+        let planned = &PLANNED[kind_index(kind)];
         if started == 0
             && let Some(fields) = SITES.get().map(|sites| sites.fields)
         {
             // SAFETY: the game's grouping calls the new base code only after
             // it refilled the object's zone list, on its own thread.
             let plan = BASES_FUSE.run("the base plan", || unsafe {
-                members::planned(bases, fields, ASKED.bases())
+                members::planned(bases, fields, ASKED.bases(kind))
             });
-            planned.store(plan.unwrap_or(MAX_GROUPED), Ordering::Relaxed);
+            planned.store(plan.unwrap_or(window::VANILLA), Ordering::Relaxed);
         }
-        let limit = planned.load(Ordering::Relaxed).min(MAX_GROUPED);
+        let limit = planned.load(Ordering::Relaxed).min(window::VANILLA);
         if usize::try_from(started).map_or(true, |n| n >= limit) {
             return;
         }
@@ -705,7 +828,7 @@ unsafe extern "system" fn in_base(bases: *const u8, i: u64, point: *const [f32; 
     // SAFETY: the lookup's own object, live, on a thread beside no grouping.
     let game = unsafe { view(bases) };
     if let (Some(p), Some(game), Ok(i)) = (p, game, usize::try_from(i))
-        && i < crate::base_groups::lookup::Bases::count(&game)
+        && game.holds_index(i)
         && let Some(inside) = BASES_FUSE.run("a base lookup", || members::in_base(&game, i, p))
     {
         return inside;
@@ -789,69 +912,8 @@ unsafe extern "system" fn check(
     // SAFETY: the cursor's own arguments, each non-null by the check before it,
     // on the cursor's thread after the original ran.
     let _done = BASES_FUSE.run("the placement check", || unsafe {
-        refuse_past_limit(flags, ctx, transform, item);
+        cursor::refuse_past_limit(flags, ctx, transform, item);
     });
-}
-
-/// Sets the cursor's "too many altars" bit for an altar whose zone would
-/// stand apart from every base once the game holds as many as it may.
-///
-/// # Safety
-///
-/// - `flags`, `ctx`, `transform` and `item` are the placement cursor's
-///   own, non-null arguments, live for the call.
-/// - Called on the cursor's thread after the original ran, which alone
-///   writes `flags` meanwhile.
-unsafe fn refuse_past_limit(
-    flags: *mut u32,
-    ctx: *const u8,
-    transform: *const i64,
-    item: *const u8,
-) {
-    let (Some(sites), Some(known), Some(engine)) =
-        (SITES.get(), ZONES.get(), crate::ecs::resolved())
-    else {
-        return;
-    };
-    let fields = sites.fields;
-    // SAFETY: the caller guarantees the cursor's live item definition; its
-    // u8 altar flag sits at the build table's `bases.item_altar`.
-    let altar = unsafe { read_at::<u8>(item, fields.item_altar) } != 0;
-    // SAFETY: the caller guarantees the cursor's live u32 flags word.
-    let reached =
-        unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } & fields.max_altars_reached;
-    if !altar || reached != 0 {
-        return;
-    }
-    let zones = known.load();
-    let most = u32::try_from(ASKED.bases()).unwrap_or(MAX_BASES);
-    if zones.bases < most {
-        return;
-    }
-    // SAFETY: the caller guarantees the cursor's live context; its balancing
-    // registry word sits at the offset the `CURSOR_ALTAR` pattern read from
-    // the cursor's own code.
-    let balancing = unsafe { read_at::<u64>(ctx, sites.balancing) };
-    if balancing == 0 {
-        return;
-    }
-    // SAFETY: `balancing` is the running cursor's non-zero balancing
-    // registry word, used on the cursor's thread.
-    let Some(size) = (unsafe { engine.zone_size(balancing, 1) }) else {
-        return;
-    };
-    // SAFETY: the caller guarantees the cursor's live transform, which
-    // starts with the position, three i64.
-    let fixed = unsafe { read_at::<[i64; 3]>(transform.cast(), 0) };
-    let candidate = limit::candidate(enshwick::ecs::metres(fixed), size);
-    if zones.refuses(&candidate, most) {
-        // SAFETY: the caller guarantees the cursor's live u32 flags word.
-        let refused =
-            unsafe { read_at::<u32>(flags.cast_const().cast(), 0) } | fields.max_altars_reached;
-        // SAFETY: the caller guarantees the cursor's live u32 flags word,
-        // which only the cursor's thread writes meanwhile.
-        unsafe { write_at(flags.cast(), 0, refused) };
-    }
 }
 
 #[cfg(test)]
