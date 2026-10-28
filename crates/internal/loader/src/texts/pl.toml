@@ -280,3 +280,6 @@
 "join.dialog.restart" = "Wyłączone w tej grze; uruchom ją ponownie:"
 "join.note.off" = "Ten serwer nie uruchamia tych modów Enshwick, więc są wyłączone do ponownego uruchomienia gry:"
 "join.note.loader" = "Ten serwer uruchamia Enshwick z tymi samymi modami, ale z inną wersją loadera. Zainstaluj wersję serwera, inaczej coś może nie działać."
+"menu.line" = "Enshwick {version} · mody: {mods}"
+"menu.line.off" = "Enshwick {version} · mody: {mods}, wyłączone: {off}"
+"menu.line.lacking" = "{line} · część funkcji jest wyłączona w tej wersji gry"

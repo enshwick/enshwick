@@ -34,6 +34,11 @@ pub(crate) enum Primitive {
     Bool,
     Guid,
     Entity,
+    ItemId,
+    RecipeId,
+    KnowledgeId,
+    SkillNode,
+    PlayerKey,
 }
 
 impl Primitive {
@@ -52,6 +57,11 @@ impl Primitive {
             "bool" => Self::Bool,
             "guid" => Self::Guid,
             "entity" => Self::Entity,
+            "item_id" => Self::ItemId,
+            "recipe_id" => Self::RecipeId,
+            "knowledge_id" => Self::KnowledgeId,
+            "skill_node" => Self::SkillNode,
+            "player_key" => Self::PlayerKey,
             _ => return None,
         })
     }
@@ -60,8 +70,15 @@ impl Primitive {
         match self {
             Self::U8 | Self::I8 | Self::Bool => 1,
             Self::U16 | Self::I16 => 2,
-            Self::U32 | Self::I32 | Self::F32 | Self::Entity => 4,
-            Self::U64 | Self::I64 | Self::F64 => 8,
+            Self::U32
+            | Self::I32
+            | Self::F32
+            | Self::Entity
+            | Self::ItemId
+            | Self::RecipeId
+            | Self::KnowledgeId
+            | Self::SkillNode => 4,
+            Self::U64 | Self::I64 | Self::F64 | Self::PlayerKey => 8,
             Self::Guid => 16,
         }
     }
@@ -262,18 +279,21 @@ pub(crate) fn decode(
                 Primitive::I8 => LuaValue::Number(f64::from(i8::from_le_bytes([raw[0]]))),
                 Primitive::U16 => LuaValue::Number(f64::from(u16::from_le_bytes([raw[0], raw[1]]))),
                 Primitive::I16 => LuaValue::Number(f64::from(i16::from_le_bytes([raw[0], raw[1]]))),
-                Primitive::U32 | Primitive::Entity => {
-                    LuaValue::Number(f64::from(u32::from_le_bytes([
-                        raw[0], raw[1], raw[2], raw[3],
-                    ])))
-                }
+                Primitive::U32
+                | Primitive::Entity
+                | Primitive::ItemId
+                | Primitive::RecipeId
+                | Primitive::KnowledgeId
+                | Primitive::SkillNode => LuaValue::Number(f64::from(u32::from_le_bytes([
+                    raw[0], raw[1], raw[2], raw[3],
+                ]))),
                 Primitive::I32 => LuaValue::Number(f64::from(i32::from_le_bytes([
                     raw[0], raw[1], raw[2], raw[3],
                 ]))),
                 Primitive::F32 => LuaValue::Number(f64::from(f32::from_le_bytes([
                     raw[0], raw[1], raw[2], raw[3],
                 ]))),
-                Primitive::U64 => {
+                Primitive::U64 | Primitive::PlayerKey => {
                     LuaValue::String(lua.create_string(u64::from_le_bytes(le8(&word)).to_string())?)
                 }
                 Primitive::I64 => {
@@ -389,7 +409,12 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
                 .unwrap_or(0)
                 .to_le_bytes(),
         ),
-        Primitive::U32 | Primitive::Entity => out.copy_from_slice(
+        Primitive::U32
+        | Primitive::Entity
+        | Primitive::ItemId
+        | Primitive::RecipeId
+        | Primitive::KnowledgeId
+        | Primitive::SkillNode => out.copy_from_slice(
             &u32::try_from(whole(0.0, f64::from(u32::MAX))?)
                 .unwrap_or(0)
                 .to_le_bytes(),
@@ -405,7 +430,7 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
         )]
         Primitive::F32 => out.copy_from_slice(&(number()? as f32).to_le_bytes()),
         Primitive::F64 => out.copy_from_slice(&number()?.to_le_bytes()),
-        Primitive::U64 => {
+        Primitive::U64 | Primitive::PlayerKey => {
             let n: u64 = digits(value)?.parse().map_err(|_| wrong("a 64-bit key"))?;
             out.copy_from_slice(&n.to_le_bytes());
         }
@@ -451,6 +476,11 @@ impl Primitive {
             Self::Bool => bool::SHAPE,
             Self::Guid => enshwick::content::Guid::SHAPE,
             Self::Entity => enshwick::Entity::SHAPE,
+            Self::ItemId => enshwick::ItemId::SHAPE,
+            Self::RecipeId => enshwick::RecipeId::SHAPE,
+            Self::KnowledgeId => enshwick::knowledge::KnowledgeId::SHAPE,
+            Self::SkillNode => enshwick::world::SkillNode::SHAPE,
+            Self::PlayerKey => enshwick::PlayerKey::SHAPE,
         }
     }
 
@@ -484,6 +514,11 @@ mod tests {
             Primitive::Bool,
             Primitive::Guid,
             Primitive::Entity,
+            Primitive::ItemId,
+            Primitive::RecipeId,
+            Primitive::KnowledgeId,
+            Primitive::SkillNode,
+            Primitive::PlayerKey,
         ])
     }
 
@@ -584,6 +619,66 @@ mod tests {
         assert!(PointDesc::parse(&description(&lua, "override", "u32", right ^ 1)).is_err());
         assert!(PointDesc::parse(&description(&lua, "override", "u8", right)).is_err());
         assert!(PointDesc::parse(&description(&lua, "observe", "u8", 7)).is_ok());
+    }
+
+    #[test]
+    fn a_changing_link_answers_an_id_type_with_its_own_hash() {
+        use enshwick::Shape;
+        let lua = Lua::new();
+        let ids = [
+            ("item_id", enshwick::ItemId::SHAPE, 4),
+            ("recipe_id", enshwick::RecipeId::SHAPE, 4),
+            ("knowledge_id", enshwick::knowledge::KnowledgeId::SHAPE, 4),
+            ("skill_node", enshwick::world::SkillNode::SHAPE, 4),
+            ("player_key", enshwick::PlayerKey::SHAPE, 8),
+        ];
+        for (read, shape, size) in ids {
+            let hash = enshwick::services::layout_hash("output", shape, size, size, 0);
+            let text = format!(
+                r#"return {{ name = "you.post:price", mode = "override", refusable = false,
+                    input = {{ size = 4, fields = {{}} }},
+                    output = {{ size = {size}, hash = "{hash}", read = "{read}" }} }}"#
+            );
+            let table: Table = lua.load(text).eval().unwrap();
+            assert!(PointDesc::parse(&table).is_ok(), "{read}");
+            let as_integer = if size == 4 { "u32" } else { "u64" };
+            let text = format!(
+                r#"return {{ name = "you.post:price", mode = "override", refusable = false,
+                    input = {{ size = 4, fields = {{}} }},
+                    output = {{ size = {size}, hash = "{hash}", read = "{as_integer}" }} }}"#
+            );
+            let table: Table = lua.load(text).eval().unwrap();
+            assert!(
+                PointDesc::parse(&table).is_err(),
+                "{read} claimed as {as_integer}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_id_reads_and_writes_as_its_number() {
+        let lua = Lua::new();
+        for p in [
+            Primitive::ItemId,
+            Primitive::RecipeId,
+            Primitive::KnowledgeId,
+            Primitive::SkillNode,
+        ] {
+            let read = Read::Primitive(p);
+            let mut bytes = [0u8; 4];
+            encode(&LuaValue::Number(1_042.0), &read, &mut bytes, 0).unwrap();
+            assert_eq!(bytes, 1_042_u32.to_le_bytes(), "{p:?}");
+            assert_eq!(
+                decode(&lua, &bytes, 0, &read).unwrap(),
+                LuaValue::Number(1_042.0)
+            );
+        }
+        let key = Read::Primitive(Primitive::PlayerKey);
+        let mut bytes = [0u8; 8];
+        let text = LuaValue::String(lua.create_string(u64::MAX.to_string()).unwrap());
+        encode(&text, &key, &mut bytes, 0).unwrap();
+        assert_eq!(bytes, u64::MAX.to_le_bytes());
+        assert_eq!(decode(&lua, &bytes, 0, &key).unwrap(), text);
     }
 }
 

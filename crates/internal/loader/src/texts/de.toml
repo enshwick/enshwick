@@ -280,3 +280,6 @@
 "join.dialog.restart" = "In diesem Spiel ausgeschaltet; starte es neu:"
 "join.note.off" = "Dieser Server nutzt diese Enshwick-Mods nicht, also sind sie aus, bis du das Spiel neu startest:"
 "join.note.loader" = "Dieser Server nutzt Enshwick mit denselben Mods, aber einer anderen Loader-Version. Installiere die Version des Servers, sonst funktioniert manches vielleicht nicht."
+"menu.line" = "Enshwick {version} · Mods: {mods}"
+"menu.line.off" = "Enshwick {version} · Mods: {mods}, aus: {off}"
+"menu.line.lacking" = "{line} · einige Funktionen sind in dieser Spielversion aus"

@@ -22,9 +22,12 @@ use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
 /// The language the player reads the game in, for a mod's own texts in its
-/// dialogs and windows; the fallback on a server.
+/// dialogs, windows and answers.
 ///
-/// The fallback, too, before the client's first text.
+/// On a server, the language of the player the loader asks the mod about,
+/// such as in an action or a settings check, as that player's game said
+/// when it joined; the fallback elsewhere on a server, and on a client
+/// before its first text.
 ///
 /// # Examples
 ///

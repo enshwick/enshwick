@@ -101,8 +101,9 @@ manifest's `name` and `description` where the file lacks them:
 "mod.description" = "Більше олтарів на рівень Полум'я."
 ```
 
-A server tells joining players the manifest's name of each of its mods, since
-it cannot know their languages.
+A server names its mods to a joining player with Enshwick in that player's
+language, and to a game without Enshwick, which does not say its language,
+with the manifest's name.
 
 ## Texts the mod uses itself
 
@@ -166,9 +167,13 @@ let line = texts.fill("found", language(), &[("count", "3")]);
 assert!(line.contains('3'));
 ```
 
-The server does not know a player's language, and `language()` there is
-`Language::FALLBACK`; an [action](../actions.md)'s request carries the
-language the player's client reads.
+A player's game with Enshwick tells the server its language when it joins.
+On a server, `language()` is that player's language while the loader asks
+the mod about the player, such as an [action](../actions.md) or a check of
+settings the player changes; elsewhere on a server it is
+`Language::FALLBACK`. The loader's own answers to a player follow the
+player's language the same way; its console follows the loader's
+`language` setting ([logging](../logging.md)), English by default.
 [`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.

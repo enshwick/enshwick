@@ -364,11 +364,28 @@ pub enum ConfigError {
     /// The settings type's own check refused the values.
     #[error("{0}")]
     Invalid(String),
+    /// The settings type's own check refused the values with a text of the
+    /// mod's texts, which the player reads in their language.
+    #[error("{key}{}", show_args(args))]
+    Text {
+        /// The key of the text in the mod's texts.
+        key: String,
+        /// The values of the text's `{name}` placeholders, by name.
+        args: Vec<(String, String)>,
+    },
+}
+
+/// `args` as the error shows them in a log: ` (name = value, ...)`.
+fn show_args(args: &[(String, String)]) -> String {
+    if args.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<String> = args.iter().map(|(n, v)| format!("{n} = {v}")).collect();
+    format!(" ({})", shown.join(", "))
 }
 
 impl ConfigError {
-    /// An [`Invalid`](Self::Invalid) with `why`, as the derive wraps a
-    /// `validate` function's error.
+    /// An [`Invalid`](Self::Invalid) with `why`, a reason in one language.
     ///
     /// # Examples
     ///
@@ -380,6 +397,63 @@ impl ConfigError {
     #[must_use]
     pub fn invalid(why: impl core::fmt::Display) -> Self {
         Self::Invalid(why.to_string())
+    }
+
+    /// A [`Text`](Self::Text) refusal: the text of `key` in the mod's texts
+    /// with each `{name}` filled from `args`, shown to each player in their
+    /// language. A `validate` function returns it to explain a refusal in
+    /// every language the mod translates.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::config::ConfigError;
+    ///
+    /// let refused = ConfigError::text("config.too-few", &[("min", "2")]);
+    /// assert_eq!(refused.to_string(), "config.too-few (min = 2)");
+    /// ```
+    #[must_use]
+    pub fn text(key: &str, args: &[(&str, &str)]) -> Self {
+        Self::Text {
+            key: key.to_owned(),
+            args: args
+                .iter()
+                .map(|&(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
+        }
+    }
+
+    /// The reason as the loader reads it from a settings check: a text
+    /// refusal as its key and `name=value` pairs, tab-separated, any other
+    /// as its message.
+    pub(crate) fn to_reason(&self) -> String {
+        let Self::Text { key, args } = self else {
+            return self.to_string();
+        };
+        let mut reason = key.replace('\t', " ");
+        for (name, value) in args {
+            reason.push('\t');
+            reason.push_str(&name.replace(['\t', '='], " "));
+            reason.push('=');
+            reason.push_str(&value.replace('\t', " "));
+        }
+        reason
+    }
+}
+
+impl From<String> for ConfigError {
+    /// An [`Invalid`](ConfigError::Invalid), as a `validate` function's
+    /// `String` error becomes.
+    fn from(why: String) -> Self {
+        Self::Invalid(why)
+    }
+}
+
+impl From<&str> for ConfigError {
+    /// An [`Invalid`](ConfigError::Invalid), as a `validate` function's
+    /// `&str` error becomes.
+    fn from(why: &str) -> Self {
+        Self::Invalid(why.to_owned())
     }
 }
 
@@ -494,7 +568,18 @@ pub enum Scope {
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{Config, ConfigError};
+
+    #[test]
+    fn a_text_refusal_reaches_the_loader_as_its_key_and_values() {
+        let refused = ConfigError::text("config.min", &[("min", "2"), ("of\t=x", "a\tb")]);
+        assert_eq!(refused.to_reason(), "config.min\tmin=2\tof  x=a b");
+        assert_eq!(
+            ConfigError::text("config.off", &[]).to_reason(),
+            "config.off"
+        );
+        assert_eq!(ConfigError::from("plain").to_reason(), "plain");
+    }
 
     /// Test settings.
     #[derive(Debug, Default, PartialEq, serde::Deserialize, serde::Serialize, crate::Config)]

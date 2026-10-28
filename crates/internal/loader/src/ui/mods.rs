@@ -529,7 +529,7 @@ fn server_settings(
                 .and_then(|m| m.texts.relock().clone());
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
-                language: crate::content::language(),
+                language: texts::language(),
             });
             *rows = rows::rows(&heard_schema, &text, None, words);
             if !admin {
@@ -731,7 +731,7 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     let texts = record.texts.relock().clone();
     let words = texts.as_ref().map(|texts| rows::Words {
         texts,
-        language: crate::content::language(),
+        language: texts::language(),
     });
     rows::rows(&schema, &file, None, words)
 }

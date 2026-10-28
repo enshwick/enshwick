@@ -280,3 +280,6 @@
 "join.dialog.restart" = "Bu oyunda kapatıldı; oyunu yeniden başlatın:"
 "join.note.off" = "Bu sunucu bu Enshwick modlarını çalıştırmıyor, bu yüzden oyunu yeniden başlatana kadar kapalılar:"
 "join.note.loader" = "Bu sunucu Enshwick'i aynı modlarla ama başka bir yükleyici sürümüyle çalıştırıyor. Sunucunun sürümünü kurun, yoksa bazı şeyler çalışmayabilir."
+"menu.line" = "Enshwick {version} · mod: {mods}"
+"menu.line.off" = "Enshwick {version} · mod: {mods}, kapalı: {off}"
+"menu.line.lacking" = "{line} · bu oyun sürümünde bazı özellikler kapalı"

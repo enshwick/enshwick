@@ -187,17 +187,16 @@ fn chained(mods_dir: &Path) -> Vec<OtherDll> {
         .collect()
 }
 
-/// Other mods' proxies in the game's folder under a name of
-/// [`crate::others::PROXY_NAMES`], and whether each is loaded.
+/// Other mods' proxies in the game's folder, as
+/// [`crate::others::beside_game`] finds them, and whether each is loaded.
 fn beside(mods_dir: &Path) -> Vec<OtherDll> {
     let Some(game_dir) = mods_dir.parent() else {
         return Vec::new();
     };
-    crate::others::PROXY_NAMES
-        .iter()
-        .filter(|name| game_dir.join(name).is_file())
-        .map(|&name| {
-            let loaded = is_loaded(&game_dir.join(name));
+    crate::others::beside_game(game_dir)
+        .into_iter()
+        .map(|name| {
+            let loaded = is_loaded(&game_dir.join(&name));
             crate::log!(
                 INFO,
                 "{name} beside the game is another mod's proxy{}",
@@ -208,7 +207,7 @@ fn beside(mods_dir: &Path) -> Vec<OtherDll> {
                 }
             );
             OtherDll {
-                file: name.to_owned(),
+                file: name,
                 origin: Origin::Game,
                 loaded,
             }
