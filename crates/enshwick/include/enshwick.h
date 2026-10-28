@@ -2754,6 +2754,20 @@ typedef struct EnshwickMapMarkerInfo {
 // the loader answers `Status::MISSING`.
 typedef uint32_t EnshwickTickHandle;
 
+// The frame of the map of the scene the server runs, as
+// `HostApi::map_frame` writes it: where the
+// map starts and how far it reaches, in metres on the world's x and z.
+typedef struct EnshwickMapFrameInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The map's corner of lowest x and z, in metres, x then z.
+  double origin[2];
+  // How far the map reaches from `origin`, in metres, x then z.
+  double size[2];
+  // The metres one cell of the game's map covers on each axis.
+  double metres_per_cell;
+} EnshwickMapFrameInfo;
+
 // The table of services the loader offers a mod.
 //
 // Fields are only ever appended; a mod checks `Header::covers` before it
@@ -4089,6 +4103,17 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
                                    EnshwickTickHandle handle,
                                    uint64_t every_nanos);
+  // Writes to `out` the frame of the map of the scene the server runs:
+  // the scene's biome map, read from the game's archive once per scene
+  // on a thread of the loader's; `Status::NOT_LOADED` until that read
+  // is done. `out` is the caller's, at least a `Header` and writable
+  // for the size its header states; `Status::BAD_ARGS` for a null or
+  // smaller one. On the server's game thread at a quiet moment
+  // (`Status::WRONG_THREAD` elsewhere or inside a step);
+  // `Status::MISSING` while no world runs, for a scene without a biome
+  // map, or when the scene does not read on this build. A panic in the
+  // loader returns `Status::REFUSED`. Since minor 4.
+  EnshwickStatus (*map_frame)(EnshwickModHandle me, struct EnshwickMapFrameInfo *out);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

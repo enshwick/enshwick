@@ -21,6 +21,8 @@ use crate::content::Id;
 use crate::locks::Relock;
 use crate::{Host, Load, Off};
 
+pub(crate) mod reason;
+
 /// The language the player reads the game in, for a mod's own texts in its
 /// dialogs, windows and answers.
 ///
@@ -417,6 +419,16 @@ impl Texts {
         out
     }
 
+    /// A reason a mod gave as a text, such as [`Off::text`], filled in
+    /// `language`; `None` when its key names no text here.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn reason(&self, reason: &str, language: Language) -> Option<String> {
+        let (key, args) = reason::decode(reason);
+        self.get(key, language)?;
+        Some(self.fill(key, language, &args))
+    }
+
     /// The texts as TOML, a table per language code, as [`Texts::parse`]
     /// reads them.
     ///
@@ -662,6 +674,24 @@ impl Load<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_text_reason_fills_in_the_language_asked_and_plain_words_name_no_text() {
+        let texts = Texts::parse(
+            "[en]\n\"glow.off\" = \"No glow on {build}.\"\n[uk]\n\"glow.off\" = \"Без сяйва на {build}.\"\n",
+        )
+        .unwrap();
+        let sent = reason::encode("glow.off", &[("build", "426")]);
+        assert_eq!(
+            texts.reason(&sent, Language::FALLBACK).as_deref(),
+            Some("No glow on 426.")
+        );
+        assert_eq!(
+            texts.reason(&sent, Language::UK_UA).as_deref(),
+            Some("Без сяйва на 426.")
+        );
+        assert_eq!(texts.reason("glow is missing", Language::UK_UA), None);
+    }
 
     #[test]
     fn every_language_round_trips_through_its_code() {

@@ -212,7 +212,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
             fingerprint.age(),
             errors::UNKNOWN_BUILD
         );
-        crate::holds::enforce(data_dir, &[], true);
+        crate::holds::enforce(data_dir, &[], true, None);
         return None;
     };
     for (name, rva) in build.checks() {
@@ -225,7 +225,7 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
                 "{name} is not where the build table says; nothing loads ({})",
                 errors::TABLE_MISMATCH
             );
-            crate::holds::enforce(data_dir, &[], true);
+            crate::holds::enforce(data_dir, &[], true, None);
             return None;
         }
     }

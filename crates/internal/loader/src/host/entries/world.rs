@@ -153,11 +153,14 @@ pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Sta
             Ok((_, _, record)) => record,
             Err(status) => return status,
         };
+        let texts = record.texts.relock();
         let changed = crate::features::report(
             &mut record.features.relock(),
             name,
             Some(off).filter(|off| !off.is_empty()),
+            texts.as_ref(),
         );
+        drop(texts);
         if let Some(line) = changed {
             let level = if off.is_empty() {
                 Level::INFO
@@ -338,6 +341,22 @@ pub(crate) extern "system" fn map_markers(
         // `capacity` entries of `entry_size` bytes and `count` null or a
         // writable `u32`, untouched by the mod during the call.
         unsafe { crate::host::entries::mods::list(&markers, out, entry_size, capacity, count) }
+    })
+}
+
+pub(crate) extern "system" fn map_frame(
+    me: ModHandle,
+    out: *mut enshwick::abi::MapFrameInfo,
+) -> Status {
+    entry("map_frame", || {
+        match caller(me).and_then(crate::scene::frame_info) {
+            // SAFETY: `HostApi::map_frame` has the mod pass `out` null or
+            // pointing at its version of `MapFrameInfo`, writable for the
+            // size its header states, that no other thread touches during
+            // the call.
+            Ok(info) => unsafe { put_headed(out, info) },
+            Err(status) => status,
+        }
     })
 }
 

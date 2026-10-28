@@ -701,11 +701,13 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 172 * 8);
+    assert!(size_of::<HostApi>() == 24 + 173 * 8);
     assert!(core::mem::offset_of!(HostApi, subscribe_tick) == 24 + 170 * 8);
     assert!(core::mem::offset_of!(HostApi, set_tick_every) == 24 + 171 * 8);
     assert!(size_of::<TickData>() == 8 + 5 * 8);
     assert!(size_of::<TickHandle>() == 4);
+    assert!(core::mem::offset_of!(HostApi, map_frame) == 24 + 172 * 8);
+    assert!(size_of::<MapFrameInfo>() == 8 + 16 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 166 * 8);
     assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 167 * 8);
     assert!(core::mem::offset_of!(HostApi, allowlist_set) == 24 + 168 * 8);
