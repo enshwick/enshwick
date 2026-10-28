@@ -13,6 +13,12 @@ Each entry names the pull request that made the change.
   item tag of the game's Comfort Furniture crafting group; a prop with the
   Decorative tag too stays `Decorative` (#628).
 
+### Changed
+
+- A mod whose `init` returns `Err(Off)` hands the loader its reason: the
+  Mods screen shows it under the mod and the log names it, an `Off::text`
+  in the reader's language.
+
 ## [1.0.0-alpha.10] - 2026-10-28
 
 ### Added

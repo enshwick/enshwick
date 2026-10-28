@@ -96,6 +96,9 @@ pub(crate) struct ModRecord {
     pub(crate) notes: Vec<String>,
     /// Set when the mod is off: refused at init or faulted later.
     pub(crate) off: AtomicBool,
+    /// Why it is off, as the mod or the loader gave it: a text of the mod's
+    /// texts as its key and values, or words.
+    pub(crate) off_reason: Mutex<Option<String>>,
     /// The settings texts handed to the mod.
     pub(crate) settings: Kept,
     /// The join values the mod last reported, as its settings file holds them.
@@ -117,6 +120,16 @@ pub(crate) struct ModRecord {
 }
 
 impl ModRecord {
+    /// Why it is off, in the reader's language where its texts have the
+    /// reason's text; `None` while it runs.
+    pub(crate) fn off_reason_shown(&self) -> Option<String> {
+        let reason = self.off_reason.relock().clone()?;
+        Some(crate::configure::mod_reason(
+            self.texts.relock().as_ref(),
+            &reason,
+        ))
+    }
+
     /// The namespace its bare stat and item-data names take: the first id
     /// it had before a rename, where its data lives, or else its id.
     pub(crate) fn home(&self) -> &str {
@@ -467,15 +480,17 @@ impl Loader {
         if record.off.swap(true, Ordering::AcqRel) {
             return;
         }
+        *record.off_reason.relock() = Some(reason.to_owned());
+        let shown = record.off_reason_shown().unwrap_or_default();
         crate::log::write(
             Level::ERROR,
             &record.id,
-            &format!("off: {reason} ({})", crate::errors::MOD_OFF),
+            &format!("off: {shown} ({})", crate::errors::MOD_OFF),
         );
         if record.pack {
             crate::packs::forget(&record.id);
         }
-        crate::diag::turned_off(&record.id, reason);
+        crate::diag::turned_off(&record.id, &shown);
         // A poisoned lock still holds the chains: the mod must be wired past.
         let chains = self.chains.relock();
         let faulted = |owner: ModIndex| {

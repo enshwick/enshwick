@@ -282,7 +282,9 @@ and changes to game data rather than code, are not seen.
 
 A mod is turned off when:
 
-- `init` returns `Err(Off)`: the mod's log has a warning `off: <reason>`;
+- `init` returns `Err(Off)`: the log has an error `off: <reason>`, and the
+  Mods screen shows the reason under the mod, in the reader's language for
+  an `Off::text`;
 - `init` panics: an error `off: init panicked`;
 - a hook, event handler, action, status closure or `ready` panics
   later: an error `off: <what panicked>`.
