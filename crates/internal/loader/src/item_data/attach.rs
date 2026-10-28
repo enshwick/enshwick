@@ -20,7 +20,7 @@ fn index(loader: &Loader, pending: &[Pending]) -> Option<Index> {
         .filter(|record| !record.aside)
         .filter_map(|record| match record.anchor {
             Anchor::Placed(placed) | Anchor::Held { root: placed, .. } => Some(placed.template()),
-            Anchor::Session(_) => None,
+            Anchor::Session(_) | Anchor::Carried { .. } => None,
         })
         .collect();
     if wanted.is_empty() {
