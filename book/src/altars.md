@@ -111,14 +111,14 @@ and `altars::base_limit()` the most the game groups now.
 
 Vanilla accepts a placed object only when both corners of its box lie in one
 zone.
-[`load.on_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
+[`load.on_building_zone_check`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/altars.rs)
 runs a filter when the game refuses one for that reason, with the zones, the
 object's box and the margin in 32.32 fixed-point metres; returning `true`
 accepts it after all.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    load.on_zone_check(|check| {
+    load.on_building_zone_check(|check| {
         check.zones.iter().any(|zone| {
             (0..3).all(|a| zone.min[a] - check.margin <= check.object.min[a] && check.object.max[a] < zone.max[a] + check.margin)
         })

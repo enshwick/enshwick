@@ -4,12 +4,12 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BedCheckFn, BuffTypeInfo, BuildCheckFn,
-    ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo, Event, EventFn,
-    ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn, InventoryResultFn,
-    KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn, NetMessageFn,
-    RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn, SpawnRequest, Status,
-    StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
-    TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront, ZoneCheckFn,
+    BuildingZoneCheckFn, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DaytimeInfo,
+    Event, EventFn, ExperiencePassFn, GameEventFn, Header, HostApi, InteractionFn,
+    InventoryResultFn, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, MidHookFn, ModEventFn,
+    NetMessageFn, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, SkillCheckFn,
+    SpawnRequest, Status, StatusFn, Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
+    TeleportRequest, TerrainEdit, TerrainMaterialInfo, UiAnswerFn, UiFrameFn, WeatherFront,
 };
 use crate::locks::Relock;
 
@@ -40,10 +40,10 @@ use content::{
 use gameplay::{
     account_knowledge, altar_limit_filter, altar_zone_filter, altar_zones_changed, altars,
     altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
-    comfort_filter, craft_filter, damage_filter, experience_filter, grant_knowledge,
-    interaction_filter, knowledge, knowledge_input_filter, quests, raise_base_limit, rate,
-    remove_buff, revoke_knowledge, set_rate, skill_override, summon_filter, summon_item, summoned,
-    survivor_bed_check, survivor_lookup, survivor_status, zone_check_filter,
+    building_zone_check_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
+    grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
+    raise_base_limit, rate, remove_buff, revoke_knowledge, set_rate, skill_override, summon_filter,
+    summon_item, summoned, survivor_bed_check, survivor_lookup, survivor_status,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
@@ -224,7 +224,7 @@ pub(crate) struct State {
     pub(crate) zone_control: bool,
     /// The mod's altar zone filters, and how often it asked for a new sizing.
     pub(crate) zone_sizing: ZoneSizing,
-    pub(crate) zone_filters: Vec<(ZoneCheckFn, usize)>,
+    pub(crate) zone_filters: Vec<(BuildingZoneCheckFn, usize)>,
     pub(crate) survivor_lookup: Option<(SurvivorLookupFn, usize)>,
     pub(crate) bed_checks: Vec<(BedCheckFn, usize)>,
     pub(crate) summons: Vec<(SummonFn, usize)>,
@@ -601,7 +601,7 @@ pub(crate) static TABLE: HostApi = HostApi {
     run_console,
     altars_open,
     altars,
-    zone_check_filter,
+    building_zone_check_filter,
     survivor_lookup,
     survivor_bed_check,
     summon_filter,

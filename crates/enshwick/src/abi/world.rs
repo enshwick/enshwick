@@ -181,7 +181,8 @@ pub struct SpawnRequest {
 
 impl_headed!(SpawnRequest);
 
-/// A player's craft request, handed to the filters registered with
+/// A player's craft request, the game's `CraftRecipeEvent`, handed to the
+/// filters registered with
 /// [`HostApi::craft_filter`](super::HostApi::craft_filter) before the server crafts.
 ///
 /// # Examples
@@ -189,8 +190,8 @@ impl_headed!(SpawnRequest);
 /// ```
 /// use enshwick::abi::{CraftCheck, Header};
 ///
-/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: enshwick::Entity(2), station: enshwick::Entity(0), recipe: enshwick::RecipeId::new(0x51), amount: 3 };
-/// assert_eq!(craft.station, enshwick::Entity(0));
+/// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(0x51), recipe_amount: 3, reserved: 0 };
+/// assert_eq!(craft.crafting_station_id, enshwick::Entity(0));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable)]
@@ -198,13 +199,15 @@ pub struct CraftCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The crafting player's character.
-    pub player: Entity,
+    pub crafting_operator_id: Entity,
     /// The station, or 0 for crafting by hand.
-    pub station: Entity,
+    pub crafting_station_id: Entity,
     /// The recipe id.
-    pub recipe: RecipeId,
+    pub recipe_id: RecipeId,
     /// How many.
-    pub amount: u32,
+    pub recipe_amount: u16,
+    /// Zero.
+    pub reserved: u16,
 }
 
 impl_headed!(CraftCheck);
@@ -319,8 +322,8 @@ impl DaytimeInfo {
 pub struct DamageCheck {
     /// Size and version of this struct.
     pub header: Header,
-    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::SHROUD`],
-    /// [`DamageCheck::SHROUD_DEATH`], [`DamageCheck::DROWNING`],
+    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::FOG`],
+    /// [`DamageCheck::DEADLY_FOG`], [`DamageCheck::DROWNING`],
     /// [`DamageCheck::DROWNING_DEATH`], [`DamageCheck::FREEZING`] or
     /// [`DamageCheck::ADMIN_KILL`].
     pub cause: u32,
@@ -351,9 +354,9 @@ impl DamageCheck {
     /// A fall.
     pub const FALL: u32 = 1;
     /// The shroud draining a character whose time in it ran out.
-    pub const SHROUD: u32 = 2;
+    pub const FOG: u32 = 2;
     /// The deadly shroud, which kills at once.
-    pub const SHROUD_DEATH: u32 = 3;
+    pub const DEADLY_FOG: u32 = 3;
     /// A character out of breath under water.
     pub const DROWNING: u32 = 4;
     /// A creature out of breath under water, which dies at once.

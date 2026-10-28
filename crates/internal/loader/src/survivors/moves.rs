@@ -171,9 +171,9 @@ pub(super) unsafe fn bed_kept(ctx: *const u8) -> bool {
     let entity = unsafe { engine.entity(ecs) };
     let check = BedCheck {
         header: Header::of::<BedCheck>(),
-        survivor: enshwick::abi::NpcId::new(survivor),
+        npc_id: enshwick::abi::NpcId::new(survivor),
         entity: Entity(entity),
-        bed: Entity(bed),
+        bed_id: Entity(bed),
         // SAFETY: `saved` and `transform` are null or the survivor's live
         // components, which the behaviour context holds while it runs.
         home: unsafe { home(saved, transform) },

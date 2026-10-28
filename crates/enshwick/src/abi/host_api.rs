@@ -6,19 +6,19 @@ use core::ffi::c_void;
 use crate::abi::{
     AccountActionType, ActionFn, ActiveBuff, AffixDefData, AffixRoll, AltarInfo,
     AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest, BuffTypeInfo,
-    BuildCheckFn, BuildInfo, BuildRights, CallFn, CallSpec, CallerFrame, ChangeId, ChangeOp,
-    ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange, DaytimeInfo,
-    EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
-    FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn,
-    ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites,
-    MapFrameInfo, MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
-    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
-    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
+    BuildCheckFn, BuildInfo, BuildRights, BuildingZoneCheckFn, CallFn, CallSpec, CallerFrame,
+    ChangeId, ChangeOp, ComfortFn, ConfigCheckFn, CraftCheckFn, DamageFilterFn, DataChange,
+    DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
+    ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
+    InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
+    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
+    ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
+    RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
     ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
     TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
+    UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -270,8 +270,11 @@ pub struct HostApi {
     /// box does not lie in one building zone; any filter returning 1 accepts
     /// it after all. Runs on both sides, since a client predicts placement.
     /// Allowed during `enshwick_mod_init` only.
-    pub zone_check_filter:
-        extern "system" fn(me: ModHandle, callback: ZoneCheckFn, user: *mut c_void) -> Status,
+    pub building_zone_check_filter: extern "system" fn(
+        me: ModHandle,
+        callback: BuildingZoneCheckFn,
+        user: *mut c_void,
+    ) -> Status,
     /// Makes `callback` with `user` the answer to the game's survivor
     /// lookups that [`SurvivorLookup`](super::SurvivorLookup) names; one mod at a time
     /// ([`Status::REFUSED`] for another). Runs on the server's worker

@@ -247,19 +247,19 @@ export type PlayerData = {
 export type PlayerDeathData = {
 	--- The player's character; 0 when the account left in the same step.
 	entity: number,
-	--- What killed the player: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
+	--- What killed the player, the game's death cause: 0 a hit, 1 a fall, 2 the shroud, 3 suffocation.
 	cause: number,
-	--- The account, the same number in every session.
+	--- The account, the same number in every session; the name is enshwick's for the game's account id hash.
 	key: string,
 	--- Where, in metres.
 	position: vector,
 	--- For a hit, the template GUID of what dealt it, a creature's or an impact's; zero for other causes.
-	killer: string,
-	--- 1 when the shroud was the deadly kind.
-	deadly_shroud: number,
+	cause_guid: string,
+	--- 1 when the shroud was the deadly kind, which kills at once.
+	was_deadly_fog: number,
 	--- 1 when the player drowned.
 	drowned: number,
-	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none.
+	--- For a hit, the attacker of the last hit the player took, from its `HitHistory`, as `EntityDiedEvent` reads it; 0 for other causes, or when the history names none. The name is enshwick's.
 	killer_entity: number,
 }
 

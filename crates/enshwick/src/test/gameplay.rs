@@ -6,6 +6,7 @@ use crate::abi::AltarLimit;
 use crate::abi::AltarZone;
 use crate::abi::BedCheck;
 use crate::abi::Bounds;
+use crate::abi::BuildingZoneCheck;
 use crate::abi::Comfort;
 use crate::abi::ExperiencePass;
 use crate::abi::ExperienceRow;
@@ -15,7 +16,6 @@ use crate::abi::KnowledgeId;
 use crate::abi::SkillCheck;
 use crate::abi::Summon;
 use crate::abi::SurvivorLookup;
-use crate::abi::ZoneCheck;
 
 use super::Installed;
 use super::stats;
@@ -282,8 +282,8 @@ impl Installed {
     #[must_use]
     pub fn zone_check(&self, zones: &[Bounds], object: Bounds, margin: i64) -> bool {
         let filters = table::with(Vec::new(), |s| s.zone_filters.clone());
-        let call = ZoneCheck {
-            header: Header::of::<ZoneCheck>(),
+        let call = BuildingZoneCheck {
+            header: Header::of::<BuildingZoneCheck>(),
             zones: zones.as_ptr(),
             zone_count: zones.len(),
             object,
@@ -371,7 +371,7 @@ impl Installed {
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(1), bed: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
+    /// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(1), bed_id: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
     /// assert!(loader.survivor_bed_check(&check));
     /// ```
     #[must_use]
@@ -737,7 +737,7 @@ impl Installed {
     /// use enshwick::abi::{CraftCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), player: enshwick::Entity(2), station: enshwick::Entity(0), recipe: enshwick::RecipeId::new(1), amount: 1 };
+    /// let craft = CraftCheck { header: Header::of::<CraftCheck>(), crafting_operator_id: enshwick::Entity(2), crafting_station_id: enshwick::Entity(0), recipe_id: enshwick::RecipeId::new(1), recipe_amount: 1, reserved: 0 };
     /// assert!(loader.craft(&craft));
     /// ```
     #[must_use]

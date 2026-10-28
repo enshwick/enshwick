@@ -36,6 +36,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "the fixture pins a release of ABI 3; the first ABI 4 release repins it"]
     fn a_mod_built_against_the_last_release_starts_in_the_current_host() {
         let Some(path) = build_old_mod() else {
             return;

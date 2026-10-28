@@ -97,8 +97,8 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// ```
 /// use enshwick::abi::{BedCheck, Header};
 ///
-/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
-/// assert_eq!(check.bed, enshwick::Entity(4100));
+/// let check = BedCheck { header: Header::of::<BedCheck>(), npc_id: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed_id: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
+/// assert_eq!(check.bed_id, enshwick::Entity(4100));
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
@@ -106,11 +106,11 @@ pub struct BedCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The survivor's id.
-    pub survivor: NpcId,
+    pub npc_id: NpcId,
     /// The survivor's entity.
     pub entity: Entity,
     /// The bed.
-    pub bed: Entity,
+    pub bed_id: Entity,
     /// Where the survivor belongs: its saved spawn cell, or where it stands.
     pub home: [i64; 3],
     /// Where the bed stands.
