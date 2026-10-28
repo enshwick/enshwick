@@ -39,6 +39,8 @@ pub use crate::abi::NpcId;
 
 /// Who asks for a survivor's entity, with what it works on.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See the [module](self).
@@ -149,6 +151,8 @@ impl Lookup {
 }
 
 /// The answer to a [`Lookup`].
+///
+/// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
@@ -328,6 +332,8 @@ unsafe fn read_summon(summon: *const RawSummon) -> Option<Summon> {
 }
 
 /// What a summon filter makes of a staff's use, from [`Load::on_summon`].
+///
+/// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///

@@ -9,7 +9,7 @@
 /// ```
 /// use enshwick::abi::RateId;
 ///
-/// assert_ne!(RateId::EXPERIENCE_COMBAT, RateId::WORKSHOP_SPEED);
+/// assert_ne!(RateId::EXPERIENCE_COMBAT, RateId::FACTORY_PRODUCTION_SPEED);
 /// ```
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,11 +21,11 @@ impl RateId {
     /// Experience from mining.
     pub const EXPERIENCE_MINING: Self = Self(2);
     /// Experience from exploration and quests.
-    pub const EXPERIENCE_EXPLORATION: Self = Self(3);
+    pub const EXPERIENCE_EXPLORATION_QUESTS: Self = Self(3);
     /// How fast workshops produce.
-    pub const WORKSHOP_SPEED: Self = Self(4);
+    pub const FACTORY_PRODUCTION_SPEED: Self = Self(4);
     /// How many resources a drop stacks.
-    pub const RESOURCE_DROPS: Self = Self(5);
+    pub const RESOURCE_DROP_STACK_AMOUNT: Self = Self(5);
     /// The comfort furniture gives a base.
     pub const COMFORT: Self = Self(6);
     /// The skill points a character gains per level.

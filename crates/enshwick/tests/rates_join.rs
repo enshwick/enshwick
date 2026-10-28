@@ -18,7 +18,7 @@ mod tests {
             if load.rate(roofs).is_ok() {
                 return Err(enshwick::Off::new("a recipe output rate took without join"));
             }
-            load.rate(Rate::WorkshopSpeed)?;
+            load.rate(Rate::FactoryProductionSpeed)?;
             Ok(Self)
         }
     }
@@ -30,6 +30,6 @@ mod tests {
         let loader = FakeHost::new().install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Alone)`.
         assert_eq!(unsafe { loader.init(enshwick_mod_init) }, Status::REFUSED);
-        assert_eq!(loader.rate(Rate::WorkshopSpeed), None);
+        assert_eq!(loader.rate(Rate::FactoryProductionSpeed), None);
     }
 }

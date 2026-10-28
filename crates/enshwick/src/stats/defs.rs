@@ -3,6 +3,8 @@ use crate::content::items::StatFormat;
 
 /// What a stat's number is.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See [`StatDef`].

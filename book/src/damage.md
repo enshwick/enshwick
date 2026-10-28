@@ -11,8 +11,8 @@ use enshwick::damage::{DamageCause, DamageTypeNew};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on_damage(|damage| match damage.cause() {
-        DamageCause::Fall => damage.cancel(),
-        DamageCause::Hit => damage.scale_type(DamageTypeNew::Poison, 0.5),
+        DamageCause::FallDamage => damage.cancel(),
+        DamageCause::Impact => damage.scale_type(DamageTypeNew::Poison, 0.5),
         _ => {}
     })
 }
@@ -22,11 +22,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 | `cause()` | What deals it | What the filter changes |
 | --- | --- | --- |
-| `Hit` | a weapon, a spell, a creature, an explosion | each damage type |
-| `Fall` | a fall | the amount |
+| `Impact` | a weapon, a spell, a creature, an explosion | each damage type |
+| `FallDamage` | a fall | the amount |
 | `Fog` | the shroud, once a character's time in it ran out | the amount |
 | `DeadlyFog` | the deadly shroud, which kills at once | the amount: the whole health, unless the filter lowers it |
-| `Drowning` | a character out of breath under water | the amount |
+| `Suffocated` | a character out of breath under water | the amount |
 | `DrowningDeath` | a creature out of breath under water, which dies at once | the amount: the whole health, unless the filter lowers it |
 | `Freezing` | a character frozen through, out of body heat | the amount |
 | `AdminKill` | an administrator's kill of chosen enemies, or of whole factions or players | only whether: the amount is 1, and 0 refuses the kill |
@@ -60,7 +60,7 @@ no allocation, no lock, no logging; read only what the mod holds itself, such
 as settings kept in atomics. A filter that panics leaves the damage as it
 was and turns the mod off.
 
-Executions are hits and pass as `Hit`. An administrator's kill zeroes every
+Executions are hits and pass as `Impact`. An administrator's kill zeroes every
 health value of its target at once, so a filter can only let it through or
 refuse it whole. Health the game's scripts set or heal, an entity whose
 lifetime ends, and mining, which wears terrain and buildings by volume

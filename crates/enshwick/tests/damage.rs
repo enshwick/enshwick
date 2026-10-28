@@ -16,10 +16,10 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_damage(|damage| match damage.cause() {
-                DamageCause::Fall => damage.scale(0.5),
+                DamageCause::FallDamage => damage.scale(0.5),
                 DamageCause::DeadlyFog => damage.cancel(),
-                DamageCause::Hit if damage.source() == Some(damage.target()) => damage.cancel(),
-                DamageCause::Hit => {
+                DamageCause::Impact if damage.source() == Some(damage.target()) => damage.cancel(),
+                DamageCause::Impact => {
                     damage.scale_type(DamageTypeNew::MagicalFire, 2.0);
                     let cut = damage.amount(DamageTypeNew::PhysicalCut);
                     damage.set(DamageTypeNew::PhysicalCut, cut.min(10.0));
@@ -51,7 +51,7 @@ mod tests {
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
 
-        let mut hit = check(DamageCheck::HIT, 2, 9);
+        let mut hit = check(DamageCheck::IMPACT, 2, 9);
         hit.amounts[DamageTypeNew::PhysicalCut.index()] = 30.0;
         hit.amounts[DamageTypeNew::MagicalFire.index()] = 5.0;
         hit.amounts[DamageTypeNew::Healing.index()] = 4.0;
@@ -69,7 +69,7 @@ mod tests {
             "healing kept"
         );
 
-        let mut own = check(DamageCheck::HIT, 2, 2);
+        let mut own = check(DamageCheck::IMPACT, 2, 2);
         own.amounts[DamageTypeNew::PhysicalBlunt.index()] = 12.0;
         own.amounts[DamageTypeNew::Healing.index()] = 3.0;
         let after = loader.damage(own);
@@ -82,7 +82,7 @@ mod tests {
             "a cancel keeps healing"
         );
 
-        let mut fall = check(DamageCheck::FALL, 2, 0);
+        let mut fall = check(DamageCheck::FALL_DAMAGE, 2, 0);
         fall.total = 40.0;
         assert!((loader.damage(fall).total - 20.0).abs() < f32::EPSILON);
 

@@ -312,7 +312,7 @@ pub const DAMAGE_TYPES: usize = 13;
 ///
 /// let mut fall = DamageCheck {
 ///     header: Header::of::<DamageCheck>(),
-///     cause: DamageCheck::FALL,
+///     cause: DamageCheck::FALL_DAMAGE,
 ///     target: enshwick::Entity(2),
 ///     source: enshwick::Entity(0),
 ///     attacker: enshwick::Entity(0),
@@ -327,8 +327,8 @@ pub const DAMAGE_TYPES: usize = 13;
 pub struct DamageCheck {
     /// Size and version of this struct.
     pub header: Header,
-    /// [`DamageCheck::HIT`], [`DamageCheck::FALL`], [`DamageCheck::FOG`],
-    /// [`DamageCheck::DEADLY_FOG`], [`DamageCheck::DROWNING`],
+    /// [`DamageCheck::IMPACT`], [`DamageCheck::FALL_DAMAGE`], [`DamageCheck::FOG`],
+    /// [`DamageCheck::DEADLY_FOG`], [`DamageCheck::SUFFOCATED`],
     /// [`DamageCheck::DROWNING_DEATH`], [`DamageCheck::FREEZING`] or
     /// [`DamageCheck::ADMIN_KILL`].
     pub cause: u32,
@@ -355,15 +355,15 @@ impl_headed!(DamageCheck);
 
 impl DamageCheck {
     /// A hit from a weapon, a spell, a creature or an explosion.
-    pub const HIT: u32 = 0;
+    pub const IMPACT: u32 = 0;
     /// A fall.
-    pub const FALL: u32 = 1;
+    pub const FALL_DAMAGE: u32 = 1;
     /// The shroud draining a character whose time in it ran out.
     pub const FOG: u32 = 2;
     /// The deadly shroud, which kills at once.
     pub const DEADLY_FOG: u32 = 3;
     /// A character out of breath under water.
-    pub const DROWNING: u32 = 4;
+    pub const SUFFOCATED: u32 = 4;
     /// A creature out of breath under water, which dies at once.
     pub const DROWNING_DEATH: u32 = 5;
     /// A character frozen through, out of body heat.

@@ -56,9 +56,10 @@ use crate::{Host, Load, Off};
 pub struct Teleport {
     /// Let the game look for a free spot near the target to stand on, as it
     /// does for respawns.
-    pub best_spawn: bool,
+    pub search_best_spawn_position: bool,
     /// The orientation to arrive in, a quaternion `x, y, z, w`; `None`
-    /// keeps the entity's own.
+    /// keeps the entity's own. The name is enshwick's: the game takes a
+    /// whole arrival transform.
     pub facing: Option<[f32; 4]>,
 }
 
@@ -72,7 +73,7 @@ impl Teleport {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            best_spawn: false,
+            search_best_spawn_position: false,
             facing: None,
         }
     }
@@ -83,8 +84,8 @@ impl Teleport {
     ///
     /// See [`Effects::teleport`].
     #[must_use]
-    pub const fn best_spawn(mut self) -> Self {
-        self.best_spawn = true;
+    pub const fn search_best_spawn_position(mut self) -> Self {
+        self.search_best_spawn_position = true;
         self
     }
 
@@ -124,9 +125,10 @@ pub struct Spawn {
     /// the template's own.
     pub level: Option<u32>,
     /// Game time after which the game removes the entity; `None` keeps it.
+    /// The name is enshwick's, not the game's.
     pub despawn_after: Option<core::time::Duration>,
     /// The orientation, a quaternion `x, y, z, w`; `None` for none turned.
-    pub facing: Option<[f32; 4]>,
+    pub orientation: Option<[f32; 4]>,
 }
 
 impl Spawn {
@@ -140,7 +142,7 @@ impl Spawn {
         Self {
             level: None,
             despawn_after: None,
-            facing: None,
+            orientation: None,
         }
     }
 
@@ -173,12 +175,12 @@ impl Spawn {
     /// ```
     /// use enshwick::effects::Spawn;
     ///
-    /// assert!(Spawn::new().facing_yaw(1.0).facing.is_some());
+    /// assert!(Spawn::new().orientation_yaw(1.0).orientation.is_some());
     /// ```
     #[must_use]
-    pub fn facing_yaw(mut self, yaw: f32) -> Self {
+    pub fn orientation_yaw(mut self, yaw: f32) -> Self {
         let half = yaw / 2.0;
-        self.facing = Some([0.0, half.sin(), 0.0, half.cos()]);
+        self.orientation = Some([0.0, half.sin(), 0.0, half.cos()]);
         self
     }
 }
@@ -484,7 +486,7 @@ impl Effects {
     /// use enshwick::effects::{Effects, Teleport};
     ///
     /// fn home(effects: &Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
-    ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn())
+    ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position())
     /// }
     /// ```
     #[cfg(feature = "unstable")]
@@ -495,7 +497,7 @@ impl Effects {
         how: Teleport,
     ) -> Result<(), WorldError> {
         let mut flags = 0;
-        if how.best_spawn {
+        if how.search_best_spawn_position {
             flags |= TeleportRequest::BEST_SPAWN;
         }
         if how.facing.is_some() {
@@ -551,7 +553,7 @@ impl Effects {
             header: Header::of::<SpawnRequest>(),
             template,
             position: crate::ecs::fixed(position),
-            orientation: how.facing.unwrap_or([0.0, 0.0, 0.0, 1.0]),
+            orientation: how.orientation.unwrap_or([0.0, 0.0, 0.0, 1.0]),
             level: how.level.unwrap_or(0),
             reserved: 0,
             lifetime_ns: lifetime,

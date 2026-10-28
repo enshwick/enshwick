@@ -270,7 +270,7 @@ unsafe extern "system" fn hit(registers: *mut Registers, _user: *mut c_void) {
         // the hit's damage vector, `TYPES` floats, at the table's
         // `damage.hit_vector` offset below `rbp`; 1.0 build 1269579.
         let amounts: [f32; TYPES] = unsafe { crate::memory::read(vector, 0) };
-        let mut check = blank(DamageCheck::HIT, target);
+        let mut check = blank(DamageCheck::IMPACT, target);
         // At the site `r12d` holds the root of the hitting impact, the
         // attacker, worked out before it; 1.0 build 1269579.
         let root = low(registers.r12).cast_unsigned();
@@ -322,7 +322,7 @@ unsafe extern "system" fn fall(registers: *mut Registers, _user: *mut c_void) {
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::FALL, target, damage);
+        let damage = filtered(DamageCheck::FALL_DAMAGE, target, damage);
         registers.r9 = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
     });
 }
@@ -389,7 +389,7 @@ unsafe extern "system" fn drowning(registers: *mut Registers, _user: *mut c_void
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::DROWNING, target, damage);
+        let damage = filtered(DamageCheck::SUFFOCATED, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
     });
 }
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn without_filters_damage_stays() {
-        assert_eq!(filtered(DamageCheck::FALL, 1, 40), 40);
+        assert_eq!(filtered(DamageCheck::FALL_DAMAGE, 1, 40), 40);
         assert!(kill_allowed(1));
     }
 }

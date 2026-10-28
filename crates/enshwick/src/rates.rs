@@ -37,7 +37,7 @@ pub enum ExperienceGroup {
     /// Mining.
     Mining,
     /// Exploration, lore, quests and completed item sets.
-    Exploration,
+    ExplorationQuests,
 }
 
 impl ExperienceGroup {
@@ -50,7 +50,7 @@ impl ExperienceGroup {
     /// use enshwick::game_events::ExperienceSourceType;
     /// use enshwick::rates::ExperienceGroup;
     ///
-    /// assert_eq!(ExperienceGroup::of(ExperienceSourceType::Quest), Some(ExperienceGroup::Exploration));
+    /// assert_eq!(ExperienceGroup::of(ExperienceSourceType::Quest), Some(ExperienceGroup::ExplorationQuests));
     /// assert_eq!(ExperienceGroup::of(ExperienceSourceType::None), None);
     /// ```
     #[must_use]
@@ -60,7 +60,7 @@ impl ExperienceGroup {
             Source::Combat => Some(Self::Combat),
             Source::Mining => Some(Self::Mining),
             Source::Exploration | Source::Lore | Source::Quest | Source::ItemSetCompleted => {
-                Some(Self::Exploration)
+                Some(Self::ExplorationQuests)
             }
             _ => None,
         }
@@ -69,12 +69,16 @@ impl ExperienceGroup {
 
 /// What a rate multiplies.
 ///
+/// The type's name is enshwick's. A rate the game has a setting for takes
+/// that setting's name; the others (`Comfort`, `SkillPoints`, `Loot`,
+/// `RecipeOutput`) are enshwick's.
+///
 /// # Examples
 ///
 /// ```
 /// use enshwick::rates::Rate;
 ///
-/// assert_eq!(Rate::from_id(Rate::WorkshopSpeed.id()), Some(Rate::WorkshopSpeed));
+/// assert_eq!(Rate::from_id(Rate::FactoryProductionSpeed.id()), Some(Rate::FactoryProductionSpeed));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -86,9 +90,9 @@ pub enum Rate {
     /// Clients count it too, for the time their screens show, so only a
     /// mod with `join: true` declares it and sets it from a synced setting:
     /// every player on a server then runs the mod with the server's factor.
-    WorkshopSpeed,
+    FactoryProductionSpeed,
     /// How many resources a drop stacks, as the game's own setting does.
-    ResourceDrops,
+    ResourceDropStackAmount,
     /// The comfort each piece of furniture gives a base, rounded to a
     /// whole number; the server decides comfort.
     Comfort,
@@ -117,9 +121,9 @@ impl Rate {
     const SINGLE: &[Self] = &[
         Self::Experience(ExperienceGroup::Combat),
         Self::Experience(ExperienceGroup::Mining),
-        Self::Experience(ExperienceGroup::Exploration),
-        Self::WorkshopSpeed,
-        Self::ResourceDrops,
+        Self::Experience(ExperienceGroup::ExplorationQuests),
+        Self::FactoryProductionSpeed,
+        Self::ResourceDropStackAmount,
         Self::Comfort,
         Self::SkillPoints,
         Self::Loot,
@@ -133,7 +137,7 @@ impl Rate {
     /// ```
     /// use enshwick::rates::Rate;
     ///
-    /// assert!(Rate::all().any(|rate| rate == Rate::WorkshopSpeed));
+    /// assert!(Rate::all().any(|rate| rate == Rate::FactoryProductionSpeed));
     /// ```
     pub fn all() -> impl Iterator<Item = Self> {
         Self::SINGLE
@@ -150,16 +154,18 @@ impl Rate {
     /// use enshwick::abi::RateId;
     /// use enshwick::rates::Rate;
     ///
-    /// assert_eq!(Rate::WorkshopSpeed.id(), RateId::WORKSHOP_SPEED);
+    /// assert_eq!(Rate::FactoryProductionSpeed.id(), RateId::FACTORY_PRODUCTION_SPEED);
     /// ```
     #[must_use]
     pub const fn id(self) -> RateId {
         match self {
             Self::Experience(ExperienceGroup::Combat) => RateId::EXPERIENCE_COMBAT,
             Self::Experience(ExperienceGroup::Mining) => RateId::EXPERIENCE_MINING,
-            Self::Experience(ExperienceGroup::Exploration) => RateId::EXPERIENCE_EXPLORATION,
-            Self::WorkshopSpeed => RateId::WORKSHOP_SPEED,
-            Self::ResourceDrops => RateId::RESOURCE_DROPS,
+            Self::Experience(ExperienceGroup::ExplorationQuests) => {
+                RateId::EXPERIENCE_EXPLORATION_QUESTS
+            }
+            Self::FactoryProductionSpeed => RateId::FACTORY_PRODUCTION_SPEED,
+            Self::ResourceDropStackAmount => RateId::RESOURCE_DROP_STACK_AMOUNT,
             Self::Comfort => RateId::COMFORT,
             Self::SkillPoints => RateId::SKILL_POINTS,
             Self::Loot => RateId::LOOT,
@@ -176,7 +182,7 @@ impl Rate {
     /// use enshwick::abi::RateId;
     /// use enshwick::rates::Rate;
     ///
-    /// assert_eq!(Rate::from_id(RateId::RESOURCE_DROPS), Some(Rate::ResourceDrops));
+    /// assert_eq!(Rate::from_id(RateId::RESOURCE_DROP_STACK_AMOUNT), Some(Rate::ResourceDropStackAmount));
     /// assert_eq!(Rate::from_id(RateId(0)), None);
     /// ```
     #[must_use]
@@ -192,14 +198,14 @@ impl Rate {
     /// ```
     /// use enshwick::rates::{ExperienceGroup, Rate};
     ///
-    /// assert!(Rate::WorkshopSpeed.seen_by_clients() && Rate::SkillPoints.seen_by_clients());
+    /// assert!(Rate::FactoryProductionSpeed.seen_by_clients() && Rate::SkillPoints.seen_by_clients());
     /// assert!(!Rate::Experience(ExperienceGroup::Combat).seen_by_clients());
     /// ```
     #[must_use]
     pub const fn seen_by_clients(self) -> bool {
         matches!(
             self,
-            Self::WorkshopSpeed | Self::SkillPoints | Self::RecipeOutput(_)
+            Self::FactoryProductionSpeed | Self::SkillPoints | Self::RecipeOutput(_)
         )
     }
 }
@@ -310,7 +316,7 @@ impl RateHandle {
     /// use enshwick::rates::{Rate, RateHandle};
     ///
     /// fn is_speed(handle: &RateHandle) -> bool {
-    ///     handle.rate() == Rate::WorkshopSpeed
+    ///     handle.rate() == Rate::FactoryProductionSpeed
     /// }
     /// ```
     #[must_use]
@@ -320,7 +326,7 @@ impl RateHandle {
 
     /// Puts `factor` in force as this mod's factor for the rate: 1 is
     /// vanilla, 2 doubles, 0 takes it all, except where a rate keeps a
-    /// least value ([`Rate::WorkshopSpeed`], [`Rate::Loot`]). The game uses it from the next
+    /// least value ([`Rate::FactoryProductionSpeed`], [`Rate::Loot`]). The game uses it from the next
     /// time it reads the rate. Any thread; neither allocates nor locks once
     /// every mod is initialised.
     ///

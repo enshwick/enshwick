@@ -40,6 +40,16 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: names the game has take its own. `DamageCause::Impact`,
+  `FallDamage` and `Suffocated` (`DamageCheck::IMPACT`, `FALL_DAMAGE`,
+  `SUFFOCATED`) replace `Hit`, `Fall` and `Drowning`;
+  `Rate::FactoryProductionSpeed` and `ResourceDropStackAmount`
+  (`RateId::FACTORY_PRODUCTION_SPEED`, `RESOURCE_DROP_STACK_AMOUNT`) replace
+  `WorkshopSpeed` and `ResourceDrops`; `ExperienceGroup::ExplorationQuests`
+  (`RateId::EXPERIENCE_EXPLORATION_QUESTS`) replaces `Exploration`;
+  `Teleport::search_best_spawn_position` replaces `best_spawn`, and
+  `Spawn::orientation` with `orientation_yaw` replaces `facing` and
+  `facing_yaw`. Names that are enshwick's own say so in their docs (#648).
 - Breaking: `abi::TickData::elapsed_steps()` is gone; read the field of
   the same name. Its accessors no longer guess for loaders of an older
   minor, which the ABI never pairs with a mod, and the ABI docs and the C

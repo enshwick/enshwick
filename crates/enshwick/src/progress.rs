@@ -83,6 +83,8 @@ impl Skill {
 
 /// Which game check asks about a skill node.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See the [module](self).

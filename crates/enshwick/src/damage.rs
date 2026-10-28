@@ -22,8 +22,8 @@
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     load.on_damage(|damage| match damage.cause() {
 //!         // Falls hurt half as much, fire twice as much.
-//!         DamageCause::Fall => damage.scale(0.5),
-//!         DamageCause::Hit => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
+//!         DamageCause::FallDamage => damage.scale(0.5),
+//!         DamageCause::Impact => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
 //!         _ => {}
 //!     })
 //! }
@@ -108,9 +108,9 @@ impl DamageTypeNew {
 
 /// What deals damage.
 ///
-/// The name is enshwick's: the loader's hook points, not a game type. The
-/// shroud's causes take the game's word for it, as its death causes and
-/// damage types do.
+/// The name is enshwick's: the loader's hook points, not a game type. A
+/// cause the game names among its death causes (`DeathCause`) takes that
+/// name; the others are enshwick's and say so.
 ///
 /// # Examples
 ///
@@ -119,21 +119,24 @@ impl DamageTypeNew {
 #[non_exhaustive]
 pub enum DamageCause {
     /// A hit from a weapon, a spell, a creature or an explosion, by type.
-    Hit,
+    Impact,
     /// A fall.
-    Fall,
+    FallDamage,
     /// The shroud draining a character whose time in it ran out.
     Fog,
     /// The deadly shroud, which kills at once.
     DeadlyFog,
     /// A character out of breath under water.
-    Drowning,
-    /// A creature out of breath under water, which dies at once.
+    Suffocated,
+    /// A creature out of breath under water, which dies at once. The name
+    /// is enshwick's, not the game's.
     DrowningDeath,
-    /// A character frozen through, out of body heat.
+    /// A character frozen through, out of body heat. The name is
+    /// enshwick's, not the game's.
     Freezing,
     /// An administrator's kill command: [`Damage::total`] is 1, and the kill
-    /// goes ahead unless a filter [cancels](Damage::cancel) it.
+    /// goes ahead unless a filter [cancels](Damage::cancel) it. The name is
+    /// enshwick's, not the game's.
     AdminKill,
     /// A cause this API does not name.
     Other(u32),
@@ -148,14 +151,14 @@ impl DamageCause {
     /// ```
     /// use enshwick::damage::DamageCause;
     ///
-    /// assert!(DamageCause::NAMED.contains(&DamageCause::Fall));
+    /// assert!(DamageCause::NAMED.contains(&DamageCause::FallDamage));
     /// ```
     pub const NAMED: &[Self] = &[
-        Self::Hit,
-        Self::Fall,
+        Self::Impact,
+        Self::FallDamage,
         Self::Fog,
         Self::DeadlyFog,
-        Self::Drowning,
+        Self::Suffocated,
         Self::DrowningDeath,
         Self::Freezing,
         Self::AdminKill,
@@ -164,11 +167,11 @@ impl DamageCause {
     /// The cause of the ABI's code, as [`DamageCheck`] numbers them.
     const fn from_code(code: u32) -> Self {
         match code {
-            DamageCheck::HIT => Self::Hit,
-            DamageCheck::FALL => Self::Fall,
+            DamageCheck::IMPACT => Self::Impact,
+            DamageCheck::FALL_DAMAGE => Self::FallDamage,
             DamageCheck::FOG => Self::Fog,
             DamageCheck::DEADLY_FOG => Self::DeadlyFog,
-            DamageCheck::DROWNING => Self::Drowning,
+            DamageCheck::SUFFOCATED => Self::Suffocated,
             DamageCheck::DROWNING_DEATH => Self::DrowningDeath,
             DamageCheck::FREEZING => Self::Freezing,
             DamageCheck::ADMIN_KILL => Self::AdminKill,
@@ -293,7 +296,7 @@ impl Damage<'_> {
     ///
     /// See [`Damage::amount`].
     pub const fn set(&mut self, ty: DamageTypeNew, amount: f32) {
-        if self.check.cause == DamageCheck::HIT {
+        if self.check.cause == DamageCheck::IMPACT {
             self.check.amounts[ty.index()] = amount;
         }
     }
@@ -316,7 +319,7 @@ impl Damage<'_> {
     /// ```
     #[must_use]
     pub fn total(&self) -> f32 {
-        if self.check.cause == DamageCheck::HIT {
+        if self.check.cause == DamageCheck::IMPACT {
             DamageTypeNew::ALL
                 .iter()
                 .filter(|&&ty| ty != DamageTypeNew::Healing)
@@ -334,7 +337,7 @@ impl Damage<'_> {
     ///
     /// See the [module](self).
     pub fn scale(&mut self, factor: f32) {
-        if self.check.cause == DamageCheck::HIT {
+        if self.check.cause == DamageCheck::IMPACT {
             for ty in DamageTypeNew::ALL {
                 if ty != DamageTypeNew::Healing {
                     self.check.amounts[ty.index()] *= factor;
@@ -352,7 +355,7 @@ impl Damage<'_> {
     ///
     /// See the [module](self).
     pub fn scale_type(&mut self, ty: DamageTypeNew, factor: f32) {
-        if self.check.cause == DamageCheck::HIT {
+        if self.check.cause == DamageCheck::IMPACT {
             self.check.amounts[ty.index()] *= factor;
         }
     }
