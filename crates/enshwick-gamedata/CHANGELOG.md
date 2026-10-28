@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.11] - 2026-10-28
+
 ### Added
 
 - `COMFORT_FURNITURE_ITEM_TAG` and its row in `RECIPE_KIND_TAGS`; an earlier

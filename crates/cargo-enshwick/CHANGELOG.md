@@ -6,6 +6,14 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.11] - 2026-10-28
+
+### Changed
+
+- `enshwick.d.luau` marks the `world` namespace, `enshwick.caller` and the
+  `PlayerDied` event unstable, and the Rust that `point` and `call` write
+  names `enshwick::abi::SkillNode` (#643, #649).
+
 ## [1.0.0-alpha.10] - 2026-10-28
 
 ### Added
