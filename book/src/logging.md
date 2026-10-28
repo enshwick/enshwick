@@ -172,6 +172,23 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A reason made with `Off::text(key, args)` names a text of the mod's
+[texts](content/texts.md). The Mods screen, the status summary and the log
+show it in the reader's language, with each `{name}` filled from `args`. A
+key with no text shows as the key and its values.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let _texts = load.texts("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
+    let glow = load.feature("glow", |load| {
+        load.symbol("lantern.glow")
+            .map_err(|_| enshwick::Off::text("glow.off", &[("symbol", "lantern.glow")]))
+    });
+    let _ = glow;
+    Ok(())
+}
+```
+
 ## Hook diagnostics
 
 With `diagnostics = true` the loader counts the calls of every hooked
@@ -265,7 +282,9 @@ and changes to game data rather than code, are not seen.
 
 A mod is turned off when:
 
-- `init` returns `Err(Off)`: the mod's log has a warning `off: <reason>`;
+- `init` returns `Err(Off)`: the log has an error `off: <reason>`, and the
+  Mods screen shows the reason under the mod, in the reader's language for
+  an `Off::text`;
 - `init` panics: an error `off: init panicked`;
 - a hook, event handler, action, status closure or `ready` panics
   later: an error `off: <what panicked>`.

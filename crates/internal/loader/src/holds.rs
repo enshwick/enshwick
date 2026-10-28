@@ -8,7 +8,8 @@
 
 use std::path::Path;
 
-use enshwick::state::{HOLD_FILE, WORLDS_DIR};
+use enshwick::i18n::Texts;
+use enshwick::state::{HOLD_FILE, Hold, WORLDS_DIR};
 
 /// How long the log gets to write the reasons before the game stops.
 #[cfg(windows)]
@@ -22,10 +23,31 @@ const EXIT_HELD: u32 = 3;
 pub struct Held {
     /// The mod that set it.
     pub id: String,
-    /// Its reason, with the world for a hold of one world.
+    /// Its reason in the line the mod wrote for readers without its texts.
     pub reason: String,
+    /// Its reason as a text of the mod's texts, when the mod gave one.
+    pub text: Option<String>,
+    /// The key of the world it holds; `None` for a hold of every world.
+    pub world: Option<String>,
     /// Its file, from the `mod-data` folder.
     pub file: String,
+}
+
+impl Held {
+    /// The reason as the log shows it: in the reader's language from the
+    /// mod's `texts` while they are loaded, else the mod's line, with the
+    /// world for a hold of one world.
+    #[must_use]
+    pub fn shown(&self, texts: Option<&Texts>) -> String {
+        let reason = texts
+            .zip(self.text.as_deref())
+            .and_then(|(texts, text)| texts.reason(text, crate::texts::language()))
+            .unwrap_or_else(|| self.reason.clone());
+        match &self.world {
+            Some(world) => format!("{reason}, in world {world}"),
+            None => reason,
+        }
+    }
 }
 
 /// The holds under `mod_data` that count as the loader starts: every data
@@ -36,6 +58,8 @@ pub fn at_start(mod_data: &Path, unknown_build: bool) -> Vec<Held> {
         .into_iter()
         .map(|(id, reason)| Held {
             file: format!("{id}/{HOLD_FILE}"),
+            text: Hold::new(&mod_data.join(&id)).text(),
+            world: None,
             id,
             reason,
         })
@@ -55,7 +79,9 @@ pub fn of_world(mod_data: &Path, world: &str) -> Vec<Held> {
         .into_iter()
         .map(|(id, reason)| Held {
             file: format!("{id}/{WORLDS_DIR}/{world}/{HOLD_FILE}"),
-            reason: format!("{reason}, in world {world}"),
+            text: Hold::for_world(&mod_data.join(&id), world).text(),
+            world: Some(world.to_owned()),
+            reason,
             id,
         })
         .collect()
@@ -72,9 +98,15 @@ pub fn unmet(holds: Vec<Held>, running: &[&str], unknown_build: bool) -> Vec<Hel
 }
 
 /// Stops the game when a hold under `data_dir` that counts at start is
-/// unmet; see [`at_start`] and [`unmet`].
+/// unmet; see [`at_start`] and [`unmet`]. The reasons read in the reader's
+/// language from the texts of the mods `loader` loaded, when there is one.
 #[cfg(windows)]
-pub(crate) fn enforce(data_dir: &Path, running: &[&str], unknown_build: bool) {
+pub(crate) fn enforce(
+    data_dir: &Path,
+    running: &[&str],
+    unknown_build: bool,
+    loader: Option<&crate::host::Loader>,
+) {
     let why = if unknown_build {
         "the game build is unknown, so it would run vanilla"
     } else {
@@ -83,6 +115,7 @@ pub(crate) fn enforce(data_dir: &Path, running: &[&str], unknown_build: bool) {
     stop(
         &unmet(at_start(data_dir, unknown_build), running, unknown_build),
         why,
+        loader,
     );
 }
 
@@ -100,17 +133,26 @@ pub(crate) fn enforce_world(loader: &crate::host::Loader, world: &str) {
     stop(
         &unmet(of_world(&loader.data_dir, world), &running, false),
         "the mod does not run",
+        Some(loader),
     );
 }
 
-/// Logs each hold of `held` with `why` it is unmet and stops the game; does
+/// Logs each hold of `held` with `why` it is unmet, its reason from the
+/// texts of its mod if `loader` loaded them, and stops the game; does
 /// nothing when `held` is empty.
 #[cfg(windows)]
-fn stop(held: &[Held], why: &str) {
+fn stop(held: &[Held], why: &str, loader: Option<&crate::host::Loader>) {
+    use crate::locks::Relock;
     if held.is_empty() {
         return;
     }
-    for Held { id, reason, file } in held {
+    for hold in held {
+        let record = loader.and_then(|loader| loader.mods.iter().find(|m| m.owns(&hold.id)));
+        let reason = match record {
+            Some(record) => hold.shown(record.texts.relock().as_ref()),
+            None => hold.shown(None),
+        };
+        let Held { id, file, .. } = hold;
         crate::log!(
             ERROR,
             "{id} holds this game ({reason}) and {why}: the game stops before the world loads; \
@@ -134,6 +176,8 @@ mod tests {
         Held {
             id: id.to_owned(),
             reason: reason.to_owned(),
+            text: None,
+            world: None,
             file: format!("{id}/{HOLD_FILE}"),
         }
     }
@@ -179,9 +223,52 @@ mod tests {
             ]
         );
         let world = of_world(&data, "world0-aa");
-        assert_eq!(world[0].reason, "17 altars, in world world0-aa");
+        assert_eq!(world[0].shown(None), "17 altars, in world world0-aa");
         assert!(of_world(&data, "world1-bb").is_empty());
         assert!(unmet(world, &["you.altars"], false).is_empty());
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_text_hold_reads_in_the_reader_s_language_and_in_its_line_without_texts() {
+        use enshwick::state::Hold;
+        let data = std::env::temp_dir().join(format!("enshwick-text-holds-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        Hold::for_world(&data.join("you.altars"), "world0-aa")
+            .set_text("17 altars", "hold.altars", &[("altars", "17")])
+            .unwrap();
+        let texts = Texts::parse(
+            "[en]\n\"hold.altars\" = \"{altars} altars\"\n[uk]\n\"hold.altars\" = \"{altars} вівтарів\"\n",
+        )
+        .unwrap();
+        let world = of_world(&data, "world0-aa");
+        assert_eq!(world[0].reason, "17 altars");
+        assert_eq!(world[0].shown(None), "17 altars, in world world0-aa");
+        let uk = Some(enshwick::i18n::Language::UK_UA);
+        assert_eq!(
+            crate::texts::for_reader(uk, || world[0].shown(Some(&texts))),
+            "17 вівтарів, in world world0-aa"
+        );
+        let other = Texts::parse("[en]\nelse = \"Else\"\n").unwrap();
+        assert_eq!(
+            crate::texts::for_reader(uk, || world[0].shown(Some(&other))),
+            "17 altars, in world world0-aa"
+        );
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn an_old_hold_file_of_one_plain_line_still_holds() {
+        let data = std::env::temp_dir().join(format!("enshwick-old-holds-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let dir = data.join("you.stacks");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(HOLD_FILE), "raised stacks").unwrap();
+        let held = at_start(&data, false);
+        assert_eq!(held.len(), 1);
+        assert_eq!(held[0].text, None);
+        assert_eq!(held[0].shown(None), "raised stacks");
+        assert_eq!(unmet(held, &[], false).len(), 1);
         let _gone = std::fs::remove_dir_all(&data);
     }
 }

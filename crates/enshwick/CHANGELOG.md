@@ -11,6 +11,29 @@ Each entry names the pull request that made the change.
 - `voxels::PER_METRE`, the voxels a metre on every axis, which the
   loader's terrain edits now read too (#632).
 
+- `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
+  code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
+  item tag of the game's Comfort Furniture crafting group; a prop with the
+  Decorative tag too stays `Decorative` (#628).
+
+### Changed
+
+- A mod whose `init` returns `Err(Off)` hands the loader its reason: the
+  Mods screen shows it under the mod and the log names it, an `Off::text`
+  in the reader's language.
+
+## [1.0.0-alpha.10] - 2026-10-28
+
+### Added
+
+- `Off::text(key, args)` turns a feature off with a text of the mod's
+  texts: the Mods screen, the status summary and the log show it in the
+  reader's language. A `ConfigError::text` turned into an `Off` stays a
+  text (#630).
+- `Hold::set_text(reason, key, args)` sets a hold whose reason the log
+  shows in the reader's language while the mod's texts are loaded, and as
+  `reason` when they are not; a hold file of one line reads as before
+  (#630).
 - `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
   ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
   events carry them, and a Luau script reads and answers them as
@@ -28,7 +51,7 @@ Each entry names the pull request that made the change.
   the game version leaves features off (#624).
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
-  test holds its texts complete for every offered language.
+  test holds its texts complete for every offered language (#618).
 - Every id type prints as its number (`Display`): `Entity`, `ItemId`,
   `PlayerKey`, `RecipeId`, `AffixId`, `SkillNode` and `KnowledgeId` go
   into a log line as they are (#615).
@@ -95,10 +118,10 @@ Each entry names the pull request that made the change.
   `KnowledgeId`, and `None` for the world (#615).
 - A text missing in a regional language comes from its main variety before
   English: `pt-br` from `pt`, `es-mx` from `es-419` and `es`, `fr-ca` from
-  `fr`, `nb` from `no` (`Language::lookup_order`).
+  `fr`, `nb` from `no` (`Language::lookup_order`) (#618).
 - The loader's own texts sit in a file per language, and every console
   answer, the status summary, the per-mod costs, the conflict report and
-  the interface demo follow the reader's language.
+  the interface demo follow the reader's language (#618).
 - A player's game tells the server its language when it joins; the
   loader's answers, join notes and mod names to that player follow it, and
   on a server `i18n::language()` is that player's language while the loader
@@ -122,7 +145,8 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
-- The Mods screen shows a secret setting as "(secret)" and never its value.
+- The Mods screen shows a secret setting as "(secret)" and never its value
+  (#626).
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

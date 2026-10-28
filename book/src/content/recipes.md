@@ -118,13 +118,15 @@ own item data classes it:
 | `Roof` | `roof` | equipment slot `BlueprintMaterial_Roof`: roof blocks |
 | `Overgrowth` | `overgrowth` | equipment slot `OvergrowthMaterial` |
 | `Terrain` | `terrain` | equipment slot `TerrainMaterial` |
-| `Decorative` | `decorative` | placed props that carry the item tag of the crafting menu's Decorative group: decorations and much of the furniture |
+| `Decorative` | `decorative` | placed props that carry the item tag of the crafting menu's Decorative group: decorations and furniture outside Comfort Furniture |
+| `ComfortFurniture` | `comfort-furniture` | placed props that carry the item tag of the crafting menu's Comfort Furniture group: beds, chairs, tables, lights, braziers, trophies, and a few logic switches and instruments |
 | `Other` | `other` | everything else: equipment, functional props, materials |
 
 Match it with a `_` arm: later versions may add kinds. Prefer it to a debug
 name prefix, which misses recipes whose names break the pattern. The game
-data files a prop under a menu group by its item tag, so `Decorative`
-follows the game's own grouping rather than a name.
+data files a prop under a menu group by its item tag, so `Decorative` and
+`ComfortFurniture` follow the game's own grouping rather than a name. A
+prop with both tags is `Decorative`.
 
 The same kinds pick recipes for a data change, `Recipes::Kind`, and for a
 recipe output rate, `Rate::RecipeOutput`:

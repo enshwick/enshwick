@@ -255,7 +255,8 @@ mod tests {
             RecipeKind::Roof => Some(RecipeKind::Overgrowth),
             RecipeKind::Overgrowth => Some(RecipeKind::Terrain),
             RecipeKind::Terrain => Some(RecipeKind::Decorative),
-            RecipeKind::Decorative => Some(RecipeKind::Other),
+            RecipeKind::Decorative => Some(RecipeKind::ComfortFurniture),
+            RecipeKind::ComfortFurniture => Some(RecipeKind::Other),
             RecipeKind::Other => None,
         }
     }

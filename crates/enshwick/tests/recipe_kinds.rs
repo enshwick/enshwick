@@ -15,6 +15,7 @@ mod tests {
     const PLANK: Guid = Guid::parse("0b6c5a52-1df4-4a3b-bd0e-6c1f7e2a9c44");
     const ROOF: Guid = Guid::parse("1d2c3b4a-5e6f-4a1b-8c2d-3e4f5a6b7c8d");
     const VASE: Guid = Guid::parse("3f4e5d6c-7a8b-4c3d-8e4f-5a6b7c8d9e0f");
+    const CHAIR: Guid = Guid::parse("4a5b6c7d-8e9f-4a0b-9c1d-2e3f4a5b6c7d");
     const CHEST: Guid = Guid::parse("6943053a-32c1-4718-ae22-e61427ddf54d");
     const MOSS: Guid = Guid::parse("2e3d4c5b-6f7a-4b2c-9d3e-4f5a6b7c8d9e");
     const RECIPES: u32 = 1;
@@ -29,7 +30,8 @@ mod tests {
             RecipeKind::Roof => 3,
             RecipeKind::Decorative => 4,
             RecipeKind::Other => 5,
-            _ => 6,
+            RecipeKind::ComfortFurniture => 6,
+            _ => 7,
         }
     }
 
@@ -130,6 +132,7 @@ mod tests {
             .recipe_kind(PLANK, RecipeKind::BuildingBlock)
             .recipe_kind(ROOF, RecipeKind::Roof)
             .recipe_kind(VASE, RecipeKind::Decorative)
+            .recipe_kind(CHAIR, RecipeKind::ComfortFurniture)
             .recipe_kind(MOSS, RecipeKind::Other)
             .install();
         // SAFETY: both functions are the exports of this file's `declare_mod!(Kinds)`.
@@ -137,12 +140,12 @@ mod tests {
         assert_eq!(status, Status::OK);
         let key = RECIPE_REGISTRY.key_by_hash(RECIPES);
         let built = loader
-            .build_resource(&key, &registry(&[PLANK, ROOF, VASE, MOSS, CHEST]))
+            .build_resource(&key, &registry(&[PLANK, ROOF, VASE, CHAIR, MOSS, CHEST]))
             .unwrap();
-        let copies: Vec<(Guid, u32)> = made(&built).into_iter().skip(5).collect();
+        let copies: Vec<(Guid, u32)> = made(&built).into_iter().skip(6).collect();
         assert_eq!(
             copies,
-            [(PLANK, 2), (ROOF, 3), (VASE, 4), (MOSS, 5)],
+            [(PLANK, 2), (ROOF, 3), (VASE, 4), (CHAIR, 6), (MOSS, 5)],
             "the chest's item has no kind yet, so it has no copy"
         );
     }

@@ -113,22 +113,16 @@ pub fn refused(why: &str) -> String {
     texts::fill("refused", &[("why", why)])
 }
 
-/// A mod's reason for refusing its settings, in the reader's language.
+/// A mod's reason, such as for refusing its settings or turning a feature
+/// off, in the reader's language.
 ///
-/// The reason's key names a text of the mod's `texts`, filled from its
-/// tab-separated `name=value` pairs; a reason no text has shows as the mod
-/// gave it.
+/// A reason the mod gave as a text of its `texts` is filled in that
+/// language; a reason no text has shows as the mod gave it.
 #[must_use]
 pub fn mod_reason(texts: Option<&enshwick::i18n::Texts>, why: &str) -> String {
-    let mut parts = why.split('\t');
-    let key = parts.next().unwrap_or_default();
-    let args: Vec<(&str, &str)> = parts.filter_map(|pair| pair.split_once('=')).collect();
-    match texts {
-        Some(texts) if texts.get(key, texts::language()).is_some() => {
-            texts.fill(key, texts::language(), &args)
-        }
-        _ => why.replace('\t', " "),
-    }
+    texts
+        .and_then(|texts| texts.reason(why, texts::language()))
+        .unwrap_or_else(|| why.replace('\t', " "))
 }
 
 /// A mod's settings: one line per setting.

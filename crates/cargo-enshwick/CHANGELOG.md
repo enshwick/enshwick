@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.10] - 2026-10-28
+
 ### Added
 
 - `cargo enshwick point`, `event` and `call` know `KnowledgeId` and
