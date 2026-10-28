@@ -10,6 +10,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Off::text(key, args)` turns a feature off with a text of the mod's
+  texts: the Mods screen, the status summary and the log show it in the
+  reader's language. A `ConfigError::text` turned into an `Off` stays a
+  text (#630).
+- `Hold::set_text(reason, key, args)` sets a hold whose reason the log
+  shows in the reader's language while the mod's texts are loaded, and as
+  `reason` when they are not; a hold file of one line reads as before
+  (#630).
 - `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
   ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
   events carry them, and a Luau script reads and answers them as

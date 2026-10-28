@@ -74,8 +74,9 @@ impl Load<'_> {
 
     /// Runs `init`, the setup of one optional part of the mod, and reports
     /// it to the loader by `name`: on, or off with the reason `init` gave.
-    /// The log, the status summary and the Mods screen show it, and the mod
-    /// keeps running either way.
+    /// The log, the status summary and the Mods screen show it, a reason
+    /// from [`Off::text`] in the reader's language, and the mod keeps
+    /// running either way.
     ///
     /// Everything registered before `init` fails stays, so `init` looks up
     /// what the part needs before it links hooks or adds content.
@@ -96,13 +97,9 @@ impl Load<'_> {
         init: impl FnOnce(&mut Self) -> Result<T, Off>,
     ) -> Option<T> {
         let outcome = init(self);
-        let reason = outcome.as_ref().err().map(ToString::to_string);
+        let reason = outcome.as_ref().err().map_or("", Off::to_reason);
         let host = self.host();
-        let _status = (host.api().feature)(
-            host.handle(),
-            Str::new(name),
-            Str::new(reason.as_deref().unwrap_or("")),
-        );
+        let _status = (host.api().feature)(host.handle(), Str::new(name), Str::new(reason));
         outcome.ok()
     }
 }

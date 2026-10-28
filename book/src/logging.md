@@ -172,6 +172,23 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
+A reason made with `Off::text(key, args)` names a text of the mod's
+[texts](content/texts.md). The Mods screen, the status summary and the log
+show it in the reader's language, with each `{name}` filled from `args`. A
+key with no text shows as the key and its values.
+
+```rust
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let _texts = load.texts("[en]\n\"glow.off\" = \"No glow: {symbol} is missing.\"\n")?;
+    let glow = load.feature("glow", |load| {
+        load.symbol("lantern.glow")
+            .map_err(|_| enshwick::Off::text("glow.off", &[("symbol", "lantern.glow")]))
+    });
+    let _ = glow;
+    Ok(())
+}
+```
+
 ## Hook diagnostics
 
 With `diagnostics = true` the loader counts the calls of every hooked
