@@ -42,52 +42,7 @@ use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 use crate::world::WorldError;
 use crate::{Host, Load};
 
-/// A buff type's id: the FNV-1a 32 hash of its GUID's bytes.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::buffs::BuffTypeId;
-///
-/// assert_eq!(BuffTypeId::from_guid([0; 16]), BuffTypeId::from_guid([0; 16]));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct BuffTypeId(pub u32);
-
-impl BuffTypeId {
-    /// The id of the buff type with GUID `guid`, its 16 bytes as the game
-    /// stores them.
-    ///
-    /// # Examples
-    ///
-    /// See [`BuffTypeId`].
-    #[must_use]
-    pub const fn from_guid(guid: [u8; 16]) -> Self {
-        Self(crate::content::Guid(guid).fnv1a())
-    }
-
-    /// The id of a buff type a mod serves under the content id `id`
-    /// (`<mod>:<name>`); a malformed literal fails the build when used in a
-    /// constant.
-    ///
-    /// # Panics
-    ///
-    /// On a malformed id.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::buffs::BuffTypeId;
-    /// use enshwick::content::Guid;
-    ///
-    /// const WARMTH: BuffTypeId = BuffTypeId::named("my-mod:warmth");
-    /// assert_eq!(WARMTH, BuffTypeId::from_guid(Guid::named("my-mod:warmth").0));
-    /// ```
-    #[must_use]
-    pub const fn named(id: &str) -> Self {
-        Self::from_guid(crate::content::Guid::named(id).0)
-    }
-}
+pub use crate::abi::BuffTypeId;
 
 /// Where an entity holds a buff.
 ///
@@ -269,7 +224,7 @@ impl Buffs {
     pub fn types(&self) -> Vec<BuffType> {
         let blank = BuffTypeInfo {
             header: Header::of::<BuffTypeInfo>(),
-            id: 0,
+            id: BuffTypeId::default(),
             slot: 0,
             flags: 0,
             name: 0,
@@ -282,7 +237,7 @@ impl Buffs {
             .unwrap_or_default()
             .iter()
             .map(|info| BuffType {
-                buff_type_id: BuffTypeId(info.id),
+                buff_type_id: info.id,
                 slot: BuffSlotType::from_slot(info.slot),
                 default_life_time: nanos(info.duration),
                 is_saved: info.flags & BuffTypeInfo::SAVED != 0,
@@ -306,7 +261,7 @@ impl Buffs {
     pub fn of(&self, entity: Entity) -> Result<Vec<Buff>, WorldError> {
         let blank = ActiveBuff {
             header: Header::of::<ActiveBuff>(),
-            id: 0,
+            id: BuffTypeId::default(),
             entity: Entity::NONE,
             slot: 0,
             level: 0,
@@ -319,7 +274,7 @@ impl Buffs {
         Ok(list(blank, fill)?
             .iter()
             .map(|buff| Buff {
-                type_id: BuffTypeId(buff.id),
+                type_id: buff.id,
                 buff_entity_id: buff.entity,
                 slot: BuffSlotType::from_slot(u16::try_from(buff.slot).unwrap_or(u16::MAX)),
                 level: (buff.level != 0).then_some(buff.level),
@@ -372,7 +327,7 @@ impl Buffs {
         let request = BuffRequest {
             header: Header::of::<BuffRequest>(),
             entity,
-            id: id.0,
+            id,
             level: how.level.map_or(0, u32::from),
             reserved: 0,
             duration,
@@ -403,7 +358,7 @@ impl Buffs {
     pub fn remove(&self, entity: Entity, id: BuffTypeId) -> Result<bool, WorldError> {
         let mut removed = 0u8;
         WorldError::check(
-            (self.host.api().remove_buff)(self.host.handle(), entity, id.0, &raw mut removed),
+            (self.host.api().remove_buff)(self.host.handle(), entity, id, &raw mut removed),
             WorldError::Lacks,
         )?;
         Ok(removed != 0)
@@ -453,6 +408,7 @@ mod tests {
     #[test]
     fn a_guid_hashes_as_the_game_hashes_it() {
         // FNV-1a 32 of 16 zero bytes.
-        assert_eq!(BuffTypeId::from_guid([0; 16]), BuffTypeId(0x6969_1905));
+        let zero = crate::content::Guid([0; 16]);
+        assert_eq!(BuffTypeId::from_guid(zero), BuffTypeId::new(0x6969_1905));
     }
 }

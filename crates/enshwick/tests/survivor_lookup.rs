@@ -4,11 +4,11 @@
 mod tests {
     use enshwick::Entity;
     use enshwick::abi::{Status, SurvivorLookup};
-    use enshwick::survivors::{Answer, Purpose, SurvivorId};
+    use enshwick::survivors::{Answer, NpcId, Purpose};
     use enshwick::{Load, Mod, Off};
 
-    const HOMELESS: SurvivorId = SurvivorId(7);
-    const ROAMER: SurvivorId = SurvivorId(8);
+    const HOMELESS: NpcId = NpcId(7);
+    const ROAMER: NpcId = NpcId(8);
 
     struct Housing;
 
@@ -49,6 +49,6 @@ mod tests {
         assert_eq!(status, Status::OK, "{:?}", loader.logs());
         assert_eq!(ask(HOMELESS, None), Answer::Nobody);
         assert_eq!(ask(ROAMER, Some(Entity(11))), Answer::Entity(Entity(11)));
-        assert_eq!(ask(SurvivorId(9), None), Answer::Vanilla);
+        assert_eq!(ask(NpcId(9), None), Answer::Vanilla);
     }
 }

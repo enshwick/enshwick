@@ -35,18 +35,7 @@ mod workshop;
 
 pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
 
-/// A survivor's id, the same for every entity of it.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::survivors::SurvivorId;
-///
-/// let blacksmith = SurvivorId(1_201_801_546);
-/// assert_eq!(blacksmith.0, 1_201_801_546);
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct SurvivorId(pub u32);
+pub use crate::abi::NpcId;
 
 /// Who asks for a survivor's entity, with what it works on.
 ///
@@ -121,7 +110,7 @@ pub enum Purpose {
 #[derive(Debug)]
 pub struct Lookup {
     /// The survivor.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// The game's own answer, if any.
     pub vanilla: Option<Entity>,
     /// Who asks.
@@ -183,7 +172,7 @@ pub enum Answer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BedCheck {
     /// The survivor.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// Its entity.
     pub entity: Entity,
     /// The bed.
@@ -276,7 +265,7 @@ where
         _ => return 0,
     };
     let lookup = Lookup {
-        survivor: SurvivorId(call.survivor),
+        survivor: call.survivor,
         vanilla: (!call.vanilla.is_none()).then_some(call.vanilla),
         purpose,
         bed_of: call.bed_of,
@@ -310,7 +299,7 @@ where
         return 1;
     };
     let call = BedCheck {
-        survivor: SurvivorId(check.survivor),
+        survivor: check.survivor,
         entity: check.entity,
         bed: check.bed,
         home: check.home,
@@ -391,13 +380,13 @@ where
 }
 
 unsafe extern "system" fn run_status<F>(
-    survivor: u32,
+    survivor: NpcId,
     statuses: *const u8,
     count: usize,
     user: *mut c_void,
 ) -> u32
 where
-    F: Fn(SurvivorId, &[u8]) -> Option<u8>,
+    F: Fn(NpcId, &[u8]) -> Option<u8>,
 {
     let statuses = if statuses.is_null() || count == 0 {
         &[][..]
@@ -410,7 +399,7 @@ where
     let shown = crate::host::guard(
         "panic in a survivor status merge",
         || None,
-        || handler(SurvivorId(survivor), statuses),
+        || handler(survivor, statuses),
     );
     shown.map_or(0, |byte| crate::abi::SURVIVOR_STATUS_SET | u32::from(byte))
 }
@@ -574,15 +563,15 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::survivors::SurvivorId;
+    /// use enshwick::survivors::NpcId;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), SurvivorId(1_201_801_546))
+    ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), NpcId(1_201_801_546))
     /// }
     /// ```
-    pub fn add_summon_item(&mut self, item: ItemId, survivor: SurvivorId) -> Result<(), Off> {
+    pub fn add_summon_item(&mut self, item: ItemId, survivor: NpcId) -> Result<(), Off> {
         let host = self.host();
-        let status = (host.api().summon_item)(host.handle(), item, survivor.0);
+        let status = (host.api().summon_item)(host.handle(), item, survivor);
         if status.is_ok() {
             Ok(())
         } else {
@@ -616,7 +605,7 @@ impl Load<'_> {
     /// ```
     pub fn on_survivor_status<F>(&mut self, merge: F) -> Result<(), Off>
     where
-        F: Fn(SurvivorId, &[u8]) -> Option<u8> + Send + Sync + 'static,
+        F: Fn(NpcId, &[u8]) -> Option<u8> + Send + Sync + 'static,
     {
         self.register(
             "the survivor menu merge",

@@ -80,19 +80,19 @@ its drops on later adds them at init and replaces them with none at once.
 chests and every other container that rolls on first opening), `DESTROYED`
 and `CONTAINERS` (corpses and chests); `with` joins two sets.
 
-A loot label id is the FNV-1a hash of an enemy or chest type's label
+Label ids and node ids are `LootContainerId`s, as the game names them; a label id is the FNV-1a hash of an enemy or chest type's label
 collection GUID. `Source::matches` tells whether a
 [`Roll`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/loot/drops.rs)
 comes from a source, which a unit test can check without the game:
 
 ```rust
 use enshwick::Entity;
-use enshwick::loot::{Kinds, Roll, Source};
+use enshwick::loot::{Kinds, LootContainerId, Roll, Source};
 
-let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };
+let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: None, labels: Some(LootContainerId::new(9)), boss: true, locked: false };
 assert!(Source::bosses().matches(&boss));
 assert!(!Source::locked_chests().matches(&boss));
-assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
+assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).matches(&boss));
 ```
 
 ## A worked example: copy staffs

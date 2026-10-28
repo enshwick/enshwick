@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 3
+#define ENSHWICK_ABI_MINOR 4
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -136,12 +136,17 @@ typedef struct EnshwickActionCall {
 // `ActionCall::RUN`.
 #define EnshwickActionCall_CONSOLE 3
 
+// A buff type of the game by its id, the
+// `Guid::fnv1a` of its GUID, to apply,
+// find or remove one buff.
+typedef uint32_t EnshwickBuffTypeId;
+
 // A buff an entity has, written by `HostApi::buffs`.
 typedef struct EnshwickActiveBuff {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // Its type's id.
-  uint32_t id;
+  EnshwickBuffTypeId id;
   // The buff's own entity, which carries its effect.
   EnshwickEntity entity;
   // Where the entity holds it, as `BuffTypeInfo::slot`.
@@ -310,6 +315,11 @@ typedef struct EnshwickBaseLimitInfo {
   uint32_t reserved;
 } EnshwickBaseLimitInfo;
 
+// An NPC of the game, such as a survivor, by its id, the
+// `Guid::fnv1a` of its template's GUID, to
+// tell survivors apart in lookups, bed checks and summons.
+typedef uint32_t EnshwickNpcId;
+
 // A survivor's own check that its bed is still its, after the game kept it,
 // as `HostApi::survivor_bed_check` hands it on. Cells are whole 0.5 m
 // cells.
@@ -317,7 +327,7 @@ typedef struct EnshwickBedCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The survivor's id.
-  uint32_t survivor;
+  EnshwickNpcId survivor;
   // The survivor's entity.
   EnshwickEntity entity;
   // The bed.
@@ -352,7 +362,7 @@ typedef struct EnshwickBuffRequest {
   // The entity to give it.
   EnshwickEntity entity;
   // The type's id.
-  uint32_t id;
+  EnshwickBuffTypeId id;
   // Its level, 1 to 255; 0 for none.
   uint32_t level;
   // Zero.
@@ -367,7 +377,7 @@ typedef struct EnshwickBuffTypeInfo {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The type's id: FNV-1a 32 of its GUID's bytes.
-  uint32_t id;
+  EnshwickBuffTypeId id;
   // Where an entity holds it: `BuffTypeInfo::FOOD`,
   // `BuffTypeInfo::BUFF`, `BuffTypeInfo::DEBUFF`,
   // `BuffTypeInfo::RESTED` or `BuffTypeInfo::TERRAIN`.
@@ -1500,7 +1510,7 @@ typedef struct EnshwickSurvivorLookup {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The survivor's id.
-  uint32_t survivor;
+  EnshwickNpcId survivor;
   // The game's own answer, 0 for none.
   EnshwickEntity vanilla;
   // Who asks; one of the constants on this type.
@@ -1593,7 +1603,7 @@ typedef uint8_t (*EnshwickSummonFn)(const struct EnshwickSummon *summon, void *u
 // The survivor, `count` status bytes at `statuses`, valid for the call, and
 // the pointer given at registration; returns `SURVIVOR_STATUS_SET` or-ed
 // with the byte to show, or 0 to leave the game's.
-typedef uint32_t (*EnshwickSurvivorStatusFn)(uint32_t survivor,
+typedef uint32_t (*EnshwickSurvivorStatusFn)(EnshwickNpcId survivor,
                                              const uint8_t *statuses,
                                              size_t count,
                                              void *user);
@@ -2996,7 +3006,7 @@ typedef struct EnshwickHostApi {
   // Files item `item` as a summoning staff of the survivor `survivor`, so
   // the game treats it as that survivor's staff, on both sides. Allowed
   // during `enshwick_mod_init` only.
-  EnshwickStatus (*summon_item)(EnshwickModHandle me, EnshwickItemId item, uint32_t survivor);
+  EnshwickStatus (*summon_item)(EnshwickModHandle me, EnshwickItemId item, EnshwickNpcId survivor);
   // Makes `callback` with `user` merge the statuses the client's survivor
   // menu shows for a survivor with several entities. Client only; one mod
   // at a time. Allowed during `enshwick_mod_init` only.
@@ -3220,7 +3230,7 @@ typedef struct EnshwickHostApi {
   // buffs. On the server's game thread only.
   EnshwickStatus (*remove_buff)(EnshwickModHandle me,
                                 EnshwickEntity entity,
-                                uint32_t id,
+                                EnshwickBuffTypeId id,
                                 uint8_t *removed);
   // Writes knowledge `id` of the player whose character is `entity`, or
   // of the world for 0 or for an id of the world's;

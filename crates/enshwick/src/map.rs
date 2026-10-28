@@ -74,7 +74,7 @@ impl MapMarkerTypeId {
     }
 
     /// The type a marker's `markerType` reference names, keyed as the
-    /// registry keys it: [`Guid::id`] of the reference.
+    /// registry keys it: [`Guid::fnv1a`] of the reference.
     ///
     /// # Examples
     ///
@@ -116,7 +116,7 @@ pub struct MapMarker {
     /// Its type; `None` for a marker without one.
     pub marker_type: Option<MapMarkerTypeId>,
     /// The text tag of its label, the game's `markerId`, which
-    /// [`game_text`](crate::i18n::game_text) reads by [`Guid::id`] on a
+    /// [`game_text`](crate::i18n::game_text) reads by [`Guid::fnv1a`] on a
     /// client; `None` for a marker without one.
     pub label: Option<Guid>,
 }

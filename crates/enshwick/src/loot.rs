@@ -17,7 +17,7 @@
 
 mod drops;
 
-pub use drops::{Drop, Kinds, MeterRoll, Roll, Source, replace_drops};
+pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_drops};
 pub(crate) use drops::{replace_group, watch_rolls};
 
 use crate::Entity;

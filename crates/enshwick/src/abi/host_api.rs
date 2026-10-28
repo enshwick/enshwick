@@ -20,7 +20,7 @@ use crate::abi::{
     TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
     WeatherFront, ZoneCheckFn,
 };
-use crate::abi::{Entity, ItemId, KnowledgeId, PlayerKey, RecipeId};
+use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
 /// The table of services the loader offers a mod.
 ///
@@ -294,7 +294,7 @@ pub struct HostApi {
     /// Files item `item` as a summoning staff of the survivor `survivor`, so
     /// the game treats it as that survivor's staff, on both sides. Allowed
     /// during `enshwick_mod_init` only.
-    pub summon_item: extern "system" fn(me: ModHandle, item: ItemId, survivor: u32) -> Status,
+    pub summon_item: extern "system" fn(me: ModHandle, item: ItemId, survivor: NpcId) -> Status,
     /// Makes `callback` with `user` merge the statuses the client's survivor
     /// menu shows for a survivor with several entities. Client only; one mod
     /// at a time. Allowed during `enshwick_mod_init` only.
@@ -528,8 +528,12 @@ pub struct HostApi {
     /// one: it goes in the next step. Writes 1 to `removed` when the entity
     /// had it, else 0; [`Status::MISSING`] for an entity that holds no
     /// buffs. On the server's game thread only.
-    pub remove_buff:
-        extern "system" fn(me: ModHandle, entity: Entity, id: u32, removed: *mut u8) -> Status,
+    pub remove_buff: extern "system" fn(
+        me: ModHandle,
+        entity: Entity,
+        id: BuffTypeId,
+        removed: *mut u8,
+    ) -> Status,
     /// Writes knowledge `id` of the player whose character is `entity`, or
     /// of the world for 0 or for an id of the world's;
     /// [`Status::MISSING`] for an id the game does not know,

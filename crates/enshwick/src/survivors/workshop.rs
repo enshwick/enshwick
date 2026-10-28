@@ -2,7 +2,7 @@
 
 use crate::content::Guid;
 
-use super::SurvivorId;
+use super::NpcId;
 
 /// A workshop survivor of the game, with its summoning staff and the
 /// template the staff places; listed in [`WORKSHOP_SURVIVORS`].
@@ -19,7 +19,7 @@ use super::SurvivorId;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WorkshopSurvivor {
     key: &'static str,
-    id: SurvivorId,
+    id: NpcId,
     staff: Guid,
     template: Guid,
 }
@@ -79,14 +79,14 @@ impl WorkshopSurvivor {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::survivors::{SurvivorId, WorkshopSurvivor};
+    /// use enshwick::survivors::{NpcId, WorkshopSurvivor};
     ///
     /// let smith = WorkshopSurvivor::find("blacksmith").ok_or("no blacksmith")?;
-    /// assert_eq!(smith.id(), SurvivorId(1_201_801_546));
+    /// assert_eq!(smith.id(), NpcId(1_201_801_546));
     /// # Ok::<(), &str>(())
     /// ```
     #[must_use]
-    pub const fn id(&self) -> SurvivorId {
+    pub const fn id(&self) -> NpcId {
         self.id
     }
 
@@ -160,7 +160,7 @@ macro_rules! survivors {
         /// ```
         pub const WORKSHOP_SURVIVORS: &[WorkshopSurvivor] = &[$(WorkshopSurvivor {
             key: $key,
-            id: SurvivorId($id),
+            id: NpcId($id),
             staff: Guid::parse($staff),
             template: Guid::parse($template),
         }),*];
@@ -193,7 +193,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_survivor_id_is_its_template_id() {
+    fn an_npc_id_is_its_template_id() {
         let mut keys = std::collections::BTreeSet::new();
         for survivor in WORKSHOP_SURVIVORS {
             assert_eq!(

@@ -1,6 +1,6 @@
 //! Buffs: their types, the active ones and requests to apply them.
 
-use crate::abi::{Entity, Header};
+use crate::abi::{BuffTypeId, Entity, Header};
 
 /// A buff or debuff type of the running game, written by
 /// [`HostApi::buff_types`](super::HostApi::buff_types).
@@ -12,7 +12,7 @@ use crate::abi::{Entity, Header};
 ///
 /// let rested = BuffTypeInfo {
 ///     header: Header::of::<BuffTypeInfo>(),
-///     id: 0xcdbe_3e80,
+///     id: enshwick::buffs::BuffTypeId::new(0xcdbe_3e80),
 ///     slot: BuffTypeInfo::RESTED,
 ///     flags: BuffTypeInfo::SAVED,
 ///     name: 1_237_250_642,
@@ -26,7 +26,7 @@ pub struct BuffTypeInfo {
     /// Size and version of this struct.
     pub header: Header,
     /// The type's id: FNV-1a 32 of its GUID's bytes.
-    pub id: u32,
+    pub id: BuffTypeId,
     /// Where an entity holds it: [`BuffTypeInfo::FOOD`],
     /// [`BuffTypeInfo::BUFF`], [`BuffTypeInfo::DEBUFF`],
     /// [`BuffTypeInfo::RESTED`] or [`BuffTypeInfo::TERRAIN`].
@@ -67,7 +67,7 @@ impl BuffTypeInfo {
 ///
 /// let fed = ActiveBuff {
 ///     header: Header::of::<ActiveBuff>(),
-///     id: 7,
+///     id: enshwick::buffs::BuffTypeId::new(7),
 ///     entity: enshwick::Entity(4100),
 ///     slot: 0,
 ///     level: 0,
@@ -82,7 +82,7 @@ pub struct ActiveBuff {
     /// Size and version of this struct.
     pub header: Header,
     /// Its type's id.
-    pub id: u32,
+    pub id: BuffTypeId,
     /// The buff's own entity, which carries its effect.
     pub entity: Entity,
     /// Where the entity holds it, as [`BuffTypeInfo::slot`].
@@ -107,7 +107,7 @@ impl_headed!(ActiveBuff);
 /// let request = BuffRequest {
 ///     header: Header::of::<BuffRequest>(),
 ///     entity: enshwick::Entity(2),
-///     id: 7,
+///     id: enshwick::buffs::BuffTypeId::new(7),
 ///     level: 0,
 ///     reserved: 0,
 ///     duration: 0,
@@ -122,7 +122,7 @@ pub struct BuffRequest {
     /// The entity to give it.
     pub entity: Entity,
     /// The type's id.
-    pub id: u32,
+    pub id: BuffTypeId,
     /// Its level, 1 to 255; 0 for none.
     pub level: u32,
     /// Zero.
