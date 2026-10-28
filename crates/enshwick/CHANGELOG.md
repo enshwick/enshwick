@@ -10,7 +10,7 @@ Each entry names the pull request that made the change.
 
 - `abi::DAMAGE_TYPES` (`ENSHWICK_DAMAGE_TYPES` in C), the length of a hit's
   damage amounts, and `DamageTypeNew::index`, a type's place in them; the
-  loader's damage and stats code count by them too (#PR).
+  loader's damage and stats code count by them too (#637).
 
 - `voxels::PER_METRE`, the voxels a metre on every axis, which the
   loader's terrain edits now read too (#632).
