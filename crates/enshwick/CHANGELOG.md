@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
+  `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
+  the game's Decorative crafting group, so `Recipes::Kind`,
+  `Rate::RecipeOutput` and `RecipeView::kind` pick decorations by the
+  game's own grouping (#616).
 - The title screen shows the loader's line under the game's version,
   `Enshwick 1.0.0-alpha.9 · mods: 6`, with the mods off and a warning when
   the game version leaves features off (#624).
@@ -78,6 +83,12 @@ Each entry names the pull request that made the change.
   texts, which each player reads in their own language; the `validate` of
   the `Config` derive takes any error that converts into `ConfigError`
   (`String`, `&str` or a `ConfigError`) (#620).
+
+### Removed
+
+- Breaking: `Load::modify_recipes`, `RecipeEdit` and `modify_recipes_in`;
+  a data change through `Load::change_recipes` or a `Rate::RecipeOutput`
+  changes recipe counts by kind (#616).
 
 ### Fixed
 

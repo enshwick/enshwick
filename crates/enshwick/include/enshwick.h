@@ -2490,7 +2490,8 @@ typedef void (*EnshwickActionFn)(const struct EnshwickActionCall *call,
 // `HostApi::recipe_kind`; a later minor may
 // add kinds, which a mod reads as `RecipeKind::OTHER`.
 typedef uint32_t EnshwickRecipeKind;
-// None of the kinds below: equipment, props, materials and the rest.
+// None of the kinds below: equipment, functional props, materials and
+// the rest.
 #define EnshwickRecipeKind_OTHER 0
 // A building block.
 #define EnshwickRecipeKind_BUILDING_BLOCK 1
@@ -2500,6 +2501,8 @@ typedef uint32_t EnshwickRecipeKind;
 #define EnshwickRecipeKind_OVERGROWTH 3
 // A terrain material.
 #define EnshwickRecipeKind_TERRAIN 4
+// A placed prop the game files under its Decorative crafting group.
+#define EnshwickRecipeKind_DECORATIVE 5
 
 // A game rate of `HostApi::rate` and
 // `HostApi::set_rate`, by the loader's stable

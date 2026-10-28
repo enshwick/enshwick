@@ -418,6 +418,7 @@ pub const FACTS: &[(&str, Fact)] = &[
             ("keen::EquipmentSetup", "slot"),
         ]),
     ),
+    ("item_info.tags", offset("keen::ItemInfo", "tags")),
     (
         "item_info.damage_mod",
         Fact::Path(&[
@@ -493,6 +494,8 @@ pub const FACTS: &[(&str, Fact)] = &[
         Fact::Type("keen::impact::ArmorDistribution"),
     ),
     ("item_slot_type", Fact::Type("keen::EquipmentSlotType")),
+    ("item_tag_weight", Fact::Type("keen::ItemTagWeight")),
+    ("item_tag_weight.tag", offset("keen::ItemTagWeight", "tag")),
     ("item_stat", Fact::Type("keen::ImpactUiValue")),
     ("item_stat.label", offset("keen::ImpactUiValue", "locaId")),
     (
