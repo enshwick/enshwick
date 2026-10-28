@@ -223,8 +223,8 @@ fn building_material(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> R
             .and_then(|at| usize::try_from(at).ok())
             .ok_or(Status::MISSING)
     };
-    let flag_at = at(catalogue::ITEM_BUILDING_VOXEL)?;
-    let id_at = at(catalogue::ITEM_PLACE_VOXEL_MATERIAL_ID)?;
+    let flag_at = at(catalogue::ids::ITEM_INFO_BUILDING_VOXEL)?;
+    let id_at = at(catalogue::ids::ITEM_INFO_PLACE_VOXEL_MATERIAL_ID)?;
     // SAFETY: `info` is the item's `ItemInfo` from the game's lookup, live
     // while `access` is held, with its `isBuildingVoxel` byte at the reflected
     // path's offset.
@@ -308,12 +308,12 @@ impl Events {
         Self {
             place: layout(
                 loader,
-                catalogue::BUILDING_PLACE_EVENT,
+                catalogue::ids::BUILDING_PLACE_EVENT,
                 &catalogue::BUILDING_PLACE_EVENT_FIELDS,
             ),
             tear_down: layout(
                 loader,
-                catalogue::BUILDING_TEAR_DOWN_EVENT,
+                catalogue::ids::BUILDING_TEAR_DOWN_EVENT,
                 &catalogue::BUILDING_TEAR_DOWN_EVENT_FIELDS,
             ),
             logic: logic_layout(loader),
@@ -375,7 +375,7 @@ impl Events {
 /// The `LogicEntityPlacedEvent` from reflection: its hash, size, and the
 /// offsets of who placed it and of the prop.
 fn logic_layout(loader: &Loader) -> Option<(u32, usize, usize, usize)> {
-    let id = catalogue::LOGIC_ENTITY_PLACED_EVENT;
+    let id = catalogue::ids::LOGIC_ENTITY_PLACED_EVENT;
     let hash = catalogue::type_hash(id)?;
     let size = loader
         .reflection

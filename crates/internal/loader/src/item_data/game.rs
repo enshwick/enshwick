@@ -56,28 +56,28 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let transform_type = loader
                 .reflection
-                .type_info(names::type_name(names::CURRENT_TRANSFORM))
+                .type_info(names::type_name(names::ids::CURRENT_TRANSFORM))
                 .ok()?;
             let stack = loader
                 .reflection
-                .type_info(names::type_name(names::ITEM_STACK))
+                .type_info(names::type_name(names::ids::ITEM_STACK))
                 .ok()?;
             let layout = Layout {
-                transform: ty(names::CURRENT_TRANSFORM)?,
-                position: at(names::CURRENT_TRANSFORM_TRANSFORM)?
-                    + at(names::WORLD_TRANSFORM_POSITION)?,
+                transform: ty(names::ids::CURRENT_TRANSFORM)?,
+                position: at(names::ids::CURRENT_TRANSFORM_TRANSFORM)?
+                    + at(names::ids::WORLD_TRANSFORM_POSITION)?,
                 item_state: ty(ITEM_STATE)?,
                 slot_entity: field(ITEM_STATE, "containedInSlotId")? + field(SLOT_ID, "entityId")?,
                 slot_index: field(ITEM_STATE, "containedInSlotId")? + field(SLOT_ID, "slotIndex")?,
                 item: field(ITEM_STATE, "itemId")?,
-                owner: ty(names::OWNER)?,
-                owner_entity: field(names::type_name(names::OWNER), "ownerEntityId")?,
-                setup: ty(names::INVENTORY_SETUP)?,
-                links: at(names::INVENTORY_SETUP_LINKS)?,
-                inventory: ty(names::INVENTORY)?,
+                owner: ty(names::ids::OWNER)?,
+                owner_entity: field(names::type_name(names::ids::OWNER), "ownerEntityId")?,
+                setup: ty(names::ids::INVENTORY_SETUP)?,
+                links: at(names::ids::INVENTORY_SETUP_LINKS)?,
+                inventory: ty(names::ids::INVENTORY)?,
                 stack: usize::try_from(stack.size()).ok()?,
-                stack_item: field(names::type_name(names::ITEM_STACK), "id")?,
-                stack_pide: at(names::ITEM_STACK_PIDE)?,
+                stack_item: field(names::type_name(names::ids::ITEM_STACK), "id")?,
+                stack_pide: at(names::ids::ITEM_STACK_PIDE)?,
             };
             // Every read lies inside the reflected type it reads.
             let size =
@@ -87,10 +87,11 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 && layout.stack_pide.max(layout.stack_item) + 4 <= layout.stack
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
                 && layout.slot_index < size(ITEM_STATE)?
-                && layout.owner_entity + 4 <= size(names::type_name(names::OWNER))?
+                && layout.owner_entity + 4 <= size(names::type_name(names::ids::OWNER))?
                 && layout.links + usize::from(LINKS) * 4
-                    <= size(names::type_name(names::INVENTORY_SETUP))?
-                && usize::from(SLOTS) * layout.stack <= size(names::type_name(names::INVENTORY))?;
+                    <= size(names::type_name(names::ids::INVENTORY_SETUP))?
+                && usize::from(SLOTS) * layout.stack
+                    <= size(names::type_name(names::ids::INVENTORY))?;
             inside.then_some(layout)
         })
         .as_ref()

@@ -11,6 +11,13 @@ Each entry names the pull request that made the change.
 - `COMFORT_FURNITURE_ITEM_TAG` and its row in `RECIPE_KIND_TAGS`; an earlier
   row wins for an item with two kind tags (#628).
 
+### Changed
+
+- Breaking: the catalogue's id constants (`ITEM_ID`, `SLOT_TYPE`,
+  `USED_ITEM` and the rest) are gone; `catalogue::ids` names every id once,
+  as the API's engine ids do (`ids::ITEM_INFO_ID`, `ids::ITEM_SLOT_TYPE`,
+  `ids::USED_ITEM`) (#636).
+
 ## [1.0.0-alpha.10] - 2026-10-28
 
 ### Added

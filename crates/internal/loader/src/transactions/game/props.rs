@@ -42,7 +42,7 @@ type ItemProp = ([u8; 16], Option<LocalBox>, bool);
 /// build lacks those reads.
 fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<ItemProp, Status> {
     let info = crate::inventory::item_info_at(loader, access, item)?.ok_or(Status::BAD_ARGS)?;
-    let flags_at = offset(loader, catalogue::ITEM_FLAGS)?;
+    let flags_at = offset(loader, catalogue::ids::ITEM_INFO_FLAGS)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its `u32` flags at
     // the reflected offset.
     let flags: u32 = unsafe { enshwick::raw::read_at(info, flags_at) };
@@ -52,15 +52,16 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
             .map(|bit| 1u32 << bit)
             .ok_or(Status::MISSING)
     };
-    let creature = bit(catalogue::ITEM_FLAG_IS_NPC)? | bit(catalogue::ITEM_FLAG_IS_ANIMAL)?;
-    let altar_at = offset(loader, catalogue::ITEM_REQUIRES_ALTAR_SLOT)?;
+    let creature =
+        bit(catalogue::ids::ITEM_FLAG_IS_NPC)? | bit(catalogue::ids::ITEM_FLAG_IS_ANIMAL)?;
+    let altar_at = offset(loader, catalogue::ids::ITEM_INFO_REQUIRES_ALTAR_SLOT)?;
     // SAFETY: `info` is the item's live `ItemInfo`, with its equipment's
     // `requiresAltarSlot` bool at the reflected path.
     let altar: u8 = unsafe { enshwick::raw::read_at(info, altar_at) };
     if flags & creature != 0 || altar != 0 {
         return Err(Status::NOT_A_PROP);
     }
-    let template_at = offset(loader, catalogue::ITEM_PLACED_ENTITY)?;
+    let template_at = offset(loader, catalogue::ids::ITEM_INFO_PLACED_ENTITY)?;
     // SAFETY: `info` is the item's live `ItemInfo` from the game's lookup,
     // with its placed template's 16-byte GUID at the reflected path.
     let template: [u8; 16] = unsafe { enshwick::raw::read_at(info, template_at) };
@@ -83,7 +84,8 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
         }
         _ => None,
     };
-    let logic = bit(catalogue::ITEM_FLAG_IS_LOGIC_ENTITY).is_ok_and(|logic| flags & logic != 0);
+    let logic =
+        bit(catalogue::ids::ITEM_FLAG_IS_LOGIC_ENTITY).is_ok_and(|logic| flags & logic != 0);
     Ok((template, local_box, logic))
 }
 
@@ -117,15 +119,15 @@ pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Stat
 /// destroyed, asked for by the player `actor`, 0 for none; the new
 /// entity. On the game thread at a quiet moment.
 pub(super) fn spawn(loader: &Loader, prop: &Prop, actor: u32) -> Result<u32, Status> {
-    let used_item = catalogue::type_hash(catalogue::USED_ITEM).ok_or(Status::MISSING)?;
-    let no_loot =
-        catalogue::type_hash(catalogue::DISABLE_RANDOM_LOOT_ON_DESTROY).ok_or(Status::MISSING)?;
-    let mut item = vec![0u8; type_size(loader, catalogue::USED_ITEM)?];
+    let used_item = catalogue::type_hash(catalogue::ids::USED_ITEM).ok_or(Status::MISSING)?;
+    let no_loot = catalogue::type_hash(catalogue::ids::DISABLE_RANDOM_LOOT_ON_DESTROY)
+        .ok_or(Status::MISSING)?;
+    let mut item = vec![0u8; type_size(loader, catalogue::ids::USED_ITEM)?];
     let bytes = prop.item.to_le_bytes();
     item.get_mut(..bytes.len())
         .ok_or(Status::MISSING)?
         .copy_from_slice(&bytes);
-    let tag = vec![0u8; type_size(loader, catalogue::DISABLE_RANDOM_LOOT_ON_DESTROY)?];
+    let tag = vec![0u8; type_size(loader, catalogue::ids::DISABLE_RANDOM_LOOT_ON_DESTROY)?];
     let request = SpawnRequest {
         header: Header::of::<SpawnRequest>(),
         template: prop.template,
@@ -198,43 +200,43 @@ impl Facts {
         let at = |id: &str| offset(loader, id);
         let ty = |id: &str| type_of(loader, id);
         Ok(Self {
-            setup: ty(catalogue::INVENTORY_SETUP)?,
-            setup_initialized: at(catalogue::INVENTORY_SETUP_INITIALIZED)?,
-            setup_links: at(catalogue::INVENTORY_SETUP_LINKS)?,
-            setup_categories: at(catalogue::INVENTORY_SETUP_CATEGORIES)?,
-            inventory: ty(catalogue::INVENTORY)?,
-            stack: type_size(loader, catalogue::ITEM_STACK)?,
-            level: ty(catalogue::LEVEL)?,
-            level_data: at(catalogue::LEVEL_DATA)?,
-            growth: ty(catalogue::GROWTH)?,
-            factory: ty(catalogue::FACTORY_STATION)?,
-            factory_state: at(catalogue::FACTORY_STATE)?,
-            factory_running: at(catalogue::FACTORY_RUNNING)?,
-            factory_next: at(catalogue::FACTORY_NEXT)?,
-            bed: ty(catalogue::NPC_BED)?,
-            bed_npc: at(catalogue::NPC_BED_NPC)?,
-            store: ty(catalogue::STORE_NPCS)?,
-            store_ids: at(catalogue::STORE_NPCS_IDS)?,
-            text: ty(catalogue::CUSTOM_PLAYER_STRING)?,
-            text_id: at(catalogue::CUSTOM_PLAYER_STRING_ID)?,
-            fuel: ty(catalogue::FUEL_CHARGES)?,
-            fuel_charges: at(catalogue::FUEL_CHARGES_DATA)?,
-            fuel_setup: ty(catalogue::FUEL_SETUP)?,
-            fuel_most: at(catalogue::FUEL_SETUP_MAX)?,
-            fuel_start: at(catalogue::FUEL_SETUP_INITIAL)?,
+            setup: ty(catalogue::ids::INVENTORY_SETUP)?,
+            setup_initialized: at(catalogue::ids::INVENTORY_SETUP_INITIALIZED)?,
+            setup_links: at(catalogue::ids::INVENTORY_SETUP_LINKS)?,
+            setup_categories: at(catalogue::ids::INVENTORY_SETUP_CATEGORIES)?,
+            inventory: ty(catalogue::ids::INVENTORY)?,
+            stack: type_size(loader, catalogue::ids::ITEM_STACK)?,
+            level: ty(catalogue::ids::LEVEL)?,
+            level_data: at(catalogue::ids::LEVEL_DATA_STORAGE)?,
+            growth: ty(catalogue::ids::GROWTH)?,
+            factory: ty(catalogue::ids::FACTORY_STATION)?,
+            factory_state: at(catalogue::ids::FACTORY_STATION_STATE)?,
+            factory_running: at(catalogue::ids::FACTORY_STATION_RUNNING_RECIPE)?,
+            factory_next: at(catalogue::ids::FACTORY_STATION_NEXT_RECIPE)?,
+            bed: ty(catalogue::ids::NPC_BED)?,
+            bed_npc: at(catalogue::ids::NPC_BED_ASSOCIATED_NPC)?,
+            store: ty(catalogue::ids::STORE_ASSOCIATED_NPC_IDS)?,
+            store_ids: at(catalogue::ids::STORE_ASSOCIATED_NPC_IDS_NPC_IDS)?,
+            text: ty(catalogue::ids::CUSTOM_PLAYER_STRING)?,
+            text_id: at(catalogue::ids::CUSTOM_PLAYER_STRING_STRING_ID)?,
+            fuel: ty(catalogue::ids::FUEL_CHARGES)?,
+            fuel_charges: at(catalogue::ids::FUEL_CHARGES_DATA_STORAGE)?,
+            fuel_setup: ty(catalogue::ids::FUEL_SETUP)?,
+            fuel_most: at(catalogue::ids::FUEL_SETUP_MAX)?,
+            fuel_start: at(catalogue::ids::FUEL_SETUP_START)?,
             fuel_refills: [
                 at(catalogue::FUEL_REFILLS[0])?,
                 at(catalogue::FUEL_REFILLS[1])?,
             ],
-            connected: ty(catalogue::LOGIC_CONNECTED)?,
-            connected_writer: at(catalogue::LOGIC_CONNECTED_WRITER)?,
-            connected_readers: at(catalogue::LOGIC_CONNECTED_READERS)?,
-            trigger: ty(catalogue::LOGIC_TRIGGER)?,
-            trigger_config: at(catalogue::LOGIC_TRIGGER_CONFIG)?,
-            trigger_shape: ty(catalogue::LOGIC_TRIGGER_SHAPE)?,
-            animal: ty(catalogue::ANIMAL_SAVED)?,
-            npc: ty(catalogue::ACTIVE_NPC_STATE_SAVED)?,
-            altar: ty(catalogue::BASE_ID)?,
+            connected: ty(catalogue::ids::LOGIC_GRAPH_NODE_CONNECTED)?,
+            connected_writer: at(catalogue::ids::LOGIC_GRAPH_NODE_CONNECTED_WRITER_GRAPH_ID)?,
+            connected_readers: at(catalogue::ids::LOGIC_GRAPH_NODE_CONNECTED_HAS_READER_GRAPHS)?,
+            trigger: ty(catalogue::ids::LOGIC_GRAPH_TRIGGER)?,
+            trigger_config: at(catalogue::ids::LOGIC_GRAPH_TRIGGER_TRIGGER_CONFIG)?,
+            trigger_shape: ty(catalogue::ids::LOGIC_TRIGGER_SHAPE)?,
+            animal: ty(catalogue::ids::ANIMAL_SAVED)?,
+            npc: ty(catalogue::ids::ACTIVE_NPC_STATE_SAVED)?,
+            altar: ty(catalogue::ids::BASE_ID_COMPONENT)?,
         })
     }
 }
@@ -313,16 +315,16 @@ pub(super) fn read(loader: &Loader, entity: u32) -> Result<(Prop, u32), Status> 
 
 /// Which way `entity` faces, from its `CurrentTransform`.
 fn orientation(loader: &Loader, entity: u32) -> Option<[f32; 4]> {
-    let hash = type_of(loader, catalogue::CURRENT_TRANSFORM).ok()?;
-    let at = offset(loader, catalogue::CURRENT_TRANSFORM_TRANSFORM).ok()?
-        + offset(loader, catalogue::WORLD_TRANSFORM_ORIENTATION).ok()?;
+    let hash = type_of(loader, catalogue::ids::CURRENT_TRANSFORM).ok()?;
+    let at = offset(loader, catalogue::ids::CURRENT_TRANSFORM_TRANSFORM).ok()?
+        + offset(loader, catalogue::ids::WORLD_TRANSFORM_ORIENTATION).ok()?;
     field(loader, entity, hash, at).ok().flatten()
 }
 
 /// Whether a prop like `prop` stands where it stood: an entity of its
 /// item with its template at its position.
 pub(super) fn stands(loader: &Loader, prop: &Prop) -> Result<bool, Status> {
-    let used_item = type_of(loader, catalogue::USED_ITEM)?;
+    let used_item = type_of(loader, catalogue::ids::USED_ITEM)?;
     let placed = crate::entities::with_component(loader, used_item)?;
     Ok(placed.iter().any(|place| {
         place.position == prop.position
@@ -368,7 +370,7 @@ pub(super) const STASH_OFF: Stash = Stash([1, 0]);
 /// Whether `entity` is a magic chest, one Quick Stash fills: it has
 /// `InventoryCraftingStock`, whose data its template shares.
 fn is_magic(loader: &Loader, entity: u32) -> Result<bool, Status> {
-    let stock = type_of(loader, catalogue::CRAFTING_STOCK)?;
+    let stock = type_of(loader, catalogue::ids::INVENTORY_CRAFTING_STOCK)?;
     Ok(has(loader, entity, stock))
 }
 
@@ -377,9 +379,17 @@ fn is_magic(loader: &Loader, entity: u32) -> Result<bool, Status> {
 /// `None` without one or on a build without the reads. On the game
 /// thread.
 fn stash(loader: &Loader, entity: u32) -> Option<Stash> {
-    let switch = type_of(loader, catalogue::STASH_SWITCH).ok()?;
-    let set_at = offset(loader, catalogue::STASH_SWITCH_SET).ok()?;
-    let on_at = offset(loader, catalogue::STASH_SWITCH_ON).ok()?;
+    let switch = type_of(loader, catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK).ok()?;
+    let set_at = offset(
+        loader,
+        catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE_IS_SET,
+    )
+    .ok()?;
+    let on_at = offset(
+        loader,
+        catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE,
+    )
+    .ok()?;
     let set = field::<u8>(loader, entity, switch, set_at).ok()??;
     let on = field::<u8>(loader, entity, switch, on_at).ok()??;
     Some(Stash([set, on]))
@@ -401,9 +411,15 @@ pub(crate) fn set_deposit(loader: &Loader, entity: u32, Stash([set, on]): Stash)
         return;
     }
     let (Ok(switch), Ok(set_at), Ok(on_at)) = (
-        type_of(loader, catalogue::STASH_SWITCH),
-        offset(loader, catalogue::STASH_SWITCH_SET),
-        offset(loader, catalogue::STASH_SWITCH_ON),
+        type_of(loader, catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK),
+        offset(
+            loader,
+            catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE_IS_SET,
+        ),
+        offset(
+            loader,
+            catalogue::ids::DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE,
+        ),
     ) else {
         return;
     };

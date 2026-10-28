@@ -225,23 +225,23 @@ impl ItemKindLayout {
         use enshwick_gamedata::catalogue;
 
         let one_byte = reflection
-            .type_info(catalogue::type_name(catalogue::SLOT_TYPE))
+            .type_info(catalogue::type_name(catalogue::ids::ITEM_SLOT_TYPE))
             .is_ok_and(|info| info.size() == 1);
         let slots = catalogue::recipe_kind_slots(reflection);
         let at = |id: &str| {
             catalogue::constant(id, reflection).and_then(|offset| usize::try_from(offset).ok())
         };
-        let (id_at, slot_at) = at(catalogue::ITEM_ID)
-            .zip(at(catalogue::ITEM_SLOT))
+        let (id_at, slot_at) = at(catalogue::ids::ITEM_INFO_ID)
+            .zip(at(catalogue::ids::ITEM_INFO_EQUIPMENT_SLOT))
             .filter(|_| one_byte && !slots.is_empty())?;
         let stride = reflection
-            .type_info(catalogue::type_name(catalogue::ITEM_TAG_WEIGHT))
+            .type_info(catalogue::type_name(catalogue::ids::ITEM_TAG_WEIGHT))
             .ok()
             .and_then(|info| usize::try_from(info.size()).ok());
         let tag_kinds = catalogue::recipe_kind_tags(reflection);
-        let tags = at(catalogue::ITEM_TAGS)
+        let tags = at(catalogue::ids::ITEM_INFO_TAGS)
             .zip(stride)
-            .zip(at(catalogue::ITEM_TAG_WEIGHT_TAG))
+            .zip(at(catalogue::ids::ITEM_TAG_WEIGHT_TAG))
             .map(|((at, stride), tag_at)| TagLayout { at, stride, tag_at })
             .filter(|_| tag_kinds.len() == catalogue::RECIPE_KIND_TAGS.len());
         Some(Self {

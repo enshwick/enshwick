@@ -222,19 +222,19 @@ fn vanilla_items(loader: &Loader) -> Vec<(Guid, ItemTraits)> {
     let at = |id: &str| {
         catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
     };
-    let backpack = at(catalogue::ITEM_PID_ENTITY)
-        .zip(at(catalogue::ITEM_SLOT))
+    let backpack = at(catalogue::ids::ITEM_INFO_PID_ENTITY)
+        .zip(at(catalogue::ids::ITEM_INFO_EQUIPMENT_SLOT))
         .zip(
-            catalogue::constant(catalogue::EQUIPMENT_SLOT_BACKPACK, &loader.reflection)
+            catalogue::constant(catalogue::ids::EQUIPMENT_SLOT_BACKPACK, &loader.reflection)
                 .and_then(|value| u8::try_from(value).ok()),
         )
         .map(|((pid, slot), value)| (pid, slot, value));
     let offsets = (|| {
         Some(TraitOffsets {
-            max_stack: at(catalogue::ITEM_MAX_STACK)?,
-            category: at(catalogue::ITEM_CATEGORY)?,
-            flags: at(catalogue::ITEM_FLAGS)?,
-            placed: at(catalogue::ITEM_PLACED_ENTITY)?,
+            max_stack: at(catalogue::ids::ITEM_INFO_MAX_STACK)?,
+            category: at(catalogue::ids::ITEM_INFO_CATEGORY)?,
+            flags: at(catalogue::ids::ITEM_INFO_FLAGS)?,
+            placed: at(catalogue::ids::ITEM_INFO_PLACED_ENTITY)?,
             backpack,
         })
     })();
@@ -351,33 +351,33 @@ fn edited(merged: &Merged) -> Vec<Guid> {
 const STATS: [(Field, &str, &str); 6] = [
     (
         Field::DamageMod,
-        catalogue::ITEM_DAMAGE_MOD,
-        catalogue::ITEM_DAMAGE_SET,
+        catalogue::ids::ITEM_INFO_DAMAGE_MOD,
+        catalogue::ids::ITEM_INFO_DAMAGE_SET,
     ),
     (
         Field::SpeedMod,
-        catalogue::ITEM_SPEED_MOD,
-        catalogue::ITEM_DAMAGE_SET,
+        catalogue::ids::ITEM_INFO_SPEED_MOD,
+        catalogue::ids::ITEM_INFO_DAMAGE_SET,
     ),
     (
         Field::Armor,
-        catalogue::ITEM_ARMOR,
-        catalogue::ITEM_ARMOR_SET,
+        catalogue::ids::ITEM_INFO_ARMOR,
+        catalogue::ids::ITEM_INFO_ARMOR_SET,
     ),
     (
         Field::BurnTime,
-        catalogue::ITEM_BURN_TIME,
-        catalogue::ITEM_FUEL_SET,
+        catalogue::ids::ITEM_INFO_BURN_TIME,
+        catalogue::ids::ITEM_INFO_FUEL_SET,
     ),
     (
         Field::EnergyOutput,
-        catalogue::ITEM_ENERGY_OUTPUT,
-        catalogue::ITEM_FUEL_SET,
+        catalogue::ids::ITEM_INFO_ENERGY_OUTPUT,
+        catalogue::ids::ITEM_INFO_FUEL_SET,
     ),
     (
         Field::ComfortAmount,
-        catalogue::ITEM_COMFORT_AMOUNT,
-        catalogue::ITEM_COMFORT_SET,
+        catalogue::ids::ITEM_INFO_COMFORT_AMOUNT,
+        catalogue::ids::ITEM_INFO_COMFORT_SET,
     ),
 ];
 
@@ -388,12 +388,12 @@ fn item_offsets(loader: &Loader) -> ItemOffsets {
     };
     let armor_count = loader
         .reflection
-        .type_info(catalogue::type_name(catalogue::ARMOR_DISTRIBUTION))
+        .type_info(catalogue::type_name(catalogue::ids::ARMOR_DISTRIBUTION))
         .ok()
         .and_then(|info| usize::try_from(info.size() / 4).ok())
         .unwrap_or(0);
     ItemOffsets {
-        max_stack: at(catalogue::ITEM_MAX_STACK),
+        max_stack: at(catalogue::ids::ITEM_INFO_MAX_STACK),
         stats: STATS
             .iter()
             .filter_map(|&(field, value, set)| Some((field, at(value)?, at(set)?)))
@@ -692,7 +692,7 @@ fn apply(
             ));
         }
     }
-    let fill = catalogue::type_hash(catalogue::LOOT_FILL_TABLE);
+    let fill = catalogue::type_hash(catalogue::ids::LOOT_FILL_TABLE);
     for (table, _) in merged.table_items() {
         let key = fill.map(|hash| table.key_by_hash(hash));
         if !key.is_some_and(|key| patched.contains(&key)) {
@@ -754,8 +754,8 @@ fn loot_patches(
         return Vec::new();
     }
     let facts = catalogue::Reflected(&loader.reflection);
-    let hashes = catalogue::type_hash(catalogue::LOOT_RANDOM_TABLE)
-        .zip(catalogue::type_hash(catalogue::LOOT_FILL_TABLE));
+    let hashes = catalogue::type_hash(catalogue::ids::LOOTABLE_ITEMS)
+        .zip(catalogue::type_hash(catalogue::ids::LOOT_FILL_TABLE));
     let (Ok(layout), Some(archive), Some((random, fill))) =
         (LootLayout::resolve(&facts), crate::archive::game(), hashes)
     else {
@@ -884,8 +884,8 @@ fn container_patches(
     let at = |id: &str| {
         catalogue::constant(id, &loader.reflection).and_then(|at| usize::try_from(at).ok())
     };
-    let placed = at(catalogue::ITEM_PLACED_ENTITY);
-    let own = at(catalogue::ITEM_PID_ENTITY);
+    let placed = at(catalogue::ids::ITEM_INFO_PLACED_ENTITY);
+    let own = at(catalogue::ids::ITEM_INFO_PID_ENTITY);
     let (Ok(layout), Some(placed), Some(archive)) = (
         ContainerLayout::resolve(&facts),
         placed,
@@ -1062,7 +1062,7 @@ fn recipe_patch(
         );
         return None;
     };
-    let duration = catalogue::constant(catalogue::RECIPE_DURATION, &loader.reflection)
+    let duration = catalogue::constant(catalogue::ids::RECIPE_DURATION, &loader.reflection)
         .and_then(|at| usize::try_from(at).ok());
     crate::log!(INFO, "{} recipes get changed values", recipes.len());
     let patch: &'static RecipePatch = Box::leak(Box::new(RecipePatch { layout, duration }));
@@ -1454,15 +1454,15 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
     let constant = |id: &str| catalogue::constant(id, &loader.reflection).is_some();
     let recipes = || RecipeLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok();
     match field {
-        Field::MaxStackSize => constant(catalogue::ITEM_MAX_STACK),
+        Field::MaxStackSize => constant(catalogue::ids::ITEM_INFO_MAX_STACK),
         Field::Output | Field::Cost | Field::Ingredient | Field::Station => recipes(),
-        Field::CraftingDuration => recipes() && constant(catalogue::RECIPE_DURATION),
+        Field::CraftingDuration => recipes() && constant(catalogue::ids::RECIPE_DURATION),
         Field::StackSize | Field::Count | Field::SpawnProbability | Field::Weight => {
             LootLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()
         }
         Field::Armor => {
-            constant(catalogue::ITEM_ARMOR)
-                && constant(catalogue::ITEM_ARMOR_SET)
+            constant(catalogue::ids::ITEM_INFO_ARMOR)
+                && constant(catalogue::ids::ITEM_INFO_ARMOR_SET)
                 && item_offsets(loader).armor_count > 0
         }
         field if STATS.iter().any(|(f, _, _)| *f == field) => STATS
@@ -1471,7 +1471,7 @@ pub(crate) fn reachable(loader: &Loader, field: Field) -> bool {
             .all(|&(_, value, set)| constant(value) && constant(set)),
         Field::Slots => {
             ContainerLayout::resolve(&catalogue::Reflected(&loader.reflection)).is_ok()
-                && constant(catalogue::ITEM_PLACED_ENTITY)
+                && constant(catalogue::ids::ITEM_INFO_PLACED_ENTITY)
         }
         _ => false,
     }
