@@ -70,8 +70,7 @@ pub(crate) fn beside_game(game_dir: &Path) -> Vec<String> {
     .collect()
 }
 
-/// Where the PE header starts, read from the DOS header.
-const PE_POINTER: usize = 0x3c;
+use crate::pe::PE_POINTER;
 /// The export directory's address and size, from the optional header of a
 /// PE32+ image.
 const EXPORT_DIRECTORY: usize = 24 + 112;

@@ -30,8 +30,9 @@ pub const TABLE_IDS: &[&str] = &[
     pinned::session::HOST_MACHINE.id(),
 ];
 
-/// Players the gate follows at most; the game has 16 slots.
-const MAX_PLAYERS: usize = 64;
+/// Players the loader follows at most, in the gate and the player reads;
+/// the game has 16 slots.
+pub(crate) const MAX_PLAYERS: usize = 64;
 /// How long a kick that did not remove the player waits to be tried again.
 const KICK_AGAIN: Duration = Duration::from_secs(10);
 /// How long the server waits on a player who entered the world.
