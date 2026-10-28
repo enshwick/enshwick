@@ -46,12 +46,17 @@ pub enum Widget {
         /// them.
         index: usize,
     },
-    /// A text field over the value, for a text setting that is no secret
-    /// and fits [`ENTRY_BYTES`].
-    Entry(String),
-    /// A line with the value, for a setting no row edits: secrets, longer
-    /// texts, tables, numbers without a range and lists other than short
-    /// lists of numbers with a range.
+    /// A text field over the value, for a text setting that fits
+    /// [`ENTRY_BYTES`].
+    Entry {
+        /// The text.
+        text: String,
+        /// The text as TOML, for the line shown where no field is drawn.
+        toml: String,
+    },
+    /// A line with the value, for a setting no row edits: longer texts,
+    /// tables, numbers without a range and lists other than short lists of
+    /// numbers with a range; for a secret, its mark instead of the value.
     Text(String),
 }
 
@@ -185,8 +190,11 @@ fn widget(field: &Field, value: &toml::Value, words: Option<Words<'_>>) -> Widge
                 whole,
             }
         }
-        (Some(Kind::String), ..) if !field.secret => match value.as_str() {
-            Some(text) if text.len() <= ENTRY_BYTES => Widget::Entry(text.to_owned()),
+        (Some(Kind::String), ..) => match value.as_str() {
+            Some(text) if text.len() <= ENTRY_BYTES => Widget::Entry {
+                text: text.to_owned(),
+                toml: value.to_string(),
+            },
             _ => Widget::Text(value.to_string()),
         },
         _ => Widget::Text(value.to_string()),
@@ -242,6 +250,10 @@ pub fn rows(
                     stage: field.stage,
                 }
             };
+            if field.secret {
+                let mark = crate::texts::fill("config.secret", &[]);
+                return vec![row(field.key.clone(), label, Widget::Text(mark))];
+            }
             match element_field(field, &value) {
                 Some((element, items)) => items
                     .iter()
@@ -381,6 +393,13 @@ mod tests {
         )
     }
 
+    fn entry(text: &str) -> Widget {
+        Widget::Entry {
+            text: text.to_owned(),
+            toml: toml::Value::String(text.to_owned()).to_string(),
+        }
+    }
+
     #[test]
     fn settings_show_as_rows_with_their_values() {
         let file = "enabled = false\nmax_altars = 6\nradius = 2.5\nmode = \"on\"\n";
@@ -413,7 +432,7 @@ mod tests {
                 index: 1
             }
         );
-        assert_eq!(rows[4].widget, Widget::Entry("hi".into()));
+        assert_eq!(rows[4].widget, entry("hi"));
         assert_eq!(rows[4].lock, Lock::Open);
         assert!(
             matches!(rows[5].widget, Widget::Slider { steps: 0, whole: true, value, .. } if (value - 500.0).abs() < 1e-3)
@@ -430,6 +449,29 @@ mod tests {
             matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
         );
         assert_eq!(rows[0].lock, Lock::Open);
+    }
+
+    #[test]
+    fn a_secret_setting_shows_its_mark_never_its_value() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("token", Stage::Runtime, "").with_secret(true),
+                Field::new("pin", Stage::Runtime, &0).with_secret(true),
+            ],
+        );
+        let rows = rows(&schema, "token = \"hunter2\"\npin = 4815\n", None, None);
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(
+                row.widget,
+                Widget::Text("(secret)".to_owned()),
+                "{}",
+                row.key
+            );
+            assert_eq!(row.lock, Lock::File);
+        }
     }
 
     #[test]
@@ -511,13 +553,14 @@ mod tests {
                 Field::new("tags", Stage::Runtime, &["a"]),
             ],
         );
-        let file = format!("motd = \"Привіт\"\nbanner = \"{long}\"\n");
+        let file = format!("motd = \"Привіт\"\ntoken = \"hunter2\"\nbanner = \"{long}\"\n");
         let rows = rows(&schema, &file, None, None);
         assert_eq!(
             (&rows[0].widget, rows[0].lock),
-            (&Widget::Entry("Привіт".into()), Lock::Open)
+            (&entry("Привіт"), Lock::Open)
         );
         assert_eq!(rows[1].lock, Lock::File, "a secret is changed in the file");
+        assert!(matches!(&rows[1].widget, Widget::Text(mark) if !mark.contains("hunter2")));
         assert!(
             matches!(rows[2].widget, Widget::Text(_)),
             "too long to type"

@@ -94,6 +94,12 @@ fn client_tables_pin_the_scroll_area_and_the_text_field_whole() {
     let newest = tables.iter().max_by_key(|t| t.game_version()).unwrap();
     assert_eq!(pins(newest, &scroll), scroll.len());
     assert_eq!(pins(newest, &text_field), text_field.len());
+    let highlight = newest
+        .constants()
+        .iter()
+        .find(|c| c.id() == pinned::ui::NAV_HIGHLIGHT.id())
+        .map(enshwick_gamedata::Constant::value);
+    assert_eq!(highlight, Some(0x60), "the config's 0x28 plus 0x38");
 }
 
 #[test]

@@ -21,6 +21,8 @@ struct GameText {
     grow: usize,
 }
 
+const _: () = assert!(size_of::<GameText>() == 32);
+
 type TextFieldFn = unsafe extern "system" fn(
     field: Ptr,
     text: *mut GameText,
@@ -34,10 +36,19 @@ type HitFn = unsafe extern "system" fn(frame: Ptr, out: *mut [u8; 8], mode: u32,
 
 /// The field object, a label with the field's parts after it.
 const FIELD_SIZE: usize = 0x280;
+/// The field's pointer to the [`GameText`] it edits, which the constructor
+/// writes and the input and the drawing read and write through.
+const FIELD_TEXT: usize = 0x150;
 /// The game's key for a field's kept state among its node's states.
 const STATE_KEY: u64 = 0x64d2_7908_60d9_c7f6;
-/// The kept state's byte that is set while the field has the caret.
+/// The kept state's size.
+const STATE_SIZE: usize = 0x1990;
+/// The kept state's byte that is set while the field has the caret; the
+/// rename dialog clears it on Back to end the typing.
 const STATE_EDITING: usize = 0x1988;
+
+const _: () = assert!(FIELD_TEXT + 8 <= FIELD_SIZE);
+const _: () = assert!(STATE_EDITING < STATE_SIZE);
 /// The input's answer for Enter.
 const ENTERED: u64 = 1;
 /// The hit test's first byte for a click.
@@ -130,7 +141,8 @@ impl Engine {
 
     /// Draws a text field over `buffer`, as wide as its column, with `hint`
     /// in it while it is empty; what the player did, or `None` on a build
-    /// without text fields.
+    /// without text fields. With `ending`, a field that has the caret gives
+    /// it up, as the rename dialog's does on Back.
     ///
     /// # Safety
     ///
@@ -143,6 +155,7 @@ impl Engine {
         context: usize,
         buffer: &mut TextBuffer,
         hint: &UiText,
+        ending: bool,
     ) -> Option<Typed> {
         let fns = self.text_fields.as_ref()?;
         let bundle = self.bundle(context);
@@ -152,12 +165,15 @@ impl Engine {
         let mut field = Buf::<FIELD_SIZE>::zeroed();
         // SAFETY: `fns.field` is the game's `ui.text_field`, checked in
         // `TextFields::resolve`, inside the window this function's `# Safety`
-        // gives; `field` holds the `FIELD_SIZE` bytes the field is, and
-        // `buffer`, borrowed for this call, the only time the game reaches
-        // it through `field`, points at its own `ENTRY_BYTES` bytes with no
-        // grow function; and the style is the
-        // reflected `defaultStyle` inside the frame's look bundle, as both of
-        // the game's callers pass.
+        // gives; `field` holds the `FIELD_SIZE` bytes the field is. The
+        // constructor stores the `GameText` pointer at `FIELD_TEXT`, and
+        // `ui.text_field_input` and `ui.label_draw` below read and write the
+        // text through it: `buffer` stays exclusively borrowed and unmoved
+        // until after `label_draw`, its data points at its own
+        // `ENTRY_BYTES` bytes with that capacity, and `grow` is 0, so the
+        // game cuts at the capacity and never reallocates or frees the
+        // bytes. The style is the reflected `defaultStyle` inside the
+        // frame's look bundle, as both of the game's callers pass.
         unsafe {
             (fns.field)(
                 field.ptr(),
@@ -181,7 +197,7 @@ impl Engine {
         // `TextFields::resolve`, on the field built above; it writes eight
         // bytes to the live `pointer`.
         unsafe { (fns.hit)(field.ptr(), &raw mut pointer, 1, 0, 0) };
-        if pointer[0] == CLICKED {
+        if pointer[0] == CLICKED && !ending {
             // SAFETY: `fns.focus` is the game's `ui.focus_request`, checked in
             // `TextFields::resolve`, on the field built above.
             unsafe { (fns.focus)(field.ptr()) };
@@ -189,24 +205,36 @@ impl Engine {
         let mut answer = 0u64;
         // SAFETY: `fns.input` is the game's `ui.text_field_input`, checked
         // in `TextFields::resolve`, on the field built above; it writes the
-        // typed text into `buffer`, at most its capacity, and its answer to
-        // the live `answer`; `hint` outlives the frame by this function's
+        // typed text through the `GameText` at `FIELD_TEXT`, which points at
+        // `buffer`, exclusively borrowed and unmoved for this call, at most
+        // `ENTRY_BYTES` bytes with no grow function, and its answer to the
+        // live `answer`; `hint` outlives the frame by this function's
         // `# Safety`.
         unsafe { (fns.input)(field.ptr(), &raw mut answer, hint, 0) };
         // SAFETY: `fns.state` is the game's `ui.text_field_state`, checked in
         // `TextFields::resolve`, on the field built above, with the game's
         // own key for the field's state.
         let state = unsafe { (fns.state)(field.ptr(), STATE_KEY, 1) };
-        let editing = !state.is_null()
-            // SAFETY: `state` is non-null, checked first, and points at the
-            // field's kept state, whose editing byte sits at `STATE_EDITING`
-            // inside its 0x1990 bytes on client 426.
-            && unsafe { crate::memory::read::<u8>(state.expose_provenance(), STATE_EDITING) }
-                != 0;
+        let state = state.expose_provenance();
+        let mut editing = state != 0
+            // SAFETY: `state` is non-zero, checked first, and points at the
+            // field's kept state of `STATE_SIZE` bytes on client 426, whose
+            // editing byte sits at `STATE_EDITING`.
+            && unsafe { crate::memory::read::<u8>(state, STATE_EDITING) } != 0;
+        if editing && ending {
+            // SAFETY: `state` is non-zero, checked by `editing`, and points at
+            // the field's kept state of `STATE_SIZE` bytes, which the game
+            // touches only on this thread while it draws; clearing its
+            // editing byte ends the typing, as the rename dialog does on Back.
+            unsafe { crate::memory::write::<u8>(state, STATE_EDITING, 0) };
+            editing = false;
+        }
         buffer.text.len = buffer.text.len.min(ENTRY_BYTES as u64);
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
-        // `Engine::resolve`, on the field built above, which draws and
-        // closes it as the game's callers do.
+        // `Engine::resolve`, on the field built above, which draws and closes
+        // it as the game's callers do; it reads the text through the
+        // `GameText` at `FIELD_TEXT`, which points at `buffer`, still
+        // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
         Some(Typed {
             entered: answer & u64::from(u32::MAX) == ENTERED,

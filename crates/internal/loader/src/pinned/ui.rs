@@ -69,6 +69,7 @@ pub(crate) const NAV_DROP: Symbol = Symbol::new("ui.nav_drop");
 pub(crate) const NAV_END: Symbol = Symbol::new("ui.nav_end");
 pub(crate) const NAV_EXTENT: Constant = Constant::new("ui.nav_extent");
 pub(crate) const NAV_FLAGS: Constant = Constant::new("ui.nav_flags");
+pub(crate) const NAV_HIGHLIGHT: Constant = Constant::new("ui.nav_highlight");
 pub(crate) const NAV_INIT: Symbol = Symbol::new("ui.nav_init");
 pub(crate) const NAV_INPUT: Symbol = Symbol::new("ui.nav_input");
 pub(crate) const NAV_INPUT_KIND: Constant = Constant::new("ui.nav_input_kind");

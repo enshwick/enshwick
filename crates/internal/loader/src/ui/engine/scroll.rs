@@ -68,15 +68,14 @@ const CONFIG_AXES_ON: u16 = 0x101;
 const CONFIG_BAR: usize = 0x32;
 const CONFIG_LOOK: usize = 0x44;
 
-/// The navigation config's highlight sound, 16 bytes, which the window's
-/// navigation leaves empty.
-const NAV_HIGHLIGHT: usize = 0x38;
+/// The navigation config's highlight sound, which the window's navigation
+/// leaves empty.
+const SOUND_SIZE: usize = 16;
 /// The navigation kind of a scrolled column.
 const NAV_SCROLLED: u32 = 3;
 
 const _: () = assert!(CONFIG_LOOK + SCROLLBAR_LOOK <= SCROLL_CONFIG);
 const _: () = assert!(LOOK_SLIDER + TEXTURE_SIZE <= SCROLLBAR_LOOK);
-const _: () = assert!(NAV_HIGHLIGHT + 16 <= NAV_CONFIG);
 
 /// The scroll area's functions and the bundle's looks for its scrollbar.
 #[derive(Debug)]
@@ -97,6 +96,9 @@ pub(super) struct Scrolling {
     range: usize,
     tint: usize,
     highlight: usize,
+    /// Where the highlight sound sits in the navigation config, from the
+    /// table's `ui.nav_highlight`.
+    nav_highlight: usize,
 }
 
 fn scrollbar(loader: &Loader, name: &str) -> Option<usize> {
@@ -108,6 +110,26 @@ fn scrollbar(loader: &Loader, name: &str) -> Option<usize> {
             ("keen::FbUiMenuScrollbar", name),
         ],
     )
+}
+
+/// The highlight sound's offset in the navigation config, kept inside the
+/// loader's config buffer.
+fn nav_highlight(loader: &Loader) -> Result<usize, Missing> {
+    let id = pinned::ui::NAV_HIGHLIGHT.id();
+    let field = |id: &'static str| {
+        loader
+            .build
+            .constant(id)
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or(Missing::Entry(id))
+    };
+    let at = field(id)?
+        .checked_sub(field(pinned::ui::NAV_CONFIG.id())?)
+        .ok_or(Missing::Room(id))?;
+    if at + SOUND_SIZE > NAV_CONFIG {
+        return Err(Missing::Room(id));
+    }
+    Ok(at)
 }
 
 impl Scrolling {
@@ -137,6 +159,7 @@ impl Scrolling {
             range: scrollbar(loader, "range").ok_or(Missing::Looks)?,
             tint: scrollbar(loader, "rangeTint").ok_or(Missing::Looks)?,
             highlight: sound(loader, "highlightChange").ok_or(Missing::Looks)?,
+            nav_highlight: nav_highlight(loader)?,
         })
     }
 }
@@ -170,16 +193,13 @@ impl Scroll {
 }
 
 impl Engine {
-    /// Whether this build draws scroll areas; without them lists page.
-    pub(in crate::ui) const fn scrolls(&self) -> bool {
-        self.scroll.is_some()
-    }
-
     /// Starts a scroll area `height` high and as wide as the window, as the
     /// world settings scroll their tabs: rows drawn until
     /// [`Engine::scroll_end`] go into it, `gap` apart, and the game keeps
-    /// its offset from frame to frame. Opens nothing on a build without
-    /// scroll areas.
+    /// its offset from frame to frame. True when the rows scroll; false on
+    /// a build without scroll areas, which opens nothing, and when the game
+    /// keeps no state for the area this frame, which leaves only a frame
+    /// `height` high open.
     ///
     /// # Safety
     ///
@@ -194,10 +214,10 @@ impl Engine {
         scroll: &mut Scroll,
         height: f32,
         gap: f32,
-    ) {
+    ) -> bool {
         scroll.opened = Opened::Nothing;
         let Some(fns) = &self.scroll else {
-            return;
+            return false;
         };
         // SAFETY: `self.frame_open` is the game's `ui.frame_open`, checked in
         // `Engine::resolve`, inside the window this function's `# Safety`
@@ -220,7 +240,7 @@ impl Engine {
         let state =
             unsafe { (fns.persist)(parent, STATE_KEY, STATE_SIZE as u64, fns.no_construct, 1) };
         if state.is_null() {
-            return;
+            return false;
         }
         // SAFETY: `fns.first_use` is the game's `ui.first_use`, checked in
         // `Scrolling::resolve`, on the non-null state `persist` just handed
@@ -273,6 +293,7 @@ impl Engine {
         // SAFETY: `self.node_stretch` is the game's `ui.node_stretch`,
         // checked in `Engine::resolve`, on the node the column just wrote.
         unsafe { (self.node_stretch)(column, stretch(1.0, 0.0)) };
+        true
     }
 
     /// Ends the scroll area [`Engine::scroll_begin`] started, closing what
@@ -362,7 +383,7 @@ impl Engine {
         // context, and `fns.highlight` the reflected offset of a 16-byte
         // sound reference inside it.
         let highlight = unsafe { crate::memory::read::<[u8; 16]>(bundle, fns.highlight) };
-        nav.put(NAV_HIGHLIGHT, highlight);
+        nav.put(fns.nav_highlight, highlight);
         nav
     }
 }

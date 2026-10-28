@@ -79,6 +79,7 @@ static JUMP_SHOWN: AtomicU8 = AtomicU8::new(0);
 /// The pause menu's submenu state for the world settings.
 const WORLD_SETTINGS_SUBMENU: u32 = 4;
 
+/// What the screen shows.
 enum Page {
     /// The mods, from `first` while they page.
     List { first: usize },
@@ -106,14 +107,25 @@ enum Page {
 }
 
 impl Page {
+    /// The text fields of the page, on a settings page.
+    fn entries(&mut self) -> Option<&mut Entries> {
+        match self {
+            Self::Settings { entries, .. } | Self::ServerSettings { entries, .. } => Some(entries),
+            _ => None,
+        }
+    }
+
     /// Whether one of the page's text fields has the caret, so Back ends
     /// the typing and not the page.
-    fn editing(&self) -> bool {
-        match self {
-            Self::Settings { entries, .. } | Self::ServerSettings { entries, .. } => {
-                entries.editing
-            }
-            _ => false,
+    fn editing(&mut self) -> bool {
+        self.entries().is_some_and(|e| e.editing)
+    }
+
+    /// Back while a text field has the caret: the field gives it up in the
+    /// next frame, and the page stays.
+    fn end_typing(&mut self) {
+        if let Some(entries) = self.entries() {
+            entries.ending = true;
         }
     }
 }
@@ -125,9 +137,13 @@ struct Entries {
     fields: Vec<(String, Box<TextBuffer>)>,
     /// One of them had the caret in the last frame.
     editing: bool,
+    /// Back came while one had the caret: the next frame takes it away.
+    ending: bool,
 }
 
 impl Entries {
+    /// The buffer of row `key`, made with `value` the first time the row
+    /// shows.
     fn buffer(&mut self, key: &str, value: &str) -> &mut TextBuffer {
         let at = self.fields.iter().position(|(k, _)| k == key);
         let at = at.unwrap_or_else(|| {
@@ -324,6 +340,9 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             return;
         }
         JUMP_SHOWN.store(u8::from(screen.from == FROM_PAUSE), Ordering::Relaxed);
+        if let Some(entries) = screen.page.entries() {
+            entries.ending = false;
+        }
         match BACK.swap(0, Ordering::Relaxed) {
             // The world settings opened over the pause menu: the screen goes.
             2 => {
@@ -332,7 +351,8 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 return;
             }
             // Back while a text field has the caret only ends the typing.
-            1 if !screen.page.editing() && back(screen) => {
+            1 if screen.page.editing() => screen.page.end_typing(),
+            1 if back(screen) => {
                 *slot = None;
                 return;
             }
@@ -400,6 +420,13 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
     }
 }
 
+/// Draws the screen's window; true when the player closed it.
+///
+/// # Safety
+///
+/// - Called inside a frame of the game's interface update, on its thread.
+/// - `context` is the non-zero context `Engine::context` read in this frame.
+/// - No other window is open.
 unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Screen) -> bool {
     let name = copy(&[b"enshwick/loader/mods"]);
     let title = title(loader, &screen.page);
@@ -424,7 +451,8 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     // SAFETY: the window started above in this frame, on its thread, with
     // its `context`; `screen.scroll` stays in the thread-local `SCREEN`,
     // unmoved until `scroll_end` below.
-    unsafe { engine.scroll_begin(context, &mut screen.scroll, height, GAP) };
+    let scrolled = unsafe { engine.scroll_begin(context, &mut screen.scroll, height, GAP) };
+    paint.set_scrolled(scrolled);
     let next = content(loader, &paint, &mut screen.page);
     // SAFETY: `scroll_begin` started `screen.scroll` in this frame inside
     // this window; it did not move, and the painter's widgets close every
@@ -448,7 +476,15 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
         }
         Next::Message(message) => screen.message = Some(message),
     }
-    back && !screen.page.editing() && self::back(screen)
+    if !back {
+        return false;
+    }
+    if screen.page.editing() {
+        // Taken as a Back press in the next frame, which ends the typing.
+        BACK.store(1, Ordering::Relaxed);
+        return false;
+    }
+    self::back(screen)
 }
 
 /// What the screen does after a frame of its page.
@@ -755,7 +791,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
 /// How the screen shows its lists: in its scroll area, or `per_page` at a
 /// time on a build without scroll areas.
 fn listing(paint: &Painter<'_>, per_page: usize) -> Listing {
-    if paint.engine.scrolls() {
+    if paint.scrolled() {
         Listing::Scrolled
     } else {
         Listing::Paged { per_page }
@@ -857,6 +893,8 @@ fn settings(
     )
 }
 
+/// Draws one row, its text field kept in `entries` where the page has
+/// them; the TOML of the player's change.
 fn draw_row(
     paint: &Painter<'_>,
     id: &str,
@@ -897,19 +935,18 @@ fn draw_row(
             )?;
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
-        Widget::Entry(value) => match entries {
+        Widget::Entry { text, toml } => match entries {
             Some(entries) if !read_only && paint.engine.types_text() => {
                 paint.label(label.as_bytes(), UiWidget::STYLE_BODY, true, false);
-                text_row(paint, &row.key, value, entries)
+                text_row(paint, &row.key, text, entries)
             }
             _ => {
                 let line = if read_only {
-                    texts::fill("row.value", &[("label", &label), ("value", value)])
+                    texts::fill("row.value", &[("label", &label), ("value", text)])
                 } else {
-                    let value = rows::entered(value);
                     texts::fill(
                         "row.text",
-                        &[("label", &label), ("value", &value), ("id", id)],
+                        &[("label", &label), ("value", toml), ("id", id)],
                     )
                 };
                 paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
@@ -928,12 +965,14 @@ fn draw_row(
 }
 
 /// Draws the text field of row `key`, whose setting holds `value`; the
-/// TOML of the typed text when the player pressed Enter. Out of the field,
-/// it shows the setting's value: typing that ends without Enter is
-/// dropped.
+/// TOML of the typed text when the player pressed Enter. Typing that ends
+/// without Enter sets nothing, and the field's buffer gets the setting's
+/// value back; `entries.ending` takes the caret from the field.
 fn text_row(paint: &Painter<'_>, key: &str, value: &str, entries: &mut Entries) -> Option<String> {
+    let ending = entries.ending;
     let buffer = entries.buffer(key, value);
-    let typed = paint.text_field(buffer, texts::text("row.text.hint").as_bytes())?;
+    let hint = texts::text("row.text.hint").as_bytes();
+    let typed = paint.text_field(buffer, hint, ending)?;
     let entered = typed.entered.then(|| rows::entered(buffer.text()));
     if !typed.editing && entered.is_none() && buffer.text() != value {
         buffer.set(value);

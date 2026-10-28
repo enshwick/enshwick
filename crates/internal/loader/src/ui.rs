@@ -124,6 +124,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::NAV_END.id(),
     pinned::ui::NAV_EXTENT.id(),
     pinned::ui::NAV_FLAGS.id(),
+    pinned::ui::NAV_HIGHLIGHT.id(),
     pinned::ui::NAV_INIT.id(),
     pinned::ui::NAV_INPUT.id(),
     pinned::ui::NAV_INPUT_KIND.id(),

@@ -180,8 +180,8 @@ it extends, and edits each player's own settings of each mod that derives
 their last tab, with nothing to write in the mod. See
 [Settings per world](settings.md#settings-per-world). Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list
-out. While a text field has the caret, Back ends the typing and leaves the
-page open.
+out. While a text field has the caret, Back takes the caret from the field
+and leaves the page open; the next Back steps back.
 
 The list of mods, a mod's settings and the server's settings scroll in the
 game's own scroll area, with its scrollbar, as the game's world settings do.
