@@ -1,7 +1,6 @@
 //! Events the loader raises, with the data each carries.
 
 use core::ffi::c_void;
-use core::mem::offset_of;
 use core::time::Duration;
 
 use crate::abi::{Entity, Header, ItemId, KnowledgeId, PlayerKey};
@@ -469,7 +468,7 @@ impl PlayerInfo {
 /// use enshwick::abi::TickData;
 ///
 /// let tick = TickData::new(7).with_elapsed(6, Duration::from_millis(100));
-/// assert_eq!((tick.step, tick.elapsed_steps()), (7, 6));
+/// assert_eq!((tick.step, tick.elapsed_steps), (7, 6));
 /// assert_eq!(tick.elapsed(), Duration::from_millis(100));
 /// ```
 #[repr(C)]
@@ -480,20 +479,20 @@ pub struct TickData {
     /// Steps since the loader started counting, from 1.
     pub step: u64,
     /// Server steps since this handler's last call: 1 for an every-step
-    /// handler and for a handler's first call. Since minor 3.
+    /// handler and for a handler's first call.
     pub elapsed_steps: u64,
     /// Wall time since this handler's last call in nanoseconds; for its
     /// first call, and for an every-step handler, the time since the step
-    /// before. 0 on the loader's first step. Since minor 3.
+    /// before. 0 on the loader's first step.
     pub elapsed_nanos: u64,
     /// The average time between server steps in nanoseconds, over about the
-    /// last 16 steps; 0 until a step has been measured. Since minor 3.
+    /// last 16 steps; 0 until a step has been measured.
     pub step_nanos: u64,
     /// What one call of this mod's event handlers cost on average since
     /// this handler's last call, in nanoseconds; 0 for an every-step
     /// handler, unless the loader's diagnostics time callbacks, and for
     /// about a second after they start, while the loader measures its
-    /// clock. Since minor 3.
+    /// clock.
     pub cost_nanos: u64,
 }
 
@@ -507,7 +506,7 @@ impl TickData {
     ///
     /// ```
     /// let tick = enshwick::abi::TickData::new(1);
-    /// assert_eq!(tick.elapsed_steps(), 1);
+    /// assert_eq!(tick.elapsed_steps, 1);
     /// ```
     #[must_use]
     pub const fn new(step: u64) -> Self {
@@ -538,30 +537,14 @@ impl TickData {
         }
     }
 
-    /// Server steps since the handler's last call; 1 from a loader older
-    /// than minor 3.
-    ///
-    /// # Examples
-    ///
-    /// See [`TickData`].
-    #[must_use]
-    pub const fn elapsed_steps(&self) -> u64 {
-        if self.header.covers(end_of(offset_of!(Self, elapsed_steps))) {
-            self.elapsed_steps
-        } else {
-            1
-        }
-    }
-
-    /// Wall time since the handler's last call; zero from a loader older
-    /// than minor 3.
+    /// Wall time since the handler's last call.
     ///
     /// # Examples
     ///
     /// See [`TickData`].
     #[must_use]
     pub const fn elapsed(&self) -> Duration {
-        Duration::from_nanos(self.minor_2(offset_of!(Self, elapsed_nanos), self.elapsed_nanos))
+        Duration::from_nanos(self.elapsed_nanos)
     }
 
     /// The average time between server steps lately, about 50 ms on an
@@ -577,7 +560,7 @@ impl TickData {
     /// ```
     #[must_use]
     pub const fn step_interval(&self) -> Option<Duration> {
-        match self.minor_2(offset_of!(Self, step_nanos), self.step_nanos) {
+        match self.step_nanos {
             0 => None,
             nanos => Some(Duration::from_nanos(nanos)),
         }
@@ -594,31 +577,16 @@ impl TickData {
     /// ```
     #[must_use]
     pub const fn cost(&self) -> Option<Duration> {
-        match self.minor_2(offset_of!(Self, cost_nanos), self.cost_nanos) {
+        match self.cost_nanos {
             0 => None,
             nanos => Some(Duration::from_nanos(nanos)),
         }
     }
-
-    /// `value`, the u64 field at `offset`, when the writer's header covers
-    /// it, and 0 otherwise.
-    const fn minor_2(&self, offset: usize, value: u64) -> u64 {
-        if self.header.covers(end_of(offset)) {
-            value
-        } else {
-            0
-        }
-    }
-}
-
-/// Where a u64 field that starts at `offset` ends.
-const fn end_of(offset: usize) -> usize {
-    offset + size_of::<u64>()
 }
 
 /// A periodic tick handler a mod subscribed with
 /// [`HostApi::subscribe_tick`](super::HostApi::subscribe_tick), for
-/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every). Since minor 3.
+/// [`HostApi::set_tick_every`](super::HostApi::set_tick_every).
 ///
 /// Valid for the mod that subscribed it until that mod reloads, after which
 /// the loader answers [`Status::MISSING`](super::Status::MISSING).

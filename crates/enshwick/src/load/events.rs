@@ -85,7 +85,7 @@ impl Load<'_> {
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     load.on_tick(Duration::from_secs(5), |tick| {
-    ///         enshwick::debug!("{} steps in {:?}", tick.elapsed_steps(), tick.elapsed());
+    ///         enshwick::debug!("{} steps in {:?}", tick.elapsed_steps, tick.elapsed());
     ///     })?;
     ///     Ok(())
     /// }

@@ -24,7 +24,7 @@ mod tests {
             CALLS
                 .lock()
                 .unwrap()
-                .push((name, tick.elapsed_steps(), tick.elapsed()));
+                .push((name, tick.elapsed_steps, tick.elapsed()));
         }
     }
 

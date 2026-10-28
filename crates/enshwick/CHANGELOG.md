@@ -28,6 +28,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: `abi::TickData::elapsed_steps()` is gone; read the field of
+  the same name. Its accessors no longer guess for loaders of an older
+  minor, which the ABI never pairs with a mod, and the ABI docs and the C
+  header drop their per-minor history notes.
 - Breaking: `WorldError` is `enshwick::WorldError`, shared by every module
   that acts on the server's world, and `ComponentType` is
   `ecs::ComponentType`, resolved with `ComponentType::resolve` in place of
