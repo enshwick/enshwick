@@ -242,6 +242,7 @@ impl Load<'_> {
     ///
     /// See [`RecipesChange`].
     pub fn change_recipes(&mut self, change: &RecipesChange, source: &str) -> Result<(), Off> {
+        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.recipes)))?;

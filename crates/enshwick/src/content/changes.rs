@@ -47,7 +47,8 @@ pub const MAX_FACTOR: f64 = 100.0;
 pub enum Field {
     /// How many of an item one inventory slot holds, 1 to 65535; the entry
     /// is an item. The game cuts a saved stack above it, so a world saved
-    /// while it was raised depends on the change.
+    /// while it was raised depends on the change. Unstable: changing it
+    /// needs the `unstable` feature and may change in any release.
     MaxStackSize,
     /// How many of each item a recipe makes, 1 to 65535; the entry is a
     /// recipe.
@@ -65,7 +66,9 @@ pub enum Field {
     /// How many slots a container holds, 8 to 128 in steps of 8 and never
     /// fewer than it has; the entry is the item that places it, and the
     /// change reaches every item that places the same container. Containers
-    /// placed before keep their size, which the save holds.
+    /// placed before keep their size, which the save holds. Unstable:
+    /// changing it needs the `unstable` feature and may change in any
+    /// release.
     Slots,
     /// A weapon's damage factor, `dmgMod`, from 0 to 100; the entry is an
     /// item that deals damage. Weapons the game sets up after the change
@@ -749,6 +752,21 @@ fn field_and_value(raw: &DataChange) -> Option<(Field, Value)> {
     Some((Field::from_abi(raw.field)?, value))
 }
 
+impl Field {
+    /// Refuses a change of an inventory limit, [`Field::MaxStackSize`] or
+    /// [`Field::Slots`], from a mod built without the `unstable` feature: how
+    /// a player's game shows a raised limit is not yet seen in the game.
+    pub(crate) fn unstable_gate(self) -> Result<(), Off> {
+        if cfg!(feature = "unstable") || !matches!(self, Self::MaxStackSize | Self::Slots) {
+            Ok(())
+        } else {
+            Err(Off::new(format!(
+                "a change of {self} needs the `unstable` feature"
+            )))
+        }
+    }
+}
+
 impl Load<'_> {
     /// Declares `change` during `init`, from `source`, such as
     /// `items.toml:12`, which the conflict reports name. The loader merges it
@@ -767,6 +785,7 @@ impl Load<'_> {
     ///
     /// See the [module](self).
     pub fn change(&mut self, change: &Change, source: &str) -> Result<(), Off> {
+        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {}: {why}", change.entry)))?;

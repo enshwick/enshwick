@@ -1,6 +1,7 @@
 //! Recipes: a vanilla recipe copied for a new output, with its ingredients
 //! scaled, or the recipes in the registry changed in place.
 
+#[cfg(feature = "unstable")]
 use std::sync::Arc;
 
 use crate::{Load, Off};
@@ -23,9 +24,12 @@ pub use derive::{Derived, RecipeView, derive_recipes_in, derived_guid};
 pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
+#[cfg(feature = "unstable")]
 use add::fnv1a;
 pub(crate) use derive::list;
-use derive::{derived_entries, menu_entry, recipe_guids, vanilla_registry};
+use derive::menu_entry;
+#[cfg(feature = "unstable")]
+use derive::{derived_entries, recipe_guids, vanilla_registry};
 
 impl Load<'_> {
     /// Adds a recipe to the game, on the server and the client alike: a copy
@@ -33,6 +37,8 @@ impl Load<'_> {
     /// it, making `output` instead, beside recipes other mods add. The
     /// client's crafting menu lists it right after the copied recipe (see
     /// [`menu`](super::menu)).
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -58,7 +64,14 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn add_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
+        self.push_recipe(recipe)
+    }
+
+    /// Adds `recipe` as `Load::add_recipe` does, for the workshops and
+    /// data packs that bring their own.
+    pub(crate) fn push_recipe(&mut self, recipe: NewRecipe) -> Result<(), Off> {
         self.declare(recipe.id)?;
         let layout = RecipeLayout::resolve(self)?;
         let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
@@ -75,6 +88,8 @@ impl Load<'_> {
     /// settings that change, such as a world's or a server's join values,
     /// applies through [`rebuild_recipes`]. Every answer keeps the id of the
     /// first.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///
@@ -101,6 +116,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn add_recipe_with(
         &mut self,
         recipe: impl Fn() -> NewRecipe + Send + Sync + 'static,
@@ -129,6 +145,8 @@ impl Load<'_> {
     /// add. `salt` keeps the copies' GUIDs apart from other mods'; use the
     /// mod id.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] when the recipe layout is not reflected.
@@ -147,6 +165,7 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn derive_recipes(
         &mut self,
         salt: &str,
@@ -189,7 +208,7 @@ impl Load<'_> {
 /// Builds the recipe registry again with every mod's recipe changes, from any
 /// thread.
 ///
-/// For a mod whose [`Load::add_recipe_with`] reads values that changed, such
+/// For a mod whose `Load::add_recipe_with` reads values that changed, such
 /// as a server's join values on a joined client: the counts the game holds
 /// change in place.
 ///
@@ -198,7 +217,7 @@ impl Load<'_> {
 ///
 /// # Errors
 ///
-/// [`Off`] for a mod that adds no recipe with [`Load::add_recipe_with`], and
+/// [`Off`] for a mod that adds no recipe with `Load::add_recipe_with`, and
 /// when another mod's patch changed the
 /// registry's length.
 ///

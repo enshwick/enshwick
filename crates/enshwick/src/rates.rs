@@ -16,9 +16,11 @@
 //! }
 //! ```
 
+use crate::Host;
 use crate::abi::{RateId, Status};
 use crate::content::recipes::RecipeKind;
-use crate::{Host, Load, Off};
+#[cfg(feature = "unstable")]
+use crate::{Load, Off};
 
 /// The largest factor a mod sets and the largest product in force.
 pub const MAX_FACTOR: f32 = 100.0;
@@ -349,6 +351,7 @@ impl RateHandle {
     }
 }
 
+#[cfg(feature = "unstable")]
 impl Load<'_> {
     /// Declares that this mod multiplies `rate` and hands back the handle
     /// that sets its factor, 1 until set. The loader scales the game's

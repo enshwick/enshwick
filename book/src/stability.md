@@ -31,6 +31,10 @@ Everything the crate offers without a feature:
 | `Effects::teleport` and `Effects::ping`                                                                                                 | whether a client keeps a teleported player in place, and shows a ping the server raised, is not yet seen |
 | `Knowledge::revoke` and its kin, `Load::on_knowledge_input`                                                                             | how a vanilla client takes a revoke, and what it asks for, is not yet seen                               |
 | `Load::request_base_limits`                                                                                                             | young                                                                                                    |
+| `rates`: every game rate                                                                                                                | how a lowered skill-point total and the loot counts play out is not yet seen in the client               |
+| Changes of `Field::MaxStackSize` and `Field::Slots` from a mod; the same changes in data packs carry no promise either                  | how a player's game shows a chest above 72 slots, a raised stack and a grown backpack is not yet seen    |
+| Damage filters (`Load::on_damage`, `Damage`, `DamageCause`), `events::PlayerDied` and the `killer` fields of `EntityDiedEvent`          | the order of the game's attributes and who it records as a killer are not yet seen                       |
+| `Load::add_recipe`, `add_recipe_with` and `derive_recipes`                                                                              | what crafting a new recipe leaves in a player's knowledge is not yet seen                                |
 
 The API reference marks each of these items "Unstable". Turn the feature on in
 the mod's `Cargo.toml`:

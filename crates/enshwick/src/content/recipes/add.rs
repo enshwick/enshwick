@@ -14,7 +14,7 @@ use super::derive::{makes, scaled_inputs};
 pub const WORKSHOP_RECIPES: usize = 512;
 
 /// Places at each workshop derived recipes leave free for single ones,
-/// which [`Load::add_recipe`](crate::Load::add_recipe) adds, while the game's limit holds.
+/// which `Load::add_recipe` adds, while the game's limit holds.
 pub const RESERVED_FOR_SINGLE: usize = 16;
 
 /// The most recipes one workshop takes on the running game: [`usize::MAX`] once
@@ -47,11 +47,11 @@ pub fn workshop_limit() -> usize {
 /// The game's recipe registry resource.
 pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba656e2");
 
-/// A new recipe for [`Load::add_recipe`](crate::Load::add_recipe).
+/// A new recipe for `Load::add_recipe`.
 ///
 /// # Examples
 ///
-/// See [`Load::add_recipe`](crate::Load::add_recipe).
+/// See `Load::add_recipe`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NewRecipe {
     /// The new recipe's id; its game id is [`RecipeId::from_guid`](crate::RecipeId::from_guid) of its GUID.
@@ -152,6 +152,7 @@ impl RecipeLayout {
 }
 
 /// FNV-1a over `bytes`.
+#[cfg(feature = "unstable")]
 pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
     bytes.iter().fold(0x811c_9dc5_u32, |hash, &b| {
         (hash ^ u32::from(b)).wrapping_mul(0x0100_0193)
@@ -161,7 +162,7 @@ pub(super) fn fnv1a(bytes: &[u8]) -> u32 {
 /// The recipe registry with `recipe` after the others, unless its workshop
 /// already holds `limit` recipes.
 ///
-/// [`Load::add_recipe`](crate::Load::add_recipe) serves it with [`workshop_limit`]; call it from a
+/// `Load::add_recipe` serves it with [`workshop_limit`]; call it from a
 /// [`Load::serve`](crate::Load::serve) builder of your own to combine it with other edits.
 ///
 /// # Examples

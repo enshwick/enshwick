@@ -2548,7 +2548,7 @@ typedef uint32_t EnshwickRecipeKind;
 
 // A game rate of `HostApi::rate` and
 // `HostApi::set_rate`, by the loader's stable
-// number; the safe layer names them with `crate::rates::Rate`.
+// number; the safe layer names them with `rates::Rate`.
 typedef uint32_t EnshwickRateId;
 // Experience from combat.
 #define EnshwickRateId_EXPERIENCE_COMBAT 1

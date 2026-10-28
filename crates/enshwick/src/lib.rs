@@ -32,17 +32,17 @@
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
 //! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`] |
-//! | Game rules | [`damage`], [`loot`], [`rates`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
+//! | Game rules | [`damage`], [`loot`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
 //! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
 //! | Interface | [`ui`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`actions`], [`console`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `actions`, `console`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `actions`, `console`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
@@ -148,7 +148,17 @@ pub mod pacing;
 pub mod packs;
 pub mod points;
 pub mod progress;
+#[cfg(feature = "unstable")]
 pub mod rates;
+// Without `unstable` the rates stay inside, for the recipe and comfort
+// scaling the stable parts and the fake host share.
+#[cfg(not(feature = "unstable"))]
+#[expect(
+    unreachable_pub,
+    dead_code,
+    reason = "the rates are public only with `unstable`"
+)]
+mod rates;
 pub mod raw;
 #[cfg(doctest)]
 mod refused;

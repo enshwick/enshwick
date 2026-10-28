@@ -283,6 +283,7 @@ impl Load<'_> {
     ///
     /// See [`ItemsChange`].
     pub fn change_items(&mut self, change: &ItemsChange, source: &str) -> Result<(), Off> {
+        change.field.unstable_gate()?;
         change
             .check()
             .map_err(|why| Off::new(format!("change of {:?}: {why}", change.items)))?;

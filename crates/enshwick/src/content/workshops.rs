@@ -511,7 +511,7 @@ impl Load<'_> {
             super::menu::list_workshop(menu, bundle, workshop)
         })?;
         if let Some(recipe) = recipe {
-            self.add_recipe(NewRecipe {
+            self.push_recipe(NewRecipe {
                 id: recipe.id,
                 like: like.item,
                 output: item,

@@ -1,5 +1,8 @@
 # Game rates
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 A game rate multiplies something the game hands out, such as experience or
 workshop speed. A mod declares each
 [`Rate`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/rates.rs)

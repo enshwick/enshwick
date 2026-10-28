@@ -18,6 +18,9 @@ recipes out of the game, see [Disabling recipes](disabled-recipes.md).
 
 ## A single recipe
 
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](../stability.md)).
+
 ```rust
 use enshwick::content::{Guid, Id};
 use enshwick::content::recipes::NewRecipe;
@@ -62,6 +65,9 @@ closure each time the registry is built, and
 again with the new cost ([Rebuilding](resources.md#rebuilding)).
 
 ## Derived recipes
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](../stability.md)).
 
 `derive_recipes(salt, choose)` calls `choose` with a view of each recipe in
 the registry. Return `Some(Derived { .. })` to add a copy of that recipe

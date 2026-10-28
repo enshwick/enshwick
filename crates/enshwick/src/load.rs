@@ -130,7 +130,6 @@ off_from!(
     crate::net::SendError,
     crate::packs::PackError,
     crate::packs::ReadPackError,
-    crate::rates::RateError,
     crate::services::LayoutError,
     crate::stats::ModifyError,
     crate::ui::UiError,
@@ -138,7 +137,7 @@ off_from!(
 );
 
 #[cfg(feature = "unstable")]
-off_from!(crate::console::RunError);
+off_from!(crate::console::RunError, crate::rates::RateError);
 
 impl From<ConfigError> for Off {
     /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text

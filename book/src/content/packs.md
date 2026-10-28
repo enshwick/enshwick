@@ -315,6 +315,9 @@ items it covers.
 
 ### Stack sizes and saved worlds
 
+Unstable: stack sizes and slots may change in any release; a mod changing them
+needs the `unstable` feature ([Stability](../stability.md)).
+
 The game cuts every stack above an item's stack size when a world loads and
 deletes the rest. So a world saved with a pack that raised a stack size
 depends on that pack. The first time such a world loads, the pack sets a

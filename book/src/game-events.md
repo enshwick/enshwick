@@ -41,7 +41,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | `RevivedPlayerEvent` | `target_entity_id`, `source_entity_id` |
 
 Each kind and field takes the game's own name in Rust casing; `Block`,
-`killer` and `killer_player` are enshwick's.
+`killer` and `killer_player` are enshwick's and need the `unstable` feature.
 
 The loader maps each kind and its fields to the running build, so a game
 update that renames or moves them changes the loader, not your mod.

@@ -16,9 +16,10 @@
 use core::ffi::c_void;
 use core::time::Duration;
 
+#[cfg(feature = "unstable")]
+use crate::abi::PlayerDeathData;
 use crate::abi::{
-    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, PlayerDeathData, QuestData,
-    TickData, TickHandle,
+    BuildingData, ChunkData, Event, KnowledgeData, PlayerData, QuestData, TickData, TickHandle,
 };
 
 pub(crate) mod sealed {
@@ -149,9 +150,10 @@ macro_rules! subscribe_with_data {
 }
 
 macro_rules! with_data {
-    ($($(#[doc = $doc:literal])* $name:ident = $event:ident: $data:ty, $born:expr $(, $own:path)?;)*) => {
+    ($($(#[cfg($cfg:meta)])? $(#[doc = $doc:literal])* $name:ident = $event:ident: $data:ty, $born:expr $(, $own:path)?;)*) => {
         /// The script entries of the events with data.
         const SCRIPT_WITH_DATA: &[crate::script::EventKind] = &[$(
+            $(#[cfg($cfg)])?
             crate::script::EventKind::new(
                 stringify!($name),
                 concat!($($doc, "\n"),*),
@@ -172,11 +174,14 @@ macro_rules! with_data {
         /// # Examples
         ///
         /// See [`Load::on`](crate::Load::on).
+        $(#[cfg($cfg)])?
         #[derive(Debug, Clone, Copy)]
         pub struct $name;
 
+        $(#[cfg($cfg)])?
         impl sealed::Sealed for $name {}
 
+        $(#[cfg($cfg)])?
         impl Kind for $name {
             type Data = $data;
 
@@ -188,6 +193,7 @@ macro_rules! with_data {
             }
         }
 
+        $(#[cfg($cfg)])?
         impl LoaderEvent for $name {
             const EVENT: Event = Event::$event;
 
@@ -252,7 +258,10 @@ with_data! {
     ChunkUnloaded = CHUNK_UNLOADED: ChunkData, size_of::<ChunkData>();
     /// [`Event::BUILDING_REMOVED`].
     BuildingRemoved = BUILDING_REMOVED: BuildingData, size_of::<BuildingData>();
+    #[cfg(feature = "unstable")]
     /// [`Event::PLAYER_DIED`].
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     PlayerDied = PLAYER_DIED: PlayerDeathData, core::mem::offset_of!(PlayerDeathData, killer_entity);
 }
 
@@ -360,6 +369,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn a_death_from_minor_60_reads_without_its_killer_entity() {
         let mut death = PlayerDeathData {
             header: Header::of::<PlayerDeathData>(),
