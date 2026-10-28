@@ -1,12 +1,12 @@
 //! The game's bases past 16 altar zones, and the altars each Flame level
 //! allows.
 //!
-//! The game puts zones that touch into one base. Its grouping tests only the
-//! first 16 zones and starts every later zone as a base of its own, its
-//! array of bases holds 16 with no check (a 17th base writes over the zone
-//! list), and a base names its zones in a 32-bit mask. Raised, found by byte
-//! patterns:
+//! The game puts zones that touch into one base. It copies only the first 16
+//! zones of the world's list into the bases, its array of bases holds 16 with
+//! no check (a 17th base would write over the zone list), and a base names
+//! its zones in a 32-bit mask. Raised, found by byte patterns:
 //!
+//! - the bases' copy of the zone list grows to every listed zone;
 //! - the game's grouping may start only the bases ours plans, which groups
 //!   every listed zone; after it each base takes our box and zones
 //!   ([`members`]);
@@ -547,6 +547,13 @@ unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
         .then(|| &PLANNED[unsafe { kind(bases) }])
     {
         planned.store(MAX_GROUPED, Ordering::Relaxed);
+    }
+    if let Some(sites) = SITES.get().filter(|_| raised() && !bases.is_null()) {
+        // SAFETY: `bases` is the grouping's own live object, non-null by the
+        // filter, before the game's grouping copies the world's zone list.
+        let _done = BASES_FUSE.run("the zone list", || unsafe {
+            members::let_zone_list_grow(bases, sites.fields);
+        });
     }
     // SAFETY: this detour runs only as the base grouping's link, so the slot
     // holds the next function of that signature; the game's arguments pass

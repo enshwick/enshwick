@@ -1,8 +1,10 @@
 //! The bases past 32 altar zones: the zones of each base in a side table,
 //! and the game's member lookups replaced to read it.
 //!
-//! The game names a base's zones in a 32-bit mask. Its grouping still runs,
-//! to release the old bases and copy the world's zone list, but it may start
+//! The game names a base's zones in a 32-bit mask, and copies the world's
+//! zone list into room for 16 that cannot grow; given an allocator, it grows
+//! to every listed zone. Its grouping still runs, to release the old bases
+//! and copy the world's zone list, but it may start
 //! only the bases our grouping plans; after it, each base takes our box and
 //! zones, the mask its first 32. The four lookups that read the mask answer
 //! from the side table instead. Facts from server 399 and client 426, where
@@ -27,12 +29,18 @@ const OUT_INDEX: usize = 0x8;
 const OUT_BOX: usize = 0x10;
 /// The error byte for a point outside every base.
 const NOT_IN_A_BASE: u8 = 0x1f;
-/// The game's zone box container: data, length, capacity, then the callback
-/// that grows it.
+/// The game's zone box container, also the bases object's own zone list:
+/// data, length, capacity, the callback that grows it, and the allocator it
+/// grows through, null when it may not leave its inline room.
 const VEC_DATA: usize = 0x0;
 const VEC_LEN: usize = 0x8;
 const VEC_CAP: usize = 0x10;
 const VEC_GROW: usize = 0x18;
+const VEC_ALLOCATOR: usize = 0x20;
+/// The world allocator a bases object keeps first, and the bit the game sets
+/// when it hands it to a container.
+const OBJECT_ALLOCATOR: usize = 0x0;
+const HANDED: usize = 1;
 
 /// The callback that grows a zone box container to hold `-wanted` boxes.
 type GrowFn = unsafe extern "system" fn(vec: *mut u8, wanted: i64, exact: u64) -> u8;
@@ -165,6 +173,29 @@ impl Bases for Game {
 
     fn zone(&self, z: usize) -> Aabb {
         self.read_box(self.zone_entry(z))
+    }
+}
+
+/// Lets the zone list of `obj` grow past its inline room of 16 zones, which
+/// the game leaves without an allocator, so its copy of the world's list
+/// stops at 16: hands it the object's allocator as the game hands it to each
+/// base's lists. Every destroy of the object frees the list through it.
+///
+/// # Safety
+///
+/// - `obj` is a live bases object, on the grouping's thread before the game
+///   copies the world's list, with no reader meanwhile.
+pub(super) unsafe fn let_zone_list_grow(obj: *mut u8, fields: Fields) {
+    let allocator_at = fields.zone_list + VEC_ALLOCATOR;
+    // SAFETY: the caller guarantees a live object; its zone list container
+    // starts at the build table's `bases.zone_list`, its allocator field at
+    // `VEC_ALLOCATOR` in it.
+    let given = unsafe { read_at::<usize>(obj, allocator_at) };
+    // SAFETY: as above, the world allocator at `OBJECT_ALLOCATOR`.
+    let allocator = unsafe { read_at::<usize>(obj, OBJECT_ALLOCATOR) };
+    if given == 0 && allocator != 0 {
+        // SAFETY: as above.
+        unsafe { write_at(obj, allocator_at, allocator | HANDED) };
     }
 }
 
@@ -382,7 +413,7 @@ mod tests {
         item_altar: 0x43,
         max_altars_reached: 0x4000,
     };
-    const OBJECT: usize = 0x1340;
+    const OBJECT: usize = 0x1560;
 
     /// A bases object of the game's layout, 16-aligned as the game's.
     #[repr(C, align(16))]
@@ -593,6 +624,27 @@ mod tests {
             );
         };
         assert_eq!(stuck.len, 16, "boxes past the room are skipped");
+    }
+
+    #[test]
+    fn the_zone_list_takes_the_object_s_allocator_once() {
+        let mut fake = Fake::new(1, &[square(0.0, 0.0)]);
+        let obj = fake.ptr();
+        // SAFETY: the fake object, without an allocator yet.
+        unsafe { let_zone_list_grow(obj, FIELDS) };
+        assert_eq!(fake.obj.0[0x1350..0x1358], [0; 8], "no allocator to hand");
+        fake.obj.0[..8].copy_from_slice(&0x1000usize.to_le_bytes());
+        // SAFETY: as above, now with an allocator.
+        unsafe { let_zone_list_grow(obj, FIELDS) };
+        assert_eq!(fake.obj.0[0x1350..0x1358], 0x1001usize.to_le_bytes());
+        fake.obj.0[0x1350..0x1358].copy_from_slice(&0x2001usize.to_le_bytes());
+        // SAFETY: as above.
+        unsafe { let_zone_list_grow(obj, FIELDS) };
+        assert_eq!(
+            fake.obj.0[0x1350..0x1358],
+            0x2001usize.to_le_bytes(),
+            "a list that has one keeps it"
+        );
     }
 
     #[test]
