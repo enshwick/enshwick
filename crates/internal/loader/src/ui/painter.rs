@@ -1,9 +1,11 @@
+use core::cell::Cell;
+
 use enshwick::abi::{Status, Str, UiWidget};
 
 use crate::host::Loader;
 use crate::mod_index::ModIndex;
 
-use super::engine::{Engine, UiText};
+use super::engine::{Engine, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -32,6 +34,8 @@ pub(crate) fn widget(loader: &Loader, owner: ModIndex, token: u64, raw: &mut UiW
 pub(crate) struct Painter<'a> {
     pub(super) engine: &'a Engine,
     pub(super) context: usize,
+    /// The window's list is inside a scroll area this frame.
+    scrolled: Cell<bool>,
 }
 
 impl<'a> Painter<'a> {
@@ -45,7 +49,11 @@ impl<'a> Painter<'a> {
     /// - The painter is used only on this thread and only until that window
     ///   ends.
     pub(super) unsafe fn new(engine: &'a Engine, context: usize) -> Self {
-        Self { engine, context }
+        Self {
+            engine,
+            context,
+            scrolled: Cell::new(false),
+        }
     }
 
     pub(super) fn label(&self, text: &[u8], style: u32, wrap: bool, center: bool) {
@@ -125,6 +133,32 @@ impl<'a> Painter<'a> {
             self.engine
                 .dropdown(&label, &texts[..count], index, read_only)
         }
+    }
+
+    /// A text field over `buffer` with `hint` in it while it is empty,
+    /// which gives up the caret when `ending`; `None` on a build without
+    /// text fields.
+    pub(super) fn text_field(
+        &self,
+        buffer: &mut TextBuffer,
+        hint: &[u8],
+        ending: bool,
+    ) -> Option<Typed> {
+        let hint = copy(&[hint]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the hint lives in the frame's
+        // arena.
+        unsafe { self.engine.text_field(self.context, buffer, &hint, ending) }
+    }
+
+    /// Whether the list drawn now is inside a scroll area.
+    pub(super) fn scrolled(&self) -> bool {
+        self.scrolled.get()
+    }
+
+    /// Notes whether the list drawn now is inside a scroll area.
+    pub(super) fn set_scrolled(&self, scrolled: bool) {
+        self.scrolled.set(scrolled);
     }
 
     pub(super) fn progress(&self, value: f32, min: f32, max: f32) {

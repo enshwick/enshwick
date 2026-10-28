@@ -83,6 +83,10 @@ Each entry names the pull request that made the change.
   texts, which each player reads in their own language; the `validate` of
   the `Config` derive takes any error that converts into `ConfigError`
   (`String`, `&str` or a `ConfigError`) (#620).
+- The Mods screen scrolls its lists in the game's own scroll area instead
+  of paging them, and a text setting takes typed text in the game's own
+  text field, set on Enter. A game build without either keeps the pages
+  and the read-only line, and the log names what is missing (#625).
 
 ### Removed
 

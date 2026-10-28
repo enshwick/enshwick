@@ -245,6 +245,29 @@ revision = 1
 "ui.pause_menu_site" = { rva = 0xcc_3517, pattern = "41 C7 04 24 01 00 00 00 48 8B 05 ?? ?? ?? ?? 4C 8B B0 ?? ?? ?? ?? 49 8D 8E ?? ?? ?? ??", at = 8 }
 "ui.world_settings_site" = { rva = 0xb8_4dab, pattern = "48 8D 8D ?? ?? ?? ?? 49 8B D6 E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F 10 44 24 ??", at = 15 }
 "ui.node_id_get" = { rva = 0x119_aef0, pattern = "E8 ?? ?? ?? ?? 49 8B CE 0F 10 38 E8 ?? ?? ?? ?? 4C 8B F8 48 8B CE E8 ?? ?? ?? ?? 84 C0", rel = 12 }
+# The scroll area the world settings, the server list and its details
+# panel scroll in. `ui.persist` and `ui.no_construct` are pinned at the
+# world settings' call, whose hash is the game's key for its own state.
+"ui.persist" = { rva = 0x118_5580, pattern = "48 89 5C 24 ?? 4C 89 4C 24 ?? 55 56 57 41 54 41 55 41 56 41 57 48 83 EC 40 48 8B 41 50 48 8B EA 48 8B 71 48 4C 8B E9" }
+"ui.first_use" = { rva = 0x119_f650, pattern = "4C 8D 0D ?? ?? ?? ?? 48 BA 1A 10 39 CC 75 E3 E0 E6 C7 44 24 ?? 01 00 00 00 41 B8 18 00 00 00 E8 ?? ?? ?? ?? 48 8B C8 4C 8B F8 E8 ?? ?? ?? ??", rel = 43 }
+"ui.scroll_config" = { rva = 0xa3_24d0, pattern = "48 89 5C 24 ?? 55 48 8D 6C 24 ?? 48 81 EC E0 00 00 00 48 8B D9 E8 ?? ?? ?? ?? 0F 57 C0 C7 45 ?? FF FF FF FF 0F 11 43 08" }
+"ui.scrollbar_look" = { rva = 0xa3_1540, pattern = "C7 44 24 08 FF FF FF FF 0F 57 C0 C7 44 24 0C 00 00 80 3F 0F 57 C9 48 8B 44 24 08 48 89 41 04" }
+"ui.scroll_begin" = { rva = 0xa3_1640, pattern = "48 8B C4 55 57 41 54 41 55 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 10 03 00 00 48 89 58 ?? 48 8B F9 48 89 70 ?? 45 33 ED" }
+"ui.scroll_focus" = { rva = 0xd3_aff0, pattern = "48 89 5C 24 ?? 57 48 81 EC 50 01 00 00 48 8B F9 41 B8 90 2C 03 00 48 8B 0D" }
+"ui.scroll_set_focus" = { rva = 0xa4_4f00, pattern = "80 B9 68 04 00 00 00 75 07 C6 81 68 04 00 00 01 F3 0F 11 89 64 04 00 00 C3" }
+"ui.scroll_nav" = { rva = 0xa3_cdb0, pattern = "40 53 48 83 EC 20 48 8B D9 48 81 C1 80 01 00 00 E8 ?? ?? ?? ?? C6 83 84 00 00 00 01 48 83 C4 20 5B C3" }
+"ui.scroll_input" = { rva = 0xa4_4cf0, pattern = "80 B9 90 01 00 00 00 0F 10 02 0F 11 81 80 01 00 00 75 07 C6 81 90 01 00 00 01 C3" }
+"ui.scroll_end" = { rva = 0xa3_3780, pattern = "48 8B C4 55 53 56 57 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC F8 03 00 00 44 0F 29 B8 ?? ?? ?? ?? 48 8B F9" }
+"ui.column" = { rva = 0xa2_fdc0, pattern = "40 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 48 8B D9 0F 29 74 24 ?? 45 33 C0 33 D2 0F 28 F1 48 8B 48 18 48 89 0B 48 C7 43 08 00 00 00 00 48 C7 43 10 00 00 00 00 E8 ?? ?? ?? ?? 48 8B CB 48 89 43 08 C6 43 14 01 E8 ?? ?? ?? ?? 48 8B 4B 08 48 8D 54 24 ?? 45 33 C0 F3 0F 11 74 24 44" }
+"ui.no_construct" = { rva = 0xab_e7b0, pattern = "4C 8D 0D ?? ?? ?? ?? 48 BA 1A 10 39 CC 75 E3 E0 E6 C7 44 24 ?? 01 00 00 00 41 B8 18 00 00 00 E8 ?? ?? ?? ?? 48 8B C8 4C 8B F8 E8 ?? ?? ?? ??", rel = 3 }
+# The text field of the rename dialogs and the chat input. `ui.text_field`
+# is pinned at the chat's call: a sibling constructor shares its entry.
+"ui.text_field" = { rva = 0xb1_3c30, pattern = "48 8D 95 ?? ?? ?? ?? 41 B1 01 C6 44 24 20 01 48 8D 8D ?? ?? ?? ?? 4C 8B 80 C8 00 00 00 49 81 C0 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8", rel = 37 }
+"ui.text_field_state" = { rva = 0xaf_ab60, pattern = "40 53 48 83 EC 30 48 8B 49 08 4C 8D 0D ?? ?? ?? ?? 44 89 44 24 ?? 41 B8 90 19 00 00 E8" }
+"ui.text_field_input" = { rva = 0xd1_7040, pattern = "48 89 5C 24 ?? 48 89 6C 24 ?? 56 57 41 56 48 81 EC F0 00 00 00 80 B9 1B 01 00 00 00 41 0F B6 E9" }
+"ui.focus_request" = { rva = 0xa4_4b30, pattern = "40 53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B D9 48 8B 49 08 48 8B 50 10 8B 52 44 E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 8B 4B 08" }
+"ui.frame_hit" = { rva = 0xa3_a670, pattern = "40 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 48 8B DA 48 8B 49 08 48 8B 50 10 0F B6 44 24 60 88 44 24 20 8B 52 44 E8" }
+"ui.node_min_height" = { rva = 0x11b_35f0, pattern = "0F 57 C0 F3 0F 5F C1 F3 0F 11 41 7C C3" }
 
 # Engine offsets, sizes and values by symbolic id. A `pattern` holds
 # the code that uses the value, found once on a build without its own
@@ -707,6 +730,24 @@ revision = 1
 "ui.main_menu_site.bytes" = 0x1_4824_44c7_c033
 "ui.pause_menu_site.bytes" = 0x4c01_b5af_7a05_8b48
 "ui.world_settings_site.bytes" = "0xe800_0017_588d_8d48"
+"ui.persist.bytes" = 0x4c89_4c10_245c_8948
+"ui.first_use.bytes" = "0xcccc_ccc3_f041_b60f"
+"ui.scroll_config.bytes" = "0x8d48_5510_245c_8948"
+"ui.scrollbar_look.bytes" = "0xffff_ffff_0824_44c7"
+"ui.scroll_begin.bytes" = 0x4154_4157_55c4_8b48
+"ui.scroll_focus.bytes" = "0x8148_5710_245c_8948"
+"ui.scroll_set_focus.bytes" = 0x7500_0000_0468_b980
+"ui.scroll_nav.bytes" = "0x8b48_20ec_8348_5340"
+"ui.scroll_input.bytes" = 0xf00_0000_0190_b980
+"ui.scroll_end.bytes" = 0x4157_5653_55c4_8b48
+"ui.column.bytes" = "0x8b48_30ec_8348_5340"
+"ui.no_construct.bytes" = "0xcccc_cccc_cc00_00c2"
+"ui.text_field.bytes" = 0x7489_4810_245c_8948
+"ui.text_field_state.bytes" = "0x8b48_30ec_8348_5340"
+"ui.text_field_input.bytes" = 0x6c89_4810_245c_8948
+"ui.focus_request.bytes" = "0x8b48_20ec_8348_5340"
+"ui.frame_hit.bytes" = "0x8b48_30ec_8348_5340"
+"ui.node_min_height.bytes" = "0xf3c1_5f0f_f3c0_570f"
 # The interface's layouts: fields of the context, the popup state, the
 # widgets' configs and the objects the widget functions fill, with the
 # extent each function reads or writes; `ui.nav_*` are offsets in the
@@ -743,6 +784,7 @@ revision = 1
 "ui.nav_input_kind" = { value = 0x58, pattern = "C6 41 ?? 01 C7 41 ?? 03 00 00 00 66 C7 41 ?? 01 01 C7 41 ?? 02 00 00 00 66 C7 41 ?? 1B 00 0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ??", at = 19, size = 1 }
 "ui.nav_layer" = { value = 0x5c, pattern = "66 C7 41 ?? 01 01 C7 41 ?? 02 00 00 00 66 C7 41 ?? 1B 00 0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ??", at = 16, size = 1 }
 "ui.nav_sound" = { value = 0x70, pattern = "0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ?? C7 41 ?? 02 00 00 00", at = 7, size = 1 }
+"ui.nav_highlight" = { value = 0x60, pattern = "0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ?? C7 41 ?? 02 00 00 00", at = 3, size = 1 }
 "ui.label_align" = { value = 0x38, pattern = "49 89 4E ?? 49 89 4E ?? 41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1 }
 "ui.label_shown" = { value = 0x3d, pattern = "41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1, plus = 1 }
 "ui.label_font_size" = { value = 0x7c, pattern = "40 88 7C 24 ?? 41 0F 11 46 ?? 41 89 4E ?? 0F 10 03 49 89 8E ?? ?? ?? ?? 41 89 8E ?? ?? ?? ?? 41 C7 46 ?? 00 00 40 41 49 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? FF FF 00 00 49 89 8E ?? ?? ?? ?? 41 C7 86 ?? ?? ?? ?? FF FF FF FF 41 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? 00 00 00 FF", at = 34, size = 1 }
