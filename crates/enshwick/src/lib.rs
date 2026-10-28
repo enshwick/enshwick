@@ -386,6 +386,11 @@ pub mod __private {
 
     pub use crate::content::recipes::derive::{RecipeEdit, modify_recipes_in};
     pub use crate::engine_ids::ALL as ENGINE_IDS;
+    /// The ids the API asks the loader for engine facts by, for the loader and
+    /// the catalogue to name them from one place.
+    pub mod ids {
+        pub use crate::engine_ids::*;
+    }
 
     /// Each experience source with its catalogue id, for the loader's
     /// experience rates.

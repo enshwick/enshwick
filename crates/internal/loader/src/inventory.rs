@@ -516,7 +516,7 @@ fn build(loader: &Loader) -> Option<Executor> {
         item_category: field("category")?,
         item_rarity: field("rarity")?,
         item_placed_entity: crate::catalogue::constant(
-            enshwick_gamedata::catalogue::ITEM_PLACED_ENTITY,
+            enshwick_gamedata::catalogue::ids::ITEM_INFO_PLACED_ENTITY,
             &loader.reflection,
         )
         .and_then(|offset| usize::try_from(offset).ok()),

@@ -286,13 +286,13 @@ pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status>
             .and_then(|at| usize::try_from(at).ok())
             .ok_or(Status::MISSING)
     };
-    let configs = at(catalogue::TERRAFORMING_BUILDING_CONFIGS)?;
-    let material_at = at(catalogue::BUILDING_CONFIG_MATERIAL)?;
-    let hardness_at = at(catalogue::BUILDING_CONFIG_HARDNESS)?;
+    let configs = at(catalogue::ids::TERRAFORMING_REGISTRY_BUILDING_CONFIGS)?;
+    let material_at = at(catalogue::ids::BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL)?;
+    let hardness_at = at(catalogue::ids::BUILDING_TERRAFORMING_CONFIG_HARDNESS)?;
     let size = loader
         .reflection
         .type_info(catalogue::type_name(
-            catalogue::BUILDING_TERRAFORMING_CONFIG,
+            catalogue::ids::BUILDING_TERRAFORMING_CONFIG,
         ))
         .ok()
         .and_then(|info| usize::try_from(info.size()).ok())
