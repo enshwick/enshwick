@@ -20,7 +20,7 @@ mod altars;
 pub mod archive;
 pub mod attribute_slots;
 #[cfg_attr(
-    all(not(windows), not(test)),
+    not(windows),
     expect(dead_code, reason = "only the running game groups altar zones")
 )]
 mod base_groups;

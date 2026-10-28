@@ -1,7 +1,8 @@
 //! Base limits a mod asks for: the largest request holds, and a request past
 //! the most the loader takes is refused.
 
-#[cfg(all(test, feature = "unstable"))]
+#[cfg(test)]
+#[cfg(feature = "unstable")]
 mod tests {
     use enshwick::abi::Status;
     use enshwick::altars::Grouping;
@@ -15,7 +16,9 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            let refused = load.request_base_limits(256, 16).unwrap_err();
+            let Err(refused) = load.request_base_limits(256, 16) else {
+                return Err(Off::new("256 altar zones taken"));
+            };
             assert!(
                 refused.to_string().contains("the most is 255 in 16"),
                 "{refused}"
