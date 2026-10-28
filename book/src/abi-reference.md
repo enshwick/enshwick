@@ -406,3 +406,4 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `subscribe_tick`             | Calls a tick handler on the game thread about every period of wall time, every step for 0; init only |
 | `set_tick_every`             | Changes a periodic tick handler's period from the next step; any thread                              |
 | `map_frame`                  | The map's origin, size and cell size in metres, read once per scene; game thread, quiet              |
+| `request_base_limits`        | Asks for up to the given altar zones and bases, the largest request holding; init only               |

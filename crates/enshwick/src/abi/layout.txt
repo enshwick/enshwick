@@ -1,4 +1,4 @@
-abi 4.0
+abi 4.1
 AccountActionType size 1 align 1
     0 at 0 size 1
 ActionCall size 144 align 8
@@ -65,12 +65,15 @@ AltarZone size 32 align 8
     reserved at 13 size 3
     grow at 16 size 8
     height at 24 size 8
-BaseLimitInfo size 24 align 4
+BaseLimitInfo size 36 align 4
     header at 0 size 8
     zones at 8 size 4
     bases at 12 size 4
     vanilla_zones at 16 size 4
     reserved at 20 size 4
+    vanilla_bases at 24 size 4
+    max_zones at 28 size 4
+    max_bases at 32 size 4
 BedCheck size 72 align 8
     header at 0 size 8
     npc_id at 8 size 4
@@ -277,7 +280,7 @@ HookSpec size 32 align 8
     next at 16 size 8
     priority at 24 size 4
     flags at 28 size 4
-HostApi size 1408 align 8
+HostApi size 1416 align 8
     header at 0 size 8
     host_version at 8 size 16
     build at 24 size 8
@@ -453,6 +456,7 @@ HostApi size 1408 align 8
     subscribe_tick at 1384 size 8
     set_tick_every at 1392 size 8
     map_frame at 1400 size 8
+    request_base_limits at 1408 size 8
 Interaction size 56 align 8
     header at 0 size 8
     kind at 8 size 4

@@ -4,6 +4,7 @@ use enshwick::Entity;
 use enshwick::abi as api_frame;
 use enshwick::abi::{ModHandle, RateId, Status, Str};
 
+use crate::base_groups::limit::Limits;
 use crate::host::entries::mods::list;
 use crate::host::memory::{get_headed, put, put_headed, put_headed_list, put_list, text};
 use crate::host::{caller, caller_index, calling, entry};
@@ -550,7 +551,8 @@ pub(crate) extern "system" fn base_limit(
         if let Err(status) = caller(me) {
             return status;
         }
-        let (zones, bases) = crate::bases::base_limit();
+        let now = crate::bases::base_limit();
+        let (vanilla, most) = (Limits::VANILLA, Limits::MOST);
         // SAFETY: `HostApi::base_limit` has the mod pass `out` null or
         // readable for its header and writable for the size it names, with no
         // other thread touching it during the call.
@@ -559,10 +561,13 @@ pub(crate) extern "system" fn base_limit(
                 out,
                 api_frame::BaseLimitInfo {
                     header: api_frame::Header::of::<api_frame::BaseLimitInfo>(),
-                    zones,
-                    bases,
-                    vanilla_zones: crate::bases::VANILLA_ZONES,
+                    zones: now.zones,
+                    bases: now.bases,
+                    vanilla_zones: vanilla.zones,
                     reserved: 0,
+                    vanilla_bases: vanilla.bases,
+                    max_zones: most.zones,
+                    max_bases: most.bases,
                 },
             )
         }
@@ -571,7 +576,14 @@ pub(crate) extern "system" fn base_limit(
 
 pub(crate) extern "system" fn raise_base_limit(me: ModHandle) -> Status {
     entry("raise_base_limit", || match caller_index(me) {
-        Ok((loader, index)) => crate::bases::raise(loader, index),
+        Ok((loader, _)) => crate::bases::request(loader, Limits::RAISED),
+        Err(status) => status,
+    })
+}
+
+pub(crate) extern "system" fn request_base_limits(me: ModHandle, zones: u32, bases: u32) -> Status {
+    entry("request_base_limits", || match caller_index(me) {
+        Ok((loader, _)) => crate::bases::request(loader, Limits { zones, bases }),
         Err(status) => status,
     })
 }

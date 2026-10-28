@@ -19,6 +19,11 @@ pub mod allowlist;
 mod altars;
 pub mod archive;
 pub mod attribute_slots;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the running game groups altar zones")
+)]
+mod base_groups;
 #[cfg(windows)]
 mod bases;
 #[cfg(windows)]

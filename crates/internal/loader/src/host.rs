@@ -39,9 +39,9 @@ use entries::gameplay::{
     altar_zones_changed, altars, altars_open, apply_buff, base_limit, base_zones, buff_types,
     buffs, build_filter, building_zone_check_filter, comfort_filter, craft_filter, damage_filter,
     experience_filter, grant_knowledge, interaction_filter, item_lines, knowledge,
-    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, revoke_knowledge,
-    set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open, stat_sources,
-    stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
+    knowledge_input_filter, quests, raise_base_limit, rate, remove_buff, request_base_limits,
+    revoke_knowledge, set_rate, skill_override, stat_buff, stat_info, stat_modify, stat_open,
+    stat_sources, stat_value, stat_watch, stats_changed, summon_filter, summon_item, summoned,
     survivor_bed_check, survivor_lookup, survivor_status,
 };
 use entries::hooks::{
@@ -806,6 +806,7 @@ pub(crate) static API: HostApi = HostApi {
     subscribe_tick,
     set_tick_every,
     map_frame,
+    request_base_limits,
 };
 
 /// The loader and the calling mod, when the mod is on.

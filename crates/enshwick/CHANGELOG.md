@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::request_base_limits`, behind the new `unstable` feature, asks for
+  up to 255 altars a Flame level (ABI 4.1,
+  `HostApi::request_base_limits`), and `BaseLimit` tells the game's own
+  bases and the most a mod may ask for, with `BaseLimit::past_vanilla`
+  (#641).
+
 - `abi::DAMAGE_TYPES` (`ENSHWICK_DAMAGE_TYPES` in C), the length of a hit's
   damage amounts, and `DamageTypeNew::index`, a type's place in them; the
   loader's damage and stats code count by them too (#637).
@@ -55,6 +61,11 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- With the base limit raised, every altar zone the game lists joins its
+  base: the game copied only the first 16 into its bases, so zones past
+  16 had no comfort, crafting from chests or survivors (#641).
+- "Remove water" on a Flame Altar clears every zone of its base, not only
+  the first 16 (#641).
 - After a restart that followed any added or removed entity, an entity or
   item data value could land on another entity of the same template; values
   now follow their entity's place. Values of a file written before this
