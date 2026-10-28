@@ -109,9 +109,9 @@ export type Done = "Committed" | "RolledBack" | "Unavailable" | "TimedOut" | "Re
 export type EntityDiedEvent = {
 	--- The entity that died.
 	dead_entity_id: number,
-	--- The attacker of the last hit it took, from the hits it keeps; the name is enshwick's, not the game's.
+	--- The attacker of the last hit it took, from the hits it keeps; the name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 	killer: number?,
-	--- The last player character that hit it, from its kill credit: the one the game credits with the experience; the name is enshwick's, not the game's.
+	--- The last player character that hit it, from its kill credit: the one the game credits with the experience; the name is enshwick's, not the game's. Unstable: needs the `unstable` feature and may change in any release.
 	killer_player: number?,
 }
 

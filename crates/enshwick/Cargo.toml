@@ -83,6 +83,7 @@ harness = false
 [[bench]]
 name = "rates"
 harness = false
+required-features = ["unstable"]
 
 [[bench]]
 name = "tick"

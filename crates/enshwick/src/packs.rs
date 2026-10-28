@@ -201,7 +201,7 @@ impl Load<'_> {
     /// Adds `pack`'s recipes, changes of values and loot.
     fn add_pack_rest(&mut self, pack: &Pack) -> Result<(), Off> {
         for recipe in &pack.recipes {
-            self.add_recipe(NewRecipe {
+            self.push_recipe(NewRecipe {
                 id: id(&recipe.id)?,
                 like: recipe.like,
                 output: recipe.output,

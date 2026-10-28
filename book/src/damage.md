@@ -1,5 +1,8 @@
 # Damage
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 [`load.on_damage(filter)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/damage.rs)
 runs a filter on damage about to reach an entity's health in the server's
 world, before the game applies it. The filter gets a

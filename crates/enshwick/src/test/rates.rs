@@ -1,6 +1,9 @@
 //! Game rates: rates a build lacks, and the factor in force for each.
 
-use crate::rates::{Rate, combine};
+use crate::abi::RateId;
+#[cfg(feature = "unstable")]
+use crate::rates::Rate;
+use crate::rates::combine;
 
 use super::{FakeHost, Installed, table};
 
@@ -16,6 +19,7 @@ impl FakeHost {
     /// assert_eq!(loader.rate(Rate::FactoryProductionSpeed), None);
     /// ```
     #[must_use]
+    #[cfg(feature = "unstable")]
     pub fn without_rate(mut self, rate: Rate) -> Self {
         self.missing_rates.insert(rate.id());
         self
@@ -40,8 +44,13 @@ impl Installed {
     /// assert_eq!(loader.rate(Rate::ResourceDropStackAmount), None);
     /// ```
     #[must_use]
+    #[cfg(feature = "unstable")]
     pub fn rate(&self, rate: Rate) -> Option<f32> {
-        let id = rate.id();
+        self.rate_of(rate.id())
+    }
+
+    /// The factor in force for the rate `id`, combined as the loader combines it.
+    pub(crate) fn rate_of(&self, id: RateId) -> Option<f32> {
         table::with(None, |s| {
             s.rates
                 .iter()
@@ -52,6 +61,7 @@ impl Installed {
 }
 
 #[cfg(test)]
+#[cfg(feature = "unstable")]
 mod tests {
     use crate::abi::{HostApi, ModHandle, Status};
     use crate::rates::{ExperienceGroup, Rate};

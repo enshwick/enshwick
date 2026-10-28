@@ -1,6 +1,9 @@
 //! Typed game events: a struct per event with its fields read for the
 //! running build, for [`Load::on`](crate::Load::on).
 
+#[cfg(feature = "unstable")]
+use crate::Host;
+#[cfg(feature = "unstable")]
 use crate::ecs::ComponentType;
 use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
@@ -8,9 +11,10 @@ use crate::game_events::values::{
     AttackCategoryMask, DamageTypeMask, EquipmentSlot, ExperienceSourceType, FlameAltarActionType,
 };
 use crate::game_events::{EventType, Field, RawGameEvent};
+#[cfg(feature = "unstable")]
 use crate::raw::read_at;
 use crate::{Entity, ItemId, RecipeId};
-use crate::{Host, Load, Off};
+use crate::{Load, Off};
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
 fn some(entity: Entity) -> Option<Entity> {
@@ -128,9 +132,7 @@ impl crate::events::Kind for HitEvent {
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 ///     load.on::<EntityDiedEvent>(|died| {
-///         if let Some(player) = died.killer_player {
-///             enshwick::info!("player {player} killed entity {}", died.dead_entity_id);
-///         }
+///         enshwick::debug!("entity {} died", died.dead_entity_id);
 ///     })
 /// }
 /// ```
@@ -140,15 +142,20 @@ pub struct EntityDiedEvent {
     /// The entity that died.
     pub dead_entity_id: Entity,
     /// The attacker of the last hit it took, from the hits it keeps; the
-    /// name is enshwick's, not the game's.
+    /// name is enshwick's, not the game's. Unstable: needs the `unstable`
+    /// feature and may change in any release.
+    #[cfg(feature = "unstable")]
     pub killer: Option<Entity>,
     /// The last player character that hit it, from its kill credit:
     /// the one the game credits with the experience; the name is
-    /// enshwick's, not the game's.
+    /// enshwick's, not the game's. Unstable: needs the `unstable` feature
+    /// and may change in any release.
+    #[cfg(feature = "unstable")]
     pub killer_player: Option<Entity>,
 }
 
 /// Where the kill credit lives on a dying entity.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug)]
 struct Credit {
     host: Host,
@@ -162,6 +169,7 @@ struct Credit {
     last_player: usize,
 }
 
+#[cfg(feature = "unstable")]
 impl Credit {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
         let offset = |id: &str| {
@@ -232,6 +240,7 @@ impl crate::events::Kind for EntityDiedEvent {
     {
         let ty = load.game_event_type(ids::ENTITY_DIED_EVENT)?;
         let dead: Field<Entity> = ty.field_by_id(load, ids::ENTITY_DIED_EVENT_DEAD_ENTITY_ID)?;
+        #[cfg(feature = "unstable")]
         let credit = Credit::resolve(load)
             .inspect_err(|off| crate::debug!("kill credit off: {off}"))
             .ok();
@@ -242,7 +251,9 @@ impl crate::events::Kind for EntityDiedEvent {
                 let entity = e.get(dead)?;
                 Some(Self {
                     dead_entity_id: entity,
+                    #[cfg(feature = "unstable")]
                     killer: credit.as_ref().and_then(|c| c.killer(entity)),
+                    #[cfg(feature = "unstable")]
                     killer_player: credit.as_ref().and_then(|c| c.killer_player(entity)),
                 })
             },

@@ -14,25 +14,27 @@
 //! systems that deal damage: they must not allocate, lock or log, and read
 //! only what they hold themselves, such as settings in atomics.
 //!
+//! The filters need the `unstable` feature and may change in any release:
+//! the order of health, stamina and mana in the game's attributes, and who
+//! the game records as a killer, are not yet seen in the running game. The
+//! damage types are stable.
+//!
 //! # Examples
 //!
 //! ```
-//! use enshwick::damage::{DamageCause, DamageTypeNew};
+//! use enshwick::damage::DamageTypeNew;
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     load.on_damage(|damage| match damage.cause() {
-//!         // Falls hurt half as much, fire twice as much.
-//!         DamageCause::FallDamage => damage.scale(0.5),
-//!         DamageCause::Impact => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
-//!         _ => {}
-//!     })
-//! }
+//! assert_eq!(DamageTypeNew::ALL[DamageTypeNew::MagicalFire.index()], DamageTypeNew::MagicalFire);
 //! ```
 
+#[cfg(feature = "unstable")]
 use core::ffi::c_void;
 
+#[cfg(feature = "unstable")]
 use crate::Entity;
+#[cfg(feature = "unstable")]
 use crate::abi::DamageCheck;
+#[cfg(feature = "unstable")]
 use crate::{Load, Off};
 
 /// A damage type, as the game sorts a hit's damage.
@@ -108,6 +110,8 @@ impl DamageTypeNew {
 
 /// What deals damage.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// The name is enshwick's: the loader's hook points, not a game type. A
 /// cause the game names among its death causes (`DeathCause`) takes that
 /// name; the others are enshwick's and say so.
@@ -115,6 +119,7 @@ impl DamageTypeNew {
 /// # Examples
 ///
 /// See the [module](self).
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum DamageCause {
@@ -142,6 +147,7 @@ pub enum DamageCause {
     Other(u32),
 }
 
+#[cfg(feature = "unstable")]
 impl DamageCause {
     /// Every cause this API names, without [`Other`](Self::Other): the set
     /// a tally by cause iterates, so a newly named cause joins it.
@@ -183,14 +189,18 @@ impl DamageCause {
 /// Damage about to reach an entity's health, for a filter registered with
 /// [`Load::on_damage`] to see and change.
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// See the [module](self).
+#[cfg(feature = "unstable")]
 #[derive(Debug)]
 pub struct Damage<'a> {
     check: &'a mut DamageCheck,
 }
 
+#[cfg(feature = "unstable")]
 impl Damage<'_> {
     /// What deals it.
     ///
@@ -371,6 +381,7 @@ impl Damage<'_> {
     }
 }
 
+#[cfg(feature = "unstable")]
 unsafe extern "system" fn run_damage<F>(check: *mut DamageCheck, user: *mut c_void)
 where
     F: Fn(&mut Damage<'_>),
@@ -397,6 +408,7 @@ where
     }
 }
 
+#[cfg(feature = "unstable")]
 impl Load<'_> {
     /// Runs `filter` on damage about to reach an entity's health in the
     /// server's world: hits by type, falls and the shroud. What it leaves is
@@ -404,13 +416,26 @@ impl Load<'_> {
     /// the systems that deal damage, in the dedicated server or a hosting
     /// client: it must not allocate, lock or log.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] after init or on a build without the damage sites.
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// ```
+    /// use enshwick::damage::{DamageCause, DamageTypeNew};
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.on_damage(|damage| match damage.cause() {
+    ///         // Falls hurt half as much, fire twice as much.
+    ///         DamageCause::FallDamage => damage.scale(0.5),
+    ///         DamageCause::Impact => damage.scale_type(DamageTypeNew::MagicalFire, 2.0),
+    ///         _ => {}
+    ///     })
+    /// }
+    /// ```
     pub fn on_damage<F>(&mut self, filter: F) -> Result<(), Off>
     where
         F: Fn(&mut Damage<'_>) + Send + Sync + 'static,
@@ -425,6 +450,7 @@ impl Load<'_> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "unstable")]
 mod tests {
     use super::*;
 

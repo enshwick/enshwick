@@ -26,6 +26,7 @@ mod config_groups;
 mod config_lists;
 #[cfg(feature = "unstable")]
 mod containers;
+#[cfg(feature = "unstable")]
 mod damage;
 mod daytime;
 #[cfg(feature = "unstable")]
@@ -83,11 +84,16 @@ mod points_described;
 mod points_links;
 mod points_owner;
 mod published_texts;
+#[cfg(feature = "unstable")]
 mod rates;
+#[cfg(feature = "unstable")]
 mod rates_comfort;
+#[cfg(feature = "unstable")]
 mod rates_join;
 mod recipe_changes;
+#[cfg(feature = "unstable")]
 mod recipe_kinds;
+#[cfg(feature = "unstable")]
 mod recipe_menu;
 mod recipe_rules;
 mod resource_types;

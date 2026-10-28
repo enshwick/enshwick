@@ -201,6 +201,7 @@ impl Load<'_> {
         field: Field,
         source: &str,
     ) -> Result<ChangeHandle, Off> {
+        field.unstable_gate()?;
         let what = || format!("the change of {field} of {target:?}");
         target
             .check(field)

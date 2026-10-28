@@ -1,5 +1,8 @@
 # Inventory limits
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](../stability.md)).
+
 A mod changes how many of an item one slot holds and how many slots a chest
 has with the same changes [data packs](packs.md) make, merged by the same
 rule with every pack and mod. A change declared with `Load::declare_change`

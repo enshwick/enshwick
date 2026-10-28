@@ -170,8 +170,11 @@ mod tests {
             panic!("{deaths:?}")
         };
         assert_eq!(died.dead_entity_id, Entity(77));
-        assert_eq!(died.killer, Some(Entity(5)), "{:?}", loader.logs());
-        assert_eq!(died.killer_player, Some(Entity(6)));
+        #[cfg(feature = "unstable")]
+        {
+            assert_eq!(died.killer, Some(Entity(5)), "{:?}", loader.logs());
+            assert_eq!(died.killer_player, Some(Entity(6)));
+        }
 
         let mut equipped = [0u8; 64];
         for slot in [40u8, 41] {

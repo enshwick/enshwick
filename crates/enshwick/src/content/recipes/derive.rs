@@ -25,6 +25,7 @@ pub(super) fn vanilla_registry() -> Option<Vec<u8>> {
 }
 
 /// The GUIDs of the recipes in `registry`.
+#[cfg(feature = "unstable")]
 pub(super) fn recipe_guids(
     layout: &RecipeLayout,
     registry: &[u8],
@@ -73,6 +74,7 @@ pub(super) fn menu_entry(layout: &RecipeLayout, recipe: &NewRecipe) -> MenuEntry
 
 /// Where the crafting menu lists the copies [`derive_recipes_in`] makes of
 /// the recipes in `registry`: each after its original.
+#[cfg(feature = "unstable")]
 pub(super) fn derived_entries(
     layout: &RecipeLayout,
     registry: &[u8],
@@ -146,11 +148,11 @@ pub(crate) fn list(
     )
 }
 
-/// A vanilla recipe as [`Load::derive_recipes`](crate::Load::derive_recipes) shows it.
+/// A vanilla recipe as `Load::derive_recipes` shows it.
 ///
 /// # Examples
 ///
-/// See [`Load::derive_recipes`](crate::Load::derive_recipes).
+/// See `Load::derive_recipes`.
 #[derive(Clone, Copy, Debug)]
 pub struct RecipeView<'a> {
     pub(super) blob: &'a Blob,
@@ -163,7 +165,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
+    /// See `Load::derive_recipes`.
     #[must_use]
     pub fn guid(&self) -> Guid {
         let mut guid = [0u8; 16];
@@ -181,7 +183,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
+    /// See `Load::derive_recipes`.
     #[must_use]
     pub fn debug_name(&self) -> String {
         self.blob
@@ -195,7 +197,7 @@ impl RecipeView<'_> {
     ///
     /// # Examples
     ///
-    /// See [`Load::derive_recipes`](crate::Load::derive_recipes).
+    /// See `Load::derive_recipes`.
     #[must_use]
     pub fn output(&self) -> Option<(Guid, u32)> {
         let (outputs, count) = self.blob.array(self.at + self.layout.output)?;
@@ -240,7 +242,7 @@ impl RecipeView<'_> {
 ///
 /// # Examples
 ///
-/// See [`Load::derive_recipes`](crate::Load::derive_recipes).
+/// See `Load::derive_recipes`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Derived {
     /// The vanilla output count times this.
@@ -285,7 +287,7 @@ pub fn derived_guid(base: Guid, salt: u32) -> Guid {
 /// recipe `choose` picks.
 ///
 /// With a workshop `limit` other than [`usize::MAX`], copies stop
-/// [`RESERVED_FOR_SINGLE`] short of it. [`Load::derive_recipes`](crate::Load::derive_recipes) serves it;
+/// [`RESERVED_FOR_SINGLE`] short of it. `Load::derive_recipes` serves it;
 /// `salt` marks the copies as in [`derived_guid`].
 ///
 /// # Examples

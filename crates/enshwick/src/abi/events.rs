@@ -103,7 +103,7 @@ impl Event {
     pub const PLAYER_DIED: Self = Self(20);
 }
 
-/// The data of the [`PlayerDied`](crate::events::PlayerDied) event.
+/// The data of the `PlayerDied` event.
 ///
 /// # Examples
 ///

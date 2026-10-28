@@ -635,7 +635,7 @@ impl Installed {
     }
 
     /// Runs the mod's comfort filters on `comfort` as the loader would, then
-    /// its comfort rate ([`Rate::Comfort`](crate::rates::Rate::Comfort));
+    /// its comfort rate (`Rate::Comfort`);
     /// the comfort registered.
     ///
     /// # Examples
@@ -658,7 +658,7 @@ impl Installed {
                 // SAFETY: a valid registration; `user` is the mod's pointer.
                 unsafe { callback(&raw const call, user) }
             });
-        let factor = self.rate(crate::rates::Rate::Comfort).unwrap_or(1.0);
+        let factor = self.rate_of(crate::abi::RateId::COMFORT).unwrap_or(1.0);
         let scaled = crate::rates::scale_whole(i64::from(filtered), factor);
         i32::try_from(scaled).unwrap_or(if scaled < 0 { i32::MIN } else { i32::MAX })
     }

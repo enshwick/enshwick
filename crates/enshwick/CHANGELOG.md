@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The `unstable` feature also holds what rests on engine facts not yet
+  seen in the running game: the game rates (`rates`), changes of
+  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
+  without the feature), the damage filters, `events::PlayerDied`, the
+  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
+  `add_recipe_with` and `derive_recipes` (#649).
+
 - `Load::request_base_limits` takes up to 179 bases: the loader grows the
   game's bases objects and keeps bases past 16 behind its array, on both
   sides, and `BaseLimit::max_bases` reads 179, or 16 on a build where the

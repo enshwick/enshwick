@@ -2,7 +2,7 @@
 
 /// A game rate of [`HostApi::rate`](super::HostApi::rate) and
 /// [`HostApi::set_rate`](super::HostApi::set_rate), by the loader's stable
-/// number; the safe layer names them with [`crate::rates::Rate`].
+/// number; the safe layer names them with `rates::Rate`.
 ///
 /// # Examples
 ///
