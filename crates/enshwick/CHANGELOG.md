@@ -12,7 +12,13 @@ Each entry names the pull request that made the change.
   code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
   item tag of the game's Comfort Furniture crafting group; a prop with the
   Decorative tag too stays `Decorative` (#628).
-
+- `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
+  ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
+  events carry them, and a Luau script reads and answers them as
+  `buff_type_id` and `npc_id`. Every id the game derives from a GUID has
+  `named` (#623).
+- `loot::LootContainerId`, the game's name for a loot roll's node and
+  labels (#623).
 - `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
   `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
   the game's Decorative crafting group, so `Recipes::Kind`,
@@ -47,6 +53,15 @@ Each entry names the pull request that made the change.
 - The fake host runs steps as the loader does with `Installed::tick` (#614).
 
 ### Changed
+
+- Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
+  structs, `HostApi::remove_buff`, `summon_item` and the survivor status
+  merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a
+  `Guid`. The fake host's `summon_items` and `survivor_status` carry the
+  ids (#623).
+- Breaking: `Roll::node` and `Roll::labels` are `Option<LootContainerId>`,
+  `None` where the game has none, and `Source::nodes`, `labels`,
+  `with_nodes` and `with_labels` take `LootContainerId` (#623).
 
 - Breaking: `Load::on::<Ticked>` runs the handler every
   `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's

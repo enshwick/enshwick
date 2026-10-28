@@ -39,7 +39,7 @@ mod tests {
 
         let swift = BuffTypeInfo {
             header: Header::of::<BuffTypeInfo>(),
-            id: 7,
+            id: BuffTypeId::new(7),
             slot: BuffTypeInfo::BUFF,
             flags: BuffTypeInfo::SAVED,
             name: 99,

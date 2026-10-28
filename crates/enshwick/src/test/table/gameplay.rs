@@ -117,10 +117,10 @@ pub(crate) extern "system" fn summoned(
 pub(crate) extern "system" fn summon_item(
     _me: ModHandle,
     item: crate::ItemId,
-    survivor: u32,
+    survivor: crate::survivors::NpcId,
 ) -> Status {
     with(Status::MISSING, |s| {
-        s.summon_items.push((item.get(), survivor));
+        s.summon_items.push((item, survivor));
         Status::OK
     })
 }
@@ -381,7 +381,7 @@ pub(crate) extern "system" fn apply_buff(_me: ModHandle, request: *const BuffReq
 pub(crate) extern "system" fn remove_buff(
     _me: ModHandle,
     entity: crate::Entity,
-    id: u32,
+    id: crate::buffs::BuffTypeId,
     removed: *mut u8,
 ) -> Status {
     if removed.is_null() {

@@ -203,7 +203,7 @@ fn sources(s: &mut super::table::State, entity: u32, stat: u32) -> Vec<StatSourc
     let mut buffs: Vec<u32> = s
         .buffs
         .get(&entity)
-        .map(|on| on.iter().map(|b| b.id).collect())
+        .map(|on| on.iter().map(|b| b.id.get()).collect())
         .unwrap_or_default();
     buffs.sort_unstable();
     for buff in buffs {

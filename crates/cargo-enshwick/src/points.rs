@@ -411,7 +411,15 @@ struct BuiltIn {
 }
 
 /// The API's own types a schema names, the one list every writer reads.
-const BUILT_IN: [BuiltIn; 7] = [
+const BUILT_IN: [BuiltIn; 9] = [
+    BuiltIn {
+        name: "enshwick.buff_type_id",
+        rust: "enshwick::buffs::BuffTypeId",
+        size: 4,
+        align: 4,
+        read: "buff_type_id",
+        luau: "number",
+    },
     BuiltIn {
         name: "enshwick.entity",
         rust: "enshwick::Entity",
@@ -466,6 +474,14 @@ const BUILT_IN: [BuiltIn; 7] = [
         size: 4,
         align: 4,
         read: "skill_node",
+        luau: "number",
+    },
+    BuiltIn {
+        name: "enshwick.npc_id",
+        rust: "enshwick::survivors::NpcId",
+        size: 4,
+        align: 4,
+        read: "npc_id",
         luau: "number",
     },
 ];
