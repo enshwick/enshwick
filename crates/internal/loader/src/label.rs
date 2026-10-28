@@ -37,8 +37,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The game's error for a string it could not take; the rename path then
 /// changes nothing.
 const REFUSED: u8 = 0x1f;
-/// The reflected component that holds a label.
-const LABEL_TYPE: &str = "keen::ecs::CustomPlayerString";
 
 type FindFn = unsafe extern "system" fn(
     out: *mut [usize; 4],
@@ -109,7 +107,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 symbol(pinned::label::REPLACE)?,
                 symbol(pinned::label::ADD)?,
             );
-            let descriptor = loader.reflection.type_info(LABEL_TYPE).ok()?.va();
+            let descriptor = loader
+                .reflection
+                .type_info(crate::catalogue::type_name(
+                    crate::catalogue::ids::CUSTOM_PLAYER_STRING,
+                ))
+                .ok()?
+                .va();
             Some(Layout {
                 // SAFETY: the build table's `label.find` is the address of
                 // the game function with the `FindFn` signature on this build.

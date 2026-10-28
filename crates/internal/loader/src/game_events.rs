@@ -167,11 +167,10 @@ pub(crate) fn link(loader: &'static Loader) {
     let subscribers = std::mem::take(&mut *PENDING.relock());
     let equipment = crate::stats::wanted()
         .then(|| {
-            let info = loader
-                .reflection
-                .type_info("keen::ecs::HandleEquipmentSlotChangedEvent")
-                .ok()?;
-            crate::world::type_hash(info.va())
+            crate::catalogue::component_hash(
+                loader,
+                crate::catalogue::ids::HANDLE_EQUIPMENT_SLOT_CHANGED_EVENT,
+            )
         })
         .flatten();
     let sealed = Sealed {

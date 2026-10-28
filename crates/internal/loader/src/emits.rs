@@ -21,6 +21,7 @@ use enshwick::Entity;
 use enshwick::abi::{Status, TeleportRequest};
 use rustc_hash::FxHashMap;
 
+use crate::catalogue::{ids, type_name};
 use crate::host::Loader;
 use crate::pinned;
 use crate::pinned::Symbol;
@@ -42,10 +43,10 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The event types mods may raise: types the server's own systems raise on
 /// the 1.0 build 1269579, each with a consumer on the server or the clients.
 const ALLOWED: [&str; 4] = [
-    "keen::ecs::NpcCommandEvent",
-    "keen::ecs::SetToggleStateEvent",
-    "keen::ecs::AddThreatTargetEvent",
-    "keen::ecs::UiPingEvent",
+    ids::NPC_COMMAND_EVENT,
+    ids::SET_TOGGLE_STATE_EVENT,
+    ids::ADD_THREAT_TARGET_EVENT,
+    ids::UI_PING_EVENT,
 ];
 
 /// The source id the game's own game-thread pushes give their events.
@@ -128,9 +129,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             };
             let allowed = ALLOWED
                 .iter()
-                .filter_map(|name| {
-                    let size = reflection.type_info(name).ok()?.size();
-                    Some((hash_of(name)?, Allowed { size }))
+                .filter_map(|&id| {
+                    let size = reflection.type_info(type_name(id)).ok()?.size();
+                    Some((
+                        crate::catalogue::component_hash(loader, id)?,
+                        Allowed { size },
+                    ))
                 })
                 .collect();
             let teleport = (|| {
@@ -172,7 +176,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 record_data: loader.offset(pinned::ecs::COMMAND_SET_DATA)?,
                 world_entities: loader.offset(pinned::world::ENTITIES)?,
                 teleport,
-                transform: hash_of("keen::ecs::CurrentTransform")?,
+                transform: crate::catalogue::component_hash(loader, ids::CURRENT_TRANSFORM)?,
                 teleport_count: hash_of("keen::ecs::TeleportCount")?,
             })
         })
