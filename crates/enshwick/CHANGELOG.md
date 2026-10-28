@@ -11,7 +11,7 @@ Each entry names the pull request that made the change.
 - `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
   code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
   item tag of the game's Comfort Furniture crafting group; a prop with the
-  Decorative tag too stays `Decorative` (#PR).
+  Decorative tag too stays `Decorative` (#628).
 
 - `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
   `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
