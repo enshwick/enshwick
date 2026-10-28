@@ -41,8 +41,8 @@ struct Record {
     account: usize,
     cause: usize,
     position: usize,
-    killer: usize,
-    deadly: usize,
+    cause_guid: usize,
+    was_deadly_fog: usize,
     drowned: usize,
 }
 
@@ -137,8 +137,8 @@ fn record(loader: &Loader) -> Option<Record> {
         account: field("accountIdHash")?,
         cause: field("cause")?,
         position: field("position")?,
-        killer: field("causeGuid")?,
-        deadly: field("wasDeadlyFog")?,
+        cause_guid: field("causeGuid")?,
+        was_deadly_fog: field("wasDeadlyFog")?,
         drowned: field("drowned")?,
     })
 }
@@ -221,8 +221,8 @@ fn data(layout: &Record, bytes: &[u8; 64], entity_of: impl Fn(u64) -> u32) -> Pl
         cause: u32::from(field::<1>(bytes, layout.cause)[0]),
         key: enshwick::PlayerKey::new(key),
         position: [coordinate(0), coordinate(1), coordinate(2)],
-        killer: field(bytes, layout.killer),
-        deadly_shroud: field::<1>(bytes, layout.deadly)[0],
+        cause_guid: field(bytes, layout.cause_guid),
+        was_deadly_fog: field::<1>(bytes, layout.was_deadly_fog)[0],
         drowned: field::<1>(bytes, layout.drowned)[0],
         reserved: 0,
         killer_entity: Entity(0),
@@ -248,7 +248,7 @@ pub(crate) fn after_step(loader: &Loader) {
                 .find(|p| p.key == enshwick::PlayerKey::new(key))
                 .map_or(0, |p| p.entity.0)
         });
-        if death.cause == PlayerDeathData::HIT
+        if death.cause == PlayerDeathData::IMPACT
             && death.entity != Entity(0)
             && let Some(history) = history
         {
@@ -269,8 +269,8 @@ mod tests {
             account: 0,
             cause: 12,
             position: 16,
-            killer: 28,
-            deadly: 44,
+            cause_guid: 28,
+            was_deadly_fog: 44,
             drowned: 45,
         };
         let mut bytes = [0u8; 64];
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(death.key, enshwick::PlayerKey::new(7));
         assert_eq!(death.cause, PlayerDeathData::SUFFOCATED);
         assert!((death.position[0] - 1.5).abs() < f32::EPSILON);
-        assert_eq!(death.killer[0], 0xab);
-        assert_eq!((death.deadly_shroud, death.drowned), (0, 1));
+        assert_eq!(death.cause_guid[0], 0xab);
+        assert_eq!((death.was_deadly_fog, death.drowned), (0, 1));
     }
 }

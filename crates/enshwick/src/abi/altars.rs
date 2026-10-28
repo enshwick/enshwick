@@ -129,16 +129,19 @@ impl_headed!(AltarZone);
 pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mut c_void);
 
 /// A placement the game refused because the object's box does not lie in a
-/// single building zone, as [`HostApi::zone_check_filter`](super::HostApi::zone_check_filter) hands it on.
+/// single building zone, as [`HostApi::building_zone_check_filter`](super::HostApi::building_zone_check_filter) hands it on.
 /// Coordinates are 32.32 fixed-point metres.
+///
+/// The name is enshwick's, after the game's building zone: the game's check
+/// has no name of its own.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Bounds, Header, ZoneCheck};
+/// use enshwick::abi::{Bounds, Header, BuildingZoneCheck};
 ///
-/// let check = ZoneCheck {
-///     header: Header::of::<ZoneCheck>(),
+/// let check = BuildingZoneCheck {
+///     header: Header::of::<BuildingZoneCheck>(),
 ///     zones: core::ptr::null(),
 ///     zone_count: 0,
 ///     object: Bounds::default(),
@@ -148,7 +151,7 @@ pub type AltarZoneFn = unsafe extern "system" fn(zone: *mut AltarZone, user: *mu
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Zeroable)]
-pub struct ZoneCheck {
+pub struct BuildingZoneCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The building zones, half-open boxes, valid for the call.
@@ -161,8 +164,9 @@ pub struct ZoneCheck {
     pub margin: i64,
 }
 
-impl_headed!(ZoneCheck);
+impl_headed!(BuildingZoneCheck);
 
 /// A mod's zone check filter: the check and the pointer given at
 /// registration; returns 1 to accept the placement after all.
-pub type ZoneCheckFn = unsafe extern "system" fn(check: *const ZoneCheck, user: *mut c_void) -> u8;
+pub type BuildingZoneCheckFn =
+    unsafe extern "system" fn(check: *const BuildingZoneCheck, user: *mut c_void) -> u8;

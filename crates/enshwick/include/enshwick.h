@@ -9,10 +9,10 @@
 
 // The major version of this interface. A loader refuses a mod built for
 // another major.
-#define ENSHWICK_ABI_MAJOR 3
+#define ENSHWICK_ABI_MAJOR 4
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 5
+#define ENSHWICK_ABI_MINOR 0
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -328,15 +328,17 @@ typedef uint32_t EnshwickNpcId;
 // A survivor's own check that its bed is still its, after the game kept it,
 // as `HostApi::survivor_bed_check` hands it on. Cells are whole 0.5 m
 // cells.
+//
+// The name is enshwick's: the game's bed check has none.
 typedef struct EnshwickBedCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The survivor's id.
-  EnshwickNpcId survivor;
+  EnshwickNpcId npc_id;
   // The survivor's entity.
   EnshwickEntity entity;
   // The bed.
-  EnshwickEntity bed;
+  EnshwickEntity bed_id;
   // Where the survivor belongs: its saved spawn cell, or where it stands.
   int64_t home[3];
   // Where the bed stands.
@@ -547,6 +549,25 @@ typedef struct EnshwickBuildingData {
 // Torn down.
 #define EnshwickBuildingData_TORN_DOWN 2
 
+// A placement the game refused because the object's box does not lie in a
+// single building zone, as `HostApi::building_zone_check_filter` hands it on.
+// Coordinates are 32.32 fixed-point metres.
+//
+// The name is enshwick's, after the game's building zone: the game's check
+// has no name of its own.
+typedef struct EnshwickBuildingZoneCheck {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // The building zones, half-open boxes, valid for the call.
+  const struct EnshwickBounds *zones;
+  // How many boxes `zones` holds.
+  size_t zone_count;
+  // The object's box, both corners included.
+  struct EnshwickBounds object;
+  // How far the game lets an object reach past a zone, on every side.
+  int64_t margin;
+} EnshwickBuildingZoneCheck;
+
 // One field of a service table or mod event, as its layout hash sees it.
 //
 // Frozen: written as an array.
@@ -657,17 +678,21 @@ typedef uint32_t EnshwickRecipeId;
 
 // A player's craft request, handed to the filters registered with
 // `HostApi::craft_filter` before the server crafts.
+//
+// The name is enshwick's; the fields are the game's `CraftRecipeEvent`.
 typedef struct EnshwickCraftCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The crafting player's character.
-  EnshwickEntity player;
+  EnshwickEntity crafting_operator_id;
   // The station, or 0 for crafting by hand.
-  EnshwickEntity station;
+  EnshwickEntity crafting_station_id;
   // The recipe id.
-  EnshwickRecipeId recipe;
+  EnshwickRecipeId recipe_id;
   // How many.
-  uint32_t amount;
+  uint16_t recipe_amount;
+  // Zero.
+  uint16_t reserved;
 } EnshwickCraftCheck;
 
 // Damage about to reach an entity's health, handed to the filters
@@ -675,8 +700,8 @@ typedef struct EnshwickCraftCheck {
 typedef struct EnshwickDamageCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // `DamageCheck::HIT`, `DamageCheck::FALL`, `DamageCheck::SHROUD`,
-  // `DamageCheck::SHROUD_DEATH`, `DamageCheck::DROWNING`,
+  // `DamageCheck::HIT`, `DamageCheck::FALL`, `DamageCheck::FOG`,
+  // `DamageCheck::DEADLY_FOG`, `DamageCheck::DROWNING`,
   // `DamageCheck::DROWNING_DEATH`, `DamageCheck::FREEZING` or
   // `DamageCheck::ADMIN_KILL`.
   uint32_t cause;
@@ -703,9 +728,9 @@ typedef struct EnshwickDamageCheck {
 // A fall.
 #define EnshwickDamageCheck_FALL 1
 // The shroud draining a character whose time in it ran out.
-#define EnshwickDamageCheck_SHROUD 2
+#define EnshwickDamageCheck_FOG 2
 // The deadly shroud, which kills at once.
-#define EnshwickDamageCheck_SHROUD_DEATH 3
+#define EnshwickDamageCheck_DEADLY_FOG 3
 // A character out of breath under water.
 #define EnshwickDamageCheck_DROWNING 4
 // A creature out of breath under water, which dies at once.
@@ -1488,25 +1513,10 @@ typedef void (*EnshwickInventoryResultFn)(const struct EnshwickInventoryResult *
 // valid until the source runs again; empty for none.
 typedef void (*EnshwickStatusFn)(void *user, struct EnshwickStr *out);
 
-// A placement the game refused because the object's box does not lie in a
-// single building zone, as `HostApi::zone_check_filter` hands it on.
-// Coordinates are 32.32 fixed-point metres.
-typedef struct EnshwickZoneCheck {
-  // Size and version of this struct.
-  struct EnshwickHeader header;
-  // The building zones, half-open boxes, valid for the call.
-  const struct EnshwickBounds *zones;
-  // How many boxes `zones` holds.
-  size_t zone_count;
-  // The object's box, both corners included.
-  struct EnshwickBounds object;
-  // How far the game lets an object reach past a zone, on every side.
-  int64_t margin;
-} EnshwickZoneCheck;
-
 // A mod's zone check filter: the check and the pointer given at
 // registration; returns 1 to accept the placement after all.
-typedef uint8_t (*EnshwickZoneCheckFn)(const struct EnshwickZoneCheck *check, void *user);
+typedef uint8_t (*EnshwickBuildingZoneCheckFn)(const struct EnshwickBuildingZoneCheck *check,
+                                               void *user);
 
 // A game system asking which entity is a survivor, as
 // `HostApi::survivor_lookup` hands it to the mod that answers.
@@ -3009,7 +3019,9 @@ typedef struct EnshwickHostApi {
   // box does not lie in one building zone; any filter returning 1 accepts
   // it after all. Runs on both sides, since a client predicts placement.
   // Allowed during `enshwick_mod_init` only.
-  EnshwickStatus (*zone_check_filter)(EnshwickModHandle me, EnshwickZoneCheckFn callback, void *user);
+  EnshwickStatus (*building_zone_check_filter)(EnshwickModHandle me,
+                                               EnshwickBuildingZoneCheckFn callback,
+                                               void *user);
   // Makes `callback` with `user` the answer to the game's survivor
   // lookups that `SurvivorLookup` names; one mod at a time
   // (`Status::REFUSED` for another). Runs on the server's worker
@@ -4197,37 +4209,41 @@ typedef struct EnshwickPlayerDeathData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The player's character; 0 when the account left in the same step.
+  // The name is enshwick's: the game's record holds the user instead.
   EnshwickEntity entity;
-  // What killed the player: 0 a hit, 1
-  // a fall, 2 the shroud,
-  // 3 suffocation.
+  // What killed the player, the game's death cause: 0
+  // a hit, 1
+  // a fall, 2
+  // the shroud, 3
+  // suffocation.
   uint32_t cause;
-  // The account, the same number in every session.
+  // The account, the same number in every session;
+  // the name is enshwick's for the game's account id hash.
   EnshwickPlayerKey key;
   // Where, in metres.
   float position[3];
   // For a hit, the template GUID of what dealt it, a creature's or an
   // impact's; zero for other causes.
-  uint8_t killer[16];
-  // 1 when the shroud was the deadly kind.
-  uint8_t deadly_shroud;
+  uint8_t cause_guid[16];
+  // 1 when the shroud was the deadly kind, which kills at once.
+  uint8_t was_deadly_fog;
   // 1 when the player drowned.
   uint8_t drowned;
   // Zero.
   uint16_t reserved;
   // For a hit, the attacker of the last hit the player took, from its
   // `HitHistory`, as `EntityDiedEvent` reads it; 0 for other
-  // causes, or when the history names none.
+  // causes, or when the history names none. The name is enshwick's.
   EnshwickEntity killer_entity;
   // Zero.
   uint32_t reserved_tail;
 } EnshwickPlayerDeathData;
 // A hit.
-#define EnshwickPlayerDeathData_HIT 0
+#define EnshwickPlayerDeathData_IMPACT 0
 // A fall.
-#define EnshwickPlayerDeathData_FALL 1
+#define EnshwickPlayerDeathData_FALL_DAMAGE 1
 // The shroud.
-#define EnshwickPlayerDeathData_SHROUD 2
+#define EnshwickPlayerDeathData_FOG 2
 // Out of breath, under water.
 #define EnshwickPlayerDeathData_SUFFOCATED 3
 

@@ -89,7 +89,7 @@ macro_rules! headed {
             VoxelRegion,
             VoxelWrite,
             WeatherFront,
-            ZoneCheck
+            BuildingZoneCheck
         )
     };
 }

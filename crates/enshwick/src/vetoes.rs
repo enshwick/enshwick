@@ -15,7 +15,7 @@
 //! ```
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     const FORBIDDEN_RECIPE: enshwick::RecipeId = enshwick::RecipeId::new(0x51);
-//!     load.on_craft(|craft| craft.recipe != FORBIDDEN_RECIPE)?;
+//!     load.on_craft(|craft| craft.recipe_id != FORBIDDEN_RECIPE)?;
 //!     // Nothing is built below sea level.
 //!     load.on_build(|placement| placement.position[1] >= 0.0)
 //! }
@@ -24,28 +24,13 @@
 use core::ffi::c_void;
 
 use crate::abi::{BuildCheck, CraftCheck};
-use crate::{Entity, ItemId, RecipeId};
+use crate::game_events::CraftRecipeEvent;
+use crate::{Entity, ItemId};
 use crate::{Load, Off};
 
-/// A player's craft request, from [`Load::on_craft`].
-///
-/// # Examples
-///
-/// See the [module](self).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct CraftRequest {
-    /// The crafting player's character.
-    pub player: Entity,
-    /// The station, or `None` for crafting by hand.
-    pub station: Option<Entity>,
-    /// The recipe id.
-    pub recipe: RecipeId,
-    /// How many.
-    pub amount: u32,
-}
-
-/// A placement the game allows, from [`Load::on_build`].
+/// A placement the game allows, from [`Load::on_build`]. The name is
+/// enshwick's: the game's cursor check has none, and a refusal sets the
+/// game's `NoPermission` cursor flag.
 ///
 /// # Examples
 ///
@@ -63,17 +48,17 @@ pub struct Placement {
 
 unsafe extern "system" fn run_craft<F>(call: *const CraftCheck, user: *mut c_void) -> u8
 where
-    F: Fn(&CraftRequest) -> bool,
+    F: Fn(&CraftRecipeEvent) -> bool,
 {
     // SAFETY: the loader passes a valid call for the duration of this one.
     let Some(call) = (unsafe { call.as_ref() }) else {
         return 1;
     };
-    let request = CraftRequest {
-        player: call.player,
-        station: Entity::from_raw(call.station.0),
-        recipe: call.recipe,
-        amount: call.amount,
+    let request = CraftRecipeEvent {
+        crafting_operator_id: call.crafting_operator_id,
+        crafting_station_id: Entity::from_raw(call.crafting_station_id.0),
+        recipe_id: call.recipe_id,
+        recipe_amount: call.recipe_amount,
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
@@ -122,7 +107,7 @@ impl Load<'_> {
     /// See the [module](self).
     pub fn on_craft<F>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&CraftRequest) -> bool + Send + Sync + 'static,
+        F: Fn(&CraftRecipeEvent) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
         crate::load::hand_over(

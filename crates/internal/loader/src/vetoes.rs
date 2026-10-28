@@ -219,15 +219,16 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
     let amount: u16 = unsafe { read_at(payload, layout.amount) };
     let call = CraftCheck {
         header: Header::of::<CraftCheck>(),
-        player: enshwick::Entity(player),
-        station: enshwick::Entity(station),
-        recipe: enshwick::RecipeId::new(recipe),
-        amount: u32::from(amount),
+        crafting_operator_id: enshwick::Entity(player),
+        crafting_station_id: enshwick::Entity(station),
+        recipe_id: enshwick::RecipeId::new(recipe),
+        recipe_amount: amount,
+        reserved: 0,
     };
-    if call.player == enshwick::Entity(0) {
+    if call.crafting_operator_id == enshwick::Entity(0) {
         return;
     }
-    let disabled = crate::recipes::is_disabled(call.recipe.get());
+    let disabled = crate::recipes::is_disabled(call.recipe_id.get());
     let allowed = !disabled
         && filters.iter().filter(|f| f.live()).all(|f| {
             // SAFETY: `callback` is a `CraftCheckFn` the mod registered, in
@@ -252,8 +253,8 @@ pub(crate) unsafe fn screen(type_hash: u32, payload: *mut u8, size: usize) {
         crate::log!(
             DEBUG,
             "craft of recipe {:#x} by player {} refused{}",
-            call.recipe,
-            call.player.0,
+            call.recipe_id,
+            call.crafting_operator_id.0,
             if disabled {
                 ": the recipe is disabled"
             } else {

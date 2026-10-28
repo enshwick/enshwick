@@ -96,7 +96,9 @@ impl DamageTypeNew {
 
 /// What deals damage.
 ///
-/// The name is enshwick's: the loader's hook points, not a game type.
+/// The name is enshwick's: the loader's hook points, not a game type. The
+/// shroud's causes take the game's word for it, as its death causes and
+/// damage types do.
 ///
 /// # Examples
 ///
@@ -109,9 +111,9 @@ pub enum DamageCause {
     /// A fall.
     Fall,
     /// The shroud draining a character whose time in it ran out.
-    Shroud,
+    Fog,
     /// The deadly shroud, which kills at once.
-    ShroudDeath,
+    DeadlyFog,
     /// A character out of breath under water.
     Drowning,
     /// A creature out of breath under water, which dies at once.
@@ -139,8 +141,8 @@ impl DamageCause {
     pub const NAMED: &[Self] = &[
         Self::Hit,
         Self::Fall,
-        Self::Shroud,
-        Self::ShroudDeath,
+        Self::Fog,
+        Self::DeadlyFog,
         Self::Drowning,
         Self::DrowningDeath,
         Self::Freezing,
@@ -152,8 +154,8 @@ impl DamageCause {
         match code {
             DamageCheck::HIT => Self::Hit,
             DamageCheck::FALL => Self::Fall,
-            DamageCheck::SHROUD => Self::Shroud,
-            DamageCheck::SHROUD_DEATH => Self::ShroudDeath,
+            DamageCheck::FOG => Self::Fog,
+            DamageCheck::DEADLY_FOG => Self::DeadlyFog,
             DamageCheck::DROWNING => Self::Drowning,
             DamageCheck::DROWNING_DEATH => Self::DrowningDeath,
             DamageCheck::FREEZING => Self::Freezing,

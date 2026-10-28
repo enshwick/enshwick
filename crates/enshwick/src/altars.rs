@@ -27,7 +27,7 @@ use core::ffi::c_void;
 use crate::Entity;
 use crate::abi::{
     AltarInfo, AltarLimit as RawAltarLimit, AltarZone as RawAltarZone, Bounds,
-    ZoneCheck as RawZoneCheck,
+    BuildingZoneCheck as RawBuildingZoneCheck,
 };
 use crate::{Host, Load, Off};
 
@@ -516,7 +516,7 @@ where
     }
 }
 
-/// The most zones a [`ZoneCheck`] carries; the engine keeps at most 255.
+/// The most zones a [`BuildingZoneCheck`] carries; the engine keeps at most 255.
 pub const MAX_ZONES: usize = 256;
 
 /// How many altars a Flame level allows, as an altar limit filter sees it;
@@ -587,14 +587,17 @@ pub fn base_limit() -> Option<BaseLimit> {
 }
 
 /// A placement the game refused because the object does not lie in a single
-/// building zone; see [`Load::on_zone_check`]. Coordinates are 32.32
+/// building zone; see [`Load::on_building_zone_check`]. Coordinates are 32.32
 /// fixed-point metres.
+///
+/// The name is enshwick's, after the game's building zone: the check the game makes has no name, and its refusal is the cursor
+/// flag `CursorOutsideBuildingZone`.
 ///
 /// # Examples
 ///
-/// See [`Load::on_zone_check`].
+/// See [`Load::on_building_zone_check`].
 #[derive(Clone, Copy, Debug)]
-pub struct ZoneCheck<'a> {
+pub struct BuildingZoneCheck<'a> {
     /// The building zones, half-open.
     pub zones: &'a [Bounds],
     /// The object's box, both corners included.
@@ -603,9 +606,12 @@ pub struct ZoneCheck<'a> {
     pub margin: i64,
 }
 
-unsafe extern "system" fn run_zone_check<F>(check: *const RawZoneCheck, user: *mut c_void) -> u8
+unsafe extern "system" fn run_building_zone_check<F>(
+    check: *const RawBuildingZoneCheck,
+    user: *mut c_void,
+) -> u8
 where
-    F: Fn(&ZoneCheck<'_>) -> bool,
+    F: Fn(&BuildingZoneCheck<'_>) -> bool,
 {
     // SAFETY: the loader passes a valid check for the duration of the call.
     let Some(check) = (unsafe { check.as_ref() }) else {
@@ -619,7 +625,7 @@ where
     };
     // SAFETY: `user` is the leaked `F` this function was registered with.
     let filter = unsafe { &*user.cast::<F>() };
-    let call = ZoneCheck {
+    let call = BuildingZoneCheck {
         zones,
         object: check.object,
         margin: check.margin,
@@ -697,7 +703,7 @@ impl Load<'_> {
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     // Accept an object whose box lies in two zones' bounding box.
-    ///     load.on_zone_check(|check| {
+    ///     load.on_building_zone_check(|check| {
     ///         check.zones.len() >= 2
     ///             && (0..3).all(|a| {
     ///                 let low = check.zones.iter().map(|z| z.min[a]).min().unwrap_or(0);
@@ -707,15 +713,21 @@ impl Load<'_> {
     ///     })
     /// }
     /// ```
-    pub fn on_zone_check<F>(&mut self, filter: F) -> Result<(), Off>
+    pub fn on_building_zone_check<F>(&mut self, filter: F) -> Result<(), Off>
     where
-        F: Fn(&ZoneCheck<'_>) -> bool + Send + Sync + 'static,
+        F: Fn(&BuildingZoneCheck<'_>) -> bool + Send + Sync + 'static,
     {
         let host = self.host();
         crate::load::hand_over(
             filter,
-            |user| (host.api().zone_check_filter)(host.handle(), run_zone_check::<F>, user),
-            "zone checks",
+            |user| {
+                (host.api().building_zone_check_filter)(
+                    host.handle(),
+                    run_building_zone_check::<F>,
+                    user,
+                )
+            },
+            "building zone checks",
         )
     }
 }

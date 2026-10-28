@@ -165,18 +165,19 @@ pub enum Answer {
 }
 
 /// A survivor's bed the game kept, from [`Load::on_survivor_bed_check`].
+/// The name is enshwick's; the game's own bed check has none.
 ///
 /// # Examples
 ///
 /// See [`Load::on_survivor_bed_check`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BedCheck {
-    /// The survivor.
-    pub survivor: NpcId,
+    /// The survivor, as the game's active NPC state names it.
+    pub npc_id: NpcId,
     /// Its entity.
     pub entity: Entity,
-    /// The bed.
-    pub bed: Entity,
+    /// The bed, as the survivor's NPC record names it.
+    pub bed_id: Entity,
     /// Where the survivor belongs: its saved spawn cell, or where it stands.
     pub home: [i64; 3],
     /// Where the bed stands.
@@ -299,9 +300,9 @@ where
         return 1;
     };
     let call = BedCheck {
-        survivor: check.survivor,
+        npc_id: check.npc_id,
         entity: check.entity,
-        bed: check.bed,
+        bed_id: check.bed_id,
         home: check.home,
         bed_at: check.bed_at,
     };

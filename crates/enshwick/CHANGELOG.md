@@ -18,6 +18,17 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: ABI 4.0. Filter inputs and the death record take the game's
+  names. `Load::on_craft` hands the game's `CraftRecipeEvent` (`CraftRequest`
+  is gone) and `CraftCheck` names its fields `crafting_operator_id`,
+  `crafting_station_id`, `recipe_id` and a `u16` `recipe_amount`.
+  `PlayerDeathData` has `cause_guid`, `was_deadly_fog` and the causes
+  `IMPACT`, `FALL_DAMAGE` and `FOG`. `DamageCause::Fog` and `DeadlyFog`
+  (`DamageCheck::FOG`, `DEADLY_FOG`) replace `Shroud` and `ShroudDeath`.
+  `BedCheck` names `npc_id` and `bed_id`. The zone check is
+  `Load::on_building_zone_check` with `BuildingZoneCheck`
+  (`HostApi::building_zone_check_filter`), and the fake host's
+  `building_zone_check` (#635).
 - A mod whose `init` returns `Err(Off)` hands the loader its reason: the
   Mods screen shows it under the mod and the log names it, an `Off::text`
   in the reader's language.

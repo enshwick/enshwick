@@ -4,9 +4,9 @@ use core::ffi::c_void;
 
 use crate::abi::{
     ActiveBuff, AltarInfo, AltarLimitFilterFn, AltarZoneFn, BaseLimitInfo, BedCheckFn, BuffRequest,
-    BuffTypeInfo, BuildCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn, ExperiencePassFn, Header,
-    InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId, Side, SkillCheckFn, Status,
-    SummonFn, SurvivorLookupFn, SurvivorStatusFn, ZoneCheckFn,
+    BuffTypeInfo, BuildCheckFn, BuildingZoneCheckFn, ComfortFn, CraftCheckFn, DamageFilterFn,
+    ExperiencePassFn, Header, InteractionFn, KnowledgeInfo, KnowledgeInputFn, ModHandle, RateId,
+    Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
 use crate::test::table::mods::list;
 use crate::test::table::{put, put_list, with};
@@ -56,9 +56,9 @@ pub(crate) extern "system" fn altar_zones_changed(_me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn zone_check_filter(
+pub(crate) extern "system" fn building_zone_check_filter(
     _me: ModHandle,
-    callback: ZoneCheckFn,
+    callback: BuildingZoneCheckFn,
     user: *mut c_void,
 ) -> Status {
     with(Status::MISSING, |s| {
