@@ -1,21 +1,16 @@
 //! Which 8³-voxel bricks a terrain edit can write, and which edits a transaction takes.
 
 use enshwick::abi::{Status, TerrainEdit, Voxel};
+use enshwick::terrain::MAX_RADIUS;
+use enshwick::voxels::PER_METRE;
 
-use crate::voxels::WorldExtent;
+use crate::voxels::{TERRAIN, WorldExtent};
 
 /// Voxels along a brick's side.
 pub(crate) const BRICK: u32 = 8;
 /// Voxels in a brick.
 pub(crate) const BRICK_VOXELS: usize = (BRICK * BRICK * BRICK) as usize;
 
-/// The largest radius and height an edit takes, in metres, as
-/// `crate::terrain` checks them.
-const MAX_REACH: f32 = 16.0;
-/// The last terrain material; above it, building materials.
-const TERRAIN_LAST: u32 = 0x7f;
-/// Voxels a metre.
-const PER_METRE: f64 = 2.0;
 /// Voxels added on every side of the box the game computes, so a rounding
 /// apart between its `f32` bounds and these `f64` ones never leaves a
 /// written voxel out.
@@ -89,13 +84,13 @@ impl Bricks {
 }
 
 /// Whether a transaction takes `edit`: what `crate::terrain` writes, a
-/// known kind and shape, a radius above 0 and up to 16 metres, a position
-/// at 0 or more inside the coordinates a box covers, a terrain material for
-/// an add or a flatten and a height for an add; no dry run, which writes
-/// nothing to undo.
+/// known kind and shape, a radius above 0 and up to [`MAX_RADIUS`], a
+/// position at 0 or more inside the coordinates a box covers, a terrain
+/// material for an add or a flatten and a height for an add; no dry run,
+/// which writes nothing to undo.
 pub(crate) fn check(edit: &TerrainEdit) -> Result<Bricks, Status> {
-    let reach = |metres: f32| metres > 0.0 && metres <= MAX_REACH;
-    let material = (1..=TERRAIN_LAST).contains(&edit.material);
+    let reach = |metres: f32| metres > 0.0 && metres <= MAX_RADIUS;
+    let material = u8::try_from(edit.material).is_ok_and(|material| TERRAIN.contains(&material));
     let valid = edit.flags & TerrainEdit::DRY_RUN == 0
         && reach(edit.radius)
         && edit

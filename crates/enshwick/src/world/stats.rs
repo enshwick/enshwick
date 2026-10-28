@@ -11,8 +11,7 @@ use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError, WritableType};
 use crate::{Host, Load, Off};
 
-/// The attribute set's flag bit that marks it initialised.
-const SET_INITIALISED: u8 = 1;
+use crate::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
 /// The skill nodes a character keeps.
 const SKILL_SLOTS: usize = 256;
 /// A node's level is the top three bits of its byte; 1.0 build 1269579.

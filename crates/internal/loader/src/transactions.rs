@@ -17,7 +17,7 @@ pub(crate) mod cover;
 mod game;
 mod ledger;
 mod paste;
-mod props;
+pub(crate) mod props;
 mod record;
 
 use std::sync::Mutex;
