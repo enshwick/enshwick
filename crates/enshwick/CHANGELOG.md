@@ -90,6 +90,10 @@ Each entry names the pull request that made the change.
   a data change through `Load::change_recipes` or a `Rate::RecipeOutput`
   changes recipe counts by kind (#616).
 
+### Fixed
+
+- The Mods screen shows a secret setting as "(secret)" and never its value.
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added
