@@ -333,6 +333,11 @@ pub type UiAnswerFn = unsafe extern "system" fn(answer: u32, user: *mut c_void);
 /// it: [`Status::OK`] to accept it; else the reason, written to `why` and valid
 /// until the mod's next call, and [`Status::REFUSED`].
 ///
+/// A reason that starts with a key of the mod's texts, followed by
+/// tab-separated `name=value` pairs (`"config.min\tmin=2"`), shows as that
+/// text in the reader's language with each `{name}` filled; any other
+/// reason shows as written. A name holds no `=`; neither holds a tab.
+///
 /// It must not unwind.
 pub type ConfigCheckFn =
     unsafe extern "system" fn(text: Str, why: *mut Str, user: *mut c_void) -> Status;

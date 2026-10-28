@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The title screen shows the loader's line under the game's version,
+  `Enshwick 1.0.0-alpha.9 · mods: 6`, with the mods off and a warning when
+  the game version leaves features off (#624).
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
   test holds its texts complete for every offered language.
@@ -19,6 +22,9 @@ Each entry names the pull request that made the change.
   (ABI 3.2) (#615).
 - `ItemId::from_guid`, `RecipeId::from_guid` and `KnowledgeId::from_guid`
   give the game's id of a GUID with its type, in a constant too (#615).
+- `KnowledgeId` and `SkillNode` have a `Shape`, so services, events and
+  points carry them; a Luau script changes an answer of any id type
+  (#619).
 - `Load::on_tick` runs a tick handler on a period of wall time and returns
   a `TickPeriod`, whose `set_every` changes the period while the game runs;
   `Load::on_every_step` runs one on every server step. A step a handler
@@ -62,6 +68,16 @@ Each entry names the pull request that made the change.
 - The loader's own texts sit in a file per language, and every console
   answer, the status summary, the per-mod costs, the conflict report and
   the interface demo follow the reader's language.
+- A player's game tells the server its language when it joins; the
+  loader's answers, join notes and mod names to that player follow it, and
+  on a server `i18n::language()` is that player's language while the loader
+  asks a mod about the player. The loader's setting `language` sets the
+  language of its console. The join message protocol moved to version 2
+  (#620).
+- `ConfigError::text(key, args)` refuses settings with a text of the mod's
+  texts, which each player reads in their own language; the `validate` of
+  the `Config` derive takes any error that converts into `ConfigError`
+  (`String`, `&str` or a `ConfigError`) (#620).
 - The Mods screen scrolls its lists in the game's own scroll area instead
   of paging them, and a text setting takes typed text in the game's own
   text field, set on Enter. A game build without either keeps the pages

@@ -53,7 +53,7 @@ pub(super) fn world_rows(
             let texts = record.texts.relock().clone();
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
-                language: crate::content::language(),
+                language: texts::language(),
             });
             let mut rows = rows::rows(&schema, &file, server.as_ref().filter(|_| joined), words);
             if joined {

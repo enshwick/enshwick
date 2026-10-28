@@ -240,6 +240,7 @@ revision = 1
 "ui.pause_entry" = { rva = 0xca_1a70, pattern = "48 8B C4 44 88 40 ?? 88 50 ?? 48 89 48 ?? 55 56 57 41 54" }
 "ui.action_new" = { rva = 0xb1_4b00, pattern = "40 53 48 83 EC 40 45 33 D2 66 C7 01 5B 00 4C 89 51 ??" }
 "ui.action_query" = { rva = 0xd9_1310, pattern = "40 53 41 57 48 81 EC C8 02 00 00 41 0F B7 D8 4C 8B F9" }
+"ui.legal_line_site" = { rva = 0xc0_958b, pattern = "48 8B 1D ?? ?? ?? ?? 48 8B 9B C8 00 00 00 48 8D 8B ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B D0 48 8D 4C 24 ?? E8", at = 7 }
 "ui.main_menu_site" = { rva = 0xc1_c360, pattern = "75 04 C6 46 ?? 01 33 C0 C7 44 24 ?? 01 00 00 00 49 8D 8E ?? ?? ?? ??", at = 6 }
 "ui.pause_menu_site" = { rva = 0xcc_3517, pattern = "41 C7 04 24 01 00 00 00 48 8B 05 ?? ?? ?? ?? 4C 8B B0 ?? ?? ?? ?? 49 8D 8E ?? ?? ?? ??", at = 8 }
 "ui.world_settings_site" = { rva = 0xb8_4dab, pattern = "48 8D 8D ?? ?? ?? ?? 49 8B D6 E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F 10 44 24 ??", at = 15 }
@@ -725,6 +726,7 @@ revision = 1
 "ui.pause_entry.bytes" = "0x8818_4088_44c4_8b48"
 "ui.action_new.bytes" = 0x3345_40ec_8348_5340
 "ui.action_query.bytes" = "0xc8ec_8148_5741_5340"
+"ui.legal_line_site.bytes" = 0x4800_0000_c89b_8b48
 "ui.main_menu_site.bytes" = 0x1_4824_44c7_c033
 "ui.pause_menu_site.bytes" = 0x4c01_b5af_7a05_8b48
 "ui.world_settings_site.bytes" = "0xe800_0017_588d_8d48"

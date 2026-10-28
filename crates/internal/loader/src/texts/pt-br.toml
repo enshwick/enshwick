@@ -282,3 +282,6 @@
 "join.dialog.restart" = "Desativados neste jogo; reinicie-o:"
 "join.note.off" = "Este servidor não executa estes mods do Enshwick, então eles ficam desativados até você reiniciar o jogo:"
 "join.note.loader" = "Este servidor executa o Enshwick com os mesmos mods, mas com outra versão do carregador. Instale a versão do servidor, ou algumas coisas podem não funcionar."
+"menu.line" = "Enshwick {version} · mods: {mods}"
+"menu.line.off" = "Enshwick {version} · mods: {mods}, desativados: {off}"
+"menu.line.lacking" = "{line} · alguns recursos estão desativados nesta versão do jogo"

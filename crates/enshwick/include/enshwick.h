@@ -2110,6 +2110,11 @@ typedef struct EnshwickUiMarker {
 // it: `Status::OK` to accept it; else the reason, written to `why` and valid
 // until the mod's next call, and `Status::REFUSED`.
 //
+// A reason that starts with a key of the mod's texts, followed by
+// tab-separated `name=value` pairs (`"config.min\tmin=2"`), shows as that
+// text in the reader's language with each `{name}` filled; any other
+// reason shows as written. A name holds no `=`; neither holds a tab.
+//
 // It must not unwind.
 typedef EnshwickStatus (*EnshwickConfigCheckFn)(struct EnshwickStr text,
                                                 struct EnshwickStr *why,
@@ -3537,9 +3542,13 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*knowledge_input_filter)(EnshwickModHandle me,
                                            EnshwickKnowledgeInputFn callback,
                                            void *user);
-  // The game language the client last asked a text in, as the game
-  // numbers them (see `crate::i18n::Language`); `0`, the fallback, on a
-  // server and before the client's first text. Any thread.
+  // The game language of the reader, as the game numbers them (see
+  // `crate::i18n::Language`). On a server, while the loader calls the
+  // mod about one player (an action, a settings check, the player's mod
+  // message) on that thread, the language that player's game named when
+  // it joined, always one the game knows; else `0`, the fallback. On a
+  // client, the language it last asked a text in, `0` before its first
+  // text. Any thread; the answer holds for the calling thread.
   uint32_t (*language)(EnshwickModHandle me);
   // Replaces the live game settings with `data` as
   // `HostApi::set_game_settings` does, and keeps the fields with a

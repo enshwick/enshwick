@@ -282,3 +282,6 @@
 "join.dialog.restart" = "このゲームでオフになりました。ゲームを再起動してください："
 "join.note.off" = "このサーバーは次の Enshwick の MOD を実行していないため、ゲームを再起動するまでオフになります："
 "join.note.loader" = "このサーバーは同じ MOD で Enshwick を実行していますが、ローダーのバージョンが異なります。サーバーのバージョンをインストールしてください。そうしないと正しく動作しない場合があります。"
+"menu.line" = "Enshwick {version}・MOD：{mods}"
+"menu.line.off" = "Enshwick {version}・MOD：{mods}、無効：{off}"
+"menu.line.lacking" = "{line}・このゲームバージョンでは一部の機能が無効です"

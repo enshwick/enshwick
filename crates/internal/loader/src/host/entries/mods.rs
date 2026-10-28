@@ -368,11 +368,13 @@ pub(crate) extern "system" fn config_check(
 /// Runs mod `index`'s check of the new settings text `text`; `Ok` for a mod
 /// without one.
 pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
-    let Some(&(callback, user)) = loader()
+    let Some(record) = loader()
         .and_then(|loader| loader.mods.get(index))
         .filter(|record| !record.off.load(Ordering::Acquire))
-        .and_then(|record| record.check.get())
     else {
+        return Ok(());
+    };
+    let Some(&(callback, user)) = record.check.get() else {
         return Ok(());
     };
     let mut why = Str::EMPTY;
@@ -393,9 +395,10 @@ pub(crate) fn check_settings(index: usize, text: &str) -> Result<(), String> {
         return Ok(());
     }
     // SAFETY: the reason stays valid until the mod's next check.
-    Err(unsafe { why.as_str() }.map_or_else(
+    let why = unsafe { why.as_str() };
+    Err(why.map_or_else(
         || crate::texts::fill("refused.by-mod", &[]),
-        ToOwned::to_owned,
+        |why| crate::configure::mod_reason(record.texts.relock().as_ref(), why),
     ))
 }
 
@@ -418,6 +421,9 @@ pub(crate) extern "system" fn texts(me: ModHandle, toml: Str) -> Status {
 }
 
 pub(crate) extern "system" fn language(_me: ModHandle) -> u32 {
+    if let Some(reader) = crate::texts::reader() {
+        return reader.0;
+    }
     loader()
         .filter(|loader| loader.side == Side::CLIENT)
         .map_or(0, |_| crate::content::language().0)

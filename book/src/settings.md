@@ -269,7 +269,10 @@ second.
 
 Before anything writes, the loader runs the mod's own check: `load.config()`
 hands it over, and it parses what the mod would read and runs the type's
-`validate`; a refusal keeps the file and shows its reason.
+`validate`; a refusal keeps the file and shows its reason. A `validate` that
+returns `ConfigError::text("config.too-few", &[("min", "2")])` names a text
+of the mod's [texts](content/texts.md): each player reads it in their own
+language, with `{min}` filled in. A `String` reason shows as written.
 
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:

@@ -185,9 +185,11 @@ pub struct RecipeId(pub u32);
     serde::Deserialize,
     bytemuck::Zeroable,
     bytemuck::Pod,
+    crate::Shape,
     crate::Script,
 )]
 #[serde(transparent)]
+#[shape(api = "skill_node")]
 pub struct SkillNode(pub u32);
 
 /// A knowledge value of the game by its id: a recipe's, a quest's, or any
@@ -220,9 +222,11 @@ pub struct SkillNode(pub u32);
     serde::Deserialize,
     bytemuck::Zeroable,
     bytemuck::Pod,
+    crate::Shape,
     crate::Script,
 )]
 #[serde(transparent)]
+#[shape(api = "knowledge_id")]
 pub struct KnowledgeId(pub u32);
 
 impl From<RecipeId> for KnowledgeId {

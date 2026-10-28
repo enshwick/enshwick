@@ -5,7 +5,8 @@
 use std::fmt::Write as _;
 
 use super::{
-    Error, Kind, PointSchema, Schema, TypeSchema, find, is_named, prose, reached, reached_from,
+    Error, Kind, PointSchema, Schema, TypeSchema, built_in, find, is_named, prose, reached,
+    reached_from,
 };
 
 /// A type's size and alignment in a `repr(C)` layout.
@@ -17,14 +18,17 @@ struct Shape {
 
 /// The size and alignment of a primitive or built-in type.
 fn primitive(name: &str) -> Option<Shape> {
+    if let Some(b) = built_in(name) {
+        return Some(Shape {
+            size: b.size,
+            align: b.align,
+        });
+    }
     let (size, align) = match name {
         "u8" | "i8" | "bool" => (1, 1),
         "u16" | "i16" => (2, 2),
-        "u32" | "i32" | "f32" | "enshwick.entity" | "enshwick.item_id" | "enshwick.recipe_id" => {
-            (4, 4)
-        }
-        "u64" | "i64" | "f64" | "usize" | "isize" | "enshwick.player_key" => (8, 8),
-        "enshwick.guid" => (16, 1),
+        "u32" | "i32" | "f32" => (4, 4),
+        "u64" | "i64" | "f64" | "usize" | "isize" => (8, 8),
         _ => return None,
     };
     Some(Shape { size, align })
@@ -82,10 +86,8 @@ impl Writer<'_> {
     fn read(&self, name: &str, depth: u32) -> Result<String, Error> {
         if primitive(name).is_some() {
             let read = match name {
-                "enshwick.entity" => "entity",
-                "enshwick.guid" => "guid",
-                "enshwick.item_id" | "enshwick.recipe_id" => "u32",
-                "enshwick.player_key" | "usize" => "u64",
+                _ if let Some(b) = built_in(name) => b.read,
+                "usize" => "u64",
                 "isize" => "i64",
                 other => other,
             };
@@ -162,10 +164,9 @@ impl Writer<'_> {
 /// The Luau type a value of the schema type `name` takes.
 fn luau_type(schema: &Schema, name: &str) -> String {
     match name {
+        _ if let Some(b) = built_in(name) => b.luau.to_owned(),
         "bool" => "boolean".to_owned(),
-        "u64" | "i64" | "usize" | "isize" | "enshwick.guid" | "enshwick.player_key" => {
-            "string".to_owned()
-        }
+        "u64" | "i64" | "usize" | "isize" => "string".to_owned(),
         _ if !is_named(name) => "number".to_owned(),
         named => match schema.types.iter().find(|t| t.name == named) {
             Some(ty) if ty.kind == Kind::Struct => named.to_owned(),
@@ -356,7 +357,7 @@ pub fn luau_event(schema: &Schema, name: &str) -> Result<String, Error> {
 /// write is valid. A value type's or an enum's hash would come from the
 /// module's own text, which a script can forge.
 fn is_script_input(ty: &str) -> bool {
-    super::PRIMITIVES.contains(&ty) || super::BUILT_IN.contains(&ty)
+    super::PRIMITIVES.contains(&ty) || built_in(ty).is_some()
 }
 
 /// The Luau definition of the call `name` of `schema`: a module that exports
@@ -490,7 +491,7 @@ mod tests {
         let text = luau(&schema, "you.trading-post:price").unwrap();
         assert!(text.contains("input = { size = 24, fields = {"), "{text}");
         assert!(
-            text.contains("{ name = \"player\", offset = 8, read = \"u64\""),
+            text.contains("{ name = \"player\", offset = 8, read = \"player_key\""),
             "{text}"
         );
         assert!(

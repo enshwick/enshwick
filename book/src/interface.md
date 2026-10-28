@@ -163,6 +163,13 @@ The buttons are the game's: `Ok`, `Cancel`, `Retry`, `Ignore`, `Reset`,
 When the loader cannot link the interface on a game build, frame callbacks
 never run and dialogs show as system message boxes instead.
 
+## The title screen's line
+
+Under the game's version on the title screen, the loader writes its own line
+in the same look: `Enshwick 1.0.0-alpha.9 · mods: 6`, with how many mods are
+off and a warning when this game version leaves some of the loader's features
+off.
+
 ## The Mods screen
 
 The loader adds a "Mods" entry to the title screen's main menu and to the

@@ -282,3 +282,6 @@
 "join.dialog.restart" = "已在此游戏中关闭；请重新启动游戏："
 "join.note.off" = "此服务器没有运行这些 Enshwick 模组，因此在你重新启动游戏前它们都处于关闭状态："
 "join.note.loader" = "此服务器运行的 Enshwick 模组相同，但加载器版本不同。请安装服务器的版本，否则可能无法正常运行。"
+"menu.line" = "Enshwick {version} · 模组：{mods}"
+"menu.line.off" = "Enshwick {version} · 模组：{mods}，已停用：{off}"
+"menu.line.lacking" = "{line} · 此游戏版本中部分功能已停用"

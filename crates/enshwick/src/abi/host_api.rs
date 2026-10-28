@@ -875,9 +875,13 @@ pub struct HostApi {
     /// only.
     pub knowledge_input_filter:
         extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
-    /// The game language the client last asked a text in, as the game
-    /// numbers them (see [`crate::i18n::Language`]); `0`, the fallback, on a
-    /// server and before the client's first text. Any thread.
+    /// The game language of the reader, as the game numbers them (see
+    /// [`crate::i18n::Language`]). On a server, while the loader calls the
+    /// mod about one player (an action, a settings check, the player's mod
+    /// message) on that thread, the language that player's game named when
+    /// it joined, always one the game knows; else `0`, the fallback. On a
+    /// client, the language it last asked a text in, `0` before its first
+    /// text. Any thread; the answer holds for the calling thread.
     pub language: extern "system" fn(me: ModHandle) -> u32,
     /// Replaces the live game settings with `data` as
     /// [`HostApi::set_game_settings`] does, and keeps the fields with a

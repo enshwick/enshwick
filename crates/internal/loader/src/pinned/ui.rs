@@ -54,6 +54,7 @@ pub(crate) const LABEL_FLAGS: Constant = Constant::new("ui.label_flags");
 pub(crate) const LABEL_FONT_SIZE: Constant = Constant::new("ui.label_font_size");
 pub(crate) const LABEL_NEW: Symbol = Symbol::new("ui.label_new");
 pub(crate) const LABEL_SHOWN: Constant = Constant::new("ui.label_shown");
+pub(crate) const LEGAL_LINE_SITE: Symbol = Symbol::new("ui.legal_line_site");
 pub(crate) const LOCA_ID: Symbol = Symbol::new("ui.loca_id");
 pub(crate) const LOCA_TEXT: Symbol = Symbol::new("ui.loca_text");
 pub(crate) const MAIN_ENTRY: Symbol = Symbol::new("ui.main_entry");

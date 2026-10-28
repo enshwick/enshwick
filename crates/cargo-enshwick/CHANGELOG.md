@@ -6,6 +6,13 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo enshwick point`, `event` and `call` know `KnowledgeId` and
+  `SkillNode`, and the Luau modules they write read every id type as
+  itself (`item_id`, `recipe_id`, `knowledge_id`, `skill_node`,
+  `player_key`), so a script can change an answer of an id type (#619).
+
 ## [1.0.0-alpha.9] - 2026-10-27
 
 ### Added
