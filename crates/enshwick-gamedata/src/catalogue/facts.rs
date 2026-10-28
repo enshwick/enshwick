@@ -750,24 +750,6 @@ pub const FACTS: &[(&str, Fact)] = &[
     ("fuel.max", offset("keen::ecs::NetworkFuel", "fuelMax")),
     ("owner", Fact::Type("keen::ecs::OwnerRelationship")),
     (
-        "owner.entity",
-        offset("keen::ecs::OwnerRelationship", "ownerEntityId"),
-    ),
-    ("item_state", Fact::Type("keen::ecs::ItemState")),
-    (
-        "item_state.slot",
-        offset("keen::ecs::ItemState", "containedInSlotId"),
-    ),
-    ("item_state.item", offset("keen::ecs::ItemState", "itemId")),
-    (
-        "inventory_slot_id.entity",
-        offset("keen::InventorySlotId", "entityId"),
-    ),
-    (
-        "inventory_slot_id.index",
-        offset("keen::InventorySlotId", "slotIndex"),
-    ),
-    (
         "inventory_empty_state",
         Fact::Type("keen::ecs::InventoryEmptyState"),
     ),

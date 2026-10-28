@@ -64,4 +64,32 @@ mod tests {
         owners.remove(chest).unwrap();
         assert_eq!(owners.get(chest), None);
     }
+
+    #[test]
+    fn a_player_s_character_takes_no_value_since_no_load_finds_it_again() {
+        use enshwick::abi::{Header, PlayerInfo};
+
+        let ann = Entity(2);
+        let player = PlayerInfo {
+            header: Header::of::<PlayerInfo>(),
+            slot: 0,
+            entity: ann,
+            key: enshwick::PlayerKey::new(7),
+            permissions: 0,
+            name_len: 0,
+            name: [0; 64],
+        };
+        let loader = enshwick::test::FakeHost::new().player(player).install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Chests)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let owners = OWNERS.get().unwrap();
+        let owner = Owner {
+            player: 7,
+            name: "Ann".into(),
+        };
+        assert_eq!(owners.set(ann, &owner), Err(SetError::NotKept));
+        assert_eq!(owners.get(ann), None);
+        assert_eq!(owners.remove(ann), Ok(()), "nothing to remove is no error");
+    }
 }

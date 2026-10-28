@@ -26,9 +26,9 @@ impl Placed {
     /// its `CurrentTransform`. An `f32` −0.0 counts as +0.0: a load gives
     /// survivors' −0.0 turns back as +0.0 (server 399).
     pub(crate) fn new(template: [u8; 16], mut transform: [u8; TRANSFORM_KEY]) -> Self {
-        for word in transform[FLOATS..].chunks_exact_mut(4) {
-            if word == (-0.0f32).to_le_bytes() {
-                word.copy_from_slice(&0.0f32.to_le_bytes());
+        for word in transform[FLOATS..].as_chunks_mut::<4>().0 {
+            if *word == (-0.0f32).to_le_bytes() {
+                *word = 0.0f32.to_le_bytes();
             }
         }
         Self {
@@ -280,7 +280,10 @@ mod tests {
             rest = after;
         }
         assert!(rest.is_empty());
-        assert_eq!(Anchor::decode(&bytes[..bytes.len() - 1 - 72]), None);
+        let held = 1 + 16 + TRANSFORM_KEY + 2;
+        let last = &bytes[bytes.len() - held..];
+        assert!(Anchor::decode(last).is_some());
+        assert_eq!(Anchor::decode(&last[..held - 1]), None);
         assert_eq!(Anchor::decode(&[9, 0, 0, 0, 0]), None);
     }
 

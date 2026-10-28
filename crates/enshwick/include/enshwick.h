@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 4
+#define ENSHWICK_ABI_MINOR 5
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -43,8 +43,13 @@ typedef struct EnshwickHeader {
 // An entity id, as the engine numbers entities: a character, a prop, an item
 // with its own entity, anything the world holds.
 //
-// The engine's id 0 stands for no entity; the safe API hands it over as
-// `None` in an `Option<Entity>`, never as an `Entity`.
+// The id lasts one session: every load of a world numbers its entities
+// anew, in the order of the save, so an id kept across a restart names
+// another entity. It therefore has no serde form. Data that must outlast a
+// restart goes in entity data or
+// item data, which find their entities again after a
+// load. The engine's id 0 stands for no entity; the safe API hands it over
+// as `None` in an `Option<Entity>`, never as an `Entity`.
 typedef uint32_t EnshwickEntity;
 
 // A player's account by the number the game keeps for it, the same in every

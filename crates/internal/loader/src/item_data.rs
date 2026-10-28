@@ -962,14 +962,25 @@ mod tests {
         assert_eq!(take_destroyed().into_iter().collect::<Vec<_>>(), [2]);
     }
 
-    #[test]
-    fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
-        let _added = KINDS.add(Kind {
+    /// The kinds these tests share, sealed once per process: `a:charges`
+    /// (0), an item kind clients get, and `a:owner` (1), an entity kind.
+    fn kinds() {
+        let _charges = KINDS.add(Kind {
             id: "a:charges".into(),
             scope: Scope::Item,
             sent: true,
         });
+        let _owner = KINDS.add(Kind {
+            id: "a:owner".into(),
+            scope: Scope::Entity,
+            sent: false,
+        });
         let _sealed = KINDS.seal();
+    }
+
+    #[test]
+    fn a_client_keeps_at_most_its_cap_of_a_server_s_records() {
+        kinds();
         let mut values = Values::default();
         let mut bytes = Vec::new();
         for pide in 1..=u32::try_from(MAX_CLIENT_RECORDS).unwrap() {
@@ -1035,12 +1046,7 @@ mod tests {
 
     #[test]
     fn a_save_keeps_values_by_anchor_and_waiting_records_as_read() {
-        let _added = KINDS.add(Kind {
-            id: "a:owner".into(),
-            scope: Scope::Entity,
-            sent: false,
-        });
-        let _sealed = KINDS.seal();
+        kinds();
         let placed = anchor::Placed::new([1; 16], [2; anchor::TRANSFORM_KEY]);
         // A file of the version that kept entity ids: its record waits under
         // the old id, never attached.
@@ -1054,7 +1060,7 @@ mod tests {
         assert_eq!(pending[0].anchor, Anchor::Session(1043));
         let mut kept = server(pending, unknown);
         kept.values.insert(
-            (0, 1027),
+            (1, 1027),
             Record {
                 item: 9,
                 anchor: Some(Anchor::Placed(placed)),
@@ -1062,7 +1068,7 @@ mod tests {
             },
         );
         kept.values.insert(
-            (0, 1030),
+            (1, 1030),
             Record {
                 item: 9,
                 anchor: None,

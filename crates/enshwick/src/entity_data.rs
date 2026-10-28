@@ -2,11 +2,16 @@
 //! survivor's nickname: typed values in kinds named `<mod>:<name>`, kept
 //! per world and, for kinds that ask for it, sent to players.
 //!
-//! The game saves entities under their ids and creates them with those ids
-//! on load, so a value stays with its entity across saves. The server keeps
-//! the template each value's entity had: once the entity is gone or holds
-//! another template, the value reads as missing on the server's game
-//! thread, and the server drops it when the world saves. Values live in
+//! A load numbers the world's entities anew, so the server keeps each value
+//! under its entity's place: the template and the exact transform the save
+//! holds. After the first step of a loaded world every value finds its
+//! entity again; a value whose place no entity, or more than one, holds
+//! stays aside in the world's file and is never given to another entity.
+//! Only an entity the save keeps in place carries a value: a player's
+//! character does not, so [`EntityData::set`] refuses it with
+//! [`SetError::NotKept`]. Once the entity is gone or holds another
+//! template, the value reads as missing on the server's game thread, and the
+//! server drops it when the world saves. Values live in
 //! `mod-data/enshwick/worlds/<key>/`, never in the game's save, beside
 //! [item data](crate::item_data), which is the same store for items.
 //!
@@ -126,8 +131,9 @@ where
     /// # Errors
     ///
     /// [`SetError`] when the value does not encode or is too long, off the
-    /// server or its game thread, before the world has loaded, or for an
-    /// entity that does not exist.
+    /// server or its game thread, before the world has loaded, for an
+    /// entity that does not exist, or for one no load finds again
+    /// ([`SetError::NotKept`]).
     ///
     /// # Examples
     ///
@@ -173,6 +179,7 @@ where
             Status::REFUSED | Status::WRONG_THREAD => Err(SetError::NotServer),
             Status::MISSING => Err(SetError::NoWorld),
             Status::BAD_ARGS => Err(SetError::NoEntity),
+            Status::NOT_KEPT => Err(SetError::NotKept),
             other => Err(SetError::Refused(other.0)),
         }
     }

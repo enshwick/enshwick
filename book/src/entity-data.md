@@ -54,15 +54,31 @@ A kind is sent once any mod opens it with `Clients`.
 
 `set` and `remove` return a `SetError`: the value does not encode or is too
 long, the call came off the server's game thread, the world has not loaded,
-or the entity does not exist.
+the entity does not exist, or no load finds the entity again (`NotKept`).
 
 ## The entity and its value
 
-The game saves an entity under its id and creates it with the same id when
-the world loads, so a value stays with its entity across saves. The server
-keeps, with each value, the template its entity had when the value was set.
-When the game destroys the entity, the server drops its values after that
-step and tells the clients. When its id names another thing:
+An entity id lasts one session. Each load of a world numbers its entities
+anew in the order of the save, so adding or removing one thing moves the
+ids of everything saved after it. `Entity` therefore has no serde form, and
+a mod keeps nothing by entity id in its own files.
+
+The server keeps each value under its entity's place instead: the template
+and the exact transform, which the save holds bit for bit. After the first
+step of a loaded world, every value finds its entity again by that place.
+A value whose place holds no entity waits in the file for a later load. A
+place that two entities share, such as two chests a mod spawned at one
+point, names neither for certain: its value stays aside in the file and
+the log says how many did. Nothing is given to another entity on a guess.
+
+Only an entity the save keeps in place can carry a value: a placed prop, an
+altar, a container, a survivor. A player's character is not one, so `set`
+refuses it with `SetError::NotKept`; keep player data by `PlayerKey`.
+
+The server also keeps, with each value, the template its entity had when
+the value was set. When the game destroys the entity, the server drops its
+values after that step and tells the clients. When its id names another
+thing:
 
 - a read on the server's game thread finds it out and the value reads as
   missing;
