@@ -8,22 +8,23 @@ through.
 ## Crafting
 
 [`load.on_craft(|craft| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
-runs on each player's craft request in the server's world, with a
-`CraftRequest`: the crafting `player`, the `station` (`None` for crafting by
-hand), the `recipe` id and the `amount`. Returning `false` refuses it:
-nothing is made and nothing is taken.
+runs on each player's craft request in the server's world, with the game's
+`CraftRecipeEvent`: the `crafting_operator_id`, the `crafting_station_id`
+(`None` for crafting by hand), the `recipe_id` and the `recipe_amount`.
+Returning `false` refuses it: nothing is made and nothing is taken.
 
 ```rust
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
     // Only administrators craft by hand.
     load.on_craft(move |craft| {
-        craft.station.is_some() || world.player(craft.player).is_some_and(|p| p.is_admin())
+        craft.crafting_station_id.is_some()
+            || world.player(craft.crafting_operator_id).is_some_and(|p| p.is_admin())
     })
 }
 ```
 
-A request is the game's `CraftRecipeEvent`. The loader screens the requests
+The loader screens the requests
 on the game thread at the start of the next step, before the crafting system
 reads them, so [`World`](world.md) reads work in the filter. A refused
 request reaches the crafting system empty, with no crafter and no amount.
@@ -31,8 +32,9 @@ request reaches the crafting system empty, with no crafter and no amount.
 ## Building
 
 [`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
-runs after the game's cursor check allows a placement, with a `Placement`:
-the building `player`, the `item` placed and its `position` in metres.
+runs after the game's cursor check allows a placement, with a `Placement`,
+enshwick's name, since the game's check has none: the building `player`,
+the `item` placed and its `position` in metres.
 Returning `false` refuses it the way the game refuses a placement without
 building permission: the building systems do not place it.
 

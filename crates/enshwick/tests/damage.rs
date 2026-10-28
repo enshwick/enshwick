@@ -17,7 +17,7 @@ mod tests {
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             load.on_damage(|damage| match damage.cause() {
                 DamageCause::Fall => damage.scale(0.5),
-                DamageCause::ShroudDeath => damage.cancel(),
+                DamageCause::DeadlyFog => damage.cancel(),
                 DamageCause::Hit if damage.source() == Some(damage.target()) => damage.cancel(),
                 DamageCause::Hit => {
                     damage.scale_type(DamageTypeNew::MagicalFire, 2.0);
@@ -80,7 +80,7 @@ mod tests {
         fall.total = 40.0;
         assert!((loader.damage(fall).total - 20.0).abs() < f32::EPSILON);
 
-        let mut death = check(DamageCheck::SHROUD_DEATH, 2, 0);
+        let mut death = check(DamageCheck::DEADLY_FOG, 2, 0);
         death.total = 300.0;
         assert!(loader.damage(death).total.abs() < f32::EPSILON);
     }

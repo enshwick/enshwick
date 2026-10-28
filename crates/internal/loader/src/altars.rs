@@ -31,8 +31,8 @@ use std::time::{Duration, Instant};
 use arc_swap::ArcSwapOption;
 use arrayvec::ArrayVec;
 use enshwick::abi::{
-    AltarInfo, AltarZone, AltarZoneFn, Bounds, Event, Header, HookFlags, Side, Status, ZoneCheck,
-    ZoneCheckFn,
+    AltarInfo, AltarZone, AltarZoneFn, Bounds, BuildingZoneCheck, BuildingZoneCheckFn, Event,
+    Header, HookFlags, Side, Status,
 };
 use enshwick::altars::MAX_ZONES;
 use enshwick::raw::{read_at, read_ptr_at};
@@ -234,7 +234,7 @@ static ADD_ZONES_NEXT: Next<SystemFn> = unsafe { Next::new() };
 // that function's next.
 static UPGRADE_NEXT: Next<SystemFn> = unsafe { Next::new() };
 
-type Filter = Registered<ZoneCheckFn>;
+type Filter = Registered<BuildingZoneCheckFn>;
 type Sizer = Registered<AltarZoneFn>;
 
 #[derive(Debug, Clone, Copy)]
@@ -509,7 +509,11 @@ pub(crate) fn forget() {
     CHANGED.store(true, Ordering::Release);
 }
 
-pub(crate) fn register(owner: ModIndex, callback: ZoneCheckFn, user: *mut c_void) -> Status {
+pub(crate) fn register(
+    owner: ModIndex,
+    callback: BuildingZoneCheckFn,
+    user: *mut c_void,
+) -> Status {
     if FILTERS.is_sealed() {
         return Status::TOO_LATE;
     }
@@ -821,8 +825,8 @@ unsafe fn check(
     // SAFETY: the caller guarantees two readable corners, the second
     // `building.corner_size` bytes after the first, starting with three i64.
     let high: [i64; 3] = unsafe { read_at(corners.cast(), layout.corner_size) };
-    let call = ZoneCheck {
-        header: Header::of::<ZoneCheck>(),
+    let call = BuildingZoneCheck {
+        header: Header::of::<BuildingZoneCheck>(),
         zones: zones.as_ptr(),
         zone_count: zones.len(),
         object: Bounds {

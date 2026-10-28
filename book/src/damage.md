@@ -24,8 +24,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 | --- | --- | --- |
 | `Hit` | a weapon, a spell, a creature, an explosion | each damage type |
 | `Fall` | a fall | the amount |
-| `Shroud` | the shroud, once a character's time in it ran out | the amount |
-| `ShroudDeath` | the deadly shroud, which kills at once | the amount: the whole health, unless the filter lowers it |
+| `Fog` | the shroud, once a character's time in it ran out | the amount |
+| `DeadlyFog` | the deadly shroud, which kills at once | the amount: the whole health, unless the filter lowers it |
 | `Drowning` | a character out of breath under water | the amount |
 | `DrowningDeath` | a creature out of breath under water, which dies at once | the amount: the whole health, unless the filter lowers it |
 | `Freezing` | a character frozen through, out of body heat | the amount |
@@ -34,8 +34,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 A hit's damage comes by type, after the target's resistances and before its
 armour, so the armour, a block and the hit the game raises (and a
 [`Hit` game event](game-events.md)) follow what the filters leave. The types
-are the game's: `Cut`, `Pierce`, `Blunt`, `Fire`, `Ice`, `Shroud`,
-`Lightning`, `Healing`, `Poison`, `Wood`, `Stone`, `Metal`, `Explosion`.
+are the game's, every value of `DamageTypeNew`: `PhysicalCut`,
+`PhysicalPierce`, `PhysicalBlunt`, `MagicalFire`, `MagicalIce`,
+`MagicalFog`, `MagicalLightning`, `Healing`, `Poison`, `Wood`, `Stone`,
+`Metal`, `Explosion`.
 `Healing` is what the hit heals; `scale` and `cancel` leave it alone.
 
 `target()` is the entity that takes the damage; `source()` is what dealt a

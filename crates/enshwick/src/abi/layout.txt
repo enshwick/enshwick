@@ -1,4 +1,4 @@
-abi 3.5
+abi 4.0
 AccountActionType size 1 align 1
     0 at 0 size 1
 ActionCall size 144 align 8
@@ -73,9 +73,9 @@ BaseLimitInfo size 24 align 4
     reserved at 20 size 4
 BedCheck size 72 align 8
     header at 0 size 8
-    survivor at 8 size 4
+    npc_id at 8 size 4
     entity at 12 size 4
-    bed at 16 size 4
+    bed_id at 16 size 4
     home at 24 size 24
     bed_at at 48 size 24
 BlockPlace size 56 align 8
@@ -138,6 +138,12 @@ BuildingData size 52 align 4
     replay at 21 size 1
     template at 22 size 16
     position at 40 size 12
+BuildingZoneCheck size 80 align 8
+    header at 0 size 8
+    zones at 8 size 8
+    zone_count at 16 size 8
+    object at 24 size 48
+    margin at 72 size 8
 CallSpec size 64 align 8
     header at 0 size 8
     name at 8 size 16
@@ -171,10 +177,11 @@ Comfort size 28 align 4
     position at 16 size 12
 CraftCheck size 24 align 4
     header at 0 size 8
-    player at 8 size 4
-    station at 12 size 4
-    recipe at 16 size 4
-    amount at 20 size 4
+    crafting_operator_id at 8 size 4
+    crafting_station_id at 12 size 4
+    recipe_id at 16 size 4
+    recipe_amount at 20 size 2
+    reserved at 22 size 2
 DamageCheck size 80 align 4
     header at 0 size 8
     cause at 8 size 4
@@ -315,7 +322,7 @@ HostApi size 1408 align 8
     run_console at 336 size 8
     altars_open at 344 size 8
     altars at 352 size 8
-    zone_check_filter at 360 size 8
+    building_zone_check_filter at 360 size 8
     survivor_lookup at 368 size 8
     survivor_bed_check at 376 size 8
     summon_filter at 384 size 8
@@ -620,8 +627,8 @@ PlayerDeathData size 64 align 8
     cause at 12 size 4
     key at 16 size 8
     position at 24 size 12
-    killer at 36 size 16
-    deadly_shroud at 52 size 1
+    cause_guid at 36 size 16
+    was_deadly_fog at 52 size 1
     drowned at 53 size 1
     reserved at 54 size 2
     killer_entity at 56 size 4
@@ -917,9 +924,3 @@ WeatherFront size 56 align 8
     radius at 40 size 4
     reserved at 44 size 4
     remaining at 48 size 8
-ZoneCheck size 80 align 8
-    header at 0 size 8
-    zones at 8 size 8
-    zone_count at 16 size 8
-    object at 24 size 48
-    margin at 72 size 8

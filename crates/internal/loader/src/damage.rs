@@ -73,8 +73,8 @@ struct Layout {
 enum Site {
     Hit,
     Fall,
-    Shroud,
-    ShroudDeath,
+    Fog,
+    DeadlyFog,
     Drowning,
     DrowningDeath,
     Freezing,
@@ -122,12 +122,8 @@ pub(crate) fn link(loader: &Loader) {
     let sites: [(Symbol, Site, MidFn); 9] = [
         (pinned::damage::HIT, Site::Hit, hit),
         (pinned::damage::FALL, Site::Fall, fall),
-        (pinned::damage::SHROUD, Site::Shroud, shroud),
-        (
-            pinned::damage::SHROUD_DEATH,
-            Site::ShroudDeath,
-            shroud_death,
-        ),
+        (pinned::damage::SHROUD, Site::Fog, shroud),
+        (pinned::damage::SHROUD_DEATH, Site::DeadlyFog, shroud_death),
         (pinned::damage::DROWNING, Site::Drowning, drowning),
         (
             pinned::damage::DROWNING_DEATH,
@@ -346,7 +342,7 @@ unsafe extern "system" fn shroud(registers: *mut Registers, _user: *mut c_void) 
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::SHROUD, target, damage);
+        let damage = filtered(DamageCheck::FOG, target, damage);
         registers.rax = u64::from(damage.cast_unsigned());
     });
 }
@@ -371,7 +367,7 @@ unsafe extern "system" fn shroud_death(registers: *mut Registers, _user: *mut c_
         // SAFETY: at the site `r15` holds the live query context of the
         // system running on this thread; 1.0 build 1269579.
         let target = unsafe { row_entity(registers.r15) };
-        let damage = filtered(DamageCheck::SHROUD_DEATH, target, damage);
+        let damage = filtered(DamageCheck::DEADLY_FOG, target, damage);
         registers.rdx = u64::from(current.saturating_sub(damage).max(0).cast_unsigned());
     });
 }

@@ -13,7 +13,7 @@ mod tests {
         }
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-            load.on_craft(|craft| craft.station.is_some() || craft.amount < 10)?;
+            load.on_craft(|craft| craft.crafting_station_id.is_some() || craft.recipe_amount < 10)?;
             load.on_build(|placement| {
                 placement.position[1] >= 0.0 && placement.item != enshwick::ItemId::new(13)
             })?;
@@ -29,12 +29,13 @@ mod tests {
         // SAFETY: both functions are the exports of this file's `declare_mod!(Picky)`.
         let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
         assert_eq!(status, Status::OK);
-        let craft = |station, amount| CraftCheck {
+        let craft = |crafting_station_id, recipe_amount| CraftCheck {
             header: Header::of::<CraftCheck>(),
-            player: enshwick::Entity(2),
-            station,
-            recipe: enshwick::RecipeId::new(5),
-            amount,
+            crafting_operator_id: enshwick::Entity(2),
+            crafting_station_id,
+            recipe_id: enshwick::RecipeId::new(5),
+            recipe_amount,
+            reserved: 0,
         };
         assert!(loader.craft(&craft(enshwick::Entity(0), 3)));
         assert!(!loader.craft(&craft(enshwick::Entity(0), 12)));

@@ -114,17 +114,17 @@ impl Event {
 /// let fell = PlayerDeathData {
 ///     header: Header::of::<PlayerDeathData>(),
 ///     entity: enshwick::Entity(2),
-///     cause: PlayerDeathData::FALL,
+///     cause: PlayerDeathData::FALL_DAMAGE,
 ///     key: enshwick::PlayerKey::new(7),
 ///     position: [10.0, 50.0, -3.0],
-///     killer: [0; 16],
-///     deadly_shroud: 0,
+///     cause_guid: [0; 16],
+///     was_deadly_fog: 0,
 ///     drowned: 0,
 ///     reserved: 0,
 ///     killer_entity: enshwick::Entity(0),
 ///     reserved_tail: 0,
 /// };
-/// assert_eq!(fell.cause, PlayerDeathData::FALL);
+/// assert_eq!(fell.cause, PlayerDeathData::FALL_DAMAGE);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, bytemuck::Zeroable, crate::Script)]
@@ -132,27 +132,31 @@ pub struct PlayerDeathData {
     /// Size and version of this struct.
     pub header: Header,
     /// The player's character; 0 when the account left in the same step.
+    /// The name is enshwick's: the game's record holds the user instead.
     pub entity: Entity,
-    /// What killed the player: 0 [a hit](PlayerDeathData::HIT), 1
-    /// [a fall](PlayerDeathData::FALL), 2 [the shroud](PlayerDeathData::SHROUD),
-    /// 3 [suffocation](PlayerDeathData::SUFFOCATED).
+    /// What killed the player, the game's death cause: 0
+    /// [a hit](PlayerDeathData::IMPACT), 1
+    /// [a fall](PlayerDeathData::FALL_DAMAGE), 2
+    /// [the shroud](PlayerDeathData::FOG), 3
+    /// [suffocation](PlayerDeathData::SUFFOCATED).
     pub cause: u32,
-    /// The account, [the same number](PlayerInfo::key) in every session.
+    /// The account, [the same number](PlayerInfo::key) in every session;
+    /// the name is enshwick's for the game's account id hash.
     pub key: PlayerKey,
     /// Where, in metres.
     pub position: [f32; 3],
     /// For a hit, the template GUID of what dealt it, a creature's or an
     /// impact's; zero for other causes.
-    pub killer: [u8; 16],
-    /// 1 when the shroud was the deadly kind.
-    pub deadly_shroud: u8,
+    pub cause_guid: [u8; 16],
+    /// 1 when the shroud was the deadly kind, which kills at once.
+    pub was_deadly_fog: u8,
     /// 1 when the player drowned.
     pub drowned: u8,
     /// Zero.
     pub reserved: u16,
     /// For a hit, the attacker of the last hit the player took, from its
     /// `HitHistory`, as [`EntityDiedEvent`](crate::game_events::EntityDiedEvent) reads it; 0 for other
-    /// causes, or when the history names none.
+    /// causes, or when the history names none. The name is enshwick's.
     pub killer_entity: Entity,
     /// Zero.
     pub reserved_tail: u32,
@@ -162,11 +166,11 @@ impl_headed!(PlayerDeathData);
 
 impl PlayerDeathData {
     /// A hit.
-    pub const HIT: u32 = 0;
+    pub const IMPACT: u32 = 0;
     /// A fall.
-    pub const FALL: u32 = 1;
+    pub const FALL_DAMAGE: u32 = 1;
     /// The shroud.
-    pub const SHROUD: u32 = 2;
+    pub const FOG: u32 = 2;
     /// Out of breath, under water.
     pub const SUFFOCATED: u32 = 3;
 }

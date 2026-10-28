@@ -64,12 +64,12 @@ pub(crate) extern "system" fn altar_zones_changed(me: ModHandle) -> Status {
     })
 }
 
-pub(crate) extern "system" fn zone_check_filter(
+pub(crate) extern "system" fn building_zone_check_filter(
     me: ModHandle,
-    callback: api_frame::ZoneCheckFn,
+    callback: api_frame::BuildingZoneCheckFn,
     user: *mut core::ffi::c_void,
 ) -> Status {
-    entry("zone_check_filter", || {
+    entry("building_zone_check_filter", || {
         let (_, index) = match caller_index(me) {
             Ok(found) => found,
             Err(status) => return status,

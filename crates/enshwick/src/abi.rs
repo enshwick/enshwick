@@ -8,10 +8,10 @@
 
 /// The major version of this interface. A loader refuses a mod built for
 /// another major.
-pub const ABI_MAJOR: u16 = 3;
+pub const ABI_MAJOR: u16 = 4;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 5;
+pub const ABI_MINOR: u16 = 0;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -836,7 +836,7 @@ const _: () = {
     assert!(size_of::<EventTypeInfo>() == 8 + 16 + 4 + 4);
     assert!(size_of::<ActionCall>() == 8 + 8 + 96 + 16 + 16);
     assert!(core::mem::offset_of!(HostApi, altars_open) == 24 + 40 * 8);
-    assert!(core::mem::offset_of!(HostApi, zone_check_filter) == 24 + 42 * 8);
+    assert!(core::mem::offset_of!(HostApi, building_zone_check_filter) == 24 + 42 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_lookup) == 24 + 43 * 8);
     assert!(core::mem::offset_of!(HostApi, survivor_status) == 24 + 47 * 8);
     assert!(core::mem::offset_of!(HostApi, interaction_filter) == 24 + 48 * 8);
@@ -877,7 +877,7 @@ const _: () = {
     assert!(size_of::<Summon>() == 8 + 8 + 16 + 24 + 8 + 4 + 4 + 4 + 4);
     assert!(size_of::<Bounds>() == 48);
     assert!(size_of::<AltarInfo>() == 16 + 17 * 48 + 24);
-    assert!(size_of::<ZoneCheck>() == 8 + 16 + 48 + 8);
+    assert!(size_of::<BuildingZoneCheck>() == 8 + 16 + 48 + 8);
     assert!(core::mem::offset_of!(Manifest, name) == 80);
     assert!(core::mem::offset_of!(Manifest, points) == 80 + 16 * 4 + 16);
     assert!(size_of::<Manifest>() == 80 + 16 * 4 + 16 + 16);

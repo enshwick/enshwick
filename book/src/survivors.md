@@ -45,8 +45,9 @@ server's worker threads, in the dedicated server or a hosting client, and for
 ## Beds
 
 `load.on_survivor_bed_check` runs after a survivor's own check kept its bed;
-returning `false` makes the game clear it. A `BedCheck` has the survivor, its
-entity, the bed, the survivor's home cell and the bed's cell.
+returning `false` makes the game clear it. A `BedCheck`, enshwick's name, has
+the survivor's `npc_id`, its `entity`, the `bed_id`, the survivor's `home`
+cell and the bed's cell, `bed_at`.
 
 ## Summoning staffs
 
