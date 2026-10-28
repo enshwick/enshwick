@@ -562,6 +562,30 @@ fn nanos(ns: f64) -> String {
     }
 }
 
+/// The main menu's line under the game's version, in the reader's language.
+///
+/// It names the loader's version and how many `mods` load, how many of them
+/// are `off`, and whether this game version leaves some of the loader's
+/// features off (`lacking`).
+#[must_use]
+pub fn menu_line(version: &str, mods: usize, off: usize, lacking: bool) -> String {
+    let mods = mods.to_string();
+    let off = off.to_string();
+    let line = if off == "0" {
+        crate::texts::fill("menu.line", &[("version", version), ("mods", &mods)])
+    } else {
+        crate::texts::fill(
+            "menu.line.off",
+            &[("version", version), ("mods", &mods), ("off", &off)],
+        )
+    };
+    if lacking {
+        crate::texts::fill("menu.line.lacking", &[("line", &line)])
+    } else {
+        line
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -598,6 +622,19 @@ mod tests {
                 features: Vec::new(),
             },
         ]
+    }
+
+    #[test]
+    fn the_menu_line_counts_mods_and_warns_of_what_is_off() {
+        assert_eq!(menu_line("1.0.0", 6, 0, false), "Enshwick 1.0.0 · mods: 6");
+        assert_eq!(
+            menu_line("1.0.0", 6, 2, false),
+            "Enshwick 1.0.0 · mods: 6, off: 2"
+        );
+        assert_eq!(
+            menu_line("1.0.0", 0, 0, true),
+            "Enshwick 1.0.0 · mods: 0 · some features are off on this game version"
+        );
     }
 
     fn summary() -> Summary {

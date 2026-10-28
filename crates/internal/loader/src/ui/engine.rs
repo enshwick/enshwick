@@ -543,6 +543,29 @@ pub(crate) struct Engine {
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
     pub(super) world_settings_site: u64,
+    /// The main menu's site between its version line and its legal line,
+    /// when its code holds on this build; 0 keeps the loader's line off.
+    pub(super) legal_line_site: u64,
+    /// The look of the main menu's version line; `None` keeps the loader's
+    /// line off.
+    legal: Option<Legal>,
+}
+
+/// Where the look of the main menu's version line sits in the look bundle,
+/// from reflection.
+#[derive(Debug, Clone, Copy)]
+struct Legal {
+    style: usize,
+    size: usize,
+}
+
+impl Legal {
+    fn find(loader: &Loader) -> Option<Self> {
+        Some(Self {
+            style: style(loader, "legalText")?,
+            size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "xsmall")])?,
+        })
+    }
 }
 
 /// Every function the loader calls or hooks, by symbol; each must read its
@@ -604,6 +627,7 @@ fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
 const BUNDLE: &str = "keen::FbUiBundle";
 const STYLES: &str = "keen::FbUiCharacterStyles";
 const SOUNDS: &str = "keen::FbUiSounds";
+const FONT_SIZES: &str = "keen::FbUiFontSizes";
 const MENU_SOUNDS: &str = "keen::FbUiSoundsMenuGeneric";
 
 fn style(loader: &Loader, name: &str) -> Option<usize> {
@@ -650,10 +674,7 @@ fn looks(loader: &Loader) -> Option<Looks> {
             ],
         )?,
         outline: style(loader, "defaultStyleOutline")?,
-        title_size: path(
-            loader,
-            &[(BUNDLE, "fontSizes"), ("keen::FbUiFontSizes", "caps_large")],
-        )?,
+        title_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "caps_large")])?,
         sounds: [
             sound(loader, "mouseClickGeneric")?,
             sound(loader, "entryTrigger")?,
@@ -780,6 +801,12 @@ impl Engine {
             main_menu_site: loader.address(pinned::ui::MAIN_MENU_SITE).unwrap_or(0),
             pause_menu_site: loader.address(pinned::ui::PAUSE_MENU_SITE).unwrap_or(0),
             world_settings_site: loader.address(pinned::ui::WORLD_SETTINGS_SITE).unwrap_or(0),
+            legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
+                loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
+            } else {
+                0
+            },
+            legal: Legal::find(loader),
         })
     }
 

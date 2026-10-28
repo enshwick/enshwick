@@ -280,3 +280,6 @@
 "join.dialog.restart" = "Disattivate in questa partita; riavvia il gioco:"
 "join.note.off" = "Questo server non usa queste mod di Enshwick, quindi restano disattivate finché non riavvii il gioco:"
 "join.note.loader" = "Questo server usa Enshwick con le stesse mod ma un'altra versione del loader. Installa la versione del server, altrimenti alcune cose potrebbero non funzionare."
+"menu.line" = "Enshwick {version} · mod: {mods}"
+"menu.line.off" = "Enshwick {version} · mod: {mods}, disattivate: {off}"
+"menu.line.lacking" = "{line} · alcune funzioni sono disattivate in questa versione del gioco"

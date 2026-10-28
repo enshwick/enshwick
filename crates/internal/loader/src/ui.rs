@@ -20,6 +20,7 @@ mod demo;
 mod dialog;
 mod engine;
 mod map;
+mod menu_line;
 mod mods;
 
 use core::cell::{Cell, RefCell};
@@ -104,6 +105,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::LABEL_FONT_SIZE.id(),
     pinned::ui::LABEL_NEW.id(),
     pinned::ui::LABEL_SHOWN.id(),
+    pinned::ui::LEGAL_LINE_SITE.id(),
     pinned::ui::LOCA_ID.id(),
     pinned::ui::LOCA_TEXT.id(),
     pinned::ui::MAIN_ENTRY.id(),
@@ -438,6 +440,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = ENGINE.set(engine);
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
+        menu_line::link(loader, engine);
     }
     loader.link_feature(
         "HUD",
