@@ -128,7 +128,7 @@ impl Load<'_> {
         }
         self.on::<crate::events::Ticked>(|tick| {
             if let Some(clock) = CLOCK.get() {
-                clock.advance(tick.elapsed(), tick.elapsed_steps());
+                clock.advance(tick.elapsed(), tick.elapsed_steps);
             }
         })?;
         Ok(CLOCK.get_or_init(StepClock::new))

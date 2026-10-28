@@ -102,7 +102,7 @@ data afresh (measured on a server copy with 11 mods, build 399). Steps a handler
 
 `TickData` says what passed since the handler's last call:
 
-- `elapsed_steps()`: the server steps, 1 for an every-step handler;
+- `elapsed_steps`: the server steps, 1 for an every-step handler;
 - `elapsed()`: the wall time, for a first call the time since the step
   before;
 - `step_interval()`: the average time between steps over about the last 16
@@ -116,7 +116,7 @@ use std::time::Duration;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     load.on::<enshwick::events::Ticked>(|tick| {
-        enshwick::debug!("{} steps in {:?}", tick.elapsed_steps(), tick.elapsed());
+        enshwick::debug!("{} steps in {:?}", tick.elapsed_steps, tick.elapsed());
     })?;
     load.on_tick(Duration::from_secs(1), |_| enshwick::debug!("a second"))?;
     load.on_every_step(|tick| enshwick::debug!("step {}", tick.step))

@@ -277,13 +277,12 @@ pub struct BaseLimitInfo {
     pub vanilla_zones: u32,
     /// Zero.
     pub reserved: u32,
-    /// Bases the game's own code holds. Since minor 1.
+    /// Bases the game's own code holds.
     pub vanilla_bases: u32,
     /// The most altar zones a mod may ask for with
     /// [`HostApi::request_base_limits`](super::HostApi::request_base_limits).
-    /// Since minor 1.
     pub max_zones: u32,
-    /// The most bases a mod may ask for. Since minor 1.
+    /// The most bases a mod may ask for.
     pub max_bases: u32,
 }
 
