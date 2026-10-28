@@ -11,7 +11,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::ecs::Components;
+use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::fresh::Fresh;
 use crate::inventory::Fill;
@@ -446,9 +446,9 @@ struct Engine {
     txn_entity: usize,
     request_node: usize,
     request_labels: usize,
-    destroy_on_loot: u32,
-    boss: u32,
-    lock: u32,
+    destroy_on_loot: ComponentType,
+    boss: ComponentType,
+    lock: ComponentType,
     lock_item: usize,
     /// The single roll's output; `None` on a build without its layout.
     slot: Option<Slot>,
@@ -493,12 +493,7 @@ unsafe fn function<F: crate::FnPtr>(address: u64) -> F {
 
 impl Engine {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        let world = load.world()?;
-        let ty = |id: &str| {
-            world
-                .component_type(load, id)
-                .map(crate::world::ComponentType::hash)
-        };
+        let ty = |id: &str| ComponentType::resolve(load, id);
         let size = |name: &str| {
             load.constant(name)
                 .map(|v| usize::try_from(v).unwrap_or(usize::MAX))

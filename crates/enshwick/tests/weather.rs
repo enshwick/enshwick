@@ -5,10 +5,10 @@ mod tests {
     use std::sync::OnceLock;
     use std::time::Duration;
 
+    use enshwick::WorldError;
     use enshwick::abi::{ChunkData, Header, Status, WeatherFront};
     use enshwick::events::ChunkLoaded;
     use enshwick::weather::{Forecast, Weather, WeatherPhenomenonEffect, WeatherState};
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     static WEATHER: OnceLock<Weather> = OnceLock::new();

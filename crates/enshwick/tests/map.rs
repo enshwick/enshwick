@@ -6,6 +6,7 @@ mod tests {
     use std::sync::Mutex;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::{
         AltarInfo, Bounds, Header, MapFrameInfo, MapMarkerInfo, PlayerInfo, Status,
     };
@@ -14,7 +15,6 @@ mod tests {
     use enshwick::map::{
         Map, MapAltar, MapFrame, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
     };
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     const WAYPOINT: u32 = 2;

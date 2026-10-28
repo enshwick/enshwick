@@ -45,8 +45,8 @@
 //! }
 //! ```
 
+use crate::WorldError;
 use crate::abi;
-use crate::world::WorldError;
 use crate::{Host, Load};
 
 /// The most voxels one [`Voxels::read`] takes: a box of 64 voxels, 32
@@ -324,7 +324,7 @@ impl Voxel {
 /// ```
 /// use enshwick::voxels::{VoxelPos, Voxels};
 ///
-/// fn solid(voxels: &Voxels, corner: VoxelPos) -> Result<usize, enshwick::world::WorldError> {
+/// fn solid(voxels: &Voxels, corner: VoxelPos) -> Result<usize, enshwick::WorldError> {
 ///     let block = voxels.read(corner, [4, 4, 4])?;
 ///     Ok(block.iter().filter(|(_, voxel)| !voxel.is_air()).count())
 /// }

@@ -5,10 +5,10 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::{Header, KnowledgeData, KnowledgeInfo, Status};
     use enshwick::events::KnowledgeChanged;
     use enshwick::knowledge::{Grant, Knowledge, KnowledgeId, KnowledgeType, Scope};
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     static KNOWLEDGE: OnceLock<Knowledge> = OnceLock::new();

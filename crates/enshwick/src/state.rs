@@ -425,6 +425,18 @@ pub fn held_worlds(mod_data: &Path) -> Vec<String> {
     worlds
 }
 
+/// The key of the world the server runs, from the loader.
+pub(crate) fn world_key(host: crate::Host) -> Option<String> {
+    let api = host.api();
+    let mut out = crate::abi::Str::EMPTY;
+    if !(api.world_key)(host.handle(), &raw mut out).is_ok() {
+        return None;
+    }
+    // SAFETY: `world_key` returned OK, and the loader keeps the key's bytes
+    // alive and unchanged for the process, which outlives the copy here.
+    unsafe { out.as_str() }.map(str::to_owned)
+}
+
 /// A value kept per world, in `mod-data/<id>/worlds/<key>/<name>.toml`,
 /// never inside the game's save: removing the mod leaves the world vanilla.
 /// The value is a TOML table, such as a struct.

@@ -5,9 +5,9 @@ mod tests {
     use std::sync::OnceLock;
     use std::time::Duration;
 
+    use enshwick::WorldError;
     use enshwick::abi::Status;
     use enshwick::game_settings::{GameSettings, GameSettingsPreset, WeatherFrequency};
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     const TYPE: &str = "game_settings";

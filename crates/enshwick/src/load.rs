@@ -135,7 +135,7 @@ off_from!(
     crate::services::LayoutError,
     crate::stats::ModifyError,
     crate::ui::UiError,
-    crate::world::WorldError,
+    crate::WorldError,
 );
 
 impl From<ConfigError> for Off {
@@ -367,7 +367,7 @@ impl Load<'_> {
         let store = crate::state::WorldStore::new(&self.data_dir()?, name)?;
         let host = self.host;
         let opened = store.clone();
-        self.on::<crate::events::WorldLoaded>(move |()| match crate::world::world_key(host) {
+        self.on::<crate::events::WorldLoaded>(move |()| match crate::state::world_key(host) {
             Some(key) => {
                 if let Err(error) = opened.open(&key) {
                     crate::error!("world store kept shut: {error}");

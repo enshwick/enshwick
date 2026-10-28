@@ -1,11 +1,10 @@
 use core::ffi::c_void;
 
 use crate::abi::{Header, InventoryOp, InventoryRequest, ItemData};
-use crate::ecs::Components;
+use crate::ecs::{ComponentType, Components};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::schedule::Scheduler;
-use crate::world::{ComponentType, World};
 use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
@@ -58,7 +57,6 @@ pub(super) struct Layout {
 #[derive(Clone, Copy, Debug)]
 pub struct Inventories {
     host: Host,
-    world: World,
     components: Components,
     scheduler: Scheduler,
     layout: Layout,
@@ -88,18 +86,17 @@ impl Inventories {
                 status.0
             )));
         }
-        let world = load.world()?;
         let components = Components::resolve(load)?;
         let offset = |id: &str| {
             load.constant(id)
                 .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
         };
         let layout = Layout {
-            setup: world.component_type(load, ids::INVENTORY_SETUP)?,
-            inventory: world.component_type(load, ids::INVENTORY)?,
-            durability: world.component_type(load, ids::DURABILITY)?,
-            fuel: world.component_type(load, ids::FUEL)?,
-            owner: world.component_type(load, ids::OWNER)?,
+            setup: ComponentType::resolve(load, ids::INVENTORY_SETUP)?,
+            inventory: ComponentType::resolve(load, ids::INVENTORY)?,
+            durability: ComponentType::resolve(load, ids::DURABILITY)?,
+            fuel: ComponentType::resolve(load, ids::FUEL)?,
+            owner: ComponentType::resolve(load, ids::OWNER)?,
             links: offset(ids::INVENTORY_SETUP_LINKS)?,
             categories: offset(ids::INVENTORY_SETUP_CATEGORIES)?,
             initialized: offset(ids::INVENTORY_SETUP_INITIALIZED)?,
@@ -114,7 +111,6 @@ impl Inventories {
         };
         Ok(Self {
             host,
-            world,
             components,
             scheduler,
             layout,
@@ -460,20 +456,14 @@ impl Reader<'_> {
             return None;
         }
         if self.ctx.is_null() {
-            self.inventories
-                .world
-                .component(entity, ty)
+            ty.read(self.inventories.host, entity)
                 .map(<*const c_void>::cast)
         } else {
             // SAFETY: a non-null `ctx` comes only from `read_in`, whose caller
             // guarantees the hooked system's live context, used on its thread
             // during the hook, which is the contract of `component`.
-            unsafe {
-                self.inventories
-                    .components
-                    .component(self.ctx, entity, ty.hash())
-            }
-            .map(<*mut u8>::cast_const)
+            unsafe { self.inventories.components.component(self.ctx, entity, ty) }
+                .map(<*mut u8>::cast_const)
         }
     }
 

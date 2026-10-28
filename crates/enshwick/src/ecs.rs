@@ -307,6 +307,71 @@ type SlotRoot = unsafe extern "system" fn(
     ctx: *mut u64,
 ) -> *mut [u64; 2];
 
+/// A reflected ECS component type, resolved once at init, which component
+/// reads take.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::ecs::ComponentType;
+///
+/// fn init(load: &mut enshwick::Load<'_>) -> Result<ComponentType, enshwick::Off> {
+///     ComponentType::resolve(load, "keen::ecs::UsedItem")
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ComponentType(u32);
+
+impl ComponentType {
+    /// The component type named `name`, such as `keen::ecs::UsedItem`.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the type is not reflected on this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`ComponentType`].
+    pub fn resolve(load: &Load<'_>, name: &str) -> Result<Self, Off> {
+        Self::named(load.host(), name)
+    }
+
+    /// The component type named `name` on the host's build.
+    pub(crate) fn named(host: Host, name: &str) -> Result<Self, Off> {
+        let mut hash = 0;
+        let status = (host.api().type_hash)(crate::abi::Str::new(name), &raw mut hash);
+        crate::load::ok(status, Self(hash), || format!("component type {name}"))
+    }
+
+    /// The type whose hash is `hash`, for a hash the loader already checked.
+    pub(crate) const fn from_hash(hash: u32) -> Self {
+        Self(hash)
+    }
+
+    /// The type's hash, the engine's id for it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn hash(load: &enshwick::Load<'_>) -> Result<u32, enshwick::Off> {
+    ///     Ok(enshwick::ecs::ComponentType::resolve(load, "keen::ecs::UsedItem")?.hash())
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn hash(self) -> u32 {
+        self.0
+    }
+
+    /// A pointer to `entity`'s component of this type on the server's game
+    /// thread, valid until the game thread returns to the game; `None` when
+    /// the entity has none.
+    pub(crate) fn read(self, host: Host, entity: Entity) -> Option<*const core::ffi::c_void> {
+        let mut out: *const core::ffi::c_void = core::ptr::null();
+        let status = (host.api().component)(host.handle(), entity, self.0, &raw mut out);
+        (status == crate::abi::Status::OK && !out.is_null()).then_some(out)
+    }
+}
+
 /// Component reads from inside a hooked ECS system, on the worker thread that
 /// runs it: what another system's entities hold, such as a chest's
 /// `UsedItem` or position.
@@ -368,10 +433,9 @@ impl Components {
         })
     }
 
-    /// A pointer to `entity`'s component of type `hash` (see
-    /// [`World::component_type`](crate::world::World::component_type)), or
-    /// `None` when it has none. Writing through it is only right for
-    /// components no client sees, which need no change mark.
+    /// A pointer to `entity`'s component of type `ty`, or `None` when it has
+    /// none. Writing through it is only right for components no client sees,
+    /// which need no change mark.
     ///
     /// # Safety
     ///
@@ -381,24 +445,32 @@ impl Components {
     /// # Examples
     ///
     /// ```
+    /// use enshwick::ecs::{ComponentType, Components};
     /// use enshwick::raw::read_at;
     ///
     /// unsafe fn used_item(
-    ///     c: &enshwick::ecs::Components,
+    ///     c: &Components,
     ///     ctx: *mut u64,
     ///     chest: enshwick::Entity,
+    ///     used_item: ComponentType,
     /// ) -> Option<u32> {
     ///     // SAFETY: called from a system's hook with its live context.
-    ///     let data = unsafe { c.component(ctx, chest, 0x0b02_361d) }?;
+    ///     let data = unsafe { c.component(ctx, chest, used_item) }?;
     ///     // SAFETY: a live UsedItem, inside the hook, is its u32 item id alone.
     ///     Some(unsafe { read_at(data, 0) })
     /// }
     /// ```
     #[must_use]
-    pub unsafe fn component(&self, ctx: *mut u64, entity: Entity, hash: u32) -> Option<*mut u8> {
+    pub unsafe fn component(
+        &self,
+        ctx: *mut u64,
+        entity: Entity,
+        ty: ComponentType,
+    ) -> Option<*mut u8> {
         if ctx.is_null() || entity.is_none() {
             return None;
         }
+        let hash = ty.0;
         // SAFETY: `ctx` is not null, as the early return ensures, and the
         // caller guarantees a live context, whose first word is its query
         // descriptor (engine layout).

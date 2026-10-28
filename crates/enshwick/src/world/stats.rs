@@ -168,7 +168,7 @@ impl Stats {
             })
         };
         let slot = |name: &str| value(name).map(|v| v as usize);
-        let set = |ty: &str| super::type_named(host, ty);
+        let set = |ty: &str| ComponentType::named(host, ty);
         let skills = (|| {
             let ty = ids::SKILL_NODES;
             let at = |id: &str| {
@@ -234,7 +234,7 @@ impl Stats {
             .ok(),
             in_shroud: (|| {
                 let actor = WritableType {
-                    ty: super::type_named(host, ids::BASE_ACTOR)?,
+                    ty: ComponentType::named(host, ids::BASE_ACTOR)?,
                     size: load.type_size(ids::BASE_ACTOR)?,
                     name: ids::BASE_ACTOR,
                 };

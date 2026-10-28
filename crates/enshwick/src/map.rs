@@ -39,11 +39,13 @@ pub use snapshot::{
 
 use crate::Entity;
 use crate::Host;
+use crate::WorldError;
 use crate::abi::{MapFrameInfo, MapMarkerInfo, Status};
 use crate::altars::Altars;
 use crate::content::{EngineFacts, Guid};
+use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
-use crate::world::{ComponentType, World, WorldError};
+use crate::world::World;
 use crate::{Load, Off};
 
 /// The key of a map marker type, as the game's marker type registry
@@ -217,9 +219,9 @@ fn field(load: &Load<'_>, ty: &str, id: &str, width: usize) -> Result<usize, Off
 }
 
 impl Waypoint {
-    fn resolve(load: &Load<'_>, world: World) -> Result<Self, Off> {
+    fn resolve(load: &Load<'_>) -> Result<Self, Off> {
         Ok(Self {
-            ty: world.component_type(load, ids::PLAYER_WAYPOINT)?,
+            ty: ComponentType::resolve(load, ids::PLAYER_WAYPOINT)?,
             enabled_at: field(load, ids::PLAYER_WAYPOINT, ids::PLAYER_WAYPOINT_ENABLED, 1)?,
             position_at: field(
                 load,
@@ -240,7 +242,7 @@ impl Map {
         let resolved = Resolved {
             host: load.host(),
             world,
-            waypoint: Waypoint::resolve(load, world)
+            waypoint: Waypoint::resolve(load)
                 .inspect_err(|off| crate::debug!("waypoint reads off: {off}"))
                 .ok(),
         };

@@ -22,6 +22,13 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: `WorldError` is `enshwick::WorldError`, shared by every module
+  that acts on the server's world, and `ComponentType` is
+  `ecs::ComponentType`, resolved with `ComponentType::resolve` in place of
+  `World::component_type`; `WritableType::resolve` replaces
+  `World::writable_type`. `ecs::Components::component` takes a
+  `ComponentType` in place of its hash. Inventories, loot and the kill
+  credit of `EntityDiedEvent` no longer need the world's reads (#642).
 - Breaking: ABI 4.0. Filter inputs and the death record take the game's
   names. `Load::on_craft` hands the game's `CraftRecipeEvent` (`CraftRequest`
   is gone) and `CraftCheck` names its fields `crafting_operator_id`,

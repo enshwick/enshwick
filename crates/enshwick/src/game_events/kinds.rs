@@ -1,6 +1,7 @@
 //! Typed game events: a struct per event with its fields read for the
 //! running build, for [`Load::on`](crate::Load::on).
 
+use crate::ecs::ComponentType;
 use crate::engine_enum::{Bits, Values};
 use crate::engine_ids as ids;
 use crate::game_events::values::{
@@ -8,9 +9,8 @@ use crate::game_events::values::{
 };
 use crate::game_events::{EventType, Field, RawGameEvent};
 use crate::raw::read_at;
-use crate::world::{ComponentType, World};
 use crate::{Entity, ItemId, RecipeId};
-use crate::{Load, Off};
+use crate::{Host, Load, Off};
 
 /// `Some(entity)` unless it is [`Entity::NONE`].
 fn some(entity: Entity) -> Option<Entity> {
@@ -127,10 +127,9 @@ impl crate::events::Kind for HitEvent {
 /// use enshwick::game_events::EntityDiedEvent;
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let world = load.world()?;
-///     load.on::<EntityDiedEvent>(move |died| {
-///         if let Some(player) = died.killer_player.and_then(|p| world.player(p)) {
-///             enshwick::info!("{} killed entity {}", player.name, died.dead_entity_id);
+///     load.on::<EntityDiedEvent>(|died| {
+///         if let Some(player) = died.killer_player {
+///             enshwick::info!("player {player} killed entity {}", died.dead_entity_id);
 ///         }
 ///     })
 /// }
@@ -152,7 +151,7 @@ pub struct EntityDiedEvent {
 /// Where the kill credit lives on a dying entity.
 #[derive(Clone, Copy, Debug)]
 struct Credit {
-    world: World,
+    host: Host,
     history: ComponentType,
     last_index: usize,
     entries: usize,
@@ -165,7 +164,6 @@ struct Credit {
 
 impl Credit {
     fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        let world = load.world()?;
         let offset = |id: &str| {
             load.constant(id).and_then(|o| {
                 usize::try_from(o).map_err(|_| Off::new(format!("{id}: out of range")))
@@ -179,15 +177,15 @@ impl Credit {
             .max(1);
         let slots = offset(ids::HIT_HISTORY_END)?.saturating_sub(entries) / entry_size;
         Ok(Self {
-            history: world.component_type(load, ids::HIT_HISTORY)?,
+            history: ComponentType::resolve(load, ids::HIT_HISTORY)?,
             last_index: offset(ids::HIT_HISTORY_LAST_INDEX)?,
             entries,
             slots,
             entry_size,
             entry_attacker: offset(ids::HIT_EVENT_ROOT_SOURCE_ID)?,
-            experience: world.component_type(load, ids::EXPERIENCE_CREDIT)?,
+            experience: ComponentType::resolve(load, ids::EXPERIENCE_CREDIT)?,
             last_player: offset(ids::EXPERIENCE_CREDIT_LAST_PLAYER)?,
-            world,
+            host: load.host(),
         })
         .and_then(|credit: Self| {
             let id = size_of::<u32>();
@@ -202,8 +200,8 @@ impl Credit {
 
     /// The attacker of the last hit `entity` took.
     fn killer(&self, entity: Entity) -> Option<Entity> {
-        let history = self.world.component(entity, self.history)?.cast::<u8>();
-        // SAFETY: `component` returned the entity's live HitHistory, valid
+        let history = self.history.read(self.host, entity)?.cast::<u8>();
+        // SAFETY: `read` returned the entity's live HitHistory, valid
         // until the game thread moves on; `resolve` checked that the u32 at
         // `lastIndex` lies inside its reflected size.
         let last: u32 = unsafe { read_at(history, self.last_index) };
@@ -217,8 +215,8 @@ impl Credit {
 
     /// The last player character that hit `entity`.
     fn killer_player(&self, entity: Entity) -> Option<Entity> {
-        let source = self.world.component(entity, self.experience)?.cast::<u8>();
-        // SAFETY: `component` returned the entity's live ExperienceSource component,
+        let source = self.experience.read(self.host, entity)?.cast::<u8>();
+        // SAFETY: `read` returned the entity's live ExperienceSource component,
         // valid until the game thread moves on; `resolve` checked that the u32
         // at `lastHitPlayerId` lies inside its reflected size.
         some(Entity(unsafe { read_at(source, self.last_player) }))

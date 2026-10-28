@@ -117,7 +117,8 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::world::{World, WorldError};
+    /// use enshwick::WorldError;
+    /// use enshwick::world::World;
     ///
     /// fn worth_placing(world: World, at: [f64; 3]) -> Result<bool, WorldError> {
     ///     let [x, y, z] = at;

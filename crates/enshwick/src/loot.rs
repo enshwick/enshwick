@@ -21,7 +21,7 @@ pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_d
 pub(crate) use drops::{replace_group, watch_rolls};
 
 use crate::Entity;
-use crate::ecs::{Components, Ecs};
+use crate::ecs::{ComponentType, Components, Ecs};
 use crate::engine_ids as ids;
 use crate::raw::read_at;
 use crate::{Load, Off};
@@ -122,16 +122,16 @@ impl Container {
     }
 }
 
-/// Component hashes and field offsets, from reflection.
+/// Component types and field offsets, from reflection.
 #[derive(Clone, Copy, Debug)]
 struct Layout {
-    transform: u32,
-    empty_state: u32,
-    destroy: u32,
-    lifetime: u32,
-    area_loot: u32,
-    offer: u32,
-    player_input: u32,
+    transform: ComponentType,
+    empty_state: ComponentType,
+    destroy: ComponentType,
+    lifetime: ComponentType,
+    area_loot: ComponentType,
+    offer: ComponentType,
+    player_input: ComponentType,
     is_empty: usize,
     exclude: usize,
     accept_time: usize,
@@ -189,18 +189,13 @@ impl Containers {
     ///
     /// See [`Containers`].
     pub fn resolve(load: &mut Load<'_>) -> Result<Self, Off> {
-        let world = load.world()?;
-        let ty = |id: &str| {
-            world
-                .component_type(load, id)
-                .map(crate::world::ComponentType::hash)
-        };
+        let ty = |id: &str| ComponentType::resolve(load, id);
         let offset = |id: &str| {
             load.constant(id)
                 .and_then(|v| usize::try_from(v).map_err(|_| Off::new(format!("offset {id}"))))
         };
         let layout = Layout {
-            transform: world.transform_type().hash(),
+            transform: ty(ids::CURRENT_TRANSFORM)?,
             empty_state: ty(ids::INVENTORY_EMPTY_STATE)?,
             destroy: ty(ids::DESTROY_ON_LOOT)?,
             lifetime: ty(ids::LIFETIME)?,

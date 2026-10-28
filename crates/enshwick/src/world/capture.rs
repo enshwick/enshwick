@@ -37,7 +37,8 @@ const VOXEL_METRES: f64 = 0.5;
 ///
 /// ```
 /// use enshwick::voxels::VoxelPos;
-/// use enshwick::world::{Capture, World, WorldError};
+/// use enshwick::WorldError;
+/// use enshwick::world::{Capture, World};
 ///
 /// fn shed(world: World, corner: VoxelPos) -> Result<Capture, WorldError> {
 ///     let [x, y, z] = corner.to_array();

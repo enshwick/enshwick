@@ -34,10 +34,10 @@
 //! ```
 
 use crate::Entity;
+use crate::WorldError;
 use crate::abi::{Header, SpawnRequest, TeleportRequest};
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
-use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
 /// How an entity arrives, for [`Effects::teleport`].

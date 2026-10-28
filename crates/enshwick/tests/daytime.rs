@@ -5,10 +5,10 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::WorldError;
     use enshwick::abi::{DaytimeInfo, Header, Status};
     use enshwick::daytime::{Clock, ClockSpeed};
     use enshwick::events::NightStarted;
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     const HOUR: i64 = 3_600_000_000_000;

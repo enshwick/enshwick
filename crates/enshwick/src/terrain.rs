@@ -41,8 +41,8 @@
 //! }
 //! ```
 
+use crate::WorldError;
 use crate::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
-use crate::world::WorldError;
 use crate::{Host, ItemId, Load};
 
 /// The largest radius and height of an edit, in metres.

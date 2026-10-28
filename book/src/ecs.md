@@ -101,20 +101,21 @@ fn system(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 [`Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
 reads what any entity holds, from inside a running system:
 
-- `component(ctx, entity, hash)` returns a pointer to the entity's component of
+- `component(ctx, entity, ty)` returns a pointer to the entity's component of
   that type, or `None` when it has none. Write through it only for components
   no client sees, which need no change mark.
 - `slot_root(ctx, slot, owner_index)` finds the inventory an item slot belongs
   to at the root: the chest or player holding it.
 
-The hash names the component type. Get it at init from
-`World::component_type`, by the type's reflected name:
+A `ComponentType` names the component type. Get it at init with
+`ComponentType::resolve`, by the type's reflected name:
 
 ```rust
+use enshwick::ecs::ComponentType;
+
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let world = load.world()?;
-    let used_item = world.component_type(load, "keen::ecs::UsedItem")?.hash();
-    enshwick::info!("UsedItem is {used_item:#010x}");
+    let used_item = ComponentType::resolve(load, "keen::ecs::UsedItem")?;
+    enshwick::info!("UsedItem is {:#010x}", used_item.hash());
     Ok(())
 }
 ```
