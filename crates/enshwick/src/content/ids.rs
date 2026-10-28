@@ -274,7 +274,7 @@ pub const fn is_id(id: &str) -> bool {
 ///
 /// Content calls such as [`Load::add_item`](crate::Load::add_item) take an `Id` for what they
 /// create and declare it to the loader, which turns the mod off when its id
-/// lies outside the mod's namespace or its game id ([`Guid::id`]) is
+/// lies outside the mod's namespace or its game id ([`Guid::fnv1a`]) is
 /// another content id's; the log names both. References to existing
 /// content, vanilla or another mod's, stay [`Guid`]s.
 ///

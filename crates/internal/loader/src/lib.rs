@@ -99,6 +99,7 @@ mod kept_text;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+pub mod listing;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the client's join reads lobbies")

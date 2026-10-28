@@ -1,12 +1,12 @@
 //! What the item kinds add to the game's resource open and resolve: a
 //! resolve once the items are in, a resolve of another resource while items
-//! wait, and an item's open and resolve.
+//! wait, an item's open and resolve, and classing a prop by its tags.
 
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use enshwick::abi::RecipeKind;
-use enshwick_loader::item_kinds::{CAPACITY, ItemKinds};
+use enshwick_loader::item_kinds::{CAPACITY, Classes, ItemKindLayout, ItemKinds, TagLayout};
 
 /// Items the vanilla game and a few mods load, about.
 const ITEMS: u32 = 4096;
@@ -14,9 +14,27 @@ const ITEMS: u32 = 4096;
 static LOADED: ItemKinds<CAPACITY> = ItemKinds::new();
 static LOADING: ItemKinds<CAPACITY> = ItemKinds::new();
 
+const DECOR: [u8; 16] = [0xd0; 16];
+
+fn classes() -> Classes {
+    Classes {
+        slots: Box::new([(10, RecipeKind::BUILDING_BLOCK)]),
+        tags: Box::new([(3, DECOR, RecipeKind::DECORATIVE)]),
+    }
+}
+
 fn kinds(c: &mut Criterion) {
     for items in [&LOADED, &LOADING] {
-        items.seal(0, 0x104, Box::new([(10, RecipeKind::BUILDING_BLOCK)]));
+        items.seal(ItemKindLayout {
+            id_at: 0,
+            slot_at: 0x104,
+            tags: Some(TagLayout {
+                at: 0x5e0,
+                stride: 0x18,
+                tag_at: 0,
+            }),
+            classes: classes(),
+        });
         for handle in 1..=ITEMS {
             items.opened(handle);
             items.take_opened(handle);
@@ -36,6 +54,11 @@ fn kinds(c: &mut Criterion) {
             LOADED.opened(black_box(7));
             LOADED.take_opened(black_box(7))
         });
+    });
+    let classes = classes();
+    let tags = [[0xc0; 16], [0xc1; 16], DECOR];
+    group.bench_function("class_of_a_prop_by_its_tags", |b| {
+        b.iter(|| classes.classify(black_box(3), black_box(tags)));
     });
     group.finish();
 }

@@ -168,6 +168,22 @@ declares each as a typedef:
 | `PlayerKey` | `EnshwickPlayerKey` | `u64`   | a player's account, the same every session  |
 | `RecipeId`  | `EnshwickRecipeId`  | `u32`   | a crafting recipe                           |
 
+## Recipe kinds
+
+`HostApi::recipe_kind` answers a
+[`RecipeKind`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/content.rs)
+code, and a recipe selection of `change_data` and a recipe output `RateId`
+take one. A mod reads a code it does not know as `OTHER`.
+
+| Code | Constant         | The item a recipe makes                                    |
+| ---- | ---------------- | ---------------------------------------------------------- |
+| 0    | `OTHER`          | none of the kinds below                                    |
+| 1    | `BUILDING_BLOCK` | equipment slot `BlueprintMaterial_Default`                 |
+| 2    | `ROOF`           | equipment slot `BlueprintMaterial_Roof`                    |
+| 3    | `OVERGROWTH`     | equipment slot `OvergrowthMaterial`                        |
+| 4    | `TERRAIN`        | equipment slot `TerrainMaterial`                           |
+| 5    | `DECORATIVE`     | slot `BuildTool` with the Decorative menu group's item tag |
+
 ## Events
 
 A mod subscribes with
@@ -354,7 +370,7 @@ marked "init only" are allowed during `enshwick_mod_init` only.
 | `run_point`              | Runs the live links of the mod's own extension point over its answer; any thread                     |
 | `actions`                | Registers the mod's player actions, asked for sheets, runs and hints; init only                      |
 | `event_types`            | Every game event type the running build reflects, with hash and size; any thread                     |
-| `recipe_kind`            | The kind of the recipes that make an item, from its loaded static data; any thread                   |
+| `recipe_kind`            | The kind of the recipes that make an item, from its loaded slot and tags; any thread                 |
 | `rate`                   | Declares a game rate the mod multiplies; init only                                                   |
 | `set_rate`               | Puts the mod's factor for a declared rate in force, 0 to 100; any thread                             |
 | `change_data`            | Declares a change of a vanilla value, or of each item or recipe a selection picks; init only         |

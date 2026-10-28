@@ -83,7 +83,7 @@ impl WorkshopId {
         self.0
     }
 
-    /// The game's id for the workshop: [`Guid::id`] of its GUID.
+    /// The game's id for the workshop: [`Guid::fnv1a`] of its GUID.
     ///
     /// # Examples
     ///

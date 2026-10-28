@@ -10,7 +10,7 @@ use super::types;
 
 mod add;
 mod change;
-mod derive;
+pub(crate) mod derive;
 mod kind;
 mod rules;
 
@@ -19,9 +19,7 @@ pub use add::{
     workshop_limit,
 };
 pub use change::{RecipeChanges, change_recipes_in, recipe_workshops};
-pub use derive::{
-    Derived, RecipeEdit, RecipeView, derive_recipes_in, derived_guid, modify_recipes_in,
-};
+pub use derive::{Derived, RecipeView, derive_recipes_in, derived_guid};
 pub use kind::RecipeKind;
 pub use rules::{Name, RecipeRule, disable, enable, is_disabled};
 
@@ -186,62 +184,22 @@ impl Load<'_> {
             menu::list_recipes(menu, bundle, &entries)
         })
     }
-
-    /// Changes recipes in the registry in place, on the server and the
-    /// client alike, so the client's crafting menu shows the new counts:
-    /// `modify` is called with each recipe and may scale its output and
-    /// ingredient counts. It sees the registry as it reaches this patch,
-    /// with the recipes and changes of mods that patched before, and the
-    /// mods after see its changes. The mod's log says how many recipes
-    /// changed. When values `modify` reads change later, such as a server's
-    /// join values, [`rebuild_recipes`] applies them.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the recipe layout is not reflected.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use enshwick::content::recipes::RecipeEdit;
-    ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.modify_recipes(|recipe: &mut RecipeEdit<'_>| {
-    ///         if recipe.view().debug_name().starts_with("Block_") {
-    ///             recipe.scale_output(2);
-    ///         }
-    ///     })
-    /// }
-    /// ```
-    pub fn modify_recipes(
-        &mut self,
-        modify: impl Fn(&mut RecipeEdit<'_>) + Send + Sync + 'static,
-    ) -> Result<(), Off> {
-        let layout = RecipeLayout::resolve(self)?;
-        let registry = RECIPE_REGISTRY.key(types::RECIPE_REGISTRY_RESOURCE)?;
-        self.serve(registry, registry, move |base| {
-            let (built, changed) = modify_recipes_in(&layout, base, &modify)?;
-            crate::info!("{changed} recipes changed");
-            Some(built)
-        })?;
-        self.allow_rebuild(registry)
-    }
 }
 
 /// Builds the recipe registry again with every mod's recipe changes, from any
 /// thread.
 ///
-/// For a mod whose [`Load::modify_recipes`] or [`Load::add_recipe_with`] reads
-/// values that changed, such as a server's join values on a joined client: the
-/// counts the game holds change in place.
+/// For a mod whose [`Load::add_recipe_with`] reads values that changed, such
+/// as a server's join values on a joined client: the counts the game holds
+/// change in place.
 ///
 /// Nothing is done while the game has not built the registry yet. See
 /// [`rebuild`](crate::content::rebuild) for what a rebuild can change.
 ///
 /// # Errors
 ///
-/// [`Off`] for a mod that neither modifies recipes nor adds them with
-/// [`Load::add_recipe_with`], and when another mod's patch changed the
+/// [`Off`] for a mod that adds no recipe with [`Load::add_recipe_with`], and
+/// when another mod's patch changed the
 /// registry's length.
 ///
 /// # Examples
@@ -259,6 +217,7 @@ pub fn rebuild_recipes() -> Result<(), Off> {
 
 #[cfg(test)]
 mod tests {
+    use super::derive::modify_recipes_in;
     use super::*;
     use crate::content::workshops::WorkshopId;
     use crate::content::{Blob, Guid, Id};
@@ -295,7 +254,8 @@ mod tests {
             RecipeKind::BuildingBlock => Some(RecipeKind::Roof),
             RecipeKind::Roof => Some(RecipeKind::Overgrowth),
             RecipeKind::Overgrowth => Some(RecipeKind::Terrain),
-            RecipeKind::Terrain => Some(RecipeKind::Other),
+            RecipeKind::Terrain => Some(RecipeKind::Decorative),
+            RecipeKind::Decorative => Some(RecipeKind::Other),
             RecipeKind::Other => None,
         }
     }
@@ -540,8 +500,7 @@ mod tests {
         assert!(blob.set_array(8, first, 2));
         let (built, changed) = modify_recipes_in(&LAYOUT, blob.bytes(), &|recipe| {
             if recipe.view().debug_name().starts_with("Block_") {
-                recipe.scale_output(3);
-                recipe.scale_inputs(1);
+                recipe.scale_output_by(3.0);
             }
         })
         .unwrap();
@@ -562,12 +521,18 @@ mod tests {
         assert_eq!(u32_at(built.bytes(), inputs + 48 + 0x14), 4);
 
         // A second patch composes: it sees the first one's counts.
-        let (again, _) =
-            modify_recipes_in(&LAYOUT, built.bytes(), &|recipe| recipe.scale_inputs(2)).unwrap();
+        let (again, _) = modify_recipes_in(&LAYOUT, built.bytes(), &|recipe| {
+            recipe.scale_output_by(2.0);
+        })
+        .unwrap();
         let again = Blob::new(&again);
-        let (inputs, _) = again.array(recipes + 0x28).unwrap();
-        assert_eq!(u32_at(again.bytes(), inputs + 48 + 0x14), 8);
-        assert_eq!(view(recipes).output().unwrap().1, 30);
+        let view = |at| RecipeView {
+            blob: &again,
+            at,
+            layout: &LAYOUT,
+        };
+        assert_eq!(view(recipes).output().unwrap().1, 60);
+        assert_eq!(view(recipes + 0xa8).output().unwrap().1, 20);
     }
 
     #[test]

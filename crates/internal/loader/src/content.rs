@@ -812,27 +812,25 @@ fn build(entry: &Served, database: *mut u8) -> Option<(usize, usize)> {
     Some(result)
 }
 
-/// Records the equipment slot of the item whose resolved `ItemInfo` is the
-/// `len` bytes at `data`; nothing when it is not resident or too short.
 fn record_item(data: u64, len: u64) {
     let (Ok(data), Ok(len)) = (usize::try_from(data), usize::try_from(len)) else {
         return;
     };
-    let Some((id_at, slot_at)) = crate::item_kinds::ITEMS.offsets() else {
+    let Some(sealed) = crate::item_kinds::ITEMS.sealed() else {
         return;
     };
-    if data == 0 || id_at.saturating_add(4) > len || slot_at >= len {
+    if data == 0 {
         return;
     }
-    let info = core::ptr::with_exposed_provenance::<u8>(data);
-    // SAFETY: the game resolved this `ItemInfo` to `len` resident bytes at
-    // `data`, non-zero by the check before it, and its u32 item id at the
-    // reflected `id_at` ends within them, checked before it.
-    let item: u32 = unsafe { read_at(info, id_at) };
-    // SAFETY: as for the item id: the reflected `slot_at`, below `len` by the
-    // check before it, holds the one-byte equipment slot `seal` checked.
-    let slot: u8 = unsafe { read_at(info, slot_at) };
-    crate::item_kinds::ITEMS.record(item, slot);
+    let read = |at: usize, out: &mut [u8]| {
+        // SAFETY: the game resolved this `ItemInfo` to `len` resident bytes
+        // at `data`, non-zero by the check before it, unchanged for the
+        // call; `ItemKindLayout::item` reads only bytes within `len`.
+        unsafe { crate::memory::read_bytes(data, at, out) };
+    };
+    if let Some((item, kind)) = sealed.item(len, read) {
+        crate::item_kinds::ITEMS.record(item, kind);
+    }
 }
 
 /// Runs the patches of the mods still on, or of the mods `only` names,

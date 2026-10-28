@@ -4,8 +4,8 @@ fn roll(kind: Kinds) -> Roll {
     Roll {
         kind,
         entity: Some(Entity(5)),
-        node: 0,
-        labels: 0,
+        node: None,
+        labels: None,
         boss: false,
         locked: false,
     }
@@ -16,11 +16,11 @@ fn filters_keep_their_kind_and_markers() {
     let corpse = roll(Kinds::CORPSES);
     let boss = Roll {
         boss: true,
-        labels: 3,
+        labels: Some(LootContainerId::new(3)),
         ..corpse
     };
     let chest = Roll {
-        node: 9,
+        node: Some(LootContainerId::new(9)),
         ..roll(Kinds::CHESTS)
     };
     let locked = Roll {
@@ -34,18 +34,43 @@ fn filters_keep_their_kind_and_markers() {
     assert!(!Source::bosses().matches(&locked));
     assert!(Source::locked_chests().matches(&locked));
     assert!(!Source::locked_chests().matches(&chest));
-    assert!(Source::bosses().with_labels(&[3]).matches(&boss));
-    assert!(!Source::bosses().with_labels(&[4]).matches(&boss));
+    assert!(
+        Source::bosses()
+            .with_labels(&[LootContainerId::new(3)])
+            .matches(&boss)
+    );
+    assert!(
+        !Source::bosses()
+            .with_labels(&[LootContainerId::new(4)])
+            .matches(&boss)
+    );
     assert!(
         Source::kinds(Kinds::CHESTS)
-            .with_nodes(&[9])
+            .with_nodes(&[LootContainerId::new(9)])
             .matches(&chest)
     );
     assert!(
         !Source::kinds(Kinds::CHESTS)
-            .with_nodes(&[8])
+            .with_nodes(&[LootContainerId::new(8)])
             .matches(&chest)
     );
+}
+
+#[test]
+fn a_roll_without_labels_or_a_node_matches_no_list_of_them() {
+    let corpse = roll(Kinds::CORPSES);
+    let any = LootContainerId::default();
+    assert!(
+        !Source::kinds(Kinds::CORPSES)
+            .with_labels(&[any])
+            .matches(&corpse)
+    );
+    assert!(
+        !Source::kinds(Kinds::CORPSES)
+            .with_nodes(&[any])
+            .matches(&corpse)
+    );
+    assert!(Source::kinds(Kinds::CORPSES).matches(&corpse));
 }
 
 #[test]

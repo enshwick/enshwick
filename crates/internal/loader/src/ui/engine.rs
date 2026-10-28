@@ -502,6 +502,10 @@ pub(crate) struct Engine {
     pub(super) dialog: Option<DialogLayout>,
     /// The world settings view's fields; `None` keeps the mods' rows out.
     pub(super) view: Option<ViewLayout>,
+    /// The scroll area's functions and looks; `None` pages long lists.
+    scroll: Option<scroll::Scrolling>,
+    /// The text field's functions; `None` shows texts read-only.
+    text_fields: Option<text_field::TextFields>,
     window_begin: WindowBeginFn,
     window_end: OneFn,
     frame_from_node: FrameFromNodeFn,
@@ -543,6 +547,29 @@ pub(crate) struct Engine {
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
     pub(super) world_settings_site: u64,
+    /// The main menu's site between its version line and its legal line,
+    /// when its code holds on this build; 0 keeps the loader's line off.
+    pub(super) legal_line_site: u64,
+    /// The look of the main menu's version line; `None` keeps the loader's
+    /// line off.
+    legal: Option<Legal>,
+}
+
+/// Where the look of the main menu's version line sits in the look bundle,
+/// from reflection.
+#[derive(Debug, Clone, Copy)]
+struct Legal {
+    style: usize,
+    size: usize,
+}
+
+impl Legal {
+    fn find(loader: &Loader) -> Option<Self> {
+        Some(Self {
+            style: style(loader, "legalText")?,
+            size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "xsmall")])?,
+        })
+    }
 }
 
 /// Every function the loader calls or hooks, by symbol; each must read its
@@ -604,6 +631,7 @@ fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
 const BUNDLE: &str = "keen::FbUiBundle";
 const STYLES: &str = "keen::FbUiCharacterStyles";
 const SOUNDS: &str = "keen::FbUiSounds";
+const FONT_SIZES: &str = "keen::FbUiFontSizes";
 const MENU_SOUNDS: &str = "keen::FbUiSoundsMenuGeneric";
 
 fn style(loader: &Loader, name: &str) -> Option<usize> {
@@ -650,10 +678,7 @@ fn looks(loader: &Loader) -> Option<Looks> {
             ],
         )?,
         outline: style(loader, "defaultStyleOutline")?,
-        title_size: path(
-            loader,
-            &[(BUNDLE, "fontSizes"), ("keen::FbUiFontSizes", "caps_large")],
-        )?,
+        title_size: path(loader, &[(BUNDLE, "fontSizes"), (FONT_SIZES, "caps_large")])?,
         sounds: [
             sound(loader, "mouseClickGeneric")?,
             sound(loader, "entryTrigger")?,
@@ -663,6 +688,42 @@ fn looks(loader: &Loader) -> Option<Looks> {
         setting_off: setting_text(loader, "settingOff")?,
         setting_on: setting_text(loader, "settingOn")?,
     })
+}
+
+/// The address of game function `name`, once its first eight bytes read as
+/// its `<name>.bytes` constant says.
+fn verify(loader: &Loader, name: Symbol) -> Result<usize, Missing> {
+    let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
+    let expected = loader
+        .build
+        .constant(&format!("{name}.bytes"))
+        .ok_or(Missing::Bytes(name.id()))?;
+    let address = usize::try_from(address).map_err(|_| Missing::Entry(name.id()))?;
+    // SAFETY: `loader.address` resolves `name` to a function in the game's
+    // executable, mapped for the process, so eight bytes at its entry are
+    // readable; code is not written while it runs.
+    let found = unsafe { crate::memory::read::<u64>(address, 0) };
+    if found != expected {
+        return Err(Missing::Bytes(name.id()));
+    }
+    Ok(address)
+}
+
+/// Game function `name`, checked by [`verify`], as a function pointer of
+/// type `F`.
+///
+/// # Safety
+///
+/// - `F` is the `extern "system"` function pointer type of the game
+///   function `name` names on every build whose table pins it.
+unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> {
+    const { assert!(size_of::<F>() == size_of::<usize>()) };
+    let address = verify(loader, name)?;
+    // SAFETY: `address` is non-zero code of the game whose entry bytes
+    // `verify` just matched against the table, and `F` is a function
+    // pointer of its type and of `usize`'s size by this function's
+    // `# Safety` and the assertion above.
+    Ok(unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
 /// Why the interface stays off on this build.
@@ -687,25 +748,16 @@ impl core::fmt::Display for Missing {
 
 impl Engine {
     /// Resolves every function and look; the first that is missing or does
-    /// not read as expected keeps the interface off.
+    /// not read as expected keeps the interface off. The scroll area and
+    /// the text field resolve on their own: without them the interface
+    /// stays on and pages its lists and shows texts read-only.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
         for name in FUNCTIONS {
-            let address = loader.address(name).ok_or(Missing::Entry(name.id()))?;
             if name == pinned::ui::CONTEXT {
+                loader.address(name).ok_or(Missing::Entry(name.id()))?;
                 continue;
             }
-            let expected = loader
-                .build
-                .constant(&format!("{name}.bytes"))
-                .ok_or(Missing::Bytes(name.id()))?;
-            let address = usize::try_from(address).map_err(|_| Missing::Entry(name.id()))?;
-            // SAFETY: `loader.address` resolves `name` to a function in the
-            // game's executable, mapped for the process, so eight bytes at
-            // its entry are readable; code is not written while it runs.
-            let found = unsafe { crate::memory::read::<u64>(address, 0) };
-            if found != expected {
-                return Err(Missing::Bytes(name.id()));
-            }
+            verify(loader, name)?;
         }
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
@@ -715,6 +767,19 @@ impl Engine {
             .ok();
         let view = ViewLayout::read(&lookup)
             .inspect_err(|why| crate::log!(WARN, "the world settings' Mods rows off: {why}"))
+            .ok();
+        let scroll = scroll::Scrolling::resolve(loader)
+            .inspect_err(|why| {
+                crate::log!(WARN, "the Mods screen pages instead of scrolling: {why}");
+            })
+            .ok();
+        let text_fields = text_field::TextFields::resolve(loader)
+            .inspect_err(|why| {
+                crate::log!(
+                    WARN,
+                    "text settings are read-only on the Mods screen: {why}"
+                );
+            })
             .ok();
         let at = |name: Symbol| {
             loader
@@ -739,6 +804,8 @@ impl Engine {
             layout,
             dialog,
             view,
+            scroll,
+            text_fields,
             window_begin: function!(pinned::ui::WINDOW_BEGIN, WindowBeginFn),
             window_end: function!(pinned::ui::WINDOW_END, OneFn),
             frame_from_node: function!(pinned::ui::FRAME_FROM_NODE, FrameFromNodeFn),
@@ -780,6 +847,12 @@ impl Engine {
             main_menu_site: loader.address(pinned::ui::MAIN_MENU_SITE).unwrap_or(0),
             pause_menu_site: loader.address(pinned::ui::PAUSE_MENU_SITE).unwrap_or(0),
             world_settings_site: loader.address(pinned::ui::WORLD_SETTINGS_SITE).unwrap_or(0),
+            legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
+                loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
+            } else {
+                0
+            },
+            legal: Legal::find(loader),
         })
     }
 
@@ -872,7 +945,12 @@ fn slider_format(min: f32, max: f32, steps: u32) -> u32 {
 
 mod hud;
 mod menus;
+mod scroll;
 #[cfg(test)]
 mod tests;
+mod text_field;
 mod widgets;
 mod windows;
+
+pub(super) use scroll::Scroll;
+pub(super) use text_field::{TextBuffer, Typed};

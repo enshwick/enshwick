@@ -73,6 +73,24 @@ impl Kinds {
     }
 }
 
+/// A loot container id, as the game names both the world node a chest is
+/// placed at and the loot labels of an enemy or chest type; the labels' id
+/// is the [`Guid::fnv1a`](crate::content::Guid::fnv1a) of their GUID.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::loot::LootContainerId;
+///
+/// let labels = LootContainerId::new(9);
+/// assert_eq!(labels.get(), 9);
+/// assert_eq!(labels.to_string(), "9");
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LootContainerId(u32);
+
+crate::abi::id_conversions!(LootContainerId(u32));
+
 /// One roll of a container's loot, as the filters see it.
 ///
 /// # Examples
@@ -84,11 +102,10 @@ pub struct Roll {
     pub kind: Kinds,
     /// The container; `None` for a single-item roll.
     pub entity: Option<Entity>,
-    /// The world node a chest is placed at; 0 for a corpse.
-    pub node: u32,
-    /// The loot labels of the enemy or chest type: the FNV-1a hash of the
-    /// label collection's GUID; 0 without one.
-    pub labels: u32,
+    /// The world node a chest is placed at; `None` for a corpse.
+    pub node: Option<LootContainerId>,
+    /// The loot labels of the enemy or chest type; `None` without them.
+    pub labels: Option<LootContainerId>,
     /// Whether the corpse is a boss's.
     pub boss: bool,
     /// Whether the chest needs a key or a lockpick to open.
@@ -101,13 +118,13 @@ pub struct Roll {
 ///
 /// ```
 /// use enshwick::Entity;
-/// use enshwick::loot::{Source, Kinds, Roll};
+/// use enshwick::loot::{LootContainerId, Source, Kinds, Roll};
 ///
-/// let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: 0, labels: 9, boss: true, locked: false };
+/// let boss = Roll { kind: Kinds::CORPSES, entity: Some(Entity(7)), node: None, labels: Some(LootContainerId::new(9)), boss: true, locked: false };
 /// assert!(Source::bosses().matches(&boss));
 /// assert!(!Source::locked_chests().matches(&boss));
-/// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[9]).matches(&boss));
-/// assert!(!Source::kinds(Kinds::CONTAINERS).with_nodes(&[3]).matches(&boss));
+/// assert!(Source::kinds(Kinds::CORPSES).with_labels(&[LootContainerId::new(9)]).matches(&boss));
+/// assert!(!Source::kinds(Kinds::CONTAINERS).with_nodes(&[LootContainerId::new(3)]).matches(&boss));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Source {
@@ -118,9 +135,9 @@ pub struct Source {
     /// Only chests that need a key or a lockpick.
     pub locked_only: bool,
     /// Only these loot label ids ([`Roll::labels`]); empty for any.
-    pub labels: Vec<u32>,
+    pub labels: Vec<LootContainerId>,
     /// Only these world nodes ([`Roll::node`]); empty for any.
-    pub nodes: Vec<u32>,
+    pub nodes: Vec<LootContainerId>,
 }
 
 impl Source {
@@ -170,7 +187,7 @@ impl Source {
     ///
     /// See [`Source`].
     #[must_use]
-    pub fn with_labels(mut self, labels: &[u32]) -> Self {
+    pub fn with_labels(mut self, labels: &[LootContainerId]) -> Self {
         self.labels.extend_from_slice(labels);
         self
     }
@@ -181,7 +198,7 @@ impl Source {
     ///
     /// See [`Source`].
     #[must_use]
-    pub fn with_nodes(mut self, nodes: &[u32]) -> Self {
+    pub fn with_nodes(mut self, nodes: &[LootContainerId]) -> Self {
         self.nodes.extend_from_slice(nodes);
         self
     }
@@ -196,8 +213,8 @@ impl Source {
         self.kinds.contains(roll.kind)
             && (!self.bosses_only || roll.boss)
             && (!self.locked_only || roll.locked)
-            && (self.labels.is_empty() || self.labels.contains(&roll.labels))
-            && (self.nodes.is_empty() || self.nodes.contains(&roll.node))
+            && (self.labels.is_empty() || roll.labels.is_some_and(|l| self.labels.contains(&l)))
+            && (self.nodes.is_empty() || roll.node.is_some_and(|n| self.nodes.contains(&n)))
     }
 }
 
@@ -219,7 +236,7 @@ impl Source {
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Drop {
-    /// The items' game ids, [`Guid::id`](crate::content::Guid::id) of their
+    /// The items' game ids, [`ItemId::from_guid`](crate::ItemId::from_guid) of their
     /// GUIDs; a drop that hits gives one of them, each as likely.
     pub items: Vec<ItemId>,
     /// The chance per roll, from 0 to 1.
@@ -546,8 +563,8 @@ impl Engine {
                 Kinds::CHESTS
             },
             entity: Some(entity),
-            node,
-            labels,
+            node: (node != 0).then_some(LootContainerId(node)),
+            labels: (labels != 0).then_some(LootContainerId(labels)),
             boss: corpse && has(self.boss).is_some(),
             locked: !corpse && locked,
         };
@@ -741,8 +758,8 @@ unsafe fn add_one(res: *mut u8, out: *mut u8) {
     let roll = Roll {
         kind: Kinds::DESTROYED,
         entity: None,
-        node: 0,
-        labels: 0,
+        node: None,
+        labels: None,
         boss: false,
         locked: false,
     };

@@ -189,7 +189,12 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             // word it registered; `bits` outlives the call.
             let answer =
                 crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
-                    (merge.callback)(id, bits.as_ptr(), bits.len(), user)
+                    (merge.callback)(
+                        enshwick::abi::NpcId::new(id),
+                        bits.as_ptr(),
+                        bits.len(),
+                        user,
+                    )
                 });
             if answer & enshwick::abi::SURVIVOR_STATUS_SET == 0 {
                 continue;

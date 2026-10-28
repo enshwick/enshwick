@@ -8,6 +8,21 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
+  ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
+  events carry them, and a Luau script reads and answers them as
+  `buff_type_id` and `npc_id`. Every id the game derives from a GUID has
+  `named` (#623).
+- `loot::LootContainerId`, the game's name for a loot roll's node and
+  labels (#623).
+- `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
+  `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
+  the game's Decorative crafting group, so `Recipes::Kind`,
+  `Rate::RecipeOutput` and `RecipeView::kind` pick decorations by the
+  game's own grouping (#616).
+- The title screen shows the loader's line under the game's version,
+  `Enshwick 1.0.0-alpha.9 · mods: 6`, with the mods off and a warning when
+  the game version leaves features off (#624).
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
   test holds its texts complete for every offered language.
@@ -34,6 +49,15 @@ Each entry names the pull request that made the change.
 - The fake host runs steps as the loader does with `Installed::tick` (#614).
 
 ### Changed
+
+- Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
+  structs, `HostApi::remove_buff`, `summon_item` and the survivor status
+  merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a
+  `Guid`. The fake host's `summon_items` and `survivor_status` carry the
+  ids (#623).
+- Breaking: `Roll::node` and `Roll::labels` are `Option<LootContainerId>`,
+  `None` where the game has none, and `Source::nodes`, `labels`,
+  `with_nodes` and `with_labels` take `LootContainerId` (#623).
 
 - Breaking: `Load::on::<Ticked>` runs the handler every
   `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's
@@ -75,6 +99,20 @@ Each entry names the pull request that made the change.
   texts, which each player reads in their own language; the `validate` of
   the `Config` derive takes any error that converts into `ConfigError`
   (`String`, `&str` or a `ConfigError`) (#620).
+- The Mods screen scrolls its lists in the game's own scroll area instead
+  of paging them, and a text setting takes typed text in the game's own
+  text field, set on Enter. A game build without either keeps the pages
+  and the read-only line, and the log names what is missing (#625).
+
+### Removed
+
+- Breaking: `Load::modify_recipes`, `RecipeEdit` and `modify_recipes_in`;
+  a data change through `Load::change_recipes` or a `Rate::RecipeOutput`
+  changes recipe counts by kind (#616).
+
+### Fixed
+
+- The Mods screen shows a secret setting as "(secret)" and never its value.
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

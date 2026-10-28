@@ -54,7 +54,7 @@ pub const RECIPE_REGISTRY: Guid = Guid::parse("5e57de0f-280c-4559-8191-f02c1ba65
 /// See [`Load::add_recipe`](crate::Load::add_recipe).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NewRecipe {
-    /// The new recipe's id; its game id is [`Id::id`].
+    /// The new recipe's id; its game id is [`RecipeId::from_guid`](crate::RecipeId::from_guid) of its GUID.
     pub id: Id,
     /// The item whose recipe is copied: same workshop, unlock and duration.
     pub like: Guid,
