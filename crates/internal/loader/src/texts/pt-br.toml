@@ -43,6 +43,8 @@
 "row.restart" = "{label} (ao reiniciar o jogo)"
 "row.server" = "{label} (definido pelo servidor)"
 "row.text" = "{label}: {value} (edite mod-configs/{id}.toml)"
+"row.text.hint" = "Digite e pressione Enter"
+"row.value" = "{label}: {value}"
 "world.belongs" = "Estas configurações pertencem a este mundo."
 "world.next" = "As mudanças aqui vão para o próximo mundo que carregar."
 "change.next" = "{id} {key} = {value}: salvo para o próximo mundo que carregar."

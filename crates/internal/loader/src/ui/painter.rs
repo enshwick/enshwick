@@ -3,7 +3,7 @@ use enshwick::abi::{Status, Str, UiWidget};
 use crate::host::Loader;
 use crate::mod_index::ModIndex;
 
-use super::engine::{Engine, UiText};
+use super::engine::{Engine, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
 use super::{Drawing, ENGINE, gather};
 
@@ -125,6 +125,16 @@ impl<'a> Painter<'a> {
             self.engine
                 .dropdown(&label, &texts[..count], index, read_only)
         }
+    }
+
+    /// A text field over `buffer` with `hint` in it while it is empty;
+    /// `None` on a build without text fields.
+    pub(super) fn text_field(&self, buffer: &mut TextBuffer, hint: &[u8]) -> Option<Typed> {
+        let hint = copy(&[hint]);
+        // SAFETY: a window is open on this thread with `self.context`, by
+        // the contract of `Painter::new`; the hint lives in the frame's
+        // arena.
+        unsafe { self.engine.text_field(self.context, buffer, &hint) }
     }
 
     pub(super) fn progress(&self, value: f32, min: f32, max: f32) {

@@ -17,6 +17,11 @@
 //! that sets a mod's join values, those rows show the server's values and
 //! take no changes.
 //!
+//! Long lists scroll in the game's own scroll area, and a text setting
+//! takes typed text in the game's own text field, set on Enter; typing left
+//! without Enter is dropped. A build without either pages its lists and
+//! shows its texts read-only.
+//!
 //! The world settings view shows the same rows under its last tab, inside
 //! its scroll area, from a hook after the tab's own rows: read-only where the
 //! view is, for a player who may not change the world.
@@ -30,17 +35,18 @@ use world::{WorldRows, world_settings};
 
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::host::Loader;
+use crate::listing::{self, Listing};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::others::Origin;
 use crate::texts;
 
-use super::engine::{Engine, Window};
+use super::engine::{Engine, Scroll, TextBuffer, Window};
 use super::{ENGINE, Painter, copy};
 
-/// Mods a list page shows.
+/// Mods a list page shows on a build without scroll areas.
 const MODS_PER_PAGE: usize = 4;
-/// Settings a mod's page shows.
+/// Settings a mod's page shows on a build without scroll areas.
 const ROWS_PER_PAGE: usize = 5;
 /// The layers of the screen: over the main menu (layer 9) and over the
 /// pause menu (0x1a), as the game's own settings and submenus.
@@ -73,29 +79,65 @@ static JUMP_SHOWN: AtomicU8 = AtomicU8::new(0);
 /// The pause menu's submenu state for the world settings.
 const WORLD_SETTINGS_SUBMENU: u32 = 4;
 
-/// What the screen shows.
 enum Page {
-    /// The mods, from `first`.
+    /// The mods, from `first` while they page.
     List { first: usize },
-    /// Mod `index`'s settings, from row `first`.
+    /// Mod `index`'s settings, from row `first` while they page.
     Settings {
         index: usize,
         first: usize,
         rows: Vec<Row>,
+        entries: Entries,
     },
-    /// The joined server's mods with settings, from `first`.
+    /// The joined server's mods with settings, from `first` while they page.
     ServerList { first: usize },
-    /// The joined server's settings of mod `id`, from row `first`, as last
-    /// heard (`news`).
+    /// The joined server's settings of mod `id`, from row `first` while
+    /// they page, as last heard (`news`).
     ServerSettings {
         id: String,
         first: usize,
         rows: Vec<Row>,
         schema: Option<enshwick::config::Schema>,
         news: u64,
+        entries: Entries,
     },
     /// The actions the server offers.
     Actions(super::actions::View),
+}
+
+impl Page {
+    /// Whether one of the page's text fields has the caret, so Back ends
+    /// the typing and not the page.
+    fn editing(&self) -> bool {
+        match self {
+            Self::Settings { entries, .. } | Self::ServerSettings { entries, .. } => {
+                entries.editing
+            }
+            _ => false,
+        }
+    }
+}
+
+/// The text fields of a settings page by row key, each with its buffer,
+/// kept while the page shows.
+#[derive(Default)]
+struct Entries {
+    fields: Vec<(String, Box<TextBuffer>)>,
+    /// One of them had the caret in the last frame.
+    editing: bool,
+}
+
+impl Entries {
+    fn buffer(&mut self, key: &str, value: &str) -> &mut TextBuffer {
+        let at = self.fields.iter().position(|(k, _)| k == key);
+        let at = at.unwrap_or_else(|| {
+            let mut buffer = TextBuffer::new();
+            buffer.set(value);
+            self.fields.push((key.to_owned(), buffer));
+            self.fields.len() - 1
+        });
+        &mut self.fields[at].1
+    }
 }
 
 struct Screen {
@@ -104,6 +146,7 @@ struct Screen {
     /// The last change's outcome, and whether it went through.
     message: Option<(String, bool)>,
     window: Window,
+    scroll: Scroll,
 }
 
 thread_local! {
@@ -260,6 +303,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 page: Page::List { first: 0 },
                 message: None,
                 window: Window::screen(layer, GAP),
+                scroll: Scroll::new(),
             });
             BACK.store(0, Ordering::Relaxed);
             if opened == FROM_PAUSE {
@@ -287,7 +331,8 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
                 JUMP_SHOWN.store(0, Ordering::Relaxed);
                 return;
             }
-            1 if back(screen) => {
+            // Back while a text field has the caret only ends the typing.
+            1 if !screen.page.editing() && back(screen) => {
                 *slot = None;
                 return;
             }
@@ -355,13 +400,6 @@ fn title(loader: &Loader, page: &Page) -> super::engine::UiText {
     }
 }
 
-/// Draws the screen's window; true when the player closed it.
-///
-/// # Safety
-///
-/// - Called inside a frame of the game's interface update, on its thread.
-/// - `context` is the non-zero context `Engine::context` read in this frame.
-/// - No other window is open.
 unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Screen) -> bool {
     let name = copy(&[b"enshwick/loader/mods"]);
     let title = title(loader, &screen.page);
@@ -372,7 +410,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     unsafe { engine.window_begin(context, &mut screen.window, &name, &title) };
     // SAFETY: the window started one call earlier in this frame, on its
     // thread, with the frame's `context`, and `paint` is not used after
-    // either `window_end` below.
+    // `window_end` below.
     let paint = unsafe { Painter::new(engine, context) };
     if let Some((text, ok)) = &screen.message {
         let style = if *ok {
@@ -382,94 +420,117 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
         };
         paint.label(text.as_bytes(), style, true, true);
     }
-    let close = match &mut screen.page {
+    let height = listing::scroll_height(screen.message.is_some());
+    // SAFETY: the window started above in this frame, on its thread, with
+    // its `context`; `screen.scroll` stays in the thread-local `SCREEN`,
+    // unmoved until `scroll_end` below.
+    unsafe { engine.scroll_begin(context, &mut screen.scroll, height, GAP) };
+    let next = content(loader, &paint, &mut screen.page);
+    // SAFETY: `scroll_begin` started `screen.scroll` in this frame inside
+    // this window; it did not move, and the painter's widgets close every
+    // frame they open.
+    unsafe { engine.scroll_end(&mut screen.scroll) };
+    let back = paint.button(texts::text("mods.back").as_bytes(), true);
+    // SAFETY: `window_begin` started `screen.window` in this frame, on this
+    // thread, with this `context`; it did not move, and the scroll area and
+    // the painter's widgets closed every frame they opened.
+    unsafe { engine.window_end(context, &mut screen.window) };
+    match next {
+        Next::Stay => {}
+        Next::ServerList => {
+            open_server_list(screen);
+            return false;
+        }
+        Next::Page(page, message) => {
+            screen.page = page;
+            screen.message = message;
+            return false;
+        }
+        Next::Message(message) => screen.message = Some(message),
+    }
+    back && !screen.page.editing() && self::back(screen)
+}
+
+/// What the screen does after a frame of its page.
+enum Next {
+    /// Nothing.
+    Stay,
+    /// Opens the server's list of mods.
+    ServerList,
+    /// Opens a page, with a message or none.
+    Page(Page, Option<(String, bool)>),
+    /// Shows a message.
+    Message((String, bool)),
+}
+
+/// Draws the page's content, inside the scroll area where the build has
+/// one; what the screen does next.
+fn content(loader: &Loader, paint: &Painter<'_>, page: &mut Page) -> Next {
+    match page {
         Page::List { first } => {
             if joined_elsewhere() && paint.button(texts::text("mods.server").as_bytes(), true) {
-                open_server_list(screen);
-                // SAFETY: `window_begin` started `screen.window` in this
-                // frame, on this thread, with this `context`; it did not
-                // move, and the painter's widgets close every frame they
-                // open.
-                unsafe { engine.window_end(context, &mut screen.window) };
-                return false;
+                return Next::ServerList;
             }
-            match list(loader, &paint, first) {
-                Listed::Settings(index) => {
-                    let rows = page_rows(loader, index);
-                    go(
-                        screen,
-                        Page::Settings {
-                            index,
-                            first: 0,
-                            rows,
-                        },
-                    );
-                }
+            match list(loader, paint, first) {
+                Listed::Settings(index) => Next::Page(
+                    Page::Settings {
+                        index,
+                        first: 0,
+                        rows: page_rows(loader, index),
+                        entries: Entries::default(),
+                    },
+                    None,
+                ),
                 Listed::Actions(id) => {
-                    go(screen, Page::Actions(super::actions::View::new(id, None)));
+                    Next::Page(Page::Actions(super::actions::View::new(id, None)), None)
                 }
-                Listed::Nothing => {}
+                Listed::Nothing => Next::Stay,
             }
-            paint.button(texts::text("mods.back").as_bytes(), true)
         }
-        Page::Settings { index, first, rows } => {
-            if let Some(message) = settings(loader, &paint, *index, first, rows) {
+        Page::Settings {
+            index,
+            first,
+            rows,
+            entries,
+        } => match settings(loader, paint, *index, first, rows, entries) {
+            Some(message) => {
                 *rows = page_rows(loader, *index);
-                screen.message = Some(message);
+                Next::Message(message)
             }
-            if paint.button(texts::text("mods.back").as_bytes(), true) {
-                screen.page = Page::List { first: 0 };
-                screen.message = None;
-            }
-            false
-        }
-        Page::ServerList { first } => {
-            if let Some(id) = server_list(&paint, first) {
+            None => Next::Stay,
+        },
+        Page::ServerList { first } => match server_list(paint, first) {
+            Some(id) => {
                 let asked =
                     crate::net::to_server(&crate::remote::Message::Query { id: id.clone() });
-                screen.message =
-                    (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false));
-                screen.page = Page::ServerSettings {
-                    id,
-                    first: 0,
-                    rows: Vec::new(),
-                    schema: None,
-                    news: 0,
-                };
-            } else if paint.button(texts::text("mods.back").as_bytes(), true) {
-                screen.page = Page::List { first: 0 };
-                screen.message = None;
+                Next::Page(
+                    Page::ServerSettings {
+                        id,
+                        first: 0,
+                        rows: Vec::new(),
+                        schema: None,
+                        news: 0,
+                        entries: Entries::default(),
+                    },
+                    (!asked).then(|| (texts::text("mods.server.closed").to_owned(), false)),
+                )
             }
-            false
-        }
+            None => Next::Stay,
+        },
         Page::ServerSettings {
             id,
             first,
             rows,
             schema,
             news,
-        } => {
-            if let Some(message) = server_settings(&paint, id, first, rows, schema, news) {
-                screen.message = Some(message);
-            }
-            if paint.button(texts::text("mods.back").as_bytes(), true) {
-                open_server_list(screen);
-            }
-            false
-        }
+            entries,
+        } => server_settings(paint, id, first, rows, schema, news, entries)
+            .map_or(Next::Stay, Next::Message),
         Page::Actions(view) => {
-            super::actions::body(&paint, view);
-            if paint.button(texts::text("mods.back").as_bytes(), true) && view.back() {
-                go(screen, Page::List { first: 0 });
-            }
-            false
+            super::actions::body(paint, view);
+            Next::Stay
         }
-    };
-    // SAFETY: `window_begin` started `screen.window` in this frame, on this
-    // thread, with this `context`; it did not move, and the painter's
-    // widgets close every frame they open.
-    unsafe { engine.window_end(context, &mut screen.window) };
-    close
+    }
 }
 
 /// Draws a page of the server's mods; the mod whose settings the player
@@ -494,14 +555,16 @@ fn server_list(paint: &Painter<'_>, first: &mut usize) -> Option<String> {
         );
     }
     let mut opened = None;
-    *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
-    for (id, name) in mods.iter().skip(*first).take(MODS_PER_PAGE) {
+    let listing = listing(paint, MODS_PER_PAGE);
+    *first = listing.clamp_first(*first, mods.len());
+    let shown = listing.shown(*first, mods.len());
+    for (id, name) in mods.iter().take(shown.end).skip(shown.start) {
         paint.label(name.as_bytes(), UiWidget::STYLE_H3, false, false);
         if paint.button(texts::text("mods.settings").as_bytes(), true) {
             opened = Some(id.clone());
         }
     }
-    pages(paint, first, mods.len(), MODS_PER_PAGE);
+    pages(paint, listing, first, mods.len());
     opened
 }
 
@@ -515,7 +578,9 @@ fn server_settings(
     rows: &mut Vec<Row>,
     schema: &mut Option<enshwick::config::Schema>,
     news: &mut u64,
+    entries: &mut Entries,
 ) -> Option<(String, bool)> {
+    entries.editing = false;
     let (heard_news, result) = crate::remote::heard(|h| (h.news, h.result.clone()));
     let mut message = None;
     if heard_news != *news {
@@ -551,16 +616,18 @@ fn server_settings(
         return message;
     };
     let mut changed = None;
-    *first = clamp_first(*first, rows.len(), ROWS_PER_PAGE);
-    for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
-        if let Some(value) = draw_row(paint, id, known, row) {
+    let listing = listing(paint, ROWS_PER_PAGE);
+    *first = listing.clamp_first(*first, rows.len());
+    let shown = listing.shown(*first, rows.len());
+    for row in rows.iter().take(shown.end).skip(shown.start) {
+        if let Some(value) = draw_row(paint, id, known, row, Some(entries)) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {
             paint.label(row.doc.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
     }
-    pages(paint, first, rows.len(), ROWS_PER_PAGE);
+    pages(paint, listing, first, rows.len());
     if let Some((key, value)) = changed {
         let sent = crate::net::to_server(&crate::remote::Message::Edit {
             id: id.to_owned(),
@@ -583,12 +650,6 @@ enum Listed {
     Settings(usize),
     /// Opened the actions of the mod with this id, or of every mod.
     Actions(Option<String>),
-}
-
-/// Moves the screen to `page`, with no message.
-fn go(screen: &mut Screen, page: Page) {
-    screen.page = page;
-    screen.message = None;
 }
 
 /// Draws a page of the mod list; what the player did.
@@ -621,8 +682,10 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
-    *first = clamp_first(*first, mods.len(), MODS_PER_PAGE);
-    for (index, record) in mods.iter().enumerate().skip(*first).take(MODS_PER_PAGE) {
+    let listing = listing(paint, MODS_PER_PAGE);
+    *first = listing.clamp_first(*first, mods.len());
+    let shown = listing.shown(*first, mods.len());
+    for (index, record) in mods.iter().enumerate().take(shown.end).skip(shown.start) {
         let heading = if record.off.load(Ordering::Acquire) {
             let name = record.label();
             texts::fill("mods.off", &[("name", &name), ("version", &record.version)])
@@ -685,36 +748,34 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
     }
-    pages(paint, first, mods.len(), MODS_PER_PAGE);
+    pages(paint, listing, first, mods.len());
     done
 }
 
-/// The first item of the page showing `first` in a list that now holds
-/// `count` items: the last page when the list shrank below it.
-fn clamp_first(first: usize, count: usize, per_page: usize) -> usize {
-    if first < count {
-        first
+/// How the screen shows its lists: in its scroll area, or `per_page` at a
+/// time on a build without scroll areas.
+fn listing(paint: &Painter<'_>, per_page: usize) -> Listing {
+    if paint.engine.scrolls() {
+        Listing::Scrolled
     } else {
-        count.saturating_sub(1) / per_page.max(1) * per_page
+        Listing::Paged { per_page }
     }
 }
 
-/// The Previous and Next buttons of a paged list of `count` items.
-fn pages(paint: &Painter<'_>, first: &mut usize, count: usize, per_page: usize) {
-    if count <= per_page {
+/// The page line and the Previous and Next buttons of a list of `count`
+/// items, when it pages.
+fn pages(paint: &Painter<'_>, listing: Listing, first: &mut usize, count: usize) {
+    let Some(controls) = listing.controls(*first, count) else {
         return;
-    }
-    let (page, pages) = (
-        (*first / per_page + 1).to_string(),
-        count.div_ceil(per_page).to_string(),
-    );
+    };
+    let (page, pages) = (controls.page.to_string(), controls.pages.to_string());
     let page = texts::fill("mods.page", &[("page", &page), ("pages", &pages)]);
     paint.label(page.as_bytes(), UiWidget::STYLE_SECONDARY, false, true);
-    if *first + per_page < count && paint.button(texts::text("mods.page.next").as_bytes(), true) {
-        *first += per_page;
+    if controls.next && paint.button(texts::text("mods.page.next").as_bytes(), true) {
+        *first = listing.next(*first);
     }
-    if *first > 0 && paint.button(texts::text("mods.page.previous").as_bytes(), true) {
-        *first = first.saturating_sub(per_page);
+    if controls.previous && paint.button(texts::text("mods.page.previous").as_bytes(), true) {
+        *first = listing.previous(*first);
     }
 }
 
@@ -761,7 +822,9 @@ fn settings(
     index: usize,
     first: &mut usize,
     rows: &[Row],
+    entries: &mut Entries,
 ) -> Option<(String, bool)> {
+    entries.editing = false;
     let record = loader.mods.get(index)?;
     if rows.iter().any(|r| r.lock == Lock::Server) {
         paint.label(
@@ -773,16 +836,18 @@ fn settings(
     }
     let schema = record.schema.relock().clone()?;
     let mut changed = None;
-    *first = clamp_first(*first, rows.len(), ROWS_PER_PAGE);
-    for row in rows.iter().skip(*first).take(ROWS_PER_PAGE) {
-        if let Some(value) = draw_row(paint, &record.id, &schema, row) {
+    let listing = listing(paint, ROWS_PER_PAGE);
+    *first = listing.clamp_first(*first, rows.len());
+    let shown = listing.shown(*first, rows.len());
+    for row in rows.iter().take(shown.end).skip(shown.start) {
+        if let Some(value) = draw_row(paint, &record.id, &schema, row, Some(entries)) {
             changed = Some((row.key.clone(), value));
         }
         if !row.doc.is_empty() {
             paint.label(row.doc.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
     }
-    pages(paint, first, rows.len(), ROWS_PER_PAGE);
+    pages(paint, listing, first, rows.len());
     let (key, value) = changed?;
     Some(
         match crate::configure::apply(loader, index, &key, &value, "the Mods screen") {
@@ -792,12 +857,12 @@ fn settings(
     )
 }
 
-/// Draws one row; the TOML of the player's change.
 fn draw_row(
     paint: &Painter<'_>,
     id: &str,
     schema: &enshwick::config::Schema,
     row: &Row,
+    entries: Option<&mut Entries>,
 ) -> Option<String> {
     let mut label = row.label.clone();
     match row.stage {
@@ -832,6 +897,25 @@ fn draw_row(
             )?;
             rows::picked(schema.field(&row.key)?, picked as usize)
         }
+        Widget::Entry(value) => match entries {
+            Some(entries) if !read_only && paint.engine.types_text() => {
+                paint.label(label.as_bytes(), UiWidget::STYLE_BODY, true, false);
+                text_row(paint, &row.key, value, entries)
+            }
+            _ => {
+                let line = if read_only {
+                    texts::fill("row.value", &[("label", &label), ("value", value)])
+                } else {
+                    let value = rows::entered(value);
+                    texts::fill(
+                        "row.text",
+                        &[("label", &label), ("value", &value), ("id", id)],
+                    )
+                };
+                paint.label(line.as_bytes(), UiWidget::STYLE_BODY, true, false);
+                None
+            }
+        },
         Widget::Text(value) => {
             let line = texts::fill(
                 "row.text",
@@ -841,6 +925,21 @@ fn draw_row(
             None
         }
     }
+}
+
+/// Draws the text field of row `key`, whose setting holds `value`; the
+/// TOML of the typed text when the player pressed Enter. Out of the field,
+/// it shows the setting's value: typing that ends without Enter is
+/// dropped.
+fn text_row(paint: &Painter<'_>, key: &str, value: &str, entries: &mut Entries) -> Option<String> {
+    let buffer = entries.buffer(key, value);
+    let typed = paint.text_field(buffer, texts::text("row.text.hint").as_bytes())?;
+    let entered = typed.entered.then(|| rows::entered(buffer.text()));
+    if !typed.editing && entered.is_none() && buffer.text() != value {
+        buffer.set(value);
+    }
+    entries.editing |= typed.editing;
+    entered
 }
 
 /// The view's last tab, under which the mods' rows show.

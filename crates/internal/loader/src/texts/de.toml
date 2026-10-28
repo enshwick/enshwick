@@ -43,6 +43,8 @@
 "row.restart" = "{label} (wenn das Spiel neu startet)"
 "row.server" = "{label} (vom Server gesetzt)"
 "row.text" = "{label}: {value} (in mod-configs/{id}.toml ändern)"
+"row.text.hint" = "Tippen, dann Enter drücken"
+"row.value" = "{label}: {value}"
 "world.belongs" = "Diese Einstellungen gehören zu dieser Welt."
 "world.next" = "Änderungen hier gehen in die nächste Welt, die lädt."
 "change.next" = "{id} {key} = {value}: für die nächste Welt gespeichert, die lädt."

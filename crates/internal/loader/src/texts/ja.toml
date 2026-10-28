@@ -43,6 +43,8 @@
 "row.restart" = "{label}（ゲーム再起動時）"
 "row.server" = "{label}（サーバーが設定）"
 "row.text" = "{label}：{value}（mod-configs/{id}.toml で編集）"
+"row.text.hint" = "入力して Enter キーで確定"
+"row.value" = "{label}：{value}"
 "world.belongs" = "これらの設定はこのワールドのものです。"
 "world.next" = "ここでの変更は、次に読み込まれるワールドに入ります。"
 "change.next" = "{id} {key} = {value}：次に読み込まれるワールド用に保存しました。"

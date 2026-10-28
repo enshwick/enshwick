@@ -43,6 +43,8 @@
 "row.restart" = "{label}（遊戲重新啟動時）"
 "row.server" = "{label}（由伺服器設定）"
 "row.text" = "{label}：{value}（在 mod-configs/{id}.toml 中編輯）"
+"row.text.hint" = "輸入後按 Enter 鍵確認"
+"row.value" = "{label}：{value}"
 "world.belongs" = "這些設定屬於此世界。"
 "world.next" = "這裡的變更將用於下一個載入的世界。"
 "change.next" = "{id} {key} = {value}：已為下一個載入的世界儲存。"

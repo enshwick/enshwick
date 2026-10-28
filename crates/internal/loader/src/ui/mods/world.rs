@@ -176,7 +176,7 @@ pub(super) fn world(read_only: bool) {
                     row.lock = Lock::File;
                 }
                 let id = loader.mods.get(*index).map_or("", |m| m.id.as_str());
-                if let Some(value) = draw_row(&paint, id, schema, &row) {
+                if let Some(value) = draw_row(&paint, id, schema, &row, None) {
                     changed = Some((*index, row.key.clone(), value));
                 }
             }
