@@ -344,6 +344,22 @@ pub(crate) extern "system" fn map_markers(
     })
 }
 
+pub(crate) extern "system" fn map_frame(
+    me: ModHandle,
+    out: *mut enshwick::abi::MapFrameInfo,
+) -> Status {
+    entry("map_frame", || {
+        match caller(me).and_then(crate::scene::frame_info) {
+            // SAFETY: `HostApi::map_frame` has the mod pass `out` null or
+            // pointing at its version of `MapFrameInfo`, writable for the
+            // size its header states, that no other thread touches during
+            // the call.
+            Ok(info) => unsafe { put_headed(out, info) },
+            Err(status) => status,
+        }
+    })
+}
+
 pub(crate) extern "system" fn component_write(
     me: ModHandle,
     entity: Entity,

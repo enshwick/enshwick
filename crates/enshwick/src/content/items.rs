@@ -84,7 +84,7 @@ pub fn vanilla_name(item: Guid, language: crate::i18n::Language) -> Option<&'sta
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NewItem {
-    /// The new item's id; its game id is [`Id::id`].
+    /// The new item's id; its game id is [`ItemId::from_guid`](crate::ItemId::from_guid) of its GUID.
     pub id: Id,
     /// The vanilla item it is cloned from: what it looks like and does.
     pub like: Guid,

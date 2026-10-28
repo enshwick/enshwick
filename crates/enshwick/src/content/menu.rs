@@ -100,7 +100,7 @@ impl MenuLayout {
 /// See [`list_recipes`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MenuEntry {
-    /// The recipe; its id is [`Guid::id`].
+    /// The recipe; its id is [`Guid::fnv1a`].
     pub recipe: Guid,
     /// The recipe it follows in the menu, such as the one it copies.
     pub after: Option<Guid>,

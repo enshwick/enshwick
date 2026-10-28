@@ -457,7 +457,8 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
     if request.entity == Entity(0) || request.level > u32::from(u8::MAX) || request.duration < 0 {
         return Err(Status::BAD_ARGS);
     }
-    let ty = find_type(layout, registry(layout, game)?, request.id).ok_or(Status::BAD_ARGS)?;
+    let ty =
+        find_type(layout, registry(layout, game)?, request.id.get()).ok_or(Status::BAD_ARGS)?;
     let duration = if request.duration == 0 {
         // SAFETY: `ty` is the non-null live `BuffType` `find_type` returned
         // on the game thread; the reflected `keen::BuffType` places its `i64`
@@ -474,7 +475,7 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
         // `keen::ecs::BuffInstance` places its `u32` `typeId` at
         // `instance_type`.
         let id: u32 = unsafe { read(slot, layout.instance_type) };
-        if id != request.id {
+        if id != request.id.get() {
             continue;
         }
         // SAFETY: `slot` is a slot of the entity's live `BuffContainer`, which
@@ -502,7 +503,7 @@ pub(crate) fn apply(loader: &Loader, request: &BuffRequest) -> Result<(), Status
             out.copy_from_slice(bytes);
         }
     };
-    put(layout.record_type, &request.id.to_le_bytes());
+    put(layout.record_type, &request.id.get().to_le_bytes());
     put(layout.record_lifetime, &duration.to_le_bytes());
     put(layout.record_remaining, &duration.to_le_bytes());
     if let Ok(level @ 1..) = u8::try_from(request.level) {

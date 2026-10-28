@@ -15,7 +15,7 @@ mod tests {
     };
     use enshwick::{Load, Mod, Off};
 
-    const BLESSED: u32 = 0xb1e5;
+    const BLESSED: BuffTypeId = BuffTypeId::new(0xb1e5);
 
     struct Kit {
         buffs: Buffs,
@@ -46,7 +46,7 @@ mod tests {
                 load.define_stat("luck", &StatDef::additive("x")).is_err(),
                 "defined twice"
             );
-            load.add_buff_modifiers(BuffTypeId(BLESSED), &[Modifier::new(luck, Op::Add, 0.25)])?;
+            load.add_buff_modifiers(BLESSED, &[Modifier::new(luck, Op::Add, 0.25)])?;
             load.on_stats_changed(|change| {
                 CHANGES
                     .lock()
@@ -121,9 +121,7 @@ mod tests {
             duration: 60_000_000_000,
         };
         loader.set_buffs(&[blessed], &[player]);
-        buffs
-            .apply(player, BuffTypeId(BLESSED), Apply::new())
-            .unwrap();
+        buffs.apply(player, BLESSED, Apply::new()).unwrap();
         let ring = ItemInstance {
             pide: Entity(900),
             item: enshwick::ItemId::new(0x5e01),
@@ -152,11 +150,7 @@ mod tests {
             .collect();
         assert!(matches!(
             order.as_slice(),
-            [
-                Origin::Item(_),
-                Origin::Buff(BuffTypeId(BLESSED)),
-                Origin::Mod { .. }
-            ]
+            [Origin::Item(_), Origin::Buff(BLESSED), Origin::Mod { .. }]
         ));
 
         assert_eq!(loader.settle_stats(), 2);

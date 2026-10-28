@@ -11,10 +11,18 @@ Each entry names the pull request that made the change.
 - `Off::text(key, args)` turns a feature off with a text of the mod's
   texts: the Mods screen, the status summary and the log show it in the
   reader's language. A `ConfigError::text` turned into an `Off` stays a
-  text.
+  text (#630).
 - `Hold::set_text(reason, key, args)` sets a hold whose reason the log
   shows in the reader's language while the mod's texts are loaded, and as
-  `reason` when they are not; a hold file of one line reads as before.
+  `reason` when they are not; a hold file of one line reads as before
+  (#630).
+- `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
+  ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
+  events carry them, and a Luau script reads and answers them as
+  `buff_type_id` and `npc_id`. Every id the game derives from a GUID has
+  `named` (#623).
+- `loot::LootContainerId`, the game's name for a loot roll's node and
+  labels (#623).
 - `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
   `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
   the game's Decorative crafting group, so `Recipes::Kind`,
@@ -47,8 +55,22 @@ Each entry names the pull request that made the change.
   cost per handler call: `elapsed_steps`, `elapsed`, `step_interval` and
   `cost`, with `TickData::new` and `with_elapsed` for tests (ABI 3.3) (#614).
 - The fake host runs steps as the loader does with `Installed::tick` (#614).
+- `Map::frame` returns a `MapFrame`: where the scene's map starts, how far
+  it reaches and the size of its cells, in metres, read from the game's
+  data once per scene like the markers (ABI 3.4, `HostApi::map_frame` and
+  `MapFrameInfo`); the fake host serves one with `FakeHost::map_frame`
+  (#627).
 
 ### Changed
+
+- Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
+  structs, `HostApi::remove_buff`, `summon_item` and the survivor status
+  merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a
+  `Guid`. The fake host's `summon_items` and `survivor_status` carry the
+  ids (#623).
+- Breaking: `Roll::node` and `Roll::labels` are `Option<LootContainerId>`,
+  `None` where the game has none, and `Source::nodes`, `labels`,
+  `with_nodes` and `with_labels` take `LootContainerId` (#623).
 
 - Breaking: `Load::on::<Ticked>` runs the handler every
   `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's
@@ -62,6 +84,8 @@ Each entry names the pull request that made the change.
   to every part of the step that needs the time (#614).
 - `abi::read_headed` copies a struct in one move when the writer's struct
   covers all of it, so a larger event struct costs a handler no more (#614).
+- Breaking: `MapSnapshot` carries the map's `frame`, and
+  `MAP_SNAPSHOT_FORMAT` is 2 (#627).
 - Breaking: `Guid::id` is `Guid::fnv1a`, the bare hash, and `Id::id` is
   gone; `ItemId::from_guid(id.guid())` and its siblings take their place.
   `World::used_item` returns an `ItemId`, and `migrations::current_id`
