@@ -378,6 +378,7 @@ fn records(
                 .map(|(_, note)| note.clone())
                 .collect(),
             off: AtomicBool::new(false),
+            off_reason: Mutex::new(None),
             settings: host::Kept::default(),
             synced: Mutex::new(None),
             server_synced: Mutex::new(None),
