@@ -737,7 +737,9 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         if !credits.is_empty() {
             paint.label(credits.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
         }
-        for feature in record.features.relock().iter() {
+        let features = record.features.relock().clone();
+        let features = crate::features::shown(&features, record.texts.relock().as_ref());
+        for feature in features {
             if let Some(reason) = &feature.off {
                 let line = texts::fill(
                     "mods.feature.off",

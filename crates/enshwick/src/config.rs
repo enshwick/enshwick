@@ -366,22 +366,13 @@ pub enum ConfigError {
     Invalid(String),
     /// The settings type's own check refused the values with a text of the
     /// mod's texts, which the player reads in their language.
-    #[error("{key}{}", show_args(args))]
+    #[error("{}", crate::i18n::reason::show(key, args))]
     Text {
         /// The key of the text in the mod's texts.
         key: String,
         /// The values of the text's `{name}` placeholders, by name.
         args: Vec<(String, String)>,
     },
-}
-
-/// `args` as the error shows them in a log: ` (name = value, ...)`.
-fn show_args(args: &[(String, String)]) -> String {
-    if args.is_empty() {
-        return String::new();
-    }
-    let shown: Vec<String> = args.iter().map(|(n, v)| format!("{n} = {v}")).collect();
-    format!(" ({})", shown.join(", "))
 }
 
 impl ConfigError {
@@ -427,17 +418,10 @@ impl ConfigError {
     /// refusal as its key and `name=value` pairs, tab-separated, any other
     /// as its message.
     pub(crate) fn to_reason(&self) -> String {
-        let Self::Text { key, args } = self else {
-            return self.to_string();
-        };
-        let mut reason = key.replace('\t', " ");
-        for (name, value) in args {
-            reason.push('\t');
-            reason.push_str(&name.replace(['\t', '='], " "));
-            reason.push('=');
-            reason.push_str(&value.replace('\t', " "));
+        match self {
+            Self::Text { key, args } => crate::i18n::reason::encode(key, args),
+            _ => self.to_string(),
         }
-        reason
     }
 }
 

@@ -32,6 +32,9 @@ use crate::services::{ModEvent, Service};
 #[error("{reason}")]
 pub struct Off {
     reason: Cow<'static, str>,
+    /// The reason as the loader reads a text of the mod's texts, when it is
+    /// one.
+    text: Option<String>,
 }
 
 impl Off {
@@ -44,7 +47,44 @@ impl Off {
     pub fn new(reason: impl Into<Cow<'static, str>>) -> Self {
         Self {
             reason: reason.into(),
+            text: None,
         }
+    }
+
+    /// An `Off` whose reason is the text of `key` in the mod's texts with
+    /// each `{name}` filled from `args`, so the Mods screen, the status
+    /// summary and the log show it in the reader's language.
+    ///
+    /// The mod hands its texts over with [`Load::texts`] first; a reason
+    /// whose key has no text shows as the key and its values.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     let _texts = load.texts("[en]\n\"glow.off\" = \"No glow on this game version.\"\n")?;
+    ///     let glow = load.feature("glow", |load| {
+    ///         load.symbol("lantern.glow").map_err(|_| enshwick::Off::text("glow.off", &[]))
+    ///     });
+    ///     let _ = glow;
+    ///     Ok(())
+    /// }
+    ///
+    /// let off = enshwick::Off::text("stalls.min", &[("min", "2")]);
+    /// assert_eq!(off.to_string(), "stalls.min (min = 2)");
+    /// ```
+    #[must_use]
+    pub fn text(key: &str, args: &[(&str, &str)]) -> Self {
+        Self {
+            reason: crate::i18n::reason::show(key, args).into(),
+            text: Some(crate::i18n::reason::encode(key, args)),
+        }
+    }
+
+    /// The reason as the loader reads it: a text as its key and values,
+    /// any other as its words.
+    pub(crate) fn to_reason(&self) -> &str {
+        self.text.as_deref().unwrap_or(&self.reason)
     }
 
     pub(crate) fn status(what: &str, status: Status) -> Self {
@@ -83,7 +123,6 @@ off_from!(
     crate::code::FindError,
     crate::code::PatternError,
     crate::console::RunError,
-    ConfigError,
     crate::content::vanilla::VanillaError,
     crate::inventory::BatchError,
     crate::item_data::SetError,
@@ -97,6 +136,18 @@ off_from!(
     crate::ui::UiError,
     crate::world::WorldError,
 );
+
+impl From<ConfigError> for Off {
+    /// `error`'s message as the reason; a [`ConfigError::Text`] stays a text
+    /// of the mod's texts, as from [`Off::text`].
+    fn from(error: ConfigError) -> Self {
+        let text = matches!(error, ConfigError::Text { .. }).then(|| error.to_reason());
+        Self {
+            reason: error.to_string().into(),
+            text,
+        }
+    }
+}
 
 /// A mod: what the loader initialises when it loads the DLL.
 ///

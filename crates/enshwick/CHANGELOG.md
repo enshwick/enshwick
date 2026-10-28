@@ -8,6 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Off::text(key, args)` turns a feature off with a text of the mod's
+  texts: the Mods screen, the status summary and the log show it in the
+  reader's language. A `ConfigError::text` turned into an `Off` stays a
+  text.
+- `Hold::set_text(reason, key, args)` sets a hold whose reason the log
+  shows in the reader's language while the mod's texts are loaded, and as
+  `reason` when they are not; a hold file of one line reads as before.
 - `RecipeKind::Decorative` (`decorative` in a data pack, ABI code
   `RecipeKind::DECORATIVE`) for placed props that carry the item tag of
   the game's Decorative crafting group, so `Recipes::Kind`,

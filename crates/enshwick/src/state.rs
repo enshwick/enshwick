@@ -184,8 +184,9 @@ pub const WORLDS_DIR: &str = "worlds";
 /// without that mod: when the game build is unknown (the loader would leave
 /// the game vanilla), or the mod is missing, skipped or off, it logs the
 /// reason and stops the game before the world loads. The hold is a file,
-/// `mod-data/<id>/hold.txt`, holding the reason; a player who accepts the
-/// risk deletes it. A hold of one world, [`Hold::for_world`], stops the
+/// `mod-data/<id>/hold.txt`, holding the reason on its first line and, from
+/// [`Hold::set_text`], the same reason as a text of the mod's texts on the
+/// second; a player who accepts the risk deletes it. A hold of one world, [`Hold::for_world`], stops the
 /// game only as that world loads, where the loader runs; a build it leaves
 /// vanilla stops for every hold, since no world is known there.
 ///
@@ -257,11 +258,46 @@ impl Hold {
     ///
     /// See [`Hold`].
     pub fn set(&self, reason: &str) -> Result<(), StoreError> {
+        self.write(first_line(reason))
+    }
+
+    /// Sets the hold with the text of `key` in the mod's texts, each
+    /// `{name}` filled from `args`, which the loader logs in the reader's
+    /// language while the mod's texts are loaded, and with `reason`, one
+    /// line it logs when they are not, as when the mod is missing.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError`] when the file cannot be written.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::state::Hold;
+    ///
+    /// let hold = Hold::new(&std::env::temp_dir().join("enshwick-text-hold-doc"));
+    /// hold.set_text("the world has 20 altars", "hold.altars", &[("altars", "20")])?;
+    /// assert_eq!(hold.reason().as_deref(), Some("the world has 20 altars"));
+    /// hold.clear()?;
+    /// # Ok::<(), enshwick::state::StoreError>(())
+    /// ```
+    pub fn set_text(
+        &self,
+        reason: &str,
+        key: &str,
+        args: &[(&str, &str)],
+    ) -> Result<(), StoreError> {
+        let text = crate::i18n::reason::encode(key, args);
+        self.write(&format!("{}\n{text}", first_line(reason)))
+    }
+
+    /// Writes `contents` to a temporary file, then renames it to the hold.
+    fn write(&self, contents: &str) -> Result<(), StoreError> {
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
         }
         let temporary = self.path.with_extension("txt.tmp");
-        std::fs::write(&temporary, reason.lines().next().unwrap_or_default())
+        std::fs::write(&temporary, contents)
             .and_then(|()| std::fs::rename(&temporary, &self.path))
             .map_err(|e| StoreError::io(&self.path, e))
     }
@@ -296,8 +332,24 @@ impl Hold {
     pub fn reason(&self) -> Option<String> {
         std::fs::read_to_string(&self.path)
             .ok()
-            .map(|reason| reason.trim().to_owned())
+            .map(|held| first_line(held.trim_start()).trim().to_owned())
     }
+
+    /// The reason [`Hold::set_text`] gave as a text, as the loader reads it
+    /// with [`Texts::reason`](crate::i18n::Texts::reason); `None` while the
+    /// hold is not set or was set with one line.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn text(&self) -> Option<String> {
+        let held = std::fs::read_to_string(&self.path).ok()?;
+        let text = held.trim_start().lines().nth(1)?;
+        (!text.is_empty()).then(|| text.to_owned())
+    }
+}
+
+/// The first line of `text`.
+fn first_line(text: &str) -> &str {
+    text.lines().next().unwrap_or_default()
 }
 
 /// Every hold under the `mod-data` folder `mod_data`, as `(mod id, reason)`,
@@ -669,6 +721,41 @@ mod tests {
         );
         Hold::for_world(&lanterns, "world0-aa").clear().unwrap();
         assert_eq!(held_worlds(&data), ["world1-bb"]);
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_text_hold_keeps_its_line_for_readers_without_the_mod_s_texts() {
+        let data = std::env::temp_dir().join(format!("enshwick-text-hold-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let hold = Hold::new(&data.join("you.altars"));
+        hold.set_text("17 altars\nand more", "hold.altars", &[("altars", "17")])
+            .unwrap();
+        assert_eq!(hold.reason().as_deref(), Some("17 altars"));
+        assert_eq!(hold.text().as_deref(), Some("hold.altars\taltars=17"));
+        assert_eq!(
+            holds(&data),
+            vec![("you.altars".to_owned(), "17 altars".to_owned())]
+        );
+        hold.set("17 altars").unwrap();
+        assert_eq!(hold.text(), None);
+        let _gone = std::fs::remove_dir_all(&data);
+    }
+
+    #[test]
+    fn a_hold_file_of_one_plain_line_still_holds() {
+        let data = std::env::temp_dir().join(format!("enshwick-old-hold-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let dir = data.join("you.stacks");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(HOLD_FILE), "raised stacks\n").unwrap();
+        let hold = Hold::new(&dir);
+        assert_eq!(hold.reason().as_deref(), Some("raised stacks"));
+        assert_eq!(hold.text(), None);
+        assert_eq!(
+            holds(&data),
+            vec![("you.stacks".to_owned(), "raised stacks".to_owned())]
+        );
         let _gone = std::fs::remove_dir_all(&data);
     }
 

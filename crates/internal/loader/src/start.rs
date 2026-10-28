@@ -85,7 +85,7 @@ fn enforce_holds(loader: &Loader) {
         .flat_map(ModRecord::names)
         .chain([crate::settings::LOADER_ID])
         .collect();
-    crate::holds::enforce(&loader.data_dir, &running, false);
+    crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
 }
 
 /// Runs once, on the stub's thread.

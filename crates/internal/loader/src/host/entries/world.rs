@@ -153,11 +153,14 @@ pub(crate) extern "system" fn feature(me: ModHandle, name: Str, off: Str) -> Sta
             Ok((_, _, record)) => record,
             Err(status) => return status,
         };
+        let texts = record.texts.relock();
         let changed = crate::features::report(
             &mut record.features.relock(),
             name,
             Some(off).filter(|off| !off.is_empty()),
+            texts.as_ref(),
         );
+        drop(texts);
         if let Some(line) = changed {
             let level = if off.is_empty() {
                 Level::INFO
