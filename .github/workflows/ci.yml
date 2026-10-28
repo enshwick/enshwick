@@ -88,7 +88,7 @@ jobs:
       # The Windows lint and tests run natively on the owner's PC while it is
       # online; the tests run under Wine on the organization runners while
       # it is offline.
-      clippy-features: enshwick/test,xtask/compat
+      clippy-features: enshwick/test,enshwick/unstable,xtask/compat
       native-tests: true
     secrets:
       ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}

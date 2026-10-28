@@ -551,6 +551,31 @@ pub struct BaseLimit {
     pub bases: u32,
     /// Altar zones the game's own grouping takes, without the raised limit.
     pub vanilla_zones: u32,
+    /// Bases the game's own code holds.
+    pub vanilla_bases: u32,
+    /// The most altar zones a mod may ask for.
+    pub max_zones: u32,
+    /// The most bases a mod may ask for.
+    pub max_bases: u32,
+}
+
+impl BaseLimit {
+    /// Whether a world of `grouping` holds more altar zones or bases than
+    /// the game's own code takes, so it must not open without the raised
+    /// limit.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::altars::{base_limit, grouping};
+    ///
+    /// let held = grouping().zip(base_limit()).is_some_and(|(g, l)| l.past_vanilla(g));
+    /// # let _ = held;
+    /// ```
+    #[must_use]
+    pub const fn past_vanilla(&self, grouping: Grouping) -> bool {
+        grouping.zones > self.vanilla_zones || grouping.bases > self.vanilla_bases
+    }
 }
 
 /// The most altar zones and bases the game groups now; `None` without a
@@ -577,12 +602,18 @@ pub fn base_limit() -> Option<BaseLimit> {
         bases: 0,
         vanilla_zones: 0,
         reserved: 0,
+        vanilla_bases: 0,
+        max_zones: 0,
+        max_bases: 0,
     };
     let status = (host.api().base_limit)(host.handle(), &raw mut out);
     status.is_ok().then_some(BaseLimit {
         zones: out.zones,
         bases: out.bases,
         vanilla_zones: out.vanilla_zones,
+        vanilla_bases: out.vanilla_bases,
+        max_zones: out.max_zones,
+        max_bases: out.max_bases,
     })
 }
 
@@ -849,14 +880,56 @@ impl Load<'_> {
     /// ```
     pub fn raise_base_limit(&mut self) -> Result<bool, Off> {
         let host = self.host();
-        let status = (host.api().raise_base_limit)(host.handle());
-        if status.is_ok() {
-            Ok(true)
-        } else if status == crate::abi::Status::MISSING {
-            Ok(false)
-        } else {
-            Err(Off::status("the base limit", status))
-        }
+        armed((host.api().raise_base_limit)(host.handle()))
+    }
+
+    /// Lets the game group up to `zones` altar zones into up to `bases`
+    /// bases, refusing an altar that would start a base past them; values
+    /// below the game's own count as the game's, and the largest request of
+    /// every mod holds. Otherwise as [`Load::raise_base_limit`].
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] after init, or for a value past the most the loader takes
+    /// ([`BaseLimit::max_zones`], [`BaseLimit::max_bases`]).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     if !load.request_base_limits(128, 16)? {
+    ///         enshwick::info!("the game keeps its own altar zones on this build");
+    ///     }
+    ///     Ok(())
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
+    pub fn request_base_limits(&mut self, zones: u32, bases: u32) -> Result<bool, Off> {
+        let host = self.host();
+        armed((host.api().request_base_limits)(
+            host.handle(),
+            zones,
+            bases,
+        ))
+        .map_err(|off| match base_limit() {
+            Some(most) if zones > most.max_zones || bases > most.max_bases => Off::new(format!(
+                "{zones} altar zones in {bases} bases asked for; the most is {} in {}",
+                most.max_zones, most.max_bases
+            )),
+            _ => off,
+        })
+    }
+}
+
+/// Whether a base limit `status` is in force: `false` on a build whose code
+/// the platform does not know.
+fn armed(status: crate::abi::Status) -> Result<bool, Off> {
+    if status.is_ok() {
+        Ok(true)
+    } else if status == crate::abi::Status::MISSING {
+        Ok(false)
+    } else {
+        Err(Off::status("the base limit", status))
     }
 }
 

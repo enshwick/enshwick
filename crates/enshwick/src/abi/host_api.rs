@@ -1457,4 +1457,14 @@ pub struct HostApi {
     /// map, or when the scene does not read on this build. A panic in the
     /// loader returns [`Status::REFUSED`]. Since minor 4.
     pub map_frame: extern "system" fn(me: ModHandle, out: *mut MapFrameInfo) -> Status,
+    /// Asks the game to group up to `zones` altar zones into up to `bases`
+    /// bases, refusing an altar that would start a base past them; values
+    /// below the game's own count as the game's. The loader takes the
+    /// largest request of every mod for each, and the patches and hooks
+    /// count as the mod's own. [`Status::BAD_ARGS`] for a value past the
+    /// most the loader takes ([`BaseLimitInfo::max_zones`],
+    /// [`BaseLimitInfo::max_bases`]); [`Status::MISSING`] when this build's
+    /// code is not the one the loader knows, and the game keeps its own.
+    /// Allowed during `enshwick_mod_init` only. Since minor 1.
+    pub request_base_limits: extern "system" fn(me: ModHandle, zones: u32, bases: u32) -> Status,
 }

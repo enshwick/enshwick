@@ -13,6 +13,44 @@ pub(crate) const VANILLA_ZONES: u32 = 16;
 pub(crate) const MAX_BASES: u32 = 16;
 /// The most zones one base mask names.
 pub(crate) const MAX_ZONES: usize = 32;
+/// Altar zones and bases: what the game groups, or what a mod asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Limits {
+    /// Altar zones the game puts into bases.
+    pub(crate) zones: u32,
+    /// Bases the game holds.
+    pub(crate) bases: u32,
+}
+
+impl Limits {
+    /// The game's own.
+    pub(crate) const VANILLA: Self = Self {
+        zones: VANILLA_ZONES,
+        bases: MAX_BASES,
+    };
+    /// What raising the limit asks for.
+    pub(crate) const RAISED: Self = Self {
+        zones: 32,
+        bases: MAX_BASES,
+    };
+    /// The most a mod may ask for: every zone the game lists, in the bases
+    /// its array holds.
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "the game lists at most 255 zones"
+    )]
+    pub(crate) const MOST: Self = Self {
+        zones: super::grouping::MAX_LISTED as u32,
+        bases: MAX_BASES,
+    };
+
+    /// Whether neither value passes `most`'s.
+    #[must_use]
+    pub(crate) const fn within(self, most: Self) -> bool {
+        self.zones <= most.zones && self.bases <= most.bases
+    }
+}
+
 /// Slack around a candidate altar's zone, in metres: the cursor leans
 /// towards allowing, since the new base guard catches what it lets through.
 const SLACK: f32 = 0.5;
@@ -31,6 +69,15 @@ impl Aabb {
     #[must_use]
     pub(crate) fn touches(&self, other: &Self) -> bool {
         (0..3).all(|axis| self.min[axis] <= other.max[axis] && other.min[axis] <= self.max[axis])
+    }
+
+    /// The smallest box holding both.
+    #[must_use]
+    pub(crate) fn union(&self, other: &Self) -> Self {
+        Self {
+            min: [0, 1, 2].map(|axis| self.min[axis].min(other.min[axis])),
+            max: [0, 1, 2].map(|axis| self.max[axis].max(other.max[axis])),
+        }
     }
 }
 

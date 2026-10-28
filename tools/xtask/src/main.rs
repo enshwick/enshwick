@@ -37,8 +37,9 @@ const USAGE: &str = "usage: cargo xtask check [--all] [--windows] [--base <git r
 const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// Turned on by name: most of the API crate's test targets need its fake
 /// loader, and without the feature cargo skips them without a word; the
-/// compat task is linted and tested with the rest.
-const TEST_FEATURE: &str = "enshwick/test,xtask/compat";
+/// API's unstable calls and the compat task are linted and tested with the
+/// rest.
+const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,xtask/compat";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

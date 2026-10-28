@@ -26,8 +26,6 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
-mod limit;
-
 use core::ffi::c_void;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -36,8 +34,8 @@ use arc_swap::ArcSwap;
 use enshwick::abi::{AltarLimit, AltarLimitFilterFn, HookFlags, Status};
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
-pub(crate) use self::limit::VANILLA_ZONES;
-use self::limit::{Aabb, MAX_BASES, MAX_ZONES, Zone, Zones};
+pub(crate) use crate::base_groups::limit::VANILLA_ZONES;
+use crate::base_groups::limit::{self, Aabb, Limits, MAX_BASES, MAX_ZONES, Zone, Zones};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
 use crate::host::{Loader, Registered};
@@ -167,6 +165,32 @@ static ZONES: OnceLock<ArcSwap<Zones>> = OnceLock::new();
 static ZONE_COUNT: AtomicU32 = AtomicU32::new(u32::MAX);
 /// Set at arming when every patch is written with the links.
 static RAISED: AtomicBool = AtomicBool::new(false);
+/// The largest limits the mods asked for.
+static ASKED: Asked = Asked {
+    zones: AtomicU32::new(VANILLA_ZONES),
+    bases: AtomicU32::new(MAX_BASES),
+};
+
+/// The largest limits the mods asked for, each at least the game's own.
+#[derive(Debug)]
+struct Asked {
+    zones: AtomicU32,
+    bases: AtomicU32,
+}
+
+impl Asked {
+    fn take(&self, asked: Limits) {
+        self.zones.fetch_max(asked.zones, Ordering::Relaxed);
+        self.bases.fetch_max(asked.bases, Ordering::Relaxed);
+    }
+
+    fn limits(&self) -> Limits {
+        Limits {
+            zones: self.zones.load(Ordering::Relaxed),
+            bases: self.bases.load(Ordering::Relaxed),
+        }
+    }
+}
 
 // SAFETY: `GroupFn` is the signature of the base grouping the `GROUPING`
 // pattern finds, and `link` uses this slot only as that function's next.
@@ -217,22 +241,27 @@ pub(crate) fn add_limit(
 }
 
 /// The most altar zones and bases the game groups now: its own, or the
-/// raised maximum once the patches are in.
-pub(crate) fn base_limit() -> (u32, u32) {
+/// largest request once the patches are in.
+pub(crate) fn base_limit() -> Limits {
     if raised() {
-        (u32::try_from(MAX_ZONES).unwrap_or(u32::MAX), MAX_BASES)
+        ASKED.limits()
     } else {
-        (VANILLA_ZONES, MAX_BASES)
+        Limits::VANILLA
     }
 }
 
-/// Finds every site and registers the patches as mod `owner`'s, all or
-/// none; a miss or a refusal leaves nothing registered.
-pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
+/// Takes mod `owner`'s request for `asked`, refused past [`Limits::MOST`];
+/// the first request finds every site and registers the patches as the
+/// mod's, all or none, and a miss or a refusal leaves nothing registered.
+pub(crate) fn request(loader: &Loader, owner: ModIndex, asked: Limits) -> Status {
     if too_late(loader) {
         return Status::TOO_LATE;
     }
+    if !asked.within(Limits::MOST) {
+        return Status::BAD_ARGS;
+    }
     if SITES.get().is_some() {
+        ASKED.take(asked);
         return Status::OK;
     }
     if crate::ecs::engine(loader).is_none() {
@@ -278,6 +307,7 @@ pub(crate) fn raise(loader: &Loader, owner: ModIndex) -> Status {
     }
     let _first = SITES.set(sites);
     let _first = ZONES.set(ArcSwap::from_pointee(Zones::default()));
+    ASKED.take(asked);
     Status::OK
 }
 
@@ -438,8 +468,7 @@ unsafe extern "system" fn max_altars(balancing: u64, flame_level: u32) -> u8 {
         return vanilla;
     };
     let running = limits.iter().filter(|f| !crate::host::is_off(f.owner));
-    let (zones, _) = base_limit();
-    chain_limit(flame_level, vanilla, zones, running)
+    chain_limit(flame_level, vanilla, base_limit().zones, running)
 }
 
 /// Runs `filters` in order on the limit of `flame_level`, where the game

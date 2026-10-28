@@ -252,7 +252,16 @@ impl_headed!(AltarLimit);
 /// ```
 /// use enshwick::abi::{BaseLimitInfo, Header};
 ///
-/// let limit = BaseLimitInfo { header: Header::of::<BaseLimitInfo>(), zones: 16, bases: 16, vanilla_zones: 16, reserved: 0 };
+/// let limit = BaseLimitInfo {
+///     header: Header::of::<BaseLimitInfo>(),
+///     zones: 16,
+///     bases: 16,
+///     vanilla_zones: 16,
+///     reserved: 0,
+///     vanilla_bases: 16,
+///     max_zones: 255,
+///     max_bases: 16,
+/// };
 /// assert_eq!(limit.zones, limit.vanilla_zones);
 /// ```
 #[repr(C)]
@@ -268,6 +277,14 @@ pub struct BaseLimitInfo {
     pub vanilla_zones: u32,
     /// Zero.
     pub reserved: u32,
+    /// Bases the game's own code holds. Since minor 1.
+    pub vanilla_bases: u32,
+    /// The most altar zones a mod may ask for with
+    /// [`HostApi::request_base_limits`](super::HostApi::request_base_limits).
+    /// Since minor 1.
+    pub max_zones: u32,
+    /// The most bases a mod may ask for. Since minor 1.
+    pub max_bases: u32,
 }
 
 impl_headed!(BaseLimitInfo);

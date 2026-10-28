@@ -713,7 +713,7 @@ impl Installed {
     /// ```
     #[must_use]
     pub fn base_limit_raised(&self) -> bool {
-        table::with(false, |s| s.base_limit.raised)
+        table::with(false, |s| s.base_limit.requested.is_some())
     }
 
     /// Makes the last grouping find `zones` altar zones in `bases` bases.

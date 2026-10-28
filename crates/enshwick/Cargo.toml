@@ -46,6 +46,9 @@ serde = { workspace = true, features = ["derive"] }
 test = []
 ## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
+## `unstable`: calls that rest on engine facts not yet checked in the
+## running game; they may change or go in any release.
+unstable = []
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
 # one link instead of one per file. nextest still runs each test in a

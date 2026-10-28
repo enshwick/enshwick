@@ -197,14 +197,40 @@ pub(crate) extern "system" fn altar_limit_filter(
     })
 }
 
-/// The zones and bases the fake's game groups, as the loader's: 16 and 16,
-/// 32 and 16 once the mod raised the limit and its hooks are armed.
+/// The altar zones and bases the fake's game groups by itself, as the
+/// game's.
+const VANILLA: (u32, u32) = (16, 16);
+/// The most altar zones and bases a mod may ask for, as the loader's.
+const MOST: (u32, u32) = (255, 16);
+/// What raising the base limit asks for.
+const RAISED: (u32, u32) = (32, 16);
+
+/// The zones and bases the fake's game groups, as the loader's: the game's
+/// own, or the mod's largest request once its hooks are armed.
 pub(crate) fn zones_and_bases() -> (u32, u32) {
-    if with(false, |s| s.base_limit.raised && s.base_limit.armed) {
-        (32, 16)
-    } else {
-        (16, 16)
+    with(None, |s| {
+        s.base_limit.requested.filter(|_| s.base_limit.armed)
+    })
+    .unwrap_or(VANILLA)
+}
+
+/// Takes a request for `zones` and `bases`, as the loader does: refused
+/// past the most it takes or after init, kept as the largest of each.
+fn request(zones: u32, bases: u32) -> Status {
+    if zones > MOST.0 || bases > MOST.1 {
+        return Status::BAD_ARGS;
     }
+    with(Status::MISSING, |s| {
+        if s.base_limit.armed {
+            return Status::TOO_LATE;
+        }
+        let (old_zones, old_bases) = s.base_limit.requested.unwrap_or(VANILLA);
+        s.base_limit.requested = Some((
+            zones.max(old_zones).max(VANILLA.0),
+            bases.max(old_bases).max(VANILLA.1),
+        ));
+        Status::OK
+    })
 }
 
 pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo) -> Status {
@@ -213,8 +239,11 @@ pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo
         header: Header::of::<BaseLimitInfo>(),
         zones,
         bases,
-        vanilla_zones: 16,
+        vanilla_zones: VANILLA.0,
         reserved: 0,
+        vanilla_bases: VANILLA.1,
+        max_zones: MOST.0,
+        max_bases: MOST.1,
     };
     // SAFETY: the safe layer passes `out` null or a `BaseLimitInfo` with
     // its header set, writable for the call.
@@ -226,10 +255,15 @@ pub(crate) extern "system" fn base_limit(_me: ModHandle, out: *mut BaseLimitInfo
 }
 
 pub(crate) extern "system" fn raise_base_limit(_me: ModHandle) -> Status {
-    with(Status::MISSING, |s| {
-        s.base_limit.raised = true;
-        Status::OK
-    })
+    request(RAISED.0, RAISED.1)
+}
+
+pub(crate) extern "system" fn request_base_limits(
+    _me: ModHandle,
+    zones: u32,
+    bases: u32,
+) -> Status {
+    request(zones, bases)
 }
 
 pub(crate) extern "system" fn base_zones(

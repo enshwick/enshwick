@@ -8,6 +8,7 @@ mod actions;
 mod affixes;
 mod altar_limit;
 mod altar_zones;
+mod base_limits;
 mod buffs;
 mod build_rights;
 pub mod call_schema;

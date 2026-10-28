@@ -42,8 +42,9 @@ use gameplay::{
     altars_open, apply_buff, base_limit, base_zones, buff_types, buffs, build_filter,
     building_zone_check_filter, comfort_filter, craft_filter, damage_filter, experience_filter,
     grant_knowledge, interaction_filter, knowledge, knowledge_input_filter, quests,
-    raise_base_limit, rate, remove_buff, revoke_knowledge, set_rate, skill_override, summon_filter,
-    summon_item, summoned, survivor_bed_check, survivor_lookup, survivor_status,
+    raise_base_limit, rate, remove_buff, request_base_limits, revoke_knowledge, set_rate,
+    skill_override, summon_filter, summon_item, summoned, survivor_bed_check, survivor_lookup,
+    survivor_status,
 };
 use hooks::{code_range, hook, hook_at, patch_code, workshop_recipes};
 use inventory::{inventory_open, inventory_submit, item_info};
@@ -301,11 +302,11 @@ fn take_turn() -> MutexGuard<'static, ()> {
     turn
 }
 
-/// Whether the mod raised the base limit, and whether the hooks are armed.
+/// The base limits the mod asked for, and whether the hooks are armed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct BaseLimitState {
-    /// The mod raised the limit.
-    pub(crate) raised: bool,
+    /// The largest zones and bases the mod asked for, once it asked.
+    pub(crate) requested: Option<(u32, u32)>,
     /// The mod's init returned and its hooks are armed.
     pub(crate) armed: bool,
 }
@@ -732,4 +733,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     subscribe_tick: super::ticks::subscribe_tick,
     set_tick_every: super::ticks::set_tick_every,
     map_frame,
+    request_base_limits,
 };
