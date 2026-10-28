@@ -250,6 +250,13 @@ authors and status, and edits each player's own (`client`) settings. Over
 the pause menu while hosting, its "World settings" button opens the game's
 world settings.
 
+On the Mods screen a text setting shows the game's own text field. Click
+it, type, and press Enter: the value goes through the same checks as any
+other change, and a refusal shows above the list. Leaving the field without
+Enter keeps the old value. A `secret`, a text longer than 256 bytes, and a
+game build where the loader cannot draw the text field keep the line with
+the file's name instead.
+
 On a client joined to a dedicated server, the screen also offers "Server
 settings": the server's mods with settings, and each one's values as the
 server's world holds them, asked over the loader's own messages. An

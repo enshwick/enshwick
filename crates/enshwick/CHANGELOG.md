@@ -62,6 +62,10 @@ Each entry names the pull request that made the change.
 - The loader's own texts sit in a file per language, and every console
   answer, the status summary, the per-mod costs, the conflict report and
   the interface demo follow the reader's language.
+- The Mods screen scrolls its lists in the game's own scroll area instead
+  of paging them, and a text setting takes typed text in the game's own
+  text field, set on Enter. A game build without either keeps the pages
+  and the read-only line, and the log names what is missing.
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

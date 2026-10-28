@@ -173,7 +173,14 @@ it extends, and edits each player's own settings of each mod that derives
 their last tab, with nothing to write in the mod. See
 [Settings per world](settings.md#settings-per-world). Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list
-out.
+out. While a text field has the caret, Back ends the typing and leaves the
+page open.
+
+The list of mods, a mod's settings and the server's settings scroll in the
+game's own scroll area, with its scrollbar, as the game's world settings do.
+On a game build where the loader cannot draw that scroll area, the screen
+shows a few at a time with "Next page" and "Previous page" buttons, and the
+log says why.
 
 In a game, the screen also shows the [player actions](actions.md) the
 server offers the player: an Actions button above the list, and one under
