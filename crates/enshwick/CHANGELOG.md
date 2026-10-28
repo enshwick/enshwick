@@ -113,13 +113,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
-
 - `Off::text(key, args)` turns a feature off with a text of the mod's
   texts: the Mods screen, the status summary and the log show it in the
   reader's language. A `ConfigError::text` turned into an `Off` stays a
@@ -246,13 +239,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
-
 - `code::find_each_unique` finds many patterns in one pass over the code,
   each with the result `Pattern::find_unique` gives (#598).
 - `World::account_action` asks the game to kick, ban or unban an account
@@ -348,13 +334,6 @@ Each entry names the pull request that made the change.
 ## [1.0.0-alpha.8] - 2026-10-27
 
 ### Added
-
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
 
 - `packs::script_files` lists the scripts `PackFiles::read_dir` would read,
   without reading them. The loader lists a Luau mod's scripts each time it
@@ -559,13 +538,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
-
 - `load.voxels()` reads up to 64³ voxels of the server's world with
   `Voxels::read` and `Voxels::sample`, on the game thread at a quiet
   moment, as `VoxelBox` of `Voxel`s; `Status::NOT_LOADED` and
@@ -607,13 +579,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
-
 - `content::loot_tables` reads and changes the random loot table's stack
   sizes and every stack of a fill table; a data pack's `loot.toml` changes
   `stack_size`, `count`, `spawn_probability` and `weight` under the game's
@@ -646,13 +611,6 @@ Each entry names the pull request that made the change.
 ## [1.0.0-alpha.5] - 2026-10-26
 
 ### Added
-
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
 
 - `Rate::RecipeOutput(kind)` multiplies what the recipes of each
   `RecipeKind` make, after every mod's own recipe patch;
@@ -844,13 +802,6 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
-
 - `rates`: a mod declares a `Rate` with `Load::rate` and sets its factor;
   the loader scales experience by group, workshop speed, resource drops,
   comfort, skill points per level and loot stacks by the product of every
@@ -892,13 +843,6 @@ Each entry names the pull request that made the change.
 ## [1.0.0-alpha.3] - 2026-10-26
 
 ### Added
-
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
 
 - Mod ids have an author part, `<author>.<name>`, each part of `[a-z0-9-]`,
   at most 64 characters; `abi::is_valid_id` checks one, and
@@ -951,13 +895,6 @@ Each entry names the pull request that made the change.
 ## [1.0.0-alpha.2] - 2026-10-26
 
 ### Added
-
-- The `unstable` feature also holds what rests on engine facts not yet
-  seen in the running game: the game rates (`rates`), changes of
-  `Field::MaxStackSize` and `Field::Slots` from a mod (refused with `Off`
-  without the feature), the damage filters, `events::PlayerDied`, the
-  `killer` fields of `EntityDiedEvent`, and `Load::add_recipe`,
-  `add_recipe_with` and `derive_recipes` (#649).
 
 - A mod's actions run from the server's console as
   `<mod id> <action> <values>`, through `ActionCall::CONSOLE` (#336).
