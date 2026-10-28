@@ -2503,6 +2503,9 @@ typedef uint32_t EnshwickRecipeKind;
 #define EnshwickRecipeKind_TERRAIN 4
 // A placed prop the game files under its Decorative crafting group.
 #define EnshwickRecipeKind_DECORATIVE 5
+// A placed prop the game files under its Comfort Furniture crafting
+// group.
+#define EnshwickRecipeKind_COMFORT_FURNITURE 6
 
 // A game rate of `HostApi::rate` and
 // `HostApi::set_rate`, by the loader's stable

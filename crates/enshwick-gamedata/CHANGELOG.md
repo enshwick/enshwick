@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `COMFORT_FURNITURE_ITEM_TAG` and its row in `RECIPE_KIND_TAGS`; an earlier
+  row wins for an item with two kind tags (#PR).
+
 - Catalogue facts for an item's tags (`item_info.tags`, `item_tag_weight`,
   `item_tag_weight.tag`), the Decorative item tag and
   `RECIPE_KIND_TAGS` with `recipe_kind_tags`, the kinds an item takes from

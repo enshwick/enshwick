@@ -174,14 +174,15 @@ declares each as a typedef:
 code, and a recipe selection of `change_data` and a recipe output `RateId`
 take one. A mod reads a code it does not know as `OTHER`.
 
-| Code | Constant         | The item a recipe makes                                    |
-| ---- | ---------------- | ---------------------------------------------------------- |
-| 0    | `OTHER`          | none of the kinds below                                    |
-| 1    | `BUILDING_BLOCK` | equipment slot `BlueprintMaterial_Default`                 |
-| 2    | `ROOF`           | equipment slot `BlueprintMaterial_Roof`                    |
-| 3    | `OVERGROWTH`     | equipment slot `OvergrowthMaterial`                        |
-| 4    | `TERRAIN`        | equipment slot `TerrainMaterial`                           |
-| 5    | `DECORATIVE`     | slot `BuildTool` with the Decorative menu group's item tag |
+| Code | Constant            | The item a recipe makes                                                                      |
+| ---- | ------------------- | -------------------------------------------------------------------------------------------- |
+| 0    | `OTHER`             | none of the kinds below                                                                      |
+| 1    | `BUILDING_BLOCK`    | equipment slot `BlueprintMaterial_Default`                                                   |
+| 2    | `ROOF`              | equipment slot `BlueprintMaterial_Roof`                                                      |
+| 3    | `OVERGROWTH`        | equipment slot `OvergrowthMaterial`                                                          |
+| 4    | `TERRAIN`           | equipment slot `TerrainMaterial`                                                             |
+| 5    | `DECORATIVE`        | slot `BuildTool` with the Decorative menu group's item tag                                   |
+| 6    | `COMFORT_FURNITURE` | slot `BuildTool` with the Comfort Furniture menu group's item tag and not the Decorative one |
 
 ## Events
 
