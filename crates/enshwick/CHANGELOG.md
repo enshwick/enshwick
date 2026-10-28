@@ -56,9 +56,9 @@ Each entry names the pull request that made the change.
   refuses an entity no load finds again, a player's character, with
   `SetError::NotKept` (`Status::NOT_KEPT`, ABI 3.5) (#631).
 - Entity and item data keep each value under its entity's place, the
-  template and transform or the container and slot, and find it again
-  after a load; a value no place names for certain stays aside in the
-  world's file (#631).
+  template and position as the save keeps them or the container and slot,
+  and find it again after a load; a value no place names for certain goes
+  aside in the world's file and never attaches again (#631).
 - Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
   structs, `HostApi::remove_buff`, `summon_item` and the survivor status
   merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a

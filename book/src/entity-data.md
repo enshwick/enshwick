@@ -64,11 +64,11 @@ ids of everything saved after it. `Entity` therefore has no serde form, and
 a mod keeps nothing by entity id in its own files.
 
 The server keeps each value under its entity's place instead: the template
-and the exact transform, which the save holds bit for bit. After the first
-step of a loaded world, every value finds its entity again by that place.
-A value whose place names no entity for certain goes aside: its place holds
-no entity, or two entities share it, such as two chests a mod spawned at
-one point. A value aside stays in the world's file, attached to nothing
+and the position, as the save keeps it, to a sixteen-thousandth of a metre.
+After the first step of a loaded world, every value finds its entity again
+by that place. A value whose place names no entity for certain goes aside:
+its place holds no entity, or two entities of the template share it, such
+as two chests a mod spawned at one point, even turned apart. A value aside stays in the world's file, attached to nothing
 and never matched again, since a later entity may take its place. The log
 says how many went aside. Nothing is given to another entity on a guess.
 

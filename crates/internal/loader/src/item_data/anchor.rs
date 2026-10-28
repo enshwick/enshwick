@@ -1,39 +1,32 @@
 //! Keys that find a record's entity again after a load. The game numbers
 //! entities anew at every load, in save order, so an entity id names its
 //! entity for one session only; the save keeps no identity of its own
-//! (server 399). What it keeps bit for bit is the template and the
-//! `CurrentTransform` of every placed thing, and an item's place in its
-//! owner's inventory.
+//! (server 399). What it keeps is the template and the position of every
+//! placed thing, and an item's place in its owner's inventory.
 
 use rustc_hash::FxHashMap;
 
-/// The bytes of a `CurrentTransform` a key takes: position (three 32.32
-/// `i64`), orientation (four `f32`) and scale (three `f32`), not the padding
-/// after them.
-pub(crate) const TRANSFORM_KEY: usize = 0x34;
-/// Where the `f32` words of the key start: orientation, then scale.
-const FLOATS: usize = 0x18;
+/// The low bits of each 32.32 fixed-point axis the save clears: it keeps a
+/// position floored to 2^-14 m, and a loaded position is kept unchanged
+/// (server 399, proven for positive axes). Orientation is re-encoded by a
+/// codec not known, so it is no part of a key.
+const SAVED_GRAIN: i64 = (1 << 18) - 1;
 
-/// A placed thing: its template GUID and where it stands.
+/// A placed thing: its template GUID and where the save keeps it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct Placed {
     template: [u8; 16],
-    transform: [u8; TRANSFORM_KEY],
+    position: [i64; 3],
 }
 
 impl Placed {
-    /// The key of a thing of `template` at `transform`, the leading bytes of
-    /// its `CurrentTransform`. An `f32` −0.0 counts as +0.0: a load gives
-    /// survivors' −0.0 turns back as +0.0 (server 399).
-    pub(crate) fn new(template: [u8; 16], mut transform: [u8; TRANSFORM_KEY]) -> Self {
-        for word in transform[FLOATS..].as_chunks_mut::<4>().0 {
-            if *word == (-0.0f32).to_le_bytes() {
-                *word = 0.0f32.to_le_bytes();
-            }
-        }
+    /// The key of a thing of `template` at `position`, 32.32 fixed-point
+    /// metres, floored as the save keeps it, so a thing spawned or moved
+    /// this session keys as it will after the next load.
+    pub(crate) fn new(template: [u8; 16], position: [i64; 3]) -> Self {
         Self {
             template,
-            transform,
+            position: position.map(|axis| axis & !SAVED_GRAIN),
         }
     }
 
@@ -43,13 +36,20 @@ impl Placed {
 
     fn encode(&self, out: &mut Vec<u8>) {
         out.extend_from_slice(&self.template);
-        out.extend_from_slice(&self.transform);
+        for axis in self.position {
+            out.extend_from_slice(&axis.to_le_bytes());
+        }
     }
 
     fn decode(bytes: &[u8]) -> Option<(Self, &[u8])> {
-        let (template, rest) = bytes.split_first_chunk::<16>()?;
-        let (transform, rest) = rest.split_first_chunk::<TRANSFORM_KEY>()?;
-        Some((Self::new(*template, *transform), rest))
+        let (template, mut rest) = bytes.split_first_chunk::<16>()?;
+        let mut position = [0i64; 3];
+        for axis in &mut position {
+            let (bytes, after) = rest.split_first_chunk::<8>()?;
+            *axis = i64::from_le_bytes(*bytes);
+            rest = after;
+        }
+        Some((Self::new(*template, position), rest))
     }
 }
 
@@ -234,16 +234,9 @@ mod tests {
     const CHEST: [u8; 16] = [7; 16];
     const BED: [u8; 16] = [9; 16];
 
-    /// A transform at `x` metres along the first axis, upright, scale one.
-    fn at(x: i64) -> [u8; TRANSFORM_KEY] {
-        let mut bytes = [0u8; TRANSFORM_KEY];
-        bytes[..8].copy_from_slice(&(x << 32).to_le_bytes());
-        bytes[0x24..0x28].copy_from_slice(&1.0f32.to_le_bytes());
-        for axis in 0..3 {
-            let at = 0x28 + axis * 4;
-            bytes[at..at + 4].copy_from_slice(&1.0f32.to_le_bytes());
-        }
-        bytes
+    /// A position `x` metres along the first axis, in 32.32 fixed point.
+    fn at(x: i64) -> [i64; 3] {
+        [x << 32, 900 << 32, 1400 << 32]
     }
 
     fn pending(kind: u32, anchor: Anchor, check: u32, value: u8) -> Pending {
@@ -261,17 +254,16 @@ mod tests {
     }
 
     #[test]
-    fn a_negative_zero_turn_keys_as_positive_zero() {
-        let mut turned = at(3);
-        turned[0x18..0x1c].copy_from_slice(&(-0.0f32).to_le_bytes());
-        assert_eq!(Placed::new(BED, turned), Placed::new(BED, at(3)));
-        let mut far = at(3);
-        far[0..8].copy_from_slice(&(-0.0f64).to_le_bytes());
-        assert_ne!(
-            Placed::new(BED, far),
-            Placed::new(BED, at(3)),
-            "the fixed-point position is no float"
-        );
+    fn a_position_keys_as_the_save_keeps_it() {
+        // Server 399: a spawned chest at x + 0x60000 loads at x + 0x40000;
+        // + 0x7ffff loads at + 0x40000, + 0x20000 at + 0.
+        let [x, y, z] = at(3);
+        let spawned = |dx: i64| Placed::new(BED, [x + dx, y, z]);
+        assert_eq!(spawned(0x60000), spawned(0x40000));
+        assert_eq!(spawned(0x7ffff), spawned(0x40000));
+        assert_eq!(spawned(0x20000), spawned(0));
+        assert_ne!(spawned(0x40000), spawned(0), "one grain apart");
+        assert_ne!(Placed::new(BED, at(3)), Placed::new(CHEST, at(3)));
     }
 
     #[test]
@@ -296,7 +288,7 @@ mod tests {
             rest = after;
         }
         assert!(rest.is_empty());
-        let held = 1 + 16 + TRANSFORM_KEY + 2;
+        let held = 1 + 16 + 24 + 2;
         let last = &bytes[bytes.len() - held..];
         assert!(Anchor::decode(last).is_some());
         assert_eq!(Anchor::decode(&last[..held - 1]), None);

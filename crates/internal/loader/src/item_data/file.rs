@@ -127,7 +127,7 @@ pub(crate) fn write<'a>(records: impl IntoIterator<Item = Saved<'a>>) -> Vec<u8>
 
 #[cfg(test)]
 mod tests {
-    use super::super::anchor::{Placed, TRANSFORM_KEY};
+    use super::super::anchor::Placed;
     use super::*;
 
     fn saved<'a>(id: &'a str, anchor: Anchor, value: &'a [u8]) -> Saved<'a> {
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn records_read_back_as_written() {
-        let chest = Placed::new([1; 16], [2; TRANSFORM_KEY]);
+        let chest = Placed::new([1; 16], [2 << 32; 3]);
         let records = vec![
             saved("a:charges", Anchor::Placed(chest), &[3]),
             Saved {
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn a_file_that_does_not_read_to_its_end_is_left_alone() {
-        let chest = Placed::new([1; 16], [2; TRANSFORM_KEY]);
+        let chest = Placed::new([1; 16], [2 << 32; 3]);
         let bytes = write([
             saved("a:charges", Anchor::Placed(chest), &[3]),
             saved("a:charges", Anchor::Session(5), &[4]),

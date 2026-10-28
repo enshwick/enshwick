@@ -3,10 +3,10 @@
 //! per world and, for kinds that ask for it, sent to players.
 //!
 //! A load numbers the world's entities anew, so the server keeps each value
-//! under its entity's place: the template and the exact transform the save
-//! holds. After the first step of a loaded world every value finds its
+//! under its entity's place: the template and the position as the save
+//! keeps it. After the first step of a loaded world every value finds its
 //! entity again; a value whose place no entity, or more than one, holds
-//! stays aside in the world's file and is never given to another entity.
+//! goes aside in the world's file and is never given to another entity.
 //! Only an entity the save keeps in place carries a value: a player's
 //! character does not, so [`EntityData::set`] refuses it with
 //! [`SetError::NotKept`]. Once the entity is gone or holds another

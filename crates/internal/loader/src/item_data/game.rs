@@ -8,7 +8,7 @@ use enshwick::Entity;
 use enshwick::raw::read_at;
 use enshwick_gamedata::catalogue as names;
 
-use super::anchor::{Anchor, Placed, TRANSFORM_KEY};
+use super::anchor::{Anchor, Placed};
 use crate::host::Loader;
 
 /// `link` of an item in its root's own inventory rather than a linked one.
@@ -25,7 +25,8 @@ const SLOT_ID: &str = "keen::InventorySlotId";
 #[derive(Clone, Copy, Debug)]
 struct Layout {
     transform: u32,
-    transform_at: usize,
+    /// Where a `CurrentTransform` holds its position.
+    position: usize,
     item_state: u32,
     slot_entity: usize,
     slot_index: usize,
@@ -63,7 +64,8 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 .ok()?;
             let layout = Layout {
                 transform: ty(names::CURRENT_TRANSFORM)?,
-                transform_at: at(names::CURRENT_TRANSFORM_TRANSFORM)?,
+                position: at(names::CURRENT_TRANSFORM_TRANSFORM)?
+                    + at(names::WORLD_TRANSFORM_POSITION)?,
                 item_state: ty(ITEM_STATE)?,
                 slot_entity: field(ITEM_STATE, "containedInSlotId")? + field(SLOT_ID, "entityId")?,
                 slot_index: field(ITEM_STATE, "containedInSlotId")? + field(SLOT_ID, "slotIndex")?,
@@ -80,7 +82,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             // Every read lies inside the reflected type it reads.
             let size =
                 |name: &str| usize::try_from(loader.reflection.type_info(name).ok()?.size()).ok();
-            let inside = layout.transform_at + TRANSFORM_KEY
+            let inside = layout.position + size_of::<[i64; 3]>()
                 <= usize::try_from(transform_type.size()).ok()?
                 && layout.stack_pide.max(layout.stack_item) + 4 <= layout.stack
                 && layout.slot_entity.max(layout.item) + 4 <= size(ITEM_STATE)?
@@ -92,6 +94,12 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             inside.then_some(layout)
         })
         .as_ref()
+}
+
+/// Whether this build gives every layout an anchor reads; without it no
+/// anchor is read, and no record may be judged by one.
+pub(crate) fn readable(loader: &Loader) -> bool {
+    layout(loader).is_some()
 }
 
 /// The `CurrentTransform` hash, for the walk over placed things.
@@ -119,10 +127,10 @@ pub(crate) fn placed(loader: &Loader, entity: u32) -> Option<Placed> {
     let template = crate::world::template(loader, Entity(entity)).ok()?;
     let data = component(loader, entity, layout.transform)?;
     // SAFETY: `data` is the entity's live `CurrentTransform`, read on the game
-    // thread (checked by `world::component`); `layout` checked that its
-    // reflected transform holds `TRANSFORM_KEY` bytes from `transform_at`.
-    let transform = unsafe { read_at::<[u8; TRANSFORM_KEY]>(data, layout.transform_at) };
-    Some(Placed::new(template, transform))
+    // thread (checked by `world::component`); `layout` checked that it holds
+    // the three `i64` of its reflected position from `position`.
+    let position = unsafe { read_at::<[i64; 3]>(data, layout.position) };
+    Some(Placed::new(template, position))
 }
 
 /// The `link` of inventory `inventory` among `root`'s linked inventories, or

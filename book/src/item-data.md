@@ -47,8 +47,9 @@ A load numbers item entities anew, as it does every
 the server keeps each value under the item's place: the placed container,
 which of its inventories, and the slot. After the next load the value finds
 the item in that slot again, if it holds the same item. An item in a
-player's inventory has no such place, so its value lasts until the server
-stops and then stays aside in the world's file.
+player's inventory has no such place: its value lasts while the world
+holds the item. Once its player leaves or the server stops, the value goes
+aside in the world's file at the next save.
 
 ## Kinds
 
