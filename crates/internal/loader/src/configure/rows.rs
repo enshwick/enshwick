@@ -15,6 +15,10 @@ pub const MAX_STOPS: u32 = 32;
 /// shows as a line and is changed in the file.
 pub const MAX_LIST_ROWS: usize = 16;
 
+/// The most UTF-8 bytes a text field row holds; a longer text shows as a
+/// line and is changed in the file.
+pub const ENTRY_BYTES: usize = 256;
+
 /// How a setting shows.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Widget {
@@ -42,9 +46,17 @@ pub enum Widget {
         /// them.
         index: usize,
     },
-    /// A line with the value, for a setting no row edits: text, tables,
-    /// numbers without a range and lists other than short lists of numbers
-    /// with a range.
+    /// A text field over the value, for a text setting that fits
+    /// [`ENTRY_BYTES`].
+    Entry {
+        /// The text.
+        text: String,
+        /// The text as TOML, for the line shown where no field is drawn.
+        toml: String,
+    },
+    /// A line with the value, for a setting no row edits: longer texts,
+    /// tables, numbers without a range and lists other than short lists of
+    /// numbers with a range; for a secret, its mark instead of the value.
     Text(String),
 }
 
@@ -178,6 +190,13 @@ fn widget(field: &Field, value: &toml::Value, words: Option<Words<'_>>) -> Widge
                 whole,
             }
         }
+        (Some(Kind::String), ..) => match value.as_str() {
+            Some(text) if text.len() <= ENTRY_BYTES => Widget::Entry {
+                text: text.to_owned(),
+                toml: value.to_string(),
+            },
+            _ => Widget::Text(value.to_string()),
+        },
         _ => Widget::Text(value.to_string()),
     }
 }
@@ -231,6 +250,10 @@ pub fn rows(
                     stage: field.stage,
                 }
             };
+            if field.secret {
+                let mark = crate::texts::fill("config.secret", &[]);
+                return vec![row(field.key.clone(), label, Widget::Text(mark))];
+            }
             match element_field(field, &value) {
                 Some((element, items)) => items
                     .iter()
@@ -330,6 +353,25 @@ pub fn picked(field: &Field, index: usize) -> Option<String> {
     field.choices.get(index).cloned()
 }
 
+/// The text a text field holds: the first `len` of its `bytes`, at most
+/// [`ENTRY_BYTES`], cut back to whole UTF-8 characters.
+#[must_use]
+pub fn typed(bytes: &[u8], len: usize) -> &str {
+    let end = len.min(ENTRY_BYTES).min(bytes.len());
+    let bytes = &bytes[..end];
+    match core::str::from_utf8(bytes) {
+        Ok(text) => text,
+        Err(error) => core::str::from_utf8(&bytes[..error.valid_up_to()]).unwrap_or_default(),
+    }
+}
+
+/// The TOML a text field writes: the typed text as a string, whatever it
+/// looks like.
+#[must_use]
+pub fn entered(text: &str) -> String {
+    toml::Value::String(text.to_owned()).to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,6 +391,13 @@ mod tests {
                 Field::new("count", Stage::Runtime, &500).with_range(Some(0.0), Some(1000.0)),
             ],
         )
+    }
+
+    fn entry(text: &str) -> Widget {
+        Widget::Entry {
+            text: text.to_owned(),
+            toml: toml::Value::String(text.to_owned()).to_string(),
+        }
     }
 
     #[test]
@@ -383,8 +432,8 @@ mod tests {
                 index: 1
             }
         );
-        assert_eq!(rows[4].widget, Widget::Text("\"hi\"".into()));
-        assert_eq!(rows[4].lock, Lock::File);
+        assert_eq!(rows[4].widget, entry("hi"));
+        assert_eq!(rows[4].lock, Lock::Open);
         assert!(
             matches!(rows[5].widget, Widget::Slider { steps: 0, whole: true, value, .. } if (value - 500.0).abs() < 1e-3)
         );
@@ -400,6 +449,29 @@ mod tests {
             matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
         );
         assert_eq!(rows[0].lock, Lock::Open);
+    }
+
+    #[test]
+    fn a_secret_setting_shows_its_mark_never_its_value() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("token", Stage::Runtime, "").with_secret(true),
+                Field::new("pin", Stage::Runtime, &0).with_secret(true),
+            ],
+        );
+        let rows = rows(&schema, "token = \"hunter2\"\npin = 4815\n", None, None);
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(
+                row.widget,
+                Widget::Text("(secret)".to_owned()),
+                "{}",
+                row.key
+            );
+            assert_eq!(row.lock, Lock::File);
+        }
     }
 
     #[test]
@@ -466,6 +538,60 @@ mod tests {
         assert!(schema.field("enabled").unwrap().check(&v["v"]).is_ok());
         assert_eq!(key_words("max_altars"), "Max altars");
         assert_eq!(key_words(""), "");
+    }
+
+    #[test]
+    fn a_text_setting_takes_typed_text_unless_it_is_secret_or_too_long() {
+        let long = "x".repeat(ENTRY_BYTES + 1);
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("motd", Stage::Runtime, "hello"),
+                Field::new("token", Stage::Runtime, "").with_secret(true),
+                Field::new("banner", Stage::Runtime, ""),
+                Field::new("tags", Stage::Runtime, &["a"]),
+            ],
+        );
+        let file = format!("motd = \"Привіт\"\ntoken = \"hunter2\"\nbanner = \"{long}\"\n");
+        let rows = rows(&schema, &file, None, None);
+        assert_eq!(
+            (&rows[0].widget, rows[0].lock),
+            (&entry("Привіт"), Lock::Open)
+        );
+        assert_eq!(rows[1].lock, Lock::File, "a secret is changed in the file");
+        assert!(matches!(&rows[1].widget, Widget::Text(mark) if !mark.contains("hunter2")));
+        assert!(
+            matches!(rows[2].widget, Widget::Text(_)),
+            "too long to type"
+        );
+        assert_eq!(rows[2].lock, Lock::File);
+        assert_eq!(rows[3].lock, Lock::File, "a list is not text");
+    }
+
+    #[test]
+    fn typed_text_is_cut_to_the_buffer_on_a_whole_character() {
+        assert_eq!(typed(b"hello", 5), "hello");
+        assert_eq!(typed(b"hello", 2), "he");
+        assert_eq!(typed(b"hi", 9), "hi", "a length past the bytes holds them");
+        let word = "жук".as_bytes();
+        assert_eq!(typed(word, 5), "жу", "half a letter is dropped");
+        assert_eq!(typed(word, 1), "");
+        let mut full = vec![b'a'; ENTRY_BYTES - 1];
+        full.extend_from_slice("ж".as_bytes());
+        assert_eq!(typed(&full, full.len()).len(), ENTRY_BYTES - 1);
+        assert_eq!(typed(&[0xff, b'a'], 2), "", "bytes that are no text");
+    }
+
+    #[test]
+    fn typed_text_writes_a_toml_string_the_schema_accepts() {
+        let field = Field::new("motd", Stage::Runtime, "");
+        for text in ["42", "true", "a \"quoted\" \\ line", "Привіт", ""] {
+            let toml = entered(text);
+            let table: toml::Table = format!("v = {toml}").parse().unwrap();
+            assert_eq!(table["v"].as_str(), Some(text), "{toml}");
+            assert!(field.check(&table["v"]).is_ok());
+        }
     }
 
     #[test]

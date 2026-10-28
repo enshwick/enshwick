@@ -55,7 +55,7 @@ use entries::mods::{
 use entries::net::{net_channel, net_ready, net_send};
 use entries::services::{
     attach_point, declare_content, define_event, define_point, publish, run_point, send_event,
-    service, subscribe, subscribe_event,
+    service, set_tick_every, subscribe, subscribe_event, subscribe_tick,
 };
 use entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
@@ -142,7 +142,7 @@ impl ModRecord {
         let texts = self.texts.lock().ok();
         self.meta.name_in(
             texts.as_ref().and_then(|t| t.as_ref()),
-            crate::content::language(),
+            crate::texts::language(),
         )
     }
 
@@ -157,7 +157,7 @@ impl ModRecord {
         let texts = self.texts.lock().ok();
         self.meta.description_in(
             texts.as_ref().and_then(|t| t.as_ref()),
-            crate::content::language(),
+            crate::texts::language(),
         )
     }
 
@@ -788,6 +788,8 @@ pub(crate) static API: HostApi = HostApi {
     account_action,
     allowlist_set,
     allowlist_has,
+    subscribe_tick,
+    set_tick_every,
     map_frame,
 };
 

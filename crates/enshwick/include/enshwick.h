@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 3
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 3
+#define ENSHWICK_ABI_MINOR 4
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -2110,6 +2110,11 @@ typedef struct EnshwickUiMarker {
 // it: `Status::OK` to accept it; else the reason, written to `why` and valid
 // until the mod's next call, and `Status::REFUSED`.
 //
+// A reason that starts with a key of the mod's texts, followed by
+// tab-separated `name=value` pairs (`"config.min\tmin=2"`), shows as that
+// text in the reader's language with each `{name}` filled; any other
+// reason shows as written. A name holds no `=`; neither holds a tab.
+//
 // It must not unwind.
 typedef EnshwickStatus (*EnshwickConfigCheckFn)(struct EnshwickStr text,
                                                 struct EnshwickStr *why,
@@ -2485,7 +2490,8 @@ typedef void (*EnshwickActionFn)(const struct EnshwickActionCall *call,
 // `HostApi::recipe_kind`; a later minor may
 // add kinds, which a mod reads as `RecipeKind::OTHER`.
 typedef uint32_t EnshwickRecipeKind;
-// None of the kinds below: equipment, props, materials and the rest.
+// None of the kinds below: equipment, functional props, materials and
+// the rest.
 #define EnshwickRecipeKind_OTHER 0
 // A building block.
 #define EnshwickRecipeKind_BUILDING_BLOCK 1
@@ -2495,6 +2501,8 @@ typedef uint32_t EnshwickRecipeKind;
 #define EnshwickRecipeKind_OVERGROWTH 3
 // A terrain material.
 #define EnshwickRecipeKind_TERRAIN 4
+// A placed prop the game files under its Decorative crafting group.
+#define EnshwickRecipeKind_DECORATIVE 5
 
 // A game rate of `HostApi::rate` and
 // `HostApi::set_rate`, by the loader's stable
@@ -2724,6 +2732,14 @@ typedef struct EnshwickMapMarkerInfo {
   // none.
   uint8_t label[16];
 } EnshwickMapMarkerInfo;
+
+// A periodic tick handler a mod subscribed with
+// `HostApi::subscribe_tick`, for
+// `HostApi::set_tick_every`. Since minor 3.
+//
+// Valid for the mod that subscribed it until that mod reloads, after which
+// the loader answers `Status::MISSING`.
+typedef uint32_t EnshwickTickHandle;
 
 // The frame of the map of the scene the server runs, as
 // `HostApi::map_frame` writes it: where the
@@ -3543,9 +3559,13 @@ typedef struct EnshwickHostApi {
   EnshwickStatus (*knowledge_input_filter)(EnshwickModHandle me,
                                            EnshwickKnowledgeInputFn callback,
                                            void *user);
-  // The game language the client last asked a text in, as the game
-  // numbers them (see `crate::i18n::Language`); `0`, the fallback, on a
-  // server and before the client's first text. Any thread.
+  // The game language of the reader, as the game numbers them (see
+  // `crate::i18n::Language`). On a server, while the loader calls the
+  // mod about one player (an action, a settings check, the player's mod
+  // message) on that thread, the language that player's game named when
+  // it joined, always one the game knows; else `0`, the fallback. On a
+  // client, the language it last asked a text in, `0` before its first
+  // text. Any thread; the answer holds for the calling thread.
   uint32_t (*language)(EnshwickModHandle me);
   // Replaces the live game settings with `data` as
   // `HostApi::set_game_settings` does, and keeps the fields with a
@@ -4041,6 +4061,35 @@ typedef struct EnshwickHostApi {
   // while the list changes. A panic in the loader returns
   // `Status::REFUSED`. Since minor 1.
   EnshwickStatus (*allowlist_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *listed);
+  // Calls `callback` with `user`, `Event::TICKED` and a `TickData`
+  // on the server's game thread after a step, once `every_nanos` of wall
+  // time have passed since its last call, and on the first step after it
+  // subscribed; 0 calls it every step. Steps the handler skips cost it
+  // nothing. The data lives for the call; the loader keeps `user` and
+  // never frees it. Writes the handler's handle to `out`, the caller's,
+  // writable for four bytes, on `Status::OK` only. `Status::BAD_ARGS`
+  // for a null `out`; `Status::TOO_LATE` outside `enshwick_mod_init`
+  // and a reloading mod's init again. The handler runs until the mod is
+  // off; a panic in it turns the mod off. It may call
+  // `HostApi::set_tick_every` on itself. `Status::REFUSED` once the
+  // loader holds `u32::MAX` handlers, and when the loader panics.
+  // Since minor 3.
+  EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
+                                   uint64_t every_nanos,
+                                   EnshwickEventFn callback,
+                                   void *user,
+                                   EnshwickTickHandle *out);
+  // Sets the period of the mod's periodic tick handler `handle` to
+  // `every_nanos`, 0 for every step, from the next step on: the next
+  // call comes `every_nanos` after its last one, or on the next step when
+  // that time has passed. `Status::REFUSED` for another mod's handle;
+  // `Status::MISSING` for a handle the loader never gave out or one of
+  // the mod's copy before a reload. Any thread, the handler itself
+  // included. A panic in the loader returns `Status::REFUSED`. Since
+  // minor 3.
+  EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
+                                   EnshwickTickHandle handle,
+                                   uint64_t every_nanos);
   // Writes to `out` the frame of the map of the scene the server runs:
   // the scene's biome map, read from the game's archive once per scene
   // on a thread of the loader's; `Status::NOT_LOADED` until that read
@@ -4050,7 +4099,7 @@ typedef struct EnshwickHostApi {
   // (`Status::WRONG_THREAD` elsewhere or inside a step);
   // `Status::MISSING` while no world runs, for a scene without a biome
   // map, or when the scene does not read on this build. A panic in the
-  // loader returns `Status::REFUSED`. Since minor 3.
+  // loader returns `Status::REFUSED`. Since minor 4.
   EnshwickStatus (*map_frame)(EnshwickModHandle me, struct EnshwickMapFrameInfo *out);
 } EnshwickHostApi;
 
@@ -4200,11 +4249,31 @@ typedef struct EnshwickQuestData {
 } EnshwickQuestData;
 
 // The data of the `Ticked` event.
+//
+// A handler on a period sees the steps and the time since its own last
+// call; an every-step handler sees one step and the time since the step
+// before.
 typedef struct EnshwickTickData {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // Steps since the loader started counting, from 1.
   uint64_t step;
+  // Server steps since this handler's last call: 1 for an every-step
+  // handler and for a handler's first call. Since minor 3.
+  uint64_t elapsed_steps;
+  // Wall time since this handler's last call in nanoseconds; for its
+  // first call, and for an every-step handler, the time since the step
+  // before. 0 on the loader's first step. Since minor 3.
+  uint64_t elapsed_nanos;
+  // The average time between server steps in nanoseconds, over about the
+  // last 16 steps; 0 until a step has been measured. Since minor 3.
+  uint64_t step_nanos;
+  // What one call of this mod's event handlers cost on average since
+  // this handler's last call, in nanoseconds; 0 for an every-step
+  // handler, unless the loader's diagnostics time callbacks, and for
+  // about a second after they start, while the loader measures its
+  // clock. Since minor 3.
+  uint64_t cost_nanos;
 } EnshwickTickData;
 
 // A box of voxels, for `TransactionOp::ERASE`.

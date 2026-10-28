@@ -127,6 +127,8 @@ ids! {
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_EQUIPMENT_SLOT = "item_info.equipment_slot";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_INFO_TAGS = "item_info.tags";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_DAMAGE_MOD = "item_info.damage_mod";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_SPEED_MOD = "item_info.speed_mod";
@@ -150,6 +152,10 @@ ids! {
     ARMOR_DISTRIBUTION = "armor_distribution";
     #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_SLOT_TYPE = "item_slot_type";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_TAG_WEIGHT = "item_tag_weight";
+    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    ITEM_TAG_WEIGHT_TAG = "item_tag_weight.tag";
     ITEM_STAT = "item_stat";
     ITEM_STAT_LABEL = "item_stat.label";
     ITEM_STAT_FORMAT = "item_stat.format";

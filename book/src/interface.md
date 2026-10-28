@@ -163,6 +163,13 @@ The buttons are the game's: `Ok`, `Cancel`, `Retry`, `Ignore`, `Reset`,
 When the loader cannot link the interface on a game build, frame callbacks
 never run and dialogs show as system message boxes instead.
 
+## The title screen's line
+
+Under the game's version on the title screen, the loader writes its own line
+in the same look: `Enshwick 1.0.0-alpha.9 · mods: 6`, with how many mods are
+off and a warning when this game version leaves some of the loader's features
+off.
+
 ## The Mods screen
 
 The loader adds a "Mods" entry to the title screen's main menu and to the
@@ -173,7 +180,14 @@ it extends, and edits each player's own settings of each mod that derives
 their last tab, with nothing to write in the mod. See
 [Settings per world](settings.md#settings-per-world). Back, Escape or the
 gamepad's B steps back from a mod's settings to the list, and from the list
-out.
+out. While a text field has the caret, Back takes the caret from the field
+and leaves the page open; the next Back steps back.
+
+The list of mods, a mod's settings and the server's settings scroll in the
+game's own scroll area, with its scrollbar, as the game's world settings do.
+On a game build where the loader cannot draw that scroll area, the screen
+shows a few at a time with "Next page" and "Previous page" buttons, and the
+log says why.
 
 In a game, the screen also shows the [player actions](actions.md) the
 server offers the player: an Actions button above the list, and one under

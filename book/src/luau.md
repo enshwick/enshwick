@@ -173,7 +173,8 @@ reaches, its named values, and each field's place with the layout hash the
 owner's build wrote. The loader links only when every hash matches the
 owner's, the input the module reads is no larger than the owner's and the
 answer has the owner's size. A script changes an answer only of a number,
-`boolean`, entity or GUID type, whose hash the runtime checks against the
+`boolean`, GUID or id type (`Entity`, `ItemId`, `RecipeId`, `KnowledgeId`,
+`SkillNode`, `PlayerKey`), whose hash the runtime checks against the
 type the module names; on another answer type it may observe the point. The handler gets the input and the answer so
 far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
 refusable point:
@@ -202,7 +203,8 @@ A Luau mod hears another mod's [events](services.md) and sends its own.
 events/<event>.luau` writes the description of an event the owner lists in
 its `manifest!(events: [..])`. A description may also be written by hand:
 each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
-`bool`, `entity` or `guid`, laid out and hashed as Rust lays out a
+`bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
+`knowledge_id`, `skill_node` or `player_key`, laid out and hashed as Rust lays out a
 `#[repr(C)]` struct of those fields:
 
 ```luau

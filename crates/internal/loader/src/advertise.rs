@@ -1,7 +1,7 @@
 //! The server tells the server browser which mod set it runs.
 //!
 //! Once the dedicated server has logged on to Steam, the loader appends
-//! `[enshwick <fingerprint>]` to its Steam name and sets the rules `enshwick`
+//! `[mods: <count of join mods>]` to its Steam name and sets the rules `enshwick`
 //! (the fingerprint) and `enshwick.mods`, `enshwick.mods.1`, ... (the mods that
 //! count, `id@version`, split to fit Steam's rule length), and for each join
 //! mod with join values `enshwick.sync.<id>`, `enshwick.sync.<id>.1`, ...
@@ -183,7 +183,7 @@ impl Advert {
         }
         let fingerprint = fingerprint(loader_version, mods, &fit);
         Self {
-            name: server_name(configured, &fingerprint),
+            name: server_name(configured, mods.len()),
             fingerprint,
             rules,
             too_long,
@@ -252,13 +252,17 @@ pub fn rule_name(index: usize) -> String {
     part_name(RULE_MODS, index)
 }
 
-/// `name` with the fingerprint appended, shortened to fit Steam's limit.
+/// `name` with the count of its join mods appended, such as `[mods: 6]`,
+/// shortened to fit Steam's limit; a suffix the loader appended before is
+/// replaced.
 #[must_use]
-pub fn server_name(name: &str, fingerprint: &str) -> String {
-    let suffix = format!(" [enshwick {fingerprint}]");
+pub fn server_name(name: &str, mods: usize) -> String {
+    let suffix = format!(" [mods: {mods}]");
     let base = name.trim();
-    let base = base
-        .find(" [enshwick ")
+    let base = [" [mods: ", " [enshwick "]
+        .iter()
+        .filter_map(|mark| base.find(mark))
+        .min()
         .map_or(base, |at| base[..at].trim_end());
     let room = NAME_LIMIT.saturating_sub(suffix.len());
     let mut cut = base.len().min(room);
@@ -582,10 +586,7 @@ mod tests {
                 ("enshwick.sync.count".to_owned(), "{ a = [2] }".to_owned()),
             ]
         );
-        assert_eq!(
-            advert.name,
-            format!("Homelab [enshwick {}]", advert.fingerprint)
-        );
+        assert_eq!(advert.name, format!("Homelab [mods: {}]", mods().len()));
         let huge = Advert::new(
             "0.1.0",
             "Homelab",
@@ -658,17 +659,17 @@ mod tests {
     }
 
     #[test]
-    fn the_name_carries_the_fingerprint_once_and_fits() {
+    fn the_name_counts_the_mods_once_and_fits() {
+        assert_eq!(server_name("Homelab", 6), "Homelab [mods: 6]");
+        assert_eq!(server_name("Homelab [mods: 2]", 6), "Homelab [mods: 6]");
         assert_eq!(
-            server_name("Homelab", "0a1b2c3d"),
-            "Homelab [enshwick 0a1b2c3d]"
+            server_name("Homelab [enshwick 0a1b2c3d]", 6),
+            "Homelab [mods: 6]"
         );
-        assert_eq!(
-            server_name("Homelab [enshwick 00000000]", "0a1b2c3d"),
-            "Homelab [enshwick 0a1b2c3d]"
-        );
-        let long = server_name(&"ї".repeat(40), "0a1b2c3d");
-        assert!(long.len() <= NAME_LIMIT && long.ends_with(" [enshwick 0a1b2c3d]"));
+        let long = server_name(&"ї".repeat(40), 12);
+        assert!(long.len() <= NAME_LIMIT && long.ends_with("ї [mods: 12]"));
+        let advert = Advert::new("0.1.0", "Homelab", &mods(), &Lines::default(), &none());
+        assert_eq!(advert.name, format!("Homelab [mods: {}]", mods().len()));
     }
 
     #[test]

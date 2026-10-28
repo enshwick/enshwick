@@ -250,6 +250,14 @@ authors and status, and edits each player's own (`client`) settings. Over
 the pause menu while hosting, its "World settings" button opens the game's
 world settings.
 
+On the Mods screen a text setting shows the game's own text field. Click
+it, type, and press Enter: the value goes through the same checks as any
+other change, and a refusal shows above the list. Only Enter sets the
+value: typing that ends any other way sets nothing. A text longer than 256
+bytes, and any text on a game build where the loader cannot draw the text
+field, shows as a line with the file's name instead. A `secret` shows only
+its mark, never its value.
+
 On a client joined to a dedicated server, the screen also offers "Server
 settings": the server's mods with settings, and each one's values as the
 server's world holds them, asked over the loader's own messages. An
@@ -262,7 +270,10 @@ second.
 
 Before anything writes, the loader runs the mod's own check: `load.config()`
 hands it over, and it parses what the mod would read and runs the type's
-`validate`; a refusal keeps the file and shows its reason.
+`validate`; a refusal keeps the file and shows its reason. A `validate` that
+returns `ConfigError::text("config.too-few", &[("min", "2")])` names a text
+of the mod's [texts](content/texts.md): each player reads it in their own
+language, with `{min}` filled in. A `String` reason shows as written.
 
 A value is TOML (`5`, `true`, `"text"`, `[1, 2]`); text settings also take
 plain words. After a write the loader raises the mod's settings event at once:

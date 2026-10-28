@@ -4,8 +4,6 @@
 //! after each mod loads, initialises and gets ready. The copy lives only
 //! while the loader starts; the changes found stay for the conflict report.
 
-use std::fmt::Write as _;
-
 /// Changed bytes closer than this join one range: a jump and the bytes it
 /// pads count once.
 const JOIN_GAP: usize = 16;
@@ -48,6 +46,20 @@ impl Stage {
             Self::Init => "in its init",
             Self::BeforeArming => "after every init, before enshwick armed its hooks",
             Self::Ready => "in its ready",
+        }
+    }
+
+    /// The key of [`describe`](Self::describe)'s text, for reports in the
+    /// reader's language.
+    #[must_use]
+    pub const fn key(self) -> &'static str {
+        match self {
+            Self::BeforeStart => "watch.before-start",
+            Self::Load => "watch.load",
+            Self::Skip => "watch.skip",
+            Self::Init => "watch.init",
+            Self::BeforeArming => "watch.before-arming",
+            Self::Ready => "watch.ready",
         }
     }
 }
@@ -295,18 +307,31 @@ pub fn report(changes: &[CodeChange], place: impl Fn(usize) -> String) -> Vec<St
         .into_iter()
         .map(|(start, end, mut members)| {
             members.sort_by_key(|c| changes.iter().position(|o| core::ptr::eq(o, *c)));
-            let mut line = format!(
-                "game code at {}, {} bytes: changed outside the API by ",
-                place(start),
-                end - start
-            );
-            for (i, change) in members.iter().enumerate() {
-                if i > 0 {
-                    line.push_str(", then by ");
-                }
-                let _w = write!(line, "{} {}", change.who(), change.stage.describe());
-            }
-            line
+            let by: Vec<String> = members
+                .iter()
+                .map(|change| {
+                    let who = if change.by.is_empty() {
+                        crate::texts::fill("watch.another-program", &[])
+                    } else {
+                        change.by.clone()
+                    };
+                    crate::texts::fill(
+                        "watch.change",
+                        &[
+                            ("who", &who),
+                            ("when", &crate::texts::fill(change.stage.key(), &[])),
+                        ],
+                    )
+                })
+                .collect();
+            crate::texts::fill(
+                "watch.code",
+                &[
+                    ("place", &place(start)),
+                    ("bytes", &(end - start).to_string()),
+                    ("changes", &by.join(&crate::texts::fill("watch.then", &[]))),
+                ],
+            )
         })
         .collect()
 }

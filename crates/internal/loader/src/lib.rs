@@ -99,6 +99,7 @@ mod kept_text;
 mod knowledge;
 #[cfg(windows)]
 mod label;
+pub mod listing;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the client's join reads lobbies")
@@ -228,6 +229,7 @@ mod terrain;
 mod texts;
 #[cfg(windows)]
 mod textures;
+pub mod ticks;
 #[cfg_attr(
     not(windows),
     expect(dead_code, reason = "only the Windows build writes the game's voxels")

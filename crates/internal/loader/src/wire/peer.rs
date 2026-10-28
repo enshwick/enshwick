@@ -24,6 +24,13 @@ pub struct Peer {
     /// Messages the peer may still send now.
     pub(crate) tokens: f64,
     seen: Instant,
+    /// The language the peer's player reads the game in, once its hello
+    /// named one.
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "the server reads it only in the game")
+    )]
+    pub(crate) language: Option<enshwick::i18n::Language>,
 }
 
 impl Default for Peer {
@@ -58,6 +65,7 @@ impl Peer {
             partial: HashMap::new(),
             tokens,
             seen: Instant::now(),
+            language: None,
         }
     }
 

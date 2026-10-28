@@ -17,8 +17,8 @@ use crate::abi::{
     ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
     StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
     SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront, ZoneCheckFn,
+    TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 use crate::abi::{Entity, ItemId, KnowledgeId, PlayerKey, RecipeId};
 
@@ -875,9 +875,13 @@ pub struct HostApi {
     /// only.
     pub knowledge_input_filter:
         extern "system" fn(me: ModHandle, callback: KnowledgeInputFn, user: *mut c_void) -> Status,
-    /// The game language the client last asked a text in, as the game
-    /// numbers them (see [`crate::i18n::Language`]); `0`, the fallback, on a
-    /// server and before the client's first text. Any thread.
+    /// The game language of the reader, as the game numbers them (see
+    /// [`crate::i18n::Language`]). On a server, while the loader calls the
+    /// mod about one player (an action, a settings check, the player's mod
+    /// message) on that thread, the language that player's game named when
+    /// it joined, always one the game knows; else `0`, the fallback. On a
+    /// client, the language it last asked a text in, `0` before its first
+    /// text. Any thread; the answer holds for the calling thread.
     pub language: extern "system" fn(me: ModHandle) -> u32,
     /// Replaces the live game settings with `data` as
     /// [`HostApi::set_game_settings`] does, and keeps the fields with a
@@ -1405,6 +1409,36 @@ pub struct HostApi {
     /// [`Status::REFUSED`]. Since minor 1.
     pub allowlist_has:
         extern "system" fn(me: ModHandle, account: PlayerKey, listed: *mut u8) -> Status,
+    /// Calls `callback` with `user`, [`Event::TICKED`] and a [`TickData`](super::TickData)
+    /// on the server's game thread after a step, once `every_nanos` of wall
+    /// time have passed since its last call, and on the first step after it
+    /// subscribed; 0 calls it every step. Steps the handler skips cost it
+    /// nothing. The data lives for the call; the loader keeps `user` and
+    /// never frees it. Writes the handler's handle to `out`, the caller's,
+    /// writable for four bytes, on [`Status::OK`] only. [`Status::BAD_ARGS`]
+    /// for a null `out`; [`Status::TOO_LATE`] outside `enshwick_mod_init`
+    /// and a reloading mod's init again. The handler runs until the mod is
+    /// off; a panic in it turns the mod off. It may call
+    /// [`HostApi::set_tick_every`] on itself. [`Status::REFUSED`] once the
+    /// loader holds `u32::MAX` handlers, and when the loader panics.
+    /// Since minor 3.
+    pub subscribe_tick: extern "system" fn(
+        me: ModHandle,
+        every_nanos: u64,
+        callback: EventFn,
+        user: *mut c_void,
+        out: *mut TickHandle,
+    ) -> Status,
+    /// Sets the period of the mod's periodic tick handler `handle` to
+    /// `every_nanos`, 0 for every step, from the next step on: the next
+    /// call comes `every_nanos` after its last one, or on the next step when
+    /// that time has passed. [`Status::REFUSED`] for another mod's handle;
+    /// [`Status::MISSING`] for a handle the loader never gave out or one of
+    /// the mod's copy before a reload. Any thread, the handler itself
+    /// included. A panic in the loader returns [`Status::REFUSED`]. Since
+    /// minor 3.
+    pub set_tick_every:
+        extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
     /// Writes to `out` the frame of the map of the scene the server runs:
     /// the scene's biome map, read from the game's archive once per scene
     /// on a thread of the loader's; [`Status::NOT_LOADED`] until that read
@@ -1414,6 +1448,6 @@ pub struct HostApi {
     /// ([`Status::WRONG_THREAD`] elsewhere or inside a step);
     /// [`Status::MISSING`] while no world runs, for a scene without a biome
     /// map, or when the scene does not read on this build. A panic in the
-    /// loader returns [`Status::REFUSED`]. Since minor 3.
+    /// loader returns [`Status::REFUSED`]. Since minor 4.
     pub map_frame: extern "system" fn(me: ModHandle, out: *mut MapFrameInfo) -> Status,
 }

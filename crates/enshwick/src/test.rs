@@ -91,6 +91,7 @@ mod rates;
 mod settings;
 mod stats;
 mod table;
+mod ticks;
 mod transactions;
 mod ui;
 mod world;

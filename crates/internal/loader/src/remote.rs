@@ -579,8 +579,14 @@ mod live {
         String::from_utf8_lossy(&player.name[..usize::from(player.name_len).min(64)]).into_owned()
     }
 
-    /// Takes a message a client sent, on the server's game thread.
+    /// Takes a message a client sent, on the server's game thread; the
+    /// answer is in the language the client's player reads.
     pub(crate) fn server(loader: &Loader, key: u64, message: Message) {
+        texts::for_player(key, || answer(loader, key, message));
+    }
+
+    /// Answers a message the client `key` sent.
+    fn answer(loader: &Loader, key: u64, message: Message) {
         let admin =
             player(loader, key).is_some_and(|p| p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
         match gate(key, admin, &message) {

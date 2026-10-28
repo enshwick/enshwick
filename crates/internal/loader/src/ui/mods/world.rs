@@ -53,7 +53,7 @@ pub(super) fn world_rows(
             let texts = record.texts.relock().clone();
             let words = texts.as_ref().map(|texts| rows::Words {
                 texts,
-                language: crate::content::language(),
+                language: texts::language(),
             });
             let mut rows = rows::rows(&schema, &file, server.as_ref().filter(|_| joined), words);
             if joined {
@@ -176,7 +176,7 @@ pub(super) fn world(read_only: bool) {
                     row.lock = Lock::File;
                 }
                 let id = loader.mods.get(*index).map_or("", |m| m.id.as_str());
-                if let Some(value) = draw_row(&paint, id, schema, &row) {
+                if let Some(value) = draw_row(&paint, id, schema, &row, None) {
                     changed = Some((*index, row.key.clone(), value));
                 }
             }

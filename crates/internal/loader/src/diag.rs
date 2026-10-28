@@ -467,33 +467,55 @@ conflicts:"
         }
     }
 
-    /// A few lines for the chat.
+    /// A few lines for the console, in the reader's language.
     #[must_use]
     pub fn short(&self) -> String {
-        let running = self.mods.iter().filter(|m| m.running).count();
-        let mut lines = vec![format!(
-            "Enshwick {}, up {}{}: {running} of {} mods running.",
-            self.version,
-            duration(self.uptime),
-            if self.hosting { ", server running" } else { "" },
-            self.mods.len()
+        let running = self.mods.iter().filter(|m| m.running).count().to_string();
+        let mods = self.mods.len().to_string();
+        let uptime = duration(self.uptime);
+        let head = if self.hosting {
+            "status.short.server"
+        } else {
+            "status.short"
+        };
+        let mut lines = vec![crate::texts::fill(
+            head,
+            &[
+                ("version", &self.version),
+                ("uptime", &uptime),
+                ("running", &running),
+                ("mods", &mods),
+            ],
         )];
         lines.extend(self.replaced.iter().map(|line| format!("{line}.")));
         for t in self.turned_off.iter().rev().take(3) {
-            lines.push(format!("{} off: {}", t.id, t.reason));
+            lines.push(crate::texts::fill(
+                "status.off",
+                &[("id", &t.id), ("reason", &t.reason)],
+            ));
         }
+        let hooks = self.targets.to_string();
+        let resources = self.served.resources.to_string();
+        let patches = self.patches.written.to_string();
+        let mut args = vec![
+            ("hooks", hooks.as_str()),
+            ("resources", resources.as_str()),
+            ("patches", patches.as_str()),
+        ];
         let busiest = self
             .hooks
             .as_ref()
             .and_then(|hooks| hooks.iter().max_by_key(|h| h.calls))
             .filter(|h| h.calls > 0)
-            .map(|h| format!(", busiest {} with {} calls", h.name, count(h.calls)))
-            .unwrap_or_default();
-        lines.push(format!(
-            "{} hooked functions{busiest}; {} resources served; {} code patches.",
-            self.targets, self.served.resources, self.patches.written
-        ));
-        lines.push("Full summary: logs/enshwick/status.log".to_owned());
+            .map(|h| (h.name.as_str(), count(h.calls)));
+        let line = if let Some((hook, calls)) = &busiest {
+            args.extend([("hook", *hook), ("calls", calls.as_str())]);
+            "status.hooks.busiest"
+        } else {
+            "status.hooks"
+        };
+        lines.push(crate::texts::fill(line, &args));
+        lines.push(crate::texts::fill("status.full", &[]));
         lines.join("\n")
     }
 }
@@ -540,6 +562,30 @@ fn nanos(ns: f64) -> String {
     }
 }
 
+/// The main menu's line under the game's version, in the reader's language.
+///
+/// It names the loader's version and how many `mods` load, how many of them
+/// are `off`, and whether this game version leaves some of the loader's
+/// features off (`lacking`).
+#[must_use]
+pub fn menu_line(version: &str, mods: usize, off: usize, lacking: bool) -> String {
+    let mods = mods.to_string();
+    let off = off.to_string();
+    let line = if off == "0" {
+        crate::texts::fill("menu.line", &[("version", version), ("mods", &mods)])
+    } else {
+        crate::texts::fill(
+            "menu.line.off",
+            &[("version", version), ("mods", &mods), ("off", &off)],
+        )
+    };
+    if lacking {
+        crate::texts::fill("menu.line.lacking", &[("line", &line)])
+    } else {
+        line
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,6 +622,19 @@ mod tests {
                 features: Vec::new(),
             },
         ]
+    }
+
+    #[test]
+    fn the_menu_line_counts_mods_and_warns_of_what_is_off() {
+        assert_eq!(menu_line("1.0.0", 6, 0, false), "Enshwick 1.0.0 · mods: 6");
+        assert_eq!(
+            menu_line("1.0.0", 6, 2, false),
+            "Enshwick 1.0.0 · mods: 6, off: 2"
+        );
+        assert_eq!(
+            menu_line("1.0.0", 0, 0, true),
+            "Enshwick 1.0.0 · mods: 0 · some features are off on this game version"
+        );
     }
 
     fn summary() -> Summary {

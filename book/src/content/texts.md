@@ -25,7 +25,15 @@ module reads it, and a server owner can add to it or change it.
   `zh-cn`. Codes ignore case; an unknown code is an error.
 - Keys are the mod's own names for its texts; values must be strings.
 - `en` is the fallback: a language without a text of its own for a key gets
-  the `en` text.
+  the `en` text. A regional language looks in its main variety first:
+  `pt-br` in `pt`, `es-mx` in `es-419` and then `es`, `fr-ca` in `fr`, `nb`
+  in `no`.
+  [`Language::lookup_order`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/i18n.rs)
+  gives the order.
+- `Language::OFFERED` lists the languages the game's settings offer: `en`,
+  `de`, `fr`, `it`, `es`, `ru`, `pl`, `ja`, `ko`, `pt-br`, `th`, `tr`,
+  `zh-cn`, `zh-tw` and `uk`. The game's English reads as `en-us`, which
+  falls back to `en`.
 
 Embed the file with `include_str!("texts.toml")` and read it during `init`
 with
@@ -93,8 +101,9 @@ manifest's `name` and `description` where the file lacks them:
 "mod.description" = "Більше олтарів на рівень Полум'я."
 ```
 
-A server tells joining players the manifest's name of each of its mods, since
-it cannot know their languages.
+A server names its mods to a joining player with Enshwick in that player's
+language, and to a game without Enshwick, which does not say its language,
+with the manifest's name.
 
 ## Texts the mod uses itself
 
@@ -126,11 +135,13 @@ assert_eq!(texts.get("greeting", Language::FALLBACK), Some("Hi"));
 assert_eq!(Language::from_code("pt-BR"), Some(Language::PT_BR));
 ```
 
-A test holds the file complete without naming its languages, so a new
-language is a new table and no change to the test:
+A test holds the file complete without naming its languages:
+`missing_in(Language::OFFERED)` lists each language the game offers and each
+key it lacks, so a language the game adds shows up as missing texts, and
+`untranslated()` catches a key one table forgot:
 
 ```rust
-use enshwick::i18n::Texts;
+use enshwick::i18n::{Language, Texts};
 
 // In a mod: const TEXTS: &str = include_str!("texts.toml");
 const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт\"\n";
@@ -138,6 +149,9 @@ const TEXTS: &str = "[en]\ngreeting = \"Hello\"\n[uk]\ngreeting = \"Привіт
 // The body of the mod's test `every_text_exists_in_all_languages`.
 let texts = Texts::parse(TEXTS).unwrap();
 assert_eq!(texts.untranslated(), []);
+// The body of `every_language_the_game_offers_has_every_text`; this short
+// file lacks most of them.
+assert!(!texts.missing_in(Language::OFFERED).is_empty());
 ```
 
 On a client,
@@ -153,9 +167,13 @@ let line = texts.fill("found", language(), &[("count", "3")]);
 assert!(line.contains('3'));
 ```
 
-The server does not know a player's language, and `language()` there is
-`Language::FALLBACK`; an [action](../actions.md)'s request carries the
-language the player's client reads.
+A player's game with Enshwick tells the server its language when it joins.
+On a server, `language()` is that player's language while the loader asks
+the mod about the player, such as an [action](../actions.md) or a check of
+settings the player changes; elsewhere on a server it is
+`Language::FALLBACK`. The loader's own answers to a player follow the
+player's language the same way; its console follows the loader's
+`language` setting ([logging](../logging.md)), English by default.
 [`enshwick-personal-safes`](https://github.com/enshwick/mod-personal-safes)
 names a Safe's owner on its label in one language from its settings, falling
 back to `Language::FALLBACK`.
@@ -210,8 +228,8 @@ without rebuilding it.
 The loader's own texts, the words of the Mods screen, the answers of the
 [console](../chat.md#the-console)'s tools, the reasons a settings change is refused and the
 name of an item whose mod is gone, ship in
-[`texts.toml`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts.toml),
-and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
+[`texts/`](https://github.com/enshwick/enshwick/blob/main/crates/internal/loader/src/texts),
+a file per language, and `mod-configs/enshwick.texts.toml` overrides them or adds a language the
 same way.
 
 The file is read on the machine the mod runs on. On a dedicated server it

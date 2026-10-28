@@ -10,8 +10,8 @@ what one side sees or decides, such as a server-only balance change.
 Once the dedicated server has logged on to Steam, the loader advertises the
 running join mods (the ones that are on):
 
-- `[enshwick <fingerprint>]` at the end of the server's Steam name, so players
-  see it in the server browser, with or without mods;
+- `[mods: 6]`, the count of its join mods, at the end of the server's Steam
+  name, so players see in the server browser that it runs mods;
 - the Steam rule `enshwick`: the fingerprint, eight hex digits over the loader
   version, every `id@version` and every mod's join values;
 - `enshwick.mods`, `enshwick.mods.1`, ...: the mods, `id@version`, sorted and

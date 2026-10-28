@@ -36,7 +36,7 @@ The types are in
 
 | Event | Data | When | Thread |
 | --- | --- | --- | --- |
-| `Ticked` | `TickData` (`step`) | after each simulation step: about 20 a second with nobody online, 60 with players; from before `WorldLoaded` | game |
+| `Ticked` | `TickData` (`step`, `elapsed_steps`, `elapsed_nanos`, `step_nanos`, `cost_nanos`) | after a server step, every 100 ms by default; see [Ticks](#ticks); from before `WorldLoaded` | game |
 | `WorldLoaded` | none | the world finished loading and the server runs | game |
 | `WorldSaved` | none | a save of the world finished writing to disk | game |
 | `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world | game |
@@ -60,6 +60,7 @@ The types are in
 The data:
 
 - `TickData::step` counts steps since the loader started counting, from 1.
+  The other fields are in [Ticks](#ticks).
 - `PlayerData` has the server's player `slot` (0 to 15), the character's
   `entity` and `key`, the same number for the same player account in every
   session. [`World::player`](world.md) gives the rest, such as the name.
@@ -79,6 +80,98 @@ version.
 [`mods::join_missing()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/mods.rs)
 lists them with the server's versions and homepages. The handler runs on the
 game thread.
+
+## Ticks
+
+On dedicated server build 399 the simulation runs fixed ticks of 1/60 s, and
+one step runs 1 to 3 of them (read from the server's code). With nobody
+online the server made 20 steps a second over 229 minutes of its own
+statistics. With players its loop waits only 1 ms, which allows up to 60
+steps a second; that rate is not yet measured with a real player. Steps
+are not time, so a tick handler runs on a period of wall time:
+
+- `load.on::<Ticked>(f)` runs `f` after the first step, then after the first
+  step at least `Ticked::DEFAULT_EVERY` (100 ms) after its last call.
+- `load.on_tick(every, f)` picks the period; `Duration::ZERO` runs `f` on
+  every step.
+- `load.on_every_step(f)` runs `f` on every step, always. Use it for state
+  that changes each step, input or the camera.
+
+A call costs about 1 µs, most of it the processor fetching the mod's code and
+data afresh (measured on a server copy with 11 mods, build 399). Steps a handler skips never enter the mod and cost it nothing.
+
+`TickData` says what passed since the handler's last call:
+
+- `elapsed_steps()`: the server steps, 1 for an every-step handler;
+- `elapsed()`: the wall time, for a first call the time since the step
+  before;
+- `step_interval()`: the average time between steps over about the last 16
+  steps;
+- `cost()`: what one call of the mod's event handlers cost on average since
+  the last call, when the loader's `diagnostics` setting times callbacks;
+  `None` otherwise and for every-step handlers.
+
+```rust
+use std::time::Duration;
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    load.on::<enshwick::events::Ticked>(|tick| {
+        enshwick::debug!("{} steps in {:?}", tick.elapsed_steps(), tick.elapsed());
+    })?;
+    load.on_tick(Duration::from_secs(1), |_| enshwick::debug!("a second"))?;
+    load.on_every_step(|tick| enshwick::debug!("step {}", tick.step))
+}
+```
+
+`on_tick` returns a `TickPeriod`, a `Copy` handle to keep anywhere, the
+handler included. Its `set_every(period)` takes effect on the next step. The
+next call then comes a period after the last one, or at once if that time has
+passed. The every-step handler of `on_every_step` has no period
+to change.
+
+### An adaptive tick
+
+A handler that need not keep pace with the server can follow its load. This
+one runs every 100 ms to 2 s: it slows down while steps come late or its own
+calls cost much, and speeds up again when there is room.
+
+```rust
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+
+use enshwick::abi::TickData;
+use enshwick::events::TickPeriod;
+
+const FASTEST: Duration = Duration::from_millis(100);
+const SLOWEST: Duration = Duration::from_secs(2);
+
+static PERIOD: OnceLock<TickPeriod> = OnceLock::new();
+static EVERY_MS: AtomicU64 = AtomicU64::new(100);
+
+fn adapt(tick: &TickData) {
+    let every = Duration::from_millis(EVERY_MS.load(Ordering::Relaxed));
+    let late = tick.step_interval().is_some_and(|s| s > Duration::from_millis(60));
+    let costly = tick.cost().is_some_and(|c| c > Duration::from_micros(50));
+    let next = if late || costly {
+        (every * 2).min(SLOWEST)
+    } else {
+        (every / 2).max(FASTEST)
+    };
+    if next != every && PERIOD.get().is_some_and(|p| p.set_every(next).is_ok()) {
+        EVERY_MS.store(u64::try_from(next.as_millis()).unwrap_or(u64::MAX), Ordering::Relaxed);
+    }
+}
+
+fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    let period = load.on_tick(FASTEST, |tick| {
+        // The mod's own work goes here.
+        adapt(tick);
+    })?;
+    let _first = PERIOD.set(period);
+    Ok(())
+}
+```
 
 ## Game events
 
@@ -105,10 +198,12 @@ A killed process raises no `ShutdownStarted`.
 returns a
 [`Scheduler`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/schedule.rs),
 a `Copy` handle that puts work on the server's game thread after a simulation
-step:
+step. The scheduler looks for due tasks on a tick of the default period, so
+its precision is `Ticked::DEFAULT_EVERY` (100 ms):
 
-- `next_tick(f)` runs `f` after the next step;
-- `after(delay, f)` runs `f` after the first step at least `delay` from now;
+- `next_tick(f)` runs `f` on the scheduler's next pass, within the tick
+  period;
+- `after(delay, f)` runs `f` on the first pass at least `delay` from now;
 - `every(period, f)` runs `f` about every `period`, the first time a period
   from now, while `f` returns `ControlFlow::Continue(())`; `Break(())` stops it.
 
@@ -133,8 +228,9 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - Tasks run where the game's server code runs, so they may call into the game,
   [read the world](world.md) and [run console lines](chat.md#the-console).
 - Tasks run only while steps run: on a dedicated server, or on a client while
-  it hosts a game. Timing follows steps, so a task is late by up to one step.
-- An idle step costs one atomic load.
+  it hosts a game. A task is late by up to one tick period and one step.
+- A pass with nothing due costs one atomic load, and the steps between
+  passes cost nothing.
 
 ## The step clock
 
@@ -144,10 +240,11 @@ period after a player's action, counts in the server's steps instead:
 [`load.step_clock()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/time.rs)
 returns the mod's
 [`StepClock`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/time.rs),
-which every `Ticked` moves on by the step's real length, at most
-`StepClock::MAX_STEP` (250 ms). A stalled server, a world loading or a
-debugger's pause takes no steps, so the clock stands still with it; the first
-step after counts `MAX_STEP` at most.
+which its `Ticked` handler moves on by the time the tick carries, at most
+`StepClock::MAX_STEP` (250 ms) for each step in it. A stalled server, a world
+loading or a debugger's pause takes no steps, so the clock stands still with
+it. The first step after counts `MAX_STEP` at most. The clock moves on with
+its tick, every 100 ms by default.
 
 ```rust
 use std::time::Duration;
@@ -167,4 +264,5 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   `&'static StepClock` to copy anywhere.
 - `now()` reads it from any thread without a lock.
 - A unit test makes its own with `StepClock::new()` and moves it with
-  `step(instant)`.
+  `advance(elapsed, steps)`, or ticks the fake host with
+  `loader.tick(elapsed)` ([testing](testing.md)).

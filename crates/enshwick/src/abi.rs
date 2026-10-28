@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 3;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 3;
+pub const ABI_MINOR: u16 = 4;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -209,9 +209,9 @@ macro_rules! impl_headed {
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, TickData, read_headed};
+/// use enshwick::abi::{TickData, read_headed};
 ///
-/// let mut old = TickData { header: Header::of::<TickData>(), step: 7 };
+/// let mut old = TickData::new(7);
 /// old.header.size = 8;
 /// // SAFETY: `old` is a tick readable for the eight bytes its header states.
 /// let tick = unsafe { read_headed(&raw const old, 8) }.ok_or("too short")?;
@@ -228,6 +228,12 @@ pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T
     let header = unsafe { raw.cast::<Header>().read_unaligned() };
     if !header.covers(required.max(size_of::<Header>())) {
         return None;
+    }
+    if header.covers(size_of::<T>()) {
+        // SAFETY: the caller guarantees `raw` readable for `header.size`
+        // bytes, which the check above found at least a whole `T`, and
+        // `Headed` makes any bytes the writer wrote a valid `T`.
+        return Some(unsafe { raw.read_unaligned() });
     }
     let known = (header.size as usize).min(size_of::<T>());
     let mut out = T::zeroed();
@@ -256,11 +262,11 @@ pub unsafe fn read_headed<T: Headed>(raw: *const T, required: usize) -> Option<T
 /// # Examples
 ///
 /// ```
-/// use enshwick::abi::{Header, TickData, write_headed};
+/// use enshwick::abi::{TickData, write_headed};
 ///
-/// let mut old = TickData { header: Header::of::<TickData>(), step: 0 };
+/// let mut old = TickData::new(0);
 /// old.header.size = 8;
-/// let new = TickData { header: Header::of::<TickData>(), step: 7 };
+/// let new = TickData::new(7);
 /// // SAFETY: `old` is a tick writable for the eight bytes its header states.
 /// assert!(unsafe { write_headed(&raw mut old, new) });
 /// assert_eq!((old.header.size, old.step), (8, 0));
@@ -695,8 +701,12 @@ const _: () = {
     assert!(size_of::<StatModify>() == 8 + 8 + 12 + 4 + 8);
     assert!(size_of::<StatChange>() == 8 + 24);
     assert!(core::mem::offset_of!(HostApi, language) == 24 + 123 * 8);
-    assert!(size_of::<HostApi>() == 24 + 171 * 8);
-    assert!(core::mem::offset_of!(HostApi, map_frame) == 24 + 170 * 8);
+    assert!(size_of::<HostApi>() == 24 + 173 * 8);
+    assert!(core::mem::offset_of!(HostApi, subscribe_tick) == 24 + 170 * 8);
+    assert!(core::mem::offset_of!(HostApi, set_tick_every) == 24 + 171 * 8);
+    assert!(size_of::<TickData>() == 8 + 5 * 8);
+    assert!(size_of::<TickHandle>() == 4);
+    assert!(core::mem::offset_of!(HostApi, map_frame) == 24 + 172 * 8);
     assert!(size_of::<MapFrameInfo>() == 8 + 16 + 16 + 8);
     assert!(core::mem::offset_of!(HostApi, map_markers) == 24 + 166 * 8);
     assert!(core::mem::offset_of!(HostApi, account_action) == 24 + 167 * 8);

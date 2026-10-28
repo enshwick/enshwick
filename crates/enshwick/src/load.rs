@@ -250,7 +250,7 @@ impl Load<'_> {
     }
 
     /// The mod's [`Scheduler`](crate::schedule::Scheduler), which runs work on
-    /// the server's game thread after each simulation step: the dedicated
+    /// the server's game thread on a tick of the default period: the dedicated
     /// server's, or the built-in server's while a client hosts a game.
     ///
     /// # Errors

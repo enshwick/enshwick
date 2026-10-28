@@ -54,6 +54,9 @@ pub struct Hello {
     /// In a game the client hosts, the host's own number for its hello; 0
     /// elsewhere.
     pub nonce: u64,
+    /// The language the player reads the game in; `None` for a hello that
+    /// names none.
+    pub language: Option<enshwick::i18n::Language>,
 }
 
 /// A server join mod the player's game lacks or runs in another version.
@@ -434,6 +437,7 @@ mod tests {
             mods: mods.to_owned(),
             complete: true,
             nonce: 0,
+            language: None,
         }
     }
 
@@ -836,6 +840,7 @@ mod tests {
             mods: "area@1.0.0,you.trading-post@0.2.0".to_owned(),
             complete: false,
             nonce: 0,
+            language: None,
         };
         let server = "area@1.0.0,camera@1.0.0,you.trading-post@0.3.0,zones@0.1.0";
         assert_eq!(
@@ -850,6 +855,7 @@ mod tests {
             mods: String::new(),
             complete: false,
             nonce: 0,
+            language: None,
         };
         assert_eq!(needs(server, Some(&empty)).len(), 4);
     }
