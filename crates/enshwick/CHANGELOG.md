@@ -15,6 +15,9 @@ Each entry names the pull request that made the change.
   `named` (#623).
 - `loot::LootContainerId`, the game's name for a loot roll's node and
   labels (#623).
+- The title screen shows the loader's line under the game's version,
+  `Enshwick 1.0.0-alpha.9 · mods: 6`, with the mods off and a warning when
+  the game version leaves features off (#624).
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
   test holds its texts complete for every offered language.
@@ -91,6 +94,10 @@ Each entry names the pull request that made the change.
   texts, which each player reads in their own language; the `validate` of
   the `Config` derive takes any error that converts into `ConfigError`
   (`String`, `&str` or a `ConfigError`) (#620).
+
+### Fixed
+
+- The Mods screen shows a secret setting as "(secret)" and never its value.
 
 ## [1.0.0-alpha.9] - 2026-10-27
 

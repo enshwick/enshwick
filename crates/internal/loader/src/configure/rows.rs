@@ -231,6 +231,10 @@ pub fn rows(
                     stage: field.stage,
                 }
             };
+            if field.secret {
+                let mark = crate::texts::fill("config.secret", &[]);
+                return vec![row(field.key.clone(), label, Widget::Text(mark))];
+            }
             match element_field(field, &value) {
                 Some((element, items)) => items
                     .iter()
@@ -400,6 +404,29 @@ mod tests {
             matches!(rows[2].widget, Widget::Slider { value, .. } if (value - 4.0).abs() < 1e-3)
         );
         assert_eq!(rows[0].lock, Lock::Open);
+    }
+
+    #[test]
+    fn a_secret_setting_shows_its_mark_never_its_value() {
+        let schema = Schema::new(
+            "",
+            "config",
+            vec![
+                Field::new("token", Stage::Runtime, "").with_secret(true),
+                Field::new("pin", Stage::Runtime, &0).with_secret(true),
+            ],
+        );
+        let rows = rows(&schema, "token = \"hunter2\"\npin = 4815\n", None, None);
+        assert_eq!(rows.len(), 2);
+        for row in rows {
+            assert_eq!(
+                row.widget,
+                Widget::Text("(secret)".to_owned()),
+                "{}",
+                row.key
+            );
+            assert_eq!(row.lock, Lock::File);
+        }
     }
 
     #[test]
