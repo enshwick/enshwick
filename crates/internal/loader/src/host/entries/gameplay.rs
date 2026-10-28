@@ -437,7 +437,7 @@ pub(crate) extern "system" fn affix_info(
 pub(crate) extern "system" fn summon_item(
     me: ModHandle,
     item: enshwick::ItemId,
-    survivor: enshwick::abi::SurvivorId,
+    survivor: enshwick::abi::NpcId,
 ) -> Status {
     entry("summon_item", || match caller_index(me) {
         Ok((loader, _)) => crate::survivors::register_item(loader, item.get(), survivor.get()),

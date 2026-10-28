@@ -190,7 +190,7 @@ pub(super) unsafe fn merge_statuses(ctx: *mut u64) {
             let answer =
                 crate::profile::call(merge.owner, crate::profile::Feature::Survivors, || unsafe {
                     (merge.callback)(
-                        enshwick::abi::SurvivorId::new(id),
+                        enshwick::abi::NpcId::new(id),
                         bits.as_ptr(),
                         bits.len(),
                         user,

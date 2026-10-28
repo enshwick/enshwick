@@ -20,7 +20,7 @@ use crate::abi::{
     TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
     WeatherFront, ZoneCheckFn,
 };
-use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, PlayerKey, RecipeId, SurvivorId};
+use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
 /// The table of services the loader offers a mod.
 ///
@@ -294,8 +294,7 @@ pub struct HostApi {
     /// Files item `item` as a summoning staff of the survivor `survivor`, so
     /// the game treats it as that survivor's staff, on both sides. Allowed
     /// during `enshwick_mod_init` only.
-    pub summon_item:
-        extern "system" fn(me: ModHandle, item: ItemId, survivor: SurvivorId) -> Status,
+    pub summon_item: extern "system" fn(me: ModHandle, item: ItemId, survivor: NpcId) -> Status,
     /// Makes `callback` with `user` merge the statuses the client's survivor
     /// menu shows for a survivor with several entities. Client only; one mod
     /// at a time. Allowed during `enshwick_mod_init` only.

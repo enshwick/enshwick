@@ -2,7 +2,7 @@
 
 use core::ffi::c_void;
 
-use crate::abi::{Entity, Header, ItemId, SurvivorId};
+use crate::abi::{Entity, Header, ItemId, NpcId};
 
 /// A game system asking which entity is a survivor, as
 /// [`HostApi::survivor_lookup`](super::HostApi::survivor_lookup) hands it to the mod that answers.
@@ -18,7 +18,7 @@ use crate::abi::{Entity, Header, ItemId, SurvivorId};
 ///
 /// let lookup = SurvivorLookup {
 ///     header: Header::of::<SurvivorLookup>(),
-///     survivor: enshwick::survivors::SurvivorId::new(0x47a1_5e4a),
+///     survivor: enshwick::survivors::NpcId::new(0x47a1_5e4a),
 ///     vanilla: enshwick::Entity(4096),
 ///     purpose: SurvivorLookup::SPAWN,
 ///     entity: enshwick::Entity(0),
@@ -34,7 +34,7 @@ pub struct SurvivorLookup {
     /// Size and version of this struct.
     pub header: Header,
     /// The survivor's id.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// The game's own answer, 0 for none.
     pub vanilla: Entity,
     /// Who asks; one of the constants on this type.
@@ -97,7 +97,7 @@ pub type SurvivorLookupFn = unsafe extern "system" fn(
 /// ```
 /// use enshwick::abi::{BedCheck, Header};
 ///
-/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::SurvivorId::new(7), entity: enshwick::Entity(4096), bed: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
+/// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(4096), bed: enshwick::Entity(4100), home: [0; 3], bed_at: [4, 0, 4] };
 /// assert_eq!(check.bed, enshwick::Entity(4100));
 /// ```
 #[repr(C)]
@@ -106,7 +106,7 @@ pub struct BedCheck {
     /// Size and version of this struct.
     pub header: Header,
     /// The survivor's id.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// The survivor's entity.
     pub entity: Entity,
     /// The bed.
@@ -193,7 +193,7 @@ pub type SummonFn = unsafe extern "system" fn(summon: *const Summon, user: *mut 
 /// the pointer given at registration; returns [`SURVIVOR_STATUS_SET`] or-ed
 /// with the byte to show, or 0 to leave the game's.
 pub type SurvivorStatusFn = unsafe extern "system" fn(
-    survivor: SurvivorId,
+    survivor: NpcId,
     statuses: *const u8,
     count: usize,
     user: *mut c_void,

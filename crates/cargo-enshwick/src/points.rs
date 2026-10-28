@@ -477,11 +477,11 @@ const BUILT_IN: [BuiltIn; 9] = [
         luau: "number",
     },
     BuiltIn {
-        name: "enshwick.survivor_id",
-        rust: "enshwick::survivors::SurvivorId",
+        name: "enshwick.npc_id",
+        rust: "enshwick::survivors::NpcId",
         size: 4,
         align: 4,
-        read: "survivor_id",
+        read: "npc_id",
         luau: "number",
     },
 ];

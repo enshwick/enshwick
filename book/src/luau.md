@@ -174,7 +174,7 @@ owner's build wrote. The loader links only when every hash matches the
 owner's, the input the module reads is no larger than the owner's and the
 answer has the owner's size. A script changes an answer only of a number,
 `boolean`, GUID or id type (`Entity`, `ItemId`, `RecipeId`, `KnowledgeId`,
-`SkillNode`, `PlayerKey`, `BuffTypeId`, `SurvivorId`), whose hash the runtime checks against the
+`SkillNode`, `PlayerKey`, `BuffTypeId`, `NpcId`), whose hash the runtime checks against the
 type the module names; on another answer type it may observe the point. The handler gets the input and the answer so
 far, and returns a new answer, `nil` to keep it, or `enshwick.refuse` on a
 refusable point:
@@ -204,7 +204,7 @@ events/<event>.luau` writes the description of an event the owner lists in
 its `manifest!(events: [..])`. A description may also be written by hand:
 each field with a `name` and how it reads, `u8` to `i64`, `f32`, `f64`,
 `bool`, `guid`, or an id: `entity`, `item_id`, `recipe_id`,
-`knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `survivor_id`, laid out and hashed as Rust lays out a
+`knowledge_id`, `skill_node`, `player_key`, `buff_type_id` or `npc_id`, laid out and hashed as Rust lays out a
 `#[repr(C)]` struct of those fields:
 
 ```luau

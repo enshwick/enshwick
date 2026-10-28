@@ -35,7 +35,7 @@ mod workshop;
 
 pub use workshop::{WORKSHOP_SURVIVORS, WorkshopSurvivor};
 
-pub use crate::abi::SurvivorId;
+pub use crate::abi::NpcId;
 
 /// Who asks for a survivor's entity, with what it works on.
 ///
@@ -110,7 +110,7 @@ pub enum Purpose {
 #[derive(Debug)]
 pub struct Lookup {
     /// The survivor.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// The game's own answer, if any.
     pub vanilla: Option<Entity>,
     /// Who asks.
@@ -172,7 +172,7 @@ pub enum Answer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BedCheck {
     /// The survivor.
-    pub survivor: SurvivorId,
+    pub survivor: NpcId,
     /// Its entity.
     pub entity: Entity,
     /// The bed.
@@ -380,13 +380,13 @@ where
 }
 
 unsafe extern "system" fn run_status<F>(
-    survivor: SurvivorId,
+    survivor: NpcId,
     statuses: *const u8,
     count: usize,
     user: *mut c_void,
 ) -> u32
 where
-    F: Fn(SurvivorId, &[u8]) -> Option<u8>,
+    F: Fn(NpcId, &[u8]) -> Option<u8>,
 {
     let statuses = if statuses.is_null() || count == 0 {
         &[][..]
@@ -563,13 +563,13 @@ impl Load<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::survivors::SurvivorId;
+    /// use enshwick::survivors::NpcId;
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), SurvivorId(1_201_801_546))
+    ///     load.add_summon_item(enshwick::ItemId::new(0x5e01), NpcId(1_201_801_546))
     /// }
     /// ```
-    pub fn add_summon_item(&mut self, item: ItemId, survivor: SurvivorId) -> Result<(), Off> {
+    pub fn add_summon_item(&mut self, item: ItemId, survivor: NpcId) -> Result<(), Off> {
         let host = self.host();
         let status = (host.api().summon_item)(host.handle(), item, survivor);
         if status.is_ok() {
@@ -605,7 +605,7 @@ impl Load<'_> {
     /// ```
     pub fn on_survivor_status<F>(&mut self, merge: F) -> Result<(), Off>
     where
-        F: Fn(SurvivorId, &[u8]) -> Option<u8> + Send + Sync + 'static,
+        F: Fn(NpcId, &[u8]) -> Option<u8> + Send + Sync + 'static,
     {
         self.register(
             "the survivor menu merge",

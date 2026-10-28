@@ -235,7 +235,7 @@ pub(crate) struct State {
     /// Content served or put in the fake archive, by hash.
     pub(crate) content: std::collections::BTreeMap<[u32; 4], Vec<u8>>,
     pub(crate) item_values: std::collections::BTreeMap<(u32, u32), (u32, Vec<u8>)>,
-    pub(crate) summon_items: Vec<(crate::ItemId, crate::survivors::SurvivorId)>,
+    pub(crate) summon_items: Vec<(crate::ItemId, crate::survivors::NpcId)>,
     /// Stat kinds, modifiers and worn items.
     pub(crate) stats: super::stats::FakeStats,
     /// Extension points the mod defined and links it attached.

@@ -307,17 +307,17 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::abi::SurvivorLookup;
-    /// use enshwick::survivors::{Answer, SurvivorId};
+    /// use enshwick::survivors::{Answer, NpcId};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let vanilla = Some(enshwick::Entity(4096));
-    /// let answer = loader.survivor_lookup(SurvivorId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
+    /// let answer = loader.survivor_lookup(NpcId(7), vanilla, SurvivorLookup::SPAWN, None, [0; 3], &[]);
     /// assert_eq!(answer, Answer::Vanilla);
     /// ```
     #[must_use]
     pub fn survivor_lookup(
         &self,
-        survivor: crate::survivors::SurvivorId,
+        survivor: crate::survivors::NpcId,
         vanilla: Option<Entity>,
         purpose: u32,
         entity: Option<Entity>,
@@ -371,7 +371,7 @@ impl Installed {
     /// use enshwick::abi::{BedCheck, Header};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::SurvivorId::new(7), entity: enshwick::Entity(1), bed: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
+    /// let check = BedCheck { header: Header::of::<BedCheck>(), survivor: enshwick::survivors::NpcId::new(7), entity: enshwick::Entity(1), bed: enshwick::Entity(2), home: [0; 3], bed_at: [0; 3] };
     /// assert!(loader.survivor_bed_check(&check));
     /// ```
     #[must_use]
@@ -512,7 +512,7 @@ impl Installed {
     /// assert!(loader.summon_items().is_empty());
     /// ```
     #[must_use]
-    pub fn summon_items(&self) -> Vec<(crate::ItemId, crate::survivors::SurvivorId)> {
+    pub fn summon_items(&self) -> Vec<(crate::ItemId, crate::survivors::NpcId)> {
         table::with(Vec::new(), |s| s.summon_items.clone())
     }
 
@@ -523,12 +523,12 @@ impl Installed {
     ///
     /// ```
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.survivor_status(enshwick::survivors::SurvivorId::new(7), &[1, 3]), None);
+    /// assert_eq!(loader.survivor_status(enshwick::survivors::NpcId::new(7), &[1, 3]), None);
     /// ```
     #[must_use]
     pub fn survivor_status(
         &self,
-        survivor: crate::survivors::SurvivorId,
+        survivor: crate::survivors::NpcId,
         statuses: &[u8],
     ) -> Option<u8> {
         let (callback, user) = table::with(None, |s| s.survivor_status)?;

@@ -8,15 +8,13 @@ Each entry names the pull request that made the change.
 
 ### Added
 
-- `BuffTypeId` and `SurvivorId` are ABI ids (ABI 3.4): the buff and
-  survivor structs and `HostApi::remove_buff`, `summon_item` and the
-  survivor status merge take them, and they print as their number. Every
-  id the game derives from a GUID has `named`. Both have a `Shape`, and a Luau
-  script reads and answers them as `buff_type_id` and `survivor_id` (#623).
+- `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
+  ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
+  events carry them, and a Luau script reads and answers them as
+  `buff_type_id` and `npc_id`. Every id the game derives from a GUID has
+  `named` (#623).
 - `loot::LootContainerId`, the game's name for a loot roll's node and
-  labels; `Roll::node` and `Roll::labels` are `None` where the game has
-  none, and `Source::with_nodes` and `with_labels` take the ids (#623).
-
+  labels (#623).
 - `Language::OFFERED`, the languages the game's settings offer, and
   `Texts::missing_in(languages)`, each language's missing texts, so a mod's
   test holds its texts complete for every offered language.
@@ -43,6 +41,15 @@ Each entry names the pull request that made the change.
 - The fake host runs steps as the loader does with `Installed::tick` (#614).
 
 ### Changed
+
+- Breaking: `survivors::SurvivorId` is `NpcId`; the buff and survivor ABI
+  structs, `HostApi::remove_buff`, `summon_item` and the survivor status
+  merge take `BuffTypeId` and `NpcId`, and `BuffTypeId::from_guid` takes a
+  `Guid`. The fake host's `summon_items` and `survivor_status` carry the
+  ids (#623).
+- Breaking: `Roll::node` and `Roll::labels` are `Option<LootContainerId>`,
+  `None` where the game has none, and `Source::nodes`, `labels`,
+  `with_nodes` and `with_labels` take `LootContainerId` (#623).
 
 - Breaking: `Load::on::<Ticked>` runs the handler every
   `Ticked::DEFAULT_EVERY` (100 ms) instead of on every step; so do Luau's

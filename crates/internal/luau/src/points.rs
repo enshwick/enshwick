@@ -40,7 +40,7 @@ pub(crate) enum Primitive {
     SkillNode,
     PlayerKey,
     BuffTypeId,
-    SurvivorId,
+    NpcId,
 }
 
 impl Primitive {
@@ -65,7 +65,7 @@ impl Primitive {
             "skill_node" => Self::SkillNode,
             "player_key" => Self::PlayerKey,
             "buff_type_id" => Self::BuffTypeId,
-            "survivor_id" => Self::SurvivorId,
+            "npc_id" => Self::NpcId,
             _ => return None,
         })
     }
@@ -83,7 +83,7 @@ impl Primitive {
             | Self::KnowledgeId
             | Self::SkillNode
             | Self::BuffTypeId
-            | Self::SurvivorId => 4,
+            | Self::NpcId => 4,
             Self::U64 | Self::I64 | Self::F64 | Self::PlayerKey => 8,
             Self::Guid => 16,
         }
@@ -292,7 +292,7 @@ pub(crate) fn decode(
                 | Primitive::KnowledgeId
                 | Primitive::SkillNode
                 | Primitive::BuffTypeId
-                | Primitive::SurvivorId => LuaValue::Number(f64::from(u32::from_le_bytes([
+                | Primitive::NpcId => LuaValue::Number(f64::from(u32::from_le_bytes([
                     raw[0], raw[1], raw[2], raw[3],
                 ]))),
                 Primitive::I32 => LuaValue::Number(f64::from(i32::from_le_bytes([
@@ -424,7 +424,7 @@ fn encode_primitive(value: &LuaValue, p: Primitive, out: &mut [u8]) -> mlua::Res
         | Primitive::KnowledgeId
         | Primitive::SkillNode
         | Primitive::BuffTypeId
-        | Primitive::SurvivorId => out.copy_from_slice(
+        | Primitive::NpcId => out.copy_from_slice(
             &u32::try_from(whole(0.0, f64::from(u32::MAX))?)
                 .unwrap_or(0)
                 .to_le_bytes(),
@@ -492,7 +492,7 @@ impl Primitive {
             Self::SkillNode => enshwick::world::SkillNode::SHAPE,
             Self::PlayerKey => enshwick::PlayerKey::SHAPE,
             Self::BuffTypeId => enshwick::buffs::BuffTypeId::SHAPE,
-            Self::SurvivorId => enshwick::survivors::SurvivorId::SHAPE,
+            Self::NpcId => enshwick::survivors::NpcId::SHAPE,
         }
     }
 
@@ -532,7 +532,7 @@ mod tests {
             Primitive::SkillNode,
             Primitive::PlayerKey,
             Primitive::BuffTypeId,
-            Primitive::SurvivorId,
+            Primitive::NpcId,
         ])
     }
 
@@ -646,7 +646,7 @@ mod tests {
             ("skill_node", enshwick::world::SkillNode::SHAPE, 4),
             ("player_key", enshwick::PlayerKey::SHAPE, 8),
             ("buff_type_id", enshwick::buffs::BuffTypeId::SHAPE, 4),
-            ("survivor_id", enshwick::survivors::SurvivorId::SHAPE, 4),
+            ("npc_id", enshwick::survivors::NpcId::SHAPE, 4),
         ];
         for (read, shape, size) in ids {
             let hash = enshwick::services::layout_hash("output", shape, size, size, 0);

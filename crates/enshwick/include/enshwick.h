@@ -136,10 +136,9 @@ typedef struct EnshwickActionCall {
 // `ActionCall::RUN`.
 #define EnshwickActionCall_CONSOLE 3
 
-// A buff type of the game by its id, the `Guid::fnv1a` of its GUID, to
-// apply, find or remove one buff.
-//
-// `Guid::fnv1a`: crate::content::Guid::fnv1a
+// A buff type of the game by its id, the
+// `Guid::fnv1a` of its GUID, to apply,
+// find or remove one buff.
 typedef uint32_t EnshwickBuffTypeId;
 
 // A buff an entity has, written by `HostApi::buffs`.
@@ -316,11 +315,10 @@ typedef struct EnshwickBaseLimitInfo {
   uint32_t reserved;
 } EnshwickBaseLimitInfo;
 
-// A survivor of the game by its id, the `Guid::fnv1a` of its template's
-// GUID, to tell survivors apart in lookups, bed checks and summons.
-//
-// `Guid::fnv1a`: crate::content::Guid::fnv1a
-typedef uint32_t EnshwickSurvivorId;
+// An NPC of the game, such as a survivor, by its id, the
+// `Guid::fnv1a` of its template's GUID, to
+// tell survivors apart in lookups, bed checks and summons.
+typedef uint32_t EnshwickNpcId;
 
 // A survivor's own check that its bed is still its, after the game kept it,
 // as `HostApi::survivor_bed_check` hands it on. Cells are whole 0.5 m
@@ -329,7 +327,7 @@ typedef struct EnshwickBedCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The survivor's id.
-  EnshwickSurvivorId survivor;
+  EnshwickNpcId survivor;
   // The survivor's entity.
   EnshwickEntity entity;
   // The bed.
@@ -1512,7 +1510,7 @@ typedef struct EnshwickSurvivorLookup {
   // Size and version of this struct.
   struct EnshwickHeader header;
   // The survivor's id.
-  EnshwickSurvivorId survivor;
+  EnshwickNpcId survivor;
   // The game's own answer, 0 for none.
   EnshwickEntity vanilla;
   // Who asks; one of the constants on this type.
@@ -1605,7 +1603,7 @@ typedef uint8_t (*EnshwickSummonFn)(const struct EnshwickSummon *summon, void *u
 // The survivor, `count` status bytes at `statuses`, valid for the call, and
 // the pointer given at registration; returns `SURVIVOR_STATUS_SET` or-ed
 // with the byte to show, or 0 to leave the game's.
-typedef uint32_t (*EnshwickSurvivorStatusFn)(EnshwickSurvivorId survivor,
+typedef uint32_t (*EnshwickSurvivorStatusFn)(EnshwickNpcId survivor,
                                              const uint8_t *statuses,
                                              size_t count,
                                              void *user);
@@ -3005,9 +3003,7 @@ typedef struct EnshwickHostApi {
   // Files item `item` as a summoning staff of the survivor `survivor`, so
   // the game treats it as that survivor's staff, on both sides. Allowed
   // during `enshwick_mod_init` only.
-  EnshwickStatus (*summon_item)(EnshwickModHandle me,
-                                EnshwickItemId item,
-                                EnshwickSurvivorId survivor);
+  EnshwickStatus (*summon_item)(EnshwickModHandle me, EnshwickItemId item, EnshwickNpcId survivor);
   // Makes `callback` with `user` merge the statuses the client's survivor
   // menu shows for a survivor with several entities. Client only; one mod
   // at a time. Allowed during `enshwick_mod_init` only.

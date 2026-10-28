@@ -229,10 +229,9 @@ pub struct SkillNode(pub u32);
 #[shape(api = "knowledge_id")]
 pub struct KnowledgeId(pub u32);
 
-/// A buff type of the game by its id, the [`Guid::fnv1a`] of its GUID, to
-/// apply, find or remove one buff.
-///
-/// [`Guid::fnv1a`]: crate::content::Guid::fnv1a
+/// A buff type of the game by its id, the
+/// [`Guid::fnv1a`](crate::content::Guid::fnv1a) of its GUID, to apply,
+/// find or remove one buff.
 ///
 /// # Examples
 ///
@@ -264,17 +263,16 @@ pub struct KnowledgeId(pub u32);
 #[shape(api = "buff_type_id")]
 pub struct BuffTypeId(pub u32);
 
-/// A survivor of the game by its id, the [`Guid::fnv1a`] of its template's
-/// GUID, to tell survivors apart in lookups, bed checks and summons.
-///
-/// [`Guid::fnv1a`]: crate::content::Guid::fnv1a
+/// An NPC of the game, such as a survivor, by its id, the
+/// [`Guid::fnv1a`](crate::content::Guid::fnv1a) of its template's GUID, to
+/// tell survivors apart in lookups, bed checks and summons.
 ///
 /// # Examples
 ///
 /// ```
-/// use enshwick::survivors::SurvivorId;
+/// use enshwick::survivors::NpcId;
 ///
-/// let blacksmith = SurvivorId::new(1_201_801_546);
+/// let blacksmith = NpcId::new(1_201_801_546);
 /// assert_eq!(blacksmith.get(), 1_201_801_546);
 /// ```
 #[repr(transparent)]
@@ -296,8 +294,8 @@ pub struct BuffTypeId(pub u32);
     crate::Script,
 )]
 #[serde(transparent)]
-#[shape(api = "survivor_id")]
-pub struct SurvivorId(pub u32);
+#[shape(api = "npc_id")]
+pub struct NpcId(pub u32);
 
 impl From<RecipeId> for KnowledgeId {
     fn from(recipe: RecipeId) -> Self {
@@ -422,10 +420,10 @@ id_conversions!(
     SkillNode(u32),
     KnowledgeId(u32),
     BuffTypeId(u32),
-    SurvivorId(u32),
+    NpcId(u32),
 );
 
-guid_ids!(ItemId, RecipeId, KnowledgeId, BuffTypeId, SurvivorId);
+guid_ids!(ItemId, RecipeId, KnowledgeId, BuffTypeId, NpcId);
 
 const _: () = {
     assert!(size_of::<Entity>() == size_of::<u32>() && align_of::<Entity>() == align_of::<u32>());
@@ -447,10 +445,7 @@ const _: () = {
         size_of::<BuffTypeId>() == size_of::<u32>()
             && align_of::<BuffTypeId>() == align_of::<u32>()
     );
-    assert!(
-        size_of::<SurvivorId>() == size_of::<u32>()
-            && align_of::<SurvivorId>() == align_of::<u32>()
-    );
+    assert!(size_of::<NpcId>() == size_of::<u32>() && align_of::<NpcId>() == align_of::<u32>());
 };
 
 #[cfg(test)]
@@ -507,14 +502,14 @@ mod tests {
             BuffTypeId::from_guid(id.guid())
         );
         assert_eq!(
-            SurvivorId::named("my-mod:smith").get(),
+            NpcId::named("my-mod:smith").get(),
             crate::content::Guid::named("my-mod:smith").fnv1a()
         );
         assert_eq!(
             ItemId::named("my-mod:warmth").get(),
             BuffTypeId::named("my-mod:warmth").get()
         );
-        assert_eq!(SurvivorId::new(7).to_string(), "7");
+        assert_eq!(NpcId::new(7).to_string(), "7");
     }
 
     #[test]

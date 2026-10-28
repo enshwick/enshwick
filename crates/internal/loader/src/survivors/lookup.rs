@@ -44,7 +44,7 @@ pub(super) fn call(
 ) -> SurvivorLookup {
     SurvivorLookup {
         header: Header::of::<SurvivorLookup>(),
-        survivor: enshwick::abi::SurvivorId::new(survivor),
+        survivor: enshwick::abi::NpcId::new(survivor),
         vanilla: Entity(vanilla),
         purpose,
         entity,

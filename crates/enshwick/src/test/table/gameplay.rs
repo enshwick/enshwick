@@ -117,7 +117,7 @@ pub(crate) extern "system" fn summoned(
 pub(crate) extern "system" fn summon_item(
     _me: ModHandle,
     item: crate::ItemId,
-    survivor: crate::survivors::SurvivorId,
+    survivor: crate::survivors::NpcId,
 ) -> Status {
     with(Status::MISSING, |s| {
         s.summon_items.push((item, survivor));
