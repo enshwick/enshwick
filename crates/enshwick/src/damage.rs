@@ -73,7 +73,7 @@ pub enum DamageTypeNew {
 
 impl DamageTypeNew {
     /// Every type, in the game's order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; crate::abi::DAMAGE_TYPES] = [
         Self::PhysicalCut,
         Self::PhysicalPierce,
         Self::PhysicalBlunt,
@@ -89,7 +89,19 @@ impl DamageTypeNew {
         Self::Explosion,
     ];
 
-    const fn index(self) -> usize {
+    /// The type's place in a hit's damage amounts,
+    /// [`DamageCheck::amounts`](crate::abi::DamageCheck::amounts), the game's
+    /// order of its damage types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::damage::DamageTypeNew;
+    ///
+    /// assert_eq!(DamageTypeNew::ALL[DamageTypeNew::Healing.index()], DamageTypeNew::Healing);
+    /// ```
+    #[must_use]
+    pub const fn index(self) -> usize {
         self as usize
     }
 }

@@ -3,7 +3,27 @@
 //! loader reads and serves itself.
 
 use enshwick::content::ResourceType;
-pub(crate) use enshwick_gamedata::catalogue::{Reflected, constant, event_types, type_name};
+pub(crate) use enshwick_gamedata::catalogue::{Reflected, constant, event_types, ids, type_name};
+
+use crate::host::Loader;
+
+/// The running game's hash of the type the catalogue id `id` names, as its
+/// entities' components carry it; `None` on a build without the type.
+pub(crate) fn component_hash(loader: &Loader, id: &str) -> Option<u32> {
+    let info = loader.reflection.type_info(type_name(id)).ok()?;
+    crate::world::type_hash(info.va())
+}
+
+/// The offset the catalogue id `id` names in the running game, in bytes.
+pub(crate) fn offset(loader: &Loader, id: &str) -> Option<usize> {
+    constant(id, &loader.reflection).and_then(|offset| usize::try_from(offset).ok())
+}
+
+/// The size of the type the catalogue id `id` names in the running game.
+pub(crate) fn size(loader: &Loader, id: &str) -> Option<usize> {
+    let info = loader.reflection.type_info(type_name(id)).ok()?;
+    usize::try_from(info.size()).ok()
+}
 
 /// The hashes of the resource types the loader handles itself, from the
 /// catalogue's reflected names.

@@ -45,9 +45,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 ];
 
 /// Damage types in a hit's vector.
-const TYPES: usize = 13;
+const TYPES: usize = enshwick::abi::DAMAGE_TYPES;
 /// The healing entry of a hit's vector.
-const HEALING: usize = 7;
+const HEALING: usize = enshwick::damage::DamageTypeNew::Healing.index();
 /// The carry flag in `rflags`.
 const CARRY: u64 = 1;
 

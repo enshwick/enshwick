@@ -47,10 +47,8 @@ pub(super) static FUEL_TYPE: OnceLock<Option<u32>> = OnceLock::new();
 
 /// The meter of the item entity `pide`, `[current, max]`, or zeros.
 pub(super) fn meter(loader: &Loader, pide: u32) -> [u16; 2] {
-    let ty = FUEL_TYPE.get_or_init(|| {
-        let info = loader.reflection.type_info("keen::ecs::NetworkFuel").ok()?;
-        crate::world::type_hash(info.va())
-    });
+    let ty = FUEL_TYPE
+        .get_or_init(|| crate::catalogue::component_hash(loader, crate::catalogue::ids::FUEL));
     let Some(data) = ty.and_then(|ty| crate::world::component(loader, Entity(pide), ty).ok())
     else {
         return [0; 2];

@@ -6,11 +6,30 @@
 
 use rustc_hash::FxHashMap;
 
-/// The low bits of each 32.32 fixed-point axis the save clears: it keeps a
-/// position floored to 2^-14 m, and a loaded position is kept unchanged
-/// (server 399, proven for positive axes). Orientation is re-encoded by a
-/// codec not known, so it is no part of a key.
-const SAVED_GRAIN: i64 = (1 << 18) - 1;
+/// The save keeps each 32.32 fixed-point axis as a 128 m sector, the axis
+/// shifted right by `SECTOR_SHIFT` and clamped to `0..=MAX_SECTOR`, and a
+/// 21-bit offset in 2^-14 m steps, the axis shifted right by `GRAIN_SHIFT`;
+/// a load gives back `sector << 39 | offset << 18`, so every loaded axis lies
+/// in `[0, 32768 m)` and a loaded position keeps itself (server 399). The
+/// orientation is packed by its own codec and the scale into a byte, so
+/// neither is part of a key.
+const SECTOR_SHIFT: u32 = 39;
+const MAX_SECTOR: i64 = 255;
+const GRAIN_SHIFT: u32 = 18;
+const OFFSET_MASK: i64 = (1 << 21) - 1;
+
+/// `axis` as a load gives it back after a save.
+const fn as_saved(axis: i64) -> i64 {
+    let sector = axis >> SECTOR_SHIFT;
+    let sector = if sector < 0 {
+        0
+    } else if sector > MAX_SECTOR {
+        MAX_SECTOR
+    } else {
+        sector
+    };
+    (sector << SECTOR_SHIFT) | (((axis >> GRAIN_SHIFT) & OFFSET_MASK) << GRAIN_SHIFT)
+}
 
 /// A placed thing: its template GUID and where the save keeps it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -21,12 +40,12 @@ pub(crate) struct Placed {
 
 impl Placed {
     /// The key of a thing of `template` at `position`, 32.32 fixed-point
-    /// metres, floored as the save keeps it, so a thing spawned or moved
-    /// this session keys as it will after the next load.
+    /// metres, as the save keeps it, so a thing spawned or moved this
+    /// session keys as it will after the next load.
     pub(crate) fn new(template: [u8; 16], position: [i64; 3]) -> Self {
         Self {
             template,
-            position: position.map(|axis| axis & !SAVED_GRAIN),
+            position: position.map(as_saved),
         }
     }
 
@@ -264,6 +283,29 @@ mod tests {
         assert_eq!(spawned(0x20000), spawned(0));
         assert_ne!(spawned(0x40000), spawned(0), "one grain apart");
         assert_ne!(Placed::new(BED, at(3)), Placed::new(CHEST, at(3)));
+    }
+
+    #[test]
+    fn an_axis_outside_the_saved_range_keys_where_the_load_puts_it() {
+        // Quarter metres in 32.32 fixed point.
+        let quarters = |q: i64| q << 30;
+        // Server 399: a survivor saved at z = -0.5 m loads at z = 127.5 m.
+        assert_eq!(as_saved(quarters(-2)), quarters(510));
+        assert_eq!(as_saved(quarters(-4 * 128)), 0, "the sector clamps at 0");
+        assert_eq!(
+            as_saved(quarters(4 * 32_800)),
+            (255 << SECTOR_SHIFT) | quarters(4 * 32),
+            "and at 255"
+        );
+        for q in [0, 1, 511, 512, 14_937, 40_958] {
+            let fine = quarters(q) + 0x3_ffff;
+            assert_eq!(as_saved(fine), quarters(q), "{q}: floored to the grain");
+            assert_eq!(
+                as_saved(quarters(q)),
+                quarters(q),
+                "a loaded axis keeps itself"
+            );
+        }
     }
 
     #[test]

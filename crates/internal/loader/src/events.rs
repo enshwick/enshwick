@@ -61,8 +61,7 @@ const STATE_SHUTDOWN: u8 = 6;
 /// game-systems holder and the world, after `set_state` enters it (server
 /// 399, client 426). The name is enshwick's.
 const STATE_TEAR_DOWN: u8 = 7;
-/// The slot state of a player in the world.
-const SLOT_IN_GAME: u8 = 3;
+use crate::world::SLOT_IN_GAME;
 /// Slots the joined set can hold; the game has 16.
 const MAX_SLOTS: usize = 32;
 
@@ -600,6 +599,8 @@ unsafe extern "system" fn remove(server: *mut u8, slot: *mut u8) {
             crate::remote::forget_player(data.key.get());
             crate::admission::left(data.key.get());
             guarded(&REMOVE_FUSE, "the player removal link", || {
+                // Before the game removes the character: its items still read.
+                crate::item_data::player_left(loader, data.entity.0);
                 loader.emit(Event::PLAYER_LEFT, None, (&raw const data).cast());
             });
         }

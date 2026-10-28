@@ -20,8 +20,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 
-/// The game's own number of recipes per workshop.
-const WORKSHOP_RECIPES: usize = 512;
+use enshwick::content::recipes::WORKSHOP_RECIPES;
 
 /// The check before a recipe joins its workshop's list, the same on server
 /// and client: `movzx eax, word [rdx+0x1000]; mov ecx, 0x200; cmp ax, cx;
@@ -495,22 +494,13 @@ fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
 /// serve the recipe registry.
 pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let found = (|| {
-        let wide = |v: u64| usize::try_from(v).map_err(|e| e.to_string());
-        let offset = |ty: &str, field: &str| {
-            loader
-                .reflection
-                .field_offset(ty, field)
-                .map_err(|e| format!("{ty}.{field}: {e:?}"))
-                .and_then(wide)
-        };
+        use crate::catalogue::ids;
+        let offset = |id: &str| crate::catalogue::offset(loader, id).ok_or(format!("no {id}"));
         let layout = Layout {
-            recipes: offset("keen::RecipeRegistryResource", "recipes")?,
-            recipe: loader
-                .reflection
-                .type_info("keen::RecipeInfo")
-                .map(|info| info.size() as usize)
-                .map_err(|e| format!("keen::RecipeInfo: {e:?}"))?,
-            workshop: offset("keen::RecipeInfo", "workshopId")?,
+            recipes: offset(ids::RECIPE_REGISTRY_RECIPES)?,
+            recipe: crate::catalogue::size(loader, ids::RECIPE)
+                .ok_or(format!("no {}", ids::RECIPE))?,
+            workshop: offset(ids::RECIPE_WORKSHOP)?,
         };
         let (start, _) = text(loader.base).ok_or("the code section is not found")?;
         let code = text_bytes(loader.base).ok_or("the code section is not found")?;

@@ -267,8 +267,8 @@ struct Layout {
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 
-/// Player slots in game, for the joined-player reads.
-const SLOT_IN_GAME: u8 = 3;
+/// The slot state of a player in the world, for the joined-player reads.
+pub(crate) const SLOT_IN_GAME: u8 = 3;
 /// Names longer than this are not a client's name.
 const MAX_NAME: usize = 0x100;
 
@@ -528,11 +528,7 @@ pub(crate) fn template(loader: &Loader, entity: Entity) -> Result<[u8; 16], Stat
 /// Where `entity` stands, in 32.32 fixed-point metres, from its
 /// `CurrentTransform`; on the server's game thread.
 pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]> {
-    let info = loader
-        .reflection
-        .type_info("keen::ecs::CurrentTransform")
-        .ok()?;
-    let hash = type_hash(info.va())?;
+    let hash = crate::catalogue::component_hash(loader, crate::catalogue::ids::CURRENT_TRANSFORM)?;
     let data = component(loader, entity, hash).ok()?;
     // SAFETY: `data` is the non-null data of the entity's live
     // `CurrentTransform` (checked by `component`), which starts with its
@@ -541,13 +537,15 @@ pub(crate) fn fixed_position(loader: &Loader, entity: Entity) -> Option<[i64; 3]
     Some(unsafe { enshwick::raw::read_at::<[i64; 3]>(data.cast(), 0) })
 }
 
-/// The reflected component that names the item an entity was placed from.
-const USED_ITEM: &str = "keen::ecs::UsedItem";
-
 /// The item `entity` was placed from, from its `UsedItem`; on the server's
 /// game thread.
 pub(crate) fn used_item(loader: &Loader, entity: Entity) -> Option<u32> {
-    let info = loader.reflection.type_info(USED_ITEM).ok()?;
+    let info = loader
+        .reflection
+        .type_info(crate::catalogue::type_name(
+            crate::catalogue::ids::USED_ITEM,
+        ))
+        .ok()?;
     if info.size() != 4 {
         return None;
     }
@@ -592,8 +590,7 @@ pub(crate) fn players(loader: &Loader) -> Result<Vec<PlayerInfo>, Status> {
         .collect())
 }
 
-/// Player slots [`player_entities`] reads; the game has 16.
-pub(crate) const MAX_PLAYERS: usize = 64;
+use crate::admission::MAX_PLAYERS;
 
 /// The character entity of each player in game, as [`players`] lists them,
 /// without their names and permissions.

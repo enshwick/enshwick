@@ -14,6 +14,10 @@ Each entry names the pull request that made the change.
   bases and the most a mod may ask for, with `BaseLimit::past_vanilla`
   (#641).
 
+- `abi::DAMAGE_TYPES` (`ENSHWICK_DAMAGE_TYPES` in C), the length of a hit's
+  damage amounts, and `DamageTypeNew::index`, a type's place in them; the
+  loader's damage and stats code count by them too (#637).
+
 - `voxels::PER_METRE`, the voxels a metre on every axis, which the
   loader's terrain edits now read too (#632).
 
@@ -59,6 +63,9 @@ Each entry names the pull request that made the change.
   item data value could land on another entity of the same template; values
   now follow their entity's place. Values of a file written before this
   stay aside, attached to nothing (#631).
+- Item data on a leaving player's items goes aside in the world's file
+  instead of being dropped with the items the game removes, and a place
+  keys exactly as the save keeps it, a negative axis included (#640).
 
 ## [1.0.0-alpha.10] - 2026-10-28
 

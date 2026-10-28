@@ -4,7 +4,7 @@
 /// Declares each id as a constant and lists them all in [`ALL`].
 macro_rules! ids {
     ($($(#[$meta:meta])* $name:ident = $id:literal;)*) => {
-        $($(#[$meta])* pub(crate) const $name: &str = $id;)*
+        $($(#[$meta])* #[doc(hidden)] pub const $name: &str = $id;)*
 
         /// Every id, for the loader's test that each one resolves.
         pub const ALL: &[&str] = &[$($id),*];
@@ -50,19 +50,19 @@ ids! {
     ACCEPT_OFFERED_INTERACTION_EVENT_GUEST_ENTITY_ID = "accept_offered_interaction_event.guest_entity_id";
     ACCEPT_OFFERED_INTERACTION_EVENT_HOST_ENTITY_ID = "accept_offered_interaction_event.host_entity_id";
     ACCEPT_OFFERED_INTERACTION_EVENT_OFFER_ID = "accept_offered_interaction_event.offer_id";
+    /// The id of the event the game raises when a building piece is placed.
     BUILDING_PLACE_EVENT = "building_place_event";
     BUILDING_PLACE_EVENT_OWNER_ID = "building_place_event.owner_id";
     BUILDING_PLACE_EVENT_POSITION = "building_place_event.position";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     BUILDING_PLACE_EVENT_ORIENTATION = "building_place_event.orientation";
     BUILDING_PLACE_EVENT_VOLUME_MIN = "building_place_event.volume_min";
     BUILDING_PLACE_EVENT_VOLUME_MAX = "building_place_event.volume_max";
     BUILDING_PLACE_EVENT_MATERIAL = "building_place_event.material";
     BUILDING_PLACE_EVENT_TRACKING_ITEM_ID = "building_place_event.tracking_item_id";
+    /// The id of the event the game raises when building voxels are torn down.
     BUILDING_TEAR_DOWN_EVENT = "building_tear_down_event";
     BUILDING_TEAR_DOWN_EVENT_OWNER_ID = "building_tear_down_event.owner_id";
     BUILDING_TEAR_DOWN_EVENT_POSITION = "building_tear_down_event.position";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     BUILDING_TEAR_DOWN_EVENT_ORIENTATION = "building_tear_down_event.orientation";
     BUILDING_TEAR_DOWN_EVENT_VOLUME_MIN = "building_tear_down_event.volume_min";
     BUILDING_TEAR_DOWN_EVENT_VOLUME_MAX = "building_tear_down_event.volume_max";
@@ -88,7 +88,9 @@ ids! {
     REVIVED_PLAYER_EVENT = "revived_player_event";
     REVIVED_PLAYER_EVENT_TARGET_ENTITY_ID = "revived_player_event.target_entity_id";
     REVIVED_PLAYER_EVENT_SOURCE_ENTITY_ID = "revived_player_event.source_entity_id";
+    /// The id of a transform's position, three 32.32 fixed-point `i64`.
     WORLD_TRANSFORM_POSITION = "world_transform.position";
+    /// The id of a transform's orientation, a quaternion of four `f32`.
     WORLD_TRANSFORM_ORIENTATION = "world_transform.orientation";
     WORLD_TRANSFORM_SCALE = "world_transform.scale";
     NPC_COMMAND_EVENT = "npc_command_event";
@@ -107,54 +109,68 @@ ids! {
     UI_PING_EVENT_SENDER_ENTITY_ID = "ui_ping_event.sender_entity_id";
     UI_PING_POSITION = "ui_ping_event.position";
     ITEM_INFO = "item_info";
+    /// The id of the offset of the item id in an item's static data.
     ITEM_INFO_ID = "item_info.id";
     ITEM_INFO_OBJECT = "item_info.object";
     ITEM_INFO_NAME = "item_info.name";
     ITEM_INFO_DESCRIPTION = "item_info.description";
+    /// The id of the offset of an item's flags, a `u32`, in an item's static
+    /// data.
     ITEM_INFO_FLAGS = "item_info.flags";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of an item's `ItemCategory`, a `u8`, in an item's
+    /// static data.
     ITEM_INFO_CATEGORY = "item_info.category";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of how many of an item one slot holds, a `u16`,
+    /// in an item's static data.
     ITEM_INFO_MAX_STACK = "item_info.max_stack";
+    /// The id of the offset of the template of an item's own entity, a GUID, in
+    /// an item's static data; a backpack's inventory sits there.
     ITEM_INFO_PID_ENTITY = "item_info.pid_entity";
     ITEM_INFO_UI_VALUES = "item_info.ui_values";
     ITEM_INFO_ICON_IMAGE = "item_info.icon_image";
+    /// The id of the offset of the template an item places, a GUID, in an
+    /// item's static data.
     ITEM_INFO_PLACED_ENTITY = "item_info.placed_entity";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the flag, a byte, that says an item places building voxels.
     ITEM_INFO_BUILDING_VOXEL = "item_info.building_voxel";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the voxel material an item places, a `u8`: 0x80 and up for a
+    /// building material.
     ITEM_INFO_PLACE_VOXEL_MATERIAL_ID = "item_info.place_voxel_material_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of the equipment slot in an item's static data.
     ITEM_INFO_EQUIPMENT_SLOT = "item_info.equipment_slot";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of an item's tags in its static data, a blob array
+    /// of [`ITEM_TAG_WEIGHT`].
     ITEM_INFO_TAGS = "item_info.tags";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a weapon's damage factor, an `f32`, in an item's static data.
     ITEM_INFO_DAMAGE_MOD = "item_info.damage_mod";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a weapon's attack speed factor, an `f32`.
     ITEM_INFO_SPEED_MOD = "item_info.speed_mod";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the flag that says an item deals damage.
     ITEM_INFO_DAMAGE_SET = "item_info.damage_set";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of an item's armour values, `f32` each, as many as
+    /// [`ARMOR_DISTRIBUTION`] holds.
     ITEM_INFO_ARMOR = "item_info.armor";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the flag that says an item gives armour.
     ITEM_INFO_ARMOR_SET = "item_info.armor_set";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of how long an item burns as fuel, a `keen::Time` in nanoseconds.
     ITEM_INFO_BURN_TIME = "item_info.burn_time";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the energy an item gives as fuel, a `u32`.
     ITEM_INFO_ENERGY_OUTPUT = "item_info.energy_output";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the flag that says an item is fuel.
     ITEM_INFO_FUEL_SET = "item_info.fuel_set";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the comfort a placed item gives, a `u32`.
     ITEM_INFO_COMFORT_AMOUNT = "item_info.comfort_amount";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the flag that says an item gives comfort.
     ITEM_INFO_COMFORT_SET = "item_info.comfort_set";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the armour values' type, whose size counts them.
     ARMOR_DISTRIBUTION = "armor_distribution";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the enum an item's equipment slot holds, which
+    /// [`RECIPE_KINDS`] names constants of.
     ITEM_SLOT_TYPE = "item_slot_type";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the type of one entry of an item's tags, whose size is its
+    /// stride.
     ITEM_TAG_WEIGHT = "item_tag_weight";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of the tag, a GUID, in one entry of an item's tags.
     ITEM_TAG_WEIGHT_TAG = "item_tag_weight.tag";
     ITEM_STAT = "item_stat";
     ITEM_STAT_LABEL = "item_stat.label";
@@ -165,12 +181,16 @@ ids! {
     ITEM_REGISTRY_REFS = "item_registry.refs";
     ITEM_REGISTRY_NAMES = "item_registry.names";
     TEMPLATE = "template";
+    /// The id of a template resource's components, a blob array of variants.
     TEMPLATE_COMPONENTS = "template.components";
     TEMPLATE_NAME = "template.name";
     TEMPLATE_COLLECTION = "template_collection";
     TEMPLATE_COLLECTION_TEMPLATES = "template_collection.templates";
+    /// The id of a prop's `FuelSetup`.
     FUEL_SETUP = "fuel_setup";
+    /// The id of a `FuelSetup`'s most charges, an `i32`.
     FUEL_SETUP_MAX = "fuel_setup.max";
+    /// The id of the share of its charges a fresh prop starts with, an `f32`.
     FUEL_SETUP_START = "fuel_setup.start";
     CRAFTING = "crafting";
     CRAFTING_WORKSHOP = "crafting.workshop";
@@ -199,7 +219,8 @@ ids! {
     RECIPE_INPUT = "recipe.input";
     RECIPE_OUTPUT = "recipe.output";
     RECIPE_COMPLETION = "recipe.completion";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the offset of how long a recipe takes, a `keen::Time` in
+    /// nanoseconds, in a recipe.
     RECIPE_DURATION = "recipe.duration";
     RECIPE_REQUIRED_PROPS = "recipe.required_props";
     RECIPE_DEBUG_NAME = "recipe.debug_name";
@@ -221,26 +242,39 @@ ids! {
     CRAFTING_MENU_GROUP_SETS = "crafting_menu_group.sets";
     CRAFTING_MENU_SET = "crafting_menu_set";
     CRAFTING_MENU_SET_ENTRIES = "crafting_menu_set.entries";
+    /// The id of an entity's place in the world.
     CURRENT_TRANSFORM = "current_transform";
+    /// The id of the transform inside a [`CURRENT_TRANSFORM`].
     CURRENT_TRANSFORM_TRANSFORM = "current_transform.transform";
+    /// The id of the component that names the item an entity was placed from.
     USED_ITEM = "used_item";
     LABEL = "label";
+    /// The id of an entity's inventory setup and of its links (`u32`
+    /// entities), their categories (bytes) and its initialized byte.
     INVENTORY_SETUP = "inventory_setup";
+    /// The id of an inventory setup's linked entities.
     INVENTORY_SETUP_LINKS = "inventory_setup.links";
+    /// The id of an inventory setup's link categories.
     INVENTORY_SETUP_CATEGORIES = "inventory_setup.categories";
+    /// The id of an inventory setup's initialized byte.
     INVENTORY_SETUP_INITIALIZED = "inventory_setup.initialized";
     INVENTORY_SETUP_GENERIC_SLOTS = "inventory_setup.generic_slots";
     INVENTORY_SETUP_AVAILABLE_SLOTS = "inventory_setup.available_slots";
     INVENTORY_SETUP_OVERWRITE = "inventory_setup_overwrite";
     INVENTORY_SETUP_OVERWRITE_GENERIC_SLOTS = "inventory_setup_overwrite.generic_slots";
+    /// The id of a sub-inventory's stacks.
     INVENTORY = "inventory";
+    /// The id of a stack in an inventory, its `u32` item first.
     ITEM_STACK = "item_stack";
     ITEM_STACK_COUNT = "item_stack.count";
+    /// The id of a stack's `u32` item entity, its PIDE.
     ITEM_STACK_PIDE = "item_stack.pide";
     DURABILITY = "durability";
     DURABILITY_MAX = "durability.max";
     FUEL = "fuel";
     FUEL_MAX = "fuel.max";
+    /// The id of the component that relates an entity to its owner, the
+    /// owner's `u32` entity alone.
     OWNER = "owner";
     INVENTORY_EMPTY_STATE = "inventory_empty_state";
     INVENTORY_EMPTY_STATE_EMPTY = "inventory_empty_state.empty";
@@ -259,7 +293,7 @@ ids! {
     LOOT_SLOT = "loot_slot";
     LOOT_SLOT_ITEM = "loot_slot.item";
     LOOT_SLOT_COUNT = "loot_slot.count";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the random loot table's type, of which the game has one.
     LOOTABLE_ITEMS = "lootable_items";
     LOOTABLE_ITEMS_ITEMS = "lootable_items.items";
     LOOTABLE_ITEM = "lootable_item";
@@ -267,7 +301,7 @@ ids! {
     LOOTABLE_ITEM_STACK_MIN = "lootable_item.stack_min";
     LOOTABLE_ITEM_STACK_MAX = "lootable_item.stack_max";
     LOOTABLE_ITEM_STACK_MAX_SCALED = "lootable_item.stack_max_scaled";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a container fill table's type.
     LOOT_FILL_TABLE = "loot_fill_table";
     LOOT_FILL_TABLE_ROOT = "loot_fill_table.root";
     LOOT_FILL_GROUP = "loot_fill_group";
@@ -389,6 +423,7 @@ ids! {
     EQUIPMENT_SLOT_OVERGROWTH_MATERIAL = "equipment_slot.overgrowth_material";
     EQUIPMENT_SLOT_HOOK_SHOT = "equipment_slot.hook_shot";
     EQUIPMENT_SLOT_GLIDER = "equipment_slot.glider";
+    /// The id of the `Backpack` member of the game's equipment slots.
     EQUIPMENT_SLOT_BACKPACK = "equipment_slot.backpack";
     EQUIPMENT_SLOT_MAIN_HAND = "equipment_slot.main_hand";
     INVENTORY_ERROR_INVALID_STATE = "inventory_error.invalid_state";
@@ -425,152 +460,158 @@ ids! {
     CURSE_MODIFIER_EASY = "curse_modifier.easy";
     CURSE_MODIFIER_NORMAL = "curse_modifier.normal";
     CURSE_MODIFIER_HARD = "curse_modifier.hard";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the bit of a player's permission mask that lets the player
+    /// edit a base.
     PLAYER_PERMISSIONS_CAN_EDIT_BASE = "player_permissions.can_edit_base";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the bit of a player's permission mask that lets the player
+    /// edit the world outside every base.
     PLAYER_PERMISSIONS_CAN_EDIT_WORLD = "player_permissions.can_edit_world";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the terraforming registry resource's building configs, an
+    /// array of [`BUILDING_TERRAFORMING_CONFIG`].
     TERRAFORMING_REGISTRY_BUILDING_CONFIGS = "terraforming_registry.building_configs";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a building material's terraforming config.
     BUILDING_TERRAFORMING_CONFIG = "building_terraforming_config";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a building config's material, a `u8` counted from 0x80.
     BUILDING_TERRAFORMING_CONFIG_BUILDING_MATERIAL = "building_terraforming_config.building_material";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a building config's hardness, a `u8`.
     BUILDING_TERRAFORMING_CONFIG_HARDNESS = "building_terraforming_config.hardness";
     PLAYER_WAYPOINT = "player_waypoint";
     PLAYER_WAYPOINT_ENABLED = "player_waypoint.enabled";
     PLAYER_WAYPOINT_POSITION = "player_waypoint.waypoint_position";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a map marker's type, `MapMarker`.
     MAP_MARKER = "map_marker";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a map marker's label text tag, `markerId`, a GUID.
     MAP_MARKER_MARKER_ID = "map_marker.marker_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a map marker's type reference, `markerType`, a GUID.
     MAP_MARKER_MARKER_TYPE = "map_marker.marker_type";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a marker type in the marker type registry, `MapMarkerType`,
+    /// whose size is its stride there.
     MAP_MARKER_TYPE = "map_marker_type";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a marker type's id, a `u32`.
     MAP_MARKER_TYPE_MARKER_ID = "map_marker_type.marker_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a marker type's flag for players' own markers, a byte.
     MAP_MARKER_TYPE_IS_CUSTOM = "map_marker_type.is_custom_marker_type";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a marker type's flag for showing above the fog, a byte.
     MAP_MARKER_TYPE_SHOW_ABOVE_FOG = "map_marker_type.show_above_fog_of_war";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a marker type's flag for showing a label, a byte.
     MAP_MARKER_TYPE_SHOW_LABEL = "map_marker_type.show_label";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the marker types in the registry resource, a blob array of
+    /// [`MAP_MARKER_TYPE`].
     MAP_MARKER_REGISTRY_TYPES = "map_marker_registry.types";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the visibility of a marker the map shows.
     MAP_MARKER_VISIBILITY_TYPE_VISIBLE = "map_marker_visibility_type.visible";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene chunk's resource type, which lists what it spawns.
     SCENE_CHUNK = "scene_chunk";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene chunk's template references, a blob array of GUIDs.
     SCENE_CHUNK_TEMPLATES = "scene_chunk.templates";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene chunk's spawn entries, a blob array of
+    /// [`SCENE_SPAWN_ENTRY`].
     SCENE_CHUNK_ENTITIES = "scene_chunk.entities";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene chunk's spawn entry type, whose size is its stride.
     SCENE_SPAWN_ENTRY = "scene_spawn_entry";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a spawn entry's template index, a `u16`.
     SCENE_SPAWN_ENTRY_TEMPLATE_INDEX = "scene_spawn_entry.template_index";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a spawn entry's packed transform.
     SCENE_SPAWN_ENTRY_TRANSFORM = "scene_spawn_entry.transform";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_X0 = "scene_transform.position_x0";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_X1 = "scene_transform.position_x1";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_Y0 = "scene_transform.position_y0";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_Y1 = "scene_transform.position_y1";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_Z0 = "scene_transform.position_z0";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     SCENE_TRANSFORM_POSITION_Z1 = "scene_transform.position_z1";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene's resource type, keyed by the scene's GUID.
     SCENE_RESOURCE = "scene_resource";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene resource's flag for a biome map, a byte.
     SCENE_RESOURCE_HAS_BIOME_MAP = "scene_resource.has_biome_map";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a scene's biome map resource type, keyed by the scene's GUID.
     BIOME_MAP = "biome_map";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a biome map's world origin, two `i32`, x then z.
     BIOME_MAP_WORLD_ORIGIN = "biome_map.world_origin";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a biome map's world size in cells, two `u32`, x then z.
     BIOME_MAP_WORLD_SIZE = "biome_map.world_size";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a biome map's metres per cell, a `u32`.
     BIOME_MAP_MAP_SCALE = "biome_map.map_scale";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the tag that keeps a prop from dropping random loot when it
+    /// is destroyed.
     DISABLE_RANDOM_LOOT_ON_DESTROY = "disable_random_loot_on_destroy";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the `Level` attribute and of its `u32` values: the level,
+    /// then its most.
     LEVEL = "level";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a `Level`'s values.
     LEVEL_DATA_STORAGE = "level.data_storage";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a plant's `Growth`.
     GROWTH = "growth";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a production station and of its state (a `u8`, 0 for no
+    /// recipe) and running and next recipe (`u32` each, 0 for none).
     FACTORY_STATION = "factory_station";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a production station's state.
     FACTORY_STATION_STATE = "factory_station.state";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a production station's running recipe.
     FACTORY_STATION_RUNNING_RECIPE = "factory_station.running_recipe";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a production station's next recipe.
     FACTORY_STATION_NEXT_RECIPE = "factory_station.next_recipe";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a survivor bed and of its survivor, a `u32`, 0 for none.
     NPC_BED = "npc_bed";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a survivor bed's survivor.
     NPC_BED_ASSOCIATED_NPC = "npc_bed.associated_npc";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the survivors a station keeps, and of their two `u32`s.
     STORE_ASSOCIATED_NPC_IDS = "store_associated_npc_ids";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a station's two survivors.
     STORE_ASSOCIATED_NPC_IDS_NPC_IDS = "store_associated_npc_ids.npc_ids";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a player's text on a prop, and of its `u64` id, 0 for none.
     CUSTOM_PLAYER_STRING = "custom_player_string";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a player's text's id.
     CUSTOM_PLAYER_STRING_STRING_ID = "custom_player_string.string_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the event that tells who placed a logic prop.
     LOGIC_ENTITY_PLACED_EVENT = "logic_entity_placed_event";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_ENTITY_PLACED_EVENT_PLACED_BY_PLAYER_ID = "logic_entity_placed_event.placed_by_player_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     LOGIC_ENTITY_PLACED_EVENT_PLACED_LOGIC_ENTITY_ID = "logic_entity_placed_event.placed_logic_entity_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_PLACEMENT_BOX_MIN = "item_info.placement_box_min";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     ITEM_INFO_PLACEMENT_BOX_MAX = "item_info.placement_box_max";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the bit of an item's flags that marks a logic prop.
     ITEM_FLAG_IS_LOGIC_ENTITY = "item_flag.is_logic_entity";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a prop's saved `Fuel`, whose values hold its charges now
+    /// and most, two `i32`.
     FUEL_CHARGES = "fuel_charges";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a `Fuel`'s charges.
     FUEL_CHARGES_DATA_STORAGE = "fuel_charges.data_storage";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a logic prop's wiring.
     LOGIC_GRAPH_NODE_CONNECTED = "logic_graph_node_connected";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the `u32` graph a logic prop writes to, 0 for none.
     LOGIC_GRAPH_NODE_CONNECTED_WRITER_GRAPH_ID = "logic_graph_node_connected.writer_graph_id";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the byte that tells a logic prop has readers.
     LOGIC_GRAPH_NODE_CONNECTED_HAS_READER_GRAPHS = "logic_graph_node_connected.has_reader_graphs";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a logic trigger's settings.
     LOGIC_GRAPH_TRIGGER = "logic_graph_trigger";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the `u32` settings a logic trigger uses, which a player's
+    /// change of them replaces.
     LOGIC_GRAPH_TRIGGER_TRIGGER_CONFIG = "logic_graph_trigger.trigger_config";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a logic trigger's area.
     LOGIC_TRIGGER_SHAPE = "logic_trigger_shape";
+    /// The id of an animal's saved state, which marks a creature placed from
+    /// an item.
     ANIMAL_SAVED = "animal_saved";
+    /// The id of the component that marks a flame altar, which owns a base.
     BASE_ID_COMPONENT = "base_id_component";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the byte of an item that takes an altar slot: the flame
+    /// altar's item, which founds a base.
     ITEM_INFO_REQUIRES_ALTAR_SLOT = "item_info.requires_altar_slot";
+    /// The id of a survivor's saved state, which marks a creature placed from
+    /// an item.
     ACTIVE_NPC_STATE_SAVED = "active_npc_state_saved";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the bit of an item's flags that marks a survivor.
     ITEM_FLAG_IS_NPC = "item_flag.is_npc";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the bit of an item's flags that marks an animal.
     ITEM_FLAG_IS_ANIMAL = "item_flag.is_animal";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the component that lets Quick Stash put items into a
+    /// container: magic chests have it, plain boxes do not.
     INVENTORY_CRAFTING_STOCK = "inventory_crafting_stock";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     FUEL_SETUP_AUTOMATIC_REFILL_ENABLED = "fuel_setup.automatic_refill_enabled";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
     FUEL_SETUP_RAIN_REFILL_ENABLED = "fuel_setup.rain_refill_enabled";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of a container's per-chest Quick Stash switch a player sets.
     DYNAMIC_INVENTORY_CRAFTING_STOCK = "dynamic_inventory_crafting_stock";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the switch's byte that tells a player set it.
     DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE_IS_SET = "dynamic_inventory_crafting_stock.override_is_set";
-    #[expect(dead_code, reason = "listed only so the loader's test resolves it")]
+    /// The id of the switch's byte: 0 keeps Quick Stash out while it is set.
     DYNAMIC_INVENTORY_CRAFTING_STOCK_OVERRIDE = "dynamic_inventory_crafting_stock.override";
 }

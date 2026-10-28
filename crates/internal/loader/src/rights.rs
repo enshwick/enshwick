@@ -341,7 +341,10 @@ mod game {
     /// The masks of the permission bits, from the reflected
     /// `PlayerPermissions`.
     fn permissions(loader: &Loader) -> Option<Permissions> {
-        use enshwick_gamedata::catalogue::{PERMISSION_CAN_EDIT_BASE, PERMISSION_CAN_EDIT_WORLD};
+        use enshwick_gamedata::catalogue::ids::{
+            PLAYER_PERMISSIONS_CAN_EDIT_BASE as PERMISSION_CAN_EDIT_BASE,
+            PLAYER_PERMISSIONS_CAN_EDIT_WORLD as PERMISSION_CAN_EDIT_WORLD,
+        };
         let index = |id| crate::catalogue::constant(id, &loader.reflection);
         Permissions::from_indices(
             index(PERMISSION_CAN_EDIT_WORLD)?,

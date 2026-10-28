@@ -84,10 +84,10 @@ impl Layout {
         };
         let type_size = loader
             .reflection
-            .type_info(catalogue::type_name(catalogue::MARKER_TYPE))
+            .type_info(catalogue::type_name(catalogue::ids::MAP_MARKER_TYPE))
             .ok()
             .and_then(|info| usize::try_from(info.size()).ok())
-            .ok_or(LayoutError::Reflection(catalogue::MARKER_TYPE))?;
+            .ok_or(LayoutError::Reflection(catalogue::ids::MAP_MARKER_TYPE))?;
         Ok(Self {
             list: table(pinned::map::LIST)?,
             list_count: table(pinned::map::LIST_COUNT)?,
@@ -98,16 +98,20 @@ impl Layout {
             entry_visibility: table(pinned::map::ENTRY_VISIBILITY)?,
             entry_label: table(pinned::map::ENTRY_LABEL)?,
             entry_color: table(pinned::map::ENTRY_COLOR)?,
-            visible: u8::try_from(reflected(catalogue::MARKER_VISIBLE)?)
-                .map_err(|_| LayoutError::Reflection(catalogue::MARKER_VISIBLE))?,
+            visible: u8::try_from(reflected(
+                catalogue::ids::MAP_MARKER_VISIBILITY_TYPE_VISIBLE,
+            )?)
+            .map_err(|_| {
+                LayoutError::Reflection(catalogue::ids::MAP_MARKER_VISIBILITY_TYPE_VISIBLE)
+            })?,
             registry: table(pinned::map::REGISTRY)?,
             registry_blob: table(pinned::map::REGISTRY_BLOB)?,
-            blob_types: reflected(catalogue::MARKER_REGISTRY_TYPES)?,
+            blob_types: reflected(catalogue::ids::MAP_MARKER_REGISTRY_TYPES)?,
             type_size,
-            type_id: reflected(catalogue::MARKER_TYPE_ID)?,
-            type_custom: reflected(catalogue::MARKER_TYPE_CUSTOM)?,
-            type_above_fog: reflected(catalogue::MARKER_TYPE_ABOVE_FOG)?,
-            type_label: reflected(catalogue::MARKER_TYPE_LABEL)?,
+            type_id: reflected(catalogue::ids::MAP_MARKER_TYPE_MARKER_ID)?,
+            type_custom: reflected(catalogue::ids::MAP_MARKER_TYPE_IS_CUSTOM)?,
+            type_above_fog: reflected(catalogue::ids::MAP_MARKER_TYPE_SHOW_ABOVE_FOG)?,
+            type_label: reflected(catalogue::ids::MAP_MARKER_TYPE_SHOW_LABEL)?,
             context_state: table(pinned::map::CONTEXT_STATE)?,
             state_play_data: table(pinned::map::STATE_PLAY_DATA)?,
         })

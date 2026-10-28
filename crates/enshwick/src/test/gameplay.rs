@@ -60,7 +60,7 @@ impl Installed {
     ///     target: enshwick::Entity(2),
     ///     source: enshwick::Entity(0),
     ///     attacker: enshwick::Entity(0),
-    ///     amounts: [0.0; 13],
+    ///     amounts: [0.0; enshwick::abi::DAMAGE_TYPES],
     ///     total: 40.0,
     /// };
     /// assert_eq!(loader.damage(fall), fall, "no filters, no change");

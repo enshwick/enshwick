@@ -68,11 +68,11 @@ fn layout(loader: &Loader) -> Option<SceneLayout> {
     let field = |id: &str| field(loader, id);
     let [x0, x1, y0, y1, z0, z1] = names::SCENE_TRANSFORM_POSITION;
     Some(SceneLayout {
-        templates: field(names::SCENE_CHUNK_TEMPLATES)?,
-        entities: field(names::SCENE_CHUNK_ENTITIES)?,
-        entry_size: size(loader, names::SCENE_SPAWN_ENTRY)?,
-        entry_template: field(names::SCENE_SPAWN_TEMPLATE)?,
-        entry_transform: field(names::SCENE_SPAWN_TRANSFORM)?,
+        templates: field(names::ids::SCENE_CHUNK_TEMPLATES)?,
+        entities: field(names::ids::SCENE_CHUNK_ENTITIES)?,
+        entry_size: size(loader, names::ids::SCENE_SPAWN_ENTRY)?,
+        entry_template: field(names::ids::SCENE_SPAWN_ENTRY_TEMPLATE_INDEX)?,
+        entry_transform: field(names::ids::SCENE_SPAWN_ENTRY_TRANSFORM)?,
         position: [
             field(x0)?,
             field(x1)?,
@@ -81,10 +81,10 @@ fn layout(loader: &Loader) -> Option<SceneLayout> {
             field(z0)?,
             field(z1)?,
         ],
-        components: field(names::TEMPLATE_COMPONENTS)?,
-        marker_id: field(names::MAP_MARKER_ID)?,
-        marker_type: field(names::MAP_MARKER_TYPE)?,
-        marker_size: size(loader, names::MAP_MARKER)?,
+        components: field(names::ids::TEMPLATE_COMPONENTS)?,
+        marker_id: field(names::ids::MAP_MARKER_MARKER_ID)?,
+        marker_type: field(names::ids::MAP_MARKER_MARKER_TYPE)?,
+        marker_size: size(loader, names::ids::MAP_MARKER)?,
     })
     .filter(SceneLayout::is_sound)
 }
@@ -93,12 +93,12 @@ fn layout(loader: &Loader) -> Option<SceneLayout> {
 fn frame_layout(loader: &Loader) -> Option<FrameLayout> {
     let field = |id: &str| field(loader, id);
     Some(FrameLayout {
-        has_biome_map: field(names::SCENE_HAS_BIOME_MAP)?,
-        scene_size: size(loader, names::SCENE_RESOURCE)?,
-        world_origin: field(names::BIOME_MAP_WORLD_ORIGIN)?,
-        world_size: field(names::BIOME_MAP_WORLD_SIZE)?,
-        map_scale: field(names::BIOME_MAP_MAP_SCALE)?,
-        biome_map_size: size(loader, names::BIOME_MAP)?,
+        has_biome_map: field(names::ids::SCENE_RESOURCE_HAS_BIOME_MAP)?,
+        scene_size: size(loader, names::ids::SCENE_RESOURCE)?,
+        world_origin: field(names::ids::BIOME_MAP_WORLD_ORIGIN)?,
+        world_size: field(names::ids::BIOME_MAP_WORLD_SIZE)?,
+        map_scale: field(names::ids::BIOME_MAP_MAP_SCALE)?,
+        biome_map_size: size(loader, names::ids::BIOME_MAP)?,
     })
     .filter(FrameLayout::is_sound)
 }
@@ -141,8 +141,8 @@ fn read_markers(
     key: SceneKey,
 ) -> Result<Arc<[MapMarkerInfo]>, ReadSceneError> {
     let layout = layout.ok_or(ReadSceneError::Layout)?;
-    let chunk_hash = names::type_hash(names::SCENE_CHUNK).ok_or(ReadSceneError::Layout)?;
-    let marker_hash = names::type_hash(names::MAP_MARKER).ok_or(ReadSceneError::Layout)?;
+    let chunk_hash = names::type_hash(names::ids::SCENE_CHUNK).ok_or(ReadSceneError::Layout)?;
+    let marker_hash = names::type_hash(names::ids::MAP_MARKER).ok_or(ReadSceneError::Layout)?;
     let archive = crate::archive::game().ok_or(ReadSceneError::Archive)?;
     let chunk = archive
         .resource(&ResourceKey {
@@ -182,8 +182,8 @@ fn read_markers(
 /// resource's flag, then its biome map.
 fn read_frame(layout: Option<FrameLayout>, key: SceneKey) -> Result<MapFrameInfo, ReadFrameError> {
     let layout = layout.ok_or(ReadFrameError::Layout)?;
-    let scene_hash = names::type_hash(names::SCENE_RESOURCE).ok_or(ReadFrameError::Layout)?;
-    let biome_hash = names::type_hash(names::BIOME_MAP).ok_or(ReadFrameError::Layout)?;
+    let scene_hash = names::type_hash(names::ids::SCENE_RESOURCE).ok_or(ReadFrameError::Layout)?;
+    let biome_hash = names::type_hash(names::ids::BIOME_MAP).ok_or(ReadFrameError::Layout)?;
     let archive = crate::archive::game().ok_or(ReadFrameError::Archive)?;
     let part0 = |type_hash| {
         archive.resource(&ResourceKey {
