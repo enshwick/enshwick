@@ -11,7 +11,7 @@
 pub const ABI_MAJOR: u16 = 3;
 
 /// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 4;
+pub const ABI_MINOR: u16 = 5;
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -490,6 +490,9 @@ impl Status {
     /// such as an animal, a pet or a survivor, which only the general
     /// entity calls reach.
     pub const NOT_A_PROP: Self = Self(11);
+    /// The entity has nothing the world's next load finds it again by: a
+    /// player's character, or an entity with no place in the world.
+    pub const NOT_KEPT: Self = Self(12);
 
     /// Whether this is [`Status::OK`].
     ///

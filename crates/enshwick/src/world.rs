@@ -35,7 +35,7 @@ pub use containers::ContainerKinds;
 pub use geometry::near;
 pub use prop_state::{HeldState, PropState};
 pub(crate) use props::span;
-pub use props::{Prop, WorldTransform};
+pub use props::{CapturedProp, Prop, WorldTransform};
 pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, SkillNode, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};

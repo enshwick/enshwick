@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `voxels::PER_METRE`, the voxels a metre on every axis, which the
+  loader's terrain edits now read too (#632).
+
 - `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
   code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
   item tag of the game's Comfort Furniture crafting group; a prop with the
@@ -18,6 +21,22 @@ Each entry names the pull request that made the change.
 - A mod whose `init` returns `Err(Off)` hands the loader its reason: the
   Mods screen shows it under the mod and the log names it, an `Off::text`
   in the reader's language.
+- Breaking: `Entity` has no serde form, since each load of a world numbers
+  its entities anew; `Prop` has none either, and a `Capture` keeps
+  `CapturedProp`, the item and transform without the entity. Entity data
+  refuses an entity no load finds again, a player's character, with
+  `SetError::NotKept` (`Status::NOT_KEPT`, ABI 3.5) (#631).
+- Entity and item data keep each value under its entity's place, the
+  template and position as the save keeps them or the container and slot,
+  and find it again after a load; a value no place names for certain goes
+  aside in the world's file and never attaches again (#631).
+
+### Fixed
+
+- After a restart that followed any added or removed entity, an entity or
+  item data value could land on another entity of the same template; values
+  now follow their entity's place. Values of a file written before this
+  stay aside, attached to nothing (#631).
 
 ## [1.0.0-alpha.10] - 2026-10-28
 

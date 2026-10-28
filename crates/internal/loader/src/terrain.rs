@@ -15,11 +15,13 @@
 use std::sync::OnceLock;
 
 use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
+use enshwick::terrain::MAX_RADIUS;
 
 use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::Symbol;
+use crate::voxels::{BUILDING_FIRST, MATERIALS, TERRAIN};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -35,21 +37,12 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::terrain::VOXEL_WORLD.id(),
 ];
 
-/// The materials the edits work on: terrain, not air nor buildings, which
-/// start at the build table's `voxel.building_first`.
-const TERRAIN: core::ops::RangeInclusive<u8> = 1..=0x7f;
-/// Materials a voxel can have, as the build table's `voxel.materials`
-/// counts them; the per-material arrays the game reads are this long.
-const MATERIALS: usize = 0x100;
-
 /// Whether this build's material numbering is the one [`TERRAIN`] and
-/// [`MATERIALS`] describe.
+/// [`MATERIALS`] describe; the edits work on terrain, not air nor
+/// buildings.
 fn materials_hold(materials: Option<usize>, building_first: Option<usize>) -> bool {
-    materials == Some(MATERIALS) && building_first == Some(usize::from(*TERRAIN.end()) + 1)
+    materials == Some(MATERIALS) && building_first == Some(usize::from(BUILDING_FIRST))
 }
-/// The largest radius the loader takes, in metres: the game reads a region
-/// of `(4r)^3` voxels for an edit.
-pub(crate) const MAX_RADIUS: f32 = 16.0;
 /// The cost of a voxel that leaves the dig's budget whole.
 const FREE: f32 = 1e-6;
 

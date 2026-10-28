@@ -392,6 +392,15 @@ pub mod __private {
         pub use crate::engine_ids::*;
     }
 
+    /// Links an `InventorySetup` holds, for the inventory walks of the API
+    /// and the loader (server 399, client 426).
+    pub const INVENTORY_LINKS: usize = 16;
+    /// Slots a sub-inventory holds, for the same walks.
+    pub const INVENTORY_SLOTS: u8 = 8;
+    /// The flag bit of an attribute set that marks it initialised, for the
+    /// vitals reads of the API and the loader.
+    pub const ATTRIBUTE_SET_INITIALISED: u8 = 1;
+
     /// Each experience source with its catalogue id, for the loader's
     /// experience rates.
     pub const EXPERIENCE_SOURCES: &[(crate::game_events::ExperienceSourceType, &str)] =

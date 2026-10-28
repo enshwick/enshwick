@@ -4,6 +4,7 @@ use enshwick::abi::Status;
 
 use super::paste::Region;
 use super::props::Prop;
+use crate::voxels::{BUILDING_FIRST, MATERIALS, TERRAIN};
 
 /// The game's box for a block write, built by its own block builder from
 /// the shape, the position and the rotation (server 399, client 426); the
@@ -41,11 +42,6 @@ impl GameBox {
     }
 }
 
-/// The materials a byte names.
-pub(crate) const MATERIALS: usize = 0x100;
-/// The first building voxel material; building configs number theirs from
-/// it, 0-based.
-const BUILDING_FIRST: usize = 0x80;
 /// The game's `Unbreakable` hardness: a material this hard or harder is
 /// never written over.
 const UNBREAKABLE: u8 = 5;
@@ -60,12 +56,12 @@ pub(crate) fn replace_table(terrain: &[(u8, u8)], building: &[(u8, u8)]) -> [u8;
     let mut table = [0u8; MATERIALS];
     table[0] = 1;
     for &(material, hardness) in terrain {
-        if (1..BUILDING_FIRST).contains(&usize::from(material)) && hardness < UNBREAKABLE {
+        if TERRAIN.contains(&material) && hardness < UNBREAKABLE {
             table[usize::from(material)] = 1;
         }
     }
     for &(material, hardness) in building {
-        if let Some(slot) = table.get_mut(BUILDING_FIRST + usize::from(material))
+        if let Some(slot) = table.get_mut(usize::from(BUILDING_FIRST) + usize::from(material))
             && hardness < UNBREAKABLE
         {
             *slot = 1;

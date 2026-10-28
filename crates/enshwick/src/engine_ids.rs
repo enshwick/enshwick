@@ -88,6 +88,7 @@ ids! {
     REVIVED_PLAYER_EVENT = "revived_player_event";
     REVIVED_PLAYER_EVENT_TARGET_ENTITY_ID = "revived_player_event.target_entity_id";
     REVIVED_PLAYER_EVENT_SOURCE_ENTITY_ID = "revived_player_event.source_entity_id";
+    /// The id of a transform's position, three 32.32 fixed-point `i64`.
     WORLD_TRANSFORM_POSITION = "world_transform.position";
     /// The id of a transform's orientation, a quaternion of four `f32`.
     WORLD_TRANSFORM_ORIENTATION = "world_transform.orientation";
@@ -266,11 +267,14 @@ ids! {
     /// The id of a stack in an inventory, its `u32` item first.
     ITEM_STACK = "item_stack";
     ITEM_STACK_COUNT = "item_stack.count";
+    /// The id of a stack's `u32` item entity, its PIDE.
     ITEM_STACK_PIDE = "item_stack.pide";
     DURABILITY = "durability";
     DURABILITY_MAX = "durability.max";
     FUEL = "fuel";
     FUEL_MAX = "fuel.max";
+    /// The id of the component that relates an entity to its owner, the
+    /// owner's `u32` entity alone.
     OWNER = "owner";
     INVENTORY_EMPTY_STATE = "inventory_empty_state";
     INVENTORY_EMPTY_STATE_EMPTY = "inventory_empty_state.empty";

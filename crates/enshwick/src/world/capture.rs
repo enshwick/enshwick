@@ -4,7 +4,7 @@
 use crate::abi;
 use crate::voxels::{READ_MAX, Voxel, VoxelBox, VoxelPos, Voxels};
 
-use super::{Prop, World, WorldError};
+use super::{CapturedProp, World, WorldError};
 
 /// The most tiles one [`World::capture`] reads, each up to 64 voxels, 32
 /// metres, a side.
@@ -51,7 +51,7 @@ const VOXEL_METRES: f64 = 0.5;
 pub struct Capture {
     origin: VoxelPos,
     voxels: VoxelBox,
-    props: Vec<Prop>,
+    props: Vec<CapturedProp>,
 }
 
 /// A [`Capture`] as serde reads it, before its voxels are checked.
@@ -59,7 +59,7 @@ pub struct Capture {
 struct Parts {
     origin: VoxelPos,
     voxels: VoxelBox,
-    props: Vec<Prop>,
+    props: Vec<CapturedProp>,
 }
 
 impl TryFrom<Parts> for Capture {
@@ -126,7 +126,7 @@ impl Capture {
     ///
     /// See [`Capture`].
     #[must_use]
-    pub fn props(&self) -> &[Prop] {
+    pub fn props(&self) -> &[CapturedProp] {
         &self.props
     }
 
@@ -298,7 +298,8 @@ impl World {
             .props_in(start, end)?
             .into_iter()
             .filter(|prop| (0..3).all(|axis| prop.transform.position[axis] < end[axis]))
-            .map(|mut prop| {
+            .map(|prop| {
+                let mut prop = CapturedProp::from(prop);
                 for (axis, from) in prop.transform.position.iter_mut().zip(start) {
                     *axis -= from;
                 }
@@ -349,13 +350,12 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
-    use crate::Entity;
     use crate::ItemId;
     use crate::voxels::VoxelMaterial;
     use crate::world::WorldTransform;
 
     /// A capture of `size` whose voxels each name their own place.
-    fn numbered(size: [u32; 3], props: Vec<Prop>) -> Capture {
+    fn numbered(size: [u32; 3], props: Vec<CapturedProp>) -> Capture {
         let [width, height, depth] = size;
         let voxels = (0..depth)
             .flat_map(|z| (0..height).flat_map(move |y| (0..width).map(move |x| (x, y, z))))
@@ -469,8 +469,7 @@ mod tests {
             position in prop::array::uniform3(0.0f64..4.0),
             orientation in unit_quaternion(),
         ) {
-            let prop = Prop {
-                entity: Entity(9),
+            let prop = CapturedProp {
                 item: ItemId::new(4),
                 transform: WorldTransform { position, orientation: canonical(orientation) },
             };
@@ -494,8 +493,7 @@ mod tests {
         ) {
             let (x, y, z) = (x % width, y % height, z % depth);
             let centre = [x, y, z].map(|axis| (f64::from(axis) + 0.5) * VOXEL_METRES);
-            let prop = Prop {
-                entity: Entity(9),
+            let prop = CapturedProp {
                 item: ItemId::new(4),
                 transform: WorldTransform { position: centre, orientation },
             };

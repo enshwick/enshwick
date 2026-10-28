@@ -79,13 +79,13 @@ impl StateReads {
     }
 }
 
-/// Links an `InventorySetup` holds, stacks a sub-inventory holds, how deep
-/// virtual links nest before the walk stops, and the virtual link category
-/// (server 399, client 426).
-pub(crate) const LINKS: usize = 16;
-pub(crate) const SLOTS: usize = 8;
+/// Links an `InventorySetup` holds and stacks a sub-inventory holds.
+pub(crate) const LINKS: usize = enshwick::__private::INVENTORY_LINKS;
+pub(crate) const SLOTS: usize = enshwick::__private::INVENTORY_SLOTS as usize;
+/// How deep virtual links nest before the walk stops.
 const MAX_DEPTH: u32 = 4;
-const VIRTUAL: u8 = 5;
+/// The category of a link that leads to more links.
+const VIRTUAL: u8 = enshwick::inventory::InventoryCategory::VIRTUAL.0;
 
 /// An entity's `InventorySetup` as read: whether the game set it up, and
 /// its linked entities with their categories.
@@ -173,8 +173,6 @@ fn turn(rotation: [f32; 4], vector: [f64; 3]) -> [f64; 3] {
     [0, 1, 2].map(|i| vector[i] + real * twice[i] + again[i])
 }
 
-/// Metres to the game's 32.32 fixed point.
-const FIXED_ONE: f64 = 4_294_967_296.0;
 /// Half the side of the box a player's rights are checked for around a
 /// prop's position, in metres, for an item without a placement box: this
 /// fallback box is enshwick's own.
@@ -204,11 +202,7 @@ pub(crate) struct Prop {
 impl Prop {
     /// Its position in metres.
     pub(crate) fn metres(&self) -> [f64; 3] {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "a world position in fixed point fits an f64's precision to well below a voxel"
-        )]
-        self.position.map(|axis| axis as f64 / FIXED_ONE)
+        enshwick::ecs::metres(self.position)
     }
 
     /// Whether `other` is this prop where it was: the same template and
@@ -266,14 +260,13 @@ impl Prop {
 
     /// A prop of `item` at `metres`, its template the item's bytes.
     #[cfg(test)]
-    #[expect(clippy::cast_possible_truncation, reason = "test positions are small")]
     pub(crate) fn for_tests(item: u32, metres: [f64; 3]) -> Self {
         let mut template = [0; 16];
         template[..4].copy_from_slice(&item.to_le_bytes());
         Self {
             template,
             item,
-            position: metres.map(|axis| (axis * FIXED_ONE) as i64),
+            position: enshwick::ecs::fixed(metres),
             orientation: [0.0, 0.0, 0.0, 1.0],
             local_box: None,
             logic: false,
