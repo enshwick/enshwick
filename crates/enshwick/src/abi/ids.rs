@@ -257,8 +257,11 @@ pub struct KnowledgeId(pub u32);
     serde::Deserialize,
     bytemuck::Zeroable,
     bytemuck::Pod,
+    crate::Shape,
+    crate::Script,
 )]
 #[serde(transparent)]
+#[shape(api = "buff_type_id")]
 pub struct BuffTypeId(pub u32);
 
 /// A survivor of the game by its id, the [`Guid::fnv1a`] of its template's
@@ -289,8 +292,11 @@ pub struct BuffTypeId(pub u32);
     serde::Deserialize,
     bytemuck::Zeroable,
     bytemuck::Pod,
+    crate::Shape,
+    crate::Script,
 )]
 #[serde(transparent)]
+#[shape(api = "survivor_id")]
 pub struct SurvivorId(pub u32);
 
 impl From<RecipeId> for KnowledgeId {

@@ -11,7 +11,8 @@ Each entry names the pull request that made the change.
 - `BuffTypeId` and `SurvivorId` are ABI ids (ABI 3.4): the buff and
   survivor structs and `HostApi::remove_buff`, `summon_item` and the
   survivor status merge take them, and they print as their number. Every
-  id the game derives from a GUID has `named` (#623).
+  id the game derives from a GUID has `named`. Both have a `Shape`, and a Luau
+  script reads and answers them as `buff_type_id` and `survivor_id` (#623).
 - `loot::LootContainerId`, the game's name for a loot roll's node and
   labels; `Roll::node` and `Roll::labels` are `None` where the game has
   none, and `Source::with_nodes` and `with_labels` take the ids (#623).
