@@ -25,10 +25,7 @@ pub const MAX_OPS: usize = 64;
 pub const MAX_INVENTORIES: usize = 16;
 /// The game's op log holds this many records per transaction.
 const OP_LOG: u32 = 0x200;
-/// Slots per sub-inventory.
-const SLOTS: u8 = 8;
-/// Links per `InventorySetup`.
-const LINKS: usize = 16;
+use crate::__private::{INVENTORY_LINKS as LINKS, INVENTORY_SLOTS as SLOTS};
 /// How deep virtual sub-inventories nest before the walk stops.
 const MAX_DEPTH: u32 = 4;
 /// How far the owner walk climbs.

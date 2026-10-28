@@ -40,8 +40,7 @@ struct Layout {
     sets: [Set; 3],
 }
 
-/// The attribute set's flag bit that marks it initialised.
-const SET_INITIALISED: u8 = 1;
+use enshwick::__private::ATTRIBUTE_SET_INITIALISED as SET_INITIALISED;
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
 

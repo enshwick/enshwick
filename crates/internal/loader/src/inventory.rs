@@ -105,9 +105,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::item::INFO.id(),
 ];
 
-/// The most operations one request may hold; the game's op log takes 0x200
-/// records and an operation writes one per slot it changes.
-pub(crate) const MAX_OPS: usize = 64;
 /// How long a request may wait for the inventory system.
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// Bytes kept for the descriptor before the transaction, which is 16-aligned.
@@ -646,7 +643,7 @@ pub(crate) fn submit(
         return Status::MISSING;
     }
     let count = request.op_count as usize;
-    if request.ops.is_null() || count == 0 || count > MAX_OPS {
+    if request.ops.is_null() || count == 0 || count > enshwick::inventory::MAX_OPS {
         return Status::BAD_ARGS;
     }
     // SAFETY: the mod's request carries a non-null `ops` (checked earlier) of

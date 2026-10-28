@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `voxels::PER_METRE`, the voxels a metre on every axis, which the
+  loader's terrain edits now read too (#632).
+
 - `RecipeKind::ComfortFurniture` (`comfort-furniture` in a data pack, ABI
   code `RecipeKind::COMFORT_FURNITURE`) for placed props that carry the
   item tag of the game's Comfort Furniture crafting group; a prop with the

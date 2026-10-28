@@ -6,9 +6,10 @@ use enshwick_gamedata::catalogue;
 use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
-use crate::transactions::block::{Block, EventLayout, GameBox, MATERIALS, replace_table};
+use crate::transactions::block::{Block, EventLayout, GameBox, replace_table};
 use crate::transactions::paste::Region;
 use crate::transactions::props::Prop;
+use crate::voxels::{BUILDING_FIRST, MATERIALS};
 use crate::world::ServerAccess;
 
 /// The game's lookup of a shape's `VoxelBlueprintItem` by its item in a
@@ -60,11 +61,6 @@ pub(super) type WriteBlockFn = unsafe extern "system" fn(
     snap: u8,
     flag: u8,
 );
-
-/// The first building voxel material.
-const BUILDING_FIRST: u8 = 0x80;
-/// Metres to the game's 32.32 fixed point.
-const FIXED_ONE: f64 = 4_294_967_296.0;
 
 fn function(loader: &Loader, id: pinned::Symbol) -> Result<usize, Status> {
     loader
@@ -172,7 +168,7 @@ fn game_box(
         return Err(Status::BAD_ARGS);
     }
     let at = PosRot {
-        position: position.map(fixed),
+        position: enshwick::ecs::fixed(position),
         rotation,
     };
     let mut game = GameBox([0; GameBox::SIZE]);
@@ -215,16 +211,6 @@ fn feedback(loader: &Loader, _access: &ServerAccess<'_>, holder: usize, material
     // above), which the world keeps unchanged after load and `_access` keeps
     // alive.
     unsafe { lookup(core::ptr::with_exposed_provenance_mut(registry), material) }
-}
-
-/// A position in metres as the game's 32.32 fixed point; the caller keeps
-/// it at 0 or more and below [`enshwick::abi::Voxel::END`].
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "a position below 2^30 metres fits 32.32 fixed point in an i64"
-)]
-fn fixed(metres: f64) -> i64 {
-    (metres * FIXED_ONE) as i64
 }
 
 /// The building voxel material `item` places; [`Status::BAD_ARGS`] for an

@@ -11,9 +11,6 @@ use crate::transactions::props::{
 };
 use crate::world::ServerAccess;
 
-/// Metres to the game's 32.32 fixed point.
-const FIXED_ONE: f64 = 4_294_967_296.0;
-
 /// The offset the catalogue id `id` names on this build.
 fn offset(loader: &Loader, id: &str) -> Result<usize, Status> {
     catalogue::constant(id, &loader.reflection)
@@ -90,16 +87,6 @@ fn item_prop(loader: &Loader, access: &ServerAccess<'_>, item: u32) -> Result<It
     Ok((template, local_box, logic))
 }
 
-/// A position in metres as the game's 32.32 fixed point; the caller keeps
-/// it finite, at 0 or more and within the world.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "a position below 2^30 metres fits 32.32 fixed point in an i64"
-)]
-fn fixed(metres: f64) -> i64 {
-    (metres * FIXED_ONE) as i64
-}
-
 /// The prop `request` asks to place, checked: its item's template, box
 /// and logic flag. [`Status::BAD_ARGS`] for a position or orientation out
 /// of range or an item that places nothing, [`Status::NOT_A_PROP`] for one
@@ -118,7 +105,7 @@ pub(crate) fn resolve(loader: &Loader, request: &PropPlace) -> Result<Prop, Stat
     Ok(Prop {
         template,
         item: request.item.get(),
-        position: request.position.map(fixed),
+        position: enshwick::ecs::fixed(request.position),
         orientation: request.orientation,
         local_box,
         logic,

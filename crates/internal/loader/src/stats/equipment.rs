@@ -5,17 +5,17 @@
 use std::sync::OnceLock;
 
 use enshwick::Entity;
+use enshwick::inventory::InventoryCategory;
 use enshwick::raw::read_at;
 
 use crate::host::Loader;
 
+use crate::transactions::props::{LINKS, SLOTS};
+
 /// The equipment category of an inventory link.
-const EQUIPMENT: u8 = 2;
+const EQUIPMENT: u8 = InventoryCategory::EQUIPMENT.0;
 /// The virtual category, whose link leads to more links.
-const VIRTUAL: u8 = 5;
-/// Links in an `InventorySetup`, and stacks in an `Inventory`.
-const LINKS: usize = 16;
-const SLOTS: usize = 8;
+const VIRTUAL: u8 = InventoryCategory::VIRTUAL.0;
 /// How deep virtual links are followed.
 const MAX_DEPTH: u32 = 2;
 
