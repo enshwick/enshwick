@@ -81,6 +81,8 @@ pub enum KnowledgeType {
 
 /// Whose a knowledge value is.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See [`Known`].
@@ -160,6 +162,8 @@ impl Known {
 
 /// What a grant does, by the kind of the knowledge.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See the [module](self).
@@ -175,6 +179,8 @@ pub enum Grant {
 }
 
 /// What a revoke takes back, by the kind of the knowledge.
+///
+/// The name is enshwick's, not the game's.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
@@ -509,6 +515,8 @@ impl Knowledge {
 }
 
 /// Why the loader's knowledge guard refuses a client's request.
+///
+/// The name is enshwick's, not the game's.
 ///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///

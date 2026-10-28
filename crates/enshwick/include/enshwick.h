@@ -711,8 +711,8 @@ typedef struct EnshwickCraftCheck {
 typedef struct EnshwickDamageCheck {
   // Size and version of this struct.
   struct EnshwickHeader header;
-  // `DamageCheck::HIT`, `DamageCheck::FALL`, `DamageCheck::FOG`,
-  // `DamageCheck::DEADLY_FOG`, `DamageCheck::DROWNING`,
+  // `DamageCheck::IMPACT`, `DamageCheck::FALL_DAMAGE`, `DamageCheck::FOG`,
+  // `DamageCheck::DEADLY_FOG`, `DamageCheck::SUFFOCATED`,
   // `DamageCheck::DROWNING_DEATH`, `DamageCheck::FREEZING` or
   // `DamageCheck::ADMIN_KILL`.
   uint32_t cause;
@@ -735,15 +735,15 @@ typedef struct EnshwickDamageCheck {
   float total;
 } EnshwickDamageCheck;
 // A hit from a weapon, a spell, a creature or an explosion.
-#define EnshwickDamageCheck_HIT 0
+#define EnshwickDamageCheck_IMPACT 0
 // A fall.
-#define EnshwickDamageCheck_FALL 1
+#define EnshwickDamageCheck_FALL_DAMAGE 1
 // The shroud draining a character whose time in it ran out.
 #define EnshwickDamageCheck_FOG 2
 // The deadly shroud, which kills at once.
 #define EnshwickDamageCheck_DEADLY_FOG 3
 // A character out of breath under water.
-#define EnshwickDamageCheck_DROWNING 4
+#define EnshwickDamageCheck_SUFFOCATED 4
 // A creature out of breath under water, which dies at once.
 #define EnshwickDamageCheck_DROWNING_DEATH 5
 // A character frozen through, out of body heat.
@@ -2555,11 +2555,11 @@ typedef uint32_t EnshwickRateId;
 // Experience from mining.
 #define EnshwickRateId_EXPERIENCE_MINING 2
 // Experience from exploration and quests.
-#define EnshwickRateId_EXPERIENCE_EXPLORATION 3
+#define EnshwickRateId_EXPERIENCE_EXPLORATION_QUESTS 3
 // How fast workshops produce.
-#define EnshwickRateId_WORKSHOP_SPEED 4
+#define EnshwickRateId_FACTORY_PRODUCTION_SPEED 4
 // How many resources a drop stacks.
-#define EnshwickRateId_RESOURCE_DROPS 5
+#define EnshwickRateId_RESOURCE_DROP_STACK_AMOUNT 5
 // The comfort furniture gives a base.
 #define EnshwickRateId_COMFORT 6
 // The skill points a character gains per level.

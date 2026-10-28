@@ -16,7 +16,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("home", "Go to the world's centre"), move |request| {
         let me = request.player.entity;
-        match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
+        match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().search_best_spawn_position()) {
             Ok(()) => Outcome::done("On your way"),
             Err(why) => Outcome::refused(format!("No teleport: {why}")),
         }
@@ -77,8 +77,9 @@ Unstable: needs the `unstable` feature and may change in any release
 `teleport(entity, position, how)` moves an entity as the game's admin
 teleport does: after the next step the entity jumps to `position`, in metres,
 and clients see it arrive. `Teleport::new()` keeps the entity's orientation;
-`.best_spawn()` lets the game look for a free spot nearby to stand on, as it
-does for respawns, and `.facing_yaw(radians)` turns the entity on arrival.
+`.search_best_spawn_position()` lets the game look for a free spot nearby to
+stand on, as it does for respawns, and `.facing_yaw(radians)` turns the
+entity on arrival.
 It fails with `Gone` for an entity not in the world or without a place, and
 with `Refused` for one the game's teleport does not move: it moves actors and
 characters, not props.
@@ -93,7 +94,7 @@ entity is in the world after the next step, and a template the game does not
 know spawns nothing. `Spawn::new()` takes the template as it is;
 `.level(n)` scales the entity as the game scales enemies,
 `.despawn_after(duration)` lets the game remove it after that much game time,
-and `.facing_yaw(radians)` turns it.
+and `.orientation_yaw(radians)` turns it.
 
 ```rust
 use core::time::Duration;

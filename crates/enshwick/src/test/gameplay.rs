@@ -56,7 +56,7 @@ impl Installed {
     /// let loader = enshwick::test::FakeHost::new().install();
     /// let fall = DamageCheck {
     ///     header: Header::of::<DamageCheck>(),
-    ///     cause: DamageCheck::FALL,
+    ///     cause: DamageCheck::FALL_DAMAGE,
     ///     target: enshwick::Entity(2),
     ///     source: enshwick::Entity(0),
     ///     attacker: enshwick::Entity(0),

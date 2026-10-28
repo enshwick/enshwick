@@ -92,7 +92,11 @@ mod tests {
         assert_eq!(i64::from_le_bytes(word(pinged, 16)), 1 << 31);
 
         effects
-            .teleport(Entity(5), [10.0, 20.0, 30.0], Teleport::new().best_spawn())
+            .teleport(
+                Entity(5),
+                [10.0, 20.0, 30.0],
+                Teleport::new().search_best_spawn_position(),
+            )
             .unwrap();
         assert_eq!(
             effects.teleport(Entity(7), [0.0; 3], Teleport::new()),

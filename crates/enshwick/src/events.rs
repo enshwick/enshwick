@@ -9,7 +9,9 @@
 //!
 //! Each event is named for what happened, a subject and a verb in the past
 //! tense, and its [`Event`] constant is the same name in capitals:
-//! [`PlayerJoined`] is [`Event::PLAYER_JOINED`].
+//! [`PlayerJoined`] is [`Event::PLAYER_JOINED`]. The names are enshwick's:
+//! a loader event often joins several game events, whose own names live in
+//! [`game_events`](crate::game_events).
 
 use core::ffi::c_void;
 use core::time::Duration;

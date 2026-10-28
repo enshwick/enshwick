@@ -24,9 +24,15 @@ pub(crate) const LINKS: &[(RateId, &[Symbol])] = &[
         &[experience::SOURCE_FACTOR, experience::KILL],
     ),
     (RateId::EXPERIENCE_MINING, &[experience::SOURCE_FACTOR]),
-    (RateId::EXPERIENCE_EXPLORATION, &[experience::SOURCE_FACTOR]),
-    (RateId::WORKSHOP_SPEED, &[settings::FACTORY_SPEED]),
-    (RateId::RESOURCE_DROPS, &[settings::RESOURCE_DROPS]),
+    (
+        RateId::EXPERIENCE_EXPLORATION_QUESTS,
+        &[experience::SOURCE_FACTOR],
+    ),
+    (RateId::FACTORY_PRODUCTION_SPEED, &[settings::FACTORY_SPEED]),
+    (
+        RateId::RESOURCE_DROP_STACK_AMOUNT,
+        &[settings::RESOURCE_DROPS],
+    ),
     (RateId::COMFORT, &[comfort::BASE_REGISTER]),
     (RateId::SKILL_POINTS, &[skill::POINTS_PER_LEVEL]),
     (RateId::LOOT, &[loot::STACK_ROLL, item::INFO]),
@@ -354,7 +360,7 @@ mod tests {
     #[test]
     fn only_a_mod_that_joins_declares_a_rate_clients_count() {
         let rates = Rates::new();
-        let speed = RateId::WORKSHOP_SPEED;
+        let speed = RateId::FACTORY_PRODUCTION_SPEED;
         assert_eq!(
             rates.declare(ModIndex::new(0), speed, true, false),
             Status::REFUSED
@@ -390,7 +396,7 @@ mod tests {
         let rates = experience_rates(value);
         assert_eq!(rates[40], Some(RateId::EXPERIENCE_COMBAT));
         assert_eq!(rates[41], Some(RateId::EXPERIENCE_MINING));
-        assert_eq!(rates[50], Some(RateId::EXPERIENCE_EXPLORATION));
+        assert_eq!(rates[50], Some(RateId::EXPERIENCE_EXPLORATION_QUESTS));
         assert_eq!(rates[0], None, "no factor without a source");
         assert_eq!(rates[4], None, "a value no source has");
     }

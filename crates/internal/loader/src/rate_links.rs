@@ -200,7 +200,7 @@ unsafe extern "system" fn resource_drops(data: *const u8) -> f32 {
     // unchanged to the rest of the chain, which the slot holds since the
     // chain is wired before the target jumps here.
     let vanilla = unsafe { DROPS_NEXT.get()(data) };
-    vanilla * factor(RateId::RESOURCE_DROPS)
+    vanilla * factor(RateId::RESOURCE_DROP_STACK_AMOUNT)
 }
 
 /// The game's answer is how long production takes per unit of time, the
@@ -211,7 +211,7 @@ unsafe extern "system" fn factory_speed(data: *const u8) -> f32 {
     // unchanged to the rest of the chain, which the slot holds since the
     // chain is wired before the target jumps here.
     let vanilla = unsafe { FACTORY_NEXT.get()(data) };
-    workshop_duration(vanilla, factor(RateId::WORKSHOP_SPEED))
+    workshop_duration(vanilla, factor(RateId::FACTORY_PRODUCTION_SPEED))
 }
 
 unsafe extern "system" fn source_factor(data: *const u8, source: u8) -> f32 {

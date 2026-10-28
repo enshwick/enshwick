@@ -12,8 +12,8 @@ impl FakeHost {
     /// ```
     /// use enshwick::rates::Rate;
     ///
-    /// let loader = enshwick::test::FakeHost::new().without_rate(Rate::WorkshopSpeed).install();
-    /// assert_eq!(loader.rate(Rate::WorkshopSpeed), None);
+    /// let loader = enshwick::test::FakeHost::new().without_rate(Rate::FactoryProductionSpeed).install();
+    /// assert_eq!(loader.rate(Rate::FactoryProductionSpeed), None);
     /// ```
     #[must_use]
     pub fn without_rate(mut self, rate: Rate) -> Self {
@@ -37,7 +37,7 @@ impl Installed {
     /// use enshwick::rates::Rate;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// assert_eq!(loader.rate(Rate::ResourceDrops), None);
+    /// assert_eq!(loader.rate(Rate::ResourceDropStackAmount), None);
     /// ```
     #[must_use]
     pub fn rate(&self, rate: Rate) -> Option<f32> {
@@ -75,10 +75,12 @@ mod tests {
 
     #[test]
     fn the_fake_refuses_what_the_loader_refuses() {
-        let loader = FakeHost::new().without_rate(Rate::WorkshopSpeed).install();
+        let loader = FakeHost::new()
+            .without_rate(Rate::FactoryProductionSpeed)
+            .install();
         let api = api(&loader);
-        let speed = Rate::WorkshopSpeed.id();
-        let drops = Rate::ResourceDrops.id();
+        let speed = Rate::FactoryProductionSpeed.id();
+        let drops = Rate::ResourceDropStackAmount.id();
         assert_eq!((api.rate)(ModHandle(1), speed), Status::MISSING);
         assert_eq!(
             (api.rate)(ModHandle(1), crate::abi::RateId(0)),
@@ -92,6 +94,6 @@ mod tests {
                 Status::BAD_ARGS
             );
         }
-        assert_eq!(loader.rate(Rate::ResourceDrops), Some(1.0));
+        assert_eq!(loader.rate(Rate::ResourceDropStackAmount), Some(1.0));
     }
 }

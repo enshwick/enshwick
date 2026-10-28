@@ -66,6 +66,8 @@ pub struct TerrainTerraformingConfig {
 
 /// The shape of an edit.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See the [module](self).

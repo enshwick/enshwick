@@ -56,6 +56,8 @@ pub enum WeatherState {
 /// How the weather is at a place, from [`Weather::at`]: weights that add
 /// up to 1, as the game's systems weigh it.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// ```
@@ -145,6 +147,8 @@ pub struct Front {
 }
 
 /// The weather to start, for [`Weather::set`].
+///
+/// The name is enshwick's, not the game's.
 ///
 /// # Examples
 ///
