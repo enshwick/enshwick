@@ -746,7 +746,7 @@ pub(crate) extern "system" fn map_markers(
         return Status::WRONG_THREAD;
     }
     let Some(markers) = with(None, |s| {
-        let first = !core::mem::replace(&mut s.edits.markers_asked, true);
+        let first = s.edits.first_ask(crate::test::table::SceneRead::Markers);
         (!s.edits.stopped)
             .then(|| (!first && !s.edits.markers_pending).then(|| s.host.map_markers.clone()))
     }) else {
@@ -756,6 +756,33 @@ pub(crate) extern "system" fn map_markers(
         return Status::NOT_LOADED;
     };
     crate::test::table::mods::list(&markers, out, entry_size, capacity, count)
+}
+
+pub(crate) extern "system" fn map_frame(
+    _me: ModHandle,
+    out: *mut crate::abi::MapFrameInfo,
+) -> Status {
+    if !crate::test::table::on_game_thread() {
+        return Status::WRONG_THREAD;
+    }
+    let Some(frame) = with(None, |s| {
+        let first = s.edits.first_ask(crate::test::table::SceneRead::Frame);
+        (!s.edits.stopped).then(|| (!first && !s.edits.markers_pending).then_some(s.host.map_frame))
+    }) else {
+        return Status::MISSING;
+    };
+    let Some(frame) = frame else {
+        return Status::NOT_LOADED;
+    };
+    let Some(frame) = frame else {
+        return Status::MISSING;
+    };
+    // SAFETY: the safe layer passes a headed struct for the call.
+    if unsafe { crate::abi::write_headed(out, frame) } {
+        Status::OK
+    } else {
+        Status::BAD_ARGS
+    }
 }
 
 pub(crate) extern "system" fn world_persists(

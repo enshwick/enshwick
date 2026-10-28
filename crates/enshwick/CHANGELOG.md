@@ -47,6 +47,11 @@ Each entry names the pull request that made the change.
   cost per handler call: `elapsed_steps`, `elapsed`, `step_interval` and
   `cost`, with `TickData::new` and `with_elapsed` for tests (ABI 3.3) (#614).
 - The fake host runs steps as the loader does with `Installed::tick` (#614).
+- `Map::frame` returns a `MapFrame`: where the scene's map starts, how far
+  it reaches and the size of its cells, in metres, read from the game's
+  data once per scene like the markers (ABI 3.4, `HostApi::map_frame` and
+  `MapFrameInfo`); the fake host serves one with `FakeHost::map_frame`
+  (#627).
 
 ### Changed
 
@@ -71,6 +76,8 @@ Each entry names the pull request that made the change.
   to every part of the step that needs the time (#614).
 - `abi::read_headed` copies a struct in one move when the writer's struct
   covers all of it, so a larger event struct costs a handler no more (#614).
+- Breaking: `MapSnapshot` carries the map's `frame`, and
+  `MAP_SNAPSHOT_FORMAT` is 2 (#627).
 - Breaking: `Guid::id` is `Guid::fnv1a`, the bare hash, and `Id::id` is
   gone; `ItemId::from_guid(id.guid())` and its siblings take their place.
   `World::used_item` returns an `ItemId`, and `migrations::current_id`

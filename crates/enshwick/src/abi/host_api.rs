@@ -11,14 +11,14 @@ use crate::abi::{
     EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo, ExperiencePassFn,
     FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest, InventoryResultFn,
     ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn, LoopWaitSites,
-    MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo, NetMessageFn,
-    PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId, RecipeKind,
-    RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn, ServiceFound,
-    ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData, StatModifierData,
-    StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn, SurvivorLookupFn,
-    SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo, TickHandle,
-    TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget, Voxel,
-    WeatherFront, ZoneCheckFn,
+    MapFrameInfo, MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle, ModInfo,
+    NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict, RateId,
+    RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
+    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
+    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
+    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
+    TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget, Voxel, WeatherFront, ZoneCheckFn,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1443,4 +1443,15 @@ pub struct HostApi {
     /// minor 3.
     pub set_tick_every:
         extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
+    /// Writes to `out` the frame of the map of the scene the server runs:
+    /// the scene's biome map, read from the game's archive once per scene
+    /// on a thread of the loader's; [`Status::NOT_LOADED`] until that read
+    /// is done. `out` is the caller's, at least a [`Header`] and writable
+    /// for the size its header states; [`Status::BAD_ARGS`] for a null or
+    /// smaller one. On the server's game thread at a quiet moment
+    /// ([`Status::WRONG_THREAD`] elsewhere or inside a step);
+    /// [`Status::MISSING`] while no world runs, for a scene without a biome
+    /// map, or when the scene does not read on this build. A panic in the
+    /// loader returns [`Status::REFUSED`]. Since minor 4.
+    pub map_frame: extern "system" fn(me: ModHandle, out: *mut MapFrameInfo) -> Status,
 }

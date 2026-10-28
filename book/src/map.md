@@ -2,7 +2,7 @@
 
 [`load.map()`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/map.rs)
 returns the `Map` of the game server, dedicated or hosted by a client: the
-markers the world comes with and the waypoint each player sets. It is
+markers the world comes with, its frame and the waypoint each player sets. It is
 `Copy`; get it during `init` and move it into handlers and tasks. Every call
 belongs on the server's game thread, like the [world](world.md)'s.
 
@@ -57,11 +57,35 @@ player in the game sees, in metres; `None` while it is off. The server keeps
 it only while the player plays, never in the save. It fails like
 `markers()`, and with `Missing` on a game build without waypoints.
 
+## The map's frame
+
+`map.frame()` returns a `MapFrame`: where the world's map starts, how far
+it reaches and the size of the game's map cells, all in metres on the
+world's x and z axes. A map drawn outside the game puts its corner at
+`origin` and spans `size`. On the main scene of the current game the frame
+starts at (0, 0) and spans 10 240 m each way in cells of 8 m.
+
+```rust
+use enshwick::map::Map;
+
+fn place(map: Map, position: [f64; 3]) -> Option<[f64; 2]> {
+    let frame = map.frame().ok()?;
+    let across = |axis: usize, of: usize| (position[axis] - frame.origin[of]) / frame.size[of];
+    Some([across(0, 0), across(2, 1)])
+}
+```
+
+The loader reads it once per scene like the markers, so it fails like
+`markers()`: `NotLoaded` until that read is done, `WrongThread` off the
+game thread, and `Missing` while no world runs, for a scene without a map,
+or when the scene does not read on the game build.
+
 ## Snapshots for a map outside the game
 
 `map.snapshot(altars)` takes what the map shows now as a `MapSnapshot`:
 every player with position and waypoint, the Flame Altars of an `Altars`
-from `load.altars()` with the base each belongs to, and every marker. It is
+from `load.altars()` with the base each belongs to, every marker and the
+map's frame, `None` for a scene without one. It is
 plain serde data in Enshwick's own format, for a process beside the server
 such as a web map. `to_bytes()` writes `MAP_SNAPSHOT_FORMAT` in two bytes and
 then the fields in postcard's encoding; `MapSnapshot::from_bytes` reads it

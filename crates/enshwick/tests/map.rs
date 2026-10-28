@@ -1,15 +1,18 @@
-//! The map's markers and each player's waypoint, as the loader answers them.
+//! The map's markers, its frame and each player's waypoint, as the loader
+//! answers them.
 
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex;
 
     use enshwick::Entity;
-    use enshwick::abi::{AltarInfo, Bounds, Header, MapMarkerInfo, PlayerInfo, Status};
+    use enshwick::abi::{
+        AltarInfo, Bounds, Header, MapFrameInfo, MapMarkerInfo, PlayerInfo, Status,
+    };
     use enshwick::altars::Altars;
     use enshwick::content::Guid;
     use enshwick::map::{
-        Map, MapAltar, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
+        Map, MapAltar, MapFrame, MapMarker, MapMarkerTypeId, MapPlayer, MapPoint, MapSnapshot,
     };
     use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
@@ -97,6 +100,7 @@ mod tests {
         let map = MAP.lock().unwrap().unwrap();
         // The first call of a world starts the loader's read of the scene.
         assert_eq!(map.markers(), Err(WorldError::NotLoaded));
+        assert_eq!(map.frame(), Err(WorldError::NotLoaded));
         (loader, map)
     }
 
@@ -312,5 +316,89 @@ mod tests {
         loader.set_altars(&[altar(300, 2, [0, 0, 0], [10, 10, 10])]);
 
         assert!(map.snapshot(None).unwrap().altars.is_empty());
+    }
+
+    /// The frame of a 10 240 m world of 8 m cells, as the loader reads it.
+    const FRAME: MapFrameInfo = MapFrameInfo {
+        origin: [-512.0, 256.0],
+        size: [10240.0, 10240.0],
+        metres_per_cell: 8.0,
+        ..MapFrameInfo::EMPTY
+    };
+
+    #[test]
+    fn a_frame_gives_the_map_s_origin_size_and_cell_in_metres() {
+        let (_loader, map) = start(fake().map_frame(FRAME));
+
+        assert_eq!(
+            map.frame(),
+            Ok(MapFrame {
+                origin: [-512.0, 256.0],
+                size: [10240.0, 10240.0],
+                metres_per_cell: 8.0,
+            })
+        );
+    }
+
+    #[test]
+    fn a_scene_without_a_frame_answers_missing() {
+        let (_loader, map) = start(fake());
+
+        assert_eq!(map.frame(), Err(WorldError::Missing));
+    }
+
+    #[test]
+    fn a_frame_waits_while_the_loader_reads_the_scene() {
+        let (loader, map) = start(fake().map_frame(FRAME));
+
+        loader.read_map_markers(true);
+        assert_eq!(map.frame(), Err(WorldError::NotLoaded));
+        loader.read_map_markers(false);
+        assert_eq!(map.frame().map(|frame| frame.metres_per_cell), Ok(8.0));
+    }
+
+    #[test]
+    fn a_frame_fails_while_no_world_runs_or_off_the_game_thread() {
+        let (loader, map) = start(fake().map_frame(FRAME));
+
+        let elsewhere = std::thread::spawn(move || map.frame()).join().unwrap();
+        assert_eq!(elsewhere, Err(WorldError::WrongThread));
+        loader.stop_world();
+        assert_eq!(map.frame(), Err(WorldError::Missing));
+    }
+
+    #[test]
+    fn a_frame_no_map_can_have_is_refused_as_missing() {
+        for frame in [
+            MapFrameInfo {
+                size: [0.0, 10240.0],
+                ..FRAME
+            },
+            MapFrameInfo {
+                metres_per_cell: -8.0,
+                ..FRAME
+            },
+            MapFrameInfo {
+                origin: [f64::NAN, 0.0],
+                ..FRAME
+            },
+            MapFrameInfo {
+                size: [f64::INFINITY, 10240.0],
+                ..FRAME
+            },
+        ] {
+            let (_loader, map) = start(fake().map_frame(frame));
+            assert_eq!(map.frame(), Err(WorldError::Missing), "{frame:?}");
+        }
+    }
+
+    #[test]
+    fn a_snapshot_carries_the_frame_and_none_without_one() {
+        {
+            let (_loader, map) = start(fake().map_frame(FRAME));
+            assert_eq!(map.snapshot(None).unwrap().frame, map.frame().ok());
+        }
+        let (_loader, map) = start(fake());
+        assert_eq!(map.snapshot(None).unwrap().frame, None);
     }
 }

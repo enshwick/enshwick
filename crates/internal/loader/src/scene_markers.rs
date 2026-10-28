@@ -1,5 +1,6 @@
 //! The map markers a scene places, read from its chunk and template
-//! resources in the game's archive.
+//! resources in the game's archive, and the cache that keeps what the
+//! loader read of a scene.
 //!
 //! A scene's chunk resource lists the templates its entities use and, for
 //! each entity, the template's index and a packed transform. A template
@@ -351,51 +352,49 @@ pub fn collect(
     Ok((markers, skipped))
 }
 
-/// A scene's markers, or why they did not read.
-pub type SceneRead<T> = Result<std::sync::Arc<[T]>, ReadSceneError>;
-
-/// The markers of the last scene asked for, or why they did not read,
-/// kept until the scene changes; a read runs apart from the caller.
+/// What the loader read of the last scene asked for, or why it did not
+/// read, kept until the scene changes; a read runs apart from the caller.
 #[derive(Debug)]
-pub struct SceneMarkers<T> {
-    held: Option<(SceneKey, Option<SceneRead<T>>)>,
+pub struct SceneCache<V, E> {
+    held: Option<(SceneKey, Option<Result<V, E>>)>,
 }
 
-/// What a [`SceneMarkers::lookup`] found.
+/// What a [`SceneCache::lookup`] found.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Lookup<T> {
-    /// The scene's markers, or why they did not read.
-    Ready(SceneRead<T>),
+pub enum Lookup<V, E> {
+    /// The scene's read, or why it did not read.
+    Ready(Result<V, E>),
     /// A read of the scene is under way.
     Pending,
     /// The scene is new: the caller starts its read and calls
-    /// [`SceneMarkers::finish`] with it.
+    /// [`SceneCache::finish`] with it.
     Start,
 }
 
-impl<T> SceneMarkers<T> {
+impl<V: Clone, E: Clone> SceneCache<V, E> {
     /// Nothing read yet.
     #[must_use]
     pub const fn new() -> Self {
         Self { held: None }
     }
 
-    /// The markers of `key`; for a scene not held yet, it is held as being
+    /// The read of `key`; for a scene not held yet, it is held as being
     /// read from now on, and only this call answers [`Lookup::Start`].
     ///
     /// # Examples
     ///
     /// ```
-    /// use enshwick_loader::scene_markers::{Lookup, SceneKey, SceneMarkers};
+    /// use std::sync::Arc;
+    /// use enshwick_loader::scene_markers::{Lookup, ReadSceneError, SceneCache, SceneKey};
     ///
-    /// let mut cache = SceneMarkers::new();
+    /// let mut cache: SceneCache<Arc<[u8]>, ReadSceneError> = SceneCache::new();
     /// let key = SceneKey::new([1; 16], 2).unwrap();
     /// assert_eq!(cache.lookup(key), Lookup::Start);
     /// assert_eq!(cache.lookup(key), Lookup::Pending);
-    /// assert!(cache.finish(key, Ok(vec![5u8])));
+    /// assert!(cache.finish(key, Ok(Arc::from([5u8]))));
     /// assert!(matches!(cache.lookup(key), Lookup::Ready(Ok(markers)) if markers.len() == 1));
     /// ```
-    pub fn lookup(&mut self, key: SceneKey) -> Lookup<T> {
+    pub fn lookup(&mut self, key: SceneKey) -> Lookup<V, E> {
         match &self.held {
             Some((held, Some(found))) if *held == key => Lookup::Ready(found.clone()),
             Some((held, None)) if *held == key => Lookup::Pending,
@@ -408,10 +407,10 @@ impl<T> SceneMarkers<T> {
 
     /// Keeps the read of `key`, unless the scene changed meanwhile; whether
     /// it was kept.
-    pub fn finish(&mut self, key: SceneKey, read: Result<Vec<T>, ReadSceneError>) -> bool {
+    pub fn finish(&mut self, key: SceneKey, read: Result<V, E>) -> bool {
         match &mut self.held {
             Some((held, slot @ None)) if *held == key => {
-                *slot = Some(read.map(std::sync::Arc::from));
+                *slot = Some(read);
                 true
             }
             _ => false,
@@ -419,7 +418,7 @@ impl<T> SceneMarkers<T> {
     }
 }
 
-impl<T> Default for SceneMarkers<T> {
+impl<V: Clone, E: Clone> Default for SceneCache<V, E> {
     fn default() -> Self {
         Self::new()
     }
@@ -600,7 +599,7 @@ mod tests {
 
     #[test]
     fn a_failure_is_kept_for_its_scene_and_a_new_scene_reads_again() {
-        let mut cache: SceneMarkers<u8> = SceneMarkers::new();
+        let mut cache: SceneCache<Vec<u8>, ReadSceneError> = SceneCache::new();
         let first = SceneKey::new([1; 16], 2).unwrap();
         let second = SceneKey::new([2; 16], 2).unwrap();
         assert_eq!(cache.lookup(first), Lookup::Start);
@@ -616,7 +615,7 @@ mod tests {
 
     #[test]
     fn a_read_of_a_scene_left_meanwhile_is_dropped() {
-        let mut cache: SceneMarkers<u8> = SceneMarkers::new();
+        let mut cache: SceneCache<Vec<u8>, ReadSceneError> = SceneCache::new();
         let first = SceneKey::new([1; 16], 2).unwrap();
         let second = SceneKey::new([2; 16], 2).unwrap();
         assert_eq!(cache.lookup(first), Lookup::Start);
