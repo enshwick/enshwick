@@ -1401,7 +1401,7 @@ pub struct HostApi {
     /// [`Status::MISSING`] outside a dedicated server. Any thread, also
     /// while another call or the console changes the list: changes take
     /// turns and the file is replaced whole. A panic in the loader returns
-    /// [`Status::REFUSED`]. Since minor 1.
+    /// [`Status::REFUSED`].
     pub allowlist_set: extern "system" fn(me: ModHandle, account: PlayerKey, listed: u8) -> Status,
     /// Writes 1 to `listed` when the loader's allowlist lists `account`, 0
     /// when not or when the file never read, whether the `allowlist`
@@ -1410,7 +1410,7 @@ pub struct HostApi {
     /// [`Status::BAD_ARGS`] for account 0 or a null `listed`;
     /// [`Status::MISSING`] outside a dedicated server. Any thread, also
     /// while the list changes. A panic in the loader returns
-    /// [`Status::REFUSED`]. Since minor 1.
+    /// [`Status::REFUSED`].
     pub allowlist_has:
         extern "system" fn(me: ModHandle, account: PlayerKey, listed: *mut u8) -> Status,
     /// Calls `callback` with `user`, [`Event::TICKED`] and a [`TickData`](super::TickData)
@@ -1425,7 +1425,6 @@ pub struct HostApi {
     /// off; a panic in it turns the mod off. It may call
     /// [`HostApi::set_tick_every`] on itself. [`Status::REFUSED`] once the
     /// loader holds `u32::MAX` handlers, and when the loader panics.
-    /// Since minor 3.
     pub subscribe_tick: extern "system" fn(
         me: ModHandle,
         every_nanos: u64,
@@ -1439,8 +1438,7 @@ pub struct HostApi {
     /// that time has passed. [`Status::REFUSED`] for another mod's handle;
     /// [`Status::MISSING`] for a handle the loader never gave out or one of
     /// the mod's copy before a reload. Any thread, the handler itself
-    /// included. A panic in the loader returns [`Status::REFUSED`]. Since
-    /// minor 3.
+    /// included. A panic in the loader returns [`Status::REFUSED`].
     pub set_tick_every:
         extern "system" fn(me: ModHandle, handle: TickHandle, every_nanos: u64) -> Status,
     /// Writes to `out` the frame of the map of the scene the server runs:
@@ -1452,7 +1450,7 @@ pub struct HostApi {
     /// ([`Status::WRONG_THREAD`] elsewhere or inside a step);
     /// [`Status::MISSING`] while no world runs, for a scene without a biome
     /// map, or when the scene does not read on this build. A panic in the
-    /// loader returns [`Status::REFUSED`]. Since minor 4.
+    /// loader returns [`Status::REFUSED`].
     pub map_frame: extern "system" fn(me: ModHandle, out: *mut MapFrameInfo) -> Status,
     /// Asks the game to group up to `zones` altar zones into up to `bases`
     /// bases. Raised, the game groups every listed zone into its base;
@@ -1466,6 +1464,6 @@ pub struct HostApi {
     /// most the loader takes ([`BaseLimitInfo::max_zones`],
     /// [`BaseLimitInfo::max_bases`]); [`Status::MISSING`] when this build's
     /// code is not the one the loader knows, and the game keeps its own.
-    /// Allowed during `enshwick_mod_init` only. Since minor 1.
+    /// Allowed during `enshwick_mod_init` only.
     pub request_base_limits: extern "system" fn(me: ModHandle, zones: u32, bases: u32) -> Status,
 }

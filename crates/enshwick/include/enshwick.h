@@ -322,13 +322,12 @@ typedef struct EnshwickBaseLimitInfo {
   uint32_t vanilla_zones;
   // Zero.
   uint32_t reserved;
-  // Bases the game's own code holds. Since minor 1.
+  // Bases the game's own code holds.
   uint32_t vanilla_bases;
   // The most altar zones a mod may ask for with
   // `HostApi::request_base_limits`.
-  // Since minor 1.
   uint32_t max_zones;
-  // The most bases a mod may ask for. Since minor 1.
+  // The most bases a mod may ask for.
   uint32_t max_bases;
 } EnshwickBaseLimitInfo;
 
@@ -2778,7 +2777,7 @@ typedef struct EnshwickMapMarkerInfo {
 
 // A periodic tick handler a mod subscribed with
 // `HostApi::subscribe_tick`, for
-// `HostApi::set_tick_every`. Since minor 3.
+// `HostApi::set_tick_every`.
 //
 // Valid for the mod that subscribed it until that mod reloads, after which
 // the loader answers `Status::MISSING`.
@@ -4092,7 +4091,7 @@ typedef struct EnshwickHostApi {
   // `Status::MISSING` outside a dedicated server. Any thread, also
   // while another call or the console changes the list: changes take
   // turns and the file is replaced whole. A panic in the loader returns
-  // `Status::REFUSED`. Since minor 1.
+  // `Status::REFUSED`.
   EnshwickStatus (*allowlist_set)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t listed);
   // Writes 1 to `listed` when the loader's allowlist lists `account`, 0
   // when not or when the file never read, whether the `allowlist`
@@ -4101,7 +4100,7 @@ typedef struct EnshwickHostApi {
   // `Status::BAD_ARGS` for account 0 or a null `listed`;
   // `Status::MISSING` outside a dedicated server. Any thread, also
   // while the list changes. A panic in the loader returns
-  // `Status::REFUSED`. Since minor 1.
+  // `Status::REFUSED`.
   EnshwickStatus (*allowlist_has)(EnshwickModHandle me, EnshwickPlayerKey account, uint8_t *listed);
   // Calls `callback` with `user`, `Event::TICKED` and a `TickData`
   // on the server's game thread after a step, once `every_nanos` of wall
@@ -4115,7 +4114,6 @@ typedef struct EnshwickHostApi {
   // off; a panic in it turns the mod off. It may call
   // `HostApi::set_tick_every` on itself. `Status::REFUSED` once the
   // loader holds `u32::MAX` handlers, and when the loader panics.
-  // Since minor 3.
   EnshwickStatus (*subscribe_tick)(EnshwickModHandle me,
                                    uint64_t every_nanos,
                                    EnshwickEventFn callback,
@@ -4127,8 +4125,7 @@ typedef struct EnshwickHostApi {
   // that time has passed. `Status::REFUSED` for another mod's handle;
   // `Status::MISSING` for a handle the loader never gave out or one of
   // the mod's copy before a reload. Any thread, the handler itself
-  // included. A panic in the loader returns `Status::REFUSED`. Since
-  // minor 3.
+  // included. A panic in the loader returns `Status::REFUSED`.
   EnshwickStatus (*set_tick_every)(EnshwickModHandle me,
                                    EnshwickTickHandle handle,
                                    uint64_t every_nanos);
@@ -4141,7 +4138,7 @@ typedef struct EnshwickHostApi {
   // (`Status::WRONG_THREAD` elsewhere or inside a step);
   // `Status::MISSING` while no world runs, for a scene without a biome
   // map, or when the scene does not read on this build. A panic in the
-  // loader returns `Status::REFUSED`. Since minor 4.
+  // loader returns `Status::REFUSED`.
   EnshwickStatus (*map_frame)(EnshwickModHandle me, struct EnshwickMapFrameInfo *out);
   // Asks the game to group up to `zones` altar zones into up to `bases`
   // bases. Raised, the game groups every listed zone into its base;
@@ -4155,7 +4152,7 @@ typedef struct EnshwickHostApi {
   // most the loader takes (`BaseLimitInfo::max_zones`,
   // `BaseLimitInfo::max_bases`); `Status::MISSING` when this build's
   // code is not the one the loader knows, and the game keeps its own.
-  // Allowed during `enshwick_mod_init` only. Since minor 1.
+  // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*request_base_limits)(EnshwickModHandle me, uint32_t zones, uint32_t bases);
 } EnshwickHostApi;
 
@@ -4319,20 +4316,20 @@ typedef struct EnshwickTickData {
   // Steps since the loader started counting, from 1.
   uint64_t step;
   // Server steps since this handler's last call: 1 for an every-step
-  // handler and for a handler's first call. Since minor 3.
+  // handler and for a handler's first call.
   uint64_t elapsed_steps;
   // Wall time since this handler's last call in nanoseconds; for its
   // first call, and for an every-step handler, the time since the step
-  // before. 0 on the loader's first step. Since minor 3.
+  // before. 0 on the loader's first step.
   uint64_t elapsed_nanos;
   // The average time between server steps in nanoseconds, over about the
-  // last 16 steps; 0 until a step has been measured. Since minor 3.
+  // last 16 steps; 0 until a step has been measured.
   uint64_t step_nanos;
   // What one call of this mod's event handlers cost on average since
   // this handler's last call, in nanoseconds; 0 for an every-step
   // handler, unless the loader's diagnostics time callbacks, and for
   // about a second after they start, while the loader measures its
-  // clock. Since minor 3.
+  // clock.
   uint64_t cost_nanos;
 } EnshwickTickData;
 
