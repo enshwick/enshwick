@@ -1117,6 +1117,9 @@ typedef uint32_t EnshwickStatus;
 // such as an animal, a pet or a survivor, which only the general
 // entity calls reach.
 #define EnshwickStatus_NOT_A_PROP 11
+// The entity has nothing the world's next load finds it again by: a
+// player's character, or an entity with no place in the world.
+#define EnshwickStatus_NOT_KEPT 12
 
 // An opaque handle the loader gives each mod; every call names its caller
 // with it.

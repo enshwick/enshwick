@@ -4,13 +4,19 @@
 //!
 //! A record keeps, beside its value, what its entity was: for an item kind
 //! the item id its entity, the PIDE, held; for an entity kind the game id of
-//! the entity's template. The game saves entities under their ids and
-//! creates them with those ids on load, so the id names the entity across
-//! saves; a record reads as missing once its entity is something else, and
-//! the save drops the records of entities that hold something else now.
+//! the entity's template. Within a session the entity id names the entity;
+//! a record reads as missing once its entity is something else, and the
+//! save drops the records of entities that hold something else now.
 //! Entities the game destroys lose their records after the step that asked
 //! for it: the loader follows the engine's destroy requests, which only
 //! gameplay makes; an entity in an area that unloads keeps its record.
+//!
+//! A load numbers every entity anew, so the file keeps each record under an
+//! [`Anchor`] instead of its id: a placed thing's template and transform, an
+//! item's place in a placed thing's inventory. After the first step of a
+//! loaded world the records find their entities again; one whose key names
+//! no entity, or more than one, stays aside in the file, never attached to
+//! a guess.
 //!
 //! The server keeps the values and writes them, when the world saves, to
 //! `mod-data/enshwick/worlds/<key>/attachments.bin`, never into the game's
@@ -18,14 +24,20 @@
 //! and a client that says hello gets every value of those kinds; a client
 //! keeps what it got and answers reads from it.
 
+mod anchor;
+mod file;
+mod game;
+
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
 
 use enshwick::Entity;
 use enshwick::abi::{Event, HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use self::anchor::{Anchor, Index, Pending};
+use self::file::Saved;
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -42,9 +54,6 @@ const MAX_ID: usize = 129;
 pub(crate) const MAX_VALUE: usize = 512;
 /// The file of a world's values.
 const FILE: &str = "attachments.bin";
-/// The file's magic and version.
-const MAGIC: &[u8; 4] = b"EWID";
-const VERSION: u8 = 1;
 /// Bytes of records in one message to a client.
 const MESSAGE_BYTES: usize = 680;
 /// The most records a client keeps from one server: what a server sends
@@ -59,6 +68,9 @@ const DESTROYED_CAP: usize = 1024;
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Record {
     item: u32,
+    /// What finds the entity after a load, as last read; `None` on a client
+    /// and for an item not yet seen in an inventory.
+    anchor: Option<Anchor>,
     value: Box<[u8]>,
 }
 
@@ -88,6 +100,9 @@ type Values = FxHashMap<(u32, u32), Record>;
 struct Server {
     key: Option<String>,
     values: Values,
+    /// The file's records that have not found their entity, written back
+    /// unchanged: before the first step, and those kept aside after it.
+    pending: Vec<Pending>,
     /// The file's records of kinds no mod opened this session, as read,
     /// written back unchanged for when their mods return.
     unknown: Vec<u8>,
@@ -105,6 +120,9 @@ static CLIENT: Mutex<Option<Values>> = Mutex::new(None);
 static CLIENT_FULL: AtomicBool = AtomicBool::new(false);
 /// Whether the server keeps any record, so destroy requests are noted.
 static KEPT: AtomicBool = AtomicBool::new(false);
+/// Whether a loaded world's records wait for its first step to find their
+/// entities.
+static FINDING: AtomicBool = AtomicBool::new(false);
 /// Entities the game asked to destroy since the last step, each in the low
 /// word under its round in the high one, 0 for an empty slot; written from
 /// any thread without a lock. A slot from an earlier round is stale.
@@ -120,8 +138,6 @@ type DestroyFn = unsafe extern "system" fn(buffer: *mut u8, requester: u32, enti
 // table's `ecs.destroy_request`, and the slot is used only as the `next` of
 // the `destroy` link on that function.
 static DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
-/// `ecs::ItemState`'s type hash and the offset of its `itemId`.
-static ITEM_STATE: OnceLock<Option<(u32, usize)>> = OnceLock::new();
 
 /// Whether `part` may be the name side of a kind id: 1 to 64 of `[a-z0-9_-]`.
 fn is_part(part: &str) -> bool {
@@ -321,9 +337,13 @@ fn prune_destroyed(values: &mut Values, destroyed: &FxHashSet<u32>) -> Vec<(u32,
     gone
 }
 
-/// After the server's step: drops the records of the entities destroyed in
-/// it, and tells the clients.
-pub(crate) fn after_step() {
+/// After the server's step: after a load's first, finds the file's records'
+/// entities; after every step, drops the records of the entities destroyed
+/// in it, and tells the clients.
+pub(crate) fn after_step(loader: &Loader) {
+    if FINDING.load(Ordering::Relaxed) {
+        find_pending(loader);
+    }
     if !KEPT.load(Ordering::Relaxed) || !any_destroyed() {
         return;
     }
@@ -348,6 +368,104 @@ pub(crate) fn after_step() {
     }
     if !message.is_empty() {
         crate::net::item_data(0, &message);
+    }
+}
+
+/// The placed things whose templates the `pending` records name, by key.
+fn index(loader: &Loader, pending: &[Pending]) -> Index {
+    let mut index = Index::default();
+    let wanted: FxHashSet<[u8; 16]> = pending
+        .iter()
+        .filter_map(|record| match record.anchor {
+            Anchor::Placed(placed) | Anchor::Held { root: placed, .. } => Some(placed.template()),
+            Anchor::Session(_) => None,
+        })
+        .collect();
+    let Some(ty) = game::transform_type(loader).filter(|_| !wanted.is_empty()) else {
+        return index;
+    };
+    for place in crate::entities::with_component(loader, ty).unwrap_or_default() {
+        let entity = place.entity.0;
+        let template = crate::world::template(loader, place.entity).ok();
+        if template.is_some_and(|t| wanted.contains(&t))
+            && let Some(placed) = game::placed(loader, entity)
+        {
+            index.add(placed, entity);
+        }
+    }
+    index
+}
+
+/// Finds the entities of the records a load read, once, on the game thread
+/// after the world's first step; records it cannot name for certain stay
+/// aside.
+#[cold]
+fn find_pending(loader: &Loader) {
+    if crate::world::server().is_err() {
+        return;
+    }
+    FINDING.store(false, Ordering::Relaxed);
+    let (pending, taken) = {
+        let mut server = SERVER.relock();
+        let Some(server) = server.as_mut() else {
+            return;
+        };
+        let taken: FxHashSet<(u32, u32)> = server.values.keys().copied().collect();
+        (std::mem::take(&mut server.pending), taken)
+    };
+    if pending.is_empty() {
+        return;
+    }
+    let index = index(loader, &pending);
+    let outcome = anchor::resolve(
+        pending,
+        &index,
+        |root, link, slot| game::in_slot(loader, root, link, slot),
+        |kind, entity| taken.contains(&(kind, entity)),
+    );
+    let mut message = Vec::new();
+    let found = outcome.found.len();
+    let aside = outcome.ambiguous + outcome.session + outcome.replaced;
+    let waiting = outcome.left.len().saturating_sub(aside);
+    {
+        let mut server = SERVER.relock();
+        let Some(server) = server.as_mut() else {
+            return;
+        };
+        for (kind, entity, record) in outcome.found {
+            if let Some(spec) = self::kind(kind).filter(|k| k.sent) {
+                encode(&mut message, &spec.id, entity, record.check, &record.value);
+                if message.len() > MESSAGE_BYTES {
+                    crate::net::item_data(0, &std::mem::take(&mut message));
+                }
+            }
+            server.values.insert(
+                (kind, entity),
+                Record {
+                    item: record.check,
+                    anchor: Some(record.anchor),
+                    value: record.value,
+                },
+            );
+        }
+        server.pending = outcome.left;
+        KEPT.store(!server.values.is_empty(), Ordering::Relaxed);
+    }
+    if !message.is_empty() {
+        crate::net::item_data(0, &message);
+    }
+    crate::log!(
+        INFO,
+        "mod data: {found} values found their entities again after the load, {waiting} found no entity at their place and wait in the world's file"
+    );
+    if aside > 0 {
+        crate::log!(
+            WARN,
+            "mod data: {aside} values kept aside in the world's file, attached to no entity: {} on a place more than one entity shares, {} saved before values were kept by place, {} replaced before the world's first step",
+            outcome.ambiguous,
+            outcome.session,
+            outcome.replaced
+        );
     }
 }
 
@@ -422,7 +540,8 @@ pub(crate) fn get(kind: u32, pide: u32, item: u32) -> Result<Box<[u8]>, Status> 
 
 /// Sets, or for an empty value removes, kind `kind`'s value on the item
 /// `pide` holding `item`, and sends the change to the clients. On the
-/// server only, once its world has loaded.
+/// server only, once its world has loaded. An entity kind's value needs an
+/// entity the next load finds again: [`Status::NOT_KEPT`] otherwise.
 pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), Status> {
     let spec = self::kind(kind).ok_or(Status::BAD_ARGS)?;
     let id = spec.id.as_str();
@@ -432,15 +551,25 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     if !serves() {
         return Err(Status::REFUSED);
     }
-    let item = match spec.scope {
+    let loader = crate::host::loader();
+    let (item, anchor) = match spec.scope {
         Scope::Item if item == 0 => return Err(Status::BAD_ARGS),
-        Scope::Item => item,
+        Scope::Item => (
+            item,
+            loader
+                .and_then(|loader| game::held(loader, pide))
+                .and_then(|(anchor, _)| anchor),
+        ),
         Scope::Entity => {
             crate::world::server().map_err(|_| Status::WRONG_THREAD)?;
-            match template_id(Entity(pide)) {
-                Some(template) => template,
-                None if value.is_empty() => 0,
-                None => return Err(Status::BAD_ARGS),
+            if value.is_empty() {
+                (0, None)
+            } else {
+                let template = template_id(Entity(pide)).ok_or(Status::BAD_ARGS)?;
+                let placed = loader
+                    .and_then(|loader| game::placed(loader, pide))
+                    .ok_or(Status::NOT_KEPT)?;
+                (template, Some(Anchor::Placed(placed)))
             }
         }
     };
@@ -452,6 +581,7 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
         } else {
             let record = Record {
                 item,
+                anchor,
                 value: value.into(),
             };
             server.values.insert((kind, pide), record);
@@ -574,6 +704,7 @@ fn keep(values: &mut Values, bytes: &[u8]) -> bool {
             (kind, pide),
             Record {
                 item,
+                anchor: None,
                 value: value.into(),
             },
         );
@@ -597,67 +728,51 @@ fn file(loader: &Loader, key: &str) -> PathBuf {
         .join(FILE)
 }
 
-/// The values a world's file holds, and its records of kinds no mod
-/// opened; nothing for a file that does not read.
-fn read_file(bytes: &[u8]) -> (Values, Vec<u8>) {
-    let mut values = Values::default();
+/// The records a world's file holds, each waiting for its entity, and its
+/// records of kinds no mod opened; `None` for a file the loader does not
+/// read, such as one of a newer loader.
+fn read_file(bytes: &[u8]) -> Option<(Vec<Pending>, Vec<u8>)> {
+    let mut pending = Vec::new();
     let mut unknown = Vec::new();
-    let Some(records) = bytes
-        .strip_prefix(MAGIC.as_slice())
-        .and_then(|rest| rest.strip_prefix(&[VERSION]))
-    else {
-        return (values, unknown);
-    };
-    for (id, pide, item, value) in decode(records) {
-        if value.is_empty() {
-            continue;
+    for saved in file::read(bytes)? {
+        match kind_of(saved.id) {
+            Some(kind) => pending.push(Pending {
+                kind,
+                anchor: saved.anchor,
+                check: saved.check,
+                value: saved.value.into(),
+            }),
+            None => file::encode(&mut unknown, &saved),
         }
-        let Some(kind) = kind_of(id) else {
-            encode(&mut unknown, id, pide, item, value);
-            continue;
-        };
-        values.insert(
-            (kind, pide),
-            Record {
-                item,
-                value: value.into(),
-            },
-        );
     }
-    (values, unknown)
+    Some((pending, unknown))
 }
 
-fn write_file(values: &Values, unknown: &[u8]) -> Vec<u8> {
-    let mut bytes = MAGIC.to_vec();
-    bytes.push(VERSION);
-    let mut sorted: Vec<_> = values.iter().collect();
+/// The file's bytes: `server`'s values under their anchors, an entity seen
+/// with none under its id, which keeps it aside after the next load; then
+/// the records still waiting and those of kinds no mod opened.
+fn write_file(server: &Server) -> Vec<u8> {
+    let mut sorted: Vec<_> = server.values.iter().collect();
     sorted.sort_by_key(|(key, _)| **key);
-    for (&(kind, pide), record) in sorted {
-        if let Some(id) = kind_id(kind) {
-            encode(&mut bytes, id, pide, record.item, &record.value);
-        }
-    }
-    bytes.extend_from_slice(unknown);
+    let values = sorted.into_iter().filter_map(|(&(kind, entity), record)| {
+        Some(Saved {
+            id: kind_id(kind)?,
+            anchor: record.anchor.unwrap_or(Anchor::Session(entity)),
+            check: record.item,
+            value: &record.value,
+        })
+    });
+    let pending = server.pending.iter().filter_map(|record| {
+        Some(Saved {
+            id: kind_id(record.kind)?,
+            anchor: record.anchor,
+            check: record.check,
+            value: &record.value,
+        })
+    });
+    let mut bytes = file::write(values.chain(pending));
+    bytes.extend_from_slice(&server.unknown);
     bytes
-}
-
-/// The item entity `pide` now holds, from its `ItemState`; `None` for an
-/// entity that is gone.
-fn held(loader: &Loader, pide: u32) -> Option<u32> {
-    let (ty, offset) = (*ITEM_STATE.get_or_init(|| {
-        let info = loader.reflection.type_info("keen::ecs::ItemState").ok()?;
-        let ty = crate::world::type_hash(info.va())?;
-        let offset = loader
-            .reflection
-            .field_offset("keen::ecs::ItemState", "itemId")
-            .ok()?;
-        Some((ty, usize::try_from(offset).ok()?))
-    }))?;
-    let data = crate::world::component(loader, Entity(pide), ty).ok()?;
-    // SAFETY: `world::component` returned the entity's live `ItemState`, read
-    // on the game thread that owns it; it holds its `u32` item id at the
-    // reflected `itemId` offset.
-    Some(unsafe { enshwick::raw::read_at(data.cast(), offset) })
 }
 
 /// Follows the server's world: reads the world's values once it has
@@ -669,22 +784,37 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let key = crate::saves::world_key(loader).map(str::to_owned);
-            let (values, unknown) = key
-                .as_deref()
-                .and_then(|key| std::fs::read(file(loader, key)).ok())
-                .map(|bytes| read_file(&bytes))
-                .unwrap_or_default();
+            let path = key.as_deref().map(|key| file(loader, key));
+            let read = path.as_ref().and_then(|path| std::fs::read(path).ok());
+            let (pending, unknown) = match read.as_deref().map(read_file) {
+                Some(Some(records)) => records,
+                Some(None) => {
+                    // Keep a file this loader cannot read from being
+                    // overwritten: the world runs without its values.
+                    crate::log!(
+                        WARN,
+                        "mod data: {} is of a kind or version this loader does not read; it stays as it is",
+                        path.as_ref()
+                            .map_or_else(String::new, |p| p.display().to_string())
+                    );
+                    *SERVER.relock() = None;
+                    return;
+                }
+                None => Default::default(),
+            };
             crate::log!(
                 INFO,
                 "mod data: {} values for world {}",
-                values.len(),
+                pending.len(),
                 key.as_deref().unwrap_or("?")
             );
-            KEPT.store(!values.is_empty(), Ordering::Relaxed);
+            KEPT.store(false, Ordering::Relaxed);
+            FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
             *SERVER.relock() = Some(Server {
                 key,
-                values,
+                values: Values::default(),
+                pending,
                 unknown,
                 changed: false,
             });
@@ -694,29 +824,57 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
 }
 
-/// Writes the values when they changed; after a save of the game's, first
-/// drops the records whose entity now holds another item or template.
+/// Reads each value's anchor afresh from its entity, where the world holds
+/// it; after a save of the game's, first drops the records whose entity now
+/// holds another item or template. The number of values with no anchor.
+fn refresh(loader: &Loader, server: &mut Server, prune: bool) -> usize {
+    let before = server.values.len();
+    let mut anchorless = 0;
+    server.values.retain(|&(kind, entity), record| {
+        // `now`: what the entity holds and where, `None` when the world does
+        // not hold it, which keeps the anchor last read.
+        let now = match self::kind(kind).map(|k| k.scope) {
+            Some(Scope::Item) => game::held(loader, entity).map(|(anchor, item)| (item, anchor)),
+            Some(Scope::Entity) => template_id(Entity(entity))
+                .map(|template| (template, game::placed(loader, entity).map(Anchor::Placed))),
+            None => return true,
+        };
+        // An entity the world does not hold may lie in an area that is not
+        // loaded, so only one that holds something else loses its record.
+        if prune && now.is_some_and(|(held, _)| held != record.item) {
+            return false;
+        }
+        // A live entity in no place a load finds, such as an item in a
+        // player's inventory, loses its anchor: the old one names a slot
+        // another item may fill.
+        if let Some((_, anchor)) = now
+            && anchor != record.anchor
+        {
+            record.anchor = anchor;
+            server.changed = true;
+        }
+        anchorless += usize::from(record.anchor.is_none());
+        true
+    });
+    server.changed |= server.values.len() != before;
+    anchorless
+}
+
+/// Writes the values when they changed, under their anchors as the world
+/// holds them now.
 fn save(loader: &Loader, prune: bool) {
-    let (key, bytes) = {
+    let (key, bytes, anchorless) = {
         let mut server = SERVER.relock();
         let Some(server) = server.as_mut() else {
             return;
         };
-        if prune {
-            let before = server.values.len();
-            server.values.retain(|&(kind, pide), record| {
-                let now = match self::kind(kind).map(|k| k.scope) {
-                    Some(Scope::Item) => held(loader, pide),
-                    Some(Scope::Entity) => template_id(Entity(pide)),
-                    None => return true,
-                };
-                // An entity the world does not hold may lie in an area that
-                // is not loaded, so only one that holds something else loses
-                // its record.
-                now.is_none_or(|now| now == record.item)
-            });
-            server.changed |= server.values.len() != before;
-        }
+        // Before the first step the records wait as read, and the values set
+        // since carry the anchors they were set with.
+        let anchorless = if FINDING.load(Ordering::Relaxed) {
+            0
+        } else {
+            refresh(loader, server, prune)
+        };
         if !server.changed {
             return;
         }
@@ -724,8 +882,14 @@ fn save(loader: &Loader, prune: bool) {
             return;
         };
         server.changed = false;
-        (key, write_file(&server.values, &server.unknown))
+        (key, write_file(server), anchorless)
     };
+    if anchorless > 0 {
+        crate::log!(
+            WARN,
+            "mod data: {anchorless} item values sit where a load cannot find them, such as a player's inventory; after a restart they stay aside unless the item is in a placed container when the world saves"
+        );
+    }
     let path = file(loader, &key);
     let written = path
         .parent()
@@ -763,6 +927,7 @@ mod tests {
     fn a_destroyed_entity_loses_its_records_and_an_unloaded_one_keeps_them() {
         let record = |item| Record {
             item,
+            anchor: None,
             value: Box::new([1]),
         };
         let mut values = Values::default();
@@ -827,17 +992,95 @@ mod tests {
         assert_eq!(values.len(), MAX_CLIENT_RECORDS - 1);
     }
 
+    fn server(pending: Vec<Pending>, unknown: Vec<u8>) -> Server {
+        Server {
+            key: Some("w".into()),
+            values: Values::default(),
+            pending,
+            unknown,
+            changed: false,
+        }
+    }
+
     #[test]
     fn records_of_kinds_no_mod_opened_survive_a_save() {
-        let mut bytes = MAGIC.to_vec();
-        bytes.push(VERSION);
-        encode(&mut bytes, "gone:charges", 900, 7, &[3]);
-        encode(&mut bytes, "gone:empty", 901, 7, &[]);
-        let (values, unknown) = read_file(&bytes);
-        assert!(values.is_empty());
-        let written = write_file(&values, &unknown);
-        let records = decode(&written[MAGIC.len() + 1..]);
-        assert_eq!(records, [("gone:charges", 900, 7, &[3u8][..])]);
+        let placed = anchor::Placed::new([1; 16], [2; anchor::TRANSFORM_KEY]);
+        let bytes = file::write([
+            Saved {
+                id: "gone:charges",
+                anchor: Anchor::Placed(placed),
+                check: 7,
+                value: &[3],
+            },
+            Saved {
+                id: "gone:empty",
+                anchor: Anchor::Session(901),
+                check: 7,
+                value: &[],
+            },
+        ]);
+        let (pending, unknown) = read_file(&bytes).unwrap();
+        assert!(pending.is_empty());
+        let written = write_file(&server(pending, unknown));
+        assert_eq!(
+            file::read(&written).unwrap(),
+            [Saved {
+                id: "gone:charges",
+                anchor: Anchor::Placed(placed),
+                check: 7,
+                value: &[3],
+            }]
+        );
+    }
+
+    #[test]
+    fn a_save_keeps_values_by_anchor_and_waiting_records_as_read() {
+        let _added = KINDS.add(Kind {
+            id: "a:owner".into(),
+            scope: Scope::Entity,
+            sent: false,
+        });
+        let _sealed = KINDS.seal();
+        let placed = anchor::Placed::new([1; 16], [2; anchor::TRANSFORM_KEY]);
+        // A file of the version that kept entity ids: its record waits under
+        // the old id, never attached.
+        let mut old = file::MAGIC.to_vec();
+        old.extend_from_slice(&[1, 7]);
+        old.extend_from_slice(b"a:owner");
+        old.extend_from_slice(&1043u32.to_le_bytes());
+        old.extend_from_slice(&9u32.to_le_bytes());
+        old.extend_from_slice(&[1, 0, 5]);
+        let (pending, unknown) = read_file(&old).unwrap();
+        assert_eq!(pending[0].anchor, Anchor::Session(1043));
+        let mut kept = server(pending, unknown);
+        kept.values.insert(
+            (0, 1027),
+            Record {
+                item: 9,
+                anchor: Some(Anchor::Placed(placed)),
+                value: Box::new([6]),
+            },
+        );
+        kept.values.insert(
+            (0, 1030),
+            Record {
+                item: 9,
+                anchor: None,
+                value: Box::new([8]),
+            },
+        );
+        let written = write_file(&kept);
+        let records = file::read(&written).unwrap();
+        let anchors: Vec<(Anchor, &[u8])> = records.iter().map(|r| (r.anchor, r.value)).collect();
+        assert_eq!(
+            anchors,
+            [
+                (Anchor::Placed(placed), &[6u8][..]),
+                (Anchor::Session(1030), &[8][..]),
+                (Anchor::Session(1043), &[5][..]),
+            ]
+        );
+        assert_eq!(read_file(b"EWID\x09"), None, "a newer file is not read");
     }
 
     #[test]

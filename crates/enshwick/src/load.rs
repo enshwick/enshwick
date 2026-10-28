@@ -60,6 +60,7 @@ impl Off {
             Status::OUTSIDE_WORLD => "outside the world",
             Status::STATIC_HALF => "template data, never written",
             Status::NOT_A_PROP => "not a prop",
+            Status::NOT_KEPT => "not found again after a load",
             _ => "failed",
         };
         Self::new(format!("{what}: {why}"))

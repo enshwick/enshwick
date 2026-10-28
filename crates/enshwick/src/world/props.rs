@@ -53,7 +53,7 @@ impl WorldTransform {
 /// # Examples
 ///
 /// See [`World::props_in`].
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prop {
     /// The prop's entity.
     pub entity: Entity,
@@ -61,6 +61,36 @@ pub struct Prop {
     pub item: ItemId,
     /// Where it stands and which way it faces, its `CurrentTransform`.
     pub transform: WorldTransform,
+}
+
+/// A prop as a [`Capture`](super::Capture) keeps it: the item to place and
+/// where, without the entity, whose id lasts one session.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::ItemId;
+/// use enshwick::world::{CapturedProp, Prop, WorldTransform};
+///
+/// let prop = Prop { entity: enshwick::Entity(41), item: ItemId::new(7), transform: WorldTransform::at([1.0, 2.0, 3.0]) };
+/// assert_eq!(CapturedProp::from(prop).item, ItemId::new(7));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CapturedProp {
+    /// The item it was placed from, its `UsedItem`.
+    pub item: ItemId,
+    /// Where it stands and which way it faces, counted from the capture's
+    /// corner.
+    pub transform: WorldTransform,
+}
+
+impl From<Prop> for CapturedProp {
+    fn from(prop: Prop) -> Self {
+        Self {
+            item: prop.item,
+            transform: prop.transform,
+        }
+    }
 }
 
 /// The box between two corners, each axis from the lower to the higher
