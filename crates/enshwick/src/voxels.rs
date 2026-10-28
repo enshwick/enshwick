@@ -53,8 +53,9 @@ use crate::{Host, Load};
 /// metres, a side.
 pub const READ_MAX: u64 = abi::Voxel::READ_MAX;
 
-/// Voxels per metre on every axis.
-const PER_METRE: f64 = 2.0;
+/// Voxels per metre on every axis, for turning a size in metres into
+/// voxels.
+pub const PER_METRE: f64 = 2.0;
 
 /// A voxel's place in the world: its index on each axis from the world's
 /// corner, half a metre a step, with y up.

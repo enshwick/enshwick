@@ -49,7 +49,7 @@ pub(crate) struct Game<'a> {
     write_block: Option<blocks::WriteBlockFn>,
     events: blocks::Events,
     /// The materials a block may write over, read at the step's first block.
-    replace: Option<[u8; super::block::MATERIALS]>,
+    replace: Option<[u8; crate::voxels::MATERIALS]>,
 }
 
 impl<'a> Game<'a> {

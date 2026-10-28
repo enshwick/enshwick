@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `voxels::PER_METRE`, the voxels a metre on every axis, which the
+  loader's terrain edits now read too (#PR).
+
 - `BuffTypeId` and `NpcId`, the game's id of a survivor or other NPC, are
   ABI ids with a `Shape` (ABI 3.4); they print as their number, points and
   events carry them, and a Luau script reads and answers them as

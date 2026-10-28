@@ -28,9 +28,17 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::voxel::STORE.id(),
 ];
 
-/// The first building material of a voxel word's low byte; below it, from
-/// 1, terrain, and 0 is air (server 399, client 426).
-const BUILDING_FIRST: u8 = 0x80;
+/// The materials a voxel word's low byte names, as the build table's
+/// `voxel.materials` counts them; the per-material arrays the game reads are
+/// this long.
+pub(crate) const MATERIALS: usize = 0x100;
+/// The terrain materials: above air, 0, and below the first building
+/// material, the build table's `voxel.building_first` (server 399, client
+/// 426); `crate::terrain` checks both against the running build.
+pub(crate) const TERRAIN: core::ops::RangeInclusive<u8> = 1..=0x7f;
+/// The first building material; building configs number theirs from it,
+/// 0-based.
+pub(crate) const BUILDING_FIRST: u8 = *TERRAIN.end() + 1;
 
 /// The end the game's read takes on any axis: it compares coordinates as
 /// `i32` and rounds a box's end up to its 8-voxel brick, so a larger end
