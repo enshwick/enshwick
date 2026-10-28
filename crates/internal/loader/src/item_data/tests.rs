@@ -187,7 +187,7 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
             root,
         })
     };
-    assert_eq!(set_aside_carried(&mut world, ANN, held), 2);
+    assert_eq!(keep_carried(&mut world, ANN, held), (0, 2));
     let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
     kept.sort_unstable();
     assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
@@ -209,6 +209,59 @@ fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
     let mut destroyed = FxHashSet::default();
     destroyed.extend([2001, 2002]);
     assert!(prune_destroyed(&mut world.values, &destroyed).is_empty());
+}
+
+#[test]
+fn a_leaving_character_s_items_wait_for_its_join_and_come_back_in_their_slots() {
+    const ANN: u32 = 7;
+    const ANN_GUID: [u8; 16] = [0xa1; 16];
+    kinds();
+    let mut world = server(Vec::new(), Vec::new());
+    let value = |item, byte| Record {
+        item,
+        anchor: None,
+        value: Box::new([byte]),
+    };
+    // Two items in Ann's backpack slots 1 and 2, and one whose
+    // character GUID does not read.
+    world.values.insert((0, 2001), value(77, 1));
+    world.values.insert((0, 2002), value(78, 2));
+    world.values.insert((0, 2003), value(79, 3));
+    let left = |pide| {
+        let (anchor, item) = match pide {
+            2001 => (Some((0, 1)), 77),
+            2002 => (Some((0, 2)), 78),
+            2003 => (None, 79),
+            _ => return None,
+        };
+        Some(game::Held {
+            anchor: anchor.map(|(link, slot)| Anchor::Carried {
+                character: ANN_GUID,
+                link,
+                slot,
+            }),
+            item,
+            root: ANN,
+        })
+    };
+    assert_eq!(keep_carried(&mut world, ANN, left), (2, 1));
+    assert!(world.values.is_empty());
+    assert!(world.changed);
+    world.changed = false;
+    // Rejoined: new item entities, slot 2 now holds another item.
+    let joined = |link, slot| match (link, slot) {
+        (0, 1) => Some((3001, 77)),
+        (0, 2) => Some((3002, 90)),
+        _ => None,
+    };
+    let (found, aside) = take_back_carried(&mut world, ANN_GUID, joined);
+    assert_eq!(found, [(0, 3001)]);
+    assert_eq!(aside, 1, "the slot holding another item");
+    let back = &world.values[&(0, 3001)];
+    assert_eq!((back.item, &back.value[..]), (77, &[1][..]));
+    assert!(world.pending.iter().all(|r| r.aside), "nothing waits");
+    assert_eq!(world.pending.len(), 2);
+    assert!(world.changed);
 }
 
 #[test]

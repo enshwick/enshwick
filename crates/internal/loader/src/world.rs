@@ -45,6 +45,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::server::PLAYER_SLOT_COUNT.id(),
     pinned::server::PLAYER_SLOT_ENTITY.id(),
     pinned::server::PLAYER_SLOT_KEY.id(),
+    pinned::server::PLAYER_SLOT_CHARACTER.id(),
     pinned::server::PLAYER_SLOT_MACHINE.id(),
     pinned::server::PLAYER_SLOT_NAME.id(),
     pinned::server::PLAYER_SLOT_SIZE.id(),
@@ -263,6 +264,9 @@ struct Layout {
     slot_key: usize,
     slot_name: usize,
     slot_machine: usize,
+    /// Where a slot holds the GUID of the character in game; `None` on a
+    /// build whose table does not pin it.
+    slot_character: Option<usize>,
 }
 
 static LAYOUT: OnceLock<Option<Layout>> = OnceLock::new();
@@ -326,6 +330,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 slot_key: constant(pinned::server::PLAYER_SLOT_KEY)?,
                 slot_name: constant(pinned::server::PLAYER_SLOT_NAME)?,
                 slot_machine: constant(pinned::server::PLAYER_SLOT_MACHINE)?,
+                slot_character: constant(pinned::server::PLAYER_SLOT_CHARACTER),
             })
         })
         .as_ref()
@@ -618,6 +623,40 @@ pub(crate) fn player_entities(loader: &Loader) -> Result<ArrayVec<u32, MAX_PLAYE
             (handle != 0 && state == SLOT_IN_GAME && entity != 0).then_some(entity)
         })
         .collect())
+}
+
+/// The GUID of the character a player plays, by its character entity: one
+/// account may have several characters on a server. `None` when the build
+/// table does not pin where a slot holds it, off the game thread, or for an
+/// entity no slot names, a leaving player's included until its slot clears.
+pub(crate) fn character_of(loader: &Loader, entity: u32) -> Option<[u8; 16]> {
+    let layout = layout(loader)?;
+    let at = layout
+        .slot_character
+        .filter(|&at| at + 16 <= layout.slot_size)?;
+    let server = reader().ok()?;
+    (0..layout.slot_count.min(MAX_PLAYERS)).find_map(|index| {
+        let slot = server + layout.slots + index * layout.slot_size;
+        // SAFETY: the table's `server.player_slots`, `player_slot_size` and
+        // `player_slot_count` place `slot_count` slots in the server, `index <
+        // slot_count`, and each slot starts with its `u32` handle; read on the
+        // game thread (checked by `reader`).
+        let handle: u32 = unsafe { read(slot, 0) };
+        // SAFETY: `slot` is a player slot of the server (`index < slot_count`,
+        // slots from the table); the table's `server.player_slot_entity`
+        // offset holds its `u32` entity; read on the game thread (checked by
+        // `reader`).
+        let held: u32 = unsafe { read(slot, layout.slot_entity) };
+        if handle == 0 || held != entity {
+            return None;
+        }
+        // SAFETY: `slot` is a player slot of the server; the table's
+        // `server.player_slot_character` offset holds the 16-byte character
+        // GUID inside the slot (`at + 16 <= slot_size`, checked above); read
+        // on the game thread (checked by `reader`).
+        let guid: [u8; 16] = unsafe { read(slot, at) };
+        (guid != [0; 16]).then_some(guid)
+    })
 }
 
 /// The machine handle of each player in game, by account key: the handle

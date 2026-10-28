@@ -165,6 +165,8 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
             );
             KEPT.store(false, Ordering::Relaxed);
             UNREAD.store(false, Ordering::Relaxed);
+            JOINING.relock().clear();
+            JOINS.store(false, Ordering::Relaxed);
             FINDING.store(!pending.is_empty(), Ordering::Relaxed);
             let _earlier_world = take_destroyed();
             *SERVER.relock() = Some(Server {
