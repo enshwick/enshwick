@@ -5,7 +5,7 @@
 //! values in the order of the game's attribute container.
 
 use crate::Entity;
-pub use crate::abi::SkillNode;
+use crate::abi::SkillNode;
 use crate::engine_ids as ids;
 use crate::raw::{read_at, write_at};
 use crate::world::{ComponentType, World, WorldError, WritableType};

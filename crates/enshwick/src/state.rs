@@ -226,7 +226,7 @@ impl Hold {
     }
 
     /// The hold of the mod whose data folder is `dir` on the world whose key
-    /// is `world`, from [`World::key`](crate::world::World::key):
+    /// is `world`, from `World::key`:
     /// `mod-data/<id>/worlds/<key>/hold.txt`.
     ///
     /// # Examples
@@ -445,7 +445,7 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
 /// running world's file when the world has loaded and writes it, when
 /// changed, as the world saves and at shutdown, so the mod's state and the
 /// world's save move together. The key names the world's save file and
-/// folder (see [`World::key`](crate::world::World::key)), so a hosted game
+/// folder (see `World::key`), so a hosted game
 /// switching worlds switches files.
 ///
 /// # Examples

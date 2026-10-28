@@ -38,8 +38,8 @@ mod unwind;
 ///   defines, each an [`#[event]`](macro@crate::event) type; their schemas
 ///   go into the manifest, where `cargo enshwick event` reads them for a
 ///   Luau mod;
-/// - `calls: [Type, ...]`: the [calls](crate::services::Call) the mod
-///   serves, each a [`#[call]`](macro@crate::call) input; their schemas go
+/// - `calls: [Type, ...]`: the calls the mod
+///   serves, each a `#[call]` input; their schemas go
 ///   into the manifest, where `cargo enshwick call` reads them to write
 ///   other mods' declarations;
 /// - `builds: [{ side, guid, age, symbols: ["id" => rva], constants: ["id" => value] }]`,

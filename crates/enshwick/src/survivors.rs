@@ -531,12 +531,9 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let (world, scheduler) = (load.world()?, load.scheduler()?);
-    ///     load.on_summoned(move |summon| {
-    ///         if let (Some(pide), Some(_), false) = (summon.pide, summon.meter, summon.consumed) {
-    ///             scheduler.next_tick(move || {
-    ///                 let _spent = world.change_item_meter(pide, |charges| charges - 1);
-    ///             });
+    ///     load.on_summoned(|summon| {
+    ///         if let (Some(pide), Some(meter), false) = (summon.pide, summon.meter, summon.consumed) {
+    ///             enshwick::debug!("item {pide} summoned with {meter:?} left");
     ///         }
     ///     })
     /// }

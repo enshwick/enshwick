@@ -14,7 +14,7 @@ autotests = false
 
 [dependencies]
 arc-swap.workspace = true
-enshwick.workspace = true
+enshwick = { workspace = true, features = ["unstable"] }
 thiserror.workspace = true
 toml.workspace = true
 mlua.workspace = true

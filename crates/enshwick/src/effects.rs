@@ -14,37 +14,43 @@
 //! [`Scheduler`](crate::schedule::Scheduler) task or an action; on a client,
 //! while it hosts a game.
 //!
+//! Teleports and pings need the `unstable` feature and may change in any
+//! release: whether a client keeps a teleported player where the server put
+//! it, and whether it shows a ping the server raised, are not yet seen in
+//! the running game.
+//!
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
-//! use enshwick::effects::Teleport;
+//! use enshwick::Entity;
+//! use enshwick::effects::Effects;
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let effects = load.effects();
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("home", "Go to the world's centre"), move |request| {
-//!         let me = request.player.entity;
-//!         match effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn()) {
-//!             Ok(()) => Outcome::done("On your way"),
-//!             Err(why) => Outcome::refused(format!("No teleport: {why}")),
-//!         }
-//!     })
+//! fn alarm(effects: &Effects, sender: Entity, signal: u32) -> Result<(), enshwick::WorldError> {
+//!     effects.set_toggle(sender, signal, true)
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Effects, enshwick::Off> {
+//!     Ok(load.effects())
 //! }
 //! ```
 
 use crate::Entity;
 use crate::WorldError;
-use crate::abi::{Header, SpawnRequest, TeleportRequest};
+#[cfg(feature = "unstable")]
+use crate::abi::TeleportRequest;
+use crate::abi::{Header, SpawnRequest};
 use crate::engine_ids as ids;
 use crate::game_events::{EventType, Field, Scalar};
 use crate::{Host, Load, Off};
 
 /// How an entity arrives, for [`Effects::teleport`].
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
-/// See the [module](self).
+/// See [`Effects::teleport`].
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub struct Teleport {
@@ -56,12 +62,13 @@ pub struct Teleport {
     pub facing: Option<[f32; 4]>,
 }
 
+#[cfg(feature = "unstable")]
 impl Teleport {
     /// Straight to the target, keeping the entity's orientation.
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See [`Effects::teleport`].
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -74,7 +81,7 @@ impl Teleport {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See [`Effects::teleport`].
     #[must_use]
     pub const fn best_spawn(mut self) -> Self {
         self.best_spawn = true;
@@ -212,6 +219,7 @@ struct AddThreat {
 }
 
 /// `UiPingEvent`: a ping on the map and in the world.
+#[cfg(feature = "unstable")]
 #[derive(Clone, Copy, Debug)]
 struct Ping {
     ty: EventType,
@@ -250,6 +258,7 @@ pub struct Effects {
     npc: Option<NpcCommand>,
     toggle: Option<SetToggle>,
     threat: Option<AddThreat>,
+    #[cfg(feature = "unstable")]
     ping: Option<Ping>,
 }
 
@@ -290,6 +299,7 @@ impl Effects {
                 threat: ty.field_by_id(load, ids::ADD_THREAT_TARGET_EVENT_THREAT_VALUE)?,
             })
         })();
+        #[cfg(feature = "unstable")]
         let ping = (|| {
             let ty = load.game_event_type(ids::UI_PING_EVENT)?;
             Ok::<_, Off>(Ping {
@@ -303,6 +313,7 @@ impl Effects {
             npc: keep("survivor orders", npc),
             toggle: keep("toggles", toggle),
             threat: keep("threat", threat),
+            #[cfg(feature = "unstable")]
             ping: keep("pings", ping),
         }
     }
@@ -401,6 +412,8 @@ impl Effects {
     /// Pings `position`, in metres, on the map as `sender` would; the
     /// players see it as a ping from them.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// As for [`Effects::npc_command`].
@@ -408,10 +421,11 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// fn mark(effects: &enshwick::effects::Effects, player: &enshwick::world::Player, at: [f64; 3]) {
-    ///     let _pinged = effects.ping(player.entity, at);
+    /// fn mark(effects: &enshwick::effects::Effects, player: enshwick::Entity, at: [f64; 3]) {
+    ///     let _pinged = effects.ping(player, at);
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn ping(&self, sender: Entity, position: [f64; 3]) -> Result<(), WorldError> {
         let event = self.ping.ok_or(WorldError::Missing)?;
         let mut bytes = blank(event.ty)?;
@@ -433,14 +447,14 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let effects = load.effects();
     ///     let ping = load.game_event_type("keen::ecs::UiPingEvent")?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     actions.add(Action::new("ping-origin", "Ping the world origin").admins(), move |_request| {
+    ///     load.on::<enshwick::events::WorldLoaded>(move |()| {
     ///         let bytes = vec![0u8; ping.size() as usize];
-    ///         Outcome::done(format!("{:?}", effects.emit_raw(ping, &bytes)))
+    ///         if let Err(why) = effects.emit_raw(ping, &bytes) {
+    ///             enshwick::warn!("no ping: {why}");
+    ///         }
     ///     })
     /// }
     /// ```
@@ -454,6 +468,8 @@ impl Effects {
     /// next step, as its admin teleport does: the entity jumps there and
     /// clients see it arrive.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`WorldError::Gone`] for an entity not in the world or without a
@@ -464,7 +480,14 @@ impl Effects {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// ```
+    /// use enshwick::effects::{Effects, Teleport};
+    ///
+    /// fn home(effects: &Effects, me: enshwick::Entity) -> Result<(), enshwick::WorldError> {
+    ///     effects.teleport(me, [0.0, 100.0, 0.0], Teleport::new().best_spawn())
+    /// }
+    /// ```
+    #[cfg(feature = "unstable")]
     pub fn teleport(
         &self,
         entity: Entity,
@@ -494,7 +517,7 @@ impl Effects {
 
 impl Effects {
     /// Asks the server to spawn an entity of `template`, its GUID as
-    /// [`World::template`](crate::world::World::template) gives it, at
+    /// `World::template` gives it, at
     /// `position` in metres, as its admin spawn does: an enemy, an animal,
     /// a survivor or a prop. The new entity's id comes back at once; the
     /// entity is in the world after the next step, and a template the game
@@ -508,26 +531,10 @@ impl Effects {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Arg, Outcome, Value};
-    /// use enshwick::effects::Spawn;
+    /// use enshwick::effects::{Effects, Spawn};
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let effects = load.effects();
-    ///     let world = load.world()?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     let clone = Action::new("clone", "Spawn a copy of an entity beside you")
-    ///         .admins()
-    ///         .arg(Arg::number("Entity", 0.0..=f64::from(u32::MAX), 1.0));
-    ///     actions.add(clone, move |request| {
-    ///         let [Value::Number(id)] = request.args else {
-    ///             return Outcome::refused("Name an entity");
-    ///         };
-    ///         let source = enshwick::Entity(*id as u32);
-    ///         let (Some(template), Some([x, y, z])) = (world.template(source), world.position(request.player.entity)) else {
-    ///             return Outcome::refused("Nothing to copy, or you are nowhere");
-    ///         };
-    ///         Outcome::done(format!("{:?}", effects.spawn(template, [x + 2.0, y, z], Spawn::new())))
-    ///     })
+    /// fn beside(effects: &Effects, template: [u8; 16], [x, y, z]: [f64; 3]) -> Result<enshwick::Entity, enshwick::WorldError> {
+    ///     effects.spawn(template, [x + 2.0, y, z], Spawn::new())
     /// }
     /// ```
     pub fn spawn(
@@ -610,7 +617,7 @@ fn put_quaternion(bytes: &mut [u8], at: u64, value: [f32; 4]) -> Result<(), Worl
 
 impl Load<'_> {
     /// The mod's [`Effects`] in the server's world: game events it raises
-    /// and teleports; on a client, the built-in server's while it hosts a
+    /// and spawns; on a client, the built-in server's while it hosts a
     /// game. An action whose event this build lacks answers
     /// [`WorldError::Missing`].
     ///

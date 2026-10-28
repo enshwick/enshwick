@@ -359,7 +359,7 @@ declare enshwick: {
 	refuse: {},
 	--- Calls `handler` with the data of another mod's event, as `cargo enshwick event <event>` describes it or a description of the script's own (fields with `name` and `read`, laid out as Rust lays them out). Subscribe at the top level of main.luau.
 	on_mod_event: (event: { name: string }, handler: (data: any) -> ()) -> (),
-	--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau.
+	--- The function that runs another mod's call, as `cargo enshwick call <call> --luau` describes it: it takes the input and returns the answer, or nil and why not (`unmatched` also before the start is over, `off` or `failed`). Ask at the top level of main.luau. Unstable: may change in any release.
 	caller: (call: { name: string }) -> (input: any) -> (any, string?),
 	--- Defines a mod event of this mod for others to hear, at the top level of main.luau; `send` hands every subscriber the data.
 	define_event: (event: { name: string }) -> { send: (data: any) -> () },
@@ -374,7 +374,7 @@ declare enshwick: {
 		--- Writes `text` to the mod's log as an error; the mod keeps running.
 		error: (text: string) -> (),
 	},
-	--- The server's world: players, chat, notices and positions.
+	--- The server's world: players, chat, notices and positions. Unstable: may change in any release.
 	world: {
 		--- The connected player whose character is `entity`.
 		player: (entity: number) -> Player?,

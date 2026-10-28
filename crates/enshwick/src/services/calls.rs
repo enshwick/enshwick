@@ -21,6 +21,8 @@ use crate::{Host, Load, Off};
 /// A call: the input struct one mod hands another, which answers with
 /// [`Call::Output`].
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Safety
 ///
 /// - Implemented by [`#[call]`](macro@crate::call) only.
@@ -63,6 +65,8 @@ pub unsafe trait Call: Copy + 'static {
 }
 
 /// Why a call answered nothing.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -110,6 +114,8 @@ fn spec<C: Call>() -> CallSpec {
 
 /// Another mod's call `C`, from [`Load::caller`]: runs the server's handler
 /// on this thread.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -174,6 +180,8 @@ impl<C: Call> Caller<C> {
 }
 
 /// A call described at run time, such as by the schema a script carries.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -260,6 +268,8 @@ impl DescribedCall {
 
 /// Another mod's described call, from [`Load::described_caller`].
 ///
+/// Unstable: needs the `unstable` feature and may change in any release.
+///
 /// # Examples
 ///
 /// ```
@@ -332,6 +342,8 @@ impl Load<'_> {
     /// Serves the call `C` with `handler` for other mods to call, from the
     /// caller's thread. A panic in `handler` fails that call alone.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// `C` comes from [`#[call]`](macro@crate::call), named after this mod:
     /// `<id>:<call>`. List it in the manifest's `calls` so its schema reaches
     /// other mods' tools.
@@ -373,6 +385,8 @@ impl Load<'_> {
     }
 
     /// Asks for another mod's call `C`, and returns the handle that runs it.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// The loader matches it once every mod is initialised: with no running
     /// mod serving `C` as declared here, it logs why, and every call answers

@@ -12,6 +12,9 @@ client while it hosts a game.
 
 ## Chat lines
 
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
 [`world.broadcast(text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 sends a line to every player and
 [`world.tell(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
@@ -21,6 +24,9 @@ its own, and a message keeps at most 16 lines. The queue holds at most 256
 lines; more are dropped.
 
 ## Notices on screen
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 [`world.notify(&player, text)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/world.rs)
 shows a line on the player's screen, as the game shows its own "can't do
@@ -52,6 +58,9 @@ text tag of its own and raises the game's message event in the client's world
 at its next step.
 
 ## The console
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 The console runs a line on the server as an administrator with no character.
 A line is one of:

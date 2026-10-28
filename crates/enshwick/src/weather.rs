@@ -17,16 +17,15 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
 //! use core::time::Duration;
-//! use enshwick::weather::Forecast;
+//! use enshwick::weather::{Forecast, Weather};
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let weather = load.weather();
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("sun", "Clear skies for ten minutes").admins(), move |_request| {
-//!         Outcome::done(format!("{:?}", weather.set(Forecast::Clear, Some(Duration::from_mins(10)))))
-//!     })
+//! fn sun(weather: &Weather) -> Result<(), enshwick::WorldError> {
+//!     weather.set(Forecast::Clear, Some(Duration::from_mins(10)))
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Weather, enshwick::Off> {
+//!     Ok(load.weather())
 //! }
 //! ```
 

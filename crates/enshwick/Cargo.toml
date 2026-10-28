@@ -46,8 +46,9 @@ serde = { workspace = true, features = ["derive"] }
 test = []
 ## `packs::schemas`: the JSON Schemas of a data pack's files, for tools.
 schema = ["dep:schemars", "dep:serde_json"]
-## `unstable`: calls that rest on engine facts not yet checked in the
-## running game; they may change or go in any release.
+## `unstable`: the parts of the API that may still change in any release:
+## young APIs and calls that rest on engine facts not yet checked in the
+## running game. Every item it adds is marked in the docs.
 unstable = []
 
 # One binary for every file in `tests/`, each a module of `tests/main.rs`:
@@ -73,7 +74,7 @@ required-features = ["test"]
 [[bench]]
 name = "world"
 harness = false
-required-features = ["test"]
+required-features = ["test", "unstable"]
 
 [[bench]]
 name = "pattern_scan"

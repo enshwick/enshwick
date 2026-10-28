@@ -344,6 +344,7 @@ impl ComponentType {
     }
 
     /// The type whose hash is `hash`, for a hash the loader already checked.
+    #[cfg(feature = "unstable")]
     pub(crate) const fn from_hash(hash: u32) -> Self {
         Self(hash)
     }
@@ -711,7 +712,7 @@ pub fn fixed(metres: [f64; 3]) -> [i64; 3] {
 ///
 /// - `transform` is readable for 24 bytes, such as a live `CurrentTransform`
 ///   that [`Components::component`] or
-///   [`World::component`](crate::world::World::component) returned, while it
+///   `World::component` returned, while it
 ///   is valid; no alignment is needed.
 /// - No other thread writes those bytes during the read.
 ///

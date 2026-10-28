@@ -17,6 +17,7 @@
 //! their schemas into the manifest; another mod writes its definition of a
 //! point from there with `cargo enshwick point <owner id>:<point>`.
 
+#[cfg(feature = "unstable")]
 mod described;
 
 use core::ffi::c_void;
@@ -27,6 +28,7 @@ use crate::abi::{LayoutField, PointFlags, PointMode, PointVerdict, Status, Str};
 use crate::load::{hand_over, ok};
 use crate::{Host, Load, Off};
 
+#[cfg(feature = "unstable")]
 pub use described::{DescribedField, DescribedPoint, DescribedVerdict};
 
 /// How links act on a point's answer, as the owning mod chooses.
