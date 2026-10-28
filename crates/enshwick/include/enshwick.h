@@ -14,6 +14,10 @@
 // The minor version of this interface. A newer minor only appends fields.
 #define ENSHWICK_ABI_MINOR 0
 
+// The damage types of a hit, one per value of the game's `DamageTypeNew`:
+// the length of `DamageCheck::amounts`.
+#define ENSHWICK_DAMAGE_TYPES 13
+
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
 #define ENSHWICK_SURVIVOR_STATUS_SET 256
@@ -713,11 +717,11 @@ typedef struct EnshwickDamageCheck {
   // Who dealt a hit, the root of the impact that hit (the archer for an
   // arrow), or `source` when the game names none; 0 for other causes.
   EnshwickEntity attacker;
-  // A hit's damage by type (`DamageTypeNew`: cut 0, pierce 1, blunt 2,
-  // fire 3, ice 4, shroud 5, lightning 6, healing 7, poison 8, wood 9,
-  // stone 10, metal 11, explosion 12), after the target's resistances
-  // and before its armour; healing is what heals. Zero for other causes.
-  float amounts[13];
+  // A hit's damage by type, in the game's order of its damage types
+  // (`DamageTypeNew::index`), after
+  // the target's resistances and before its armour; healing is what
+  // heals. Zero for other causes.
+  float amounts[ENSHWICK_DAMAGE_TYPES];
   // The health the damage takes, for causes other than a hit; for a hit,
   // the sum of its damage types but healing, which the loader does not
   // read back.

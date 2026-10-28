@@ -62,8 +62,8 @@ const LOOK_EVERY: u64 = 30;
 /// The file of a world's saved modifiers.
 const FILE: &str = "stats.bin";
 /// The damage types of a hit and the healing entry among them.
-const TYPES: usize = 13;
-const HEALING: usize = 7;
+const TYPES: usize = enshwick::abi::DAMAGE_TYPES;
+const HEALING: usize = enshwick::damage::DamageTypeNew::Healing.index();
 
 /// One stat kind.
 #[derive(Debug)]
