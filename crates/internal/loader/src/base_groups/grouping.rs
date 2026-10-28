@@ -90,8 +90,8 @@ pub(crate) struct Base {
     pub(crate) first: usize,
 }
 
-/// The most bases a grouping holds.
-pub(crate) const MAX_GROUPED: usize = 16;
+/// The most bases a grouping holds: the game's array and the window.
+pub(crate) const MAX_GROUPED: usize = super::window::MOST;
 
 /// Bases as a grouping leaves them, on the stack.
 pub(crate) type Grouped = ArrayVec<Base, MAX_GROUPED>;
@@ -269,6 +269,15 @@ mod tests {
         let bases = group(&boxes, 16);
         assert_eq!(bases.len(), 16);
         assert_eq!(masks(&bases).iter().fold(0, |all, mask| all | mask), 0xffff);
+    }
+
+    #[test]
+    fn a_grouping_holds_up_to_the_window_s_most_bases() {
+        let boxes = row(200, |_| false);
+        assert_eq!(group(&boxes, 32).len(), 32);
+        let bases = group(&boxes, usize::MAX);
+        assert_eq!(bases.len(), MAX_GROUPED);
+        assert_eq!(bases.last().map(|b| b.first), Some(MAX_GROUPED - 1));
     }
 
     #[test]

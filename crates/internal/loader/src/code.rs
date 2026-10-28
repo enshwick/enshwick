@@ -42,7 +42,7 @@ const NEXT_RECIPE: usize = 0x23;
 const LOOKUP: &str = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 83 BA 4C 01 00 00 00 4C 8B D2 48 8B BA 08 01 00 00";
 
 /// A patch of game code, registered during init.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct CodePatch {
     /// The owning mod's index, or [`ModIndex::LOADER`].
     pub(crate) owner: ModIndex,
@@ -586,7 +586,7 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                 .any(|(p, v)| p.address == lift.patch && *v == Verdict::Write)
     });
     LIFTED.store(lifted, Ordering::Release);
-    crate::bases::arming(hooked);
+    crate::bases::arming(patches, verdicts, hooked);
 }
 
 /// Whether the workshop limit is lifted.

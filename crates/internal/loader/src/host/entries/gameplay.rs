@@ -552,7 +552,7 @@ pub(crate) extern "system" fn base_limit(
             return status;
         }
         let now = crate::bases::base_limit();
-        let (vanilla, most) = (Limits::VANILLA, Limits::MOST);
+        let (vanilla, most) = (Limits::VANILLA, crate::bases::most());
         // SAFETY: `HostApi::base_limit` has the mod pass `out` null or
         // readable for its header and writable for the size it names, with no
         // other thread touching it during the call.

@@ -201,7 +201,7 @@ pub(crate) extern "system" fn altar_limit_filter(
 /// game's.
 const VANILLA: (u32, u32) = (16, 16);
 /// The most altar zones and bases a mod may ask for, as the loader's.
-const MOST: (u32, u32) = (255, 16);
+const MOST: (u32, u32) = (255, 179);
 /// What raising the base limit asks for.
 const RAISED: (u32, u32) = (32, 16);
 
@@ -223,6 +223,9 @@ fn request(zones: u32, bases: u32) -> Status {
     with(Status::MISSING, |s| {
         if s.base_limit.armed {
             return Status::TOO_LATE;
+        }
+        if s.host.base_code == crate::test::BaseCode::Unknown {
+            return Status::MISSING;
         }
         let (old_zones, old_bases) = s.base_limit.requested.unwrap_or(VANILLA);
         s.base_limit.requested = Some((

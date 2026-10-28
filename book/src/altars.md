@@ -101,9 +101,14 @@ game groups only 16 zones into its 16 bases; `load.raise_base_limit()` lets
 it group every zone it lists, allows up to 32 altars a level, and refuses an
 altar that would start a 17th base with the game's own "too many altars".
 With the `unstable` feature, `load.request_base_limits(zones, bases)` allows
-up to `zones` altars a level, at most 255, every zone the game lists; the
-largest request of every mod holds, and a value past
-`base_limit().max_zones` or `max_bases` turns the mod off. Both return
+up to `zones` altars a level, at most 255, every zone the game lists, in up
+to `bases` bases, at most 179; the largest request of every mod holds, and a
+value past `base_limit().max_zones` or `max_bases` turns the mod off. Bases
+past 16 need more of the game's code than the zones do: where the loader
+cannot arm all of it, the game keeps 16 bases with the zones raised, the log
+says what was missing, and `max_bases` reads 16. A server holds the bases
+its mods asked for; a client groups every base it can, so a client joined to
+a server never holds fewer. Both return
 `false` on a game build whose code the platform does not know, where the
 game keeps 16. The loader's hooks go in together or not at all: when one
 cannot be armed, the game keeps 16. `altars::grouping()` tells how many zones

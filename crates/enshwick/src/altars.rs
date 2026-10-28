@@ -581,9 +581,11 @@ impl BaseLimit {
 /// The most altar zones and bases the game groups now; `None` without a
 /// loader. Any thread.
 ///
-/// That is the game's own, or the loader's maximum once
-/// [`Load::raise_base_limit`] is in force, which is from
-/// [`Mod::ready`](crate::Mod::ready) on, after the loader arms the patches.
+/// That is the game's own, or the largest request once either base limit
+/// request ([`Load::raise_base_limit`], `Load::request_base_limits`) is in
+/// force, which is from [`Mod::ready`](crate::Mod::ready) on, after the
+/// loader arms its hooks; bases past 16 hold only where the loader armed
+/// every hook they need, and [`BaseLimit::max_bases`] then reads 179.
 ///
 /// # Examples
 ///
@@ -777,9 +779,9 @@ pub struct Grouping {
     pub bases: u32,
 }
 
-/// The game's last grouping of altar zones into bases, while the raised base
-/// limit ([`Load::raise_base_limit`]) is in force; `None` before the first
-/// grouping. Any thread.
+/// The game's last grouping of altar zones into bases, once either base
+/// limit request ([`Load::raise_base_limit`], `Load::request_base_limits`)
+/// is in force; `None` before the first grouping. Any thread.
 ///
 /// # Examples
 ///
@@ -884,7 +886,9 @@ impl Load<'_> {
 
     /// As [`Load::raise_base_limit`], up to `zones` altars a Flame level in
     /// up to `bases` bases; values below the game's own count as the game's,
-    /// and the largest request of every mod holds.
+    /// and the largest request of every mod holds. Bases past 16 need more
+    /// of the game's code; where the loader cannot arm all of it, the game
+    /// keeps 16 bases with the zones raised, which [`base_limit`] tells.
     ///
     /// # Errors
     ///
@@ -895,7 +899,7 @@ impl Load<'_> {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     if !load.request_base_limits(128, 16)? {
+    ///     if !load.request_base_limits(128, 32)? {
     ///         enshwick::info!("the game keeps its own altar zones on this build");
     ///     }
     ///     Ok(())

@@ -4,18 +4,20 @@
 //! A point lies in a box when `min <= p < max` on every axis. A base with one
 //! zone is tested against its box alone; a base of more zones against each
 //! of its zones, after its box when the game tests that. The first base in
-//! index order wins.
+//! index order wins; bases past the game's 16 sit at window indices
+//! ([`window`](super::window)).
 
 use super::grouping::ZoneSet;
 use super::limit::Aabb;
 
 /// The bases of a world as the lookups read them.
 pub(crate) trait Bases {
-    /// How many bases there are.
+    /// How many bases there are; their record indices are
+    /// [`window::indices`](super::window::indices) of it.
     fn count(&self) -> usize;
-    /// The box around base `i`'s zones.
+    /// The box around the zones of the base at record index `i`.
     fn bounds(&self, i: usize) -> Aabb;
-    /// The zones of base `i`.
+    /// The zones of the base at record index `i`.
     fn members(&self, i: usize) -> ZoneSet;
     /// How many zones the list holds.
     fn listed(&self) -> usize;
@@ -60,14 +62,14 @@ pub(crate) fn in_base(bases: &impl Bases, i: usize, p: [f32; 3]) -> bool {
 /// The first base that holds `p`.
 #[must_use]
 pub(crate) fn base_at(bases: &impl Bases, p: [f32; 3]) -> Option<usize> {
-    (0..bases.count()).find(|&i| in_base(bases, i, p))
+    super::window::indices(bases.count()).find(|&i| in_base(bases, i, p))
 }
 
 /// The first box of a base that holds `p`: a base's own with one zone, a
 /// zone of a base with more, with no test of that base's box first.
 #[must_use]
 pub(crate) fn holder_at(bases: &impl Bases, p: [f32; 3]) -> Option<Holder> {
-    (0..bases.count()).find_map(|i| {
+    super::window::indices(bases.count()).find_map(|i| {
         let members = bases.members(i);
         if members.len() == 1 {
             bases.bounds(i).holds(p).then_some(Holder::Base(i))
@@ -88,7 +90,8 @@ pub(crate) fn zones_at(bases: &impl Bases, p: [f32; 3]) -> Option<impl Iterator<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::base_groups::grouping::{Base, group};
+    use crate::base_groups::grouping::{Base, MAX_GROUPED, group};
+    use crate::base_groups::window;
 
     /// A world: its zone list and the bases the grouping made of it.
     #[derive(Debug)]
@@ -99,8 +102,16 @@ mod tests {
 
     impl World {
         fn new(zones: Vec<Aabb>) -> Self {
-            let bases = group(&zones, 16).to_vec();
+            Self::holding(zones, 16)
+        }
+
+        fn holding(zones: Vec<Aabb>, most: usize) -> Self {
+            let bases = group(&zones, most).to_vec();
             Self { zones, bases }
+        }
+
+        fn at(&self, i: usize) -> &Base {
+            &self.bases[window::position(i).unwrap()]
         }
     }
 
@@ -109,10 +120,10 @@ mod tests {
             self.bases.len()
         }
         fn bounds(&self, i: usize) -> Aabb {
-            self.bases[i].bounds
+            self.at(i).bounds
         }
         fn members(&self, i: usize) -> ZoneSet {
-            self.bases[i].zones
+            self.at(i).zones
         }
         fn listed(&self) -> usize {
             self.zones.len()
@@ -248,6 +259,29 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_point_in_a_base_past_16_answers_its_window_index() {
+        let zones: Vec<Aabb> = (0u8..200)
+            .map(|i| square(f32::from(i) * 100.0, 0.0, 10.0))
+            .collect();
+        let world = World::holding(zones, MAX_GROUPED);
+        assert_eq!(world.count(), MAX_GROUPED);
+        assert_eq!(base_at(&world, [5.0, 5.0, 5.0]), Some(0));
+        assert_eq!(base_at(&world, [1505.0, 5.0, 5.0]), Some(15));
+        assert_eq!(base_at(&world, [1605.0, 5.0, 5.0]), Some(window::WINDOW));
+        assert_eq!(base_at(&world, [17805.0, 5.0, 5.0]), Some(255));
+        assert_eq!(
+            holder_at(&world, [1705.0, 5.0, 5.0]),
+            Some(Holder::Base(window::WINDOW + 1))
+        );
+        assert!(in_base(&world, 100, [1705.0 + 600.0, 5.0, 5.0]));
+        assert_eq!(
+            base_at(&world, [17905.0, 5.0, 5.0]),
+            None,
+            "zone 179 is apart"
+        );
     }
 
     #[test]
