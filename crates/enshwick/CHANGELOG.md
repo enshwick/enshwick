@@ -8,6 +8,12 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- Bases take every altar zone the game lists, up to 255, instead of 32:
+  `Load::request_base_limits` behind the new `unstable` feature asks for
+  them (ABI 4.1, `HostApi::request_base_limits`), and `BaseLimit` tells
+  the game's own bases and the most a mod may ask for, with
+  `BaseLimit::past_vanilla` (#NNN).
+
 - `voxels::PER_METRE`, the voxels a metre on every axis, which the
   loader's terrain edits now read too (#632).
 

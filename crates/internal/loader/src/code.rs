@@ -596,7 +596,7 @@ pub(crate) fn arming(patches: &[CodePatch], verdicts: &[Verdict], hooked: &[u64]
                 .any(|(p, v)| p.address == lift.patch && *v == Verdict::Write)
     });
     LIFTED.store(lifted, Ordering::Release);
-    crate::bases::arming(patches, verdicts);
+    crate::bases::arming(hooked);
 }
 
 /// Whether the workshop limit is lifted.

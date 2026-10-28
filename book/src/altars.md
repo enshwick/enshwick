@@ -98,14 +98,17 @@ how many altars each Flame level allows, on both sides. Each filter, in load
 order, sees the level, the game's own count and the count so far, and sets
 `allowed`; the loader keeps the answer within the zones the game groups. The
 game groups only 16 zones into its 16 bases; `load.raise_base_limit()` lets
-it group 32, the loader's maximum, and refuses an altar that would start a
-17th base with the game's own "too many altars". It
-returns `false` on a game build whose code the platform does not know, where
-the game keeps 16. The code patches and the refusal of a 17th base go in
-together or not at all: when a patch or one of the loader's hooks cannot be
-armed, none of them is, the mod is turned off, and the game keeps 16.
-`altars::grouping()` tells how many zones and bases the last grouping found,
-and `altars::base_limit()` the most the game groups now.
+it group 32 and refuses an altar that would start a 17th base with the
+game's own "too many altars". With the `unstable` feature,
+`load.request_base_limits(zones, bases)` asks for up to 255 zones, every zone
+the game lists; the largest request of every mod holds, and a value past
+`base_limit().max_zones` or `max_bases` turns the mod off. Both return
+`false` on a game build whose code the platform does not know, where the
+game keeps 16. The loader's hooks go in together or not at all: when one
+cannot be armed, the game keeps 16. `altars::grouping()` tells how many zones
+and bases the last grouping found, `altars::base_limit()` the most the game
+groups now, and `BaseLimit::past_vanilla` whether a world needs the raised
+limit to open.
 
 ## Building across zones
 

@@ -1,6 +1,8 @@
 //! The bases altar zones form: zones that touch, directly or through other
 //! zones, share one base, as the game groups them.
 
+use arrayvec::ArrayVec;
+
 use super::limit::Aabb;
 
 /// The most zones the game lists in a world.
@@ -12,6 +14,24 @@ pub(crate) const MAX_LISTED: usize = 0xff;
 pub(crate) struct ZoneSet([u64; 4]);
 
 impl ZoneSet {
+    /// The set the game's 32-bit member mask names.
+    #[must_use]
+    pub(crate) fn from_mask(mask: u32) -> Self {
+        Self([u64::from(mask), 0, 0, 0])
+    }
+
+    /// The set of `words`, zone `z` at bit `z % 64` of word `z / 64`.
+    #[must_use]
+    pub(crate) const fn from_words(words: [u64; 4]) -> Self {
+        Self(words)
+    }
+
+    /// The words of the set, as [`ZoneSet::from_words`] takes them.
+    #[must_use]
+    pub(crate) const fn words(self) -> [u64; 4] {
+        self.0
+    }
+
     /// Adds zone `zone`; a zone past the list's capacity is ignored.
     pub(crate) fn insert(&mut self, zone: usize) {
         if let Some(word) = self.0.get_mut(zone / 64) {
@@ -28,8 +48,8 @@ impl ZoneSet {
     }
 
     /// The zones, in list order.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = usize> + '_ {
-        self.0.iter().enumerate().flat_map(|(at, &word)| {
+    pub(crate) fn zones(self) -> impl Iterator<Item = usize> {
+        self.0.into_iter().enumerate().flat_map(|(at, word)| {
             let mut rest = word;
             core::iter::from_fn(move || {
                 (rest != 0).then(|| {
@@ -70,22 +90,33 @@ pub(crate) struct Base {
     pub(crate) first: usize,
 }
 
+/// The most bases a grouping holds.
+pub(crate) const MAX_GROUPED: usize = 16;
+
+/// Bases as a grouping leaves them, on the stack.
+pub(crate) type Grouped = ArrayVec<Base, MAX_GROUPED>;
+
 /// Groups `boxes`, the game's zone list, into at most `max_bases` bases in
 /// the game's order: by their first zone. The zones of further groups stay
-/// apart, in no base; zones past [`MAX_LISTED`] are ignored.
+/// apart, in no base; zones past [`MAX_LISTED`] are ignored. Allocates
+/// nothing.
 #[must_use]
-pub(crate) fn group(boxes: &[Aabb], max_bases: usize) -> Vec<Base> {
+pub(crate) fn group(boxes: &[Aabb], max_bases: usize) -> Grouped {
     let boxes = &boxes[..boxes.len().min(MAX_LISTED)];
-    let mut parent: Vec<usize> = (0..boxes.len()).collect();
+    let mut parent = [0u8; MAX_LISTED];
+    for (i, slot) in parent.iter_mut().enumerate().take(boxes.len()) {
+        *slot = u8::try_from(i).unwrap_or(u8::MAX);
+    }
     for i in 0..boxes.len() {
         for j in 0..i {
             if boxes[i].touches(&boxes[j]) {
                 let (a, b) = (root(&mut parent, i), root(&mut parent, j));
-                parent[a.max(b)] = a.min(b);
+                parent[a.max(b)] = u8::try_from(a.min(b)).unwrap_or(u8::MAX);
             }
         }
     }
-    let mut bases: Vec<Base> = Vec::new();
+    let max_bases = max_bases.min(MAX_GROUPED);
+    let mut bases = Grouped::new();
     for (i, zone) in boxes.iter().enumerate() {
         let first = root(&mut parent, i);
         if let Some(base) = bases.iter_mut().find(|base| base.first == first) {
@@ -105,10 +136,10 @@ pub(crate) fn group(boxes: &[Aabb], max_bases: usize) -> Vec<Base> {
 }
 
 /// The lowest zone of `i`'s group, which every merge keeps as the root.
-fn root(parent: &mut [usize], mut i: usize) -> usize {
-    while parent[i] != i {
-        parent[i] = parent[parent[i]];
-        i = parent[i];
+fn root(parent: &mut [u8; MAX_LISTED], mut i: usize) -> usize {
+    while usize::from(parent[i]) != i {
+        parent[i] = parent[usize::from(parent[i])];
+        i = usize::from(parent[i]);
     }
     i
 }
@@ -227,7 +258,7 @@ mod tests {
         );
         assert!(bases[3].zones.contains(254));
         assert_eq!(bases[1].first, 64);
-        assert_eq!(bases[1].zones.iter().next(), Some(64));
+        assert_eq!(bases[1].zones.zones().next(), Some(64));
         assert_eq!(bases[0].zones.low_mask(), u32::MAX);
         assert_eq!(bases[1].zones.low_mask(), 0);
     }
@@ -262,25 +293,30 @@ mod tests {
     proptest! {
         #[test]
         fn every_base_is_one_touching_group_and_apart_from_the_others(boxes in boxes()) {
-            let bases = group(&boxes, 255);
+            let bases = group(&boxes, MAX_GROUPED);
             let mut seen = ZoneSet::default();
             for (at, base) in bases.iter().enumerate() {
-                prop_assert_eq!(base.zones.iter().next(), Some(base.first));
+                prop_assert_eq!(base.zones.zones().next(), Some(base.first));
                 if at > 0 {
                     prop_assert!(bases[at - 1].first < base.first);
                 }
-                for i in base.zones.iter() {
+                for i in base.zones.zones() {
                     prop_assert!(!seen.contains(i));
                     seen.insert(i);
                     prop_assert!(base.bounds.touches(&boxes[i]));
                     for other in &bases[at + 1..] {
-                        for j in other.zones.iter() {
+                        for j in other.zones.zones() {
                             prop_assert!(!boxes[i].touches(&boxes[j]));
                         }
                     }
                 }
             }
-            prop_assert_eq!(seen.len(), boxes.len());
+            if bases.len() < MAX_GROUPED {
+                prop_assert_eq!(seen.len(), boxes.len());
+            }
+            for apart in (0..boxes.len()).filter(|&i| !seen.contains(i)) {
+                prop_assert!(seen.zones().all(|i| !boxes[i].touches(&boxes[apart])));
+            }
         }
 
         #[test]

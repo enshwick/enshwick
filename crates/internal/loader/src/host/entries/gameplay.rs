@@ -576,14 +576,14 @@ pub(crate) extern "system" fn base_limit(
 
 pub(crate) extern "system" fn raise_base_limit(me: ModHandle) -> Status {
     entry("raise_base_limit", || match caller_index(me) {
-        Ok((loader, index)) => crate::bases::request(loader, index, Limits::RAISED),
+        Ok((loader, _)) => crate::bases::request(loader, Limits::RAISED),
         Err(status) => status,
     })
 }
 
 pub(crate) extern "system" fn request_base_limits(me: ModHandle, zones: u32, bases: u32) -> Status {
     entry("request_base_limits", || match caller_index(me) {
-        Ok((loader, index)) => crate::bases::request(loader, index, Limits { zones, bases }),
+        Ok((loader, _)) => crate::bases::request(loader, Limits { zones, bases }),
         Err(status) => status,
     })
 }
