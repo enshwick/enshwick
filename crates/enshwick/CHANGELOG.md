@@ -6,6 +6,8 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+## [1.0.0-alpha.11] - 2026-10-28
+
 ### Added
 
 - The `unstable` feature also holds what rests on engine facts not yet
@@ -95,7 +97,7 @@ Each entry names the pull request that made the change.
   `building_zone_check` (#635).
 - A mod whose `init` returns `Err(Off)` hands the loader its reason: the
   Mods screen shows it under the mod and the log names it, an `Off::text`
-  in the reader's language.
+  in the reader's language (#634).
 - Breaking: `Entity` has no serde form, since each load of a world numbers
   its entities anew; `Prop` has none either, and a `Capture` keeps
   `CapturedProp`, the item and transform without the entity. Entity data
