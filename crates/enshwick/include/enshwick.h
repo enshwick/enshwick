@@ -12,7 +12,7 @@
 #define ENSHWICK_ABI_MAJOR 4
 
 // The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 0
+#define ENSHWICK_ABI_MINOR 1
 
 // The bit of a `SurvivorStatusFn` answer that says its low byte is the
 // status to show.
@@ -318,6 +318,14 @@ typedef struct EnshwickBaseLimitInfo {
   uint32_t vanilla_zones;
   // Zero.
   uint32_t reserved;
+  // Bases the game's own code holds. Since minor 1.
+  uint32_t vanilla_bases;
+  // The most altar zones a mod may ask for with
+  // `HostApi::request_base_limits`.
+  // Since minor 1.
+  uint32_t max_zones;
+  // The most bases a mod may ask for. Since minor 1.
+  uint32_t max_bases;
 } EnshwickBaseLimitInfo;
 
 // An NPC of the game, such as a survivor, by its id, the
@@ -4134,6 +4142,16 @@ typedef struct EnshwickHostApi {
   // map, or when the scene does not read on this build. A panic in the
   // loader returns `Status::REFUSED`. Since minor 4.
   EnshwickStatus (*map_frame)(EnshwickModHandle me, struct EnshwickMapFrameInfo *out);
+  // Asks the game to group up to `zones` altar zones into up to `bases`
+  // bases, refusing an altar that would start a base past them; values
+  // below the game's own count as the game's. The loader takes the
+  // largest request of every mod for each, and the patches and hooks
+  // count as the mod's own. `Status::BAD_ARGS` for a value past the
+  // most the loader takes (`BaseLimitInfo::max_zones`,
+  // `BaseLimitInfo::max_bases`); `Status::MISSING` when this build's
+  // code is not the one the loader knows, and the game keeps its own.
+  // Allowed during `enshwick_mod_init` only. Since minor 1.
+  EnshwickStatus (*request_base_limits)(EnshwickModHandle me, uint32_t zones, uint32_t bases);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.
