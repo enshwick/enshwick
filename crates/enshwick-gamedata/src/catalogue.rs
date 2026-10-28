@@ -376,8 +376,10 @@ pub const DECORATIVE_ITEM_TAG: Guid = Guid::parse("ee3b266d-83e7-4239-8bdd-8e58f
 /// The item tag behind the crafting menu's Comfort Furniture group.
 ///
 /// Game data, read from build 410's crafting menu definitions like
-/// [`DECORATIVE_ITEM_TAG`]; besides furniture, a few logic switches and
-/// instruments carry it.
+/// [`DECORATIVE_ITEM_TAG`]; besides furniture, lights, braziers, trophies
+/// and a few logic switches and instruments carry it. On server build 399,
+/// 347 of the 2536 vanilla recipes make an item with it and not the
+/// Decorative tag.
 pub const COMFORT_FURNITURE_ITEM_TAG: Guid = Guid::parse("e6e36d0a-3eaf-4cbf-a767-d26aa76ccef1");
 
 /// The kinds an item in a slot of no kind of its own takes from its tags.

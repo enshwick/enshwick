@@ -119,7 +119,7 @@ own item data classes it:
 | `Overgrowth` | `overgrowth` | equipment slot `OvergrowthMaterial` |
 | `Terrain` | `terrain` | equipment slot `TerrainMaterial` |
 | `Decorative` | `decorative` | placed props that carry the item tag of the crafting menu's Decorative group: decorations and furniture outside Comfort Furniture |
-| `ComfortFurniture` | `comfort-furniture` | placed props that carry the item tag of the crafting menu's Comfort Furniture group: beds, chairs, tables, and a few logic switches and instruments |
+| `ComfortFurniture` | `comfort-furniture` | placed props that carry the item tag of the crafting menu's Comfort Furniture group: beds, chairs, tables, lights, braziers, trophies, and a few logic switches and instruments |
 | `Other` | `other` | everything else: equipment, functional props, materials |
 
 Match it with a `_` arm: later versions may add kinds. Prefer it to a debug

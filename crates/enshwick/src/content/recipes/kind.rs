@@ -30,8 +30,8 @@ pub enum RecipeKind {
     /// furniture outside [`RecipeKind::ComfortFurniture`].
     Decorative,
     /// A placed prop the game files under its Comfort Furniture crafting
-    /// group, from the item tag behind that group: beds, chairs, tables and
-    /// the like, and some logic switches and instruments. A prop that also
+    /// group, from the item tag behind that group: beds, chairs, tables,
+    /// lights, braziers, trophies, and some logic switches and instruments. A prop that also
     /// carries the Decorative tag is [`RecipeKind::Decorative`].
     ComfortFurniture,
     /// Anything else: equipment, functional props and materials among them.
