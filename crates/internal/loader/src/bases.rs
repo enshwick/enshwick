@@ -22,6 +22,7 @@ use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::Constant;
 
+mod heap;
 mod members;
 
 use core::ffi::c_void;

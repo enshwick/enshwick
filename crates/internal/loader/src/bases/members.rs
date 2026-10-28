@@ -364,6 +364,12 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
         // SAFETY: as above.
         let cap = unsafe { read_at::<u64>(vec, VEC_CAP) };
         if cap < len + 1 {
+            // SAFETY: as above, the allocator field at `VEC_ALLOCATOR`.
+            if unsafe { read_at::<usize>(vec, VEC_ALLOCATOR) } == 0 {
+                // SAFETY: as above; the game's caller never reads the field,
+                // and its grow and free reach the loader's heap through it.
+                unsafe { write_at(vec, VEC_ALLOCATOR, super::heap::handed()) };
+            }
             // SAFETY: as above, the grow callback at `VEC_GROW`, null or the
             // game's own.
             let grow = unsafe { read_ptr_at::<u8>(vec, VEC_GROW) };
@@ -601,6 +607,7 @@ mod tests {
         unsafe { zones_at(out.as_mut_ptr(), vec, &game, [5.0, 5.0, 5.0]) };
         assert_eq!((out[0], &out[4..8]), (0, &[0u8; 4][..]));
         assert_eq!(list.len, 40);
+        assert_eq!(list.allocator, super::super::heap::handed());
         // SAFETY: the container holds `len` boxes.
         let got = unsafe { core::slice::from_raw_parts(list.data, 40) };
         assert_eq!(got[39].0, fake.zones[39].0);
