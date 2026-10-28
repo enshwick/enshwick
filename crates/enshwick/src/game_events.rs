@@ -6,7 +6,7 @@
 //! start of each simulation step. The loader copies the ones a mod asked for
 //! and hands them over on the server's game thread, before the systems of
 //! the step run, so the entities an event names are still in the world and
-//! [`World`](crate::world::World) reads work in the handler. On a client they
+//! `World` reads work in the handler. On a client they
 //! come from the built-in server while it hosts a game.
 //!
 //! An event arrives as raw bytes in the engine's layout; a typed event reads
@@ -396,6 +396,7 @@ impl<T: Scalar> Field<T> {
     }
 
     /// The hash of the type the field belongs to.
+    #[cfg(feature = "unstable")]
     pub(crate) const fn type_hash(self) -> u32 {
         self.type_hash
     }

@@ -202,7 +202,7 @@ pub(crate) extern "system" fn ui_markers(
     markers: *const UiMarker,
     count: u32,
 ) -> Status {
-    if count as usize > crate::ui::MAX_MARKERS || (markers.is_null() && count > 0) {
+    if count as usize > crate::ui::MARKER_LIMIT || (markers.is_null() && count > 0) {
         return Status::BAD_ARGS;
     }
     let given = if count == 0 {

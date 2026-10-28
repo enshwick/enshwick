@@ -62,6 +62,9 @@ its requirement asks for keeps it whole.
 
 ## Taking back
 
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
 `revoke(player, id, revoke)` and `revoke_world(id, revoke)` take
 knowledge back: `Revoke::Clear` clears a bool, `Revoke::Sub(n)` lowers a
 counter down to 0, `Revoke::Unflag(bit)` clears one bit of flags. The value
@@ -95,6 +98,9 @@ fn reward(knowledge: &enshwick::knowledge::Knowledge, account: enshwick::PlayerK
 ```
 
 ## What clients ask for
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 A client asks the server for knowledge in its input, for what its interface
 marks, and a vanilla server grants whatever it asks: a modified client could

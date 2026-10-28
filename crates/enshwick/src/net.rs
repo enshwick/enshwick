@@ -58,7 +58,7 @@ pub enum Peer {
     /// The server, as a client sees it.
     Server,
     /// A player's client, by the account key, as the server sees it; the
-    /// key [`Player::key`](crate::world::Player::key) gives. No player has
+    /// key `Player::key` gives. No player has
     /// the key 0, which the loader reads as every client.
     Player(PlayerKey),
 }

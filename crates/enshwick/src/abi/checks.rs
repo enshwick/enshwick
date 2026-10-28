@@ -84,7 +84,7 @@ pub type InteractionFn =
 /// ```
 /// use enshwick::abi::{Header, SkillCheck};
 ///
-/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::world::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
+/// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(0x4475_e8dd), gate: SkillCheck::FLY_MODE, unlocked: 0, reserved: [0; 3] };
 /// assert_eq!(check.gate, SkillCheck::FLY_MODE);
 /// ```
 #[repr(C)]

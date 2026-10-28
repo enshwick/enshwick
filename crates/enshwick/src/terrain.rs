@@ -8,7 +8,7 @@
 //! A player's shovel and pickaxe also check where the player may build,
 //! take the cost and give the loot and experience; an edit here does none
 //! of that, so a mod decides what it needs. An edit here keeps no undo; a
-//! [`Transaction`](crate::world::Transaction) of the same edits does. An
+//! `Transaction` of the same edits does. An
 //! edit where the world is not loaded yet writes nothing and fails with
 //! [`WorldError::NotLoaded`]: the game would compute it against air (an
 //! add counting its whole mound, a dig removing nothing) and merge that
@@ -22,22 +22,14 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
-//! use enshwick::terrain::Shape;
+//! use enshwick::terrain::{Shape, Terrain};
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let terrain = load.terrain();
-//!     let world = load.world()?;
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("crater", "Dig a crater where you stand").admins(), move |request| {
-//!         let Some(here) = world.position(request.player.entity) else {
-//!             return Outcome::refused("You are nowhere");
-//!         };
-//!         match terrain.dig(here, 4.0, Shape::Round, &[]) {
-//!             Ok(volume) => Outcome::done(format!("Dug {volume:.1} m³")),
-//!             Err(why) => Outcome::refused(format!("{why}")),
-//!         }
-//!     })
+//! fn crater(terrain: &Terrain, at: [f64; 3]) -> Result<f32, enshwick::WorldError> {
+//!     terrain.dig(at, 4.0, Shape::Round, &[])
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Terrain, enshwick::Off> {
+//!     Ok(load.terrain())
 //! }
 //! ```
 

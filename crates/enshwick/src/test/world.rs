@@ -71,8 +71,8 @@ impl FakeHost {
     }
 
     /// An entity in the world with a component of type `type_hash`, at
-    /// `position` in metres, for [`World::entities`](crate::world::World::entities)
-    /// and [`World::near`](crate::world::World::near).
+    /// `position` in metres, for `World::entities`
+    /// and `World::near`.
     ///
     /// # Examples
     ///
@@ -96,7 +96,7 @@ impl FakeHost {
     }
 
     /// A map marker of the scene, as the loader reads it from the game's
-    /// archive for [`Map::markers`](crate::map::Map::markers).
+    /// archive for `Map::markers`.
     ///
     /// # Examples
     ///
@@ -114,7 +114,7 @@ impl FakeHost {
     }
 
     /// The frame of the scene's map, as the loader reads it from the game's
-    /// archive for [`Map::frame`](crate::map::Map::frame); without one the
+    /// archive for `Map::frame`; without one the
     /// scene has no frame.
     ///
     /// # Examples
@@ -633,7 +633,7 @@ impl VoxelGrid {
 
 impl FakeHost {
     /// A Flame Altar's building zone from `min` to `max` in metres, where
-    /// [`World::can_build`](crate::world::World::can_build) asks for
+    /// `World::can_build` asks for
     /// `CanEditBase`.
     ///
     /// # Examples

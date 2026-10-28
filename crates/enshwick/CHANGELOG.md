@@ -8,6 +8,18 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- The `unstable` feature holds what may still change in any release, so
+  1.0 promises only the rest: `world`, `map` with `Load::fog_of_war` and
+  the map markers of `ui`, `actions`, `console`, the script binding
+  (`script`, `#[derive(Script)]`, `#[script]`), calls (`#[call]`,
+  `Load::serve_call`, `Load::caller`, `services::Call` and its kin) with
+  the described calls, events and points of script runtimes,
+  `Effects::teleport` and `Effects::ping`, the knowledge revokes and
+  `Load::on_knowledge_input`, `Load::request_base_limits`, and the world
+  edit variants of `WorldError`. Each item says so in its docs, the Luau
+  definitions mark `world` and `caller`, and the book's Stability chapter
+  names what is stable and how the ABI versions from 1.0 (#643).
+
 - `Load::request_base_limits`, behind the new `unstable` feature, asks for
   up to 255 altars a Flame level (ABI 4.1,
   `HostApi::request_base_limits`), and `BaseLimit` tells the game's own
@@ -28,6 +40,8 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- Breaking: `SkillNode` is `abi::SkillNode` alone; `world` no longer
+  re-exports it.
 - Breaking: `WorldError` is `enshwick::WorldError`, shared by every module
   that acts on the server's world, and `ComponentType` is
   `ecs::ComponentType`, resolved with `ComponentType::resolve` in place of

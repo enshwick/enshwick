@@ -1,5 +1,7 @@
 //! What the API offers a script language, described beside the Rust items.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! [`#[derive(Script)]`](macro@crate::Script) describes types,
 //! [`#[script]`](macro@crate::script) methods, and the tables of
 //! [`events`](crate::events) events; runtimes and definitions read them.
@@ -26,6 +28,7 @@ use std::sync::Arc;
 
 pub(crate) mod convert;
 #[cfg(test)]
+#[cfg(feature = "unstable")]
 mod tests;
 
 /// A value's type as a script language sees it.
@@ -957,6 +960,7 @@ fn open<T: Bound>(load: &mut crate::Load<'_>) -> Result<Opened, crate::Off> {
 /// See [`Namespace`].
 pub const NAMESPACES: &[Namespace] = &[
     Namespace::of::<Log>(),
+    #[cfg(feature = "unstable")]
     Namespace::of::<crate::world::World>(),
     Namespace::of::<crate::schedule::Scheduler>(),
     Namespace::of::<crate::inventory::Inventories>(),

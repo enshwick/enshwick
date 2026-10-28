@@ -40,6 +40,10 @@ const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
 /// API's unstable calls and the compat task are linted and tested with the
 /// rest.
 const TEST_FEATURE: &str = "enshwick/test,enshwick/unstable,xtask/compat";
+/// The API crate alone, without `unstable`: the workspace turns the feature
+/// on for the runtimes, so only a build of its own shows that the stable
+/// surface, its docs and its examples stand without the unstable one.
+const STABLE_API: [&str; 4] = ["--package", "enshwick", "--features", "test"];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -385,6 +389,36 @@ fn say(text: &str) {
     let _shown = writeln!(std::io::stderr(), "xtask: {text}");
 }
 
+/// The checks of the API crate's stable surface, built without `unstable`:
+/// its lints when its code changed, and in the full suite its examples and
+/// its rustdoc.
+fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
+    let mut steps = Vec::new();
+    if code {
+        steps.push(
+            Step::new(&["clippy", "--all-targets"])
+                .then(&STABLE_API)
+                .then(&["--", "-D", "warnings"]),
+        );
+    }
+    if full {
+        // The script binding is public only with `unstable`, so its
+        // examples fail to build without it and the rest build one by one,
+        // which takes minutes.
+        steps.push(Step::new(&["test", "--doc"]).then(&STABLE_API).then(&[
+            "--",
+            "--skip",
+            "src/script",
+        ]));
+        steps.push(
+            Step::new(&["doc", "--no-deps"])
+                .then(&STABLE_API)
+                .env("RUSTDOCFLAGS", "-D warnings"),
+        );
+    }
+    steps
+}
+
 /// Runs the checks of `scope`. Every build selects the whole workspace, so
 /// features unify the same way on every run and nothing builds twice; only
 /// the tests run are narrowed to the changed packages. Host steps run one
@@ -448,6 +482,9 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     }
     if docs && run_host {
         host_steps.push(host(&["test", "--doc"]));
+    }
+    if run_host && touches(scope, "enshwick") {
+        host_steps.extend(stable_api_steps(code, full));
     }
     if full && run_host {
         host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));

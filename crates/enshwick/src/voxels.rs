@@ -21,27 +21,21 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
-//! use enshwick::voxels::{VoxelMaterial, VoxelPos};
+//! use enshwick::voxels::{VoxelMaterial, VoxelPos, Voxels};
 //!
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let voxels = load.voxels();
-//!     let world = load.world()?;
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("ground", "What am I standing on?"), move |request| {
-//!         let Some([x, y, z]) = world.position(request.player.entity) else {
-//!             return Outcome::refused("You are nowhere");
-//!         };
-//!         let Some(feet) = VoxelPos::from_metres([x, y - 0.5, z]) else {
-//!             return Outcome::refused("Outside the world");
-//!         };
-//!         match voxels.sample(feet).map(|voxel| voxel.material()) {
-//!             Ok(VoxelMaterial::Terrain(id)) => Outcome::done(format!("Ground of material {id}")),
-//!             Ok(VoxelMaterial::Building(id)) => Outcome::done(format!("A block of material {id}")),
-//!             Ok(_) => Outcome::done("Nothing"),
-//!             Err(why) => Outcome::refused(format!("{why}")),
-//!         }
+//! fn ground(voxels: &Voxels, [x, y, z]: [f64; 3]) -> Result<String, enshwick::WorldError> {
+//!     let Some(feet) = VoxelPos::from_metres([x, y - 0.5, z]) else {
+//!         return Ok("outside the world".to_owned());
+//!     };
+//!     Ok(match voxels.sample(feet)?.material() {
+//!         VoxelMaterial::Terrain(id) => format!("ground of material {id}"),
+//!         VoxelMaterial::Building(id) => format!("a block of material {id}"),
+//!         _ => "nothing".to_owned(),
 //!     })
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<Voxels, enshwick::Off> {
+//!     Ok(load.voxels())
 //! }
 //! ```
 
@@ -301,6 +295,7 @@ impl Voxel {
     }
 
     /// The voxel as the loader writes it, and reads it from a mod.
+    #[cfg(any(test, feature = "test", feature = "unstable"))]
     pub(crate) const fn to_abi(self) -> abi::Voxel {
         let (kind, material) = match self.material {
             VoxelMaterial::Air => (abi::Voxel::AIR, 0),
@@ -382,6 +377,7 @@ impl VoxelBox {
     /// The box turned a quarter turn about the vertical, keeping its
     /// corner: the voxel at (x, y, z) from the corner moves to
     /// (depth − 1 − z, y, x).
+    #[cfg(feature = "unstable")]
     pub(crate) fn turned(&self) -> Self {
         let [width, height, depth] = self.size.map(|axis| axis as usize);
         let mut voxels = Vec::with_capacity(self.voxels.len());
@@ -402,6 +398,7 @@ impl VoxelBox {
     }
 
     /// The same voxels with the corner at `(0, 0, 0)`.
+    #[cfg(feature = "unstable")]
     pub(crate) fn at_corner(self) -> Self {
         Self {
             min: VoxelPos::default(),
@@ -410,6 +407,7 @@ impl VoxelBox {
     }
 
     /// Copies `block`, which lies inside this box, into its place.
+    #[cfg(feature = "unstable")]
     pub(crate) fn fill_from(&mut self, block: &Self) {
         let [width, height, _] = self.size.map(|axis| axis as usize);
         let [row, rows, _] = block.size.map(|axis| axis as usize);
@@ -482,7 +480,7 @@ impl VoxelBox {
 
     /// A box of `size` voxels from `min` holding `voxels`, x fastest, then
     /// y, then z, to write with
-    /// [`Transaction::write_voxels`](crate::world::Transaction::write_voxels);
+    /// `Transaction::write_voxels`;
     /// `None` for an empty box or `voxels` that do not fill it.
     ///
     /// # Examples
@@ -618,6 +616,7 @@ pub struct Voxels {
 
 impl Voxels {
     /// The reads through `host`.
+    #[cfg(feature = "unstable")]
     pub(crate) const fn new(host: Host) -> Self {
         Self { host }
     }
@@ -760,6 +759,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "unstable")]
     fn a_block_fills_its_place_row_by_row() {
         let mut whole = VoxelBox {
             min: VoxelPos::new(10, 10, 10),

@@ -12,8 +12,9 @@
 //! [`Ui::ask`] waits for the answer on a thread of the mod's own.
 //!
 //! [`Load::on_hud`] draws lines and bars on the HUD each frame, at an
-//! [`Anchor`], hidden with the game's HUD; [`Ui::set_markers`] shows the
-//! mod's markers on the map until it sets others.
+//! [`Anchor`], hidden with the game's HUD; `Ui::set_markers`, with the
+//! `unstable` feature, shows the mod's markers on the map until it sets
+//! others.
 //!
 //! Everything here is client only: [`Load::ui`] and [`Load::on_frame`] turn
 //! a mod's server part away with [`Off`].
@@ -50,6 +51,7 @@ use crate::{Host, Load, Off};
 mod dialog;
 mod frame;
 mod hud;
+#[cfg(feature = "unstable")]
 mod map;
 mod widgets;
 
@@ -61,7 +63,13 @@ use dialog::{Answer, answered};
 use frame::{Drawer, draw_frame};
 
 pub use hud::{Anchor, Hud};
+#[cfg(feature = "unstable")]
 pub use map::{MAX_MARKERS, Marker, MarkerColor};
+
+/// The most markers a mod shows on the map at once, which the fake host
+/// holds to as well.
+#[cfg(any(feature = "test", feature = "unstable"))]
+pub(crate) const MARKER_LIMIT: usize = 256;
 
 /// The most options a [`Dropdown`] shows.
 pub const MAX_OPTIONS: usize = 64;

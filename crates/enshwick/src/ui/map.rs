@@ -5,9 +5,13 @@ use crate::abi::{Header, Status, Str, UiMarker};
 use super::{Ui, UiError};
 
 /// The most markers a mod shows at once.
-pub const MAX_MARKERS: usize = 256;
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
+pub const MAX_MARKERS: usize = super::MARKER_LIMIT;
 
 /// One of the game's custom marker colours.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -50,6 +54,8 @@ impl MarkerColor {
 }
 
 /// A marker on the map: where, its label and its colour.
+///
+/// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples
 ///
@@ -113,6 +119,8 @@ impl Ui {
     /// Shows `markers` on the map in place of the mod's markers so far; an
     /// empty slice clears them. The loader copies them; any thread.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`UiError::Refused`] past [`MAX_MARKERS`].
@@ -144,6 +152,8 @@ impl Ui {
     }
 
     /// Takes the mod's markers off the map.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
     ///
     /// # Errors
     ///

@@ -890,6 +890,8 @@ impl Load<'_> {
     /// of the game's code; where the loader cannot arm all of it, the game
     /// keeps 16 bases with the zones raised, which [`base_limit`] tells.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
     /// # Errors
     ///
     /// [`Off`] after init, or for a value past the most the loader takes

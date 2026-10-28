@@ -599,7 +599,7 @@ impl Installed {
     /// use enshwick::abi::{Header, SkillCheck};
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
-    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::world::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
+    /// let check = SkillCheck { header: Header::of::<SkillCheck>(), node: enshwick::abi::SkillNode::new(7), gate: SkillCheck::OTHER, unlocked: 0, reserved: [0; 3] };
     /// assert_eq!(loader.skill(&check), SkillCheck::VANILLA);
     /// ```
     #[must_use]

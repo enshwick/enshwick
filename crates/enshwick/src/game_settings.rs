@@ -22,16 +22,14 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
-//! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-//!     let settings = load.game_settings()?;
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("hard", "Double the enemies' damage").admins(), move |_request| {
-//!         match settings.change(|s| s.enemy_damage_factor *= 2.0) {
-//!             Ok(now) => Outcome::done(format!("Enemy damage now {}", now.enemy_damage_factor)),
-//!             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
-//!         }
-//!     })
+//! use enshwick::game_settings::GameSettings;
+//!
+//! fn harder(settings: &GameSettings) -> Result<f32, enshwick::WorldError> {
+//!     Ok(settings.change(|s| s.enemy_damage_factor *= 2.0)?.enemy_damage_factor)
+//! }
+//!
+//! fn init(load: &mut enshwick::Load<'_>) -> Result<GameSettings, enshwick::Off> {
+//!     load.game_settings()
 //! }
 //! ```
 
@@ -520,18 +518,11 @@ impl GameSettings {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::actions::{Action, Outcome};
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let settings = load.game_settings()?;
-    ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
-    ///     let keep = Action::new("no-tombstone", "Keep everything on death, in this world").admins();
-    ///     actions.add(keep, move |_request| {
-    ///         use enshwick::game_settings::TombstoneMode;
-    ///         match settings.keep(|s| s.tombstone_mode = TombstoneMode::NoTombstone) {
-    ///             Ok(_) => Outcome::done("Kept for this world"),
-    ///             Err(why) => Outcome::refused(format!("Unchanged: {why}")),
-    ///         }
-    ///     })
+    /// use enshwick::game_settings::{GameSettings, TombstoneMode};
+    ///
+    /// fn keep_everything(settings: &GameSettings) -> Result<(), enshwick::WorldError> {
+    ///     settings.keep(|s| s.tombstone_mode = TombstoneMode::NoTombstone)?;
+    ///     Ok(())
     /// }
     /// ```
     pub fn keep(&self, change: impl FnOnce(&mut Settings)) -> Result<Settings, WorldError> {

@@ -22,21 +22,19 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::actions::{Action, Outcome};
 //! use core::time::Duration;
+//! use enshwick::events::PlayerJoined;
 //! use enshwick::stats::{Lasting, Modifier, Op, StatDef, builtin};
 //!
 //! fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 //!     let luck = load.define_stat("luck", &StatDef::additive("stat.luck").range(0.0, 1.0))?;
 //!     let health = load.open_stat(builtin::HEALTH_MAX)?;
 //!     let stats = load.stats()?;
-//!     let actions = load.actions(enshwick::i18n::Texts::default())?;
-//!     actions.add(Action::new("bless", "More health and luck for a minute"), move |request| {
-//!         let player = request.player.entity;
+//!     load.on::<PlayerJoined>(move |joined| {
+//!         let player = joined.entity;
 //!         let minute = Lasting::For(Duration::from_secs(60));
-//!         let _health = stats.set(player, "bless", Modifier::new(health, Op::Add, 50.0), minute);
-//!         let _luck = stats.set(player, "bless", Modifier::new(luck, Op::Add, 0.1), minute);
-//!         Outcome::done(format!("Luck now {}", stats.value(player, luck)))
+//!         let _health = stats.set(player, "welcome", Modifier::new(health, Op::Add, 50.0), minute);
+//!         let _luck = stats.set(player, "welcome", Modifier::new(luck, Op::Add, 0.1), minute);
 //!     })
 //! }
 //! ```

@@ -3,9 +3,9 @@
 
 #[cfg(test)]
 mod tests {
+    use enshwick::abi::SkillNode;
     use enshwick::abi::{Header, SkillCheck, Status};
     use enshwick::progress::{Skill, SkillGate};
-    use enshwick::world::SkillNode;
     use enshwick::{Load, Mod, Off};
 
     struct Flyer;

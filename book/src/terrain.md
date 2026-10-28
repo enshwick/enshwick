@@ -73,6 +73,9 @@ an undo, write the edits as a transaction.
 
 ## Transactions and undo
 
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
+
 `world.transaction()` starts a `Transaction`: edits of the world the loader
 writes as one and can take back as one. `terrain_add`, `terrain_dig` and
 `terrain_flatten` take the same arguments as the `Terrain` calls; `commit`
@@ -418,6 +421,9 @@ Every call works on the server's game thread, from a game event, a
 client, while it hosts a game.
 
 ## Capturing a region
+
+Unstable: needs the `unstable` feature and may change in any release
+([Stability](stability.md)).
 
 `world.props_in(a, b)` lists the props whose position lies in the box
 between two corners in metres: the things players placed from items, such
