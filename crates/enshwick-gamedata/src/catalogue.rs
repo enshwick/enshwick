@@ -334,6 +334,18 @@ pub const SCENE_TRANSFORM_POSITION: [&str; 6] = [
 ];
 /// The id of a template resource's components, a blob array of variants.
 pub const TEMPLATE_COMPONENTS: &str = "template.components";
+/// The id of a scene's resource type, keyed by the scene's GUID.
+pub const SCENE_RESOURCE: &str = "scene_resource";
+/// The id of a scene resource's flag for a biome map, a byte.
+pub const SCENE_HAS_BIOME_MAP: &str = "scene_resource.has_biome_map";
+/// The id of a scene's biome map resource type, keyed by the scene's GUID.
+pub const BIOME_MAP: &str = "biome_map";
+/// The id of a biome map's world origin, two `i32`, x then z.
+pub const BIOME_MAP_WORLD_ORIGIN: &str = "biome_map.world_origin";
+/// The id of a biome map's world size in cells, two `u32`, x then z.
+pub const BIOME_MAP_WORLD_SIZE: &str = "biome_map.world_size";
+/// The id of a biome map's metres per cell, a `u32`.
+pub const BIOME_MAP_MAP_SCALE: &str = "biome_map.map_scale";
 
 /// The id of the random loot table's type, of which the game has one.
 pub const LOOT_RANDOM_TABLE: &str = "lootable_items";
@@ -380,11 +392,22 @@ pub const ITEM_TAG_WEIGHT_TAG: &str = "item_tag_weight.tag";
 /// build 399, 685 of the 2536 vanilla recipes make an item with it.
 pub const DECORATIVE_ITEM_TAG: Guid = Guid::parse("ee3b266d-83e7-4239-8bdd-8e58fe12e9d1");
 
+/// The item tag behind the crafting menu's Comfort Furniture group.
+///
+/// Game data, read from build 410's crafting menu definitions like
+/// [`DECORATIVE_ITEM_TAG`]; besides furniture, lights, braziers, trophies
+/// and a few logic switches and instruments carry it. On server build 399,
+/// 347 of the 2536 vanilla recipes make an item with it and not the
+/// Decorative tag.
+pub const COMFORT_FURNITURE_ITEM_TAG: Guid = Guid::parse("e6e36d0a-3eaf-4cbf-a767-d26aa76ccef1");
+
 /// The kinds an item in a slot of no kind of its own takes from its tags.
 ///
 /// Each row is the name of the constant of [`SLOT_TYPE`] the item's
 /// equipment slot holds, the item tag and the kind. A row of
-/// [`RECIPE_KINDS`] wins over these. A new kind by tag is a row here.
+/// [`RECIPE_KINDS`] wins over these, and of these an earlier row wins over
+/// a later one: an item with both tags is Decorative. A new kind by tag is
+/// a row here.
 ///
 /// # Examples
 ///
@@ -394,8 +417,14 @@ pub const DECORATIVE_ITEM_TAG: Guid = Guid::parse("ee3b266d-83e7-4239-8bdd-8e58f
 ///
 /// assert!(RECIPE_KIND_TAGS.iter().any(|&(_, _, kind)| kind == RecipeKind::Decorative));
 /// ```
-pub const RECIPE_KIND_TAGS: &[(&str, Guid, RecipeKind)] =
-    &[("BuildTool", DECORATIVE_ITEM_TAG, RecipeKind::Decorative)];
+pub const RECIPE_KIND_TAGS: &[(&str, Guid, RecipeKind)] = &[
+    ("BuildTool", DECORATIVE_ITEM_TAG, RecipeKind::Decorative),
+    (
+        "BuildTool",
+        COMFORT_FURNITURE_ITEM_TAG,
+        RecipeKind::ComfortFurniture,
+    ),
+];
 
 /// The slot value each row of [`RECIPE_KIND_TAGS`] has in `reflection`,
 /// with its tag and kind; a constant the build does not reflect is left out.
@@ -791,6 +820,21 @@ mod tests {
             fact(ITEM_TAG_WEIGHT_TAG),
             Some(Fact::Offset { .. })
         ));
+    }
+
+    #[test]
+    fn the_comfort_furniture_tag_reads_as_the_game_data_writes_it() {
+        assert_eq!(
+            COMFORT_FURNITURE_ITEM_TAG.to_string(),
+            "e6e36d0a-3eaf-4cbf-a767-d26aa76ccef1"
+        );
+    }
+
+    #[test]
+    fn decorative_comes_before_comfort_furniture_so_it_wins_an_item_with_both() {
+        let row = |kind| RECIPE_KIND_TAGS.iter().position(|&(_, _, k)| k == kind);
+        assert!(row(RecipeKind::Decorative) < row(RecipeKind::ComfortFurniture));
+        assert!(row(RecipeKind::ComfortFurniture).is_some());
     }
 
     #[test]

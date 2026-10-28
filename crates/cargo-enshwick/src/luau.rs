@@ -282,4 +282,26 @@ mod tests {
     fn the_definitions_match_their_snapshot() {
         insta::assert_snapshot!(definitions());
     }
+
+    #[test]
+    fn every_example_pack_carries_the_current_definitions() {
+        let examples = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples")
+            .canonicalize()
+            .unwrap();
+        let fresh = definitions();
+        let mut checked = 0;
+        for pack in std::fs::read_dir(&examples).unwrap() {
+            let copy = pack.unwrap().path().join("types").join(DEFINITIONS_FILE);
+            if let Ok(text) = std::fs::read_to_string(&copy) {
+                assert!(
+                    text == fresh,
+                    "{0} is stale: write it with `cargo enshwick luau --out {0}`",
+                    copy.display()
+                );
+                checked += 1;
+            }
+        }
+        assert_ne!(checked, 0, "no example pack carries {DEFINITIONS_FILE}");
+    }
 }

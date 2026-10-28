@@ -1507,6 +1507,24 @@ pub const FACTS: &[(&str, Fact)] = &[
         "scene_transform.position_z1",
         offset("keen::SceneEntityTransform", "positionZ1"),
     ),
+    ("scene_resource", Fact::Type("keen::SceneResource")),
+    (
+        "scene_resource.has_biome_map",
+        offset("keen::SceneResource", "hasBiomeMap"),
+    ),
+    ("biome_map", Fact::Type("keen::BiomeMapResource")),
+    (
+        "biome_map.world_origin",
+        offset("keen::BiomeMapResource", "worldOrigin"),
+    ),
+    (
+        "biome_map.world_size",
+        offset("keen::BiomeMapResource", "worldSize"),
+    ),
+    (
+        "biome_map.map_scale",
+        offset("keen::BiomeMapResource", "mapScale"),
+    ),
     (
         "disable_random_loot_on_destroy",
         Fact::Type("keen::ecs::DisableRandomLootOnDestroy"),

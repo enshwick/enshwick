@@ -250,7 +250,7 @@ time = { times = 0.5 }
 
 | Selection | Picks |
 | --- | --- |
-| `kind = [...]` | every recipe whose item is of these [kinds](recipes.md#recipe-kinds): `building-block`, `roof`, `overgrowth`, `terrain`, `decorative` or `other` |
+| `kind = [...]` | every recipe whose item is of these [kinds](recipes.md#recipe-kinds): `building-block`, `roof`, `overgrowth`, `terrain`, `decorative`, `comfort-furniture` or `other` |
 | `workshop = [...]` | every recipe made at these stations; naming one needs the game's data at hand |
 
 A selection changes `output_count`, `cost`, `time` and `station`, never

@@ -112,7 +112,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 }
 ```
 
-The hold is a file, `mod-data/<id>/hold.txt`, holding the reason on one line.
+The hold is a file, `mod-data/<id>/hold.txt`, holding the reason.
 While it is set, the loader checks it at start and stops the game before the
 world loads whenever the mod would not run:
 
@@ -122,6 +122,25 @@ world loads whenever the mod would not run:
 The log names the mod and its reason. A player who accepts the risk deletes
 `mod-data/<id>/hold.txt` to open the world anyway. `hold.reason()` reads the
 reason back while the hold is set.
+
+`hold.set_text(reason, key, args)` also names a text of the mod's
+[texts](content/texts.md), with each `{name}` filled from `args`. While the
+mod's texts are loaded, the log shows that text in the reader's language. When
+they are not, as when the mod is missing, it shows `reason`. The file keeps `reason` on its first line and the text on the
+second; a file of one line reads as before.
+
+```rust
+use enshwick::state::Hold;
+
+fn hold_altars(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    Hold::new(&load.data_dir()?).set_text(
+        "the world has 20 altar zones",
+        "hold.altars",
+        &[("altars", "20")],
+    )?;
+    Ok(())
+}
+```
 
 A hold that concerns one world only takes that world's key, from
 [`World::key`](world.md):

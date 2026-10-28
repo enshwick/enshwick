@@ -93,6 +93,9 @@ impl RecipeKind {
     pub const TERRAIN: Self = Self(4);
     /// A placed prop the game files under its Decorative crafting group.
     pub const DECORATIVE: Self = Self(5);
+    /// A placed prop the game files under its Comfort Furniture crafting
+    /// group.
+    pub const COMFORT_FURNITURE: Self = Self(6);
 }
 
 /// The vanilla value a [`DataChange`] changes; the field says what its

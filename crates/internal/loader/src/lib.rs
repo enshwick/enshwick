@@ -108,6 +108,7 @@ mod lobby;
 mod locks;
 pub mod log;
 pub mod manifest;
+pub mod map_frame;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the Windows build reads game memory")

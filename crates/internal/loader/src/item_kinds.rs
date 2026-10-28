@@ -142,19 +142,21 @@ pub struct Classes {
 
 impl Classes {
     /// The kind of an item in `slot` that carries `tags`; the slot's own kind
-    /// wins, then the kind of the first of its tags [`Classes::tags`] names
-    /// for the slot.
+    /// wins, then the earliest row of [`Classes::tags`] for the slot whose
+    /// tag the item carries, whatever the order of its tags.
     pub fn classify(&self, slot: u8, tags: impl IntoIterator<Item = [u8; 16]>) -> RecipeKind {
         let slot = u64::from(slot);
         if let Some(&(_, kind)) = self.slots.iter().find(|&&(value, _)| value == slot) {
             return kind;
         }
         tags.into_iter()
-            .find_map(|carried| {
+            .filter_map(|carried| {
                 self.tags
                     .iter()
-                    .find(|&&(value, tag, _)| value == slot && tag == carried)
+                    .position(|&(value, tag, _)| value == slot && tag == carried)
             })
+            .min()
+            .and_then(|row| self.tags.get(row))
             .map_or(RecipeKind::OTHER, |&(_, _, kind)| kind)
     }
 
@@ -486,11 +488,19 @@ mod tests {
     const BUILD_TOOL: u8 = 3;
     const DECOR: [u8; 16] = [0xd0; 16];
     const COMFORT: [u8; 16] = [0xc0; 16];
+    const UNKNOWN_TAG: [u8; 16] = [0xe0; 16];
 
     fn classes() -> Classes {
         Classes {
             slots: Box::new([(10, RecipeKind::BUILDING_BLOCK)]),
-            tags: Box::new([(u64::from(BUILD_TOOL), DECOR, RecipeKind::DECORATIVE)]),
+            tags: Box::new([
+                (u64::from(BUILD_TOOL), DECOR, RecipeKind::DECORATIVE),
+                (
+                    u64::from(BUILD_TOOL),
+                    COMFORT,
+                    RecipeKind::COMFORT_FURNITURE,
+                ),
+            ]),
         }
     }
 
@@ -558,14 +568,29 @@ mod tests {
     }
 
     #[test]
-    fn a_prop_with_the_decorative_tag_is_decorative_and_without_it_other() {
+    fn a_prop_takes_the_kind_of_its_tag_and_without_one_is_other() {
         let classes = classes();
         assert_eq!(
-            classes.classify(BUILD_TOOL, [COMFORT, DECOR]),
+            classes.classify(BUILD_TOOL, [UNKNOWN_TAG, DECOR]),
             RecipeKind::DECORATIVE
         );
-        assert_eq!(classes.classify(BUILD_TOOL, [COMFORT]), RecipeKind::OTHER);
+        assert_eq!(
+            classes.classify(BUILD_TOOL, [COMFORT]),
+            RecipeKind::COMFORT_FURNITURE
+        );
+        assert_eq!(
+            classes.classify(BUILD_TOOL, [UNKNOWN_TAG]),
+            RecipeKind::OTHER
+        );
         assert_eq!(classes.classify(BUILD_TOOL, []), RecipeKind::OTHER);
+    }
+
+    #[test]
+    fn a_prop_with_two_kind_tags_takes_the_earlier_row_in_any_tag_order() {
+        let classes = classes();
+        for tags in [[COMFORT, DECOR], [DECOR, COMFORT]] {
+            assert_eq!(classes.classify(BUILD_TOOL, tags), RecipeKind::DECORATIVE);
+        }
     }
 
     /// An `ItemInfo` of the `sealed` layout: id, slot and the tags in a blob
@@ -594,12 +619,12 @@ mod tests {
     fn an_item_reads_as_its_id_and_the_kind_of_its_slot_and_tags() {
         let items = sealed();
         let sealed = items.sealed().unwrap();
-        let decor = item_info(0x5e01, BUILD_TOOL, &[COMFORT, DECOR]);
+        let decor = item_info(0x5e01, BUILD_TOOL, &[UNKNOWN_TAG, DECOR]);
         assert_eq!(
             sealed.item(decor.len(), read(&decor)),
             Some((0x5e01, RecipeKind::DECORATIVE))
         );
-        let lamp = item_info(0x5e02, BUILD_TOOL, &[COMFORT]);
+        let lamp = item_info(0x5e02, BUILD_TOOL, &[UNKNOWN_TAG]);
         assert_eq!(
             sealed.item(lamp.len(), read(&lamp)),
             Some((0x5e02, RecipeKind::OTHER))
