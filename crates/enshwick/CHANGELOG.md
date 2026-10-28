@@ -8,6 +8,16 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::request_base_limits` takes up to 179 bases: the loader grows the
+  game's bases objects and keeps bases past 16 behind its array, on both
+  sides, and `BaseLimit::max_bases` reads 179, or 16 on a build where the
+  loader cannot arm every site it needs. A server holds the bases its mods
+  asked for, a client every base it can. `FakeHost::without_base_limit`
+  plays a build without the base code, and
+  `Installed::requested_base_limits` tells the largest request; it replaces
+  `base_limit_raised`. The docs of `altars::grouping` and
+  `altars::base_limit` name both requests (#647).
+
 - The `unstable` feature holds what may still change in any release, so
   1.0 promises only the rest: `world`, `map` with `Load::fog_of_war` and
   the map markers of `ui`, `actions`, `console`, the script binding
