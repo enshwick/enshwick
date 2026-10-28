@@ -18,7 +18,7 @@ Each entry names the pull request that made the change.
   `Load::on_knowledge_input`, `Load::request_base_limits`, and the world
   edit variants of `WorldError`. Each item says so in its docs, the Luau
   definitions mark `world` and `caller`, and the book's Stability chapter
-  names what is stable and how the ABI versions from 1.0.
+  names what is stable and how the ABI versions from 1.0 (#643).
 
 - `Load::request_base_limits`, behind the new `unstable` feature, asks for
   up to 255 altars a Flame level (ABI 4.1,
