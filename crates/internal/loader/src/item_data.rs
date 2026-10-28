@@ -127,13 +127,15 @@ impl Server {
 }
 
 /// The scope of kind `kind`'s record at `anchor`: its own for an opened
-/// kind, else the one its anchor tells.
+/// kind, else the one its anchor tells. A live value of a kind no mod
+/// opened has no anchor only once its item left every placed inventory: an
+/// entity value always keeps its place.
 fn scope(kind: u32, anchor: Option<Anchor>) -> Option<Scope> {
     match (self::kind(kind), anchor) {
         (Some(spec), _) => Some(spec.scope),
         (None, Some(Anchor::Placed(_))) => Some(Scope::Entity),
-        (None, Some(Anchor::Held { .. })) => Some(Scope::Item),
-        (None, _) => None,
+        (None, Some(Anchor::Held { .. }) | None) => Some(Scope::Item),
+        (None, Some(Anchor::Session(_))) => None,
     }
 }
 
@@ -407,6 +409,7 @@ pub(crate) fn after_step(loader: &Loader) {
 /// values on them go aside, kept in the world's file, rather than be dropped
 /// when the game destroys the items it removes with the character. No load
 /// finds a character's items by place, so they never attach again.
+#[cold]
 pub(crate) fn player_left(loader: &Loader, entity: u32) {
     if !wanted() || !serves() {
         return;
@@ -415,12 +418,29 @@ pub(crate) fn player_left(loader: &Loader, entity: u32) {
     let Some(server) = server.as_mut() else {
         return;
     };
+    let aside = set_aside_carried(server, entity, |pide| game::held(loader, pide));
+    if aside > 0 {
+        crate::log!(
+            INFO,
+            "mod data: {aside} values on a leaving player's items set aside in the world's file"
+        );
+    }
+}
+
+/// Moves the item values of `server` whose item `held` finds in an
+/// inventory of `character` into its records aside, each under its item's
+/// session id; the number moved.
+fn set_aside_carried(
+    server: &mut Server,
+    character: u32,
+    held: impl Fn(u32) -> Option<game::Held>,
+) -> usize {
     let mut left = Vec::new();
     server.values.retain(|&(kind, pide), record| {
         if scope(kind, record.anchor) != Some(Scope::Item) {
             return true;
         }
-        let Some(held) = game::held(loader, pide).filter(|held| held.root == entity) else {
+        let Some(held) = held(pide).filter(|held| held.root == character) else {
             return true;
         };
         left.push(Pending {
@@ -432,16 +452,10 @@ pub(crate) fn player_left(loader: &Loader, entity: u32) {
         });
         false
     });
-    if left.is_empty() {
-        return;
-    }
-    crate::log!(
-        INFO,
-        "mod data: {} values on a leaving player's items set aside in the world's file",
-        left.len()
-    );
+    let moved = left.len();
+    server.changed |= moved > 0;
     server.pending.append(&mut left);
-    server.changed = true;
+    moved
 }
 
 /// The placed things whose templates the `pending` records name, by key;
@@ -1248,6 +1262,70 @@ mod tests {
         assert!(world.values.is_empty());
         assert!(!world.changed, "nothing to write");
         assert_eq!(write_file(&world), bytes, "and if written, the same bytes");
+    }
+
+    #[test]
+    fn a_leaving_player_s_item_values_go_aside_and_no_other_value_moves() {
+        const ANN: u32 = 7;
+        const BEN: u32 = 8;
+        const CHEST: u32 = 1046;
+        kinds();
+        let mut world = server(Vec::new(), Vec::new());
+        let value = |item, anchor, byte| Record {
+            item,
+            anchor,
+            value: Box::new([byte]),
+        };
+        // `a:charges` (0) on Ann's two items, Ben's item and a chest's item;
+        // `a:owner` (1) on Ann's character itself.
+        world.values.insert((0, 2001), value(77, None, 1));
+        world.values.insert((0, 2002), value(78, None, 2));
+        world.values.insert((0, 2003), value(77, None, 3));
+        let in_chest = Some(Anchor::Held {
+            root: chest(1),
+            link: 0,
+            slot: 3,
+        });
+        world.values.insert((0, 2004), value(77, in_chest, 4));
+        world
+            .values
+            .insert((1, ANN), value(9, Some(Anchor::Placed(chest(2))), 5));
+        let held = |pide| {
+            let (root, item) = match pide {
+                2001 => (ANN, 77),
+                2002 => (ANN, 78),
+                2003 => (BEN, 77),
+                2004 => (CHEST, 77),
+                _ => return None,
+            };
+            Some(game::Held {
+                anchor: None,
+                item,
+                root,
+            })
+        };
+        assert_eq!(set_aside_carried(&mut world, ANN, held), 2);
+        let mut kept: Vec<(u32, u32)> = world.values.keys().copied().collect();
+        kept.sort_unstable();
+        assert_eq!(kept, [(0, 2003), (0, 2004), (1, ANN)]);
+        let mut aside: Vec<(Anchor, u32, u8, bool)> = world
+            .pending
+            .iter()
+            .map(|r| (r.anchor, r.check, r.value[0], r.aside))
+            .collect();
+        aside.sort_unstable();
+        assert_eq!(
+            aside,
+            [
+                (Anchor::Session(2001), 77, 1, true),
+                (Anchor::Session(2002), 78, 2, true),
+            ]
+        );
+        assert!(world.changed);
+        // The items' later destroy requests find nothing left to drop.
+        let mut destroyed = FxHashSet::default();
+        destroyed.extend([2001, 2002]);
+        assert!(prune_destroyed(&mut world.values, &destroyed).is_empty());
     }
 
     #[test]
