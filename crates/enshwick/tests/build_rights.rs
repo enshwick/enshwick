@@ -5,8 +5,9 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::{Header, PlayerInfo, Status};
-    use enshwick::world::{BuildRefusal, Player, PlayerPermissions, World, WorldError};
+    use enshwick::world::{BuildRefusal, Player, PlayerPermissions, World};
     use enshwick::{Load, Mod, Off};
 
     static WORLD: OnceLock<World> = OnceLock::new();

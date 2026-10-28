@@ -30,8 +30,8 @@
 
 use core::time::Duration;
 
+use crate::WorldError;
 use crate::abi::{DaytimeInfo, Header, Status};
-use crate::world::WorldError;
 use crate::{Host, Load, Off};
 
 /// Game nanoseconds in an hour.

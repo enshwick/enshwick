@@ -4,9 +4,9 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::WorldError;
     use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
     use enshwick::terrain::{Shape, Terrain};
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     static TERRAIN: OnceLock<Terrain> = OnceLock::new();

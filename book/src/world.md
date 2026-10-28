@@ -43,14 +43,14 @@ through the system's context instead; see [ECS inside systems](ecs.md).
 | `position(entity)` | the entity's position in metres, `[f64; 3]` |
 | `template(entity)` | its template GUID, 16 bytes in file order |
 | `used_item(entity)` | the item a placed prop came from, which it keeps across saves |
-| `component_type(load, name)` | a reflected component type, such as `keen::ecs::Name`; call at init |
 | `component(entity, ty)` | a read-only pointer to the entity's component of that type |
 
 The pointer from `component` stays valid until the game thread returns to the
-game; read what you need at once. `component_type` turns the mod off when the
-type is not reflected on the running build. Its `hash()` is the hash
+game; read what you need at once. Its type is an `ecs::ComponentType`,
+resolved at init with `ComponentType::resolve`, which turns the mod off when
+the type is not reflected on the running build; the same type is what
 [`ecs::Components`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/ecs.rs)
-takes inside systems.
+takes inside systems ([ECS](ecs.md)).
 
 ```rust
 use enshwick::Entity;
@@ -147,11 +147,11 @@ A write goes to the component the server owns, and the loader marks it
 changed the way the game's own writes do, so the game sends it to clients and
 saves it with the world. The copies the game keeps for clients, the
 `Network*` and `Client*` components, are never written: the game overwrites
-them from the server's own every step, so `writable_type` refuses them.
+them from the server's own every step, so `WritableType::resolve` refuses them.
 
 | Call | Does |
 | --- | --- |
-| `writable_type(load, name)` | a component type to write, such as `keen::ecs::CombatFlags`; call at init |
+| `WritableType::resolve(load, name)` | a component type to write, such as `keen::ecs::CombatFlags`; call at init |
 | `update(entity, ty, \|bytes\| ..)` | hands the component's reflected bytes to the closure, marked changed |
 | `ty.field::<T>(load, name)` | a typed field of the type, resolved by name for the running build |
 | `get(entity, field)` | the field's value, `None` when the entity lacks the component |
@@ -162,7 +162,7 @@ use enshwick::actions::{Action, Outcome};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+    let flags = enshwick::world::WritableType::resolve(load, "keen::ecs::CombatFlags")?;
     let immune = flags.field::<bool>(load, "immune")?;
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("immune", "Toggle your immunity").admins(), move |request| {
@@ -207,7 +207,7 @@ use enshwick::actions::{Action, Outcome};
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;
-    let beds = world.component_type(load, "keen::ecs::NpcBed")?;
+    let beds = enshwick::ecs::ComponentType::resolve(load, "keen::ecs::NpcBed")?;
     let actions = load.actions(enshwick::i18n::Texts::default())?;
     actions.add(Action::new("beds", "Count the beds"), move |_request| {
         Outcome::done(format!("{} beds", world.entities(beds).len()))
@@ -291,7 +291,8 @@ work on any thread and with the setting off, and a change applies from the
 next join. Outside a dedicated server they return `WorldError::Missing`.
 
 ```rust
-use enshwick::world::{World, WorldError};
+use enshwick::WorldError;
+use enshwick::world::World;
 
 fn invite(world: &World, key: enshwick::PlayerKey) -> Result<(), WorldError> {
     if !world.allowlisted(key)? {

@@ -86,7 +86,8 @@ impl HeldState {
 /// # Examples
 ///
 /// ```
-/// use enshwick::world::{HeldState, TransactionStatus, World, WorldError};
+/// use enshwick::WorldError;
+/// use enshwick::world::{HeldState, TransactionStatus, World};
 ///
 /// fn why(world: World, id: enshwick::world::TransactionId) {
 ///     if let Some(TransactionStatus::Failed(WorldError::HoldsState(state))) = world.transaction_status(id) {

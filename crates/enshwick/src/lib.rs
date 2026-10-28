@@ -153,6 +153,7 @@ pub mod vetoes;
 pub mod voxels;
 pub mod weather;
 pub mod world;
+mod world_error;
 
 pub use abi::{Entity, ItemId, PlayerKey, RecipeId};
 pub use enshwick_macros::Config;
@@ -369,6 +370,7 @@ pub use hook::{FnPtr, Hook, Next};
 pub use host::{Host, host};
 pub use load::{Load, Mod, Off};
 pub use shape::Shape;
+pub use world_error::WorldError;
 
 #[doc(hidden)]
 pub mod __private {

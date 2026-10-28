@@ -4,9 +4,9 @@
 mod tests {
     use std::sync::OnceLock;
 
+    use enshwick::WorldError;
     use enshwick::abi::Status;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos, Voxels};
-    use enshwick::world::WorldError;
     use enshwick::{Load, Mod, Off};
 
     static VOXELS: OnceLock<Voxels> = OnceLock::new();

@@ -8,10 +8,8 @@ mod tests {
     use enshwick::ItemId;
     use enshwick::abi::Status;
     use enshwick::voxels::{Voxel, VoxelMaterial, VoxelPos};
-    use enshwick::world::{
-        CAPTURE_TILES, Capture, CapturedProp, Prop, World, WorldError, WorldTransform,
-    };
-    use enshwick::{Load, Mod, Off};
+    use enshwick::world::{CAPTURE_TILES, Capture, CapturedProp, Prop, World, WorldTransform};
+    use enshwick::{Load, Mod, Off, WorldError};
 
     const TRANSFORM: u32 = 1;
     const USED_ITEM: u32 = 2;

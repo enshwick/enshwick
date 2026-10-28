@@ -242,7 +242,8 @@ loot, and raises the game's `BuildingTearDownEvent`.
 ```rust
 use enshwick::ItemId;
 use enshwick::Entity;
-use enshwick::world::{HeldState, TransactionId, TransactionStatus, World, WorldError, WorldTransform};
+use enshwick::WorldError;
+use enshwick::world::{HeldState, TransactionId, TransactionStatus, World, WorldTransform};
 
 fn swap_chest(world: World, old: Entity, chest: ItemId, at: [f64; 3]) -> Option<TransactionId> {
     world
@@ -447,7 +448,8 @@ use std::ops::ControlFlow;
 use std::time::Duration;
 
 use enshwick::voxels::VoxelPos;
-use enshwick::world::{Capture, WorldError};
+use enshwick::WorldError;
+use enshwick::world::Capture;
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     let world = load.world()?;

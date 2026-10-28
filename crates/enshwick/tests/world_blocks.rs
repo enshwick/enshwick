@@ -9,10 +9,9 @@ mod tests {
     use enshwick::test::FakeChange;
     use enshwick::voxels::{Voxel, VoxelBox, VoxelMaterial, VoxelPos};
     use enshwick::world::{
-        BuildRefusal, Player, PlayerPermissions, TransactionStatus, World, WorldError,
-        WorldTransform,
+        BuildRefusal, Player, PlayerPermissions, TransactionStatus, World, WorldTransform,
     };
-    use enshwick::{ItemId, Load, Mod, Off};
+    use enshwick::{ItemId, Load, Mod, Off, WorldError};
 
     static WORLD: OnceLock<World> = OnceLock::new();
 

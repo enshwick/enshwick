@@ -55,9 +55,9 @@
 
 use core::ffi::c_void;
 
+use crate::WorldError;
 pub use crate::abi::KnowledgeId;
 use crate::abi::{Header, KnowledgeInfo, KnowledgeInput, Status};
-use crate::world::WorldError;
 use crate::{Entity, PlayerKey};
 use crate::{Host, Load, Off};
 

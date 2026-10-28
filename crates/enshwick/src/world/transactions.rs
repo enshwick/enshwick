@@ -130,7 +130,8 @@ impl TransactionStatus {
 ///
 /// ```
 /// use enshwick::terrain::Shape;
-/// use enshwick::world::{TransactionId, World, WorldError};
+/// use enshwick::WorldError;
+/// use enshwick::world::{TransactionId, World};
 ///
 /// fn pit_with_rim(world: World, at: [f64; 3], dirt: u8) -> Result<TransactionId, WorldError> {
 ///     world

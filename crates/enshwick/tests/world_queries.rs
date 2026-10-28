@@ -5,10 +5,12 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::{Header, PlayerInfo, Status};
+    use enshwick::ecs::ComponentType;
     use enshwick::events::{ShutdownStarted, WorldLoaded, WorldSaved};
     use enshwick::state::WorldStore;
-    use enshwick::world::{ComponentType, World, WorldError};
+    use enshwick::world::World;
     use enshwick::{Load, Mod, Off};
 
     const TRANSFORM: u32 = 1;
@@ -32,7 +34,7 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let world = load.world()?;
-            let _first = BEDS.set(world.component_type(load, "keen::ecs::NpcBed")?);
+            let _first = BEDS.set(ComponentType::resolve(load, "keen::ecs::NpcBed")?);
             let _first = WORLD.set(world);
             let _first = STORE.set(load.world_store("visits")?);
             Ok(Self)

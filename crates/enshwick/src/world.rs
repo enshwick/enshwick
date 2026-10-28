@@ -22,11 +22,12 @@ mod vitals;
 
 use core::ffi::c_void;
 
-use crate::abi::{EntityPlace, Header, PlayerInfo, Status, Str};
+use crate::abi::{EntityPlace, Header, PlayerInfo};
+use crate::ecs::ComponentType;
 use crate::engine_ids as ids;
 use crate::game_events::{Field, Scalar};
 use crate::{Entity, ItemId, PlayerKey};
-use crate::{Host, Load, Off};
+use crate::{Host, Load, Off, WorldError};
 
 pub use accounts::AccountAction;
 pub use build::{BuildRefusal, PlayerPermissions};
@@ -40,43 +41,17 @@ pub use rename::Rename;
 pub use stats::{Meter, Progress, Skill, SkillNode, Vitals};
 pub use transactions::{Transaction, TransactionId, TransactionStatus};
 
-/// A reflected ECS component type, resolved once at init.
-///
-/// # Examples
-///
-/// ```
-/// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let world = load.world()?;
-///     let used_item = world.component_type(load, "keen::ecs::UsedItem")?;
-///     let _ = used_item;
-///     Ok(())
-/// }
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ComponentType(u32);
-
-impl ComponentType {
-    /// The type's hash, as [`Components`](crate::ecs::Components) takes it.
-    ///
-    /// # Examples
-    ///
-    /// See [`ComponentType`].
-    #[must_use]
-    pub const fn hash(self) -> u32 {
-        self.0
-    }
-}
-
 /// A reflected component type a mod may write, resolved once at init with
-/// [`World::writable_type`]: one the server owns, not a copy the game keeps
+/// [`WritableType::resolve`]: one the server owns, not a copy the game keeps
 /// for clients.
 ///
 /// # Examples
 ///
 /// ```
+/// use enshwick::world::WritableType;
+///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-///     let world = load.world()?;
-///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+///     let flags = WritableType::resolve(load, "keen::ecs::CombatFlags")?;
 ///     assert_eq!(flags.name(), "keen::ecs::CombatFlags");
 ///     Ok(())
 /// }
@@ -89,6 +64,26 @@ pub struct WritableType {
 }
 
 impl WritableType {
+    /// The component type named `name` for writes, such as
+    /// `keen::ecs::CombatFlags`: one the server owns. Writes to the copies
+    /// the game keeps for clients are refused with [`WorldError::Refused`],
+    /// since the game overwrites them from the server's own every step.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] for a type not reflected on this build.
+    ///
+    /// # Examples
+    ///
+    /// See [`WritableType`].
+    pub fn resolve(load: &Load<'_>, name: &'static str) -> Result<Self, Off> {
+        Ok(Self {
+            ty: ComponentType::resolve(load, name)?,
+            size: load.type_size(name)?,
+            name,
+        })
+    }
+
     /// The component type, for reads.
     ///
     /// # Examples
@@ -109,7 +104,7 @@ impl WritableType {
     ///
     /// ```
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     let flags = load.world()?.writable_type(load, "keen::ecs::CombatFlags")?;
+    ///     let flags = enshwick::world::WritableType::resolve(load, "keen::ecs::CombatFlags")?;
     ///     enshwick::debug!("{} is {} bytes", flags.name(), flags.size());
     ///     Ok(())
     /// }
@@ -142,7 +137,7 @@ impl WritableType {
     /// See [`World::set`].
     pub fn field<T: Scalar>(self, load: &Load<'_>, name: &str) -> Result<Field<T>, Off> {
         let offset = load.field_offset(self.name, name)?;
-        Field::within(self.ty.0, self.size, offset).ok_or_else(|| {
+        Field::within(self.ty.hash(), self.size, offset).ok_or_else(|| {
             Off::new(format!(
                 "field {}.{name}: past the end of the type",
                 self.name
@@ -154,7 +149,7 @@ impl WritableType {
     /// inside this type's size.
     pub(crate) fn field_by_id<T: Scalar>(self, load: &Load<'_>, id: &str) -> Result<Field<T>, Off> {
         let offset = load.constant(id)?;
-        Field::within(self.ty.0, self.size, offset)
+        Field::within(self.ty.hash(), self.size, offset)
             .ok_or_else(|| Off::new(format!("field {id}: past the end of {}", self.name)))
     }
 }
@@ -275,86 +270,6 @@ pub enum Notice {
     Chat,
 }
 
-/// Why the world refused a request.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::world::WorldError;
-///
-/// assert_eq!(WorldError::WrongThread.to_string(), "not on the server's game thread");
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[non_exhaustive]
-pub enum WorldError {
-    /// Called off the server's game thread, inside a step (from a filter
-    /// or a hook on a system), or while no server runs.
-    #[error("not on the server's game thread")]
-    WrongThread,
-    /// The entity is not in the world.
-    #[error("the entity is not in the world")]
-    Gone,
-    /// This game build lacks the piece.
-    #[error("not available on this loader or game build")]
-    Missing,
-    /// The world refused: a player's character, a save before the world
-    /// has loaded, a write that would kill, or a copy the game keeps for
-    /// clients.
-    #[error("refused by the world")]
-    Refused,
-    /// The entity is in the world but lacks the component, such as a chest
-    /// asked for its stamina.
-    #[error("the entity lacks the component")]
-    Lacks,
-    /// The part of the world asked about is not loaded yet; asking starts
-    /// loading it, so try again in a second or so.
-    #[error("that part of the world is not loaded")]
-    NotLoaded,
-    /// The box asked about leaves the world: past its edge across, or
-    /// above the height the loader takes.
-    #[error("outside the world")]
-    OutsideWorld,
-    /// The component type is the static half of its ECS type, such as
-    /// `FuelSetup`: the set-up values every entity of the template shares,
-    /// which the world reads but never writes.
-    #[error("the template's set-up data, which is never written")]
-    StaticHalf,
-    /// The prop holds state a player would lose: items, growth, a
-    /// production queue, assigned survivors, written text, fuel, logic
-    /// wiring or a logic trigger's settings; [`HeldState`] names each
-    /// kind.
-    #[error("the prop holds {0}")]
-    HoldsState(PropState),
-    /// The entity is no prop: not placed from an item, or a creature such
-    /// as an animal, a pet or a survivor, which prop calls never touch.
-    #[error("not a prop")]
-    NotAProp,
-}
-
-impl WorldError {
-    /// The error the loader's `status` stands for, with `missing` for
-    /// [`Status::MISSING`]: [`Self::Gone`] where the call names an entity,
-    /// [`Self::Lacks`] where it names a component.
-    pub(crate) fn check(status: Status, missing: Self) -> Result<(), Self> {
-        match status {
-            Status::OK => Ok(()),
-            Status::WRONG_THREAD => Err(Self::WrongThread),
-            Status::NOT_LOADED => Err(Self::NotLoaded),
-            Status::OUTSIDE_WORLD => Err(Self::OutsideWorld),
-            Status::STATIC_HALF => Err(Self::StaticHalf),
-            Status::NOT_A_PROP => Err(Self::NotAProp),
-            Status::REFUSED | Status::BAD_ARGS => Err(Self::Refused),
-            Status::MISSING => Err(missing),
-            _ => Err(Self::Missing),
-        }
-    }
-
-    /// [`Self::check`] for a call whose missing piece is the feature itself.
-    pub(crate) fn from_status(status: Status) -> Result<(), Self> {
-        Self::check(status, Self::Missing)
-    }
-}
-
 /// A [`PlayerInfo`] for the loader to fill, its header naming this build's
 /// layout.
 fn blank_info() -> PlayerInfo {
@@ -435,15 +350,6 @@ fn orientation_offset(load: &Load<'_>) -> Option<usize> {
     usize::try_from(transform.checked_add(orientation)?).ok()
 }
 
-/// The component type named `name` on the host's build.
-fn type_named(host: Host, name: &str) -> Result<ComponentType, Off> {
-    let mut hash = 0;
-    let status = (host.api().type_hash)(Str::new(name), &raw mut hash);
-    crate::load::ok(status, ComponentType(hash), || {
-        format!("component type {name}")
-    })
-}
-
 #[crate::script(things)]
 impl World {
     pub(crate) fn resolve(load: &Load<'_>) -> Result<Self, Off> {
@@ -453,38 +359,25 @@ impl World {
         let host = load.host();
         let resolved = Resolved {
             host,
-            transform: type_named(host, ids::CURRENT_TRANSFORM)?,
-            used_item: type_named(host, ids::USED_ITEM)?,
+            transform: ComponentType::named(host, ids::CURRENT_TRANSFORM)?,
+            used_item: ComponentType::named(host, ids::USED_ITEM)?,
             orientation: orientation_offset(load),
             no_props: [
                 ids::ANIMAL_SAVED,
                 ids::ACTIVE_NPC_STATE_SAVED,
                 ids::BASE_ID_COMPONENT,
             ]
-            .map(|name| type_named(host, name).ok())
+            .map(|name| ComponentType::named(host, name).ok())
             .into_iter()
             .collect::<Option<Vec<_>>>()
             .and_then(|types| types.try_into().ok()),
-            label: type_named(host, ids::LABEL).ok(),
+            label: ComponentType::named(host, ids::LABEL).ok(),
             containers: containers::Containers::resolve(host),
             stats: stats::Stats::resolve(load, host)
                 .inspect_err(|off| crate::debug!("stat reads off: {off}"))
                 .ok(),
         };
         Ok(Self(RESOLVED.get_or_init(|| resolved)))
-    }
-
-    /// The component type named `name`, such as `keen::ecs::UsedItem`.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] when the type is not reflected on this build.
-    ///
-    /// # Examples
-    ///
-    /// See [`ComponentType`].
-    pub fn component_type(self, _load: &Load<'_>, name: &str) -> Result<ComponentType, Off> {
-        type_named(self.0.host, name)
     }
 
     /// A pointer to `entity`'s component of type `ty`, valid until the game
@@ -497,31 +390,8 @@ impl World {
     ///
     /// See [`World`].
     #[must_use]
-    pub fn component(&self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
-        let mut out: *const c_void = core::ptr::null();
-        let status =
-            (self.0.host.api().component)(self.0.host.handle(), entity, ty.0, &raw mut out);
-        (status == Status::OK && !out.is_null()).then_some(out)
-    }
-
-    /// The component type named `name` for writes, such as
-    /// `keen::ecs::CombatFlags`: one the server owns. Writes to the copies
-    /// the game keeps for clients are refused with [`WorldError::Refused`],
-    /// since the game overwrites them from the server's own every step.
-    ///
-    /// # Errors
-    ///
-    /// [`Off`] for a type not reflected on this build.
-    ///
-    /// # Examples
-    ///
-    /// See [`WritableType`].
-    pub fn writable_type(self, load: &Load<'_>, name: &'static str) -> Result<WritableType, Off> {
-        Ok(WritableType {
-            ty: self.component_type(load, name)?,
-            size: load.type_size(name)?,
-            name,
-        })
+    pub fn component(self, entity: Entity, ty: ComponentType) -> Option<*const c_void> {
+        ty.read(self.0.host, entity)
     }
 
     /// Lets `write` change `entity`'s component of type `ty`, its reflected
@@ -546,7 +416,7 @@ impl World {
     /// use enshwick::actions::{Action, Outcome};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+    ///     let flags = enshwick::world::WritableType::resolve(load, "keen::ecs::CombatFlags")?;
     ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
     ///     actions.add(Action::new("immune", "Make your character immune").admins(), move |request| {
     ///         // `immune` is the first byte of `CombatFlags`.
@@ -598,7 +468,7 @@ impl World {
     /// See [`World::set`].
     #[must_use]
     pub fn get<T: Scalar>(&self, entity: Entity, field: Field<T>) -> Option<T> {
-        let data = self.component(entity, ComponentType(field.type_hash()))?;
+        let data = self.component(entity, ComponentType::from_hash(field.type_hash()))?;
         let at = usize::try_from(field.offset()).ok()?;
         let mut bytes = [0u8; 8];
         let len = size_of::<T>().min(bytes.len());
@@ -629,7 +499,7 @@ impl World {
     /// use enshwick::actions::{Action, Arg, Outcome, Value};
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let world = load.world()?;
-    ///     let faction = world.writable_type(load, "keen::ecs::Faction")?;
+    ///     let faction = enshwick::world::WritableType::resolve(load, "keen::ecs::Faction")?;
     ///     let value = faction.field::<u8>(load, "faction")?;
     ///     let actions = load.actions(enshwick::i18n::Texts::default())?;
     ///     let befriend = Action::new("befriend", "Make an entity a player ally")
@@ -654,7 +524,7 @@ impl World {
         field: Field<T>,
         value: T,
     ) -> Result<(), WorldError> {
-        let data = self.component_mut(entity, ComponentType(field.type_hash()))?;
+        let data = self.component_mut(entity, ComponentType::from_hash(field.type_hash()))?;
         let at = usize::try_from(field.offset()).map_err(|_| WorldError::Missing)?;
         let mut bytes = [0u8; 8];
         let len = size_of::<T>().min(bytes.len());
@@ -679,8 +549,12 @@ impl World {
         ty: ComponentType,
     ) -> Result<*mut c_void, WorldError> {
         let mut out: *mut c_void = core::ptr::null_mut();
-        let status =
-            (self.0.host.api().component_write)(self.0.host.handle(), entity, ty.0, &raw mut out);
+        let status = (self.0.host.api().component_write)(
+            self.0.host.handle(),
+            entity,
+            ty.hash(),
+            &raw mut out,
+        );
         match WorldError::check(status, WorldError::Gone) {
             Ok(()) if !out.is_null() => Ok(out),
             Ok(()) => Err(WorldError::Missing),
@@ -790,7 +664,7 @@ impl World {
     /// ```
     #[must_use]
     pub fn key(self) -> Option<String> {
-        world_key(self.0.host)
+        crate::state::world_key(self.0.host)
     }
 }
 
@@ -813,16 +687,4 @@ pub(crate) fn online(host: Host) -> Vec<Player> {
         .take(usize::try_from(count).unwrap_or(0).min(MAX))
         .map(Player::from_info)
         .collect()
-}
-
-/// The key of the world the server runs, from the loader.
-pub(crate) fn world_key(host: Host) -> Option<String> {
-    let api = host.api();
-    let mut out = Str::EMPTY;
-    if !(api.world_key)(host.handle(), &raw mut out).is_ok() {
-        return None;
-    }
-    // SAFETY: `world_key` returned OK, and the loader keeps the key's bytes
-    // alive and unchanged for the process, which outlives the copy here.
-    unsafe { out.as_str() }.map(str::to_owned)
 }

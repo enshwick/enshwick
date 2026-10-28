@@ -123,7 +123,8 @@ impl World {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::world::{World, WorldError};
+    /// use enshwick::WorldError;
+    /// use enshwick::world::World;
     ///
     /// fn torches(world: World, torch: enshwick::ItemId, at: [f64; 3]) -> Result<usize, WorldError> {
     ///     let [x, y, z] = at;

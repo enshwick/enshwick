@@ -6,8 +6,10 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::Status;
-    use enshwick::world::{ComponentType, World, WorldError, WritableType};
+    use enshwick::ecs::ComponentType;
+    use enshwick::world::{World, WritableType};
     use enshwick::{Load, Mod, Off};
 
     const FUEL_SETUP: u32 = 0x139a_fbec;
@@ -34,9 +36,9 @@ mod tests {
             let world = load.world()?;
             let _first = RESOLVED.set(Resolved {
                 world,
-                setup: world.component_type(load, "keen::ecs::FuelSetup")?,
-                setup_writes: world.writable_type(load, "keen::ecs::FuelSetup")?,
-                fuel_writes: world.writable_type(load, "keen::ecs::Fuel")?,
+                setup: ComponentType::resolve(load, "keen::ecs::FuelSetup")?,
+                setup_writes: WritableType::resolve(load, "keen::ecs::FuelSetup")?,
+                fuel_writes: WritableType::resolve(load, "keen::ecs::Fuel")?,
             });
             Ok(Self)
         }

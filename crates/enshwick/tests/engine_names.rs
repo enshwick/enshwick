@@ -9,6 +9,8 @@ mod tests {
     /// The documented items whose examples may spell an engine name, by
     /// file under `src` and item, each with its reason.
     const ALLOWED: &[(&str, &str, &str)] = &[
+        ("ecs.rs", "ComponentType", COMPONENT),
+        ("ecs.rs", "hash", COMPONENT),
         ("effects.rs", "emit_raw", EVENT),
         ("game_events.rs", "EventType", EVENT),
         ("game_events.rs", "field", EVENT),
@@ -19,7 +21,6 @@ mod tests {
         ("load/build.rs", "field_offset", FIELD),
         ("load/build.rs", "type_size", FIELD),
         ("test/hooks.rs", "field_offset", FAKE),
-        ("world.rs", "ComponentType", COMPONENT),
         ("world.rs", "WritableType", COMPONENT),
         ("world.rs", "set", COMPONENT),
         ("world.rs", "size", COMPONENT),
@@ -29,7 +30,8 @@ mod tests {
 
     const EVENT: &str = "`Load::game_event_type` takes any reflected event type by name";
     const FIELD: &str = "`Load::field_offset` and `type_size` read any reflected type";
-    const COMPONENT: &str = "`World::component_type` and `writable_type` take any component";
+    const COMPONENT: &str =
+        "`ComponentType::resolve` and `WritableType::resolve` take any component";
     const FAKE: &str = "the fake host answers the low level names a mod asks for";
 
     /// Every Rust source file under `dir`.

@@ -114,12 +114,12 @@ impl Containers {
     /// to a later kind, a summoned NPC to the built ones.
     pub(crate) fn resolve(host: Host) -> Option<Self> {
         let resolve = |id| {
-            super::type_named(host, id)
+            ComponentType::named(host, id)
                 .inspect_err(|off| crate::debug!("container queries off: {off}"))
                 .ok()
         };
         let setup = resolve(ids::INVENTORY_SETUP)?;
-        let mut markers = [(ContainerKinds::OTHER, ComponentType(0)); MARKERS.len()];
+        let mut markers = [(ContainerKinds::OTHER, ComponentType::from_hash(0)); MARKERS.len()];
         for (slot, (kind, id)) in markers.iter_mut().zip(MARKERS) {
             *slot = (kind, resolve(id)?);
         }

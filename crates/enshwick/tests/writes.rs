@@ -5,9 +5,10 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::Entity;
+    use enshwick::WorldError;
     use enshwick::abi::Status;
     use enshwick::game_events::Field;
-    use enshwick::world::{Meter, World, WorldError, WritableType};
+    use enshwick::world::{Meter, World, WritableType};
     use enshwick::{Load, Mod, Off};
 
     /// What the mod resolved at init.
@@ -29,9 +30,9 @@ mod tests {
 
         fn init(load: &mut Load<'_>) -> Result<Self, Off> {
             let world = load.world()?;
-            let flags = world.writable_type(load, "keen::ecs::CombatFlags")?;
+            let flags = WritableType::resolve(load, "keen::ecs::CombatFlags")?;
             let immune = flags.field(load, "immune")?;
-            let copy = world.writable_type(load, "keen::ecs::NetworkHealth")?;
+            let copy = WritableType::resolve(load, "keen::ecs::NetworkHealth")?;
             let _first = RESOLVED.set(Resolved {
                 world,
                 flags,

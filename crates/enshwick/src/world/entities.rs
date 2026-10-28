@@ -13,13 +13,13 @@ impl World {
     ///
     /// ```
     /// fn count(load: &enshwick::Load<'_>, world: &enshwick::world::World) -> Result<usize, enshwick::Off> {
-    ///     let beds = world.component_type(load, "keen::ecs::NpcBed")?;
+    ///     let beds = enshwick::ecs::ComponentType::resolve(load, "keen::ecs::NpcBed")?;
     ///     Ok(world.entities(beds).len())
     /// }
     /// ```
     #[must_use]
     pub fn entities(self, ty: ComponentType) -> Vec<Placed> {
-        self.placed_with(ty.0)
+        self.placed_with(ty.hash())
             .unwrap_or_default()
             .iter()
             .map(Placed::from_abi)

@@ -38,8 +38,8 @@
 use core::time::Duration;
 
 use crate::Entity;
+use crate::WorldError;
 use crate::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
-use crate::world::WorldError;
 use crate::{Host, Load};
 
 pub use crate::abi::BuffTypeId;
