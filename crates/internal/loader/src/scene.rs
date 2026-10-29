@@ -11,18 +11,25 @@
 //! scene's `SceneResource` and its `BiomeMapResource` carry the scene's
 //! GUID too, at part 0; the biome map holds the map's frame (server 399
 //! data). Both change only with the scene, so they are read once per scene,
-//! and a scene that does not read is reported once.
+//! and a scene that does not read is reported once. The client's archive
+//! also holds one `MapMarkerRegistryResource`, the map's marker types,
+//! found by its reflected type and read once (client 426; a dedicated
+//! server's archive has none).
 
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
-use enshwick::abi::{Header, MapFrameInfo, MapMarkerInfo, ResourceKey, Status};
+use enshwick::abi::{
+    Header, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MarkerTypeSorting, ResourceKey, Side,
+    Status,
+};
 use enshwick_gamedata::catalogue as names;
 
 use crate::catalogue::types;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::map_frame::{FrameLayout, ReadFrameError, frame, has_biome_map};
+use crate::map_marker_types::{ReadTypesError, TypesLayout, types};
 use crate::pinned;
 use crate::scene_markers::{
     Lookup, ReadSceneError, SceneCache, SceneKey, SceneLayout, collect, placements,
@@ -42,6 +49,8 @@ struct SceneState {
     frame_layout: OnceLock<Option<FrameLayout>>,
     markers: SceneCache<Arc<[MapMarkerInfo]>, ReadSceneError>,
     frame: SceneCache<MapFrameInfo, ReadFrameError>,
+    /// The client's marker types, once read; `None` when they do not read.
+    marker_types: OnceLock<Option<Arc<[MapMarkerTypeInfo]>>>,
 }
 
 static STATE: Mutex<SceneState> = Mutex::new(SceneState {
@@ -49,7 +58,33 @@ static STATE: Mutex<SceneState> = Mutex::new(SceneState {
     frame_layout: OnceLock::new(),
     markers: SceneCache::new(),
     frame: SceneCache::new(),
+    marker_types: OnceLock::new(),
 });
+
+/// The API's marker type groups, by the catalogue's id of the game's
+/// constant for each.
+const GROUPS: [(&str, MarkerTypeSorting); 5] = [
+    (
+        names::ids::MARKER_TYPE_SORTING_NONE,
+        MarkerTypeSorting::NONE,
+    ),
+    (
+        names::ids::MARKER_TYPE_SORTING_FLAME_RELATED,
+        MarkerTypeSorting::FLAME_RELATED,
+    ),
+    (
+        names::ids::MARKER_TYPE_SORTING_DUNGEONS,
+        MarkerTypeSorting::DUNGEONS,
+    ),
+    (
+        names::ids::MARKER_TYPE_SORTING_LOCATIONS,
+        MarkerTypeSorting::LOCATIONS,
+    ),
+    (
+        names::ids::MARKER_TYPE_SORTING_CUSTOM_MARKER,
+        MarkerTypeSorting::CUSTOM_MARKER,
+    ),
+];
 
 /// The offset of the catalogue's field `id` in the running game.
 fn field(loader: &Loader, id: &str) -> Option<usize> {
@@ -311,4 +346,84 @@ pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, Status> {
         |state| &mut state.frame,
         move || read_frame(layout, key),
     )
+}
+
+/// The client's marker types, read from the game's archive at the first ask
+/// and kept; any thread. A dedicated server's archive has no registry.
+pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, Status> {
+    if loader.side == Side::SERVER {
+        return Err(Status::MISSING);
+    }
+    if let Some(known) = STATE.relock().marker_types.get() {
+        return known.clone().ok_or(Status::MISSING);
+    }
+    let started = Instant::now();
+    let read = match read_marker_types(loader) {
+        Ok(read) => {
+            crate::log!(
+                INFO,
+                "map marker types: {} in the registry, read in {} ms",
+                read.len(),
+                started.elapsed().as_millis()
+            );
+            Some(Arc::from(read))
+        }
+        Err(why) => {
+            loader.feature_off(
+                "map marker types",
+                names::ids::MAP_MARKER_REGISTRY,
+                &why.to_string(),
+            );
+            None
+        }
+    };
+    STATE
+        .relock()
+        .marker_types
+        .get_or_init(|| read)
+        .clone()
+        .ok_or(Status::MISSING)
+}
+
+/// The reflected layout the marker type parse reads, from the catalogue's
+/// facts.
+fn types_layout(loader: &Loader) -> Option<TypesLayout> {
+    let field = |id: &str| field(loader, id);
+    Some(TypesLayout {
+        types: field(names::ids::MAP_MARKER_REGISTRY_TYPES)?,
+        registry_size: size(loader, names::ids::MAP_MARKER_REGISTRY)?,
+        type_size: size(loader, names::ids::MAP_MARKER_TYPE)?,
+        type_name: field(names::ids::MAP_MARKER_TYPE_TYPE_NAME)?,
+        marker_id: field(names::ids::MAP_MARKER_TYPE_MARKER_ID)?,
+        sorting_category: field(names::ids::MAP_MARKER_TYPE_SORTING_CATEGORY)?,
+        is_fast_travel_destination: field(names::ids::MAP_MARKER_TYPE_IS_FAST_TRAVEL_DESTINATION)?,
+        is_custom_marker_type: field(names::ids::MAP_MARKER_TYPE_IS_CUSTOM)?,
+        show_above_fog_of_war: field(names::ids::MAP_MARKER_TYPE_SHOW_ABOVE_FOG)?,
+        show_label: field(names::ids::MAP_MARKER_TYPE_SHOW_LABEL)?,
+    })
+    .filter(TypesLayout::is_sound)
+}
+
+/// Reads the one marker type registry the client's archive holds.
+fn read_marker_types(loader: &Loader) -> Result<Vec<MapMarkerTypeInfo>, ReadTypesError> {
+    let layout = types_layout(loader).ok_or(ReadTypesError::Layout)?;
+    let hash = names::type_hash(names::ids::MAP_MARKER_REGISTRY).ok_or(ReadTypesError::Layout)?;
+    let groups: Vec<(u8, MarkerTypeSorting)> = GROUPS
+        .iter()
+        .filter_map(|&(id, sorting)| {
+            let value = crate::catalogue::constant(id, &loader.reflection)?;
+            Some((u8::try_from(value).ok()?, sorting))
+        })
+        .collect();
+    let archive = crate::archive::game().ok_or(ReadTypesError::Archive)?;
+    let keys = archive.keys_of(hash);
+    let [key] = keys.as_slice() else {
+        return Err(if keys.is_empty() {
+            ReadTypesError::NoRegistry
+        } else {
+            ReadTypesError::Registries(keys.len())
+        });
+    };
+    let registry = archive.resource(key).ok_or(ReadTypesError::Unreadable)?;
+    types(&layout, &groups, &registry)
 }

@@ -125,6 +125,98 @@ pub struct MapMarker {
     pub label: Option<Guid>,
 }
 
+/// The group the client's map sorts a marker type into, the game's
+/// `MarkerTypeSorting`.
+///
+/// # Examples
+///
+/// See [`MapMarkerType`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum MarkerTypeSorting {
+    /// In no group.
+    None,
+    /// The Flame's: altars and shrines.
+    FlameRelated,
+    /// Dungeons.
+    Dungeons,
+    /// Places in the world.
+    Locations,
+    /// Markers players place themselves.
+    CustomMarker,
+}
+
+impl MarkerTypeSorting {
+    fn from_raw(raw: crate::abi::MarkerTypeSorting) -> Option<Self> {
+        use crate::abi::MarkerTypeSorting as Raw;
+        Some(match raw {
+            Raw::NONE => Self::None,
+            Raw::FLAME_RELATED => Self::FlameRelated,
+            Raw::DUNGEONS => Self::Dungeons,
+            Raw::LOCATIONS => Self::Locations,
+            Raw::CUSTOM_MARKER => Self::CustomMarker,
+            _ => return None,
+        })
+    }
+}
+
+/// A marker type of the client's marker type registry, the game's
+/// `MapMarkerType`: what a marker of that type looks like on the map,
+/// for a mod's own markers to take one.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::map::{MapMarkerType, MarkerTypeSorting};
+/// use enshwick::ui::Ui;
+///
+/// fn fast_travel(ui: Ui) -> Vec<MapMarkerType> {
+///     let mut types = ui.map_marker_types().unwrap_or_default();
+///     types.retain(|ty| ty.is_fast_travel_destination);
+///     types.sort_by_key(|ty| ty.sorting_category != Some(MarkerTypeSorting::FlameRelated));
+///     types
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the game's own flags of a marker type, each named as it names them"
+)]
+pub struct MapMarkerType {
+    /// Its key, `markerId`, which [`MapMarker::marker_type`] names and
+    /// [`Marker::marker_type`](crate::ui::Marker::marker_type) takes.
+    pub marker_type: MapMarkerTypeId,
+    /// The text tag of its name, `typeName`; `None` for most types, which
+    /// have none.
+    pub type_name: Option<Guid>,
+    /// The group the map sorts it into; `None` for a group the game added
+    /// that this API does not know yet.
+    pub sorting_category: Option<MarkerTypeSorting>,
+    /// Whether players travel to markers of this type.
+    pub is_fast_travel_destination: bool,
+    /// Whether it is a type of the markers players place themselves.
+    pub is_custom_marker_type: bool,
+    /// Whether its markers show over the fog of war.
+    pub show_above_fog_of_war: bool,
+    /// Whether its markers show their label.
+    pub show_label: bool,
+}
+
+impl MapMarkerType {
+    pub(crate) fn from_info(info: &crate::abi::MapMarkerTypeInfo) -> Self {
+        Self {
+            marker_type: MapMarkerTypeId::new(info.marker_id),
+            type_name: set(info.type_name),
+            sorting_category: MarkerTypeSorting::from_raw(info.sorting_category),
+            is_fast_travel_destination: info.is_fast_travel_destination != 0,
+            is_custom_marker_type: info.is_custom_marker_type != 0,
+            show_above_fog_of_war: info.show_above_fog_of_war != 0,
+            show_label: info.show_label != 0,
+        }
+    }
+}
+
 /// Where the map of the world starts and how far it reaches, in metres on
 /// the world's x and z axes. The name is Enshwick's own: the game keeps
 /// these facts with the scene's biome map.

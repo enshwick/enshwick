@@ -246,6 +246,8 @@ pub struct FakeMarker {
     pub label: String,
     /// The colour, `UiMarker::WHITE` and on.
     pub color: u32,
+    /// The registry key of its marker type; 0 for the loader's choice.
+    pub marker_type: u32,
 }
 
 /// What the player does to a widget, given with [`Installed::input`].

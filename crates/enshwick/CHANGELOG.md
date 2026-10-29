@@ -8,6 +8,14 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Ui::map_marker_types` lists the client's map marker types from the
+  game's registry, each a `MapMarkerType` with its key, its
+  `MarkerTypeSorting` group and the game's flags, and `Marker::marker_type`
+  shows a mod's marker with one of them (`HostApi::map_marker_types`,
+  `MapMarkerTypeInfo`; `UiMarker` takes the type in place of its reserved
+  field); the fake host serves a registry with
+  `FakeHost::map_marker_types`.
+
 - `Load::apply_config` reads the settings, hands them to a closure at once
   and after every change, and returns them (#721).
 

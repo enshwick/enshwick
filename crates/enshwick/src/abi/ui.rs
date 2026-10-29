@@ -215,7 +215,7 @@ impl UiWidget {
 ///     position: [100 << 32, 40 << 32, -(20 << 32)],
 ///     label: Str::new("Locker of Bob"),
 ///     color: UiMarker::GREEN,
-///     reserved: 0,
+///     marker_type: 0,
 /// };
 /// assert_eq!(marker.color, 2);
 /// ```
@@ -231,8 +231,11 @@ pub struct UiMarker {
     /// The colour, one of the game's custom marker colours,
     /// [`UiMarker::WHITE`] to [`UiMarker::BLACK`].
     pub color: u32,
-    /// Zero.
-    pub reserved: u32,
+    /// The registry key of its marker type, one
+    /// [`HostApi::map_marker_types`](super::HostApi::map_marker_types)
+    /// lists; 0 for the loader's own choice, a custom marker type with a
+    /// label.
+    pub marker_type: u32,
 }
 
 impl_headed!(UiMarker);

@@ -9,7 +9,7 @@
 
 // The ABI version: a hash of the layout of every ABI type. A loader
 // loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0x6e14bb78
+#define ENSHWICK_ABI_VERSION 0x1aea51a4
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -2120,8 +2120,11 @@ typedef struct EnshwickUiMarker {
   // The colour, one of the game's custom marker colours,
   // `UiMarker::WHITE` to `UiMarker::BLACK`.
   uint32_t color;
-  // Zero.
-  uint32_t reserved;
+  // The registry key of its marker type, one
+  // `HostApi::map_marker_types`
+  // lists; 0 for the loader's own choice, a custom marker type with a
+  // label.
+  uint32_t marker_type;
 } EnshwickUiMarker;
 // White.
 #define EnshwickUiMarker_WHITE 0
@@ -2791,6 +2794,47 @@ typedef struct EnshwickMapFrameInfo {
   // The metres one cell of the game's map covers on each axis.
   double metres_per_cell;
 } EnshwickMapFrameInfo;
+
+// The group the client's map sorts a marker type into, the game's
+// `MarkerTypeSorting`.
+typedef uint8_t EnshwickMarkerTypeSorting;
+// In no group.
+#define EnshwickMarkerTypeSorting_NONE 0
+// The Flame's: altars and shrines.
+#define EnshwickMarkerTypeSorting_FLAME_RELATED 1
+// Dungeons.
+#define EnshwickMarkerTypeSorting_DUNGEONS 2
+// Places in the world.
+#define EnshwickMarkerTypeSorting_LOCATIONS 3
+// Markers players place themselves.
+#define EnshwickMarkerTypeSorting_CUSTOM_MARKER 4
+// A group of the game's that this loader does not know.
+#define EnshwickMarkerTypeSorting_UNKNOWN UINT8_MAX
+
+// A marker type of the client's marker type registry, one of the list
+// `HostApi::map_marker_types` writes.
+typedef struct EnshwickMapMarkerTypeInfo {
+  // Size and version of this struct.
+  struct EnshwickHeader header;
+  // Its name's text tag (`typeName`), a GUID in memory order; zero for
+  // none.
+  uint8_t type_name[16];
+  // Its registry key (`markerId`), as
+  // `UiMarker::marker_type` takes it.
+  uint32_t marker_id;
+  // The group the map sorts it into.
+  EnshwickMarkerTypeSorting sorting_category;
+  // 1 when players can travel to markers of this type, else 0.
+  uint8_t is_fast_travel_destination;
+  // 1 for a type of the markers players place themselves, else 0.
+  uint8_t is_custom_marker_type;
+  // 1 when its markers show over the fog of war, else 0.
+  uint8_t show_above_fog_of_war;
+  // 1 when its markers show their label, else 0.
+  uint8_t show_label;
+  // Zero.
+  uint8_t reserved[3];
+} EnshwickMapMarkerTypeInfo;
 
 // The table of services the loader offers a mod.
 //
@@ -4151,6 +4195,20 @@ typedef struct EnshwickHostApi {
   // code is not the one the loader knows, and the game keeps its own.
   // Allowed during `enshwick_mod_init` only.
   EnshwickStatus (*request_base_limits)(EnshwickModHandle me, uint32_t zones, uint32_t bases);
+  // Up to `capacity` marker types of the client's marker type registry,
+  // in the registry's order, and how many there are, read from the
+  // game's archive at the first call and kept. Entries are `entry_size`
+  // bytes apart, the caller's `size_of::<MapMarkerTypeInfo>()`, at least
+  // a `Header` (`Status::BAD_ARGS` below it); a null `out` asks only
+  // for the count, and a null `count` is not written. `Status::MISSING` on a dedicated
+  // server, whose archive has no registry, and when the registry does
+  // not read on this build. Any thread. A panic in the loader returns
+  // `Status::REFUSED`.
+  EnshwickStatus (*map_marker_types)(EnshwickModHandle me,
+                                     struct EnshwickMapMarkerTypeInfo *out,
+                                     uint32_t entry_size,
+                                     uint32_t capacity,
+                                     uint32_t *count);
 } EnshwickHostApi;
 
 // The data of the `KnowledgeChanged` event.

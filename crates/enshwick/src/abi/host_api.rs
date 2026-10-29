@@ -11,14 +11,14 @@ use crate::abi::{
     DaytimeInfo, EntityDataFlags, EntityPlace, Event, EventFn, EventSpec, EventTypeInfo,
     ExperiencePassFn, FogInfo, GameEventFn, Header, HookSpec, InteractionFn, InventoryRequest,
     InventoryResultFn, ItemData, ItemLine, KnowledgeInfo, KnowledgeInputFn, Level, LoopWaitFn,
-    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MidHookSpec, MigrationSet, ModEventFn, ModHandle,
-    ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink, PointSpec, PointVerdict,
-    RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey, ResourcePatchFn, ServerWaitFn,
-    ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest, StatChangeFn, StatDefData,
-    StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn, Str, SummonFn,
-    SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit, TerrainMaterialInfo,
-    TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
-    UiWidget, Voxel, WeatherFront,
+    LoopWaitSites, MapFrameInfo, MapMarkerInfo, MapMarkerTypeInfo, MidHookSpec, MigrationSet,
+    ModEventFn, ModHandle, ModInfo, NetMessageFn, PlayerInfo, PointFn, PointHandle, PointLink,
+    PointSpec, PointVerdict, RateId, RecipeKind, RecipeRuleKind, RenameCallFn, ResourceKey,
+    ResourcePatchFn, ServerWaitFn, ServiceFound, ServiceSpec, SkillCheckFn, SpawnRequest,
+    StatChangeFn, StatDefData, StatModifierData, StatModify, StatRef, StatSource, Status, StatusFn,
+    Str, SummonFn, SurvivorLookupFn, SurvivorStatusFn, TeleportRequest, TerrainEdit,
+    TerrainMaterialInfo, TickHandle, TransactionInfo, TransactionOp, UiAnswerFn, UiDialog,
+    UiFrameFn, UiMarker, UiWidget, Voxel, WeatherFront,
 };
 use crate::abi::{BuffTypeId, Entity, ItemId, KnowledgeId, NpcId, PlayerKey, RecipeId};
 
@@ -1468,4 +1468,20 @@ pub struct HostApi {
     /// code is not the one the loader knows, and the game keeps its own.
     /// Allowed during `enshwick_mod_init` only.
     pub request_base_limits: extern "system" fn(me: ModHandle, zones: u32, bases: u32) -> Status,
+    /// Up to `capacity` marker types of the client's marker type registry,
+    /// in the registry's order, and how many there are, read from the
+    /// game's archive at the first call and kept. Entries are `entry_size`
+    /// bytes apart, the caller's `size_of::<MapMarkerTypeInfo>()`, at least
+    /// a [`Header`] ([`Status::BAD_ARGS`] below it); a null `out` asks only
+    /// for the count, and a null `count` is not written. [`Status::MISSING`] on a dedicated
+    /// server, whose archive has no registry, and when the registry does
+    /// not read on this build. Any thread. A panic in the loader returns
+    /// [`Status::REFUSED`].
+    pub map_marker_types: extern "system" fn(
+        me: ModHandle,
+        out: *mut MapMarkerTypeInfo,
+        entry_size: u32,
+        capacity: u32,
+        count: *mut u32,
+    ) -> Status,
 }

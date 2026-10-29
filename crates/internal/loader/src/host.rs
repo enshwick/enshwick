@@ -61,7 +61,9 @@ use entries::transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
     transaction_undo,
 };
-use entries::ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
+use entries::ui::{
+    fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
+};
 use entries::world::{
     account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
     component_write, destroy, emit, entities, entity_template, feature, forget_game_settings,
@@ -862,6 +864,7 @@ pub(crate) static API: HostApi = HostApi {
     set_tick_every,
     map_frame,
     request_base_limits,
+    map_marker_types,
 };
 
 /// The loader and the calling mod, when the mod is on.

@@ -75,7 +75,40 @@ pub(crate) extern "system" fn ui_markers(
         else {
             return Status::BAD_ARGS;
         };
+        if given.iter().any(|m| m.marker_type != 0) {
+            let types = match crate::scene::marker_types(loader) {
+                Ok(types) => types,
+                Err(status) => return status,
+            };
+            let listed = |id: u32| types.iter().any(|t| t.marker_id == id);
+            if given
+                .iter()
+                .any(|m| m.marker_type != 0 && !listed(m.marker_type))
+            {
+                return Status::BAD_ARGS;
+            }
+        }
         crate::ui::set_markers(index, &given)
+    })
+}
+
+pub(crate) extern "system" fn map_marker_types(
+    me: ModHandle,
+    out: *mut api_frame::MapMarkerTypeInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    entry("map_marker_types", || {
+        let types =
+            match caller_index(me).and_then(|(loader, _)| crate::scene::marker_types(loader)) {
+                Ok(types) => types,
+                Err(status) => return status,
+            };
+        // SAFETY: the ABI has the mod pass `out` null or writable for
+        // `capacity` entries of `entry_size` bytes and `count` null or a
+        // writable `u32`, untouched by the mod during the call.
+        unsafe { crate::host::entries::mods::list(&types, out, entry_size, capacity, count) }
     })
 }
 

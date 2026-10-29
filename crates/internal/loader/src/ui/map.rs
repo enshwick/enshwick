@@ -5,8 +5,9 @@
 //! interface's play data, which the clear system empties first. The loader
 //! appends the mods' markers to that list right after the game fills it, on
 //! the same thread, so a marker a mod drops is gone the next frame. A marker
-//! shows only with a marker type the game's registry knows; the loader picks
-//! a custom marker type with a label from the registry once it loads.
+//! shows only with a marker type the game's registry knows: the one the mod
+//! chose from the registry in the game's archive, or else a custom marker
+//! type with a label the loader picks from the registry once it loads.
 //!
 //! The list, its entries and the walk to them come from the build table,
 //! the marker types from reflection; map markers stay off where either
@@ -190,6 +191,9 @@ struct Owned {
     position: [i64; 3],
     label: Box<[u8]>,
     color: u8,
+    /// The marker type the mod chose, which the entry checked against the
+    /// registry; 0 for the loader's choice.
+    marker_type: u32,
 }
 
 type SystemFn = unsafe extern "system" fn(context: *mut u8);
@@ -226,6 +230,7 @@ pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
             // here before `set` returns, so it outlives every use.
             label: unsafe { m.label.as_str() }.unwrap_or("").as_bytes().into(),
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
+            marker_type: m.marker_type,
         })
         .collect();
     let mut sets = MARKERS.sets.relock();
@@ -388,7 +393,12 @@ fn append() {
         for (i, axis) in marker.position.iter().enumerate() {
             entry.u64(layout.entry_position + 8 * i, axis.cast_unsigned());
         }
-        entry.u32(layout.entry_type, kind);
+        let chosen = if marker.marker_type == 0 {
+            kind
+        } else {
+            marker.marker_type
+        };
+        entry.u32(layout.entry_type, chosen);
         entry.u8(layout.entry_visibility, layout.visible);
         // The label lives in the snapshot, kept among the retired sets after it
         // is replaced.
