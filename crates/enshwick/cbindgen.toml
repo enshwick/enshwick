@@ -26,7 +26,7 @@ trailer = """
 extern "C" {
 #endif
 
-// The ENSHWICK_ABI_MAJOR the mod was built for.
+// The ENSHWICK_ABI_VERSION the mod was built for.
 ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);
