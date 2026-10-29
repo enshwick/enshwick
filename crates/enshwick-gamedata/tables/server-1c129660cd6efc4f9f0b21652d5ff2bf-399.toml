@@ -597,6 +597,10 @@ revision = 1
 "voxel.grids" = { value = 0x40, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 19, size = 1 }
 "voxel.grid_pages" = { value = 0x48, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 28, size = 1 }
 "voxel.grid_stride" = { value = 0x28, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", fixed = true }
+"building.box_min" = { value = 0x20, via = "building.block_box", within = 0x270, pattern = "89 46 1C 44 89 56 ?? 44 89 5E ??", at = 6, size = 1 }
+"building.box_size" = { value = 0x2c, via = "building.block_box", within = 0x270, pattern = "89 7E ?? 89 56 ?? 44 89 46 ?? 44 89 4E ??", at = 5, size = 1 }
+"building.box_extent" = { value = 0x50, via = "building.block_box", within = 0x270, pattern = "44 0F 11 46 ?? 48 89 5E ?? 49 8B 5B", at = 8, size = 1, plus = 8 }
+"voxel.undo_extent" = { value = 0x28, via = "voxel.undo_apply", within = 0xa5, pattern = "41 03 C9 F2 0F 10 42 ?? F2 0F 11 40", at = 7, size = 1, plus = 8 }
 # The voxel materials a byte names, and the first building material, from
 # the loop that builds the replace table and the test inside it.
 "voxel.materials" = { value = 0x100, pattern = "80 78 14 05 73 08 0F B6 C3 42 C6 04 38 01 48 FF C3 48 81 FB ?? ?? ?? ?? 72", at = 20, size = 4 }

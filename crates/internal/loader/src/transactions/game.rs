@@ -54,8 +54,11 @@ pub(crate) struct Game<'a> {
 
 impl<'a> Game<'a> {
     /// The editor, when the caller is on the game thread at a quiet moment
-    /// and the build has the undo write.
+    /// and the build has the undo write, reading only the record's head.
     pub(crate) fn new(loader: &'a Loader) -> Result<Self, Status> {
+        if !UndoRecord::head_holds(loader.offset(pinned::voxel::UNDO_EXTENT)) {
+            return Err(Status::MISSING);
+        }
         let function = loader
             .address(pinned::voxel::UNDO_APPLY)
             .and_then(|address| usize::try_from(address).ok())
@@ -185,7 +188,8 @@ impl Voxels for Game<'_> {
         // the game thread at a quiet moment with the server's live, non-zero
         // voxel editor and allocator (both checked by
         // `crate::terrain::editor_and_allocator` when this step began).
-        // `record` is a head the write reads whole: an 8-aligned brick box
+        // `record` is a head the write reads whole and no further (the
+        // table's `voxel.undo_extent`, checked in `Game::new`): an 8-aligned brick box
         // inside the coordinates the read takes, and `image`'s 512 voxels,
         // borrowed past the call and only read.
         unsafe { (self.undo_apply)(self.editor, &raw const record, self.alloc) };

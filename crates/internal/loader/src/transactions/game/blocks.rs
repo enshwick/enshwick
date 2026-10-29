@@ -6,7 +6,7 @@ use enshwick_gamedata::catalogue;
 use crate::host::Loader;
 use crate::memory::read;
 use crate::pinned;
-use crate::transactions::block::{Block, EventLayout, GameBox, replace_table};
+use crate::transactions::block::{Block, BoxLayout, EventLayout, GameBox, replace_table};
 use crate::transactions::paste::Region;
 use crate::transactions::props::Prop;
 use crate::voxels::{BUILDING_FIRST, MATERIALS};
@@ -89,7 +89,7 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
     }
     let access = crate::world::access(&"block transaction commit").ok_or(Status::MISSING)?;
     let material = building_material(loader, &access, request.material.get())?;
-    let (game, holder) = game_box(
+    let (_, region, holder) = game_box(
         loader,
         &access,
         request.shape.get(),
@@ -102,8 +102,21 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
         material,
         position: request.position,
         rotation: request.rotation,
-        region: game.region()?,
+        region,
     })
+}
+
+/// Where the game's box keeps the fields the loader reads, from the build
+/// table; [`Status::MISSING`] on a build without them or with a field
+/// outside the box.
+fn box_layout(loader: &Loader) -> Result<BoxLayout, Status> {
+    let row = |id| loader.offset(id).ok_or(Status::MISSING);
+    BoxLayout::new(
+        row(pinned::building::BOX_EXTENT)?,
+        row(pinned::building::BOX_MIN)?,
+        row(pinned::building::BOX_SIZE)?,
+    )
+    .ok_or(Status::MISSING)
 }
 
 /// The game's box for `block`, built now from the live blueprint registry;
@@ -111,24 +124,25 @@ pub(crate) fn resolve(loader: &Loader, request: &BlockPlace) -> Result<Block, St
 /// checked, as after the world changed.
 pub(super) fn rebuild(loader: &Loader, block: &Block) -> Result<GameBox, Status> {
     let access = crate::world::access(&"block rebuild").ok_or(Status::MISSING)?;
-    let (game, _) = game_box(loader, &access, block.shape, block.position, block.rotation)?;
-    if game.region()? != block.region {
+    let (game, region, _) = game_box(loader, &access, block.shape, block.position, block.rotation)?;
+    if region != block.region {
         return Err(Status::MISSING);
     }
     Ok(game)
 }
 
 /// The game's box for the block of `shape` at `position` turned by
-/// `rotation`, and the game-systems holder it was found through; the box
-/// points into the blueprint registry, which lives until the world ends,
-/// and the holder lives while `access` is held.
+/// `rotation`, the voxels it writes and the game-systems holder it was
+/// found through; the box points into the blueprint registry, which lives
+/// until the world ends, and the holder lives while `access` is held.
 fn game_box(
     loader: &Loader,
     access: &ServerAccess<'_>,
     shape: u32,
     position: [f64; 3],
     rotation: [f32; 4],
-) -> Result<(GameBox, usize), Status> {
+) -> Result<(GameBox, Region, usize), Status> {
+    let layout = box_layout(loader)?;
     let lookup = function(loader, pinned::building::BLUEPRINT_LOOKUP)?;
     let builder = function(loader, pinned::building::BLOCK_BOX)?;
     let holder_at = loader
@@ -178,10 +192,12 @@ fn game_box(
     let builder = unsafe { core::mem::transmute::<usize, BlockBoxFn>(builder) };
     // SAFETY: `builder` reads only its arguments: `item` is the non-null
     // `VoxelBlueprintItem` the lookup returned (checked above), `at` a
-    // `PosRot` on this stack, and it writes the `GameBox::SIZE` bytes of
-    // `game`, aligned to 8 as the game's box is.
+    // `PosRot` on this stack, and it writes the table's
+    // `building.box_extent` bytes of `game`, which `box_layout` keeps
+    // inside `GameBox::SIZE`, aligned to 8 as the game's box is.
     unsafe { builder(&raw mut game, item, &raw const at, 0) };
-    Ok((game, holder))
+    let region = game.region(layout)?;
+    Ok((game, region, holder))
 }
 
 /// The feedback the game gives `material`, as its place op looks it up;
