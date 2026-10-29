@@ -14,6 +14,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `item_data` and `entity_data` need the `unstable` feature: after a
+  restart, a value on an item no load finds stays aside. `ItemInstance` moved
+  to `inventory`, and `stats::SetError` names the error of
+  `Stats::set_item` (#665).
+
 - `abi::ABI_VERSION`, a hash of the committed ABI layout, replaces
   `ABI_MAJOR` and `ABI_MINOR`; `Header` carries it as `abi_version`, and the
   C header defines `ENSHWICK_ABI_VERSION`. The loader, a mod's host check and
