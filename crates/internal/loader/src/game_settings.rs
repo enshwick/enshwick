@@ -329,13 +329,7 @@ fn write_kept(loader: &Loader, key: &str, fields: &BTreeMap<String, Vec<u8>>) {
              # each field by its reflected name, its bytes as hex.\n{}",
             toml::to_string(&kept).unwrap_or_default()
         );
-        path.parent()
-            .map_or(Ok(()), std::fs::create_dir_all)
-            .and_then(|()| {
-                let fresh = path.with_extension("tmp");
-                std::fs::write(&fresh, text)?;
-                std::fs::rename(&fresh, &path)
-            })
+        enshwick::files::write_atomically(&path, text)
     };
     if let Err(error) = written {
         crate::log!(

@@ -89,18 +89,13 @@ impl Kept {
         std::fs::read_to_string(path(dir)).map_or_else(|_| Self::default(), |t| Self::from_text(&t))
     }
 
-    /// Writes the kept sizes to the loader's data folder `dir`, through a
-    /// temporary file.
+    /// Writes the kept sizes to the loader's data folder `dir`.
     ///
     /// # Errors
     ///
     /// When the file cannot be written.
     pub fn save(&self, dir: &Path) -> std::io::Result<()> {
-        std::fs::create_dir_all(dir)?;
-        let path = path(dir);
-        let temporary = path.with_extension("toml.tmp");
-        std::fs::write(&temporary, self.to_text())?;
-        std::fs::rename(&temporary, &path)
+        enshwick::files::write_atomically(&path(dir), self.to_text())
     }
 }
 

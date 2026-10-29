@@ -87,15 +87,9 @@ pub(crate) fn start(loader: &Loader, can_kick: bool) {
     }
 }
 
-/// Writes `text` to `path` whole: into a file beside it, then renamed over
-/// it, so a reader never sees it half written.
+/// Writes `text` to `path` whole, so a reader never sees it half written.
 fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let fresh = path.with_extension("txt.tmp");
-    std::fs::write(&fresh, text)?;
-    std::fs::rename(&fresh, path)
+    enshwick::files::write_atomically(path, text)
 }
 
 /// The accounts the file lists now, read again only when it changed; a
