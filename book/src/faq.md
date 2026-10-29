@@ -156,8 +156,7 @@ not turn the mod off: the mod logs
 | `init returned 6` after `off: init panicked`                   | `Mod::init` panicked                                                              |
 | `its hook at 0x... could not be armed`                         | The loader could not detour the function; `hook at 0x... not armed: ...` says why |
 | `its code patch at 0x... was skipped`                          | The bytes no longer read as expected, or overlap a hook                           |
-| `panic in hook REWARD`                                         | A detour panicked; the call went on to the original                               |
-| `panic in hook REWARD after next`                              | Work in `REWARD.after_next` panicked; the call kept what `next` gave              |
+| `panic in hook REWARD`                                         | A detour panicked; the original ran once                                          |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |
 | `panic in an event handler`                                    | An event handler panicked                                                         |
 | `panic in an action`, `panic in a rename filter`               | An action's handler or a rename filter panicked                                   |

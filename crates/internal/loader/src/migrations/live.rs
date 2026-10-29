@@ -132,15 +132,19 @@ unsafe fn slice<'a, T>(ptr: *const T, count: u32) -> Option<&'a [T]> {
 
 /// Runs `f` on a record that holds only what mod `id` ran on `world`, or
 /// on its settings file for `None`, without the record's lock, so the
-/// mod's map may call the loader; then writes that entry back, unless in
-/// a dry run. `None`, logged once, while the record does not read, so no
-/// migration runs twice.
+/// mod's map may call the loader; then writes that entry back when it
+/// changed, unless in a dry run.
+///
+/// While the record does not read, logged once, `f` runs on an empty
+/// record only where the world `stands_alone` on a record of its own;
+/// elsewhere the reason is returned, so no migration runs twice.
 fn with_entry<R>(
     loader: &Loader,
     world: Option<&str>,
     id: &str,
+    stands_alone: bool,
     f: impl FnOnce(&mut Record) -> R,
-) -> Option<R> {
+) -> Result<R, String> {
     static REPORTED: std::sync::Once = std::sync::Once::new();
     let mut part = Record::default();
     {
@@ -149,30 +153,35 @@ fn with_entry<R>(
             match Record::read(&loader.data_dir) {
                 Ok(read) => *held = Some(read),
                 Err(e) => {
+                    let reason = format!("mod-data/{} does not read ({e})", super::RECORD);
                     REPORTED.call_once(|| {
                         crate::log!(
                             ERROR,
-                            "migrations off: mod-data/{} does not read ({e}); fix or remove it",
-                            super::RECORD
+                            "{reason}: mods whose migrations need it stay off; fix or remove it"
                         );
                     });
-                    return None;
+                    if !stands_alone {
+                        return Err(reason);
+                    }
                 }
             }
         }
-        let full = held.as_mut()?;
-        part.ran(world, id).clone_from(full.ran(world, id));
+        let Some(full) = held.as_ref() else {
+            drop(held);
+            return Ok(f(&mut part));
+        };
+        part.set_entry(world, id, full.entry(world, id).cloned());
     }
     let result = f(&mut part);
     let mut held = RECORD.relock();
-    let full = held.as_mut()?;
-    *full.ran(world, id) = std::mem::take(part.ran(world, id));
-    if !dry_run()
+    if let Some(full) = held.as_mut()
+        && full.set_entry(world, id, part.entry(world, id).cloned())
+        && !dry_run()
         && let Err(e) = full.write(&loader.data_dir)
     {
         crate::log!(WARN, "migrations: the record was not written: {e}");
     }
-    Some(result)
+    Ok(result)
 }
 
 /// Logs a run's outcome under mod `id`.
@@ -185,6 +194,10 @@ fn report(id: &str, place: &str, outcome: &Result<Option<String>, (String, Strin
             format!("migrations on {place}, dry run, nothing changed: {plan}"),
         ),
         Ok(Some(plan)) => line(Level::INFO, format!("migrations on {place}: {plan}")),
+        Err((plan, reason)) if plan.is_empty() => line(
+            Level::ERROR,
+            format!("migrations on {place} did not run: {reason}"),
+        ),
         Err((plan, reason)) => line(
             Level::ERROR,
             format!("migrations on {place} failed: {reason}; planned: {plan}"),
@@ -237,7 +250,7 @@ fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
         return false;
     };
     let path = loader.configs_dir.join(format!("{}.toml", record.id));
-    let outcome = with_entry(loader, None, &record.id, |rec| {
+    let outcome = with_entry(loader, None, &record.id, false, |rec| {
         run(
             rec,
             Target::Settings { path: &path, born },
@@ -247,7 +260,7 @@ fn run_settings(loader: &Loader, reg: &Registered, born: bool) -> bool {
             dry_run(),
         )
     })
-    .unwrap_or(Ok(None));
+    .unwrap_or_else(|reason| Err((String::new(), reason)));
     report(&record.id, "the settings file", &outcome);
     if matches!(outcome, Ok(Some(_))) {
         crate::watch::wrote(&path);
@@ -286,7 +299,8 @@ pub(crate) fn world_loaded(loader: &Loader, key: &str) {
             continue;
         }
         let dir = loader.data_dir.join(&record.id).join("worlds").join(key);
-        let outcome = with_entry(loader, Some(key), &record.id, |rec| {
+        let stands_alone = matches!(super::WorldRecord::read(&dir), Ok(Some(_)));
+        let outcome = with_entry(loader, Some(key), &record.id, stands_alone, |rec| {
             run(
                 rec,
                 Target::World { key, dir: &dir },
@@ -296,7 +310,7 @@ pub(crate) fn world_loaded(loader: &Loader, key: &str) {
                 dry_run(),
             )
         })
-        .unwrap_or(Ok(None));
+        .unwrap_or_else(|reason| Err((String::new(), reason)));
         report(&record.id, &format!("world {key}"), &outcome);
         if let Err((_, reason)) = outcome {
             loader.turn_off(

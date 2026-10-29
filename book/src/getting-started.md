@@ -190,11 +190,11 @@ enshwick::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
-fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
+fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
     match AltarCount::instance() {
         Some(_) => ALTARS.load(Ordering::Relaxed),
         // SAFETY: the original takes the arguments the game passed.
-        None => unsafe { next.get()(balancing, level) },
+        None => unsafe { next.call(balancing, level) },
     }
 }
 
