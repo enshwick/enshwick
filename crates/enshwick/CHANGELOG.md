@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `WorldStore::shut_reason` says why the running world's file did not read
+  while the store stays shut, and the loader's status summary shows it
+  under the mod (#668).
+
 - `PackManifest::enshwick`: a pack's `pack.toml` may name the Enshwick
   releases it is made for, such as `enshwick = "=1.0.0-alpha.12"`; a loader
   of another release skips the pack and logs both versions (#661).

@@ -101,4 +101,44 @@ mod tests {
         assert!(text.contains("count = 3"), "{text}");
         let _gone = std::fs::remove_dir_all(&data);
     }
+
+    #[test]
+    fn a_store_that_does_not_read_stays_shut_and_says_why_in_the_status() {
+        let data = std::env::temp_dir().join(format!("enshwick-shut-store-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&data);
+        let file = data.join("worlds/world0-1a2b3c4d/visits.toml");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, "count = ").unwrap();
+        let loader = enshwick::test::FakeHost::new()
+            .type_hash("current_transform", TRANSFORM)
+            .type_hash("used_item", 2)
+            .type_hash("keen::ecs::NpcBed", BED)
+            .data_dir(data.to_str().unwrap())
+            .world_key("world0-1a2b3c4d")
+            .install();
+        // SAFETY: both functions are the exports of this file's `declare_mod!(Queries)`.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        let store = STORE.get().unwrap();
+        assert!(
+            loader.status().concat().is_empty(),
+            "nothing to say before the world"
+        );
+        assert_eq!(loader.raise::<WorldLoaded>(&()), 1);
+        assert_eq!(store.key(), None);
+        assert!(store.shut_reason().is_some());
+        let lines = loader.status().concat();
+        assert!(
+            lines.contains("visits") && lines.contains("does not parse"),
+            "{lines}"
+        );
+        assert_eq!(loader.raise::<WorldSaved>(&()), 1);
+        assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
+        assert_eq!(
+            std::fs::read_to_string(&file).unwrap(),
+            "count = ",
+            "kept for a fix"
+        );
+        let _gone = std::fs::remove_dir_all(&data);
+    }
 }
