@@ -112,6 +112,11 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
 
     /// The stored value, or `T::default()` when nothing is stored yet.
     ///
+    /// A key the file lacks, such as a field the type gained in an update,
+    /// comes from `T::default()`, in nested tables too. Arrays come from the file
+    /// whole; a map whose default holds entries gets each one back while
+    /// the file lacks it.
+    ///
     /// # Errors
     ///
     /// [`StoreError`] when the file exists but cannot be read or does not
@@ -122,7 +127,7 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     /// See [`Store`].
     pub fn load(&self) -> Result<T, StoreError> {
         match std::fs::read_to_string(&self.path) {
-            Ok(text) => toml::from_str(&text).map_err(|e| StoreError::Parse {
+            Ok(text) => with_defaults(&text).map_err(|e| StoreError::Parse {
                 path: self.path.clone(),
                 message: e.message().to_owned(),
             }),
@@ -152,6 +157,33 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
             path: self.path.clone(),
             message: e.to_string(),
         })
+    }
+}
+
+/// `text` read as `T`, each key it lacks taken from `T::default()`. Arrays
+/// and their tables are taken whole, never filled.
+fn with_defaults<T>(text: &str) -> Result<T, toml::de::Error>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize + Default,
+{
+    let mut table: toml::Table = toml::from_str(text)?;
+    if let Ok(defaults) = toml::Table::try_from(T::default()) {
+        fill(&mut table, defaults);
+    }
+    table.try_into()
+}
+
+/// Adds to `table` every key of `defaults` it lacks, tables within tables
+/// too.
+fn fill(table: &mut toml::Table, defaults: toml::Table) {
+    for (key, default) in defaults {
+        match (table.get_mut(&key), default) {
+            (None, default) => {
+                table.insert(key, default);
+            }
+            (Some(toml::Value::Table(inner)), toml::Value::Table(default)) => fill(inner, default),
+            (Some(_), _) => {}
+        }
     }
 }
 
@@ -427,6 +459,9 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
 /// A value kept per world, in `mod-data/<id>/worlds/<key>/<name>.toml`,
 /// never inside the game's save: removing the mod leaves the world vanilla.
 /// The value is a TOML table, such as a struct.
+///
+/// A field the type gains in an update reads from `Default` while a world's
+/// file lacks it, as [`Store::load`] reads.
 ///
 /// Get it from [`Load::world_store`](crate::Load::world_store). It reads the
 /// running world's file when the world has loaded and writes it, when
@@ -822,6 +857,59 @@ mod tests {
         store.close().unwrap();
         assert_eq!(store.key(), None);
         assert!(WorldStore::<Count>::new(&dir, "a/b").is_err());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+    struct Grown {
+        n: u32,
+        limit: u32,
+        lock: Lock,
+        names: Vec<String>,
+    }
+
+    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+    struct Lock {
+        on: bool,
+        tries: u8,
+    }
+
+    impl Default for Grown {
+        fn default() -> Self {
+            Self {
+                n: 0,
+                limit: 3,
+                lock: Lock { on: true, tries: 5 },
+                names: vec!["a".to_owned()],
+            }
+        }
+    }
+
+    #[test]
+    fn a_store_whose_type_gained_fields_reads_them_from_the_default() {
+        let dir = std::env::temp_dir().join(format!("enshwick-store-grown-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("grown.toml"),
+            "n = 7\nnames = []\n[lock]\non = false\n",
+        )
+        .unwrap();
+        let store: Store<Grown> = Store::new(&dir, "grown");
+        assert_eq!(
+            store.load().unwrap(),
+            Grown {
+                n: 7,
+                limit: 3,
+                lock: Lock {
+                    on: false,
+                    tries: 5
+                },
+                names: Vec::new(),
+            }
+        );
+        std::fs::write(dir.join("grown.toml"), "n = \"seven\"\n").unwrap();
+        assert!(store.load().is_err(), "a wrong type still fails");
         let _gone = std::fs::remove_dir_all(&dir);
     }
 
