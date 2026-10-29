@@ -10,6 +10,7 @@ pub(crate) const UNDO_APPLY: Symbol = Symbol::new("voxel.undo_apply");
 pub(crate) const UNDO_EXTENT: Constant = Constant::new("voxel.undo_extent");
 pub(crate) const FINEST_LEVEL: Constant = Constant::new("voxel.finest_level");
 pub(crate) const GRIDS: Constant = Constant::new("voxel.grids");
+pub(crate) const GRID_DEPTH: Constant = Constant::new("voxel.grid_depth");
 pub(crate) const GRID_PAGES: Constant = Constant::new("voxel.grid_pages");
 pub(crate) const GRID_STRIDE: Constant = Constant::new("voxel.grid_stride");
 pub(crate) const WRITE_BLOCK: Symbol = Symbol::new("voxel.write_block");
