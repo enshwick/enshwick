@@ -361,6 +361,8 @@ revision = 1
 "textures.request_context" = { value = 0x30, pattern = "33 D2 3B 4F ?? 0F 10 4B ?? C6 44 24 ?? 1F 8D 41 ?? 0F 45 D0", at = 8, size = 1 }
 "textures.request_offset" = { value = 0x40, pattern = "0F 10 03 48 89 44 24 ?? 8B 43 ?? 0F 10 4B ?? 89 84 24 ?? ?? ?? ?? 8D 41 ??", at = 10, size = 1 }
 "textures.ring_records" = { value = 0x48, pattern = "3B D0 74 22 48 8B 47 ?? 48 8D 0C 49 0F 10 44 24 ?? 66 0F 15 C9", at = 7, size = 1 }
+"textures.ring_record_context" = { value = 0x8, via = "textures.request_post", within = 0x20, pattern = "0F 11 04 C8 F2 0F 11 4C C8 ??", at = 9, size = 1, plus = -8 }
+"textures.ring_record_size" = { value = 0x18, via = "textures.request_post", within = 0x20, pattern = "0F 11 04 C8 F2 0F 11 4C C8 ??", at = 9, size = 1, plus = 8 }
 "textures.ring_head" = { value = 0x80, pattern = "C7 44 24 ?? 27 00 00 00 48 89 44 24 ?? E8 ?? ?? ?? ?? 8B 8F ?? ?? ?? ?? 33 D2 3B 4F ?? 0F 10 4B ??", at = 20, size = 4 }
 "textures.ring_last" = { value = 0x50, pattern = "E8 ?? ?? ?? ?? 8B 8F ?? ?? ?? ?? 33 D2 3B 4F ?? 0F 10 4B ?? C6 44 24 ?? 1F 8D 41 ??", at = 15, size = 1 }
 "textures.ring_tail" = { value = 0xc0, pattern = "8D 41 ?? 0F 45 D0 0F 11 4C 24 ?? 3B 97 ?? ?? ?? ?? 75 11 8B 87 ?? ?? ?? ?? 90", at = 13, size = 4 }
