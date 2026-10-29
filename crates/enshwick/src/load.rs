@@ -367,7 +367,8 @@ impl Load<'_> {
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, the data folder
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]` or is `settings`
+    /// or `save`, which the loader keeps for its own files, the data folder
     /// cannot be created or the world events are refused.
     ///
     /// # Examples

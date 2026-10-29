@@ -50,6 +50,10 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `Load::world_store` refuses the names `settings` and `save`, whose files
+  the loader keeps in the same world folder, so a store no longer writes
+  over the world's settings (#680).
+
 - Migrations run once per world, all or nothing: each world keeps its own
   record, `.migrations.toml`, and a copy of the files each migration
   changed under `.backup/`, put back when a write fails or the game stops
