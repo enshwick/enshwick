@@ -227,6 +227,11 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     )
     .unwrap();
 
+    // Tests sharing the process may have raised the level past news.
+    crate::log::set_levels(crate::settings::Settings {
+        log_level: Level::INFO,
+        ..crate::settings::Settings::default()
+    });
     crate::log::capture();
     let (found, candidates, others) = libraries(&mods, Run::Dry, &mut |_| {});
     let lines = loader_lines();
