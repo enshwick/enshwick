@@ -9,7 +9,7 @@ Each entry names the pull request that made the change.
 ### Fixed
 
 - `cargo enshwick install` builds a Windows DLL on every host, through
-  `cargo xwin` off Windows, and names the missing target or tool.
+  `cargo xwin` off Windows, and names the missing target or tool (#695).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 
