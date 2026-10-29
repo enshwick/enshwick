@@ -46,14 +46,8 @@ impl Slots {
 /// The allocator object: a pointer to its vtable, as the game's.
 #[repr(C)]
 pub(super) struct Heap {
-    vtable: *const usize,
+    vtable: &'static [usize; SLOTS],
 }
-
-// SAFETY: the vtable the pointer names is a static that is never written
-// after it is built, and every function in it may run on any thread.
-unsafe impl Sync for Heap {}
-// SAFETY: as for `Sync`; the object holds nothing tied to a thread.
-unsafe impl Send for Heap {}
 
 /// The vtable of the one heap, built for the first slots asked for: a game
 /// build calls the same slots for its whole run.
@@ -77,9 +71,7 @@ pub(super) fn handed(slots: Slots) -> Option<usize> {
             }
             vtable
         });
-        Heap {
-            vtable: vtable.as_ptr(),
-        }
+        Heap { vtable }
     });
     Some(core::ptr::from_ref(heap).addr() | 1)
 }
@@ -154,9 +146,7 @@ mod tests {
     fn slot(heap: *const Heap, at: usize) -> usize {
         // SAFETY: the loader's heap, a live static.
         let vtable = unsafe { (*heap).vtable };
-        // SAFETY: its vtable holds `SLOTS` pointers; `at` is one of the
-        // table's slots, inside it.
-        unsafe { enshwick::raw::read_at::<usize>(vtable.cast(), at) }
+        vtable[at / size_of::<usize>()]
     }
 
     #[test]

@@ -275,7 +275,7 @@ impl Fields {
         };
         if !fields.fits() {
             return Err(format!(
-                "the bases' fields are not the zone boxes the lookups copy ({fields:x?})"
+                "the bases' fields do not fit the boxes, answers and heap the lookups use ({fields:x?})"
             ));
         }
         Ok(fields)
@@ -1140,7 +1140,7 @@ mod tests {
             }
         };
         let refused = Fields::read(&offset).unwrap_err();
-        assert!(refused.contains("not the zone boxes"), "{refused}");
+        assert!(refused.contains("do not fit the boxes"), "{refused}");
         assert_eq!(Fields::read(&fake_offset), Ok(fake::FIELDS));
     }
 
