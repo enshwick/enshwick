@@ -7,7 +7,7 @@
 //! the begin and end pairs live on 426.
 
 use super::{
-    BUNDLE, Buf, Engine, FRAME_SIZE, Loader, Lookup, Missing, NAV_CONFIG, OneFn, Ptr, field,
+    BUNDLE, Buf, Engine, FRAME_SIZE, Loader, Lookup, Missing, NAV_CONFIG, OneFn, Ptr, field, fits,
     game_fn, path, sound, stretch,
 };
 use crate::pinned;
@@ -34,48 +34,38 @@ type ScrollNavFn = unsafe extern "system" fn(scroll: Ptr, nav: *const u8);
 type ScrollInputFn = unsafe extern "system" fn(scroll: Ptr, input: *const [u64; 2]);
 type ColumnFn = unsafe extern "system" fn(column: Ptr, gap: f32) -> Ptr;
 
-/// The scroll object: its start writes up to 0x180 bytes, its end reaches
-/// 0x468.
-const SCROLL_OBJECT: usize = 0x600;
-/// The scroll config; the game's is 0x108 bytes.
-const SCROLL_CONFIG: usize = 0x110;
-/// The scrollbar look, copied whole into the config.
-const SCROLLBAR_LOOK: usize = 0xc0;
+/// The loader's room for the scroll object; the build's `ui.scroll_extent`
+/// must fit in it.
+pub(super) const SCROLL_OBJECT: usize = 0x600;
+/// The loader's room for the scroll config; the build's
+/// `ui.scroll_config_extent` and the reflected config must fit in it.
+pub(super) const SCROLL_CONFIG: usize = 0x110;
+/// The loader's room for the scrollbar look; the reflected look must fit.
+pub(super) const SCROLLBAR_LOOK: usize = 0xc0;
 /// The kept state of a scroll area, which holds its offset; the game's
-/// first use zeroes part of it, the loader all of it.
-const STATE_SIZE: usize = 0x18;
+/// first use zeroes part of it, the loader all of it. The build's
+/// `ui.scroll_state_size` must fit in it.
+pub(super) const STATE_SIZE: usize = 0x18;
 /// The loader's key for its scroll area's kept state among the game's
 /// states of a node: `enshwick` in ASCII.
 const STATE_KEY: u64 = 0x656e_7368_7769_636b;
 
-/// The scrollbar look's fields, as the world settings fill them.
-const LOOK_TINT: usize = 0x04;
-const LOOK_RANGE: usize = 0x24;
-const LOOK_SLIDER: usize = 0x44;
-const LOOK_SHOWN: usize = 0x7c;
-/// Four floats from here: the bar's widths and its slider's least length.
-const LOOK_SIZES: usize = 0x80;
+/// The scrollbar look's four widths from `sliderIdleWidth` on, as the
+/// world settings fill them.
 const LOOK_SIZE_VALUES: [f32; 4] = [24.0, 24.0, 24.0, 20.0];
-const LOOK_FILLED: usize = 0x90;
 /// A nine-slice texture of the look bundle, copied into the look.
 const TEXTURE_SIZE: usize = 32;
 
-/// The scroll config's fields, as the world settings fill them.
-const CONFIG_FLAGS: usize = 0x40;
+/// What the world settings set in the scroll config: two keys in its hot key
+/// mask, and scissoring with its children centred.
 const CONFIG_FLAGS_SET: u8 = 0x18;
-const CONFIG_AXES: usize = 0x2e;
 const CONFIG_AXES_ON: u16 = 0x101;
-const CONFIG_BAR: usize = 0x32;
-const CONFIG_LOOK: usize = 0x44;
 
 /// The navigation config's highlight sound, which the window's navigation
 /// leaves empty.
 const SOUND_SIZE: usize = 16;
 /// The navigation kind of a scrolled column.
 const NAV_SCROLLED: u32 = 3;
-
-const _: () = assert!(CONFIG_LOOK + SCROLLBAR_LOOK <= SCROLL_CONFIG);
-const _: () = assert!(LOOK_SLIDER + TEXTURE_SIZE <= SCROLLBAR_LOOK);
 
 /// The scroll area's functions and the bundle's looks for its scrollbar.
 #[derive(Debug)]
@@ -99,6 +89,8 @@ pub(super) struct Scrolling {
     /// Where the highlight sound sits in the navigation config, from the
     /// table's `ui.nav_highlight`.
     nav_highlight: usize,
+    /// Where the config and its look take what the loader fills.
+    fields: Fields,
 }
 
 fn scrollbar(loader: &Loader, name: &str) -> Option<usize> {
@@ -126,9 +118,131 @@ pub(super) fn nav_highlight(lookup: Lookup<'_>) -> Result<usize, Missing> {
     Ok(at)
 }
 
+/// The game's scrollbar look, copied into the scroll config.
+const LOOK: &str = "keen::GameUiScrollbarParameterData";
+/// The game's scroll config.
+const CONFIG: &str = "keen::GameUiScrollingLayoutParameterData";
+
+/// Where the loader fills the scroll config and its scrollbar look, from
+/// their reflected types: what the world settings fill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Fields {
+    /// The look's size.
+    pub(super) look_size: usize,
+    /// The range's colour, eight bytes.
+    pub(super) tint: usize,
+    /// The range's nine-slice texture.
+    pub(super) range: usize,
+    /// The slider's nine-slice texture.
+    pub(super) slider: usize,
+    /// The slider's style byte.
+    pub(super) shown: usize,
+    /// Four floats from here: the bar's widths and its slider's least length.
+    pub(super) sizes: usize,
+    /// Whether the range is drawn filled, a byte.
+    pub(super) filled: usize,
+    /// The config's size.
+    pub(super) config_size: usize,
+    /// The config's hot key mask byte.
+    pub(super) flags: usize,
+    /// The config's scissor and centring bytes.
+    pub(super) axes: usize,
+    /// The config's global focus byte.
+    pub(super) bar: usize,
+    /// The look inside the config.
+    pub(super) look: usize,
+}
+
+impl Fields {
+    /// Reads the fields from the build's reflection, then checks them.
+    fn reflect(loader: &Loader) -> Result<Self, Missing> {
+        let reflection = &loader.reflection;
+        let field = |ty: &'static str, name: &'static str| {
+            reflection
+                .field_offset(ty, name)
+                .ok()
+                .and_then(|at| usize::try_from(at).ok())
+                .ok_or(Missing::Reflected(ty, name))
+        };
+        let size = |ty: &'static str| {
+            reflection
+                .type_info(ty)
+                .ok()
+                .and_then(|info| usize::try_from(info.size()).ok())
+                .ok_or(Missing::Reflected(ty, "its size"))
+        };
+        Self {
+            look_size: size(LOOK)?,
+            tint: field(LOOK, "rangeRectColor")?,
+            range: field(LOOK, "rangeTexture")?,
+            slider: field(LOOK, "sliderTexture")?,
+            shown: field(LOOK, "sliderStyle")?,
+            sizes: field(LOOK, "sliderIdleWidth")?,
+            filled: field(LOOK, "useInverseRangeRect")?,
+            config_size: size(CONFIG)?,
+            flags: field(CONFIG, "scrollingHotKeyMask")?,
+            axes: field(CONFIG, "doScissorWhenScrolling")?,
+            bar: field(CONFIG, "useGlobalFocus")?,
+            look: field(CONFIG, "scrollBar")?,
+        }
+        .checked()
+    }
+
+    /// Refuses fields that would put a write past the loader's buffers: a
+    /// look or config larger than its room, a field past its type, or a
+    /// look that runs past the config.
+    pub(super) fn checked(self) -> Result<Self, Missing> {
+        if self.look_size > SCROLLBAR_LOOK {
+            return Err(Missing::Room(LOOK));
+        }
+        if self.config_size > SCROLL_CONFIG {
+            return Err(Missing::Room(CONFIG));
+        }
+        let inside = |at: usize, width: usize, size: usize| {
+            at.checked_add(width).is_some_and(|end| end <= size)
+        };
+        for (at, width, name) in [
+            (self.tint, 8, "rangeRectColor"),
+            (self.range, TEXTURE_SIZE, "rangeTexture"),
+            (self.slider, TEXTURE_SIZE, "sliderTexture"),
+            (self.shown, 1, "sliderStyle"),
+            (self.sizes, 16, "sliderIdleWidth"),
+            (self.filled, 1, "useInverseRangeRect"),
+        ] {
+            if !inside(at, width, self.look_size) {
+                return Err(Missing::Room(name));
+            }
+        }
+        for (at, width, name) in [
+            (self.flags, 1, "scrollingHotKeyMask"),
+            (self.axes, 2, "doScissorWhenScrolling"),
+            (self.bar, 1, "useGlobalFocus"),
+            (self.look, self.look_size, "scrollBar"),
+        ] {
+            if !inside(at, width, self.config_size) {
+                return Err(Missing::Room(name));
+            }
+        }
+        Ok(self)
+    }
+}
+
+/// Checks the scroll area's extents in the build's table against the
+/// loader's buffers: the scroll object, the config the game's init fills
+/// and the kept state it asks for.
+pub(super) fn extents(lookup: Lookup<'_>) -> Result<(), Missing> {
+    fits(lookup, pinned::ui::SCROLL_EXTENT.id(), SCROLL_OBJECT)?;
+    fits(lookup, pinned::ui::SCROLL_CONFIG_EXTENT.id(), SCROLL_CONFIG)?;
+    fits(lookup, pinned::ui::SCROLL_STATE_SIZE.id(), STATE_SIZE)
+}
+
 impl Scrolling {
-    /// Resolves every function and look of the scroll area.
+    /// Resolves every function and look of the scroll area, once its
+    /// extents in the table and its reflected fields fit the loader's
+    /// buffers.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
+        let lookup = |id: &str| loader.build.constant(id);
+        extents(&lookup)?;
         macro_rules! function {
             ($name:expr, $ty:ty) => {
                 // SAFETY: `$ty` is the signature of the game function `$name`
@@ -153,7 +267,8 @@ impl Scrolling {
             range: scrollbar(loader, "range").ok_or(Missing::Looks)?,
             tint: scrollbar(loader, "rangeTint").ok_or(Missing::Looks)?,
             highlight: sound(loader, "highlightChange").ok_or(Missing::Looks)?,
-            nav_highlight: nav_highlight(&|id: &str| loader.build.constant(id))?,
+            nav_highlight: nav_highlight(&lookup)?,
+            fields: Fields::reflect(loader)?,
         })
     }
 }
@@ -251,8 +366,9 @@ impl Engine {
         let area = scroll.area.ptr();
         // SAFETY: `fns.begin` is the game's `ui.scroll_begin`, checked in
         // `Scrolling::resolve`, inside the parent frame; `scroll.area` holds
-        // `SCROLL_OBJECT` bytes, more than the 0x468 the scroll reaches on
-        // 426, and stays in place until `scroll_end`; `state` is the kept
+        // `SCROLL_OBJECT` bytes, at least the build's `ui.scroll_extent` the
+        // scroll reaches, as `extents` checked, and stays in place until
+        // `scroll_end`; `state` is the kept
         // state and `config` a filled local the game reads.
         unsafe { (fns.begin)(area, 1, state, 0, config.ptr()) };
         // SAFETY: `fns.focus` is the game's `ui.scroll_focus`, checked in
@@ -327,37 +443,40 @@ impl Engine {
     /// The scroll config with the game's scrollbar look, as the world
     /// settings fill it.
     fn scroll_config(fns: &Scrolling, bundle: usize) -> Buf<SCROLL_CONFIG> {
+        let at = fns.fields;
         let mut look = Buf::<SCROLLBAR_LOOK>::zeroed();
         // SAFETY: `fns.look` is the game's `ui.scrollbar_look`, checked in
-        // `Scrolling::resolve`; it fills the defaults of the `SCROLLBAR_LOOK`
-        // bytes of `look`.
+        // `Scrolling::resolve`; it fills the defaults of the reflected look,
+        // inside the `SCROLLBAR_LOOK` bytes of `look` as `Fields::checked`
+        // found.
         unsafe { (fns.look)(look.ptr()) };
-        look.u8(LOOK_SHOWN, 1);
-        for (at, from) in [(LOOK_SLIDER, fns.slider), (LOOK_RANGE, fns.range)] {
+        look.u8(at.shown, 1);
+        for (to, from) in [(at.slider, fns.slider), (at.range, fns.range)] {
             // SAFETY: `bundle` is the frame's look bundle, read from the live
             // context, and `from` the reflected offset of a nine-slice
             // texture of `TEXTURE_SIZE` bytes inside it.
             let texture = unsafe { crate::memory::read::<[u8; TEXTURE_SIZE]>(bundle, from) };
-            look.put(at, texture);
+            look.put(to, texture);
         }
         for (i, value) in LOOK_SIZE_VALUES.into_iter().enumerate() {
-            look.f32(LOOK_SIZES + 4 * i, value);
+            look.f32(at.sizes + 4 * i, value);
         }
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `fns.tint` the reflected offset of a colour inside it.
         let tint = unsafe { crate::memory::read::<u64>(bundle, fns.tint) };
-        look.u64(LOOK_TINT, tint);
-        look.u8(LOOK_FILLED, 1);
+        look.u64(at.tint, tint);
+        look.u8(at.filled, 1);
         let mut config = Buf::<SCROLL_CONFIG>::zeroed();
         // SAFETY: `fns.config` is the game's `ui.scroll_config`, checked in
-        // `Scrolling::resolve`; it fills the defaults of the game's 0x108
-        // bytes of config, inside the `SCROLL_CONFIG` bytes of `config`.
+        // `Scrolling::resolve`; it fills the build's
+        // `ui.scroll_config_extent` bytes of config, inside the
+        // `SCROLL_CONFIG` bytes of `config` as `extents` checked.
         unsafe { (fns.config)(config.ptr()) };
-        config.put(CONFIG_LOOK, look.0);
-        let flags = config.0[CONFIG_FLAGS] | CONFIG_FLAGS_SET;
-        config.u8(CONFIG_FLAGS, flags);
-        config.u16(CONFIG_AXES, CONFIG_AXES_ON);
-        config.u8(CONFIG_BAR, 1);
+        config.copy(at.look, look.0.get(..at.look_size).unwrap_or_default());
+        let flags = config.0.get(at.flags).copied().unwrap_or_default() | CONFIG_FLAGS_SET;
+        config.u8(at.flags, flags);
+        config.u16(at.axes, CONFIG_AXES_ON);
+        config.u8(at.bar, 1);
         config
     }
 

@@ -30,6 +30,14 @@ impl<const N: usize> Buf<N> {
         }
     }
 
+    /// Writes `bytes` at `at`, or nothing when they would run past the end.
+    fn copy(&mut self, at: usize, bytes: &[u8]) {
+        let end = at.checked_add(bytes.len());
+        if let Some(slot) = end.and_then(|end| self.0.get_mut(at..end)) {
+            slot.copy_from_slice(bytes);
+        }
+    }
+
     pub(super) fn u8(&mut self, at: usize, value: u8) {
         self.put(at, [value]);
     }
@@ -733,6 +741,8 @@ pub(crate) enum Missing {
     Bytes(&'static str),
     Room(&'static str),
     Looks,
+    /// A type and its field the build's reflection lacks.
+    Reflected(&'static str, &'static str),
 }
 
 impl core::fmt::Display for Missing {
@@ -742,6 +752,7 @@ impl core::fmt::Display for Missing {
             Self::Bytes(name) => write!(f, "{name} does not read as the build table says"),
             Self::Room(name) => write!(f, "{name} runs past the loader's buffer"),
             Self::Looks => f.write_str("the look bundle lacks a reflected field"),
+            Self::Reflected(ty, field) => write!(f, "{ty} {field} is not reflected on this build"),
         }
     }
 }

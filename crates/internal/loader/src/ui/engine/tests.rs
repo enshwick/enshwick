@@ -64,13 +64,15 @@ fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
 }
 
 /// Which optional parts of the interface read on a build whose constants
-/// `lookup` gives: the dialogs, the world settings' Mods rows and the
-/// scroll area's layout.
-fn optional_parts(lookup: Lookup<'_>) -> [bool; 3] {
+/// `lookup` gives: the dialogs, the world settings' Mods rows, the scroll
+/// area's highlight and extents, and the text field.
+fn optional_parts(lookup: Lookup<'_>) -> [bool; 5] {
     [
         DialogLayout::read(lookup).is_ok(),
         ViewLayout::read(lookup).is_ok(),
         scroll::nav_highlight(lookup).is_ok(),
+        scroll::extents(lookup).is_ok(),
+        text_field::TextLayout::read(lookup).is_ok(),
     ]
 }
 
@@ -82,10 +84,13 @@ fn each_optional_part_turns_off_alone() {
         pinned::ui::POPUP_TITLE.id(),
         pinned::ui::VIEW_TAB.id(),
         pinned::ui::NAV_HIGHLIGHT.id(),
+        pinned::ui::SCROLL_EXTENT.id(),
+        pinned::ui::TEXT_FIELD_EXTENT.id(),
     ];
+    let mut checked = 0;
     for table in client_tables() {
         let lookup = |id: &str| constant(&table, id);
-        if optional_parts(&lookup) != [true; 3] {
+        if optional_parts(&lookup) != [true; 5] {
             continue;
         }
         for (off, part) in parts.into_iter().enumerate() {
@@ -96,7 +101,9 @@ fn each_optional_part_turns_off_alone() {
                 assert_eq!(on, index != off, "{} without {part}", table.name());
             }
         }
+        checked += 1;
     }
+    assert!(checked > 0, "no client table pins every optional part");
 }
 
 /// Every client table that pins the text field gives its sizes, they fit
@@ -260,4 +267,102 @@ fn buffers_write_little_endian_in_bounds() {
     assert_eq!(buf.read_u64(0), 0x0102_0304);
     assert_eq!(buf.read_usize(8), 7);
     assert_eq!(buf.read_u64(12), 0);
+}
+
+/// Every client table that pins the scroll area gives its extents, they fit
+/// the loader's buffers, and a grown or missing one turns the scroll area
+/// off.
+#[test]
+fn the_scroll_area_s_extents_come_from_the_table_and_fit_its_buffers() {
+    let mut checked = 0;
+    for table in client_tables() {
+        if !table
+            .symbols()
+            .iter()
+            .any(|s| s.id() == pinned::ui::SCROLL_BEGIN.id())
+        {
+            continue;
+        }
+        let lookup = |id: &str| constant(&table, id);
+        scroll::extents(&lookup).unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+        for (id, room) in [
+            (pinned::ui::SCROLL_EXTENT.id(), scroll::SCROLL_OBJECT),
+            (pinned::ui::SCROLL_CONFIG_EXTENT.id(), scroll::SCROLL_CONFIG),
+            (pinned::ui::SCROLL_STATE_SIZE.id(), scroll::STATE_SIZE),
+        ] {
+            let grown = |asked: &str| {
+                if asked == id {
+                    Some(room as u64 + 1)
+                } else {
+                    lookup(asked)
+                }
+            };
+            assert!(
+                matches!(scroll::extents(&grown), Err(Missing::Room(at)) if at == id),
+                "{} with {id} grown",
+                table.name()
+            );
+            let missing = |asked: &str| if asked == id { None } else { lookup(asked) };
+            assert!(
+                matches!(scroll::extents(&missing), Err(Missing::Entry(at)) if at == id),
+                "{} without {id}",
+                table.name()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "no client table pins the scroll area");
+}
+
+/// The scroll config and its look as client 426 reflects them.
+const FIELDS_426: scroll::Fields = scroll::Fields {
+    look_size: 0xc0,
+    tint: 0x04,
+    range: 0x24,
+    slider: 0x44,
+    shown: 0x7c,
+    sizes: 0x80,
+    filled: 0x90,
+    config_size: 0x104,
+    flags: 0x40,
+    axes: 0x2e,
+    bar: 0x32,
+    look: 0x44,
+};
+
+/// The reflected scroll config and look fit the loader's buffers, and a
+/// build whose look grew, whose field left its type or whose look runs past
+/// the config turns the scroll area off.
+#[test]
+fn the_scroll_area_s_reflected_fields_fit_its_buffers() {
+    assert_eq!(FIELDS_426.checked().ok(), Some(FIELDS_426));
+    let refused = |fields: scroll::Fields| match fields.checked() {
+        Err(Missing::Room(name)) => name,
+        other => panic!("{other:?}"),
+    };
+    let grown = scroll::Fields {
+        look_size: scroll::SCROLLBAR_LOOK + 8,
+        ..FIELDS_426
+    };
+    assert_eq!(refused(grown), "keen::GameUiScrollbarParameterData");
+    let config = scroll::Fields {
+        config_size: scroll::SCROLL_CONFIG + 4,
+        ..FIELDS_426
+    };
+    assert_eq!(refused(config), "keen::GameUiScrollingLayoutParameterData");
+    let moved = scroll::Fields {
+        sizes: 0xb8,
+        ..FIELDS_426
+    };
+    assert_eq!(refused(moved), "sliderIdleWidth");
+    let late = scroll::Fields {
+        look: 0x50,
+        ..FIELDS_426
+    };
+    assert_eq!(refused(late), "scrollBar");
+    let far = scroll::Fields {
+        tint: usize::MAX,
+        ..FIELDS_426
+    };
+    assert_eq!(refused(far), "rangeRectColor");
 }
