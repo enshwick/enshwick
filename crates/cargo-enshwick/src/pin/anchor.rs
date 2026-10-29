@@ -27,6 +27,8 @@ pub(crate) enum Anchor {
     Through(u64),
     /// A symbol found by its own code.
     Own,
+    /// A symbol found by its whole function's code.
+    Body,
 }
 
 impl Anchor {
@@ -34,7 +36,7 @@ impl Anchor {
     pub(crate) const fn site(&self) -> Option<u64> {
         match self {
             Self::Read(site, ..) | Self::Confirm(site) | Self::Through(site) => Some(*site),
-            Self::Own => None,
+            Self::Own | Self::Body => None,
         }
     }
 
@@ -45,6 +47,7 @@ impl Anchor {
             Self::Confirm(_) => Self::Confirm(site),
             Self::Through(_) => Self::Through(site),
             Self::Own => Self::Own,
+            Self::Body => Self::Body,
         }
     }
 }
@@ -52,7 +55,7 @@ impl Anchor {
 /// Reads a `--from` pick for the entry whose value is `value`: for a
 /// constant `<rva>`, optionally prefixed `disp:`, `neg:`, `imm:` or `shl:` and
 /// followed by `+<n>` or `-<n>` for a value next to the operand, or
-/// `confirm:<rva>`; for a symbol `<rva>`, `ref:<rva>` or `direct`.
+/// `confirm:<rva>`; for a symbol `<rva>`, `ref:<rva>`, `direct` or `body`.
 ///
 /// # Errors
 ///
@@ -69,6 +72,12 @@ pub(crate) fn parse_pick(
     };
     if text == "direct" {
         return Ok(Anchor::Own);
+    }
+    if text == "body" {
+        if !symbol {
+            bail!("only a symbol takes a body pattern");
+        }
+        return Ok(Anchor::Body);
     }
     if let Some(rest) = text.strip_prefix("confirm:") {
         return Ok(Anchor::Confirm(number(rest)?));
@@ -176,6 +185,10 @@ pub(crate) fn of_table(
         );
     }
     for symbol in table.symbols() {
+        if symbol.body() {
+            out.insert(symbol.id().to_owned(), Anchor::Body);
+            continue;
+        }
         let Some((pattern, Locate::Rel { at, .. })) = symbol.pattern() else {
             continue;
         };

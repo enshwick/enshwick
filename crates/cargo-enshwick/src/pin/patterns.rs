@@ -28,6 +28,11 @@ use super::signature::{Insn, Masked, Owned, Reference};
 const MIN_SIGNIFICANT: usize = 16;
 /// The longest pattern written.
 const MAX_LEN: usize = 192;
+/// The longest function a body pattern covers.
+const MAX_BODY: u64 = 0x4000;
+/// How many instructions after a function its body pattern may take to be
+/// unique, for a function with a twin.
+const MAX_BODY_TAIL: usize = 16;
 
 /// A symbol's pattern and where the symbol lies from its match.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -293,6 +298,42 @@ fn grow(
     }
 }
 
+/// The pattern of the whole function at `rva`, so that any change to its
+/// code, other than where it and what it reaches moved, stops the pattern
+/// matching: for a symbol whose code the loader replaces or relies on as a
+/// whole.
+///
+/// # Errors
+///
+/// When the function does not decode to its end or no window of it is
+/// unique.
+pub(crate) fn body(exe: &Exe<'_>, rva: u64) -> anyhow::Result<SymbolPattern> {
+    let (text, text_rva) = exe.text();
+    let end = text_rva + text.len() as u64;
+    let len = end.saturating_sub(rva).min(MAX_BODY);
+    let code = exe
+        .code(rva, len)
+        .with_context(|| format!("{rva:#x} is not code"))?;
+    let masked = Masked::decode(code, rva, &exe.absolute_range());
+    let Some(window) = body_window(&masked, text) else {
+        bail!("the function at {rva:#x} has no end or no unique body");
+    };
+    Ok(SymbolPattern {
+        text: render(&window),
+        locate: Locate::At(0),
+    })
+}
+
+/// The window over the function that starts `masked`, strict, and as many
+/// instructions after it as make it unique in `text`.
+fn body_window(masked: &Masked, text: &[u8]) -> Option<Owned> {
+    let len = masked.body_len()?;
+    (len..=len + MAX_BODY_TAIL)
+        .take_while(|&end| end <= masked.insns.len())
+        .filter_map(|end| masked.window_hiding(0..end, &[], false, &[]))
+        .find(|window| window.pattern().find(text, 2).len() == 1)
+}
+
 /// The window as `code::Pattern` spells it: hex bytes, `??` for masked ones.
 fn render(window: &Owned) -> String {
     let tokens: Vec<String> = window
@@ -318,6 +359,43 @@ mod tests {
 
     fn insn(code: &[u8]) -> Insn {
         Masked::decode(code, 0x1000, &NOWHERE).insns[0]
+    }
+
+    #[test]
+    fn a_body_pattern_covers_the_whole_function_with_its_moving_parts_masked() {
+        let mut text = vec![0xcc; 8];
+        let function = [
+            0x48, 0x8b, 0x05, 0x00, 0x01, 0x00, 0x00, // mov rax, [rip+0x100]
+            0x85, 0xc0, // test eax, eax
+            0x74, 0x01, // je +1
+            0xc3, // ret
+            0x33, 0xc0, // xor eax, eax
+            0xc3, // ret
+        ];
+        text.extend_from_slice(&function);
+        text.extend_from_slice(&[0xcc, 0xcc, 0x90]);
+        let masked = Masked::decode(&text[8..], 0x1008, &NOWHERE);
+        let window = body_window(&masked, &text).unwrap();
+        assert_eq!(
+            render(&window),
+            "48 8B 05 ?? ?? ?? ?? 85 C0 74 01 C3 33 C0 C3"
+        );
+    }
+
+    #[test]
+    fn a_body_with_a_twin_takes_the_bytes_after_it_until_it_is_unique() {
+        let leaf = [0x8b, 0x41, 0x24, 0xc3]; // mov eax, [rcx+0x24]; ret
+        let mut text = Vec::new();
+        text.extend_from_slice(&leaf);
+        text.extend_from_slice(&[0xcc, 0xcc, 0x90]);
+        text.extend_from_slice(&leaf);
+        text.extend_from_slice(&[0xcc, 0xcc, 0x33, 0xc0]);
+        let at = 7;
+        let masked = Masked::decode(&text[at..], 0x1000 + at as u64, &NOWHERE);
+        let window = body_window(&masked, &text).unwrap();
+        assert_eq!(render(&window), "8B 41 24 C3 CC CC 33 C0");
+        let alone = Masked::decode(&leaf, 0x1000, &NOWHERE);
+        assert!(body_window(&alone, &[leaf, leaf].concat()).is_none());
     }
 
     #[test]

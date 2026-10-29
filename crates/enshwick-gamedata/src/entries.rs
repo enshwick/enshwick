@@ -38,9 +38,17 @@ pub struct Symbol {
     pub(crate) rva: u64,
     pub(crate) pattern: Option<Pattern>,
     pub(crate) locate: Locate,
+    pub(crate) body: bool,
 }
 
 impl Symbol {
+    /// Whether the symbol's pattern covers its whole function, so that a
+    /// change to the function's code is a change of the symbol.
+    #[must_use]
+    pub const fn body(&self) -> bool {
+        self.body
+    }
+
     /// The symbolic id, such as `npc.lookup`.
     #[must_use]
     pub fn id(&self) -> &str {

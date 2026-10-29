@@ -4,7 +4,7 @@
 
 use std::ops::Range;
 
-use iced_x86::{Decoder, DecoderOptions, FlowControl, Instruction, OpKind, Register};
+use iced_x86::{Code, Decoder, DecoderOptions, FlowControl, Instruction, OpKind, Register};
 use memchr::memmem;
 
 /// What an instruction points at, as an RVA.
@@ -35,6 +35,22 @@ pub(crate) struct Insn {
     pub(crate) immediate_at: Option<(usize, usize)>,
     /// The offset in the instruction of the rel32 behind `reference`.
     pub(crate) reference_at: Option<usize>,
+    /// Where a direct jump, conditional or not, goes.
+    pub(crate) jump: Option<u64>,
+    /// How the instruction leaves the code after it.
+    pub(crate) flow: Flow,
+}
+
+/// How an instruction hands on to the code after it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Flow {
+    /// The next instruction may run.
+    On,
+    /// A return or a direct unconditional jump: the next instruction runs
+    /// only when something else jumps to it.
+    Leaves,
+    /// `int3`, the padding between functions.
+    Padding,
 }
 
 impl Insn {
@@ -56,6 +72,8 @@ pub(crate) struct Masked {
     pub(crate) mask: Vec<bool>,
     /// The instructions, in order.
     pub(crate) insns: Vec<Insn>,
+    /// Where the code starts.
+    pub(crate) rva: u64,
 }
 
 impl Masked {
@@ -90,6 +108,16 @@ impl Masked {
                 displacement_at: None,
                 immediate_at: None,
                 reference_at: None,
+                jump: matches!(
+                    instruction.flow_control(),
+                    FlowControl::UnconditionalBranch | FlowControl::ConditionalBranch
+                )
+                .then(|| instruction.near_branch_target()),
+                flow: match instruction.flow_control() {
+                    FlowControl::Return | FlowControl::UnconditionalBranch => Flow::Leaves,
+                    FlowControl::Interrupt if instruction.code() == Code::Int3 => Flow::Padding,
+                    _ => Flow::On,
+                },
             };
             if offsets.has_displacement() {
                 if instruction.is_ip_rel_memory_operand() {
@@ -125,7 +153,34 @@ impl Masked {
             insns.push(insn);
         }
         let bytes = code.get(..mask.len()).unwrap_or_default().to_vec();
-        Self { bytes, mask, insns }
+        Self {
+            bytes,
+            mask,
+            insns,
+            rva,
+        }
+    }
+
+    /// How many instructions the function that starts the code has: up to
+    /// the first return or direct jump past every jump inside it, or up to
+    /// the padding after it. `None` when the code starts with padding or
+    /// runs out first.
+    pub(crate) fn body_len(&self) -> Option<usize> {
+        let mut reach = self.rva;
+        for (i, insn) in self.insns.iter().enumerate() {
+            let end = self.rva + (insn.offset + insn.len) as u64;
+            match insn.flow {
+                Flow::Padding => return (i > 0).then_some(i),
+                Flow::Leaves if end > reach => return Some(i + 1),
+                Flow::Leaves | Flow::On => {}
+            }
+            if let Some(target) = insn.jump
+                && target >= end
+            {
+                reach = reach.max(target);
+            }
+        }
+        None
     }
 
     /// The signature of the instructions `insns`.
@@ -369,6 +424,48 @@ mod tests {
         );
         assert!(masked.insns[2].uses(0x178));
         assert_eq!(masked.insns[3].reference, None, "a short jump stays");
+    }
+
+    #[test]
+    fn a_body_runs_past_an_early_return_to_its_last_branch_target() {
+        let code = [
+            0x85, 0xc9, // test ecx, ecx
+            0x74, 0x01, // je +1, to the second ret
+            0xc3, // ret
+            0x33, 0xc0, // xor eax, eax
+            0xc3, // ret
+            0xcc, 0xcc, // padding
+            0x48, 0x8b, 0xc1, // the next function
+        ];
+        let masked = Masked::decode(&code, 0x1000, &NOWHERE);
+        assert_eq!(masked.body_len(), Some(5));
+    }
+
+    #[test]
+    fn a_body_ends_at_a_tail_jump_or_at_padding() {
+        let tail = [
+            0x48, 0x8b, 0xc1, // mov rax, rcx
+            0xe9, 0x00, 0x01, 0x00, 0x00, // jmp elsewhere
+            0x48, 0x8b, 0xc1, // the next function
+        ];
+        assert_eq!(Masked::decode(&tail, 0x1000, &NOWHERE).body_len(), Some(2));
+        let padded = [0x48, 0x8b, 0xc1, 0xcc, 0x90];
+        assert_eq!(
+            Masked::decode(&padded, 0x1000, &NOWHERE).body_len(),
+            Some(1)
+        );
+        assert_eq!(Masked::decode(&[0xcc], 0x1000, &NOWHERE).body_len(), None);
+    }
+
+    #[test]
+    fn a_switch_s_indirect_jump_does_not_end_its_body() {
+        let code = [
+            0xff, 0xe0, // jmp rax
+            0x33, 0xc0, // a case: xor eax, eax
+            0xc3, // ret
+            0xcc,
+        ];
+        assert_eq!(Masked::decode(&code, 0x1000, &NOWHERE).body_len(), Some(3));
     }
 
     #[test]

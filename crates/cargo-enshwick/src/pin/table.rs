@@ -331,6 +331,10 @@ fn symbol_written(exe: &Exe<'_>, id: &str, rva: u64, anchor: Option<&Anchor>) ->
             )),
             Err(why) => Err(anyhow!("{id}: {why}")),
         },
+        Some(Anchor::Body) => match patterns::body(exe, rva) {
+            Ok(pattern) => Ok(Some(body_text(rva, &pattern))),
+            Err(why) => Err(anyhow!("{id}: {why}")),
+        },
         _ => Ok(patterns::symbol(exe, rva).map(|p| symbol_text(rva, &p))),
     }
 }
@@ -483,6 +487,15 @@ fn symbol_text(rva: u64, pattern: &SymbolPattern) -> String {
     };
     format!(
         "{{ rva = {}, pattern = \"{}\"{locate} }}",
+        hex(rva),
+        pattern.text
+    )
+}
+
+/// A symbol entry on a body pattern, as a table spells it.
+fn body_text(rva: u64, pattern: &SymbolPattern) -> String {
+    format!(
+        "{{ rva = {}, pattern = \"{}\", body = true }}",
         hex(rva),
         pattern.text
     )
