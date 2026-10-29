@@ -126,10 +126,10 @@ impl Layout {
         };
         // The join reads the address from its stack copy of the target's
         // first 16 bytes, and the ports from a copy of the 8 bytes from the
-        // address on.
+        // address on, which it reads as one word from the first copy.
         let copy = row(TARGET_COPY.id())?;
         let ip_read = TARGET_IP_READ.id();
-        let ip = copied(ip_read, row(ip_read)?, size_of::<u32>(), copy, 16)?;
+        let ip = copied(ip_read, row(ip_read)?, size_of::<u64>(), copy, 16)?;
         let word = row(TARGET_WORD_COPY.id())?;
         let port = |id: &'static str| {
             copied(id, row(id)?, size_of::<u16>(), word, size_of::<u64>())
@@ -326,6 +326,12 @@ mod tests {
         );
         assert_eq!(
             outside("join.target_ip_read", 0x60),
+            Err(LayoutError::OutsideCopy("join.target_ip_read"))
+        );
+        // The join reads eight bytes from the address on, so the ports'
+        // word runs past the copy from 0x59.
+        assert_eq!(
+            outside("join.target_ip_read", 0x5c),
             Err(LayoutError::OutsideCopy("join.target_ip_read"))
         );
         assert_eq!(
