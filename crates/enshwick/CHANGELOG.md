@@ -40,6 +40,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `stats::Origin::Mod` names its mod by the new `mods::ModIndex`, its place
+  in load order, which `ModIndex::entry` and `ModEntry::index` resolve
+  (#719).
+
 - The fake host refuses the hooks, mid-function hooks, code patches,
   points and rates the loader refuses, with the loader's status: a mod's
   test now fails where the game would. Both take the rules from one place.
