@@ -45,6 +45,72 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
     }
 }
 
+/// Every client table that pins the text field gives its sizes, they fit
+/// the loader's buffer, and a build whose field or kept state moved turns
+/// the text field off instead of letting the game write past the buffer.
+#[test]
+fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
+    let tables = enshwick_gamedata::embedded()
+        .iter()
+        .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap())
+        .filter(|t| t.side() == enshwick_gamedata::Side::Client)
+        .filter(|t| {
+            t.symbols()
+                .iter()
+                .any(|s| s.id() == pinned::ui::TEXT_FIELD.id())
+        });
+    let mut checked = 0;
+    for table in tables {
+        let lookup = |id: &str| {
+            table
+                .constants()
+                .iter()
+                .find(|c| c.id() == id)
+                .map(enshwick_gamedata::Constant::value)
+        };
+        text_field::TextLayout::read(&lookup)
+            .unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+
+        let changed = |changed: &'static str, value: u64| {
+            move |id: &str| {
+                if id == changed {
+                    Some(value)
+                } else {
+                    lookup(id)
+                }
+            }
+        };
+        let grown = changed(pinned::ui::TEXT_FIELD_EXTENT.id(), 0x1000);
+        assert!(matches!(
+            text_field::TextLayout::read(&grown),
+            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_EXTENT.id()
+        ));
+        let moved = changed(pinned::ui::TEXT_FIELD_TEXT.id(), 0x1000);
+        assert!(matches!(
+            text_field::TextLayout::read(&moved),
+            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_TEXT.id()
+        ));
+        let shrunk = changed(pinned::ui::TEXT_FIELD_STATE_SIZE.id(), 0x10);
+        assert!(matches!(
+            text_field::TextLayout::read(&shrunk),
+            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_EDITING.id()
+        ));
+        let gone = |id: &str| {
+            if id == pinned::ui::TEXT_FIELD_EXTENT.id() {
+                None
+            } else {
+                lookup(id)
+            }
+        };
+        assert!(matches!(
+            text_field::TextLayout::read(&gone),
+            Err(Missing::Entry(id)) if id == pinned::ui::TEXT_FIELD_EXTENT.id()
+        ));
+        checked += 1;
+    }
+    assert!(checked > 0, "no client table pins the text field");
+}
+
 /// A client table pins the scroll area's and the text field's functions
 /// whole, each with its expected bytes, or none of them, and the newest
 /// pins both.
