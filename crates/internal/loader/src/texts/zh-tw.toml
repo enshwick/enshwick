@@ -166,6 +166,7 @@
 "ui-demo.player" = "沒有名為 {name} 的線上玩家。"
 "ui-demo.opening" = "正在為 {name} 開啟介面示範。"
 "ui-demo.no-client" = "{name} 的用戶端沒有執行 Enshwick，或尚未回應。"
+"ui-demo.off" = "開發者工具已關閉。若要開啟，請在伺服器和該玩家的用戶端上建立空白檔案 mod-data/enshwick/developer-tools，然後重新啟動兩者。"
 "console.not-run" = "未執行（{status}）。"
 "usage.entity" = "enshwick entity <編號>"
 "usage.placed" = "enshwick placed [數量]"

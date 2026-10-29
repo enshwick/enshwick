@@ -166,6 +166,7 @@
 "ui-demo.player" = "Çevrimiçi {name} adlı oyuncu yok."
 "ui-demo.opening" = "Arayüz demosu açılıyor, oyuncu: {name}."
 "ui-demo.no-client" = "{name} adlı oyuncunun istemcisi Enshwick çalıştırmıyor ya da henüz yanıt vermedi."
+"ui-demo.off" = "Geliştirici araçları kapalı. Açmak için sunucuda ve oyuncunun istemcisinde boş mod-data/enshwick/developer-tools dosyasını oluşturun, sonra ikisini de yeniden başlatın."
 "console.not-run" = "Çalıştırılmadı ({status})."
 "usage.entity" = "enshwick entity <numara>"
 "usage.placed" = "enshwick placed [sayı]"

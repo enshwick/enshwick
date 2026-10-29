@@ -166,6 +166,7 @@
 "ui-demo.player" = "ไม่มีผู้เล่นชื่อ {name} ออนไลน์"
 "ui-demo.opening" = "กำลังเปิดเดโมอินเทอร์เฟซให้ {name}"
 "ui-demo.no-client" = "ไคลเอนต์ของ {name} ไม่ได้รัน Enshwick หรือยังไม่ตอบกลับ"
+"ui-demo.off" = "เครื่องมือนักพัฒนาปิดอยู่ หากต้องการเปิด ให้สร้างไฟล์ว่าง mod-data/enshwick/developer-tools บนเซิร์ฟเวอร์และบนไคลเอนต์ของผู้เล่น แล้วรีสตาร์ททั้งสอง"
 "console.not-run" = "ไม่ได้รัน ({status})"
 "usage.entity" = "enshwick entity <หมายเลข>"
 "usage.placed" = "enshwick placed [จำนวน]"

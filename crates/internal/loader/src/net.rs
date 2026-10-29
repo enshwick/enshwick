@@ -578,7 +578,14 @@ pub(crate) fn client_received(text: &str) -> bool {
             crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
         } else if single && let Some(rest) = frame.part().strip_prefix(control(UI_DEMO).as_slice())
         {
-            crate::ui::open_demo(demo_position(rest));
+            if crate::host::loader().is_some_and(|loader| loader.developer_tools) {
+                crate::ui::open_demo(demo_position(rest));
+            } else {
+                crate::log!(
+                    WARN,
+                    "the server asked for the interface demo; developer tools are off here"
+                );
+            }
         } else {
             let whole = state(|s| {
                 s.peers

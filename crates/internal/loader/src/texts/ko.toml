@@ -166,6 +166,7 @@
 "ui-demo.player" = "{name}(이)라는 이름의 플레이어가 접속 중이 아닙니다."
 "ui-demo.opening" = "{name}에게 인터페이스 데모를 엽니다."
 "ui-demo.no-client" = "{name}의 클라이언트가 Enshwick을 실행하지 않거나 아직 응답하지 않았습니다."
+"ui-demo.off" = "개발자 도구가 꺼져 있습니다. 켜려면 서버와 플레이어의 클라이언트에 빈 파일 mod-data/enshwick/developer-tools를 만들고 둘 다 다시 시작하세요."
 "console.not-run" = "실행되지 않음 ({status})."
 "usage.entity" = "enshwick entity <번호>"
 "usage.placed" = "enshwick placed [개수]"

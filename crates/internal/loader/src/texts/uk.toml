@@ -166,6 +166,7 @@
 "ui-demo.player" = "Гравця на ім'я {name} немає в грі."
 "ui-demo.opening" = "Відкриваю демонстрацію інтерфейсу для {name}."
 "ui-demo.no-client" = "Клієнт гравця {name} не запускає Enshwick або ще не відповів."
+"ui-demo.off" = "Інструменти розробника вимкнено. Щоб увімкнути, створіть порожній файл mod-data/enshwick/developer-tools на сервері й на клієнті гравця, потім перезапустіть обидва."
 "console.not-run" = "Не виконано ({status})."
 "usage.entity" = "enshwick entity <номер>"
 "usage.placed" = "enshwick placed [кількість]"
