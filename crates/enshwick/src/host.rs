@@ -58,9 +58,7 @@ fn fault(reason: &str) {
 
 impl Host {
     /// Wraps the loader's table for the mod `me`; `None` for a table of
-    /// another major or one shorter than this build's. The loader refuses a
-    /// mod built for a newer minor before it starts, so a mod meets a table
-    /// at least as long as its own.
+    /// another ABI version or one shorter than this build's.
     ///
     /// # Safety
     ///
@@ -73,7 +71,7 @@ impl Host {
         // table that starts with its header and lives for the process;
         // `as_ref` maps null to `None`.
         let header = unsafe { api.cast::<Header>().as_ref() }?;
-        if header.abi_major != crate::abi::ABI_MAJOR || !header.covers(size_of::<HostApi>()) {
+        if header.abi_version != crate::abi::ABI_VERSION || !header.covers(size_of::<HostApi>()) {
             return None;
         }
         // SAFETY: the table is readable for its header's size by this
@@ -94,7 +92,7 @@ impl Host {
     ///
     /// ```
     /// if let Some(host) = enshwick::host() {
-    ///     assert_eq!(host.api().header.abi_major, enshwick::abi::ABI_MAJOR);
+    ///     assert_eq!(host.api().header.abi_version, enshwick::abi::ABI_VERSION);
     /// }
     /// ```
     #[must_use]

@@ -1,17 +1,54 @@
 //! The binary interface between the loader and a mod DLL.
 //!
 //! Everything here is `repr(C)` and crosses DLL boundaries, so the layout is
-//! the contract: structs that the other side may outgrow start with a
-//! [`Header`] and only ever grow at the end, enums are integers, strings are
-//! borrowed for the call, and no function unwinds. Mods normally use the safe
-//! layer of this crate instead of these types.
+//! the contract: structs start with a [`Header`], enums are integers, strings
+//! are borrowed for the call, and no function unwinds. A loader loads only
+//! mods built for its own [`ABI_VERSION`]. Mods normally use the safe layer
+//! of this crate instead of these types.
 
-/// The major version of this interface. A loader refuses a mod built for
-/// another major.
-pub const ABI_MAJOR: u16 = 4;
+/// The version of this interface: a hash of the size, alignment and field
+/// offsets of every ABI type. A loader loads only mods built for its own.
+///
+/// Any change to the layout is another version, so a mod built against one
+/// release of this crate loads in the loader of every release with the same
+/// layout and in no other.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::abi::{ABI_VERSION, Header, Manifest};
+///
+/// assert_eq!(Header::of::<Manifest>().abi_version, ABI_VERSION);
+/// ```
+pub const ABI_VERSION: u32 = layout_version(include_bytes!("abi/layout.txt"));
 
-/// The minor version of this interface. A newer minor only appends fields.
-pub const ABI_MINOR: u16 = 1;
+/// Why a loader or its tools refuse a mod built for another [`ABI_VERSION`],
+/// naming the release to rebuild it for.
+///
+/// # Examples
+///
+/// ```
+/// assert!(enshwick::abi::OTHER_ABI.ends_with(enshwick::VERSION));
+/// ```
+pub const OTHER_ABI: &str = concat!(
+    "built for another Enshwick: rebuild it for Enshwick ",
+    env!("CARGO_PKG_VERSION")
+);
+
+/// The ABI version of a golden layout file: 32-bit FNV-1a over its bytes
+/// without carriage returns, so a checkout with Windows line endings builds
+/// the same version.
+const fn layout_version(layout: &[u8]) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    let mut i = 0;
+    while i < layout.len() {
+        if layout[i] != b'\r' {
+            hash = (hash ^ layout[i] as u32).wrapping_mul(0x0100_0193);
+        }
+        i += 1;
+    }
+    hash
+}
 
 /// Whether `id` is a valid mod id: `<author>.<name>`, each part of
 /// `[a-z0-9-]`, at most 64 characters in all.
@@ -88,8 +125,8 @@ pub const fn is_valid_former_id(id: &str) -> bool {
     true
 }
 
-/// The start of every struct the other side may know an older or newer
-/// version of.
+/// The start of every struct that crosses the boundary on its own: its size
+/// and the ABI version of its writer.
 ///
 /// # Examples
 ///
@@ -97,17 +134,15 @@ pub const fn is_valid_former_id(id: &str) -> bool {
 /// use enshwick::abi::{Header, Manifest};
 ///
 /// let header = Header::of::<Manifest>();
-/// assert_eq!(header.abi_major, enshwick::abi::ABI_MAJOR);
+/// assert_eq!(header.abi_version, enshwick::abi::ABI_VERSION);
 /// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, bytemuck::Zeroable, bytemuck::Pod)]
 pub struct Header {
     /// The size of the whole struct as its writer knew it.
     pub size: u32,
-    /// [`ABI_MAJOR`] of the writer.
-    pub abi_major: u16,
-    /// [`ABI_MINOR`] of the writer.
-    pub abi_minor: u16,
+    /// [`ABI_VERSION`] of the writer.
+    pub abi_version: u32,
 }
 
 impl Header {
@@ -130,8 +165,7 @@ impl Header {
         )]
         Self {
             size: size as u32,
-            abi_major: ABI_MAJOR,
-            abi_minor: ABI_MINOR,
+            abi_version: ABI_VERSION,
         }
     }
 
@@ -636,8 +670,8 @@ pub struct ParseLevelError;
 /// assert_eq!(enshwick::abi::exports::INIT, "enshwick_mod_init");
 /// ```
 pub mod exports {
-    /// `extern "system" fn() -> u32`: the [`ABI_MAJOR`](super::ABI_MAJOR) the mod
-    /// was built for.
+    /// `extern "system" fn() -> u32`: the [`ABI_VERSION`](super::ABI_VERSION)
+    /// the mod was built for.
     pub const ABI: &str = "enshwick_mod_abi";
     /// `extern "system" fn() -> *const Manifest`: static, no side effects.
     pub const QUERY: &str = "enshwick_mod_query";

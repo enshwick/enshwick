@@ -7,12 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The major version of this interface. A loader refuses a mod built for
-// another major.
-#define ENSHWICK_ABI_MAJOR 4
-
-// The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 1
+// The ABI version: a hash of the layout of every ABI type. A loader
+// loads only mods built for its own.
+#define ENSHWICK_ABI_VERSION 0xf4f36e0d
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -33,15 +30,13 @@ typedef uint8_t EnshwickAccountActionType;
 // Takes the account off the ban list.
 #define EnshwickAccountActionType_UN_BAN 2
 
-// The start of every struct the other side may know an older or newer
-// version of.
+// The start of every struct that crosses the boundary on its own: its size
+// and the ABI version of its writer.
 typedef struct EnshwickHeader {
   // The size of the whole struct as its writer knew it.
   uint32_t size;
-  // `ABI_MAJOR` of the writer.
-  uint16_t abi_major;
-  // `ABI_MINOR` of the writer.
-  uint16_t abi_minor;
+  // `ABI_VERSION` of the writer.
+  uint32_t abi_version;
 } EnshwickHeader;
 
 // An entity id, as the engine numbers entities: a character, a prop, an item
@@ -4373,7 +4368,7 @@ typedef struct EnshwickVoxelWrite {
 extern "C" {
 #endif
 
-// The ENSHWICK_ABI_MAJOR the mod was built for.
+// The ENSHWICK_ABI_VERSION the mod was built for.
 ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);

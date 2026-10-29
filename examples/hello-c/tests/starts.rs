@@ -6,7 +6,7 @@
 mod tests {
     use std::os::windows::ffi::OsStrExt as _;
 
-    use enshwick::abi::{ABI_MAJOR, Level, Manifest, Status, exports};
+    use enshwick::abi::{ABI_VERSION, Level, Manifest, Status, exports};
     use enshwick::test::{FakeHost, InitFn};
     use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 
@@ -28,7 +28,7 @@ mod tests {
         let abi: unsafe extern "system" fn() -> u32 =
             unsafe { core::mem::transmute(export(exports::ABI)) };
         // SAFETY: `abi` takes nothing and returns a constant.
-        assert_eq!(unsafe { abi() }, u32::from(ABI_MAJOR));
+        assert_eq!(unsafe { abi() }, ABI_VERSION);
 
         // SAFETY: the ABI gives `exports::QUERY` the signature
         // `fn() -> *const Manifest`.

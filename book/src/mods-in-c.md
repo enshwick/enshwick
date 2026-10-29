@@ -12,7 +12,7 @@ which writes one line to the log when it starts.
 
 1. Copy `enshwick.h` next to your source file.
 2. Fill a static `EnshwickManifest`: its `header` is the struct's size and
-   `ENSHWICK_ABI_MAJOR` and `ENSHWICK_ABI_MINOR`; a mod needs at least `id`,
+   `ENSHWICK_ABI_VERSION`; a mod needs at least `id`,
    `version` and `side`. `ENSHWICK_STR_INIT("text")` makes a string.
 3. Define `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init` and
    `enshwick_mod_ready`; `enshwick_mod_shutdown` is optional. The header

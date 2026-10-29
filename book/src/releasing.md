@@ -15,11 +15,11 @@ of their own too, released apart from the platform and from each other.
 
 Which loader a mod runs under is not read from that version but from the ABI
 version `enshwick` was built with (see
-[ABI reference](abi-reference.md#versions)). A mod built against
-`enshwick` X.Y needs a loader of the same ABI major whose ABI minor is
-at least the one X.Y was built with; an older loader does not start the mod
-and logs `update Enshwick`. Any loader of the same ABI major loads a mod built
-against an older `enshwick`.
+[ABI reference](abi-reference.md#versions)). A mod loads only under a loader
+of the same ABI version. Pin `enshwick` with `=`, and release a new build of
+the mod for each Enshwick release that changes the ABI; a loader of another
+version does not start the mod and logs
+`rebuild it for Enshwick <version>`.
 
 A mod's version is [SemVer](https://semver.org). Leave `version` out of
 [`manifest!`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/declare.rs)
@@ -46,7 +46,7 @@ cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
 
 Until the first public release, 1.0.0, this repository has no regular
 releases. The platform's crates carry prerelease versions, `1.0.0-alpha.N`,
-and a mod depends on `enshwick = "1.0.0-alpha.N"`.
+and a mod depends on `enshwick = "=1.0.0-alpha.N"`.
 
 The
 [dev-build workflow](https://github.com/enshwick/enshwick/blob/main/.github/workflows/dev-build.yml),

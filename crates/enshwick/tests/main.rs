@@ -70,7 +70,6 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
-mod old_mods;
 mod pacing;
 #[cfg(feature = "schema")]
 mod pack_schemas;
