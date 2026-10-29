@@ -1,14 +1,27 @@
 # How many literal offsets into game memory each file may still hold,
 # as `<count> <path>`. The test fails on a file with more, and on one with
 # fewer until its count here goes down: an offset leaves a file for
-# reflection or the build table, never the other way. A constant that is no
-# offset into game memory ends with `// bound, not a game offset: <why>`.
+# reflection or the build table, never the other way. A constant spelled in
+# hexadecimal counts, and so does a number in the offset of a game memory
+# read or write, and a constant spelled in decimal that such an offset names.
+# A constant or a call that is no offset into game memory ends with
+# `// bound, not a game offset: <why>`.
 1 src/base_groups/grouping.rs
 4 src/base_groups/window.rs
-4 src/join/target.rs
+1 src/bases/loops/sort.rs
+1 src/buffs.rs
+1 src/ecs.rs
+3 src/interactions.rs
+6 src/join/target.rs
+2 src/knowledge.rs
+2 src/rate_links.rs
+1 src/terrain.rs
+3 src/textures.rs
 3 src/transactions/block.rs
 1 src/transactions/record.rs
 13 src/ui/engine.rs
 4 src/ui/engine/scroll.rs
 1 src/ui/engine/text_field.rs
-1 src/voxels.rs
+1 src/ui/map.rs
+2 src/voxels.rs
+2 src/weather.rs

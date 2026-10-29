@@ -12,6 +12,9 @@ use crate::bases::fake::{self, Fake, record as at, twenty_bases};
 use crate::bases::fake::{FIELDS, LAYOUT};
 use crate::locks::Relock;
 
+/// Where a test element's position sits, three i64 after its u32 id.
+const ELEMENT_POSITION: usize = 8; // bound, not a game offset: a test's memory
+
 /// The test layout's parts, as the build tables read them.
 const RECORD: RecordFields = LAYOUT.record;
 const OBJECT: ObjectFields = LAYOUT.object;
@@ -148,7 +151,7 @@ unsafe extern "system" fn query(found: *mut u8, world: *mut u8, hash: u32) -> u8
         // SAFETY: the new element's u32 id.
         unsafe { write_at(element, 0, e.id) };
         // SAFETY: the new element's position, three i64 at 8.
-        unsafe { write_at(element, 8, e.position) };
+        unsafe { write_at(element, ELEMENT_POSITION, e.position) };
         // SAFETY: the rebuild's list: its u64 length.
         unsafe { write_at(found, VEC.len, len + 1) };
     }
