@@ -30,9 +30,18 @@ pub(crate) fn start(loader: &'static Loader) {
     let started = std::thread::Builder::new()
         .name("enshwick-command-file".into())
         .spawn(move || {
-            watch(files, |path, line| {
-                submit(line, Source::File(shown(&game, path)));
-            })
+            watch(
+                files,
+                |path, line| submit(line, Source::File(shown(&game, path))),
+                |path| {
+                    crate::log!(
+                        WARN,
+                        "{} was edited, not appended to: lines that ran do not run again, \
+                         and only lines past their count run; empty the file to start over",
+                        shown(&game, path)
+                    );
+                },
+            )
         });
     if let Err(e) = started {
         crate::log!(WARN, "the command file is not read: {e}");
