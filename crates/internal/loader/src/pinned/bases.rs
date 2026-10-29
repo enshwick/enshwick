@@ -19,6 +19,7 @@ pub(crate) const CLIENT_CREATE: Symbol = Symbol::new("bases.client_create");
 pub(crate) const CLIENT_DESTROY: Symbol = Symbol::new("bases.client_destroy");
 pub(crate) const CLIENT_SIZE: Constant = Constant::new("bases.client_size");
 pub(crate) const COMFORT_CLEANUP: Symbol = Symbol::new("bases.comfort_cleanup");
+pub(crate) const CONTAINER_BOX: Constant = Constant::new("bases.container_box");
 pub(crate) const CONTAINER_CAP: Constant = Constant::new("bases.container_cap");
 pub(crate) const CONTAINER_DATA: Constant = Constant::new("bases.container_data");
 pub(crate) const CONTAINER_GROW: Constant = Constant::new("bases.container_grow");

@@ -246,6 +246,9 @@ fn find(
     if fields.stride != window::RECORD {
         return Err(SiteError::Stride(fields.stride));
     }
+    if let Some(id) = loops::list_misfit(&fields.container) {
+        return Err(SiteError::Fit(id));
+    }
     let patches = vec![
         size_patch(
             code,

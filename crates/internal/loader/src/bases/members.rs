@@ -406,17 +406,18 @@ pub(super) fn forget() {
 }
 
 /// Writes the lookups' answer at `out`, laid out as `a`: the error byte and
-/// the zero word.
+/// the zero word, which every lookup writes itself.
 ///
 /// # Safety
 ///
-/// - `out` is the lookup's answer, writable for its `a.size` bytes.
+/// - `out` is a lookup's own answer, writable where the game's lookup
+///   writes its error byte and zero word.
 unsafe fn answer(out: *mut u8, a: &Answer, error: u8) {
-    // SAFETY: the caller guarantees a writable answer; its error byte lies
-    // inside it, as `Fields::read` checked.
+    // SAFETY: the caller guarantees a writable answer; its error byte, which
+    // the game's lookups write at `a.error`, the rows read from their code.
     unsafe { write_at(out, a.error, error) };
-    // SAFETY: the same answer; its zero word lies inside it, as
-    // `Fields::read` checked.
+    // SAFETY: the same answer; its zero word, which the game's lookups
+    // write at `a.zero`.
     unsafe { write_at(out, a.zero, 0u32) };
 }
 
@@ -424,17 +425,18 @@ unsafe fn answer(out: *mut u8, a: &Answer, error: u8) {
 ///
 /// # Safety
 ///
-/// - `out` is writable for the answer's size the build table gives, `obj`
-///   a live bases object, `p` readable for three `f32`; the game's own
-///   arguments to the lookup.
+/// - `out` is writable where the game's point in base writes its answer:
+///   the error byte, the zero word and the index byte the table rows read
+///   from its code; `obj` a live bases object, `p` readable for three
+///   `f32`; the game's own arguments to the lookup.
 pub(super) unsafe fn base_at(out: *mut u8, game: &Game, p: [f32; 3]) {
     let a = &game.fields.answer;
     let found = lookup::base_at(game, p);
     // SAFETY: the caller guarantees a writable answer.
     unsafe { answer(out, a, if found.is_some() { 0 } else { NOT_IN_A_BASE }) };
     let index = found.and_then(|i| u8::try_from(i).ok()).unwrap_or(0);
-    // SAFETY: the caller guarantees a writable answer; its index byte lies
-    // inside it, as `Fields::read` checked.
+    // SAFETY: the caller guarantees a writable answer; its index byte, which
+    // the game's point in base writes at `a.index`.
     unsafe { write_at(out, a.index, index) };
 }
 
@@ -447,7 +449,8 @@ pub(super) fn in_base(game: &Game, i: usize, p: [f32; 3]) -> bool {
 ///
 /// # Safety
 ///
-/// - As for [`base_at`].
+/// - `out` is writable for the answer's size the build table reads from
+///   this lookup's code, `a.size` bytes; the rest as for [`base_at`].
 pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
     let a = &game.fields.answer;
     let Some(holder) = lookup::holder_at(game, p) else {
@@ -552,8 +555,8 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
         };
         // SAFETY: zone `z` is listed, `size` bytes in the live list, and box
         // `len` of the container is room it owns, its boxes the zone list's
-        // `size` bytes, as the game's own lookup copies them; the two never
-        // overlap.
+        // `size` bytes, as `Fields::read` checked against the box the game's
+        // own lookup copies; the two never overlap.
         unsafe {
             core::ptr::copy_nonoverlapping(game.zone_entry(z), data.wrapping_add(at * size), size);
         }

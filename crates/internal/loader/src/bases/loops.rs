@@ -136,6 +136,20 @@ pub(super) struct StockFields {
     pub(super) size: usize,
 }
 
+/// The first table entry of the game's container `c` whose field lies past
+/// the bytes a record's stock list spans; `None` when every one fits.
+pub(super) fn list_misfit(c: &Container) -> Option<&'static str> {
+    [
+        (bases::CONTAINER_DATA, c.data),
+        (bases::CONTAINER_LEN, c.len),
+        (bases::CONTAINER_CAP, c.cap),
+        (bases::CONTAINER_GROW, c.grow),
+    ]
+    .into_iter()
+    .find(|&(_, at)| at + 8 > LIST_BYTES)
+    .map(|(id, _)| id.id())
+}
+
 impl Layout {
     /// The layout as `offset` reads the build table's constants, each field
     /// checked to lie inside its record, the object below its window
@@ -194,14 +208,16 @@ impl Layout {
     }
 
     /// The first table entry whose field lies outside its record, the
-    /// object's fields below the window records, or the stock cache's
-    /// answer; `None` when every one fits.
+    /// object's fields below the window's records and stock slots, a map
+    /// outside a stock slot, a set field before its set, or a field outside
+    /// the stock cache's answer; `None` when every one fits.
     fn misfit(&self) -> Option<&'static str> {
         let r = &self.record;
         let o = &self.object;
         let m = &self.map;
         let s = &self.stock;
-        let object_end = window::RECORDS + window::WINDOW * window::RECORD;
+        let object_end = (window::RECORDS + window::WINDOW * window::RECORD)
+            .min(window::SLOTS + window::WINDOW * window::SLOT);
         let map_end = [
             m.bitmap + 8,
             m.buckets + 8,
@@ -215,9 +231,9 @@ impl Layout {
         let in_record = [
             (bases::RECORD_LIST_ALL, r.list_all + LIST_BYTES),
             (bases::RECORD_LIST_KEPT, r.list_kept + LIST_BYTES),
-            (bases::RECORD_SET_BITMAP, r.set_bitmap.max(r.set) + 8),
-            (bases::RECORD_SET_BUCKETS, r.set_buckets.max(r.set) + 8),
-            (bases::RECORD_SET_COUNT, r.set_count.max(r.set) + 4),
+            (bases::RECORD_SET_BITMAP, r.set_bitmap + 8),
+            (bases::RECORD_SET_BUCKETS, r.set_buckets + 8),
+            (bases::RECORD_SET_COUNT, r.set_count + 4),
             (bases::RECORD_COMFORT_LEN, r.comfort + r.comfort_len),
             (bases::RECORD_PROPS, r.props + 8),
             (bases::RECORD_BASE_ID, r.base_id + 16),
@@ -236,12 +252,18 @@ impl Layout {
             (bases::NPC_MAP, o.npc_map + map_end),
             (bases::ANIMAL_MAP, o.animal_map + map_end),
             (bases::STAGING, o.staging + map_end),
-            (bases::PAGE, o.page + 4),
+            (bases::PAGE, o.page + 8),
             (bases::POSITION, o.position + 4),
             (bases::COUNT, self.count + 4),
         ]
         .map(|(id, end)| (id, end, object_end));
         let in_values = [
+            (bases::MAP_COUNT, map_end, window::SLOT),
+            (
+                bases::RECORD_SET,
+                r.set,
+                r.set_bitmap.min(r.set_buckets).min(r.set_count),
+            ),
             (bases::NPC_KIND, o.npc_kind + 1, o.npc_value),
             (bases::ANIMAL_VALUE, 3, o.animal_value),
             (bases::STOCK_ENTITIES, s.entities + 8, s.size),
@@ -484,9 +506,9 @@ pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
 }
 
 /// The bases of `obj` when it holds more than the game's 16 and the window
-/// is armed, with the window's layout; `None` sends a call to the game's own code. Every whole-array
-/// function enters here, so it also counts entries while the grouping lends
-/// the count.
+/// is armed, with the window's layout; `None` sends a call to the game's own
+/// code. Every whole-array function enters here, so it also counts entries
+/// while the grouping lends the count.
 ///
 /// # Safety
 ///

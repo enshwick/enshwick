@@ -115,6 +115,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::ANSWER_SIZE.id(),
     pinned::bases::ANSWER_ZERO.id(),
     pinned::bases::CHANGES.id(),
+    pinned::bases::CONTAINER_BOX.id(),
     pinned::bases::CONTAINER_CAP.id(),
     pinned::bases::CONTAINER_DATA.id(),
     pinned::bases::CONTAINER_GROW.id(),
@@ -213,8 +214,9 @@ struct Answer {
 }
 
 /// The game's container, also the bases object's own zone list: data,
-/// length, capacity, the callback that grows it, and the allocator it grows
-/// through, null when it may not leave its inline room.
+/// length, capacity, the callback that grows it, the allocator it grows
+/// through, null when it may not leave its inline room, and the bytes of
+/// each box it holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Container {
     data: usize,
@@ -222,6 +224,7 @@ struct Container {
     cap: usize,
     grow: usize,
     allocator: usize,
+    boxed: usize,
 }
 
 impl Fields {
@@ -257,6 +260,7 @@ impl Fields {
                 len: f(pinned::bases::CONTAINER_LEN)?,
                 cap: f(pinned::bases::CONTAINER_CAP)?,
                 grow: f(pinned::bases::CONTAINER_GROW)?,
+                boxed: f(pinned::bases::CONTAINER_BOX)?,
                 allocator: zone_list_allocator
                     .checked_sub(zone_list)
                     .ok_or("the zone list's allocator lies before its list")?,
@@ -272,7 +276,7 @@ impl Fields {
 
     /// Whether a zone box holds both corners, the answer holds its error,
     /// zero word, index and a whole box, and the zone list's length is the
-    /// container's.
+    /// container's, whose boxes are the zone list's.
     fn fits(&self) -> bool {
         let Answer {
             error,
@@ -288,6 +292,7 @@ impl Fields {
             && index < size
             && boxed + self.zone_size <= size
             && self.zone_list + self.container.len == self.zone_list_len
+            && self.container.boxed == self.zone_size
     }
 }
 
@@ -1158,6 +1163,7 @@ mod tests {
             (pinned::bases::CONTAINER_LEN, f.container.len),
             (pinned::bases::CONTAINER_CAP, f.container.cap),
             (pinned::bases::CONTAINER_GROW, f.container.grow),
+            (pinned::bases::CONTAINER_BOX, f.container.boxed),
             (
                 pinned::bases::ZONE_LIST_ALLOCATOR,
                 f.zone_list + f.container.allocator,

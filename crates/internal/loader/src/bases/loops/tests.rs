@@ -462,6 +462,48 @@ fn a_field_past_its_record_object_or_answer_is_named() {
 }
 
 #[test]
+fn a_field_over_the_window_s_slots_a_slot_s_map_or_its_set_is_named() {
+    let in_slots = Layout {
+        object: ObjectFields {
+            staging: window::SLOTS + window::WINDOW * window::SLOT - 0x10,
+            ..OBJECT
+        },
+        ..LAYOUT
+    };
+    assert_eq!(in_slots.misfit(), Some(bases::STAGING.id()));
+    let wide_map = Layout {
+        map: MapFields {
+            count: window::SLOT - 2,
+            ..MAP
+        },
+        ..LAYOUT
+    };
+    assert_eq!(wide_map.misfit(), Some(bases::MAP_COUNT.id()));
+    let set_after = Layout {
+        record: RecordFields {
+            set: RECORD.set_bitmap + 8,
+            ..RECORD
+        },
+        ..LAYOUT
+    };
+    assert_eq!(set_after.misfit(), Some(bases::RECORD_SET.id()));
+    let page = Layout {
+        object: ObjectFields {
+            page: window::SLOTS + window::WINDOW * window::SLOT - 4,
+            ..OBJECT
+        },
+        ..LAYOUT
+    };
+    assert_eq!(page.misfit(), Some(bases::PAGE.id()), "a page is a qword");
+    assert_eq!(list_misfit(&VEC), None);
+    let grow = Container {
+        grow: LIST_BYTES - 4,
+        ..VEC
+    };
+    assert_eq!(list_misfit(&grow), Some(bases::CONTAINER_GROW.id()));
+}
+
+#[test]
 fn the_count_getter_jump_lands_on_ours() {
     let bytes = jump_to(0x1122_3344_5566_7788);
     assert_eq!(bytes[..6], [0xFF, 0x25, 0, 0, 0, 0]);

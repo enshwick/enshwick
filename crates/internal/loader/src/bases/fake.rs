@@ -35,6 +35,7 @@ pub(super) const FIELDS: Fields = Fields {
         cap: 0x10,
         grow: 0x18,
         allocator: 0x20,
+        boxed: 0x20,
     },
 };
 
