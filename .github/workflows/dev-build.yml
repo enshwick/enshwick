@@ -40,7 +40,7 @@ jobs:
       id-token: write
       attestations: write
     # From main: the runners take only enshwick/.github's workflows on main.
-    uses: enshwick/.github/.github/workflows/dev-bundle.yml@ci/release-off-shared-runners # zizmor: ignore[unpinned-uses]
+    uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
     with:
       publish: ${{ github.event_name == 'push' || inputs.publish }}
 
