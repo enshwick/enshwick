@@ -364,6 +364,8 @@ revision = 1
 "chat.store_slot_count" = { value = 0x20, pattern = "49 83 C2 10 48 05 C0 00 00 00 49 83 FA ?? 0F 82 ?? ?? ?? ?? 48 8B 7C 24 ??", at = 13, size = 1 }
 "chat.store_tail" = { value = 0x1c8, pattern = "48 8B 86 ?? ?? ?? ?? 48 89 47 ?? 48 89 BE ?? ?? ?? ?? 48 FF 86 ?? ?? ?? ?? 44 8B 47 ?? 49 83 C0 17", at = 14, size = 4 }
 "chat.node_delivered" = { value = 0x20, pattern = "44 88 27 83 E0 3C 89 6F ?? 49 8B 4F ?? 89 47 ?? 8B 84 24 ?? ?? ?? ??", at = 8, size = 1 }
+"chat.handle_slot" = { value = 0x7f, pattern = "45 8B E7 8B C9 41 83 E4 ?? 41 C1 EF 07", at = 8, size = 1 }
+"chat.line_overhead" = { value = 0x17, via = "chat.post", within = 0x200, pattern = "44 8B 47 ?? 49 83 C0 ?? 49 8B C0 83 E0 03", at = 7, size = 1 }
 "chat.max_text" = { value = 0x400, pattern = "45 0F B6 E0 48 8B F2 4C 8B E9 48 3D ?? ?? ?? ?? 76 16 89 69 ?? 48 8B C1", at = 12, size = 4 }
 "chat.reply_type" = { value = 0x4, pattern = "4C 8D 44 24 ?? 4C 89 44 24 ?? 41 B0 ?? 48 89 44 24 ?? 89 4C 24 ??", at = 12, size = 1 }
 "label.max_text" = { value = 0xff, pattern = "48 8D 4D ?? 89 5D ?? B8 ?? ?? ?? ?? 49 8B 5E ?? 48 3B D8 48 0F 47 D8", at = 8, size = 4, plus = -1 }
