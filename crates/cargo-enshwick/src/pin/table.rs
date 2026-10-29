@@ -733,7 +733,7 @@ revision = 1
         let body = enshwick_gamedata::Body::of(&code, vec![1]).unwrap();
         let pattern = BodyPattern {
             window: SymbolPattern {
-                text: "E8 ?? ?? ?? ?? B8 01 00 00 00 C3".to_owned(),
+                text: "E8 ?? ?? ?? ??".to_owned(),
                 locate: Locate::At(0),
             },
             body: body.clone(),

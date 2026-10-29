@@ -328,7 +328,9 @@ pub(crate) fn body(exe: &Exe<'_>, rva: u64, site: Option<u64>) -> anyhow::Result
         .code(rva, len)
         .with_context(|| format!("{rva:#x} is not code"))?;
     let masked = Masked::decode(code, rva, &exe.absolute_range());
-    let body = body_of(&masked).with_context(|| format!("the function at {rva:#x} has no end"))?;
+    let body = body_of(&masked).with_context(|| {
+        format!("the function at {rva:#x} has no end, or a moving field not of 4 bytes")
+    })?;
     let window = match site {
         Some(site) => {
             let (window, target) = symbol_through(exe, site)?;
@@ -337,14 +339,18 @@ pub(crate) fn body(exe: &Exe<'_>, rva: u64, site: Option<u64>) -> anyhow::Result
             }
             window
         }
-        None => SymbolPattern {
-            text: render(
-                &unique_window(text, &masked, 0..1, &[], &[], true).with_context(|| {
-                    format!("no unique window from {rva:#x}; pick `body:<rva>` of a call to it")
-                })?,
-            ),
-            locate: Locate::At(0),
-        },
+        None => unique_window(text, &masked, 0..1, &[], &[], true)
+            .filter(|window| window.bytes.len() * 2 <= body.len())
+            .map(|window| SymbolPattern {
+                text: render(&window),
+                locate: Locate::At(0),
+            })
+            .or_else(|| preceded(exe, rva, &body))
+            .with_context(|| {
+                format!(
+                    "no unique window over at most half of the function at {rva:#x}; pick `body:<rva>` of a call to it"
+                )
+            })?,
     };
     Ok(BodyPattern { window, body })
 }
@@ -357,6 +363,66 @@ fn body_parts(masked: &Masked, text: &[u8]) -> Option<(Owned, Body)> {
     let body = body_of(masked)?;
     let window = unique_window(text, masked, 0..1, &[], &[], true)?;
     Some((window, body))
+}
+
+/// A window that ends in the first instructions of the function at `rva`
+/// and starts in the code before it, for a short function whose own
+/// window would cover most of it: at most half of `body` lies in the
+/// window.
+fn preceded(exe: &Exe<'_>, rva: u64, body: &Body) -> Option<SymbolPattern> {
+    let functions = exe.functions();
+    let before = functions.get(functions.partition_point(|f| f.end <= rva).checked_sub(1)?)?;
+    let len = rva - before.start + body.len() as u64;
+    let masked = Masked::decode(
+        exe.code(before.start, len)?,
+        before.start,
+        &exe.absolute_range(),
+    );
+    let window = preceded_window(
+        &masked,
+        usize::try_from(rva - before.start).ok()?,
+        body,
+        exe.text().0,
+    )?;
+    Some(SymbolPattern {
+        text: render(&window.0),
+        locate: Locate::At(u64::try_from(window.1).ok()?),
+    })
+}
+
+/// The smallest unique window in `text` that ends in the function at
+/// `offset` of `masked` with at most half of `body` and starts as late as
+/// it can before it, with how far before the function it starts.
+fn preceded_window(
+    masked: &Masked,
+    offset: usize,
+    body: &Body,
+    text: &[u8],
+) -> Option<(Owned, usize)> {
+    let first = masked.insn_at(offset)?;
+    let inside = |end: usize| {
+        masked
+            .insns
+            .get(end - 1)
+            .is_some_and(|last| (last.offset + last.len - offset) * 2 <= body.len())
+    };
+    let ends = (first + 1..=masked.insns.len()).take_while(|&end| inside(end));
+    for end in ends {
+        'starts: for start in (0..=first).rev() {
+            for loose in [true, false] {
+                let window = masked.window_hiding(start..end, &[], loose, &[])?;
+                if window.bytes.len() > MAX_LEN {
+                    break 'starts;
+                }
+                let pattern = window.pattern();
+                if pattern.significant() >= MIN_SIGNIFICANT && pattern.find(text, 2).len() == 1 {
+                    let before = offset - window.start;
+                    return Some((window, before));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// The body of the function that starts `masked`, every masked field open.
@@ -443,6 +509,31 @@ mod tests {
         );
         assert!(window.bytes.len() <= MAX_LEN);
         assert_eq!(window.pattern().find(&text, 2), [8]);
+    }
+
+    #[test]
+    fn a_short_function_s_window_starts_in_the_code_before_it() {
+        // sub rsp, 0x28; mov ecx, 0x44332211; add rsp, 0x28; ret
+        let before = [
+            0x48, 0x83, 0xec, 0x28, 0xb9, 0x11, 0x22, 0x33, 0x44, 0x48, 0x83, 0xc4, 0x28, 0xc3,
+            0xcc, 0xcc,
+        ];
+        let function = movs(6);
+        let mut text = function.clone();
+        text.extend_from_slice(&[0xcc, 0xcc]);
+        let at = text.len();
+        text.extend_from_slice(&before);
+        text.extend_from_slice(&function);
+        text.push(0xcc);
+        let body = Body::of(&function, vec![1]).unwrap();
+        let masked = Masked::decode(&text[at..], 0x1000, &NOWHERE);
+        let (window, ahead) = preceded_window(&masked, before.len(), &body, &text).unwrap();
+        assert_eq!(window.pattern().find(&text, 2), [at + before.len() - ahead]);
+        assert!(
+            (window.bytes.len() - ahead) * 2 <= body.len(),
+            "at most half of it"
+        );
+        assert!(ahead > 0);
     }
 
     #[test]

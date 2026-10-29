@@ -457,7 +457,8 @@ mod tests {
                 }
                 let head = resolved.head(id).is_some();
                 let bytes = resolved.constant(&format!("{id}.bytes")).is_some();
-                if !head && !bytes {
+                let body = resolved.body(id).is_some();
+                if !head && !bytes && !body {
                     unchecked.push(format!("{}: {id}", table.name()));
                 }
             }
@@ -470,7 +471,7 @@ mod tests {
     /// so a change to the game's logic there fails the code check and
     /// turns its feature off.
     #[test]
-    fn every_replaced_function_carries_a_body_pattern_in_every_table() {
+    fn every_replaced_function_carries_a_body_in_every_table() {
         let mut wrong = Vec::new();
         for table in load() {
             for symbol in crate::pinned::BODIES {

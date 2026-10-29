@@ -249,6 +249,37 @@ impl Number {
 /// a copy of a whole function, which a [`Body`] checks by its hash instead.
 pub const MAX_PATTERN: usize = 192;
 
+/// Refuses a body that no pattern finds, and an own window that spans more
+/// than half of the function, counted from the function's start: such a
+/// window holds the function's code, and the symbol is found through a call
+/// to it (`rel`) or a window that starts before it instead.
+fn check_body_window(
+    id: &str,
+    body: &Body,
+    pattern: Option<&str>,
+    locate: Locate,
+) -> Result<(), TableError> {
+    let Some(text) = pattern else {
+        return Err(TableError::Toml(format!(
+            "{id}: a body needs a pattern that finds its function"
+        )));
+    };
+    let inside = match locate {
+        Locate::At(at) => text
+            .split_whitespace()
+            .count()
+            .saturating_sub(usize::try_from(at).unwrap_or(usize::MAX)),
+        _ => 0,
+    };
+    if inside.saturating_mul(2) > body.len() {
+        return Err(TableError::Toml(format!(
+            "{id}: a body's own window spans {inside} of its {} bytes; find it through a call (`rel`)",
+            body.len()
+        )));
+    }
+    Ok(())
+}
+
 fn pattern(id: &str, text: Option<String>) -> Result<Option<Pattern>, TableError> {
     text.map(|text| {
         let pattern = Pattern::parse(&text).map_err(|e| TableError::Pattern {
@@ -321,6 +352,9 @@ impl Table {
                             }
                         };
                         let body = full.body.map(|body| body.body(&id)).transpose()?;
+                        if let Some(body) = &body {
+                            check_body_window(&id, body, full.pattern.as_deref(), locate)?;
+                        }
                         (full.rva, full.pattern, locate, body)
                     }
                 };
@@ -508,9 +542,9 @@ impl Table {
     /// its pattern in `code`, the code section that starts at `code_rva`.
     /// A symbol counts when its pattern matches exactly once and the code
     /// there still starts with the bytes its `<id>.bytes` constant pins and
-    /// still holds its whole function's [`Body`], if any; a constant counts when the code that uses it is still found
-    /// once, and takes the value read from that code where its operand
-    /// say; a constant read [`Constant::via`] a symbol counts when that
+    /// still holds its whole function's [`Body`], if any; a constant counts
+    /// when the code that uses it is still found once, and takes the value
+    /// read from that code where its operand say; a constant read [`Constant::via`] a symbol counts when that
     /// symbol counts and its code there matches; a constant in a
     /// [`Constant::cell`] counts when the cell's symbol counts and `cell`
     /// reads the `u32` at its RVA, and takes that value. Everything else is

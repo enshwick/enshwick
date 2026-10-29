@@ -6,6 +6,23 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `Body`, `Resolved::body` and `MAX_PATTERN`: a symbol whose whole function
+  the loader relies on is checked by the function's length, its moving
+  4-byte fields and a hash of the rest (#710).
+
+### Changed
+
+- Breaking: a body row reads `body = { len, open, hash }` instead of
+  `body = true` over a pattern of the whole function, and `Symbol::body`
+  returns `Option<&Body>`. A body row needs a pattern that finds it: its own
+  window over at most half of it, or a call to it (`rel`) (#710).
+- Breaking: a table pattern spans at most 192 bytes; a longer one does not
+  read (#710).
+- `Table::fall_back` carries a body symbol only where its function still
+  holds its body (#710).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added

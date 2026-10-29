@@ -413,8 +413,8 @@ impl Loader {
     /// finds it directly, its first eight bytes are the table's
     /// `<id>.bytes`, when the table pins them, and its whole function holds
     /// the table's body, when the table has one. A table carried over already
-    /// checked both while it found the symbol, so there only the presence of
-    /// a check counts. False for a symbol the build lacks.
+    /// made every check while it found the symbol, so there only the
+    /// presence of a check counts. False for a symbol the build lacks.
     pub(crate) fn code_holds(&self, id: Symbol) -> bool {
         let Some(address) = self.address(id) else {
             return false;

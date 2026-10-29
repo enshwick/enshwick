@@ -281,13 +281,15 @@ mod tests {
     ];
 
     /// A body row holds the function's length, its open fields and a hash,
-    /// never its bytes; a malformed one, or the old whole-code flag, is
-    /// refused.
+    /// never its bytes, and a pattern that finds it: its own window over at
+    /// most half of it, or a call to it. A malformed one, one no pattern
+    /// finds, one whose own window covers most of it, or the old whole-code
+    /// flag, is refused.
     #[test]
     fn a_body_row_reads_its_length_open_fields_and_hash() {
         let body = Body::of(&FUNCTION, vec![3]).unwrap();
         let row = format!(
-            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ?? 85 C0 74 01 C3", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ??", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
             body.hash()
         );
         let table = body_table(&row).unwrap();
@@ -296,6 +298,14 @@ mod tests {
         let plain = body_table(r#""f.head" = { rva = 0x1000, pattern = "33 C0 C3" }"#).unwrap();
         assert_eq!(plain.symbols()[0].body(), None);
         assert_eq!(plain.resolve().body("f.head"), None);
+        let through = format!(
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B CB E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 74 10", rel = 4, body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            body.hash()
+        );
+        assert_eq!(
+            body_table(&through).unwrap().symbols()[0].body(),
+            Some(&body)
+        );
         let hash = "0123456789abcdef0123456789abcdef";
         for bad in [
             r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", body = true }"#.to_owned(),
@@ -312,10 +322,15 @@ mod tests {
             format!(
                 r#""f.whole" = {{ rva = 0x1000, body = {{ len = 16, open = [0, 3], hash = "{hash}" }} }}"#
             ),
+            format!(r#""f.whole" = {{ rva = 0x1000, body = {{ len = 8, hash = "{hash}" }} }}"#),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, pattern = "33 C0 31 C9 C3", body = {{ len = 8, hash = "{hash}" }} }}"#
+            ),
             r#""f.whole" = { rva = 0x1000, body = { len = 8, hash = "12" } }"#.to_owned(),
             r#""f.whole" = { rva = 0x1000, body = { len = 8, hash = "zz23456789abcdef0123456789abcdef" } }"#.to_owned(),
         ] {
-            assert!(body_table(&bad).is_err(), "{bad}");
+            let error = body_table(&bad).unwrap_err().to_string();
+            assert!(error.contains("f.whole"), "{bad}: {error}");
         }
     }
 
@@ -349,7 +364,7 @@ mod tests {
     fn a_carried_body_symbol_counts_only_where_its_whole_function_holds() {
         let body = Body::of(&FUNCTION, vec![3]).unwrap();
         let row = format!(
-            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ?? 85 C0", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ??", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
             body.hash()
         );
         let table = body_table(&row).unwrap();
