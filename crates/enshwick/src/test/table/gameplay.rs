@@ -9,7 +9,7 @@ use crate::abi::{
     Side, SkillCheckFn, Status, SummonFn, SurvivorLookupFn, SurvivorStatusFn,
 };
 use crate::test::table::mods::list;
-use crate::test::table::{put, put_list, with};
+use crate::test::table::{Registration, put, put_list, with};
 
 pub(crate) extern "system" fn altars_open(_me: ModHandle) -> Status {
     with(Status::MISSING, |s| {
@@ -531,11 +531,18 @@ pub(crate) extern "system" fn quests(
 
 pub(crate) extern "system" fn rate(_me: ModHandle, rate: RateId) -> Status {
     with(Status::MISSING, |s| {
+        if crate::rates::Rate::from_id(rate).is_none() {
+            return Status::BAD_ARGS;
+        }
+        let joins = s.manifest.as_ref().is_none_or(|manifest| manifest.joins);
+        if !crate::rules::may_declare_rate(rate, joins) {
+            return Status::REFUSED;
+        }
         if s.host.missing_rates.contains(&rate) {
             return Status::MISSING;
         }
-        if crate::rates::Rate::from_id(rate).is_none() {
-            return Status::BAD_ARGS;
+        if s.registration == Registration::Closed {
+            return Status::TOO_LATE;
         }
         if !s.rates.iter().any(|&(declared, _)| declared == rate) {
             s.rates.push((rate, 1.0));

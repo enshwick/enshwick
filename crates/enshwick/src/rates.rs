@@ -370,7 +370,7 @@ impl Load<'_> {
     ///
     /// See the [module](self).
     pub fn rate(&mut self, rate: Rate) -> Result<RateHandle, Off> {
-        if rate.seen_by_clients() && !self.joins() {
+        if !crate::rules::may_declare_rate(rate.id(), self.joins()) {
             return Err(Off::new(format!(
                 "the rate {rate:?}: clients count it too, so only a mod with `join: true` declares it"
             )));

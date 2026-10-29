@@ -30,7 +30,7 @@ use core::cell::RefCell;
 use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use enshwick::abi::{Registers, UiWidget};
-use enshwick::config::{Scope, Stage};
+use enshwick::config::Scope;
 use world::{WorldRows, world_settings};
 
 use crate::configure::rows::{self, Lock, Row, Widget};
@@ -39,6 +39,7 @@ use crate::host::Loader;
 use crate::listing::{self, Listing};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind, WORLD_SETTINGS_OPENED};
 use crate::others::Origin;
 use crate::texts;
 
@@ -112,6 +113,17 @@ enum Page {
 }
 
 impl Page {
+    /// Which page this is, as far as Back cares.
+    const fn kind(&self) -> Kind {
+        match self {
+            Self::List { .. } => Kind::List,
+            Self::Settings { .. } => Kind::Settings,
+            Self::ServerList { .. } => Kind::ServerList,
+            Self::ServerSettings { .. } => Kind::ServerSettings,
+            Self::Actions(_) => Kind::Actions,
+        }
+    }
+
     /// The text fields of the page, on a settings page.
     fn entries(&mut self) -> Option<&mut Entries> {
         match self {
@@ -232,7 +244,7 @@ fn entry(from: u8, draw: impl FnOnce(&Engine, &super::engine::UiText) -> bool) {
     // the game reaches while drawing its menu inside a frame on the
     // interface thread.
     if showing && unsafe { engine.back_pressed(NODE.load(Ordering::Relaxed)) } {
-        BACK.store(1, Ordering::Relaxed);
+        BACK.store(BACK_PRESSED, Ordering::Relaxed);
     }
     let text = copy(&[texts::text("mods.title").as_bytes()]);
     if draw(engine, &text) && !showing {
@@ -290,7 +302,7 @@ unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core
         // four-byte submenu state, which the menu reads and writes only on
         // this thread; 4 opens its world settings, as its own entry does.
         unsafe { crate::memory::write(submenu, 0, WORLD_SETTINGS_SUBMENU) };
-        BACK.store(2, Ordering::Relaxed);
+        BACK.store(WORLD_SETTINGS_OPENED, Ordering::Relaxed);
     }
     let _drawn = PAUSE_MENU_FUSE.run("the pause menu's entry", || {
         // SAFETY: the hook at the table's `ui.pause_menu_site` sits right
@@ -340,7 +352,7 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
             PAUSE_SEEN.load(Ordering::Relaxed)
         };
         // The menu under the screen went away: the screen goes with it.
-        if seen + 1 < frame {
+        if mods_screen::missed_frame(seen, frame) {
             *slot = None;
             return;
         }
@@ -348,20 +360,19 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
         if let Some(entries) = screen.page.entries() {
             entries.ending = false;
         }
-        match BACK.swap(0, Ordering::Relaxed) {
-            // The world settings opened over the pause menu: the screen goes.
-            2 => {
+        let editing = screen.page.editing();
+        match mods_screen::heard(BACK.swap(0, Ordering::Relaxed), editing) {
+            Heard::WorldSettings => {
                 *slot = None;
                 JUMP_SHOWN.store(0, Ordering::Relaxed);
                 return;
             }
-            // Back while a text field has the caret only ends the typing.
-            1 if screen.page.editing() => screen.page.end_typing(),
-            1 if back(screen) => {
+            Heard::EndTyping => screen.page.end_typing(),
+            Heard::Back if back(screen) => {
                 *slot = None;
                 return;
             }
-            _ => {}
+            Heard::Back | Heard::Nothing => {}
         }
         // SAFETY: this function's `# Safety` gives the frame, its thread, its
         // `context` and no other open window, which `show` asks for.
@@ -377,23 +388,19 @@ pub(super) unsafe fn draw(loader: &Loader, engine: &Engine, context: usize, fram
 /// closes.
 fn back(screen: &mut Screen) -> bool {
     screen.message = None;
-    match screen.page {
-        Page::Settings { .. } | Page::ServerList { .. } => {
-            screen.page = Page::List { first: 0 };
-            false
-        }
-        Page::ServerSettings { .. } => {
-            open_server_list(screen);
-            false
-        }
-        Page::Actions(ref mut view) => {
-            if view.back() {
+    match mods_screen::back(screen.page.kind()) {
+        Back::Close => return true,
+        Back::List => screen.page = Page::List { first: 0 },
+        Back::ServerList => open_server_list(screen),
+        Back::Inside => {
+            if let Page::Actions(view) = &mut screen.page
+                && view.back()
+            {
                 screen.page = Page::List { first: 0 };
             }
-            false
         }
-        Page::List { .. } => true,
     }
+    false
 }
 
 /// Whether this client is joined to a server it does not host, which takes
@@ -486,7 +493,7 @@ unsafe fn show(loader: &Loader, engine: &Engine, context: usize, screen: &mut Sc
     }
     if screen.page.editing() {
         // Taken as a Back press in the next frame, which ends the typing.
-        BACK.store(1, Ordering::Relaxed);
+        BACK.store(BACK_PRESSED, Ordering::Relaxed);
         return false;
     }
     self::back(screen)
@@ -639,9 +646,7 @@ fn server_settings(
             });
             *rows = rows::rows(&heard_schema, &text, None, words);
             if !admin {
-                for row in rows.iter_mut() {
-                    row.lock = Lock::Server;
-                }
+                mods_screen::lock_to_server(rows);
             }
             *schema = Some(heard_schema);
         }
@@ -839,14 +844,8 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     done
 }
 
-/// How the screen shows its lists: in its scroll area, or `per_page` at a
-/// time on a build without scroll areas.
 fn listing(paint: &Painter<'_>, per_page: usize) -> Listing {
-    if paint.scrolled() {
-        Listing::Scrolled
-    } else {
-        Listing::Paged { per_page }
-    }
+    Listing::new(paint.scrolled(), per_page)
 }
 
 /// The page line and the Previous and Next buttons of a list of `count`
@@ -884,22 +883,8 @@ fn page_rows(loader: &Loader, index: usize) -> Vec<Row> {
     rows::rows(&schema, &file, None, words)
 }
 
-/// The settings of `record` each player keeps, the ones the Mods screen
-/// edits; `None` when it has none.
 fn client_schema(record: &crate::host::ModRecord) -> Option<enshwick::config::Schema> {
-    let mut schema = record.schema.relock().clone()?;
-    schema.fields.retain(|f| f.scope == Scope::User);
-    (!schema.fields.is_empty()).then_some(schema)
-}
-
-/// A joined server's join values, an inline table, as a table.
-fn server_table(values: &str) -> Option<toml::Table> {
-    format!("v = {values}")
-        .parse::<toml::Table>()
-        .ok()?
-        .remove("v")?
-        .as_table()
-        .cloned()
+    mods_screen::user_settings(record.schema.relock().clone()?)
 }
 
 /// Draws a page of mod `index`'s settings; the outcome of a change.
@@ -953,15 +938,7 @@ fn draw_row(
     row: &Row,
     entries: Option<&mut Entries>,
 ) -> Option<String> {
-    let mut label = row.label.clone();
-    match row.stage {
-        Stage::Startup => label = texts::fill("row.startup", &[("label", &label)]),
-        Stage::Restart => label = texts::fill("row.restart", &[("label", &label)]),
-        _ => {}
-    }
-    if row.lock == Lock::Server {
-        label = texts::fill("row.server", &[("label", &label)]);
-    }
+    let label = mods_screen::row_label(row);
     let read_only = row.lock != Lock::Open;
     match &row.widget {
         Widget::Toggle(on) => paint
@@ -1039,6 +1016,4 @@ thread_local! {
     static WORLD: RefCell<Option<WorldRows>> = const { RefCell::new(None) };
 }
 
-#[cfg(test)]
-mod tests;
 mod world;

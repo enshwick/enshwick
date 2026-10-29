@@ -750,6 +750,48 @@ pub fn menu_line(
     }
 }
 
+/// Why the main menu's line stays off on this build; `None` when it shows.
+///
+/// The hook needs its site, which the build's table names (`in_table`) and
+/// whose code holds there (`site`), and reflection must know the version
+/// line's look (`look`).
+#[must_use]
+pub const fn menu_line_off(site: bool, in_table: bool, look: bool) -> Option<&'static str> {
+    if !site {
+        return Some(if in_table {
+            "the code at ui.legal_line_site does not match its pattern or bytes"
+        } else {
+            "its table has no ui.legal_line_site"
+        });
+    }
+    if !look {
+        return Some("reflection lacks the version line's look (legalText, fontSizes.xsmall)");
+    }
+    None
+}
+
+/// The main menu's line, kept with the count of mods off it was made for,
+/// so a frame only makes it again when that count changes.
+#[derive(Debug, Default)]
+pub struct KeptLine(Option<(usize, String)>);
+
+impl KeptLine {
+    /// No line yet.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(None)
+    }
+
+    /// The line for `off` mods off, made by `make` the first time and
+    /// whenever `off` changed since.
+    pub fn get(&mut self, off: usize, make: impl FnOnce() -> String) -> &str {
+        if self.0.as_ref().is_none_or(|(was, _)| *was != off) {
+            self.0 = Some((off, make()));
+        }
+        self.0.as_ref().map_or("", |(_, line)| line.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -802,6 +844,38 @@ mod tests {
             menu_line("1.0.0", 0, 0, true, false),
             "Enshwick 1.0.0 · mods: 0 · some features are off on this game version"
         );
+    }
+
+    #[test]
+    fn the_menu_line_turns_off_alone_without_its_site_or_its_look() {
+        assert_eq!(menu_line_off(true, true, true), None);
+        let no_site = menu_line_off(false, false, true).unwrap();
+        assert!(no_site.contains("has no ui.legal_line_site"), "{no_site}");
+        let moved = menu_line_off(false, true, true).unwrap();
+        assert!(moved.contains("does not match"), "{moved}");
+        let no_look = menu_line_off(true, true, false).unwrap();
+        assert!(no_look.contains("legalText"), "{no_look}");
+        assert_eq!(menu_line_off(false, false, false), Some(no_site));
+    }
+
+    #[test]
+    fn the_menu_line_is_made_again_only_when_the_count_off_changes() {
+        let mut kept = KeptLine::new();
+        let mut made = 0;
+        let mut get = |kept: &mut KeptLine, off: usize| {
+            kept.get(off, || {
+                made += 1;
+                format!("off: {off}")
+            })
+            .to_owned()
+        };
+        assert_eq!(get(&mut kept, 0), "off: 0");
+        assert_eq!(get(&mut kept, 0), "off: 0");
+        assert_eq!(get(&mut kept, 2), "off: 2");
+        assert_eq!(get(&mut kept, 2), "off: 2");
+        assert_eq!(get(&mut kept, 0), "off: 0");
+        drop(get);
+        assert_eq!(made, 3);
     }
 
     fn summary() -> Summary {
