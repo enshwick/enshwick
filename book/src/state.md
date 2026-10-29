@@ -65,6 +65,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   something with the value, such as who may open a chest, keeps it guarded
   while the store is shut.
 - `T` is a TOML table, such as a struct, with a `Default` for a new world.
+  A field the type gains in an update reads from `Default` while a file
+  lacks it, in nested tables too, so no `#[serde(default)]` is needed.
+  Arrays come from the file whole. A map whose `Default` holds entries gets
+  each one back while the file lacks it, so keep such defaults empty.
 
 ## Store
 
@@ -72,7 +76,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 keeps one serde value as `<dir>/<name>.toml`:
 
 - `load()` returns the stored value, or `T::default()` while nothing is stored;
-  a file that does not parse is an error;
+  keys the file lacks come from `T::default()` too, as for a world store; a
+  file that does not parse is an error;
 - `save(&value)` writes the file whole through
   [`files::write_atomically`](#files-of-your-own), so a crash never leaves
   half a file, and keeps the old one as `<name>.toml.bak`.
