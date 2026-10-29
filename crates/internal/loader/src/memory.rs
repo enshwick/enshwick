@@ -105,20 +105,22 @@ mod tests {
 
     #[test]
     fn an_address_and_offset_read_what_was_written() {
+        const AT: usize = 5; // bound, not a game offset: a test's memory
         let mut bytes = [0u8; 12];
         let base = bytes.as_mut_ptr().expose_provenance();
         // SAFETY: four writable bytes of `bytes` start at offset 5.
-        unsafe { write(base, 5, 0xdead_beef_u32) };
+        unsafe { write(base, AT, 0xdead_beef_u32) };
         // SAFETY: the same four bytes, now holding a u32.
-        assert_eq!(unsafe { read::<u32>(base, 5) }, 0xdead_beef);
+        assert_eq!(unsafe { read::<u32>(base, AT) }, 0xdead_beef);
     }
 
     #[test]
     fn a_byte_span_reads_from_an_address() {
+        const AT: usize = 2; // bound, not a game offset: a test's memory
         let bytes = *b"xxname";
         let mut out = [0u8; 4];
         // SAFETY: four readable bytes of `bytes` start at offset 2.
-        unsafe { read_bytes(bytes.as_ptr().expose_provenance(), 2, &mut out) };
+        unsafe { read_bytes(bytes.as_ptr().expose_provenance(), AT, &mut out) };
         assert_eq!(&out, b"name");
     }
 

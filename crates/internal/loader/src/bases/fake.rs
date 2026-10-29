@@ -205,9 +205,9 @@ pub(super) unsafe extern "system" fn grow_16(list: *mut u8, wanted: i64, _exact:
 unsafe fn grow(list: *mut u8, wanted: i64, width: usize) -> u8 {
     let need = usize::try_from(-wanted).unwrap();
     // SAFETY: the test list's fields.
-    let len = usize::try_from(unsafe { read_at::<u64>(list, 8) }).unwrap();
+    let len = usize::try_from(unsafe { read_at::<u64>(list, FIELDS.container.len) }).unwrap();
     // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
-    let data = unsafe { read_at::<usize>(list, 0) } as *const u8;
+    let data = unsafe { read_at::<usize>(list, FIELDS.container.data) } as *const u8;
     let mut room = vec![0u8; need * 2 * width].into_boxed_slice();
     if len > 0 {
         // SAFETY: the old block holds `len` elements.
@@ -216,9 +216,9 @@ unsafe fn grow(list: *mut u8, wanted: i64, width: usize) -> u8 {
     }
     let room = Box::leak(room);
     // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
-    unsafe { write_at(list, 0, room.as_mut_ptr() as usize) };
+    unsafe { write_at(list, FIELDS.container.data, room.as_mut_ptr() as usize) };
     // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
-    unsafe { write_at(list, 0x10, (need * 2) as u64) };
+    unsafe { write_at(list, FIELDS.container.cap, (need * 2) as u64) };
     1
 }
 
@@ -227,20 +227,21 @@ unsafe fn grow(list: *mut u8, wanted: i64, width: usize) -> u8 {
 /// emptied with the grower set.
 pub(super) unsafe extern "system" fn new_base(obj: *mut u8, zone: *const u8, index: u32) {
     // SAFETY: the fake object of the test.
-    let i = unsafe { read_at::<u32>(obj, 0x24) };
+    let i = unsafe { read_at::<u32>(obj, FIELDS.count) };
     // SAFETY: the fake object's count, at 0x24 in its buffer.
-    unsafe { write_at(obj, 0x24, i + 1) };
+    unsafe { write_at(obj, FIELDS.count, i + 1) };
     let at = record(usize::try_from(i).unwrap());
     // SAFETY: a zone entry of the fake list and the record's box.
-    unsafe { core::ptr::copy_nonoverlapping(zone, obj.wrapping_add(at + 0xf0), 0x20) };
+    unsafe { core::ptr::copy_nonoverlapping(zone, obj.wrapping_add(at + RECORD_LOW), 0x20) };
     // SAFETY: the record's mask.
-    unsafe { write_at(obj, at + 0x110, 1u32 << (index & 31)) };
-    for list in [at, at + 0x28] {
+    unsafe { write_at(obj, at + RECORD_MASK, 1u32 << (index & 31)) };
+    for list in [at, at + LAYOUT.record.list_kept] {
         // SAFETY: the record's list: data, length, capacity, grower.
         unsafe { write_at(obj, list, [0u64; 3]) };
         let grower = grow_u32 as unsafe extern "system" fn(*mut u8, i64, u64) -> u8;
+        let grower_at = list + FIELDS.container.grow;
         // SAFETY: the test list: data at 0, length at 8, capacity at 0x10, grower at 0x18.
-        unsafe { write_at(obj, list + 0x18, (grower as *const ()).addr()) };
+        unsafe { write_at(obj, grower_at, (grower as *const ()).addr()) };
     }
 }
 
@@ -257,6 +258,13 @@ pub(super) fn apart(n: u8) -> Vec<Aabb> {
     (0..n).map(|i| square(f32::from(i) * 100.0, 0.0)).collect()
 }
 
+/// Where the fake record's box starts, its low corner.
+const RECORD_LOW: usize = 0xf0; // bound, not a game offset: a test's memory
+/// The fake record's box, its high corner.
+const RECORD_HIGH: usize = 0x100; // bound, not a game offset: a test's memory
+/// The fake record's zone mask, a u32.
+const RECORD_MASK: usize = 0x110; // bound, not a game offset: a test's memory
+
 /// The grower the fake constructor puts into each record's first list.
 pub(super) const CONSTRUCTED_GROWER: u64 = 0x1_4020_09f0;
 
@@ -267,11 +275,11 @@ pub(super) unsafe extern "system" fn ctor(obj: *mut u8) -> *mut u8 {
     for i in 0..window::VANILLA {
         let at = record(i);
         // SAFETY: the scratch block holds 16 records; the first list's grower.
-        unsafe { write_at(obj, at + 0x18, CONSTRUCTED_GROWER) };
+        unsafe { write_at(obj, at + FIELDS.container.grow, CONSTRUCTED_GROWER) };
         // SAFETY: the same record's box, low corner.
-        unsafe { write_at(obj, at + 0xf0, [f32::MAX; 3]) };
+        unsafe { write_at(obj, at + RECORD_LOW, [f32::MAX; 3]) };
         // SAFETY: the same record's box, high corner.
-        unsafe { write_at(obj, at + 0x100, [-f32::MAX; 3]) };
+        unsafe { write_at(obj, at + RECORD_HIGH, [-f32::MAX; 3]) };
     }
     obj
 }
