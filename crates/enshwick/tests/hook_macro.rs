@@ -116,6 +116,14 @@ mod tests {
         level + 1
     }
 
+    static COUNTED: AtomicU32 = AtomicU32::new(0);
+
+    /// A second target: the game refuses one mod's two hooks on one function.
+    extern "system" fn counted(n: u32) -> u32 {
+        COUNTED.fetch_add(1, Ordering::Relaxed);
+        n
+    }
+
     extern "system" fn plain(n: u32) -> u32 {
         n
     }
@@ -150,7 +158,7 @@ mod tests {
     fn hooks_run_the_chain_at_most_once_when_their_body_panics() {
         let loader = FakeHost::new()
             .symbol("upgrade", address(upgrade as Upgrade))
-            .symbol("count", address(plain as Count))
+            .symbol("count", address(counted as Count))
             .symbol("plain", address(plain as Count))
             .symbol("tallied", address(tallied as Count))
             .symbol("counted_once", address(counted_once as Upgrade))

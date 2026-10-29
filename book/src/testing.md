@@ -109,6 +109,13 @@ Lookups you did not configure answer `Status::MISSING`, as a game build without
 them would. Settings default to the mod's own defaults, as on first start; the
 side defaults to `Side::SERVER` and the log level to `Level::INFO`.
 
+The fake refuses what the loader refuses, with the same status. A second
+hook of the mod on one function, one hook slot on two functions, a code
+patch outside the game's code or over another patch, a point not named
+after the mod's id, and a rate clients count from a mod without `join:
+true` are refused. Hooks, code patches, points and rates asked for after
+`init` returns come too late.
+
 A test of the path where the game build lacks what the mod needs:
 
 ```rust,standalone_crate

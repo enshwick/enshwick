@@ -40,6 +40,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The fake host refuses the hooks, mid-function hooks, code patches,
+  points and rates the loader refuses, with the loader's status: a mod's
+  test now fails where the game would. Both take the rules from one place.
+
 - The ABI layout file lists each field's type, and a function pointer's
   signature, so a changed signature is another `ABI_VERSION`. Every mod
   needs a rebuild (#681).

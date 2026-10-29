@@ -103,7 +103,7 @@ impl Registry {
         user: usize,
     ) -> Result<(), String> {
         let name = &declared.name;
-        if !crate::points::is_named_after(name, names) {
+        if !enshwick::__private::rules::is_named_after(name, names) {
             let id = names.first().copied().unwrap_or_default();
             return Err(format!("call {name}: a call is named `{id}:<call>`"));
         }

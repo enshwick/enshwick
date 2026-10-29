@@ -16,6 +16,7 @@ use loom::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 #[cfg(not(loom))]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
+use enshwick::__private::rules;
 use enshwick::abi::{HookFlags, Status};
 use rustc_hash::FxHashMap;
 
@@ -244,7 +245,7 @@ impl Chains {
         if self.armed {
             return Status::TOO_LATE;
         }
-        if target == 0 || link.detour == 0 {
+        if !rules::is_complete_hook(target, link.detour) {
             return Status::BAD_ARGS;
         }
         // One slot joins one chain: a link whose slot is wired twice would
@@ -260,11 +261,10 @@ impl Chains {
             original_hop: None,
             frame: false,
         });
-        let clash = chain.links.iter().find(|l| {
-            l.owner == link.owner
-                || l.flags.contains(HookFlags::EXCLUSIVE)
-                || link.flags.contains(HookFlags::EXCLUSIVE)
-        });
+        let clash = chain
+            .links
+            .iter()
+            .find(|l| rules::hooks_clash(l.owner == link.owner, l.flags, link.flags));
         if let Some(held) = clash {
             let holder = (held.owner != link.owner).then_some(held.owner);
             self.refused.push(Refusal {
@@ -334,11 +334,10 @@ impl Chains {
         let Some(chain) = self.by_target.get_mut(&chain_target) else {
             return Status::TOO_LATE;
         };
-        let clash = chain.links.iter().any(|l| {
-            l.owner == link.owner
-                || l.flags.contains(HookFlags::EXCLUSIVE)
-                || link.flags.contains(HookFlags::EXCLUSIVE)
-        });
+        let clash = chain
+            .links
+            .iter()
+            .any(|l| rules::hooks_clash(l.owner == link.owner, l.flags, link.flags));
         if clash {
             return Status::REFUSED;
         }
