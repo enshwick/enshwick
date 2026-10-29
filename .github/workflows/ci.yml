@@ -65,7 +65,7 @@ jobs:
           for id in $ids; do
             [ "$id" = "$RUN_ID" ] && continue
             if gh run view "$id" -R "$REPO" --json jobs -q '.jobs[]
-                | select(.name == "nightly / nightly")
+                | select(.name | startswith("nightly / "))
                 | select(.status != "completed" or .conclusion == "success" or .conclusion == "failure")
                 | .name' | grep -q .; then
               ran=true
