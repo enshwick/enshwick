@@ -361,7 +361,8 @@ impl Load<'_> {
     /// A value of type `T` kept per world under the mod's data folder,
     /// opened when the world loads and written when it saves; see
     /// [`WorldStore`](crate::state::WorldStore). A world file that does not
-    /// read keeps the store shut, with the reason in the status summary.
+    /// read keeps the store shut, with the reason in the status summary and
+    /// on the Mods screen, as the feature `world store <name>` off.
     ///
     /// # Errors
     ///
@@ -378,11 +379,16 @@ impl Load<'_> {
         let store = crate::state::WorldStore::new(&self.data_dir()?, name)?;
         let host = self.host;
         let opened = store.clone();
+        let feature = format!("world store {name}");
         self.on::<crate::events::WorldLoaded>(move |()| match crate::state::world_key(host) {
             Some(key) => {
-                if let Err(error) = opened.open(&key) {
+                let shut = opened.open(&key).err().map(|error| error.to_string());
+                if let Some(error) = &shut {
                     crate::error!("world store kept shut: {error}");
                 }
+                let reason = shut.as_deref().unwrap_or_default();
+                let _shown =
+                    (host.api().feature)(host.handle(), Str::new(&feature), Str::new(reason));
             }
             None => crate::warn!("world store kept shut: the loader names no world"),
         })?;

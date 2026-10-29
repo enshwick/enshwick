@@ -129,6 +129,11 @@ mod module;
 pub mod moved_worlds;
 #[cfg(windows)]
 mod net;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game raises notices")
+)]
+mod notice_queue;
 #[cfg(windows)]
 mod notices;
 #[cfg_attr(

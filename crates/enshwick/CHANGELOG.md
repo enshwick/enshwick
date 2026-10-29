@@ -12,6 +12,9 @@ Each entry names the pull request that made the change.
   loader moves the folders of the world it came from to its new key, or
   copies them while the old save is still there (#677).
 
+- A world store whose file does not read shows on the Mods screen as the
+  feature `world store <name>` off, with the reason (#675).
+
 - `WorldStore::shut_reason` says why the running world's file did not read
   while the store stays shut, and the loader's status summary shows it
   under the mod (#668).
@@ -27,6 +30,11 @@ Each entry names the pull request that made the change.
   `<name>.toml.bak` beside its file (#658).
 
 ### Changed
+
+- `Stats::set_item`, `Affixes::roll`, `Load::add_loot_affixes`,
+  `Load::add_craft_affixes`, `AffixLoot` and `AffixCraft` need the
+  `unstable` feature: they keep their values as item data, which sets aside
+  a value on an item no load finds after a restart (#673).
 
 - `item_data` and `entity_data` need the `unstable` feature: after a
   restart, a value on an item no load finds stays aside. `ItemInstance` moved

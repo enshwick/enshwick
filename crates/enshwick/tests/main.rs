@@ -7,6 +7,7 @@
 mod accounts;
 #[cfg(feature = "unstable")]
 mod actions;
+#[cfg(feature = "unstable")]
 mod affixes;
 mod altar_limit;
 mod altar_zones;
@@ -102,6 +103,7 @@ mod services;
 mod shapes;
 mod skills;
 mod startup_sync;
+#[cfg(feature = "unstable")]
 mod stat_kinds;
 #[cfg(feature = "unstable")]
 mod static_halves;
