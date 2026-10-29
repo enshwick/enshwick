@@ -231,6 +231,7 @@ pub struct Constant {
     pub(crate) attribute: Option<String>,
     pub(crate) cell: Option<String>,
     pub(crate) carried: bool,
+    pub(crate) fixed: bool,
 }
 
 impl Constant {
@@ -300,6 +301,14 @@ impl Constant {
         self.carried
     }
 
+    /// Whether the pattern's own fixed bytes hold the value, so a match
+    /// confirms it: a size spelled by the instructions' scale, an offset 0
+    /// of an operand without a displacement.
+    #[must_use]
+    pub const fn fixed(&self) -> bool {
+        self.fixed
+    }
+
     /// The value as its pattern finds it in `code`: read from the operand,
     /// or the pinned value when the pattern only confirms it; `None` without
     /// a pattern or a unique match, and for a value read [`Self::via`] a
@@ -345,7 +354,7 @@ impl Constant {
     pub(crate) fn read(&self, code: &[u8], start: u64) -> Option<u64> {
         match self.operand {
             Some(operand) => operand.read(code, start),
-            None => Some(self.value),
+            None => self.fixed.then_some(self.value),
         }
     }
 }
