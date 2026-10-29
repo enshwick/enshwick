@@ -39,7 +39,7 @@ fuzz_target!(|data: &[u8]| {
         steps: steps(steps_text),
     };
     let map = |_: usize, _: usize, _: &str| Ok(mapped.to_owned());
-    let source = |_: &str| Some(other.to_owned());
+    let source = |_: &str| Ok(Some(other.to_owned()));
     if let Ok(migrated) = apply_settings(text, 0, &migration, &map, &source) {
         assert!(
             migrated.parse::<toml_edit::DocumentMut>().is_ok(),
