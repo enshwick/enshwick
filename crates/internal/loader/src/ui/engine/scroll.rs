@@ -7,8 +7,8 @@
 //! the begin and end pairs live on 426.
 
 use super::{
-    BUNDLE, Buf, Engine, FRAME_SIZE, Loader, Missing, NAV_CONFIG, OneFn, Ptr, game_fn, path, sound,
-    stretch,
+    BUNDLE, Buf, Engine, FRAME_SIZE, Loader, Lookup, Missing, NAV_CONFIG, OneFn, Ptr, field,
+    game_fn, path, sound, stretch,
 };
 use crate::pinned;
 
@@ -112,21 +112,15 @@ fn scrollbar(loader: &Loader, name: &str) -> Option<usize> {
     )
 }
 
-/// The highlight sound's offset in the navigation config, kept inside the
-/// loader's config buffer.
-fn nav_highlight(loader: &Loader) -> Result<usize, Missing> {
+pub(super) fn nav_highlight(lookup: Lookup<'_>) -> Result<usize, Missing> {
     let id = pinned::ui::NAV_HIGHLIGHT.id();
-    let field = |id: &'static str| {
-        loader
-            .build
-            .constant(id)
-            .and_then(|value| usize::try_from(value).ok())
-            .ok_or(Missing::Entry(id))
-    };
-    let at = field(id)?
-        .checked_sub(field(pinned::ui::NAV_CONFIG.id())?)
+    let at = field(lookup, id)?
+        .checked_sub(field(lookup, pinned::ui::NAV_CONFIG.id())?)
         .ok_or(Missing::Room(id))?;
-    if at + SOUND_SIZE > NAV_CONFIG {
+    if at
+        .checked_add(SOUND_SIZE)
+        .is_none_or(|end| end > NAV_CONFIG)
+    {
         return Err(Missing::Room(id));
     }
     Ok(at)
@@ -159,7 +153,7 @@ impl Scrolling {
             range: scrollbar(loader, "range").ok_or(Missing::Looks)?,
             tint: scrollbar(loader, "rangeTint").ok_or(Missing::Looks)?,
             highlight: sound(loader, "highlightChange").ok_or(Missing::Looks)?,
-            nav_highlight: nav_highlight(loader)?,
+            nav_highlight: nav_highlight(&|id: &str| loader.build.constant(id))?,
         })
     }
 }

@@ -299,6 +299,15 @@ pub fn captured() -> Vec<(Level, String, String)> {
         .unwrap_or_default()
 }
 
+/// Stops [`capture`], so the tests sharing the process log as before.
+#[cfg(all(test, windows))]
+pub(crate) fn end_capture() {
+    CAPTURING.store(false, Ordering::Release);
+    if let Ok(mut lines) = CAPTURED.lock() {
+        *lines = None;
+    }
+}
+
 /// Writes one line under `source`, the loader or a mod id.
 pub fn write(level: Level, source: &str, message: &str) {
     if CAPTURING.load(Ordering::Acquire) {

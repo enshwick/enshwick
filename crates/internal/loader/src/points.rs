@@ -148,7 +148,7 @@ impl Registry {
         declared: Declared,
     ) -> Result<(u32, &'static AtomicU32), String> {
         let name = &declared.name;
-        if !is_named_after(name, names) {
+        if !enshwick::__private::rules::is_named_after(name, names) {
             let owner_id = names.first().copied().unwrap_or_default();
             return Err(format!(
                 "point {name}: a point is named `{owner_id}:<point>`"
@@ -308,12 +308,6 @@ fn chain(
             undid_whom: AtomicUsize::new(usize::MAX),
         })
         .collect()
-}
-
-/// Whether `name` is `<one of names>:<what>`.
-pub(crate) fn is_named_after(name: &str, names: &[&str]) -> bool {
-    name.split_once(':')
-        .is_some_and(|(id, what)| names.contains(&id) && !what.is_empty())
 }
 
 /// The point `point` under its owner's id now, when the owner had the id

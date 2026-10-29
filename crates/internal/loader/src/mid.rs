@@ -205,9 +205,7 @@ impl Mids {
         }
         let links = self.sites.entry(address).or_default();
         let clash = links.iter().any(|l| {
-            l.owner == link.owner
-                || l.flags.contains(HookFlags::EXCLUSIVE)
-                || link.flags.contains(HookFlags::EXCLUSIVE)
+            enshwick::__private::rules::hooks_clash(l.owner == link.owner, l.flags, link.flags)
         });
         if clash {
             return Status::REFUSED;

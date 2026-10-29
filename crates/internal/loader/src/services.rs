@@ -206,7 +206,7 @@ impl Registry {
         fields: Fields,
         size: u32,
     ) -> Result<u32, String> {
-        if !crate::points::is_named_after(name, names) {
+        if !enshwick::__private::rules::is_named_after(name, names) {
             let owner_id = names.first().copied().unwrap_or_default();
             return Err(format!(
                 "event {name}: an event is named `{owner_id}:<what>`"
