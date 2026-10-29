@@ -182,8 +182,9 @@ type LocaTextFn = unsafe extern "system" fn(out: *mut UiText, id: u32) -> *mut U
 
 // The loader's room for each game object it builds on its own stack or
 // heap. The build table's extent of each must fit in it (`Layout::read`,
-// `DialogLayout::read`, the slider's stops in `checked`), or the part that
-// builds it stays off.
+// `DialogLayout::read`, `MenuLayout::read`), or the part that builds it
+// stays off. The slider's config has no extent in the table yet, only its
+// stop list is checked, so its size still counts as a game size.
 
 /// The size of the loader's own popup states.
 pub(super) const POPUP_SIZE: usize = 0x560; // bound, not a game offset: the loader's room
@@ -194,7 +195,7 @@ const NAV_CONFIG: usize = 0x58; // bound, not a game offset: the loader's room
 const PANEL_CONFIG: usize = 0x100; // bound, not a game offset: the loader's room
 const BUTTON_CONFIG: usize = 0x80; // bound, not a game offset: the loader's room
 const TOGGLE_CONFIG: usize = 0xc50; // bound, not a game offset: the loader's room
-const SLIDER_CONFIG: usize = 0x120; // bound, not a game offset: the loader's room
+const SLIDER_CONFIG: usize = 0x120;
 const DROPDOWN_CONFIG: usize = 0xca0; // bound, not a game offset: the loader's room
 const MENU_ENTRY: usize = 0x20; // bound, not a game offset: the loader's room
 const ACTION_SPEC: usize = 0x50; // bound, not a game offset: the loader's room
