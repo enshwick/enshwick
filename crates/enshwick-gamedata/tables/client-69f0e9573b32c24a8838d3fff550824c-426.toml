@@ -530,6 +530,7 @@ revision = 1
 "access.offer_out_u32" = { value = 0x4, via = "access.offer_test", within = 0x960, pattern = "49 89 47 ?? 41 89 47 ?? 41 89 47 ?? 41 C6 07 06", at = 11, size = 1 }
 "access.offer_out_u64" = { value = 0x8, via = "access.offer_test", within = 0x960, pattern = "49 89 47 ?? 41 89 47 ?? 41 89 47 ?? 41 C6 07 06", at = 3, size = 1 }
 "access.offer_out_tail" = { value = 0x10, via = "access.offer_test", within = 0x960, pattern = "49 89 47 ?? 41 89 47 ?? 41 89 47 ?? 41 C6 07 06", at = 7, size = 1 }
+"balancing.zone_size_valid" = { value = 0xc, via = "balancing.zone_size", within = 0x53, pattern = "C6 41 ?? 00 48 8B C1 C3", at = 2, size = 1 }
 "access.consumed_upgrade" = { value = 0x4c, pattern = "48 8B 45 ?? 41 8B 8C 24 ?? ?? ?? ?? 39 48 ?? 0F 84 ?? ?? ?? ?? 48 8D 95 ?? ?? ?? ?? 49 8B CD", at = 14, size = 1 }
 "survivors.unique_context" = { value = 0x38, pattern = "8B 10 E8 ?? ?? ?? ?? 41 B8 28 00 00 00 48 8D 54 24 ?? 48 8B CE E8 ?? ?? ?? ?? 84 C0", at = 17, size = 1 }
 "survivors.unique_saved_state" = { value = 0x40, pattern = "3B 18 0F 85 ?? ?? ?? ?? 4C 8B 4C 24 ?? 48 8D 94 24 ?? ?? ?? ?? 4C 8B 44 24 ??", at = 12, size = 1 }
