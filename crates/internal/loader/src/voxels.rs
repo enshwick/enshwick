@@ -161,6 +161,16 @@ struct Words {
     count: u64,
 }
 
+/// Where the editor holds the `u32` field a build table places at `field`
+/// in its first column grid, at `grids`, for the grid at `grid`; `None`
+/// when the field does not lie inside one grid of `stride` bytes.
+fn grid_field(grids: usize, stride: usize, grid: usize, field: usize) -> Option<usize> {
+    field
+        .checked_sub(grids)
+        .filter(|&field| stride.checked_sub(field) >= Some(size_of::<u32>()))
+        .and_then(|field| field.checked_add(grid))
+}
+
 /// The store's finest level, half a metre a voxel, and where the editor
 /// holds its column grid, from the build table: the grid starts with the
 /// bricks a page holds, packed in a `u64`, then its pages along x and z.
@@ -183,12 +193,7 @@ fn finest(loader: &crate::host::Loader) -> Result<Finest, Status> {
         .checked_mul(stride)
         .and_then(|offset| offset.checked_add(grids))
         .ok_or(Status::MISSING)?;
-    let in_grid = |field: usize| {
-        field
-            .checked_sub(grids)
-            .and_then(|field| field.checked_add(grid))
-            .ok_or(Status::MISSING)
-    };
+    let in_grid = |field| grid_field(grids, stride, grid, field).ok_or(Status::MISSING);
     Ok(Finest {
         level: u32::try_from(level).map_err(|_| Status::MISSING)?,
         grid,
@@ -335,6 +340,21 @@ mod tests {
         let (packed, width, depth) = SAVE_GRID;
         let extent = WorldExtent::from_grid(packed, width, depth).unwrap();
         assert_eq!(extent, WorldExtent([20_480, HEIGHT, 20_480]));
+    }
+
+    #[test]
+    fn a_grid_field_lies_inside_one_grid_or_reads_nothing() {
+        assert_eq!(grid_field(0x40, 0x28, 0x130, 0x48), Some(0x138));
+        assert_eq!(grid_field(0x40, 0x28, 0x130, 0x4c), Some(0x13c));
+        assert_eq!(grid_field(0x40, 0x28, 0x130, 0x64), Some(0x154));
+        assert_eq!(grid_field(0x40, 0x28, 0x130, 0x65), None, "past the grid");
+        assert_eq!(
+            grid_field(0x40, 0x28, 0x130, 0x3c),
+            None,
+            "before the grids"
+        );
+        assert_eq!(grid_field(0x40, 0x28, 0x130, usize::MAX), None);
+        assert_eq!(grid_field(0x40, 0x28, usize::MAX, 0x48), None);
     }
 
     #[test]
