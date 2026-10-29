@@ -308,16 +308,22 @@ fn lookup(map: usize, id: u32, stride: usize) -> Option<usize> {
     let Bucket { start, count } = unsafe { read(buckets.start, bucket * size_of::<Bucket>()) };
     // SAFETY: the map's key array header follows its bucket array header in
     // the live map.
-    let keys = unsafe { BlobArray::read(map + BlobArray::HEADER_SIZE) }?.start;
+    let keys = unsafe { BlobArray::read(map + BlobArray::HEADER_SIZE) }?;
     // SAFETY: the map's value array header follows its key array header in
     // the live map.
-    let values = unsafe { BlobArray::read(map + 2 * BlobArray::HEADER_SIZE) }?.start;
-    (start..start.saturating_add(count))
-        .map(|i| i as usize)
-        // SAFETY: the bucket's `{start, count}` names keys of the map's key
-        // array, each a u32.
-        .find(|&i| unsafe { read::<u32>(keys, i * 4) } == id)
-        .map(|i| values + i * stride)
+    let values = unsafe { BlobArray::read(map + 2 * BlobArray::HEADER_SIZE) }?;
+    bucket_entries(start, count, keys.count.min(values.count))
+        // SAFETY: `bucket_entries` keeps `i` below the key array's count,
+        // whose keys are each a u32.
+        .find(|&i| unsafe { read::<u32>(keys.start, i * 4) } == id)
+        .map(|i| values.start + i * stride)
+}
+
+/// The entries a bucket `{start, count}` names, cut to the `entries` both
+/// the key and the value array hold.
+fn bucket_entries(start: u32, count: u32, entries: usize) -> core::ops::Range<usize> {
+    let start = (start as usize).min(entries);
+    start..(start.saturating_add(count as usize)).min(entries)
 }
 
 /// How many player records the store holds.
@@ -623,6 +629,14 @@ pub(crate) fn forget() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bucket_names_only_entries_the_arrays_hold() {
+        assert_eq!(bucket_entries(2, 3, 10), 2..5);
+        assert_eq!(bucket_entries(8, 5, 10), 8..10);
+        assert_eq!(bucket_entries(12, 5, 10), 10..10);
+        assert_eq!(bucket_entries(u32::MAX, u32::MAX, 10), 10..10);
+    }
 
     #[test]
     fn a_log_entry_must_hold_its_id_and_value() {
