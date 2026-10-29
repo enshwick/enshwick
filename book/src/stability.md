@@ -15,7 +15,7 @@ Everything the crate offers without a feature:
 - the server's world calls outside `world`: altars, buffs, daytime, effects,
   game settings, rates, damage, terrain, voxels and weather, whose errors share
   one type, `enshwick::WorldError`;
-- inventories, item and entity data, stats and affixes;
+- inventories, stats and affixes;
 - content and data packs;
 - services, mod events, extension points, messages and the interface.
 
@@ -31,6 +31,7 @@ Everything the crate offers without a feature:
 | `Effects::teleport` and `Effects::ping`                                                                                                 | whether a client keeps a teleported player in place, and shows a ping the server raised, is not yet seen |
 | `Knowledge::revoke` and its kin, `Load::on_knowledge_input`                                                                             | how a vanilla client takes a revoke, and what it asks for, is not yet seen                               |
 | `Load::request_base_limits`                                                                                                             | young                                                                                                    |
+| `item_data` and `entity_data`                                                                                                           | after a restart, a value on an item no load finds, such as one in a player's inventory, stays aside      |
 | `rates`: every game rate                                                                                                                | how a lowered skill-point total and the loot counts play out is not yet seen in the client               |
 | Changes of `Field::MaxStackSize` and `Field::Slots` from a mod; the same changes in data packs carry no promise either                  | how a player's game shows a chest above 72 slots, a raised stack and a grown backpack is not yet seen    |
 | Damage filters (`Load::on_damage`, `Damage`, `DamageCause`), `events::PlayerDied` and the `killer` fields of `EntityDiedEvent`          | the order of the game's attributes and who it records as a killer are not yet seen                       |

@@ -7,7 +7,8 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::abi::Status;
-    use enshwick::item_data::{ItemData, ItemInstance, SetError};
+    use enshwick::inventory::ItemInstance;
+    use enshwick::item_data::{ItemData, SetError};
     use enshwick::{Load, Mod, Off};
 
     #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]

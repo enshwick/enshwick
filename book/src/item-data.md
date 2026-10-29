@@ -1,5 +1,8 @@
 # Item data
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 Item data is what a mod attaches to one item: a ring's rolled bonus, the
 name engraved on a sword, the owner of a staff. Each piece belongs to a
 kind with an id `<mod>:<name>` and a value type of the mod's choosing. The
@@ -8,7 +11,7 @@ module reads and writes it.
 
 ```rust
 use enshwick::Entity;
-use enshwick::item_data::ItemInstance;
+use enshwick::inventory::ItemInstance;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Bonus {

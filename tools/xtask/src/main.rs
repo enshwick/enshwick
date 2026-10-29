@@ -401,7 +401,8 @@ fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
                 .then(&["--", "-D", "warnings"]),
         );
     }
-    // The script binding and the rates are public only with `unstable`, so
+    // The script binding, the rates and item data are public only with
+    // `unstable`, so
     // their examples fail to build without it. One example that fails to
     // build makes rustdoc build the rest one by one, which takes minutes;
     // with every one building they share one binary and take seconds.
@@ -411,6 +412,8 @@ fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
         "src/script",
         "--skip",
         "src/rates.rs",
+        "--skip",
+        "src/item_data.rs",
     ]));
     if full {
         steps.push(

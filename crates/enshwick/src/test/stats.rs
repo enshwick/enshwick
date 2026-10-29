@@ -9,7 +9,7 @@ use crate::abi::{
     StatModifierData, StatModify, StatRef, StatSource, Status, Str,
 };
 use crate::affixes::{AffixDef, AffixKey, Candidate, ItemRarity, RollRules, lines_of, reroll};
-use crate::item_data::ItemInstance;
+use crate::inventory::ItemInstance;
 use crate::stats::{ItemStats, Op, Stat, StatDef, StatKey, aggregate, builtin, key_of};
 
 use super::table::with;

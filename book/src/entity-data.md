@@ -1,5 +1,8 @@
 # Entity data
 
+Unstable: everything in this chapter needs the `unstable` feature and may
+change in any release ([Stability](stability.md)).
+
 Entity data is what a mod attaches to any entity of the world: the player
 who owns a placed chest, the nickname of a survivor, the day a gate was
 built. It works as [item data](item-data.md) does, for every entity instead

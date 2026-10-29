@@ -9,7 +9,7 @@ mod tests {
     use enshwick::Entity;
     use enshwick::abi::{BuffTypeInfo, Header, Status};
     use enshwick::buffs::{Apply, BuffTypeId, Buffs};
-    use enshwick::item_data::ItemInstance;
+    use enshwick::inventory::ItemInstance;
     use enshwick::stats::{
         ItemStats, Lasting, Modifier, Op, Origin, Stat, StatChange, StatDef, Stats, builtin,
     };
