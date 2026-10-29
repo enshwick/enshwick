@@ -7,9 +7,19 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
+    /// What a constant that is no offset into game memory carries at its end,
+    /// followed by why: a sanity bound, room the loader keeps, a fact of
+    /// Windows or of the PE format, a test's own memory.
+    const BOUND: &str = "// bound, not a game offset:";
+
     /// Whether `line` declares a `usize` constant, or an array of them, spelled
-    /// as a hexadecimal literal.
+    /// as a hexadecimal literal, and is not marked a bound with its reason.
     fn is_literal_offset(line: &str) -> bool {
+        if let Some((_, why)) = line.split_once(BOUND)
+            && !why.trim().is_empty()
+        {
+            return false;
+        }
         let line = line.trim_start();
         let line = line
             .strip_prefix("pub(crate) ")
@@ -80,6 +90,22 @@ mod tests {
         assert!(!is_literal_offset("const PREFIX: usize = 16;"));
         assert!(!is_literal_offset("const MASK: u32 = 0xff;"));
         assert!(!is_literal_offset("let x: usize = 0x40;"));
+    }
+
+    #[test]
+    fn a_bound_with_its_reason_is_not_counted_and_a_bare_marker_is() {
+        assert!(!is_literal_offset(
+            "const ENTRY_MAX: usize = 0x1000; // bound, not a game offset: far past any entry"
+        ));
+        assert!(is_literal_offset(
+            "const ENTRY_MAX: usize = 0x1000; // bound, not a game offset:"
+        ));
+        assert!(is_literal_offset(
+            "const ENTRY_MAX: usize = 0x1000; // bound, not a game offset:   "
+        ));
+        assert!(is_literal_offset(
+            "const ENTRY_MAX: usize = 0x1000; // not a game offset: far past any entry"
+        ));
     }
 
     #[test]

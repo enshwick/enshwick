@@ -17,7 +17,7 @@ use super::accounts::{BanFields, ban_entry};
 const LIST_MAX: u64 = 1 << 20;
 /// The largest ban entry the loader builds, far past the game's 0xd0 bytes
 /// on server 399 and client 426.
-const ENTRY_MAX: usize = 0x1000;
+const ENTRY_MAX: usize = 0x1000; // bound, not a game offset: a sanity bound
 
 /// The game's add: the config object that holds the list, and an entry it
 /// copies. It takes the list's lock, leaves an account already listed
