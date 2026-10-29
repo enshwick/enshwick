@@ -33,6 +33,7 @@ use crate::pinned;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::textures::KEYS.id(),
+    pinned::textures::KEY_SIZE.id(),
     pinned::textures::REGISTRY_FILL.id(),
     pinned::textures::REGISTRY_LISTED.id(),
     pinned::textures::REGISTRY_LISTED_AT.id(),
@@ -131,7 +132,8 @@ struct RequestSpan {
 const RECORD_ROOM: usize = 0x40; // bound, not a game offset: the loader's room for a ring record
 
 /// A key in the database's tables: GUID, type, part and two zero words.
-const KEY: usize = 32;
+/// The table's `textures.key_size` must equal it, or mod textures stay off.
+const KEY: usize = 32; // bound, not a game offset: the loader's key type, checked against the table
 
 /// The build's offsets, after their code checked out.
 #[derive(Clone, Copy, Debug)]
@@ -175,6 +177,13 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 crate::log!(
                     WARN,
                     "mod textures off: {symbol} is not the code the loader knows"
+                );
+                return None;
+            }
+            if loader.offset(pinned::textures::KEY_SIZE) != Some(KEY) {
+                crate::log!(
+                    WARN,
+                    "mod textures off: this build's texture keys are not {KEY} bytes"
                 );
                 return None;
             }
