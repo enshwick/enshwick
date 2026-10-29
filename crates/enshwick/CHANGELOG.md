@@ -38,6 +38,9 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- `Store` and `WorldStore` fill every key a file lacks from `T::default()`,
+  so a store whose type gained a field still reads (#672).
+
 - `WorldStore` writes a value again at the next save when its background
   write failed, instead of dropping the change (#667).
 
