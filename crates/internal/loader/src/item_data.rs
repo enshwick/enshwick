@@ -27,8 +27,6 @@
 //! and a client that says hello gets every value of those kinds; a client
 //! keeps what it got and answers reads from it.
 
-mod anchor;
-mod file;
 mod game;
 
 use std::path::{Path, PathBuf};
@@ -39,10 +37,11 @@ use enshwick::Entity;
 use enshwick::abi::{Event, HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use self::anchor::{Anchor, Index, Pending};
-use self::file::Saved;
 use crate::chains::Next;
 use crate::host::Loader;
+use crate::item_records::anchor::{self, Anchor, Index, Pending};
+use crate::item_records::file::{self, Saved};
+use crate::item_records::{decode, encode};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -51,8 +50,6 @@ use crate::registry::Registry;
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[pinned::ecs::DESTROY_REQUEST.id()];
 
-/// The longest kind id: a mod id, a colon and a name of up to 64 each.
-const MAX_ID: usize = 129;
 /// The largest value, so a record fits one message frame.
 pub(crate) const MAX_VALUE: usize = 512;
 /// The file of a world's values.
@@ -765,42 +762,6 @@ pub(crate) fn set(kind: u32, pide: u32, item: u32, value: &[u8]) -> Result<(), S
     encode(&mut message, id, pide, item, value);
     crate::net::item_data(0, &message);
     Ok(())
-}
-
-/// Appends one record: the kind id, the entity, the item and the value.
-fn encode(out: &mut Vec<u8>, id: &str, pide: u32, item: u32, value: &[u8]) {
-    out.push(u8::try_from(id.len()).unwrap_or(u8::MAX));
-    out.extend_from_slice(id.as_bytes());
-    out.extend_from_slice(&pide.to_le_bytes());
-    out.extend_from_slice(&item.to_le_bytes());
-    out.extend_from_slice(&u16::try_from(value.len()).unwrap_or(0).to_le_bytes());
-    out.extend_from_slice(value);
-}
-
-/// The records in `bytes`, each `(id, pide, item, value)`; stops at the
-/// first that does not read.
-fn decode(mut bytes: &[u8]) -> Vec<(&str, u32, u32, &[u8])> {
-    let mut records = Vec::new();
-    while let Some((&len, rest)) = bytes.split_first() {
-        let len = usize::from(len);
-        if len > MAX_ID || rest.len() < len + 10 {
-            break;
-        }
-        let (id, rest) = rest.split_at(len);
-        let Ok(id) = core::str::from_utf8(id) else {
-            break;
-        };
-        let word =
-            |at: usize| u32::from_le_bytes([rest[at], rest[at + 1], rest[at + 2], rest[at + 3]]);
-        let (pide, item) = (word(0), word(4));
-        let size = usize::from(u16::from_le_bytes([rest[8], rest[9]]));
-        let Some(value) = rest.get(10..10 + size) else {
-            break;
-        };
-        records.push((id, pide, item, value));
-        bytes = &rest[10 + size..];
-    }
-    records
 }
 
 /// The messages that give a client every value, each at most

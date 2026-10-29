@@ -1,28 +1,33 @@
-//! The notices a client waits to raise: how many wait and how many one step
-//! raises, apart from the game so it is tested everywhere.
+//! The notices a client waits to raise: how many wait, how many one step
+//! raises and how much of a text the game shows, apart from the game so it
+//! is tested and fuzzed everywhere.
 
 /// Text tags the loader cycles through, so a notice still on screen keeps
 /// its text while the next one is written.
-pub(crate) const SLOTS: usize = 8;
+pub const SLOTS: usize = 8;
 /// Notices waiting for the client's next step at most.
-pub(crate) const MAX_WAITING: usize = 16;
+pub const MAX_WAITING: usize = 16;
+/// The bytes of a notice text the game shows.
+pub const MAX_TEXT: usize = 255;
 
 /// Notices waiting for the client's next step: entity and text.
-pub(crate) type Waiting = Vec<(u32, String)>;
+pub type Waiting = Vec<(u32, String)>;
 
 /// What [`push`] did with a notice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Pushed {
+pub enum Pushed {
+    /// Waits for the next step.
     Queued,
     /// Dropped by a full queue, the first of a burst.
     FirstDrop,
+    /// Dropped by a full queue, after the first of a burst.
     Dropped,
 }
 
 /// Queues a notice unless [`MAX_WAITING`] wait already; `dropping` holds
 /// whether a drop was reported since the last notice queued.
 #[must_use]
-pub(crate) fn push(waiting: &mut Waiting, dropping: &mut bool, entity: u32, text: &str) -> Pushed {
+pub fn push(waiting: &mut Waiting, dropping: &mut bool, entity: u32, text: &str) -> Pushed {
     if waiting.len() < MAX_WAITING {
         waiting.push((entity, text.to_owned()));
         *dropping = false;
@@ -37,8 +42,18 @@ pub(crate) fn push(waiting: &mut Waiting, dropping: &mut bool, entity: u32, text
 /// The notices one step raises: at most one per text slot, so no notice
 /// writes over the text of another raised in the same step; the rest wait
 /// for the next step.
-pub(crate) fn step_batch(waiting: &mut Waiting) -> Waiting {
+pub fn step_batch(waiting: &mut Waiting) -> Waiting {
     waiting.drain(..waiting.len().min(SLOTS)).collect()
+}
+
+/// `text` cut to the [`MAX_TEXT`] bytes the game shows, at a character.
+#[must_use]
+pub fn cut(text: &str) -> &str {
+    let mut end = text.len().min(MAX_TEXT);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 #[cfg(test)]

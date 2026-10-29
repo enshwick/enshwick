@@ -365,6 +365,7 @@ dependencies = [
  "enshwick-luau",
  "iced-x86",
  "loom",
+ "memchr",
  "postcard",
  "rustc-hash",
  "semver",

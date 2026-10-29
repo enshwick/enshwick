@@ -10,10 +10,14 @@ on:
       - Cargo.lock
       - crates/cargo-enshwick/src/lib.rs
       - crates/cargo-enshwick/src/points.rs
+      - crates/cargo-enshwick/src/points/**
       - crates/enshwick-gamedata/src/**
+      - crates/enshwick/src/abi.rs
+      - crates/enshwick/src/abi/**
       - crates/enshwick/src/actions.rs
       - crates/enshwick/src/actions/**
       - crates/enshwick/src/code.rs
+      - crates/enshwick/src/code/**
       - crates/enshwick/src/config.rs
       - crates/enshwick/src/config/**
       - crates/enshwick/src/i18n.rs
@@ -23,12 +27,15 @@ on:
       - crates/internal/loader/src/admission/**
       - crates/internal/loader/src/configure.rs
       - crates/internal/loader/src/configure/**
+      - crates/internal/loader/src/item_records.rs
+      - crates/internal/loader/src/item_records/**
       - crates/internal/loader/src/join.rs
       - crates/internal/loader/src/join/**
       - crates/internal/loader/src/manifest.rs
       - crates/internal/loader/src/migrations.rs
       - crates/internal/loader/src/migrations/**
       - crates/internal/loader/src/modlist.rs
+      - crates/internal/loader/src/notice_queue.rs
       - crates/internal/loader/src/remote.rs
       - crates/internal/loader/src/resolve.rs
       - crates/internal/loader/src/settings.rs
