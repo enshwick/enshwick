@@ -262,6 +262,10 @@ impl Stats {
     /// [`ItemStats`] removes it. Clients that run Enshwick get it, and the
     /// entities that wear the item follow after the next step.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    /// The value is kept as item data, which sets aside, after a restart, a
+    /// value on an item no load finds, such as one in a player's inventory.
+    ///
     /// # Errors
     ///
     /// [`SetError`] when the value is too large or the server refuses it.
@@ -277,6 +281,7 @@ impl Stats {
     ///     let _set = stats.set_item(ring, &bonuses);
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn set_item(&self, item: ItemInstance, stats: &ItemStats) -> Result<(), SetError> {
         if *stats == ItemStats::default() {
             self.items.remove(item)

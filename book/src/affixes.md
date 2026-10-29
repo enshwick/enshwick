@@ -8,6 +8,12 @@ gets the modifiers. The
 [`affixes`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/affixes.rs)
 module holds the API.
 
+Unstable: rolling affixes onto items needs the `unstable` feature and may
+change in any release ([Stability](stability.md)). What an item rolled is
+kept as [item data](item-data.md), so after a restart a roll on an item no
+load finds, such as one in a player's inventory, stays aside. Defining
+affixes and reading what an item rolled are stable.
+
 ```rust
 use enshwick::affixes::{AffixCraft, AffixDef, AffixLoot, Range, ItemRarity, RollRules};
 use enshwick::content::categories::ItemCategoryMask;
