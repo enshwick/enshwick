@@ -38,7 +38,7 @@ type HitFn = unsafe extern "system" fn(frame: Ptr, out: *mut [u8; 8], mode: u32,
 
 /// The loader's room for the field object, a label with the field's parts
 /// after it; the build's `ui.text_field_extent` must fit in it.
-pub(super) const FIELD_SIZE: usize = 0x280;
+pub(super) const FIELD_SIZE: usize = 0x280; // bound, not a game offset: the loader's room
 /// The game's key for a field's kept state among its node's states.
 const STATE_KEY: u64 = 0x64d2_7908_60d9_c7f6;
 
