@@ -112,12 +112,22 @@ pub fn enabled(level: Level, source: &str) -> bool {
     level <= self::level(source)
 }
 
+/// Whether the writer runs, so lines reach the files.
+#[must_use]
+pub fn is_open() -> bool {
+    LINES.get().is_some()
+}
+
 /// Starts the writer in `dir`, the previous runs' files moved aside first:
 /// `all.log` gets every line, `loader.log` the loader's, `mods/<id>.log` each
-/// mod's.
+/// mod's. When it cannot start, [`crate::early`] says why.
 pub fn open(dir: &Path) {
     let mods = dir.join("mods");
-    if std::fs::create_dir_all(&mods).is_err() {
+    if let Err(e) = std::fs::create_dir_all(&mods) {
+        crate::early::note(&format!(
+            "no log: {} could not be made: {e}",
+            mods.display()
+        ));
         return;
     }
     let dir = dir.to_path_buf();
@@ -130,8 +140,15 @@ pub fn open(dir: &Path) {
             rotate(&dir.join("all.log"));
             rotate(&dir.join("loader.log"));
             rotate_dir(&mods);
-            let Ok(mut all) = std::fs::File::create(dir.join("all.log")) else {
-                return;
+            let mut all = match std::fs::File::create(dir.join("all.log")) {
+                Ok(all) => all,
+                Err(e) => {
+                    crate::early::write(&format!(
+                        "no log: {} could not be written: {e}",
+                        dir.join("all.log").display()
+                    ));
+                    return;
+                }
             };
             let mut files: rustc_hash::FxHashMap<String, Option<std::fs::File>> =
                 rustc_hash::FxHashMap::default();
@@ -165,8 +182,11 @@ pub fn open(dir: &Path) {
                 COUNTS.taken.fetch_add(1, Ordering::Release);
             }
         });
-    if started.is_ok() {
-        let _first = LINES.set(send);
+    match started {
+        Ok(_) => {
+            let _first = LINES.set(send);
+        }
+        Err(e) => crate::early::note(&format!("no log: its thread did not start: {e}")),
     }
 }
 

@@ -21,7 +21,7 @@ use windows_sys::Win32::System::Diagnostics::Debug::FlushInstructionCache;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::System::Memory::{PAGE_EXECUTE_READWRITE, VirtualProtect};
 use windows_sys::Win32::System::Threading::{
-    CreateEventW, GetCurrentProcess, SetEvent, WaitForSingleObject,
+    CreateEventW, ExitProcess, GetCurrentProcess, SetEvent, WaitForSingleObject,
 };
 
 /// The longest the server's code waits for the loader, in milliseconds.
@@ -201,18 +201,27 @@ unsafe extern "system" fn held_entry(peb: *mut c_void) -> u32 {
         EXPIRED.store(true, Ordering::Release);
     }
     let entry = ENTRY.load(Ordering::Relaxed);
-    if let Some(saved) = SAVED.get() {
+    let restored = SAVED.get().is_some_and(|saved| {
         // SAFETY: `entry` starts the `JUMP` bytes of mapped code `hold`
         // saved and overwrote (the caller's contract); only this thread runs
         // the entry, and it has not run the real one yet.
-        let _written = unsafe { write_code(entry, saved) };
+        unsafe { write_code(entry, saved) }
+    });
+    if !restored {
+        // The entry still jumps here: running it would recurse until the
+        // stack overflows.
+        crate::note::note(&format!(
+            "the server's own start could not be put back ({}); the server stops",
+            std::io::Error::last_os_error()
+        ));
+        // SAFETY: no preconditions; ends the process with exit code 1.
+        unsafe { ExitProcess(1) };
     }
     // SAFETY: `entry` is the executable's entry point from its PE header
     // (the caller's contract), a function of the `Entry` signature.
     let entry: Entry = unsafe { core::mem::transmute(entry) };
     // SAFETY: the real entry point runs once, on the thread Windows started
-    // for it, with the `peb` Windows passed (the caller's contract); its own
-    // bytes are back when that `write_code` call succeeded, which is not
-    // checked.
+    // for it, with the `peb` Windows passed (the caller's contract), and its
+    // own bytes are back: a failed `write_code` ended the process above.
     unsafe { entry(peb) }
 }
