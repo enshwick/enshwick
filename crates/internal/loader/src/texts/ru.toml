@@ -22,6 +22,7 @@
 "mods.others.beside" = "Файлы других модов рядом с игрой: {files}"
 "mods.others.chain-failed" = "Не загрузились из mods/chain: {files}"
 "mods.features.off" = "Отключено полностью или частично в этой версии игры: {features}"
+"mods.discovery.off" = "Обнаружение модов выключено: в игре, которую запускает игрок, хост и подключившиеся игроки не видят моды друг друга."
 "mods.extends" = "Расширяет: {points}"
 "mods.settings" = "Настройки"
 "mods.settings.yours" = "Ваши настройки"

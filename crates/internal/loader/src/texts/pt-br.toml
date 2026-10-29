@@ -22,6 +22,7 @@
 "mods.others.beside" = "Arquivos de outros mods junto ao jogo: {files}"
 "mods.others.chain-failed" = "Não carregaram de mods/chain: {files}"
 "mods.features.off" = "Desativado no todo ou em parte nesta versão do jogo: {features}"
+"mods.discovery.off" = "A detecção de mods está desligada: em jogos hospedados por um jogador, o anfitrião e os jogadores que entram não veem os mods uns dos outros."
 "mods.extends" = "Estende: {points}"
 "mods.settings" = "Configurações"
 "mods.settings.yours" = "Suas configurações"

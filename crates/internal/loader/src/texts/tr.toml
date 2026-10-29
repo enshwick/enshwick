@@ -22,6 +22,7 @@
 "mods.others.beside" = "Oyunun yanındaki diğer mod dosyaları: {files}"
 "mods.others.chain-failed" = "mods/chain klasöründen yüklenemeyenler: {files}"
 "mods.features.off" = "Bu oyun sürümünde kapalı veya kısmen kapalı: {features}"
+"mods.discovery.off" = "Mod algılama kapalı: bir oyuncunun barındırdığı oyunlarda ev sahibi ve katılan oyuncular birbirlerinin modlarını göremez."
 "mods.extends" = "Genişlettikleri: {points}"
 "mods.settings" = "Ayarlar"
 "mods.settings.yours" = "Ayarlarınız"

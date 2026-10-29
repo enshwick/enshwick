@@ -62,7 +62,7 @@ pub(crate) fn plan(
 }
 
 #[cfg(windows)]
-pub(crate) use runtime::{host_runs_enshwick, poll, register};
+pub(crate) use runtime::{discovery_on, host_runs_enshwick, poll, register};
 
 #[cfg(windows)]
 mod runtime {
@@ -288,6 +288,13 @@ mod runtime {
             // `value` are live NUL-terminated strings Steam copies.
             unsafe { (self.set)(this, lobby, key.as_ptr(), value.as_ptr()) != 0 }
         }
+    }
+
+    /// Whether the game's Steam library has the lobby calls, so a hosted
+    /// game and the friends who join it learn each other's mods; false
+    /// until [`register`] found them.
+    pub(crate) fn discovery_on() -> bool {
+        API.get().is_some()
     }
 
     /// Whether the lobby the client entered last names a host with
