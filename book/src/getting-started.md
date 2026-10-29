@@ -20,7 +20,9 @@ A mod is a Windows DLL. You need:
 
 - Rust 1.99 or newer through [rustup](https://rustup.rs), with the target
   `x86_64-pc-windows-msvc`;
-- on Windows, the MSVC build tools;
+- on Windows, the MSVC build tools; on Linux or macOS,
+  [cargo-xwin](https://github.com/rust-cross/cargo-xwin)
+  (`cargo install --locked cargo-xwin`), which fetches the Windows SDK;
 - the Enshwick loader in the game's folder: extract
   [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip),
   the development build until the first release, 1.0.0, next to
@@ -74,8 +76,10 @@ cd my-mod
 cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Enshrouded"
 ```
 
-`install` builds the mod in release and copies the DLL to
-`<game>/mods/<package>.dll`. The game folder is `--game`, or the
+`install` builds the mod in release for `x86_64-pc-windows-msvc`, through
+`cargo xwin` off Windows, and copies the DLL to `<game>/mods/<package>.dll`.
+When the target or cargo-xwin is missing, it says so with the command that
+adds it. The game folder is `--game`, or the
 `ENSHROUDED_DIR` environment variable. It must hold `enshrouded.exe` or
 `enshrouded_server.exe`. In a workspace with several mods, `--package` (`-p`)
 names one; without it, `install` takes the package in the current folder, or
@@ -86,7 +90,7 @@ To see what a built DLL says about itself (id, version, side, join check and
 dependencies):
 
 ```bash
-cargo enshwick manifest target/release/my_mod.dll
+cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll
 ```
 
 `--expect-version <version>` makes it fail when the DLL reports another

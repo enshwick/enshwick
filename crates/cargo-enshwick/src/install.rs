@@ -12,7 +12,6 @@ pub(crate) const GAME_EXECUTABLES: [&str; 2] = ["enshrouded_server.exe", "enshro
 #[derive(Debug, serde::Deserialize)]
 struct Metadata {
     packages: Vec<Package>,
-    target_directory: PathBuf,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -46,29 +45,40 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<Stri
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
     let metadata: Metadata = serde_json::from_slice(&output.stdout).context("cargo metadata")?;
-    let here = std::env::current_dir()?;
+    let here = std::env::current_dir().context("the current folder")?;
     let (package, library) = choose(&metadata.packages, package, &here)?;
+    let windows = cfg!(windows);
+    preflight(
+        windows,
+        || {
+            Command::new(&cargo)
+                .args(["xwin", "--version"])
+                .output()
+                .is_ok_and(|out| out.status.success())
+        },
+        windows_target_installed,
+    )?;
     let built = Command::new(&cargo)
-        .args([
-            "build",
-            "--release",
-            "--message-format=json-render-diagnostics",
-            "--package",
-            &package.name,
-        ])
+        .args(build_args(windows, &package.name))
         .stderr(std::process::Stdio::inherit())
         .output()
         .context("cargo build")?;
     if !built.status.success() {
-        bail!("cargo build failed for {}", package.name);
+        bail!(
+            "cargo build failed for {}{}",
+            package.name,
+            if windows {
+                "; a Windows build links with the MSVC tools (Visual Studio Build Tools with the C++ workload)"
+            } else {
+                ""
+            }
+        );
     }
-    // Cargo names the file it built, wherever a build target puts it.
-    let from = built_dll(&String::from_utf8_lossy(&built.stdout), library).unwrap_or_else(|| {
-        metadata
-            .target_directory
-            .join("release")
-            .join(format!("{library}.dll"))
-    });
+    let from = windows_dll(
+        &String::from_utf8_lossy(&built.stdout),
+        library,
+        &package.name,
+    )?;
     let mods = game.join("mods");
     std::fs::create_dir_all(&mods).with_context(|| mods.display().to_string())?;
     let to = mods.join(format!("{}.dll", package.name));
@@ -80,6 +90,68 @@ pub(crate) fn install(game: &Path, package: Option<&str>) -> anyhow::Result<Stri
         );
     }
     Ok(done)
+}
+
+/// The target every mod DLL is built for, whatever the host.
+const WINDOWS_TARGET: &str = "x86_64-pc-windows-msvc";
+
+/// The cargo arguments that build `package` as a Windows DLL: plain cargo on
+/// Windows, `cargo xwin` with the Windows SDK it fetches elsewhere.
+fn build_args(windows_host: bool, package: &str) -> Vec<&str> {
+    let xwin: &[&str] = if windows_host { &[] } else { &["xwin"] };
+    xwin.iter()
+        .copied()
+        .chain([
+            "build",
+            "--release",
+            "--target",
+            WINDOWS_TARGET,
+            "--message-format=json-render-diagnostics",
+            "--package",
+            package,
+        ])
+        .collect()
+}
+
+/// Fails with the install command of a tool the Windows build lacks;
+/// `target_installed` is `None` when rustup cannot tell.
+fn preflight(
+    windows_host: bool,
+    has_xwin: impl FnOnce() -> bool,
+    target_installed: impl FnOnce() -> Option<bool>,
+) -> anyhow::Result<()> {
+    if target_installed() == Some(false) {
+        bail!(
+            "mods are Windows DLLs and the Rust target {WINDOWS_TARGET} is not installed; `rustup target add {WINDOWS_TARGET}` adds it"
+        );
+    }
+    if !windows_host && !has_xwin() {
+        bail!(
+            "a Windows DLL is built off Windows with cargo-xwin, which is not installed; `cargo install --locked cargo-xwin` adds it"
+        );
+    }
+    Ok(())
+}
+
+/// Whether rustup has the Windows target for the toolchain of the current
+/// folder; `None` without rustup.
+fn windows_target_installed() -> Option<bool> {
+    let out = Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())?;
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|line| line.trim() == WINDOWS_TARGET),
+    )
+}
+
+/// The Windows DLL cargo's JSON messages say it built for `package`, whose
+/// cdylib is `library`.
+fn windows_dll(messages: &str, library: &str, package: &str) -> anyhow::Result<PathBuf> {
+    built_dll(messages, library).with_context(|| format!("no Windows DLL was built for {package}"))
 }
 
 /// The DLL cargo's JSON messages say it built for the cdylib `library`.
@@ -169,6 +241,52 @@ mod tests {
             ))
         );
         assert_eq!(built_dll(&messages, "other"), None);
+    }
+
+    #[test]
+    fn a_build_without_a_windows_dll_says_so() {
+        let messages = r#"{"reason":"compiler-artifact","target":{"name":"market_stalls","crate_types":["cdylib"]},"filenames":["/t/release/libmarket_stalls.so"]}"#;
+        assert_eq!(
+            windows_dll(messages, "market_stalls", "market-stalls")
+                .unwrap_err()
+                .to_string(),
+            "no Windows DLL was built for market-stalls"
+        );
+    }
+
+    #[test]
+    fn the_build_targets_windows_on_every_host() {
+        let on_windows = build_args(true, "market-stalls");
+        let elsewhere = build_args(false, "market-stalls");
+        assert_eq!(on_windows[0], "build");
+        assert_eq!(&elsewhere[..2], ["xwin", "build"]);
+        for args in [&on_windows, &elsewhere] {
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--target", WINDOWS_TARGET])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--package", "market-stalls"])
+            );
+        }
+    }
+
+    #[test]
+    fn a_missing_tool_is_named_with_its_install_command() {
+        let target = preflight(true, || true, || Some(false))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            target.contains("rustup target add x86_64-pc-windows-msvc"),
+            "{target}"
+        );
+        let xwin = preflight(false, || false, || Some(true))
+            .unwrap_err()
+            .to_string();
+        assert!(xwin.contains("cargo install --locked cargo-xwin"), "{xwin}");
+        assert!(preflight(true, || false, || Some(true)).is_ok());
+        assert!(preflight(false, || true, || None).is_ok());
     }
 
     fn package(name: &str, dir: &str, kinds: &[&str]) -> Package {

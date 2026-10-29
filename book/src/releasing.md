@@ -39,7 +39,7 @@ version, side, join check, dependencies). With `--expect-version` it fails
 unless the DLL has that version:
 
 ```bash
-cargo enshwick manifest target/release/my_mod.dll --expect-version 0.3.0
+cargo enshwick manifest target/x86_64-pc-windows-msvc/release/my_mod.dll --expect-version 0.3.0
 ```
 
 ## Releases in this repository

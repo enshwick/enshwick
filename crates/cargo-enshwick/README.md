@@ -31,8 +31,9 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 - `manifest <dll>` prints what a built mod says about itself: id, version,
   side, join check and dependencies. With `--expect-version <version>` it fails
   when the DLL reports another version, which release pipelines can check.
-- `install` builds the mod in release and copies its DLL to
-  `<game>/mods/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
+- `install` builds the mod in release as a Windows DLL, through
+  [cargo-xwin](https://github.com/rust-cross/cargo-xwin) off Windows, and
+  copies it to `<game>/mods/<package>.dll`. The game folder is `--game` or `ENSHROUDED_DIR`;
   in a workspace with several mods, `--package` names one.
 - `id <mod:name>...` prints the GUID and the game id of each
   [content id](https://github.com/enshwick/enshwick/blob/main/book/src/content.md#content-ids), as `Guid::named`
