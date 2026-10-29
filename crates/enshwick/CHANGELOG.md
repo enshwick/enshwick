@@ -6,6 +6,12 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `PackManifest::enshwick`: a pack's `pack.toml` may name the Enshwick
+  releases it is made for, such as `enshwick = "=1.0.0-alpha.12"`; a loader
+  of another release skips the pack and logs both versions (#661).
+
 ### Changed
 
 - `abi::ABI_VERSION`, a hash of the committed ABI layout, replaces

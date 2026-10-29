@@ -152,6 +152,34 @@ unsafe fn own(mut manifest: Manifest) -> Manifest {
     manifest
 }
 
+/// Why a pack whose `pack.toml` asks for the Enshwick releases
+/// `requirement` does not run on this one; `None` when it runs, or when it
+/// asks for none.
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build reads packs")
+)]
+pub(crate) fn enshwick_refusal(requirement: &str) -> Option<String> {
+    if requirement.is_empty() {
+        return None;
+    }
+    let req = match VersionReq::parse(requirement) {
+        Ok(req) => req,
+        Err(e) => {
+            return Some(format!(
+                "enshwick = \"{requirement}\" is no version requirement: {e}"
+            ));
+        }
+    };
+    let this = Version::parse(enshwick::VERSION).ok()?;
+    (!req.matches(&this)).then(|| {
+        format!(
+            "made for Enshwick {requirement}, this is Enshwick {}",
+            enshwick::VERSION
+        )
+    })
+}
+
 /// Validates `manifest` and turns it into a candidate.
 ///
 /// # Safety
@@ -517,6 +545,26 @@ mod tests {
         // literals and statics, readable and never written.
         let why = unsafe { parse(&renamed) }.unwrap_err().to_string();
         assert!(why.contains("loader's own"), "{why}");
+    }
+
+    #[test]
+    fn a_pack_made_for_another_enshwick_is_refused_with_its_requirement() {
+        let this = format!("={}", enshwick::VERSION);
+        assert_eq!(enshwick_refusal(""), None);
+        assert_eq!(enshwick_refusal(&this), None);
+        assert_eq!(enshwick_refusal(">=1.0.0-alpha.1, <2"), None);
+        assert_eq!(
+            enshwick_refusal("=0.9.0"),
+            Some(format!(
+                "made for Enshwick =0.9.0, this is Enshwick {}",
+                enshwick::VERSION
+            ))
+        );
+        let bad = enshwick_refusal("one").unwrap();
+        assert!(
+            bad.starts_with("enshwick = \"one\" is no version requirement"),
+            "{bad}"
+        );
     }
 
     #[test]
