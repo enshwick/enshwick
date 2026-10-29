@@ -198,9 +198,13 @@ pub(crate) fn host() -> Option<u64> {
 
 /// The player `key` entered the world; on the game thread.
 pub(crate) fn joined(key: u64) {
-    if guard(key, true).keeps_out() {
-        return;
+    if !guard(key, true).keeps_out() {
+        check(key);
     }
+}
+
+/// Starts the join check on the player `key`, whom the guards let in.
+fn check(key: u64) {
     let Some(serving) = STATE.serving.get() else {
         return;
     };
@@ -231,16 +235,17 @@ pub(crate) fn joined(key: u64) {
 /// refusal fails closed.
 fn guard(key: u64, first: bool) -> Guard {
     let guard = guards(key, first);
-    let guard = if guard == Guard::Broken && !can_kick() {
-        Guard::Unkickable
-    } else {
-        guard
-    };
-    if with_gate(|gate| gate.guarded(key, guard, Instant::now(), crate::world::live_keys)) {
-        crate::log!(
-            ERROR,
-            "{key:016x} must leave, as the ban list or the allowlist says, but stays: this build lacks the session's kick"
-        );
+    let kicks = can_kick();
+    let unkickable =
+        with_gate(|gate| gate.guarded(key, guard, kicks, Instant::now(), crate::world::live_keys));
+    if unkickable {
+        // A broken guard's removal logged its own error.
+        if guard != Guard::Broken {
+            crate::log!(
+                ERROR,
+                "{key:016x} must leave, as the ban list or the allowlist says, but stays: this build lacks the session's kick"
+            );
+        }
         crate::diag::part_off(
             "join admission",
             "this build lacks the session's kick, so players the ban list or the allowlist refuses stay",
@@ -256,10 +261,10 @@ fn guards(key: u64, first: bool) -> Guard {
         let guard = Guard::of(
             STATE
                 .fuse
-                .run("a banned account's join", || refuse_banned(key)),
+                .run("a banned account's join", || refuse_banned(key, first)),
         );
         if guard == Guard::Broken {
-            refuse_unchecked(key, true, "the ban check");
+            refuse_unchecked(key, true, "the ban check", first);
         }
         if guard.keeps_out() {
             return guard;
@@ -268,7 +273,7 @@ fn guards(key: u64, first: bool) -> Guard {
     if crate::allowlist::is_on() {
         let guard = Guard::of(crate::allowlist::guarded(|| refuse_unlisted(key, first)));
         if guard == Guard::Broken {
-            refuse_unchecked(key, false, "the allowlist");
+            refuse_unchecked(key, false, "the allowlist", first);
         }
         return guard;
     }
@@ -278,9 +283,10 @@ fn guards(key: u64, first: bool) -> Guard {
 /// Removes the player `key`, and bans the account with `ban`, when `guard`
 /// could not decide after a panic: a broken guard keeps every player but
 /// the host out rather than letting the ones it should refuse in. Admins go
-/// too, since telling them apart is part of what broke.
+/// too, since telling them apart is part of what broke. A failure is
+/// logged the `first` time only, not on each try again.
 #[cold]
-fn refuse_unchecked(key: u64, ban: bool, guard: &str) {
+fn refuse_unchecked(key: u64, ban: bool, guard: &str, first: bool) {
     let removed = STATE.closing.run("a removal by a broken guard", || {
         let loader = crate::host::loader().ok_or("the loader is not running")?;
         let kick = STATE
@@ -291,6 +297,7 @@ fn refuse_unchecked(key: u64, ban: bool, guard: &str) {
         disconnect(loader, kick, key, host(), ban)
     });
     match removed {
+        Some(Err(_)) | None if !first => {}
         Some(Ok(machine)) => crate::log!(
             WARN,
             "{guard} is off after a panic: {key:016x} removed to keep the server closed (machine {machine})"
@@ -310,7 +317,7 @@ fn refuse_unchecked(key: u64, ban: bool, guard: &str) {
 /// and lists neither the account nor an administrator, as
 /// `allowlist::refused` decides; a player without an account goes too. A
 /// player whose slot does not read counts as no administrator. The player
-/// is told why the `first` time.
+/// is told why, and a failed kick logged, the `first` time.
 fn refuse_unlisted(key: u64, first: bool) -> Guard {
     let Some(loader) = crate::host::loader() else {
         return Guard::Passed;
@@ -341,10 +348,12 @@ fn refuse_unlisted(key: u64, first: bool) -> Guard {
             Guard::Removed
         }
         Err(why) => {
-            crate::log!(
-                WARN,
-                "allowlist: {key:016x} is not listed but could not be removed: {why}; trying again"
-            );
+            if first {
+                crate::log!(
+                    WARN,
+                    "allowlist: {key:016x} is not listed but could not be removed: {why}; trying again"
+                );
+            }
             Guard::Kicking
         }
     }
@@ -360,8 +369,9 @@ pub(crate) fn can_kick() -> bool {
 /// list, filled from the ban list when hosting starts. The session's kick
 /// with its ban adds the account there for the rest of the run, also for a
 /// player who joined with an administrator's password. An account the
-/// game's own unban took off the list since is forgotten and stays.
-fn refuse_banned(key: u64) -> Guard {
+/// game's own unban took off the list since is forgotten and stays. A
+/// failed kick is logged the `first` time.
+fn refuse_banned(key: u64, first: bool) -> Guard {
     let Some(loader) = crate::host::loader() else {
         return Guard::Passed;
     };
@@ -381,10 +391,12 @@ fn refuse_banned(key: u64) -> Guard {
             Guard::Removed
         }
         Err(why) => {
-            crate::log!(
-                WARN,
-                "{key:016x} is on the ban list but could not be removed: {why}; trying again"
-            );
+            if first {
+                crate::log!(
+                    WARN,
+                    "{key:016x} is on the ban list but could not be removed: {why}; trying again"
+                );
+            }
             Guard::Kicking
         }
     }
@@ -460,7 +472,9 @@ pub(crate) fn after_step(loader: &Loader) {
             gate.refusals_due(now)
         });
         for key in due {
-            let _guard = guard(key, false);
+            if !guard(key, false).keeps_out() {
+                check(key);
+            }
         }
     });
     let Some(serving) = STATE.serving.get() else {
