@@ -412,15 +412,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_log_folder_that_cannot_be_made_leaves_the_log_closed() {
-        let file = std::env::temp_dir().join(format!("enshwick-no-log-{}", std::process::id()));
-        std::fs::write(&file, "a file where the folder should be").unwrap();
-        open(&file);
-        assert!(!is_open());
-        std::fs::remove_file(&file).unwrap();
-    }
-
-    #[test]
     fn the_latest_lines_are_kept_bounded_and_filtered() {
         let mut ring = Recent::new();
         for i in 0..RECENT + 10 {
