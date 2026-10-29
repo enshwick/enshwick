@@ -363,9 +363,67 @@ pub fn embedded(running: Side) -> KnownBuild {
     }
 }
 
+/// What `ids` read on the executables `ENSH_SERVER_EXE` and
+/// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
+/// executable's own table, then by every table of its side carried to it by
+/// patterns, each row named after its table.
+#[cfg(test)]
+pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<u64>>)> {
+    let tables = load();
+    let mut rows = Vec::new();
+    for (var, side) in [
+        ("ENSH_SERVER_EXE", tables::Side::Server),
+        ("ENSH_CLIENT_EXE", tables::Side::Client),
+    ] {
+        let Ok(path) = std::env::var(var) else {
+            continue;
+        };
+        let bytes = std::fs::read(path).unwrap();
+        let image = enshwick_gamedata::reflect::Image::parse(
+            &bytes,
+            enshwick_gamedata::reflect::Layout::File,
+            None,
+        )
+        .unwrap();
+        let own = tables::exact(&tables, side, image.fingerprint().unwrap())
+            .unwrap()
+            .resolve();
+        let read = |resolved: &Resolved| ids.iter().map(|id| resolved.constant(id)).collect();
+        rows.push((format!("{var}: own"), read(&own)));
+        let base = image.base();
+        let text = image.range(image.section(".text").unwrap());
+        let code = image.read(text.start, text.end - text.start).unwrap();
+        for other in tables.iter().filter(|t| t.side() == side) {
+            let carried = other.fall_back(code, text.start - base, |rva| image.u32(base + rva));
+            rows.push((format!("{var}: {}", other.name()), read(&carried)));
+        }
+    }
+    rows
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On each executable, every table reads the words of the offer test's
+    /// out record a refused offer zeroes.
+    #[test]
+    fn the_offer_out_record_reads_on_each_executable() {
+        let ids = [
+            "access.offer_out_u32",
+            "access.offer_out_u64",
+            "access.offer_out_tail",
+        ];
+        let rows = constants_on_executables(&ids);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        assert!(rows.len() >= named * 2, "{rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x4), Some(0x8), Some(0x10)], "{table}");
+        }
+    }
 
     #[test]
     fn code_with_no_check_to_offer_never_holds() {

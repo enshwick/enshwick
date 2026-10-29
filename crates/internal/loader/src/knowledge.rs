@@ -26,7 +26,7 @@ use enshwick::abi::{Event, Header, KnowledgeData, KnowledgeInfo, QuestData, Stat
 use rustc_hash::FxHashSet;
 
 use crate::host::Loader;
-use crate::memory::read;
+use crate::memory::{BlobArray, read};
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
 
@@ -227,28 +227,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
-/// A blob array at `header`: where its elements start and how many.
-///
-/// # Safety
-///
-/// - `header` is a live blob array header, readable for 8 bytes: an `i32`
-///   offset from itself, then a `u32` count.
-/// - Nothing writes the header during the call.
-unsafe fn blob_array(header: usize) -> (usize, usize) {
-    // SAFETY: the caller guarantees 8 readable bytes of a live header,
-    // starting with its i32 offset.
-    let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: the caller guarantees 8 readable bytes of a live header, with
-    // its u32 count at 4.
-    let count: u32 = unsafe { read(header, 4) };
-    let start = if offset == 0 {
-        0
-    } else {
-        header.wrapping_add_signed(offset as isize)
-    };
-    (start, count as usize)
-}
-
 /// The game object and its knowledge store, on the game thread.
 fn store(layout: &Layout) -> Result<(usize, usize), Status> {
     store_of(layout, crate::world::server()?)
@@ -307,31 +285,33 @@ fn definition(layout: &Layout, state: usize, id: u32) -> Option<(u8, usize)> {
     })
 }
 
+/// A bucket of a static hash map in a blob: the keys of one hash, as a run
+/// of the map's key array.
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
+struct Bucket {
+    start: u32,
+    count: u32,
+}
+
 /// Finds `id` in a static hash map of the blob, its elements `stride`
 /// bytes: buckets of `{start, count}`, keys and values as blob arrays.
 fn lookup(map: usize, id: u32, stride: usize) -> Option<usize> {
     // SAFETY: `map` is a reflected map field of the live definitions' blob
     // (`definition`'s callers), and a static map starts with the blob array
     // header of its buckets.
-    let (buckets, bucket_count) = unsafe { blob_array(map) };
-    if bucket_count == 0 || buckets == 0 {
-        return None;
-    }
-    let bucket = id as usize & (bucket_count - 1);
+    let buckets = unsafe { BlobArray::read(map) }?;
+    let bucket = id as usize & (buckets.count - 1);
     // SAFETY: `bucket` is `id` masked by the non-zero bucket count less one,
-    // the game's own bucket pick, so its 8-byte `{start, count}` lies inside
-    // the bucket array of a power-of-two count.
-    let start: u32 = unsafe { read(buckets, bucket * 8) };
-    // SAFETY: `bucket` is `id` masked by the non-zero bucket count less one,
-    // the game's own bucket pick, so its u32 count at 4 lies inside the
+    // the game's own bucket pick, so its `{start, count}` lies inside the
     // bucket array of a power-of-two count.
-    let count: u32 = unsafe { read(buckets, bucket * 8 + 4) };
-    // SAFETY: the map's key array header follows its bucket array header,
-    // 8 bytes into the live map.
-    let (keys, _) = unsafe { blob_array(map + 8) };
-    // SAFETY: the map's value array header follows its key array header,
-    // 16 bytes into the live map.
-    let (values, _) = unsafe { blob_array(map + 16) };
+    let Bucket { start, count } = unsafe { read(buckets.start, bucket * size_of::<Bucket>()) };
+    // SAFETY: the map's key array header follows its bucket array header in
+    // the live map.
+    let keys = unsafe { BlobArray::read(map + BlobArray::HEADER_SIZE) }?.start;
+    // SAFETY: the map's value array header follows its key array header in
+    // the live map.
+    let values = unsafe { BlobArray::read(map + 2 * BlobArray::HEADER_SIZE) }?.start;
     (start..start.saturating_add(count))
         .map(|i| i as usize)
         // SAFETY: the bucket's `{start, count}` names keys of the map's key
@@ -513,10 +493,7 @@ fn quest_set(layout: &Layout, game: usize) -> Option<&'static FxHashSet<u32>> {
     }
     // SAFETY: `blob` is the journal's non-null blob by the check before it, and
     // its reflected `quests` field is a blob array header.
-    let (start, count) = unsafe { blob_array(blob + layout.quests) };
-    if start == 0 || count == 0 {
-        return None;
-    }
+    let BlobArray { start, count } = unsafe { BlobArray::read(blob + layout.quests) }?;
     let set = (0..count)
         // SAFETY: `i` is below the quest array's count, so this is a quest of
         // the array, of the reflected `JournalQuestResource` size; its u32

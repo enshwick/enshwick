@@ -204,7 +204,7 @@ type Sets = Vec<Arc<[Owned]>>;
 /// loading screen between two worlds, leave it to a world that may be gone.
 const FRESH_MS: u64 = 500;
 /// More marker types than any build has: a count past it is a misread.
-const MAX_TYPES: u32 = 4096;
+const MAX_TYPES: usize = 4096;
 
 fn snapshot() -> &'static ArcSwap<Sets> {
     MARKERS
@@ -441,18 +441,16 @@ unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
     if blob.is_null() {
         return None;
     }
-    let array = blob.expose_provenance() + layout.blob_types;
-    // SAFETY: the non-null blob (checked earlier) holds its type array at the
-    // reflected `MapMarkerRegistryResource` path; a blob array starts with
-    // its `i32` offset from itself, the game's resource format.
-    let offset: i32 = unsafe { crate::memory::read(array, 0) };
-    // SAFETY: the same blob array, whose `u32` count follows its offset.
-    let count: u32 = unsafe { crate::memory::read(array, 4) };
-    if offset == 0 || count == 0 || count > MAX_TYPES {
+    // SAFETY: the non-null blob (checked earlier) holds its type array's
+    // blob array header at the reflected `MapMarkerRegistryResource` path.
+    let crate::memory::BlobArray {
+        start: first,
+        count,
+    } = unsafe { crate::memory::BlobArray::read(blob.expose_provenance() + layout.blob_types) }?;
+    if count > MAX_TYPES {
         return None;
     }
-    let first = array.wrapping_add_signed(offset as isize);
-    let types: Vec<(u32, bool, bool, bool)> = (0..count as usize)
+    let types: Vec<(u32, bool, bool, bool)> = (0..count)
         .map(|i| {
             let at = first + i * layout.type_size;
             // SAFETY: the blob's type array holds `count` reflected

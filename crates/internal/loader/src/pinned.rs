@@ -24,6 +24,7 @@ pub(crate) mod experience;
 pub(crate) mod game;
 pub(crate) mod inventory;
 pub(crate) mod item;
+pub(crate) mod join;
 pub(crate) mod knowledge;
 pub(crate) mod label;
 pub(crate) mod loot;

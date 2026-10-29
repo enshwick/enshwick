@@ -18,7 +18,7 @@ use enshwick::abi::{Header, Status, TerrainEdit, TerrainMaterialInfo};
 use enshwick::terrain::MAX_RADIUS;
 
 use crate::host::Loader;
-use crate::memory::read;
+use crate::memory::{BlobArray, read};
 use crate::pinned;
 use crate::pinned::Symbol;
 use crate::voxels::{BUILDING_FIRST, MATERIALS, TERRAIN};
@@ -251,23 +251,6 @@ fn resource(layout: &Layout) -> Result<usize, Status> {
     Ok(resource)
 }
 
-/// The array a reflected array header at `header` points at: its first
-/// entry and its count; `None` for an empty one.
-///
-/// # Safety
-///
-/// - `header` is a live reflected array header: an `i32` offset from itself,
-///   then a `u32` count, read on the game thread.
-unsafe fn array(header: usize) -> Option<(usize, u32)> {
-    // SAFETY: the caller guarantees a live array header at `header`, which
-    // starts with its `i32` offset.
-    let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: the caller guarantees a live array header at `header`, whose
-    // `u32` count follows its offset.
-    let count: u32 = unsafe { read(header, 4) };
-    (offset != 0).then(|| (header.wrapping_add_signed(offset as isize), count))
-}
-
 /// The building materials' terraforming configs of the running game: each
 /// one's material, counted from 0x80, and its hardness.
 pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status> {
@@ -294,10 +277,10 @@ pub(crate) fn building_configs(loader: &Loader) -> Result<Vec<(u8, u8)>, Status>
     // SAFETY: `resource` is the live terraforming registry resource
     // `resource` returned, whose reflected `buildingConfigs` array header
     // sits at the catalogue's offset.
-    let Some((start, count)) = (unsafe { array(resource + configs) }) else {
+    let Some(BlobArray { start, count }) = (unsafe { BlobArray::read(resource + configs) }) else {
         return Ok(Vec::new());
     };
-    Ok((0..count as usize)
+    Ok((0..count)
         .map(|i| {
             let config = start + i * size;
             (
@@ -321,10 +304,11 @@ pub(crate) fn materials(loader: &Loader) -> Result<Vec<TerrainMaterialInfo>, Sta
     // SAFETY: `resource` is the live terraforming registry resource
     // `resource` returned, whose reflected `terrainConfigs` array header
     // sits at `layout.configs`.
-    let Some((start, count)) = (unsafe { array(resource + layout.configs) }) else {
+    let Some(BlobArray { start, count }) = (unsafe { BlobArray::read(resource + layout.configs) })
+    else {
         return Ok(Vec::new());
     };
-    Ok((0..count as usize)
+    Ok((0..count)
         .map(|i| {
             let config = start + i * layout.config_size;
             // SAFETY: `config` is entry `i < count` of the array the header
