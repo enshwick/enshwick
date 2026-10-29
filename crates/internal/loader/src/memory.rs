@@ -61,6 +61,46 @@ pub(crate) unsafe fn write<T: NoUninit>(base: usize, offset: usize, value: T) {
     unsafe { enshwick::raw::write_at(at(base, offset), 0, value) };
 }
 
+/// A blob array in game memory, the game's resource format for a reflected
+/// array field: where its first element sits and how many there are.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BlobArray {
+    pub(crate) start: usize,
+    pub(crate) count: usize,
+}
+
+/// The header a blob array field holds: its first element's offset from the
+/// header, then its count.
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
+struct BlobArrayHeader {
+    offset: i32,
+    count: u32,
+}
+
+impl BlobArray {
+    /// How many bytes a blob array header takes in its owner.
+    pub(crate) const HEADER_SIZE: usize = size_of::<BlobArrayHeader>();
+
+    /// Reads the blob array whose header sits at `header`; `None` for one
+    /// that holds nothing, with no elements or no offset to them.
+    ///
+    /// # Safety
+    ///
+    /// - `header` is readable for [`Self::HEADER_SIZE`] bytes; no alignment
+    ///   is needed.
+    /// - No other thread writes those bytes during the read.
+    pub(crate) unsafe fn read(header: usize) -> Option<Self> {
+        // SAFETY: the caller's guarantee for the header's bytes is the one
+        // `read` asks for, and every bit pattern is a header.
+        let BlobArrayHeader { offset, count } = unsafe { read(header, 0) };
+        (offset != 0 && count != 0).then(|| Self {
+            start: header.wrapping_add_signed(offset as isize),
+            count: count as usize,
+        })
+    }
+}
+
 /// Reads the word at `address` on a suspended thread's stack, for the hook
 /// engine's walks over other threads' stacks.
 ///
@@ -102,6 +142,7 @@ pub(crate) unsafe fn write_stack_word(address: usize, value: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytemuck::Zeroable as _;
 
     #[test]
     fn an_address_and_offset_read_what_was_written() {
@@ -134,6 +175,39 @@ mod tests {
         // borrows `words` during the read.
         assert_eq!(unsafe { read_stack_word(base + size_of::<usize>()) }, 7);
         assert_eq!(words, [1, 7, 3]);
+    }
+
+    #[test]
+    fn a_blob_array_starts_at_its_offset_from_the_header() {
+        let element = BlobArrayHeader::zeroed();
+        let mut memory = [element, element];
+        memory[1] = BlobArrayHeader {
+            offset: -i32::try_from(BlobArray::HEADER_SIZE).unwrap_or(i32::MAX),
+            count: 2,
+        };
+        let first = memory.as_ptr().expose_provenance();
+        // SAFETY: the second element of `memory` is a whole blob array header.
+        let array = unsafe { BlobArray::read(first + BlobArray::HEADER_SIZE) };
+        assert_eq!(
+            array,
+            Some(BlobArray {
+                start: first,
+                count: 2
+            })
+        );
+    }
+
+    #[test]
+    fn a_blob_array_without_an_offset_or_elements_holds_nothing() {
+        let element = BlobArrayHeader::zeroed();
+        let mut memory = [element, element];
+        memory[0].count = 3;
+        memory[1].offset = 1;
+        let first = memory.as_ptr().expose_provenance();
+        for header in [first, first + BlobArray::HEADER_SIZE] {
+            // SAFETY: both elements of `memory` are whole blob array headers.
+            assert_eq!(unsafe { BlobArray::read(header) }, None);
+        }
     }
 
     #[test]

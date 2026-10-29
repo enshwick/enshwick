@@ -20,6 +20,7 @@ doc = false
 [dependencies]
 arc-swap.workspace = true
 base64.workspace = true
+bytemuck.workspace = true
 enshwick = { workspace = true, features = ["unstable"] }
 enshwick-gamedata.workspace = true
 memchr.workspace = true
@@ -61,7 +62,6 @@ windows-sys = { workspace = true, features = [
 loom = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
-bytemuck.workspace = true
 criterion.workspace = true
 insta.workspace = true
 proptest.workspace = true

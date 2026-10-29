@@ -23,7 +23,7 @@ use enshwick::Entity;
 use enshwick::abi::{ActiveBuff, BuffRequest, BuffTypeInfo, Header, Status};
 
 use crate::host::Loader;
-use crate::memory::{read, write};
+use crate::memory::{BlobArray, read, write};
 use crate::pinned::{self, Symbol};
 
 /// The build table ids this part of the loader names.
@@ -51,7 +51,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// the build's record must fit.
 const RECORD: usize = 0x100; // bound, not a game offset: the loader's room
 /// More buff types than any build has: a count past it is not a count.
-const MAX_TYPES: u32 = 1 << 16;
+const MAX_TYPES: usize = 1 << 16;
 /// The value of the record's strength the game's own apply gives a buff.
 const STRENGTH: f32 = 1.0;
 /// The slot groups of `BuffContainer` in order, with their kinds.
@@ -338,18 +338,15 @@ pub(crate) fn types(loader: &Loader) -> Result<Vec<BuffTypeInfo>, Status> {
     }
     let header = blob + layout.types;
     // SAFETY: `blob` is non-zero (`blob == 0` returns first) and the reflected
-    // `buffs` field of `keen::BuffTypeCollectionResource` is an array header at
-    // `header`: an `i32` offset from itself, then a `u32` count.
-    let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: `blob` is non-zero (`blob == 0` returns first) and the reflected
-    // `buffs` field of `keen::BuffTypeCollectionResource` is an array header at
-    // `header`: an `i32` offset from itself, then a `u32` count.
-    let count: u32 = unsafe { read(header, 4) };
+    // `buffs` field of `keen::BuffTypeCollectionResource` is a blob array
+    // header at `header`.
+    let Some(BlobArray { start, count }) = (unsafe { BlobArray::read(header) }) else {
+        return Ok(Vec::new());
+    };
     if count > MAX_TYPES {
         return Err(Status::MISSING);
     }
-    let start = header.wrapping_add_signed(offset as isize);
-    Ok((0..count as usize)
+    Ok((0..count)
         .map(|i| type_info(layout, start + i * layout.type_size))
         .collect())
 }
