@@ -15,6 +15,7 @@ use crate::pinned::{Constant, Symbol};
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::altar::LEVEL_ATTRIBUTE.id(),
     pinned::balancing::ZONE_SIZE.id(),
+    pinned::balancing::ZONE_SIZE_VALID.id(),
     pinned::ecs::ATTRIBUTE_FIND.id(),
     pinned::ecs::ATTRIBUTE_SLOT.id(),
     pinned::ecs::COMPONENT_READ.id(),
@@ -90,6 +91,9 @@ type MarkChanged = unsafe extern "system" fn(
 );
 type AttributeFind = unsafe extern "system" fn(out: *mut u64, attribute: u32, registry: u64) -> u64;
 type ZoneSize = unsafe extern "system" fn(out: *mut f32, balancing: u64, level: u64) -> u64;
+/// The answer the zone size writes: three floats and its valid byte after
+/// them, 16 bytes in all (server 399, client 426).
+type ZoneSizeOut = [f32; 4];
 type ComponentRead =
     unsafe extern "system" fn(ctx: *mut u64, kind: *const u16, entity: u32) -> *const u8;
 
@@ -101,6 +105,9 @@ pub(crate) struct Engine {
     mark: MarkChanged,
     find: AttributeFind,
     zone_size: ZoneSize,
+    /// Where the zone size's answer holds its valid byte, inside its
+    /// [`ZoneSizeOut`].
+    zone_size_valid: usize,
     component_read: ComponentRead,
     context_row: usize,
     entity_records: usize,
@@ -161,6 +168,8 @@ impl Engine {
             level_flags: size(pinned::ecs::LEVEL_FLAGS)?,
             level_data: size(pinned::ecs::LEVEL_DATA_OFFSET)?,
             attribute_slot: size(pinned::ecs::ATTRIBUTE_SLOT)?,
+            zone_size_valid: size(pinned::balancing::ZONE_SIZE_VALID)
+                .filter(|&at| at < size_of::<ZoneSizeOut>())?,
             level_attribute: u32::try_from(
                 loader.build.constant(pinned::altar::LEVEL_ATTRIBUTE.id())?,
             )
@@ -442,14 +451,14 @@ impl Engine {
     /// - `balancing` is the balancing registry word of a live row.
     /// - Called on the running system's thread while it runs.
     pub(crate) unsafe fn zone_size(&self, balancing: u64, level: usize) -> Option<[f32; 3]> {
-        let mut out = [0f32; 4];
+        let mut out: ZoneSizeOut = [0f32; 4];
         // SAFETY: the caller guarantees a live row's balancing registry on
         // its system's thread; `out` holds the 16 bytes the function writes,
-        // three floats and the valid byte at 0xc.
+        // three floats and the valid byte (server 399, client 426).
         unsafe { (self.zone_size)(out.as_mut_ptr(), balancing, level as u64) };
-        // SAFETY: `out` is 16 readable bytes on this stack, so the byte at
-        // 0xc is inside it.
-        let valid = unsafe { read_at::<u8>(out.as_ptr().cast(), 0xc) } != 0;
+        // SAFETY: `out` is readable on this stack, and `resolve` keeps the
+        // build table's valid byte inside it.
+        let valid = unsafe { read_at::<u8>(out.as_ptr().cast(), self.zone_size_valid) } != 0;
         valid.then_some([out[0], out[1], out[2]])
     }
 }
