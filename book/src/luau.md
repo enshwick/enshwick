@@ -322,12 +322,16 @@ that reads files, starts processes or loads compiled code. The globals and
 the `enshwick` tables are read-only. `require` resolves only the mod's own
 scripts.
 
-Each mod has two budgets:
+Each mod has these budgets:
 
 | Budget | Limit | Past it |
 | --- | --- | --- |
 | memory | 64 MiB for the mod's whole VM | the allocation fails |
-| time | 100 ms per call into the scripts, 2 s for `main.luau` at start | the script stops; `pcall` cannot catch it |
+| time per call | 10 ms per call into the scripts, 2 s for `main.luau` at start | the script stops; `pcall` cannot catch it |
+| time per second | 100 ms for all calls into the scripts within one second | the mod turns off |
+
+A server step takes about 50 ms, so a handler that runs on every step does
+little work each time and leaves the rest to a task.
 
 ## When a script fails
 

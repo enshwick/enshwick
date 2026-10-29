@@ -199,6 +199,52 @@ mod tests {
         );
     }
 
+    /// A handler that spins for about `ms` milliseconds of the clock.
+    fn spinning_handler(ms: u32) -> String {
+        format!(
+            r#"enshwick.on("WorldSaved", function()
+                local start = os.clock()
+                while os.clock() - start < {ms} / 1000 do end
+            end)"#
+        )
+    }
+
+    #[test]
+    fn a_handler_past_its_budget_per_second_turns_the_mod_off() {
+        let limits = Limits::default()
+            .with_call(Duration::from_millis(20))
+            .with_per_second(Duration::from_millis(30));
+        let (loader, status) = run_with(&spinning_handler(5), limits, Scripts::new());
+        assert_eq!(status, Status::OK);
+        let started = Instant::now();
+        for _ in 0..10 {
+            let _handled = loader.raise::<WorldSaved>(&());
+        }
+        assert!(started.elapsed() < Duration::from_secs(1), "one window");
+        let faults = loader.faults();
+        assert_eq!(faults.len(), 1, "{faults:?}");
+        assert!(faults[0].contains("per second"), "{faults:?}");
+        assert!(runtime().is_off());
+    }
+
+    #[test]
+    fn a_short_handler_runs_on_under_the_default_limits() {
+        let (loader, status) = run_with(&spinning_handler(1), Limits::default(), Scripts::new());
+        assert_eq!(status, Status::OK);
+        for _ in 0..20 {
+            let _handled = loader.raise::<WorldSaved>(&());
+        }
+        assert!(loader.faults().is_empty(), "{:?}", loader.faults());
+    }
+
+    #[test]
+    fn the_default_call_budget_fits_one_server_step() {
+        let limits = Limits::default();
+        assert!(limits.call <= Duration::from_millis(10));
+        assert!(limits.per_second > limits.call);
+        assert!(limits.per_second <= Duration::from_millis(250));
+    }
+
     #[test]
     fn an_endless_start_refuses_the_mod() {
         *CASE.lock().unwrap() = None;
@@ -211,7 +257,10 @@ mod tests {
 
     #[test]
     fn a_script_past_its_memory_stops() {
-        let limits = Limits::default().with_memory(4 << 20);
+        let limits = Limits::default()
+            .with_memory(4 << 20)
+            .with_call(Duration::from_secs(5))
+            .with_per_second(Duration::from_secs(5));
         let (loader, _) = run_with(
             r#"enshwick.on("WorldSaved", function()
                 local t = {}

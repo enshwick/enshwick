@@ -19,6 +19,7 @@
 //! ```
 
 mod bridge;
+mod budget;
 mod calls;
 mod files;
 mod points;
