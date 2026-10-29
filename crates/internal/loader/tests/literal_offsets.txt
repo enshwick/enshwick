@@ -6,4 +6,3 @@
 # read or write, and a constant spelled in decimal that such an offset names.
 # A constant or a call that is no offset into game memory ends with
 # `// bound, not a game offset: <why>`.
-1 src/base_groups/grouping.rs
