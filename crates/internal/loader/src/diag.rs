@@ -116,14 +116,19 @@ pub struct PartOff {
 /// summary and the Mods screen. A part keeps its first reason; past
 /// [`HISTORY`] parts, later ones reach only the log.
 pub fn part_off(part: &str, reason: &str) {
-    let mut parts = PARTS_OFF.relock();
+    keep_part(&mut PARTS_OFF.relock(), part, reason, now());
+}
+
+/// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
+/// `parts` is full.
+fn keep_part(parts: &mut Vec<PartOff>, part: &str, reason: &str, at: u64) {
     if parts.len() == HISTORY || parts.iter().any(|p| p.part == part) {
         return;
     }
     parts.push(PartOff {
         part: part.to_owned(),
         reason: reason.to_owned(),
-        at: now(),
+        at,
     });
 }
 
@@ -1002,15 +1007,17 @@ conflicts:
 
     #[test]
     fn a_part_off_keeps_its_first_reason_and_the_list_stays_bounded() {
-        part_off(
+        let mut off = Vec::new();
+        keep_part(
+            &mut off,
             "map markers",
             "the loader panicked in the marker pass: boom",
+            1,
         );
-        part_off("map markers", "a later reason");
+        keep_part(&mut off, "map markers", "a later reason", 2);
         for i in 0..HISTORY + 2 {
-            part_off(&format!("part {i}"), "off");
+            keep_part(&mut off, &format!("part {i}"), "off", 3);
         }
-        let off = parts_off();
         assert_eq!(off.len(), HISTORY);
         let markers = off.iter().find(|p| p.part == "map markers");
         assert_eq!(
