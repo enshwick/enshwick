@@ -1,17 +1,13 @@
-//! What the loader has to say while its log is not open: a start that stops
-//! before the log opens, and panics.
-//!
-//! Such a line goes to `logs/enshwick/start.log` beside the game, or to
-//! `enshwick/start.log` in the temporary folder when the game's folder takes
-//! no files, and to the debugger's output. The file keeps lines from earlier
-//! runs, each with its date, up to [`KEPT_BYTES`].
+//! Lines from before the log opens, and panics: to [`FILE`] and the debugger.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// The file, in the log's folder, that takes the lines.
+/// The file, in the log's folder beside the game or in the temporary folder
+/// when the game's folder takes no files, that takes the lines; it keeps
+/// earlier runs' lines, each dated, up to [`KEPT_BYTES`].
 pub const FILE: &str = "start.log";
 /// Past this size the file starts again empty.
 const KEPT_BYTES: u64 = 64 << 10;
@@ -36,7 +32,7 @@ pub fn write(message: &str) {
     to_debugger(&line);
     let game_logs = std::env::current_exe().ok().and_then(|exe| {
         exe.parent()
-            .map(|dir| dir.join("logs").join(crate::settings::LOADER_ID))
+            .map(|dir| dir.join(crate::log::LOGS).join(crate::settings::LOADER_ID))
     });
     let temp = std::env::temp_dir().join(crate::settings::LOADER_ID);
     let _kept = game_logs
