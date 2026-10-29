@@ -242,9 +242,9 @@ impl Engine {
         let layout = &self.layout;
         let mut config = Buf::<SLIDER_CONFIG>::zeroed();
         // SAFETY: `self.slider_init` is the game's `ui.slider_init`, checked
-        // in `Engine::resolve`; it fills the `SLIDER_CONFIG` bytes of
-        // `config`, a size from the game's own slider pages (the table has no
-        // extent for it; `Layout::checked` keeps the stops inside it), and
+        // in `Engine::resolve`; it writes the config's fields up to the
+        // table's `ui.slider_extent` and its stop list, which `Layout::read`
+        // and `Layout::checked` keep inside the `SLIDER_CONFIG` bytes, and
         // `label` outlives the frame by this function's `# Safety`.
         unsafe { (self.slider_init)(config.ptr(), label) };
         config.f32(layout.slider_min, min);

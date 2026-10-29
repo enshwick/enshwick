@@ -119,6 +119,7 @@ pub(crate) const SCROLL_STATE_SIZE: Constant = Constant::new("ui.scroll_state_si
 pub(crate) const SLIDER: Symbol = Symbol::new("ui.slider");
 pub(crate) const SLIDER_BOUNDED: Constant = Constant::new("ui.slider_bounded");
 pub(crate) const SLIDER_DISCRETE: Constant = Constant::new("ui.slider_discrete");
+pub(crate) const SLIDER_EXTENT: Constant = Constant::new("ui.slider_extent");
 pub(crate) const SLIDER_FORMAT: Constant = Constant::new("ui.slider_format");
 pub(crate) const SLIDER_INIT: Symbol = Symbol::new("ui.slider_init");
 pub(crate) const SLIDER_MAX: Constant = Constant::new("ui.slider_max");
