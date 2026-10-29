@@ -6,6 +6,14 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `files`: `read_if_present` and `read_to_string_if_present` tell a
+  missing file from one that does not read, and `write_atomically` writes a
+  file whole, flushed to disk, keeping the old one as `backup_path`.
+  `Store`, `WorldStore` and `Hold` write through it, so a store keeps
+  `<name>.toml.bak` beside its file (#658).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added
