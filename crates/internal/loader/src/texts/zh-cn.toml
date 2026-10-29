@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version}（已关闭）"
 "mods.points" = "扩展点：{points}"
 "mods.feature.off" = "{feature} 已关闭：{reason}"
+"mods.part.off" = "出错后关闭的 Enshwick 部分：{part}（{reason}）"
 "mods.others.native" = "同时运行、未使用 Enshwick：{files}"
 "mods.others.chain" = "从 mods/chain 加载：{files}"
 "mods.others.beside" = "游戏旁的其他模组文件：{files}"

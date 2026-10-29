@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (kapalı)"
 "mods.points" = "Genişletme noktaları: {points}"
 "mods.feature.off" = "{feature} kapalı: {reason}"
+"mods.part.off" = "Hatadan sonra kapanan Enshwick parçası: {part} ({reason})"
 "mods.others.native" = "Enshwick olmadan çalışan diğerleri: {files}"
 "mods.others.chain" = "mods/chain klasöründen yüklenenler: {files}"
 "mods.others.beside" = "Oyunun yanındaki diğer mod dosyaları: {files}"

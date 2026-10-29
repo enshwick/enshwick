@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (aus)"
 "mods.points" = "Erweiterungspunkte: {points}"
 "mods.feature.off" = "{feature} ist aus: {reason}"
+"mods.part.off" = "Enshwick-Teil nach einem Fehler aus: {part} ({reason})"
 "mods.others.native" = "Läuft auch, ohne Enshwick: {files}"
 "mods.others.chain" = "Aus mods/chain geladen: {files}"
 "mods.others.beside" = "Dateien anderer Mods neben dem Spiel: {files}"

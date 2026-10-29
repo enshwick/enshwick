@@ -110,7 +110,7 @@ pub(super) unsafe extern "system" fn world_settings(
 }
 
 /// Turns the mods' world settings rows off at their first panic.
-static WORLD_ROWS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("the world settings rows");
+static WORLD_ROWS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("world settings rows");
 
 /// Draws the mods' rows under the world settings' last tab, in its scroll
 /// area; read-only for a player who may not change the world.

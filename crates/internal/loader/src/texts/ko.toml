@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (꺼짐)"
 "mods.points" = "확장 지점: {points}"
 "mods.feature.off" = "{feature} 꺼짐: {reason}"
+"mods.part.off" = "오류로 꺼진 Enshwick 부분: {part} ({reason})"
 "mods.others.native" = "Enshwick 없이 함께 실행 중: {files}"
 "mods.others.chain" = "mods/chain에서 불러옴: {files}"
 "mods.others.beside" = "게임 옆에 있는 다른 모드의 파일: {files}"

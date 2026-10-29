@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (ปิดอยู่)"
 "mods.points" = "จุดขยาย: {points}"
 "mods.feature.off" = "{feature} ปิดอยู่: {reason}"
+"mods.part.off" = "ส่วนของ Enshwick ปิดหลังเกิดข้อผิดพลาด: {part} ({reason})"
 "mods.others.native" = "ทำงานอยู่ด้วย โดยไม่ผ่าน Enshwick: {files}"
 "mods.others.chain" = "โหลดจาก mods/chain: {files}"
 "mods.others.beside" = "ไฟล์ของม็อดอื่นที่อยู่ข้างเกม: {files}"

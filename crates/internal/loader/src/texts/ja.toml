@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version}（オフ）"
 "mods.points" = "拡張ポイント：{points}"
 "mods.feature.off" = "{feature} はオフです：{reason}"
+"mods.part.off" = "エラーのためオフになった Enshwick の部分：{part}（{reason}）"
 "mods.others.native" = "Enshwick を使わずに動作中：{files}"
 "mods.others.chain" = "mods/chain から読み込み済み：{files}"
 "mods.others.beside" = "ゲームと同じ場所にあるほかの MOD のファイル：{files}"

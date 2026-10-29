@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (desactivado)"
 "mods.points" = "Puntos de extensión: {points}"
 "mods.feature.off" = "{feature} (desactivado): {reason}"
+"mods.part.off" = "Parte de Enshwick desactivada tras un error: {part} ({reason})"
 "mods.others.native" = "También en ejecución, sin Enshwick: {files}"
 "mods.others.chain" = "Cargados desde mods/chain: {files}"
 "mods.others.beside" = "Archivos de otros mods junto al juego: {files}"

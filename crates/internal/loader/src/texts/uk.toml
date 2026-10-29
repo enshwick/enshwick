@@ -17,6 +17,7 @@
 "mods.off" = "{name} {version} (вимкнено)"
 "mods.points" = "Точки розширення: {points}"
 "mods.feature.off" = "{feature} вимкнено: {reason}"
+"mods.part.off" = "Частину Enshwick вимкнено через помилку: {part} ({reason})"
 "mods.others.native" = "Також працюють, без Enshwick: {files}"
 "mods.others.chain" = "Завантажено з mods/chain: {files}"
 "mods.others.beside" = "Файли інших модів поруч із грою: {files}"

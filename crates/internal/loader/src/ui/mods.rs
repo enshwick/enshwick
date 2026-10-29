@@ -63,9 +63,9 @@ const FROM_PAUSE: u8 = 2;
 /// Asked to open, from a menu hook: where from.
 static OPEN: AtomicU8 = AtomicU8::new(0);
 /// Turns the main menu's Mods entry off at its first panic.
-static MAIN_MENU_FUSE: Fuse = Fuse::new("the main menu's Mods entry");
+static MAIN_MENU_FUSE: Fuse = Fuse::new("main menu Mods entry");
 /// Turns the pause menu's Mods entry off at its first panic.
-static PAUSE_MENU_FUSE: Fuse = Fuse::new("the pause menu's Mods entry");
+static PAUSE_MENU_FUSE: Fuse = Fuse::new("pause menu Mods entry");
 /// The frame each menu hook last ran in.
 static MAIN_SEEN: AtomicU64 = AtomicU64::new(0);
 static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);
@@ -716,6 +716,20 @@ fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
     }
 }
 
+/// Paints a line for each part of the loader that is off, with its reason.
+fn parts_off(paint: &Painter<'_>) {
+    if !crate::diag::any_part_off() {
+        return;
+    }
+    for part in crate::diag::parts_off() {
+        let line = texts::fill(
+            "mods.part.off",
+            &[("part", &part.part), ("reason", &part.reason)],
+        );
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
+}
+
 /// Draws a page of the mod list; what the player did.
 fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let mods = &loader.mods;
@@ -746,13 +760,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
-    for part in crate::diag::parts_off() {
-        let line = texts::fill(
-            "mods.feature.off",
-            &[("feature", &part.part), ("reason", &part.reason)],
-        );
-        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-    }
+    parts_off(paint);
     if !crate::lobby::discovery_on() {
         paint.label(
             texts::text("mods.discovery.off").as_bytes(),

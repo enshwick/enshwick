@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -31,6 +31,7 @@ static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
 static STATUS_MINUTES: AtomicU32 = AtomicU32::new(crate::settings::STATUS_MINUTES);
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
 static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
+static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static PATCHES: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 
@@ -117,6 +118,13 @@ pub struct PartOff {
 /// [`HISTORY`] parts, later ones reach only the log.
 pub fn part_off(part: &str, reason: &str) {
     keep_part(&mut PARTS_OFF.relock(), part, reason, now());
+    ANY_PART_OFF.store(true, Ordering::Release);
+}
+
+/// Whether any part is off, read without the lock, for a per-frame check.
+#[must_use]
+pub fn any_part_off() -> bool {
+    ANY_PART_OFF.load(Ordering::Acquire)
 }
 
 /// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
