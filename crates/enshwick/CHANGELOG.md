@@ -24,6 +24,11 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- `Stats::set_item`, `Affixes::roll`, `Load::add_loot_affixes`,
+  `Load::add_craft_affixes`, `AffixLoot` and `AffixCraft` need the
+  `unstable` feature: they keep their values as item data, which sets aside
+  a value on an item no load finds after a restart (#673).
+
 - `item_data` and `entity_data` need the `unstable` feature: after a
   restart, a value on an item no load finds stays aside. `ItemInstance` moved
   to `inventory`, and `stats::SetError` names the error of
