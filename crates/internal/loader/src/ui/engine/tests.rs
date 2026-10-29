@@ -312,6 +312,11 @@ fn the_scroll_area_s_extents_come_from_the_table_and_fit_its_buffers() {
         checked += 1;
     }
     assert!(checked > 0, "no client table pins the scroll area");
+    let reflected = Missing::Reflected("keen::GameUiScrollbarParameterData", "sliderTexture");
+    assert_eq!(
+        reflected.to_string(),
+        "sliderTexture of keen::GameUiScrollbarParameterData is not reflected on this build"
+    );
 }
 
 /// The scroll config and its look as client 426 reflects them.

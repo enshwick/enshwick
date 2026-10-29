@@ -12,6 +12,8 @@
 //! how far it reaches, checked against the loader's buffer for it.
 
 use crate::host::Loader;
+pub(crate) use crate::interface_parts::Missing;
+use crate::interface_parts::{Part, check_functions};
 use crate::pinned::{self, Symbol};
 
 /// A buffer the game fills or reads, aligned as the game keeps its own on
@@ -251,10 +253,6 @@ pub(super) struct Layout {
     dropdown_enabled: usize,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
-    menu_entry_text: usize,
-    menu_entry_font: usize,
-    action_node: usize,
-    action_bound: usize,
 }
 
 /// The navigation group's fields the loader's config sets, as offsets in
@@ -280,6 +278,29 @@ pub(super) struct DialogLayout {
     pub(super) detail_len: usize,
     pub(super) answer: usize,
     pub(super) answered: usize,
+}
+
+/// What the menus' Mods entries fill: the entry the main menu draws, and
+/// the Back action the Mods screen they open hears.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct MenuLayout {
+    pub(super) entry_text: usize,
+    pub(super) entry_font: usize,
+    pub(super) action_node: usize,
+    pub(super) action_bound: usize,
+}
+
+impl MenuLayout {
+    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        fits(lookup, pinned::ui::MENU_ENTRY_EXTENT.id(), MENU_ENTRY)?;
+        fits(lookup, pinned::ui::ACTION_EXTENT.id(), ACTION_SPEC)?;
+        Ok(Self {
+            entry_text: field(lookup, pinned::ui::MENU_ENTRY_TEXT.id())?,
+            entry_font: field(lookup, pinned::ui::MENU_ENTRY_FONT.id())?,
+            action_node: field(lookup, pinned::ui::ACTION_NODE.id())?,
+            action_bound: field(lookup, pinned::ui::ACTION_BOUND.id())?,
+        })
+    }
 }
 
 /// The world settings view's fields at the loader's hook in it: the
@@ -322,8 +343,6 @@ impl Layout {
             (pinned::ui::BUTTON_EXTENT, BUTTON_CONFIG),
             (pinned::ui::TOGGLE_EXTENT, TOGGLE_CONFIG),
             (pinned::ui::DROPDOWN_EXTENT, DROPDOWN_CONFIG),
-            (pinned::ui::MENU_ENTRY_EXTENT, MENU_ENTRY),
-            (pinned::ui::ACTION_EXTENT, ACTION_SPEC),
         ] {
             fits(lookup, id.id(), room)?;
         }
@@ -382,10 +401,6 @@ impl Layout {
             dropdown_enabled: f(pinned::ui::DROPDOWN_ENABLED.id())?,
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
-            menu_entry_text: f(pinned::ui::MENU_ENTRY_TEXT.id())?,
-            menu_entry_font: f(pinned::ui::MENU_ENTRY_FONT.id())?,
-            action_node: f(pinned::ui::ACTION_NODE.id())?,
-            action_bound: f(pinned::ui::ACTION_BOUND.id())?,
         }
         .checked()
     }
@@ -505,6 +520,8 @@ pub(crate) struct Engine {
     context: usize,
     looks: Looks,
     pub(super) layout: Layout,
+    /// The menus' Mods entries' fields; `None` keeps both entries out.
+    pub(super) menu: Option<MenuLayout>,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
     pub(super) dialog: Option<DialogLayout>,
     /// The world settings view's fields; `None` keeps the mods' rows out.
@@ -545,11 +562,11 @@ pub(crate) struct Engine {
     sound: SoundFn,
     loca_id: LocaIdFn,
     loca_text: LocaTextFn,
-    hud_visible: VisibleFn,
-    main_entry: MainEntryFn,
-    pause_entry: PauseEntryFn,
-    action_new: ActionNewFn,
-    action_query: ActionQueryFn,
+    hud_visible: Option<VisibleFn>,
+    main_entry: Option<MainEntryFn>,
+    pause_entry: Option<PauseEntryFn>,
+    action_new: Option<ActionNewFn>,
+    action_query: Option<ActionQueryFn>,
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
     pub(super) world_settings_site: u64,
@@ -577,54 +594,6 @@ impl Legal {
         })
     }
 }
-
-/// Every function the loader calls or hooks, by symbol; each must read its
-/// `<symbol>.bytes` constant.
-const FUNCTIONS: [Symbol; 43] = [
-    pinned::ui::WORLD_SETTINGS_SITE,
-    pinned::ui::MAIN_ENTRY,
-    pinned::ui::PAUSE_ENTRY,
-    pinned::ui::ACTION_NEW,
-    pinned::ui::ACTION_QUERY,
-    pinned::ui::MAIN_MENU_SITE,
-    pinned::ui::PAUSE_MENU_SITE,
-    pinned::ui::HUD,
-    pinned::ui::HUD_VISIBLE,
-    pinned::ui::POPUP,
-    pinned::ui::WINDOW_BEGIN,
-    pinned::ui::WINDOW_END,
-    pinned::ui::FRAME_FROM_NODE,
-    pinned::ui::FRAME_OPEN,
-    pinned::ui::FRAME_CLOSE,
-    pinned::ui::FRAME_STRETCH,
-    pinned::ui::FRAME_COLOR,
-    pinned::ui::NODE_PADDING,
-    pinned::ui::NODE_SPACING,
-    pinned::ui::NODE_ALIGN,
-    pinned::ui::NODE_WIDTH,
-    pinned::ui::NODE_HEIGHT,
-    pinned::ui::NODE_STRETCH,
-    pinned::ui::PANEL,
-    pinned::ui::NAV_INIT,
-    pinned::ui::NAV_INPUT,
-    pinned::ui::NAV_SET,
-    pinned::ui::NAV_PUSH,
-    pinned::ui::NAV_END,
-    pinned::ui::NAV_DROP,
-    pinned::ui::LABEL_NEW,
-    pinned::ui::LABEL_DRAW,
-    pinned::ui::BUTTON,
-    pinned::ui::TOGGLE,
-    pinned::ui::SLIDER_INIT,
-    pinned::ui::SLIDER,
-    pinned::ui::DROPDOWN_INIT,
-    pinned::ui::DROPDOWN,
-    pinned::ui::PROGRESS,
-    pinned::ui::SOUND,
-    pinned::ui::LOCA_ID,
-    pinned::ui::LOCA_TEXT,
-    pinned::ui::CONTEXT,
-];
 
 /// The bundle offset of a reflected path, `(type, field)` pairs summed.
 fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
@@ -732,77 +701,123 @@ unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> 
     Ok(unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
-/// Why the interface stays off on this build.
-#[derive(Debug)]
-pub(crate) enum Missing {
-    Entry(&'static str),
-    Bytes(&'static str),
-    Room(&'static str),
-    Looks,
-    /// A type and its field the build's reflection lacks.
-    Reflected(&'static str, &'static str),
+/// The interface's optional parts read from the build's table and
+/// reflection, each `None` when it turned off alone.
+struct Optional {
+    menu: Option<MenuLayout>,
+    dialog: Option<DialogLayout>,
+    view: Option<ViewLayout>,
+    scroll: Option<scroll::Scrolling>,
+    text_fields: Option<text_field::TextFields>,
 }
 
-impl core::fmt::Display for Missing {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Entry(name) => write!(f, "{name} is not in this build"),
-            Self::Bytes(name) => write!(f, "{name} does not read as the build table says"),
-            Self::Room(name) => write!(f, "{name} runs past the loader's buffer"),
-            Self::Looks => f.write_str("the look bundle lacks a reflected field"),
-            Self::Reflected(ty, field) => write!(f, "{ty} {field} is not reflected on this build"),
+impl Optional {
+    /// Reads each optional layout, adding the menus' entries to `parts_off`
+    /// when theirs does not read, then turns off each of `parts_off` and
+    /// each other layout that does not read, with its reason; the world
+    /// settings' rows only while their hook site reads.
+    fn resolve(loader: &Loader, parts_off: &mut Vec<(Part, Missing)>) -> Self {
+        let lookup = |id: &str| loader.build.constant(id);
+        let menu = MenuLayout::read(&lookup);
+        if let Err(why) = menu {
+            for part in [Part::MAIN_MENU, Part::PAUSE_MENU] {
+                if !parts_off.iter().any(|(p, _)| *p == part) {
+                    parts_off.push((part, why));
+                }
+            }
+        }
+        let off = |part: &'static str| {
+            move |why: &Missing| {
+                loader.feature_off(part, why.id(), &why.reason());
+            }
+        };
+        for (part, why) in parts_off.iter() {
+            off(part.name)(why);
+        }
+        let world_rows = !parts_off.iter().any(|(p, _)| *p == Part::WORLD_ROWS);
+        Self {
+            menu: menu.ok(),
+            dialog: DialogLayout::read(&lookup).inspect_err(off("dialogs")).ok(),
+            view: world_rows
+                .then(|| ViewLayout::read(&lookup).inspect_err(off(Part::WORLD_ROWS.name)))
+                .and_then(Result::ok),
+            scroll: scroll::Scrolling::resolve(loader)
+                .inspect_err(off("scrolling on the Mods screen (lists page)"))
+                .ok(),
+            text_fields: text_field::TextFields::resolve(loader)
+                .inspect_err(off("text settings on the Mods screen (read-only)"))
+                .ok(),
         }
     }
 }
 
-impl Engine {
-    /// Resolves every function and look; the first that is missing or does
-    /// not read as expected keeps the interface off. The scroll area and
-    /// the text field resolve on their own: without them the interface
-    /// stays on and pages its lists and shows texts read-only.
-    pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        for name in FUNCTIONS {
-            if name == pinned::ui::CONTEXT {
-                loader.address(name).ok_or(Missing::Entry(name.id()))?;
-                continue;
-            }
-            verify(loader, name)?;
+/// Checks interface function `name` by [`verify`]; `ui.context`, a data
+/// address, only for being in the build.
+fn check_function(loader: &Loader, name: Symbol) -> Result<(), Missing> {
+    if name == pinned::ui::CONTEXT {
+        loader.address(name).ok_or(Missing::Entry(name.id()))?;
+        return Ok(());
+    }
+    verify(loader, name).map(drop)
+}
+
+/// Game function `$name` as `$ty` of a part that is `$on`, checked by
+/// [`game_fn`]; `None` for a part that is off.
+macro_rules! part_fn {
+    ($loader:expr, $on:expr, $name:expr, $ty:ty) => {
+        if $on {
+            // SAFETY: `$ty` is the signature of the game function
+            // `$name` names, from the game's own calls of it in the
+            // menus and the HUD on client 426; `game_fn` checks its
+            // bytes against the build table.
+            unsafe { game_fn::<$ty>($loader, $name) }.ok()
+        } else {
+            None
         }
+    };
+}
+
+impl Engine {
+    /// Resolves every function and look. The first of the interface's own
+    /// that is missing or does not read as expected keeps the interface
+    /// off; an optional part, the dialogs, the world settings' rows, the
+    /// menus' entries, the HUD, the scroll area and the text field, turns
+    /// off alone with its reason, and the rest stays on.
+    pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
+        let mut parts_off = check_functions(|name| check_function(loader, name))?;
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
         let layout = Layout::read(&lookup)?;
-        let dialog = DialogLayout::read(&lookup)
-            .inspect_err(|why| crate::log!(WARN, "interface dialogs off: {why}"))
-            .ok();
-        let view = ViewLayout::read(&lookup)
-            .inspect_err(|why| crate::log!(WARN, "the world settings' Mods rows off: {why}"))
-            .ok();
-        let scroll = scroll::Scrolling::resolve(loader)
-            .inspect_err(|why| {
-                crate::log!(WARN, "the Mods screen pages instead of scrolling: {why}");
-            })
-            .ok();
-        let text_fields = text_field::TextFields::resolve(loader)
-            .inspect_err(|why| {
-                crate::log!(
-                    WARN,
-                    "text settings are read-only on the Mods screen: {why}"
-                );
-            })
-            .ok();
+        let Optional {
+            menu,
+            dialog,
+            view,
+            scroll,
+            text_fields,
+        } = Optional::resolve(loader, &mut parts_off);
+        let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
+        let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
         let at = |name: Symbol| {
             loader
                 .address(name)
                 .and_then(|a| usize::try_from(a).ok())
                 .unwrap_or(0)
         };
+        let site = |part: Part, name: Symbol| {
+            if on(part) {
+                loader.address(name).unwrap_or(0)
+            } else {
+                0
+            }
+        };
         macro_rules! function {
             ($name:expr, $ty:ty) => {{
                 let address = at($name);
-                // SAFETY: the loop over `FUNCTIONS` returned unless every
-                // function's first eight bytes match its `<name>.bytes`
-                // constant, so the address is the game function the build table
-                // types as `$ty`.
+                // SAFETY: `check_functions` with `check_function` returned
+                // unless every function of `FUNCTIONS` but `ui.context`, a
+                // data address, has first eight bytes that match its
+                // `<name>.bytes` constant, so the address is the game function
+                // the build table types as `$ty`.
                 unsafe { core::mem::transmute::<usize, $ty>(address) }
             }};
         }
@@ -810,6 +825,7 @@ impl Engine {
             context: at(pinned::ui::CONTEXT),
             looks,
             layout,
+            menu,
             dialog,
             view,
             scroll,
@@ -846,14 +862,24 @@ impl Engine {
             sound: function!(pinned::ui::SOUND, SoundFn),
             loca_id: function!(pinned::ui::LOCA_ID, LocaIdFn),
             loca_text: function!(pinned::ui::LOCA_TEXT, LocaTextFn),
-            hud_visible: function!(pinned::ui::HUD_VISIBLE, VisibleFn),
-            main_entry: function!(pinned::ui::MAIN_ENTRY, MainEntryFn),
-            pause_entry: function!(pinned::ui::PAUSE_ENTRY, PauseEntryFn),
-            action_new: function!(pinned::ui::ACTION_NEW, ActionNewFn),
-            action_query: function!(pinned::ui::ACTION_QUERY, ActionQueryFn),
-            main_menu_site: loader.address(pinned::ui::MAIN_MENU_SITE).unwrap_or(0),
-            pause_menu_site: loader.address(pinned::ui::PAUSE_MENU_SITE).unwrap_or(0),
-            world_settings_site: loader.address(pinned::ui::WORLD_SETTINGS_SITE).unwrap_or(0),
+            hud_visible: part_fn!(loader, on(Part::HUD), pinned::ui::HUD_VISIBLE, VisibleFn),
+            main_entry: part_fn!(
+                loader,
+                on(Part::MAIN_MENU),
+                pinned::ui::MAIN_ENTRY,
+                MainEntryFn
+            ),
+            pause_entry: part_fn!(
+                loader,
+                on(Part::PAUSE_MENU),
+                pinned::ui::PAUSE_ENTRY,
+                PauseEntryFn
+            ),
+            action_new: part_fn!(loader, menus, pinned::ui::ACTION_NEW, ActionNewFn),
+            action_query: part_fn!(loader, menus, pinned::ui::ACTION_QUERY, ActionQueryFn),
+            main_menu_site: site(Part::MAIN_MENU, pinned::ui::MAIN_MENU_SITE),
+            pause_menu_site: site(Part::PAUSE_MENU, pinned::ui::PAUSE_MENU_SITE),
+            world_settings_site: site(Part::WORLD_ROWS, pinned::ui::WORLD_SETTINGS_SITE),
             legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
                 loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
             } else {

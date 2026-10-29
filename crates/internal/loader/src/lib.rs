@@ -100,6 +100,11 @@ mod host;
 mod ids;
 #[cfg(windows)]
 mod interactions;
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only the Windows build draws the interface")
+)]
+mod interface_parts;
 #[cfg(windows)]
 mod inventory;
 #[cfg(windows)]
