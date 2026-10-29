@@ -131,8 +131,9 @@ pub(crate) fn link(loader: &'static Loader) {
             &STACK_NEXT,
             stack_roll as StackRollFn,
         ),
-        Err((entry, reason)) => {
-            wanted(pinned::loot::STACK_ROLL) && loader.feature_off(LOOT_RATE, entry, reason)
+        Err(why) => {
+            wanted(pinned::loot::STACK_ROLL)
+                && loader.feature_off(LOOT_RATE, why.entry(), &why.to_string())
         }
     };
     let linked = [
