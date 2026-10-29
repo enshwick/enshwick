@@ -3,6 +3,7 @@
 use super::{Constant, Symbol};
 
 pub(crate) const KEYS: Symbol = Symbol::new("textures.keys");
+pub(crate) const KEY_SIZE: Constant = Constant::new("textures.key_size");
 pub(crate) const REGISTRY_FILL: Symbol = Symbol::new("textures.registry_fill");
 pub(crate) const REGISTRY_LISTED: Constant = Constant::new("textures.registry_listed");
 pub(crate) const REGISTRY_LISTED_AT: Symbol = Symbol::new("textures.registry_listed_at");

@@ -458,6 +458,23 @@ mod tests {
         }
     }
 
+    /// On each client executable, every client table reads how many bytes
+    /// a key of the texture database's tables takes.
+    #[test]
+    fn the_texture_key_size_reads_on_each_client() {
+        let rows = constants_on_executables(&["textures.key_size"]);
+        let clients: Vec<_> = rows
+            .iter()
+            .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
+            .collect();
+        if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+            assert!(clients.len() >= 2, "{rows:?}");
+        }
+        for (table, values) in clients {
+            assert_eq!(values, &[Some(0x20)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads where the zone size's answer
     /// holds its valid byte.
     #[test]

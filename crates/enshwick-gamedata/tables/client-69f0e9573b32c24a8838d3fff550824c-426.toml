@@ -357,6 +357,7 @@ revision = 1
 "textures.registry_listed_at.bytes" = 0x4801_0000_36c0_b980
 "textures.signal.bytes" = "0x90ec_8148_53dc_8b4c"
 "textures.request_size" = { value = 0x48, pattern = "48 8B 9C 24 ?? ?? ?? ?? 49 FF C4 49 83 C5 ?? 4C 3B 63 ?? 0F 82 ?? ?? ?? ?? 4C 8B AC 24 ?? ?? ?? ??", at = 14, size = 1 }
+"textures.key_size" = { value = 0x20, via = "textures.keys", within = 0x100, pattern = "41 8B 48 08 48 C1 E0 ?? 49 03 46", at = 7, size = 1, shl = true }
 "textures.request_hash" = { value = 0x10, pattern = "41 8B 4F ?? 49 03 DD 4C 8D 43 ?? 85 C9 0F 84 ?? ?? ?? ?? 49 63 07", at = 10, size = 1 }
 "textures.request_context" = { value = 0x30, pattern = "33 D2 3B 4F ?? 0F 10 4B ?? C6 44 24 ?? 1F 8D 41 ?? 0F 45 D0", at = 8, size = 1 }
 "textures.request_offset" = { value = 0x40, pattern = "0F 10 03 48 89 44 24 ?? 8B 43 ?? 0F 10 4B ?? 89 84 24 ?? ?? ?? ?? 8D 41 ??", at = 10, size = 1 }
