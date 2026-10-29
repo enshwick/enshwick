@@ -335,7 +335,7 @@ impl Stats {
                     }),
                     StatSource::BUFF => Origin::Buff(BuffTypeId(s.id)),
                     StatSource::ENTITY => Origin::Mod {
-                        index: s.owner,
+                        index: crate::mods::ModIndex(s.owner),
                         key: s.id,
                     },
                     _ => return None,
