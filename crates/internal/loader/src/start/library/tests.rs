@@ -165,7 +165,23 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         std::fs::write(examples.join(format!("{name}.rs")), source).unwrap();
     }
     let target = target_dir();
-    let output = Command::new(env!("CARGO"))
+    let output = fixture_build(dir, &target).output().ok()?;
+    assert!(
+        output.status.success(),
+        "the fixtures did not build: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Some(target.join("debug").join("examples"))
+}
+
+/// The build of the fixtures in `dir` into `target`, with the compiler beside
+/// the cargo that built these tests: run outside `cargo test`, as when a lane
+/// runs each test alone, no `RUSTUP_TOOLCHAIN` reaches the inner cargo, and
+/// rustup would pick the toolchain by each build script's folder.
+fn fixture_build(dir: &Path, target: &Path) -> Command {
+    let cargo = Path::new(env!("CARGO"));
+    let mut build = Command::new(cargo);
+    build
         .args([
             "build",
             "--offline",
@@ -175,17 +191,30 @@ fn build_fixtures(dir: &Path) -> Option<PathBuf> {
         ])
         .arg(dir.join("Cargo.toml"))
         .arg("--target-dir")
-        .arg(&target)
+        .arg(target)
         .env_remove("RUSTFLAGS")
-        .env_remove("CARGO_TARGET_DIR")
-        .output()
-        .ok()?;
-    assert!(
-        output.status.success(),
-        "the fixtures did not build: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Some(target.join("debug").join("examples"))
+        .env_remove("CARGO_TARGET_DIR");
+    let rustc = cargo.with_file_name(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    if rustc.is_file() {
+        build.env("RUSTC", rustc);
+    }
+    build
+}
+
+#[test]
+fn the_fixtures_build_with_the_compiler_beside_the_tests_cargo() {
+    let build = fixture_build(Path::new("fixtures"), Path::new("target"));
+    let rustc = build
+        .get_envs()
+        .find(|(key, _)| *key == "RUSTC")
+        .and_then(|(_, value)| value);
+    let beside =
+        Path::new(env!("CARGO")).with_file_name(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    if beside.is_file() {
+        assert_eq!(rustc, Some(beside.as_os_str()));
+    } else {
+        assert_eq!(rustc, None, "no compiler beside {}", env!("CARGO"));
+    }
 }
 
 /// The loader's lines: level and message.

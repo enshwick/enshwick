@@ -230,11 +230,32 @@ struct Container {
     boxed: usize,
 }
 
+/// Why the bases' fields are not read, with the table entry it fails on.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+enum FieldsError {
+    /// The build table lacks an entry.
+    #[error("is not in this build")]
+    Missing(&'static str),
+    /// An entry's value is out of its range, or the fields it bounds do not
+    /// fit the boxes, answers and heap the lookups use.
+    #[error("does not fit the boxes, answers and heap the lookups use")]
+    Fit(&'static str),
+}
+
+impl FieldsError {
+    /// The table entry the read fails on.
+    const fn entry(&self) -> &'static str {
+        match self {
+            Self::Missing(id) | Self::Fit(id) => id,
+        }
+    }
+}
+
 impl Fields {
     /// The fields as `offset` reads the build table's constants, checked to
     /// fit the copies and answers the lookups make.
-    fn read(offset: &dyn Fn(Constant) -> Option<usize>) -> Result<Self, String> {
-        let f = |id: Constant| offset(id).ok_or(format!("{id} is not in this build"));
+    fn read(offset: &dyn Fn(Constant) -> Option<usize>) -> Result<Self, FieldsError> {
+        let f = |id: Constant| offset(id).ok_or(FieldsError::Missing(id.id()));
         let zone_list = f(pinned::bases::ZONE_LIST)?;
         let zone_list_allocator = f(pinned::bases::ZONE_LIST_ALLOCATOR)?;
         let fields = Self {
@@ -247,7 +268,7 @@ impl Fields {
             zone_high: f(pinned::bases::ZONE_HIGH)?,
             item_altar: f(pinned::bases::ITEM_ALTAR)?,
             max_altars_reached: u32::try_from(f(pinned::bases::MAX_ALTARS_REACHED)?)
-                .map_err(|e| e.to_string())?,
+                .map_err(|_| FieldsError::Fit(pinned::bases::MAX_ALTARS_REACHED.id()))?,
             balancing: f(pinned::bases::CURSOR_BALANCING)?,
             kind: f(pinned::bases::KIND)?,
             allocator: f(pinned::bases::ALLOCATOR)?,
@@ -266,26 +287,24 @@ impl Fields {
                 boxed: f(pinned::bases::CONTAINER_BOX)?,
                 allocator: zone_list_allocator
                     .checked_sub(zone_list)
-                    .ok_or("the zone list's allocator lies before its list")?,
+                    .ok_or(FieldsError::Fit(pinned::bases::ZONE_LIST_ALLOCATOR.id()))?,
             },
             heap: heap::Slots {
                 allocate: f(pinned::bases::HEAP_ALLOCATE)?,
                 free: f(pinned::bases::HEAP_FREE)?,
             },
         };
-        if !fields.fits() {
-            return Err(format!(
-                "the bases' fields do not fit the boxes, answers and heap the lookups use ({fields:x?})"
-            ));
+        match fields.misfit() {
+            Some(entry) => Err(FieldsError::Fit(entry.id())),
+            None => Ok(fields),
         }
-        Ok(fields)
     }
 
-    /// Whether a zone box holds both corners, the answer holds its error,
-    /// zero word, index and a whole box, and the zone list's length is the
-    /// container's, whose boxes are the zone list's, and the heap's slots
-    /// fit its vtable.
-    fn fits(&self) -> bool {
+    /// The first entry that breaks the fit, if any: a zone box holds both
+    /// corners, the answer holds its error, zero word, index and a whole
+    /// box, the zone list's length is the container's, whose boxes are the
+    /// zone list's, and the heap's slots fit its vtable.
+    fn misfit(&self) -> Option<Constant> {
         let Answer {
             error,
             zero,
@@ -293,15 +312,35 @@ impl Fields {
             boxed,
             size,
         } = self.answer;
-        self.members >= self.zone_size
-            && self.zone_high + 12 <= self.zone_size
-            && error < size
-            && zero + 4 <= size
-            && index < size
-            && boxed + self.zone_size <= size
-            && self.zone_list + self.container.len == self.zone_list_len
-            && self.container.boxed == self.zone_size
-            && self.heap.fit()
+        let within =
+            |at: usize, len: usize, room: usize| at.checked_add(len).is_some_and(|end| end <= room);
+        let checks = [
+            (self.members >= self.zone_size, pinned::bases::MEMBERS),
+            (
+                within(self.zone_high, 12, self.zone_size),
+                pinned::bases::ZONE_HIGH,
+            ),
+            (error < size, pinned::bases::ANSWER_ERROR),
+            (within(zero, 4, size), pinned::bases::ANSWER_ZERO),
+            (index < size, pinned::bases::ANSWER_INDEX),
+            (
+                within(boxed, self.zone_size, size),
+                pinned::bases::ANSWER_BOX,
+            ),
+            (
+                self.zone_list.checked_add(self.container.len) == Some(self.zone_list_len),
+                pinned::bases::CONTAINER_LEN,
+            ),
+            (
+                self.container.boxed == self.zone_size,
+                pinned::bases::CONTAINER_BOX,
+            ),
+            (self.heap.fit(), pinned::bases::HEAP_ALLOCATE),
+        ];
+        checks
+            .into_iter()
+            .find(|&(fits, _)| !fits)
+            .map(|(_, entry)| entry)
     }
 }
 
@@ -536,8 +575,8 @@ fn find(loader: &Loader) -> Status {
     }
     let fields = match Fields::read(&|id| loader.offset(id)) {
         Ok(fields) => fields,
-        Err(reason) => {
-            crate::log!(WARN, "bases keep 16 altar zones: {reason}");
+        Err(why) => {
+            loader.feature_off(RAISED_ZONES, why.entry(), &why.to_string());
             return Status::MISSING;
         }
     };
@@ -1140,8 +1179,51 @@ mod tests {
             }
         };
         let refused = Fields::read(&offset).unwrap_err();
-        assert!(refused.contains("do not fit the boxes"), "{refused}");
+        assert_eq!(refused, FieldsError::Fit(pinned::bases::ANSWER_BOX.id()));
+        assert_eq!(refused.entry(), pinned::bases::ANSWER_BOX.id());
         assert_eq!(Fields::read(&fake_offset), Ok(fake::FIELDS));
+    }
+
+    /// A field the table lacks is refused with that entry named, for the
+    /// feature to turn off on it.
+    #[test]
+    fn a_missing_field_is_refused_with_its_entry() {
+        let offset = |id: Constant| {
+            (id != pinned::bases::ZONE_HIGH)
+                .then(|| fake_offset(id))
+                .flatten()
+        };
+        let refused = Fields::read(&offset).unwrap_err();
+        assert_eq!(refused.entry(), pinned::bases::ZONE_HIGH.id());
+        assert_eq!(refused.to_string(), "is not in this build");
+    }
+
+    /// A zone list whose allocator lies before it, or offsets so large they
+    /// overflow, are refused on the entry that breaks the fit.
+    #[test]
+    fn fields_that_overflow_or_run_backwards_are_refused() {
+        let backwards = |id: Constant| {
+            if id == pinned::bases::ZONE_LIST_ALLOCATOR {
+                Some(0)
+            } else {
+                fake_offset(id)
+            }
+        };
+        assert_eq!(
+            Fields::read(&backwards).unwrap_err().entry(),
+            pinned::bases::ZONE_LIST_ALLOCATOR.id()
+        );
+        let huge = |id: Constant| {
+            if id == pinned::bases::ZONE_HIGH {
+                Some(usize::MAX)
+            } else {
+                fake_offset(id)
+            }
+        };
+        assert_eq!(
+            Fields::read(&huge).unwrap_err().entry(),
+            pinned::bases::ZONE_HIGH.id()
+        );
     }
 
     /// The fake object's fields as the build table would give them.

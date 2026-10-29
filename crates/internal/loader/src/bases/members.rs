@@ -766,7 +766,7 @@ mod tests {
         );
         assert_eq!(
             list.allocator,
-            super::super::heap::handed(FIELDS.heap).unwrap_or(0)
+            super::super::heap::handed(FIELDS.heap).unwrap()
         );
         assert_ne!(list.data, list.inline.as_mut_ptr());
         // SAFETY: the container holds `len` boxes.
