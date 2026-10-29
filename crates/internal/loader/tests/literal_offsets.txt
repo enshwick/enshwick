@@ -1,0 +1,35 @@
+# How many literal offsets into game memory each file may still hold,
+# as `<count> <path>`. The test fails on a file with more, and on one with
+# fewer until its count here goes down: an offset leaves a file for
+# reflection or the build table, never the other way.
+1 src/base_groups/grouping.rs
+4 src/base_groups/window.rs
+1 src/bases.rs
+1 src/bases/fake.rs
+2 src/bases/lifecycle.rs
+43 src/bases/loops.rs
+3 src/bases/loops/stock.rs
+12 src/bases/members.rs
+5 src/bases/past16.rs
+1 src/buffs.rs
+1 src/chains/model.rs
+3 src/code.rs
+1 src/console/ban_list.rs
+2 src/detour.rs
+1 src/inventory.rs
+4 src/join/target.rs
+1 src/others.rs
+1 src/pacing.rs
+1 src/pe.rs
+3 src/server_pin/model.rs
+1 src/spawn_request.rs
+1 src/start/game.rs
+1 src/static_halves.rs
+3 src/transactions/block.rs
+1 src/transactions/record.rs
+13 src/ui/engine.rs
+4 src/ui/engine/scroll.rs
+1 src/ui/engine/text_field.rs
+1 src/ui/map.rs
+1 src/voxels.rs
+1 src/world.rs
