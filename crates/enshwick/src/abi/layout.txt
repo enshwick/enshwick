@@ -1,930 +1,929 @@
-abi 4.1
 AccountActionType size 1 align 1
-    0 at 0 size 1
+    0 at 0 size 1 type u8
 ActionCall size 144 align 8
-    header at 0 size 8
-    kind at 8 size 4
-    language at 12 size 4
-    player at 16 size 96
-    action at 112 size 16
-    args at 128 size 16
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    language at 12 size 4 type u32
+    player at 16 size 96 type PlayerInfo
+    action at 112 size 16 type Str
+    args at 128 size 16 type Str
 ActiveBuff size 40 align 8
-    header at 0 size 8
-    id at 8 size 4
-    entity at 12 size 4
-    slot at 16 size 4
-    level at 20 size 4
-    duration at 24 size 8
-    remaining at 32 size 8
+    header at 0 size 8 type Header
+    id at 8 size 4 type BuffTypeId
+    entity at 12 size 4 type Entity
+    slot at 16 size 4 type u32
+    level at 20 size 4 type u32
+    duration at 24 size 8 type i64
+    remaining at 32 size 8 type i64
 AffixDefData size 64 align 8
-    header at 0 size 8
-    text at 8 size 16
-    group at 24 size 16
-    modifiers at 40 size 8
-    modifier_count at 48 size 4
-    weight at 52 size 4
-    categories at 56 size 4
-    rarity at 60 size 1
-    reserved at 61 size 3
+    header at 0 size 8 type Header
+    text at 8 size 16 type Str
+    group at 24 size 16 type Str
+    modifiers at 40 size 8 type *const AffixModifierData
+    modifier_count at 48 size 4 type u32
+    weight at 52 size 4 type u32
+    categories at 56 size 4 type u32
+    rarity at 60 size 1 type u8
+    reserved at 61 size 3 type [u8; 3]
 AffixModifierData size 20 align 4
-    stat at 0 size 4
-    op at 4 size 1
-    reserved at 5 size 3
-    min at 8 size 4
-    max at 12 size 4
-    step at 16 size 4
+    stat at 0 size 4 type u32
+    op at 4 size 1 type u8
+    reserved at 5 size 3 type [u8; 3]
+    min at 8 size 4 type f32
+    max at 12 size 4 type f32
+    step at 16 size 4 type f32
 AffixRoll size 32 align 8
-    header at 0 size 8
-    pide at 8 size 4
-    item at 12 size 4
-    min at 16 size 1
-    max at 17 size 1
-    max_rarity at 18 size 1
-    flags at 19 size 1
-    seed at 24 size 8
+    header at 0 size 8 type Header
+    pide at 8 size 4 type Entity
+    item at 12 size 4 type ItemId
+    min at 16 size 1 type u8
+    max at 17 size 1 type u8
+    max_rarity at 18 size 1 type u8
+    flags at 19 size 1 type u8
+    seed at 24 size 8 type u64
 AltarInfo size 856 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    level at 12 size 1
-    tilted at 13 size 1
-    level_count at 14 size 1
-    reserved at 15 size 1
-    zone at 16 size 48
-    levels at 64 size 768
-    position at 832 size 24
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    level at 12 size 1 type u8
+    tilted at 13 size 1 type u8
+    level_count at 14 size 1 type u8
+    reserved at 15 size 1 type u8
+    zone at 16 size 48 type Bounds
+    levels at 64 size 768 type [Bounds; 16]
+    position at 832 size 24 type [f64; 3]
 AltarLimit size 16 align 4
-    header at 0 size 8
-    flame_level at 8 size 4
-    vanilla at 12 size 1
-    allowed at 13 size 1
-    reserved at 14 size 2
+    header at 0 size 8 type Header
+    flame_level at 8 size 4 type u32
+    vanilla at 12 size 1 type u8
+    allowed at 13 size 1 type u8
+    reserved at 14 size 2 type [u8; 2]
 AltarZone size 32 align 8
-    header at 0 size 8
-    altar at 8 size 4
-    level at 12 size 1
-    reserved at 13 size 3
-    grow at 16 size 8
-    height at 24 size 8
+    header at 0 size 8 type Header
+    altar at 8 size 4 type Entity
+    level at 12 size 1 type u8
+    reserved at 13 size 3 type [u8; 3]
+    grow at 16 size 8 type i64
+    height at 24 size 8 type i64
 BaseLimitInfo size 36 align 4
-    header at 0 size 8
-    zones at 8 size 4
-    bases at 12 size 4
-    vanilla_zones at 16 size 4
-    reserved at 20 size 4
-    vanilla_bases at 24 size 4
-    max_zones at 28 size 4
-    max_bases at 32 size 4
+    header at 0 size 8 type Header
+    zones at 8 size 4 type u32
+    bases at 12 size 4 type u32
+    vanilla_zones at 16 size 4 type u32
+    reserved at 20 size 4 type u32
+    vanilla_bases at 24 size 4 type u32
+    max_zones at 28 size 4 type u32
+    max_bases at 32 size 4 type u32
 BedCheck size 72 align 8
-    header at 0 size 8
-    npc_id at 8 size 4
-    entity at 12 size 4
-    bed_id at 16 size 4
-    home at 24 size 24
-    bed_at at 48 size 24
+    header at 0 size 8 type Header
+    npc_id at 8 size 4 type NpcId
+    entity at 12 size 4 type Entity
+    bed_id at 16 size 4 type Entity
+    home at 24 size 24 type [i64; 3]
+    bed_at at 48 size 24 type [i64; 3]
 BlockPlace size 56 align 8
-    header at 0 size 8
-    shape at 8 size 4
-    material at 12 size 4
-    position at 16 size 24
-    rotation at 40 size 16
+    header at 0 size 8 type Header
+    shape at 8 size 4 type ItemId
+    material at 12 size 4 type ItemId
+    position at 16 size 24 type [f64; 3]
+    rotation at 40 size 16 type [f32; 4]
 Bounds size 48 align 8
-    min at 0 size 24
-    max at 24 size 24
+    min at 0 size 24 type [i64; 3]
+    max at 24 size 24 type [i64; 3]
 BuffRequest size 32 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    id at 12 size 4
-    level at 16 size 4
-    reserved at 20 size 4
-    duration at 24 size 8
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    id at 12 size 4 type BuffTypeId
+    level at 16 size 4 type u32
+    reserved at 20 size 4 type u32
+    duration at 24 size 8 type i64
 BuffTypeId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 BuffTypeInfo size 32 align 8
-    header at 0 size 8
-    id at 8 size 4
-    slot at 12 size 2
-    flags at 14 size 2
-    name at 16 size 4
-    duration at 24 size 8
+    header at 0 size 8 type Header
+    id at 8 size 4 type BuffTypeId
+    slot at 12 size 2 type u16
+    flags at 14 size 2 type u16
+    name at 16 size 4 type u32
+    duration at 24 size 8 type i64
 BuildCheck size 40 align 8
-    header at 0 size 8
-    player at 8 size 4
-    item at 12 size 4
-    position at 16 size 24
+    header at 0 size 8 type Header
+    player at 8 size 4 type Entity
+    item at 12 size 4 type ItemId
+    position at 16 size 24 type [i64; 3]
 BuildInfo size 48 align 8
-    header at 0 size 8
-    side at 8 size 1
-    base at 16 size 8
-    fingerprint at 24 size 20
-    table at 44 size 1
+    header at 0 size 8 type Header
+    side at 8 size 1 type Side
+    base at 16 size 8 type u64
+    fingerprint at 24 size 20 type Fingerprint
+    table at 44 size 1 type BuildTable
 BuildRights size 64 align 8
-    header at 0 size 8
-    player at 8 size 4
-    refusal at 12 size 4
-    min at 16 size 24
-    max at 40 size 24
+    header at 0 size 8 type Header
+    player at 8 size 4 type Entity
+    refusal at 12 size 4 type u32
+    min at 16 size 24 type [f64; 3]
+    max at 40 size 24 type [f64; 3]
 BuildRow size 56 align 8
-    side at 0 size 1
-    fingerprint at 4 size 20
-    symbols at 24 size 8
-    symbol_count at 32 size 8
-    constants at 40 size 8
-    constant_count at 48 size 8
+    side at 0 size 1 type Side
+    fingerprint at 4 size 20 type Fingerprint
+    symbols at 24 size 8 type *const Symbol
+    symbol_count at 32 size 8 type usize
+    constants at 40 size 8 type *const Symbol
+    constant_count at 48 size 8 type usize
 BuildTable size 1 align 1
-    0 at 0 size 1
+    0 at 0 size 1 type u8
 BuildingData size 52 align 4
-    header at 0 size 8
-    entity at 8 size 4
-    player at 12 size 4
-    item at 16 size 4
-    kind at 20 size 1
-    replay at 21 size 1
-    template at 22 size 16
-    position at 40 size 12
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    player at 12 size 4 type Entity
+    item at 16 size 4 type ItemId
+    kind at 20 size 1 type u8
+    replay at 21 size 1 type u8
+    template at 22 size 16 type [u8; 16]
+    position at 40 size 12 type [f32; 3]
 BuildingZoneCheck size 80 align 8
-    header at 0 size 8
-    zones at 8 size 8
-    zone_count at 16 size 8
-    object at 24 size 48
-    margin at 72 size 8
+    header at 0 size 8 type Header
+    zones at 8 size 8 type *const Bounds
+    zone_count at 16 size 8 type usize
+    object at 24 size 48 type Bounds
+    margin at 72 size 8 type i64
 CallSpec size 64 align 8
-    header at 0 size 8
-    name at 8 size 16
-    major at 24 size 4
-    input at 32 size 16
-    output at 48 size 16
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    major at 24 size 4 type u32
+    input at 32 size 16 type Layout
+    output at 48 size 16 type Layout
 CallerFrame size 72 align 8
-    rsp at 0 size 8
-    rbx at 8 size 8
-    rbp at 16 size 8
-    rdi at 24 size 8
-    rsi at 32 size 8
-    r12 at 40 size 8
-    r13 at 48 size 8
-    r14 at 56 size 8
-    r15 at 64 size 8
+    rsp at 0 size 8 type u64
+    rbx at 8 size 8 type u64
+    rbp at 16 size 8 type u64
+    rdi at 24 size 8 type u64
+    rsi at 32 size 8 type u64
+    r12 at 40 size 8 type u64
+    r13 at 48 size 8 type u64
+    r14 at 56 size 8 type u64
+    r15 at 64 size 8 type u64
 ChangeId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 ChangeOp size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 ChunkData size 24 align 4
-    header at 0 size 8
-    index at 8 size 4
-    x at 12 size 4
-    z at 16 size 4
-    size at 20 size 4
+    header at 0 size 8 type Header
+    index at 8 size 4 type u32
+    x at 12 size 4 type u32
+    z at 16 size 4 type u32
+    size at 20 size 4 type u32
 Comfort size 28 align 4
-    header at 0 size 8
-    category at 8 size 4
-    value at 12 size 4
-    position at 16 size 12
+    header at 0 size 8 type Header
+    category at 8 size 4 type u32
+    value at 12 size 4 type i32
+    position at 16 size 12 type [f32; 3]
 CraftCheck size 24 align 4
-    header at 0 size 8
-    crafting_operator_id at 8 size 4
-    crafting_station_id at 12 size 4
-    recipe_id at 16 size 4
-    recipe_amount at 20 size 2
-    reserved at 22 size 2
+    header at 0 size 8 type Header
+    crafting_operator_id at 8 size 4 type Entity
+    crafting_station_id at 12 size 4 type Entity
+    recipe_id at 16 size 4 type RecipeId
+    recipe_amount at 20 size 2 type u16
+    reserved at 22 size 2 type u16
 DamageCheck size 80 align 4
-    header at 0 size 8
-    cause at 8 size 4
-    target at 12 size 4
-    source at 16 size 4
-    attacker at 20 size 4
-    amounts at 24 size 52
-    total at 76 size 4
+    header at 0 size 8 type Header
+    cause at 8 size 4 type u32
+    target at 12 size 4 type Entity
+    source at 16 size 4 type Entity
+    attacker at 20 size 4 type Entity
+    amounts at 24 size 52 type [f32; 13]
+    total at 76 size 4 type f32
 DataChange size 80 align 8
-    header at 0 size 8
-    entry at 8 size 16
-    field at 24 size 4
-    op at 28 size 4
-    value at 32 size 8
-    source at 40 size 16
-    item at 56 size 16
-    select at 72 size 4
-    categories at 76 size 4
+    header at 0 size 8 type Header
+    entry at 8 size 16 type [u8; 16]
+    field at 24 size 4 type DataField
+    op at 28 size 4 type ChangeOp
+    value at 32 size 8 type f64
+    source at 40 size 16 type Str
+    item at 56 size 16 type [u8; 16]
+    select at 72 size 4 type DataSelect
+    categories at 76 size 4 type u32
 DataField size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 DataSelect size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 DaytimeInfo size 56 align 8
-    header at 0 size 8
-    time at 8 size 8
-    day_start at 16 size 8
-    day_end at 24 size 8
-    day_length at 32 size 8
-    night_length at 40 size 8
-    speed at 48 size 4
-    flags at 52 size 4
+    header at 0 size 8 type Header
+    time at 8 size 8 type i64
+    day_start at 16 size 8 type i64
+    day_end at 24 size 8 type i64
+    day_length at 32 size 8 type i64
+    night_length at 40 size 8 type i64
+    speed at 48 size 4 type f32
+    flags at 52 size 4 type u32
 Dependency size 40 align 8
-    id at 0 size 16
-    range at 16 size 16
-    relation at 32 size 1
+    id at 0 size 16 type Str
+    range at 16 size 16 type Str
+    relation at 32 size 1 type Relation
 Entity size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 EntityDataFlags size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 EntityPlace size 32 align 8
-    entity at 0 size 4
-    reserved at 4 size 4
-    position at 8 size 24
+    entity at 0 size 4 type Entity
+    reserved at 4 size 4 type u32
+    position at 8 size 24 type [i64; 3]
 Event size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 EventSpec size 40 align 8
-    header at 0 size 8
-    name at 8 size 16
-    layout at 24 size 16
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    layout at 24 size 16 type Layout
 EventTypeInfo size 32 align 8
-    header at 0 size 8
-    name at 8 size 16
-    hash at 24 size 4
-    size at 28 size 4
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    hash at 24 size 4 type u32
+    size at 28 size 4 type u32
 ExperiencePass size 48 align 8
-    header at 0 size 8
-    rows at 8 size 8
-    row_count at 16 size 8
-    level_cap at 24 size 4
-    need_for at 32 size 8
-    token at 40 size 8
+    header at 0 size 8 type Header
+    rows at 8 size 8 type *mut ExperienceRow
+    row_count at 16 size 8 type usize
+    level_cap at 24 size 4 type u32
+    need_for at 32 size 8 type Option<unsafe extern "system" fn(*mut c_void, u32) -> u32>
+    token at 40 size 8 type *mut c_void
 ExperienceRow size 20 align 4
-    entity at 0 size 4
-    level at 4 size 4
-    progress at 8 size 4
-    need at 12 size 4
-    gained at 16 size 4
+    entity at 0 size 4 type Entity
+    level at 4 size 4 type u32
+    progress at 8 size 4 type u32
+    need at 12 size 4 type u32
+    gained at 16 size 4 type u32
 Fingerprint size 20 align 4
-    guid at 0 size 16
-    age at 16 size 4
+    guid at 0 size 16 type [u8; 16]
+    age at 16 size 4 type u32
 FogInfo size 40 align 8
-    header at 0 size 8
-    width at 8 size 4
-    height at 12 size 4
-    metres_per_pixel at 16 size 4
-    size_z at 20 size 4
-    version at 24 size 8
-    session at 32 size 8
+    header at 0 size 8 type Header
+    width at 8 size 4 type u32
+    height at 12 size 4 type u32
+    metres_per_pixel at 16 size 4 type f32
+    size_z at 20 size 4 type f32
+    version at 24 size 8 type u64
+    session at 32 size 8 type u64
 GameEventData size 24 align 8
-    header at 0 size 8
-    type_hash at 8 size 4
-    size at 12 size 4
-    data at 16 size 8
+    header at 0 size 8 type Header
+    type_hash at 8 size 4 type u32
+    size at 12 size 4 type u32
+    data at 16 size 8 type *const u8
 Header size 8 align 4
-    size at 0 size 4
-    abi_major at 4 size 2
-    abi_minor at 6 size 2
+    size at 0 size 4 type u32
+    abi_version at 4 size 4 type u32
 HookFlags size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 HookSpec size 32 align 8
-    target at 0 size 8
-    detour at 8 size 8
-    next at 16 size 8
-    priority at 24 size 4
-    flags at 28 size 4
+    target at 0 size 8 type u64
+    detour at 8 size 8 type usize
+    next at 16 size 8 type *const Atomic<usize>
+    priority at 24 size 4 type i32
+    flags at 28 size 4 type HookFlags
 HostApi size 1416 align 8
-    header at 0 size 8
-    host_version at 8 size 16
-    build at 24 size 8
-    symbol at 32 size 8
-    system at 40 size 8
-    field_offset at 48 size 8
-    type_size at 56 size 8
-    hook at 64 size 8
-    caller_frame at 72 size 8
-    fault at 80 size 8
-    log at 88 size 8
-    settings at 96 size 8
-    publish at 104 size 8
-    service at 112 size 8
-    constant at 120 size 8
-    data_dir at 128 size 8
-    log_level at 136 size 8
-    subscribe at 144 size 8
-    type_hash at 152 size 8
-    component at 160 size 8
-    entity_template at 168 size 8
-    player at 176 size 8
-    players at 184 size 8
-    serve_resource at 192 size 8
-    add_text at 200 size 8
-    mods at 208 size 8
-    sync at 216 size 8
-    code_range at 224 size 8
-    patch_code at 232 size 8
-    workshop_recipes at 240 size 8
-    hosting at 248 size 8
-    server_world at 256 size 8
-    chat at 264 size 8
-    set_label at 272 size 8
-    rename_filter at 280 size 8
-    join_missing at 288 size 8
-    hook_at at 296 size 8
-    inventory_open at 304 size 8
-    item_info at 312 size 8
-    inventory_submit at 320 size 8
-    status at 328 size 8
-    run_console at 336 size 8
-    altars_open at 344 size 8
-    altars at 352 size 8
-    building_zone_check_filter at 360 size 8
-    survivor_lookup at 368 size 8
-    survivor_bed_check at 376 size 8
-    summon_filter at 384 size 8
-    summon_item at 392 size 8
-    survivor_status at 400 size 8
-    interaction_filter at 408 size 8
-    skill_override at 416 size 8
-    comfort_filter at 424 size 8
-    experience_filter at 432 size 8
-    raise_base_limit at 440 size 8
-    base_zones at 448 size 8
-    game_event at 456 size 8
-    entities at 464 size 8
-    destroy at 472 size 8
-    save_world at 480 size 8
-    world_key at 488 size 8
-    component_write at 496 size 8
-    emit at 504 size 8
-    teleport at 512 size 8
-    spawn at 520 size 8
-    craft_filter at 528 size 8
-    build_filter at 536 size 8
-    net_channel at 544 size 8
-    net_send at 552 size 8
-    net_ready at 560 size 8
-    notify at 568 size 8
-    time_of_day at 576 size 8
-    set_time_of_day at 584 size 8
-    time_speed_control at 592 size 8
-    set_time_speed at 600 size 8
-    game_settings at 608 size 8
-    set_game_settings at 616 size 8
-    damage_filter at 624 size 8
-    buff_types at 632 size 8
-    buffs at 640 size 8
-    apply_buff at 648 size 8
-    remove_buff at 656 size 8
-    knowledge at 664 size 8
-    grant_knowledge at 672 size 8
-    quests at 680 size 8
-    weather_at at 688 size 8
-    weather_fronts at 696 size 8
-    set_weather at 704 size 8
-    terrain_materials at 712 size 8
-    terrain_edit at 720 size 8
-    config_schema at 728 size 8
-    summoned at 736 size 8
-    item_data_open at 744 size 8
-    item_data_get at 752 size 8
-    item_data_set at 760 size 8
-    ui_frame at 768 size 8
-    ui_widget at 776 size 8
-    ui_dialog at 784 size 8
-    ui_hud at 792 size 8
-    ui_markers at 800 size 8
-    config_check at 808 size 8
-    texts at 816 size 8
-    content_serve at 824 size 8
-    content_read at 832 size 8
-    icons_ready at 840 size 8
-    stat_open at 848 size 8
-    stat_info at 856 size 8
-    stat_value at 864 size 8
-    stat_modify at 872 size 8
-    stat_buff at 880 size 8
-    stats_changed at 888 size 8
-    stat_sources at 896 size 8
-    stat_watch at 904 size 8
-    define_event at 912 size 8
-    subscribe_event at 920 size 8
-    send_event at 928 size 8
-    affix_open at 936 size 8
-    affix_roll at 944 size 8
-    item_lines at 952 size 8
-    affix_info at 960 size 8
-    migrate at 968 size 8
-    declare_content at 976 size 8
-    entity_data_open at 984 size 8
-    replaced at 992 size 8
-    knowledge_input_filter at 1000 size 8
-    language at 1008 size 8
-    keep_game_settings at 1016 size 8
-    forget_game_settings at 1024 size 8
-    revoke_knowledge at 1032 size 8
-    account_knowledge at 1040 size 8
-    resource_read at 1048 size 8
-    game_text at 1056 size 8
-    rebuild_resource at 1064 size 8
-    recipe_rule at 1072 size 8
-    recipe_disabled at 1080 size 8
-    define_point at 1088 size 8
-    attach_point at 1096 size 8
-    run_point at 1104 size 8
-    actions at 1112 size 8
-    event_types at 1120 size 8
-    recipe_kind at 1128 size 8
-    feature at 1136 size 8
-    rate at 1144 size 8
-    set_rate at 1152 size 8
-    change_data at 1160 size 8
-    loop_wait at 1168 size 8
-    server_wait at 1176 size 8
-    task_workers at 1184 size 8
-    altar_zone_filter at 1192 size 8
-    altar_zones_changed at 1200 size 8
-    altar_limit_filter at 1208 size 8
-    base_limit at 1216 size 8
-    voxel_read at 1224 size 8
-    declare_change at 1232 size 8
-    set_change at 1240 size 8
-    build_rights at 1248 size 8
-    transaction_commit at 1256 size 8
-    transaction_undo at 1264 size 8
-    transaction_status at 1272 size 8
-    transaction_commit_for at 1280 size 8
-    world_quiet at 1288 size 8
-    fog_open at 1296 size 8
-    fog_read at 1304 size 8
-    serve_call at 1312 size 8
-    find_call at 1320 size 8
-    call at 1328 size 8
-    transaction_entities at 1336 size 8
-    world_persists at 1344 size 8
-    map_markers at 1352 size 8
-    account_action at 1360 size 8
-    allowlist_set at 1368 size 8
-    allowlist_has at 1376 size 8
-    subscribe_tick at 1384 size 8
-    set_tick_every at 1392 size 8
-    map_frame at 1400 size 8
-    request_base_limits at 1408 size 8
+    header at 0 size 8 type Header
+    host_version at 8 size 16 type Str
+    build at 24 size 8 type extern "system" fn(*mut BuildInfo)
+    symbol at 32 size 8 type extern "system" fn(ModHandle, Str, *mut u64) -> Status
+    system at 40 size 8 type extern "system" fn(Str, *mut u64) -> Status
+    field_offset at 48 size 8 type extern "system" fn(Str, Str, *mut u64) -> Status
+    type_size at 56 size 8 type extern "system" fn(Str, *mut u32) -> Status
+    hook at 64 size 8 type extern "system" fn(ModHandle, *const HookSpec) -> Status
+    caller_frame at 72 size 8 type extern "system" fn(*mut CallerFrame)
+    fault at 80 size 8 type extern "system" fn(ModHandle, Str)
+    log at 88 size 8 type extern "system" fn(ModHandle, Level, Str)
+    settings at 96 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
+    publish at 104 size 8 type extern "system" fn(ModHandle, *const ServiceSpec) -> Status
+    service at 112 size 8 type extern "system" fn(ModHandle, *const ServiceSpec, *mut ServiceFound) -> Status
+    constant at 120 size 8 type extern "system" fn(ModHandle, Str, *mut u64) -> Status
+    data_dir at 128 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    log_level at 136 size 8 type extern "system" fn(ModHandle) -> Level
+    subscribe at 144 size 8 type extern "system" fn(ModHandle, Event, unsafe extern "system" fn(Event, *const c_void, *mut c_void), *mut c_void) -> Status
+    type_hash at 152 size 8 type extern "system" fn(Str, *mut u32) -> Status
+    component at 160 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut *const c_void) -> Status
+    entity_template at 168 size 8 type extern "system" fn(ModHandle, Entity, *mut [u8; 16]) -> Status
+    player at 176 size 8 type extern "system" fn(ModHandle, Entity, *mut PlayerInfo) -> Status
+    players at 184 size 8 type extern "system" fn(ModHandle, *mut PlayerInfo, u32, *mut u32) -> Status
+    serve_resource at 192 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *const ResourceKey, unsafe extern "system" fn(*const u8, usize, *mut c_void, *mut *const u8, *mut usize) -> Status, *mut c_void) -> Status
+    add_text at 200 size 8 type extern "system" fn(ModHandle, u32, u32, Str) -> Status
+    mods at 208 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
+    sync at 216 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
+    code_range at 224 size 8 type extern "system" fn(*mut u64, *mut u64) -> Status
+    patch_code at 232 size 8 type extern "system" fn(ModHandle, u64, *const u8, *const u8, usize) -> Status
+    workshop_recipes at 240 size 8 type extern "system" fn() -> u32
+    hosting at 248 size 8 type extern "system" fn() -> u8
+    server_world at 256 size 8 type extern "system" fn() -> u64
+    chat at 264 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
+    set_label at 272 size 8 type extern "system" fn(ModHandle, Entity, Str) -> Status
+    rename_filter at 280 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const RenameCall, *mut c_void) -> u8, *mut c_void) -> Status
+    join_missing at 288 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
+    hook_at at 296 size 8 type extern "system" fn(ModHandle, *const MidHookSpec) -> Status
+    inventory_open at 304 size 8 type extern "system" fn(ModHandle) -> Status
+    item_info at 312 size 8 type extern "system" fn(ModHandle, ItemId, *mut ItemData) -> Status
+    inventory_submit at 320 size 8 type extern "system" fn(ModHandle, *const InventoryRequest, unsafe extern "system" fn(*const InventoryResult, *mut c_void), *mut c_void) -> Status
+    status at 328 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut c_void, *mut Str), *mut c_void) -> Status
+    run_console at 336 size 8 type extern "system" fn(ModHandle, Str, *mut Str) -> Status
+    altars_open at 344 size 8 type extern "system" fn(ModHandle) -> Status
+    altars at 352 size 8 type extern "system" fn(ModHandle, *mut AltarInfo, u32, u32, *mut u32) -> Status
+    building_zone_check_filter at 360 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BuildingZoneCheck, *mut c_void) -> u8, *mut c_void) -> Status
+    survivor_lookup at 368 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const SurvivorLookup, *mut c_void, *mut Entity) -> u8, *mut c_void) -> Status
+    survivor_bed_check at 376 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BedCheck, *mut c_void) -> u8, *mut c_void) -> Status
+    summon_filter at 384 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Summon, *mut c_void) -> u8, *mut c_void) -> Status
+    summon_item at 392 size 8 type extern "system" fn(ModHandle, ItemId, NpcId) -> Status
+    survivor_status at 400 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(NpcId, *const u8, usize, *mut c_void) -> u32, *mut c_void) -> Status
+    interaction_filter at 408 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Interaction, *mut c_void) -> u8, *mut c_void) -> Status
+    skill_override at 416 size 8 type extern "system" fn(ModHandle, SkillNode, unsafe extern "system" fn(*const SkillCheck, *mut c_void) -> u8, *mut c_void) -> Status
+    comfort_filter at 424 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Comfort, *mut c_void) -> i32, *mut c_void) -> Status
+    experience_filter at 432 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut ExperiencePass, *mut c_void), *mut c_void) -> Status
+    raise_base_limit at 440 size 8 type extern "system" fn(ModHandle) -> Status
+    base_zones at 448 size 8 type extern "system" fn(ModHandle, *mut u32, *mut u32) -> Status
+    game_event at 456 size 8 type extern "system" fn(ModHandle, u32, unsafe extern "system" fn(*const GameEventData, *mut c_void), *mut c_void) -> Status
+    entities at 464 size 8 type extern "system" fn(ModHandle, u32, *mut EntityPlace, u32, *mut u32) -> Status
+    destroy at 472 size 8 type extern "system" fn(ModHandle, Entity) -> Status
+    save_world at 480 size 8 type extern "system" fn(ModHandle) -> Status
+    world_key at 488 size 8 type extern "system" fn(ModHandle, *mut Str) -> Status
+    component_write at 496 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut *mut c_void) -> Status
+    emit at 504 size 8 type extern "system" fn(ModHandle, u32, *const u8, u32) -> Status
+    teleport at 512 size 8 type extern "system" fn(ModHandle, *const TeleportRequest) -> Status
+    spawn at 520 size 8 type extern "system" fn(ModHandle, *const SpawnRequest, *mut Entity) -> Status
+    craft_filter at 528 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const CraftCheck, *mut c_void) -> u8, *mut c_void) -> Status
+    build_filter at 536 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const BuildCheck, *mut c_void) -> u8, *mut c_void) -> Status
+    net_channel at 544 size 8 type extern "system" fn(ModHandle, Str, unsafe extern "system" fn(*const NetMessage, *mut c_void), *mut c_void, *mut u32) -> Status
+    net_send at 552 size 8 type extern "system" fn(ModHandle, u32, PlayerKey, *const u8, u32) -> Status
+    net_ready at 560 size 8 type extern "system" fn(ModHandle, PlayerKey) -> Status
+    notify at 568 size 8 type extern "system" fn(ModHandle, PlayerKey, Str) -> Status
+    time_of_day at 576 size 8 type extern "system" fn(ModHandle, *mut DaytimeInfo) -> Status
+    set_time_of_day at 584 size 8 type extern "system" fn(ModHandle, i64) -> Status
+    time_speed_control at 592 size 8 type extern "system" fn(ModHandle) -> Status
+    set_time_speed at 600 size 8 type extern "system" fn(ModHandle, f32) -> Status
+    game_settings at 608 size 8 type extern "system" fn(ModHandle, *mut u8, u32, *mut u32) -> Status
+    set_game_settings at 616 size 8 type extern "system" fn(ModHandle, *const u8, u32) -> Status
+    damage_filter at 624 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut DamageCheck, *mut c_void), *mut c_void) -> Status
+    buff_types at 632 size 8 type extern "system" fn(ModHandle, *mut BuffTypeInfo, u32, *mut u32) -> Status
+    buffs at 640 size 8 type extern "system" fn(ModHandle, Entity, *mut ActiveBuff, u32, *mut u32) -> Status
+    apply_buff at 648 size 8 type extern "system" fn(ModHandle, *const BuffRequest) -> Status
+    remove_buff at 656 size 8 type extern "system" fn(ModHandle, Entity, BuffTypeId, *mut u8) -> Status
+    knowledge at 664 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, *mut KnowledgeInfo) -> Status
+    grant_knowledge at 672 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, u32, u32) -> Status
+    quests at 680 size 8 type extern "system" fn(ModHandle, *mut KnowledgeId, u32, *mut u32) -> Status
+    weather_at at 688 size 8 type extern "system" fn(ModHandle, *const [i64; 3], *mut [f32; 4]) -> Status
+    weather_fronts at 696 size 8 type extern "system" fn(ModHandle, *mut WeatherFront, u32, *mut u32) -> Status
+    set_weather at 704 size 8 type extern "system" fn(ModHandle, u32, i64) -> Status
+    terrain_materials at 712 size 8 type extern "system" fn(ModHandle, *mut TerrainMaterialInfo, u32, *mut u32) -> Status
+    terrain_edit at 720 size 8 type extern "system" fn(ModHandle, *const TerrainEdit, *mut f32) -> Status
+    config_schema at 728 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    summoned at 736 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const Summon, *mut c_void) -> u8, *mut c_void) -> Status
+    item_data_open at 744 size 8 type extern "system" fn(ModHandle, Str, *mut u32) -> Status
+    item_data_get at 752 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *mut u8, u32, *mut u32) -> Status
+    item_data_set at 760 size 8 type extern "system" fn(ModHandle, u32, Entity, ItemId, *const u8, u32) -> Status
+    ui_frame at 768 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
+    ui_widget at 776 size 8 type extern "system" fn(ModHandle, u64, *mut UiWidget) -> Status
+    ui_dialog at 784 size 8 type extern "system" fn(ModHandle, *const UiDialog, unsafe extern "system" fn(u32, *mut c_void), *mut c_void) -> Status
+    ui_hud at 792 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const UiFrame, *mut c_void), *mut c_void) -> Status
+    ui_markers at 800 size 8 type extern "system" fn(ModHandle, *const UiMarker, u32) -> Status
+    config_check at 808 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(Str, *mut Str, *mut c_void) -> Status, *mut c_void) -> Status
+    texts at 816 size 8 type extern "system" fn(ModHandle, Str) -> Status
+    content_serve at 824 size 8 type extern "system" fn(ModHandle, *const u8, u32, *mut [u32; 4]) -> Status
+    content_read at 832 size 8 type extern "system" fn(ModHandle, *const [u32; 4], *mut u8, u32, *mut u32) -> Status
+    icons_ready at 840 size 8 type extern "system" fn(ModHandle) -> Status
+    stat_open at 848 size 8 type extern "system" fn(ModHandle, Str, *const StatDefData, *mut StatRef) -> Status
+    stat_info at 856 size 8 type extern "system" fn(ModHandle, u32, *mut StatDefData, *mut Str) -> Status
+    stat_value at 864 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut f32) -> Status
+    stat_modify at 872 size 8 type extern "system" fn(ModHandle, *const StatModify) -> Status
+    stat_buff at 880 size 8 type extern "system" fn(ModHandle, u32, *const StatModifierData, u32) -> Status
+    stats_changed at 888 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const StatChange, *mut c_void), *mut c_void) -> Status
+    stat_sources at 896 size 8 type extern "system" fn(ModHandle, Entity, u32, *mut StatSource, u32, *mut u32) -> Status
+    stat_watch at 904 size 8 type extern "system" fn(ModHandle, Entity, u8) -> Status
+    define_event at 912 size 8 type extern "system" fn(ModHandle, *const EventSpec, *mut u32) -> Status
+    subscribe_event at 920 size 8 type extern "system" fn(ModHandle, *const EventSpec, unsafe extern "system" fn(*const c_void, *mut c_void), *mut c_void) -> Status
+    send_event at 928 size 8 type extern "system" fn(ModHandle, u32, *const c_void) -> Status
+    affix_open at 936 size 8 type extern "system" fn(ModHandle, Str, *const AffixDefData, *mut StatRef) -> Status
+    affix_roll at 944 size 8 type extern "system" fn(ModHandle, *const AffixRoll, *mut u32) -> Status
+    item_lines at 952 size 8 type extern "system" fn(ModHandle, Entity, ItemId, *mut ItemLine, u32, *mut u32) -> Status
+    affix_info at 960 size 8 type extern "system" fn(ModHandle, u32, *mut Str, *mut u8) -> Status
+    migrate at 968 size 8 type extern "system" fn(ModHandle, *const MigrationSet) -> Status
+    declare_content at 976 size 8 type extern "system" fn(ModHandle, Str, *mut [u8; 16]) -> Status
+    entity_data_open at 984 size 8 type extern "system" fn(ModHandle, Str, EntityDataFlags, *mut u32) -> Status
+    replaced at 992 size 8 type extern "system" fn(ModHandle, *mut ModInfo, u32, u32, *mut u32) -> Status
+    knowledge_input_filter at 1000 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const KnowledgeInput, *mut c_void) -> u8, *mut c_void) -> Status
+    language at 1008 size 8 type extern "system" fn(ModHandle) -> u32
+    keep_game_settings at 1016 size 8 type extern "system" fn(ModHandle, *const u8, *const u8, u32) -> Status
+    forget_game_settings at 1024 size 8 type extern "system" fn(ModHandle) -> Status
+    revoke_knowledge at 1032 size 8 type extern "system" fn(ModHandle, Entity, KnowledgeId, u32, u32) -> Status
+    account_knowledge at 1040 size 8 type extern "system" fn(ModHandle, PlayerKey, KnowledgeId, u32, u32, u32) -> Status
+    resource_read at 1048 size 8 type extern "system" fn(ModHandle, *const ResourceKey, *mut u8, u32, *mut u32) -> Status
+    game_text at 1056 size 8 type extern "system" fn(ModHandle, u32, u32, *mut Str) -> Status
+    rebuild_resource at 1064 size 8 type extern "system" fn(ModHandle, *const ResourceKey) -> Status
+    recipe_rule at 1072 size 8 type extern "system" fn(ModHandle, RecipeRuleKind, Str, u32) -> Status
+    recipe_disabled at 1080 size 8 type extern "system" fn(ModHandle, RecipeId, *mut u32) -> Status
+    define_point at 1088 size 8 type extern "system" fn(ModHandle, *const PointSpec, *mut PointHandle) -> Status
+    attach_point at 1096 size 8 type extern "system" fn(ModHandle, *const PointLink, unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> PointVerdict, *mut c_void) -> Status
+    run_point at 1104 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void, *mut PointVerdict) -> Status
+    actions at 1112 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const ActionCall, *mut c_void, *mut Str), *mut c_void) -> Status
+    event_types at 1120 size 8 type extern "system" fn(ModHandle, *mut EventTypeInfo, u32, *mut u32) -> Status
+    recipe_kind at 1128 size 8 type extern "system" fn(ModHandle, ItemId, *mut RecipeKind) -> Status
+    feature at 1136 size 8 type extern "system" fn(ModHandle, Str, Str) -> Status
+    rate at 1144 size 8 type extern "system" fn(ModHandle, RateId) -> Status
+    set_rate at 1152 size 8 type extern "system" fn(ModHandle, RateId, f32) -> Status
+    change_data at 1160 size 8 type extern "system" fn(ModHandle, *const DataChange) -> Status
+    loop_wait at 1168 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*const LoopWaitData, *mut c_void), *mut c_void, *mut LoopWaitSites) -> Status
+    server_wait at 1176 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut u64, *mut c_void), *mut c_void, *mut u32) -> Status
+    task_workers at 1184 size 8 type extern "system" fn(ModHandle, u32, u32, *mut u32) -> Status
+    altar_zone_filter at 1192 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut AltarZone, *mut c_void), *mut c_void) -> Status
+    altar_zones_changed at 1200 size 8 type extern "system" fn(ModHandle) -> Status
+    altar_limit_filter at 1208 size 8 type extern "system" fn(ModHandle, unsafe extern "system" fn(*mut AltarLimit, *mut c_void), *mut c_void) -> Status
+    base_limit at 1216 size 8 type extern "system" fn(ModHandle, *mut BaseLimitInfo) -> Status
+    voxel_read at 1224 size 8 type extern "system" fn(ModHandle, *const [u32; 3], *const [u32; 3], *mut Voxel, u64) -> Status
+    declare_change at 1232 size 8 type extern "system" fn(ModHandle, *const DataChange, *mut ChangeId) -> Status
+    set_change at 1240 size 8 type extern "system" fn(ModHandle, ChangeId, ChangeOp, f64) -> Status
+    build_rights at 1248 size 8 type extern "system" fn(ModHandle, *mut BuildRights) -> Status
+    transaction_commit at 1256 size 8 type extern "system" fn(ModHandle, *const TransactionOp, u32, *mut u64) -> Status
+    transaction_undo at 1264 size 8 type extern "system" fn(ModHandle, u64) -> Status
+    transaction_status at 1272 size 8 type extern "system" fn(ModHandle, u64, *mut TransactionInfo) -> Status
+    transaction_commit_for at 1280 size 8 type extern "system" fn(ModHandle, Entity, *const TransactionOp, u32, *mut u64) -> Status
+    world_quiet at 1288 size 8 type extern "system" fn(ModHandle) -> Status
+    fog_open at 1296 size 8 type extern "system" fn(ModHandle) -> Status
+    fog_read at 1304 size 8 type extern "system" fn(ModHandle, *mut FogInfo, u32, u32, u32, u32, *mut u8, u32) -> Status
+    serve_call at 1312 size 8 type extern "system" fn(ModHandle, *const CallSpec, unsafe extern "system" fn(*const c_void, *mut c_void, *mut c_void) -> Status, *mut c_void) -> Status
+    find_call at 1320 size 8 type extern "system" fn(ModHandle, *const CallSpec, *mut u32) -> Status
+    call at 1328 size 8 type extern "system" fn(ModHandle, u32, *const c_void, *mut c_void) -> Status
+    transaction_entities at 1336 size 8 type extern "system" fn(ModHandle, u64, *mut Entity, u32, *mut u32) -> Status
+    world_persists at 1344 size 8 type extern "system" fn(ModHandle, *const [f64; 3], *const [f64; 3], *mut u8) -> Status
+    map_markers at 1352 size 8 type extern "system" fn(ModHandle, *mut MapMarkerInfo, u32, u32, *mut u32) -> Status
+    account_action at 1360 size 8 type extern "system" fn(ModHandle, AccountActionType, PlayerKey) -> Status
+    allowlist_set at 1368 size 8 type extern "system" fn(ModHandle, PlayerKey, u8) -> Status
+    allowlist_has at 1376 size 8 type extern "system" fn(ModHandle, PlayerKey, *mut u8) -> Status
+    subscribe_tick at 1384 size 8 type extern "system" fn(ModHandle, u64, unsafe extern "system" fn(Event, *const c_void, *mut c_void), *mut c_void, *mut TickHandle) -> Status
+    set_tick_every at 1392 size 8 type extern "system" fn(ModHandle, TickHandle, u64) -> Status
+    map_frame at 1400 size 8 type extern "system" fn(ModHandle, *mut MapFrameInfo) -> Status
+    request_base_limits at 1408 size 8 type extern "system" fn(ModHandle, u32, u32) -> Status
 Interaction size 56 align 8
-    header at 0 size 8
-    kind at 8 size 4
-    player at 12 size 4
-    target at 16 size 4
-    item at 20 size 4
-    known at 24 size 1
-    reserved at 25 size 3
-    position at 32 size 24
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    player at 12 size 4 type Entity
+    target at 16 size 4 type Entity
+    item at 20 size 4 type ItemId
+    known at 24 size 1 type u8
+    reserved at 25 size 3 type [u8; 3]
+    position at 32 size 24 type [f64; 3]
 InventoryOp size 32 align 8
-    kind at 0 size 4
-    flags at 4 size 4
-    target at 8 size 8
-    other at 16 size 8
-    item at 24 size 4
-    count at 28 size 4
+    kind at 0 size 4 type u32
+    flags at 4 size 4 type u32
+    target at 8 size 8 type u64
+    other at 16 size 8 type u64
+    item at 24 size 4 type ItemId
+    count at 28 size 4 type u32
 InventoryOpResult size 8 align 4
-    error at 0 size 4
-    remaining at 4 size 4
+    error at 0 size 4 type u32
+    remaining at 4 size 4 type u32
 InventoryRequest size 32 align 8
-    header at 0 size 8
-    flags at 8 size 4
-    actor at 12 size 4
-    ops at 16 size 8
-    op_count at 24 size 4
-    reserved at 28 size 4
+    header at 0 size 8 type Header
+    flags at 8 size 4 type u32
+    actor at 12 size 4 type Entity
+    ops at 16 size 8 type *const InventoryOp
+    op_count at 24 size 4 type u32
+    reserved at 28 size 4 type u32
 InventoryResult size 24 align 8
-    header at 0 size 8
-    outcome at 8 size 4
-    op_count at 12 size 4
-    ops at 16 size 8
+    header at 0 size 8 type Header
+    outcome at 8 size 4 type u32
+    op_count at 12 size 4 type u32
+    ops at 16 size 8 type *const InventoryOpResult
 ItemData size 36 align 4
-    header at 0 size 8
-    id at 8 size 4
-    max_stack at 12 size 2
-    category at 14 size 1
-    rarity at 15 size 1
-    flags at 16 size 4
-    placed_entity at 20 size 16
+    header at 0 size 8 type Header
+    id at 8 size 4 type ItemId
+    max_stack at 12 size 2 type u16
+    category at 14 size 1 type u8
+    rarity at 15 size 1 type u8
+    flags at 16 size 4 type u32
+    placed_entity at 20 size 16 type [u8; 16]
 ItemId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 ItemLine size 16 align 4
-    modifier at 0 size 12
-    affix at 12 size 4
+    modifier at 0 size 12 type StatModifierData
+    affix at 12 size 4 type u32
 KnowledgeData size 20 align 4
-    header at 0 size 8
-    entity at 8 size 4
-    id at 12 size 4
-    value at 16 size 4
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    id at 12 size 4 type KnowledgeId
+    value at 16 size 4 type u32
 KnowledgeId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 KnowledgeInfo size 24 align 4
-    header at 0 size 8
-    id at 8 size 4
-    kind at 12 size 1
-    scope at 13 size 1
-    reserved at 14 size 2
-    value at 16 size 4
-    flags at 20 size 4
+    header at 0 size 8 type Header
+    id at 8 size 4 type KnowledgeId
+    kind at 12 size 1 type u8
+    scope at 13 size 1 type u8
+    reserved at 14 size 2 type u16
+    value at 16 size 4 type u32
+    flags at 20 size 4 type u32
 KnowledgeInput size 32 align 4
-    header at 0 size 8
-    player at 8 size 4
-    id at 12 size 4
-    kind at 16 size 1
-    scope at 17 size 1
-    reserved at 18 size 2
-    value at 20 size 4
-    refusal at 24 size 4
-    allowed at 28 size 4
+    header at 0 size 8 type Header
+    player at 8 size 4 type Entity
+    id at 12 size 4 type KnowledgeId
+    kind at 16 size 1 type u8
+    scope at 17 size 1 type u8
+    reserved at 18 size 2 type u16
+    value at 20 size 4 type u32
+    refusal at 24 size 4 type u32
+    allowed at 28 size 4 type u32
 Layout size 16 align 8
-    fields at 0 size 8
-    count at 8 size 4
-    size at 12 size 4
+    fields at 0 size 8 type *const LayoutField
+    count at 8 size 4 type u32
+    size at 12 size 4 type u32
 LayoutField size 24 align 8
-    name at 0 size 16
-    hash at 16 size 8
+    name at 0 size 16 type Str
+    hash at 16 size 8 type u64
 Level size 1 align 1
-    0 at 0 size 1
+    0 at 0 size 1 type u8
 LoopWaitData size 24 align 8
-    header at 0 size 8
-    ms at 8 size 4
-    reserved at 12 size 4
-    left_ns at 16 size 8
+    header at 0 size 8 type Header
+    ms at 8 size 4 type u32
+    reserved at 12 size 4 type u32
+    left_ns at 16 size 8 type i64
 LoopWaitSites size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 Manifest size 176 align 8
-    header at 0 size 8
-    id at 8 size 16
-    version at 24 size 16
-    side at 40 size 1
-    flags at 44 size 4
-    dependencies at 48 size 8
-    dependency_count at 56 size 8
-    builds at 64 size 8
-    build_count at 72 size 8
-    name at 80 size 16
-    description at 96 size 16
-    authors at 112 size 8
-    author_count at 120 size 8
-    license at 128 size 16
-    homepage at 144 size 16
-    points at 160 size 16
+    header at 0 size 8 type Header
+    id at 8 size 16 type Str
+    version at 24 size 16 type Str
+    side at 40 size 1 type Side
+    flags at 44 size 4 type ManifestFlags
+    dependencies at 48 size 8 type *const Dependency
+    dependency_count at 56 size 8 type usize
+    builds at 64 size 8 type *const BuildRow
+    build_count at 72 size 8 type usize
+    name at 80 size 16 type Str
+    description at 96 size 16 type Str
+    authors at 112 size 8 type *const Str
+    author_count at 120 size 8 type usize
+    license at 128 size 16 type Str
+    homepage at 144 size 16 type Str
+    points at 160 size 16 type Str
 ManifestFlags size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 MapFrameInfo size 48 align 8
-    header at 0 size 8
-    origin at 8 size 16
-    size at 24 size 16
-    metres_per_cell at 40 size 8
+    header at 0 size 8 type Header
+    origin at 8 size 16 type [f64; 2]
+    size at 24 size 16 type [f64; 2]
+    metres_per_cell at 40 size 8 type f64
 MapMarkerInfo size 64 align 8
-    header at 0 size 8
-    position at 8 size 24
-    marker_type at 32 size 16
-    label at 48 size 16
+    header at 0 size 8 type Header
+    position at 8 size 24 type [f64; 3]
+    marker_type at 32 size 16 type [u8; 16]
+    label at 48 size 16 type [u8; 16]
 MidHookSpec size 32 align 8
-    address at 0 size 8
-    handler at 8 size 8
-    user at 16 size 8
-    priority at 24 size 4
-    flags at 28 size 4
+    address at 0 size 8 type u64
+    handler at 8 size 8 type unsafe extern "system" fn(*mut Registers, *mut c_void)
+    user at 16 size 8 type *mut c_void
+    priority at 24 size 4 type i32
+    flags at 28 size 4 type HookFlags
 Migration size 32 align 8
-    id at 0 size 16
-    steps at 16 size 8
-    count at 24 size 4
+    id at 0 size 16 type Str
+    steps at 16 size 8 type *const MigrationStep
+    count at 24 size 4 type u32
 MigrationSet size 40 align 8
-    header at 0 size 8
-    migrations at 8 size 8
-    count at 16 size 4
-    map at 24 size 8
-    user at 32 size 8
+    header at 0 size 8 type Header
+    migrations at 8 size 8 type *const Migration
+    count at 16 size 4 type u32
+    map at 24 size 8 type Option<unsafe extern "system" fn(*mut c_void, u32, u32, Str, *mut Str) -> Status>
+    user at 32 size 8 type *mut c_void
 MigrationStep size 72 align 8
-    kind at 0 size 4
-    from at 8 size 16
-    to at 24 size 16
-    from_guid at 40 size 16
-    to_guid at 56 size 16
+    kind at 0 size 4 type u32
+    from at 8 size 16 type Str
+    to at 24 size 16 type Str
+    from_guid at 40 size 16 type [u8; 16]
+    to_guid at 56 size 16 type [u8; 16]
 ModHandle size 8 align 8
-    0 at 0 size 8
+    0 at 0 size 8 type usize
 ModInfo size 168 align 8
-    header at 0 size 8
-    id at 8 size 16
-    version at 24 size 16
-    side at 40 size 1
-    flags at 44 size 4
-    off at 48 size 1
-    file at 56 size 16
-    name at 72 size 16
-    description at 88 size 16
-    authors at 104 size 8
-    author_count at 112 size 8
-    license at 120 size 16
-    homepage at 136 size 16
-    replaced_by at 152 size 16
+    header at 0 size 8 type Header
+    id at 8 size 16 type Str
+    version at 24 size 16 type Str
+    side at 40 size 1 type Side
+    flags at 44 size 4 type ManifestFlags
+    off at 48 size 1 type u8
+    file at 56 size 16 type Str
+    name at 72 size 16 type Str
+    description at 88 size 16 type Str
+    authors at 104 size 8 type *const Str
+    author_count at 112 size 8 type usize
+    license at 120 size 16 type Str
+    homepage at 136 size 16 type Str
+    replaced_by at 152 size 16 type Str
 NetMessage size 40 align 8
-    header at 0 size 8
-    channel at 8 size 4
-    reserved at 12 size 4
-    peer at 16 size 8
-    data at 24 size 8
-    size at 32 size 4
-    reserved_tail at 36 size 4
+    header at 0 size 8 type Header
+    channel at 8 size 4 type u32
+    reserved at 12 size 4 type u32
+    peer at 16 size 8 type PlayerKey
+    data at 24 size 8 type *const u8
+    size at 32 size 4 type u32
+    reserved_tail at 36 size 4 type u32
 NpcId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 PlayerData size 24 align 8
-    header at 0 size 8
-    slot at 8 size 4
-    entity at 12 size 4
-    key at 16 size 8
+    header at 0 size 8 type Header
+    slot at 8 size 4 type u32
+    entity at 12 size 4 type Entity
+    key at 16 size 8 type PlayerKey
 PlayerDeathData size 64 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    cause at 12 size 4
-    key at 16 size 8
-    position at 24 size 12
-    cause_guid at 36 size 16
-    was_deadly_fog at 52 size 1
-    drowned at 53 size 1
-    reserved at 54 size 2
-    killer_entity at 56 size 4
-    reserved_tail at 60 size 4
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    cause at 12 size 4 type u32
+    key at 16 size 8 type PlayerKey
+    position at 24 size 12 type [f32; 3]
+    cause_guid at 36 size 16 type [u8; 16]
+    was_deadly_fog at 52 size 1 type u8
+    drowned at 53 size 1 type u8
+    reserved at 54 size 2 type u16
+    killer_entity at 56 size 4 type Entity
+    reserved_tail at 60 size 4 type u32
 PlayerInfo size 96 align 8
-    header at 0 size 8
-    slot at 8 size 4
-    entity at 12 size 4
-    key at 16 size 8
-    permissions at 24 size 1
-    name_len at 25 size 1
-    name at 26 size 64
+    header at 0 size 8 type Header
+    slot at 8 size 4 type u32
+    entity at 12 size 4 type Entity
+    key at 16 size 8 type PlayerKey
+    permissions at 24 size 1 type u8
+    name_len at 25 size 1 type u8
+    name at 26 size 64 type [u8; 64]
 PlayerKey size 8 align 8
-    0 at 0 size 8
+    0 at 0 size 8 type u64
 PointFlags size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 PointHandle size 24 align 8
-    header at 0 size 8
-    id at 8 size 4
-    live at 16 size 8
+    header at 0 size 8 type Header
+    id at 8 size 4 type u32
+    live at 16 size 8 type *const Atomic<u32>
 PointLink size 48 align 8
-    header at 0 size 8
-    point at 8 size 8
-    before at 16 size 8
-    after at 24 size 8
-    before_count at 32 size 4
-    after_count at 36 size 4
-    priority at 40 size 4
+    header at 0 size 8 type Header
+    point at 8 size 8 type *const PointSpec
+    before at 16 size 8 type *const Str
+    after at 24 size 8 type *const Str
+    before_count at 32 size 4 type u32
+    after_count at 36 size 4 type u32
+    priority at 40 size 4 type i32
 PointMode size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 PointSpec size 64 align 8
-    header at 0 size 8
-    name at 8 size 16
-    mode at 24 size 4
-    flags at 28 size 4
-    input at 32 size 16
-    output at 48 size 16
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    mode at 24 size 4 type PointMode
+    flags at 28 size 4 type PointFlags
+    input at 32 size 16 type Layout
+    output at 48 size 16 type Layout
 PointVerdict size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 PropPlace size 56 align 8
-    header at 0 size 8
-    item at 8 size 4
-    reserved at 12 size 4
-    position at 16 size 24
-    orientation at 40 size 16
+    header at 0 size 8 type Header
+    item at 8 size 4 type ItemId
+    reserved at 12 size 4 type u32
+    position at 16 size 24 type [f64; 3]
+    orientation at 40 size 16 type [f32; 4]
 PropRemove size 16 align 4
-    header at 0 size 8
-    entity at 8 size 4
-    flags at 12 size 4
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    flags at 12 size 4 type u32
 QuestData size 16 align 4
-    header at 0 size 8
-    entity at 8 size 4
-    quest at 12 size 4
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    quest at 12 size 4 type KnowledgeId
 RateId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 RecipeId size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 RecipeKind size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 RecipeRuleKind size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 Registers size 136 align 8
-    rax at 0 size 8
-    rcx at 8 size 8
-    rdx at 16 size 8
-    rbx at 24 size 8
-    rsp at 32 size 8
-    rbp at 40 size 8
-    rsi at 48 size 8
-    rdi at 56 size 8
-    r8 at 64 size 8
-    r9 at 72 size 8
-    r10 at 80 size 8
-    r11 at 88 size 8
-    r12 at 96 size 8
-    r13 at 104 size 8
-    r14 at 112 size 8
-    r15 at 120 size 8
-    rflags at 128 size 8
+    rax at 0 size 8 type u64
+    rcx at 8 size 8 type u64
+    rdx at 16 size 8 type u64
+    rbx at 24 size 8 type u64
+    rsp at 32 size 8 type u64
+    rbp at 40 size 8 type u64
+    rsi at 48 size 8 type u64
+    rdi at 56 size 8 type u64
+    r8 at 64 size 8 type u64
+    r9 at 72 size 8 type u64
+    r10 at 80 size 8 type u64
+    r11 at 88 size 8 type u64
+    r12 at 96 size 8 type u64
+    r13 at 104 size 8 type u64
+    r14 at 112 size 8 type u64
+    r15 at 120 size 8 type u64
+    rflags at 128 size 8 type u64
 Relation size 1 align 1
-    0 at 0 size 1
+    0 at 0 size 1 type u8
 RenameCall size 128 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    known at 12 size 1
-    player at 16 size 96
-    text at 112 size 16
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    known at 12 size 1 type u8
+    player at 16 size 96 type PlayerInfo
+    text at 112 size 16 type Str
 ResourceKey size 24 align 4
-    guid at 0 size 16
-    type_hash at 16 size 4
-    part at 20 size 4
+    guid at 0 size 16 type [u8; 16]
+    type_hash at 16 size 4 type u32
+    part at 20 size 4 type u32
 ServiceFound size 72 align 8
-    header at 0 size 8
-    table at 8 size 8
-    fields at 16 size 4
-    owner at 24 size 16
-    owner_version at 40 size 16
-    reason at 56 size 16
+    header at 0 size 8 type Header
+    table at 8 size 8 type *const c_void
+    fields at 16 size 4 type u32
+    owner at 24 size 16 type Str
+    owner_version at 40 size 16 type Str
+    reason at 56 size 16 type Str
 ServiceSpec size 56 align 8
-    header at 0 size 8
-    name at 8 size 16
-    major at 24 size 4
-    layout at 32 size 16
-    table at 48 size 8
+    header at 0 size 8 type Header
+    name at 8 size 16 type Str
+    major at 24 size 4 type u32
+    layout at 32 size 16 type Layout
+    table at 48 size 8 type *const c_void
 Side size 1 align 1
-    0 at 0 size 1
+    0 at 0 size 1 type u8
 SkillCheck size 20 align 4
-    header at 0 size 8
-    node at 8 size 4
-    gate at 12 size 4
-    unlocked at 16 size 1
-    reserved at 17 size 3
+    header at 0 size 8 type Header
+    node at 8 size 4 type SkillNode
+    gate at 12 size 4 type u32
+    unlocked at 16 size 1 type u8
+    reserved at 17 size 3 type [u8; 3]
 SkillNode size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 SpawnRequest size 80 align 8
-    header at 0 size 8
-    template at 8 size 16
-    position at 24 size 24
-    orientation at 48 size 16
-    level at 64 size 4
-    reserved at 68 size 4
-    lifetime_ns at 72 size 8
+    header at 0 size 8 type Header
+    template at 8 size 16 type [u8; 16]
+    position at 24 size 24 type [i64; 3]
+    orientation at 48 size 16 type [f32; 4]
+    level at 64 size 4 type u32
+    reserved at 68 size 4 type u32
+    lifetime_ns at 72 size 8 type u64
 StatChange size 32 align 4
-    header at 0 size 8
-    entity at 8 size 4
-    stat at 12 size 8
-    old at 20 size 4
-    new at 24 size 4
-    reserved at 28 size 4
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    stat at 12 size 8 type StatRef
+    old at 20 size 4 type f32
+    new at 24 size 4 type f32
+    reserved at 28 size 4 type u32
 StatDefData size 40 align 8
-    header at 0 size 8
-    ty at 8 size 1
-    format at 9 size 1
-    reserved at 10 size 2
-    default at 12 size 4
-    min at 16 size 4
-    max at 20 size 4
-    text at 24 size 16
+    header at 0 size 8 type Header
+    ty at 8 size 1 type u8
+    format at 9 size 1 type u8
+    reserved at 10 size 2 type u16
+    default at 12 size 4 type f32
+    min at 16 size 4 type f32
+    max at 20 size 4 type f32
+    text at 24 size 16 type Str
 StatModifierData size 12 align 4
-    stat at 0 size 4
-    op at 4 size 1
-    reserved at 5 size 3
-    value at 8 size 4
+    stat at 0 size 4 type u32
+    op at 4 size 1 type u8
+    reserved at 5 size 3 type [u8; 3]
+    value at 8 size 4 type f32
 StatModify size 40 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    key at 12 size 4
-    modifier at 16 size 12
-    flags at 28 size 4
-    duration_ms at 32 size 8
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    key at 12 size 4 type u32
+    modifier at 16 size 12 type StatModifierData
+    flags at 28 size 4 type u32
+    duration_ms at 32 size 8 type u64
 StatRef size 8 align 4
-    index at 0 size 4
-    key at 4 size 4
+    index at 0 size 4 type u32
+    key at 4 size 4 type u32
 StatSource size 20 align 4
-    kind at 0 size 1
-    op at 1 size 1
-    reserved at 2 size 2
-    stat at 4 size 4
-    value at 8 size 4
-    id at 12 size 4
-    owner at 16 size 4
+    kind at 0 size 1 type u8
+    op at 1 size 1 type u8
+    reserved at 2 size 2 type u16
+    stat at 4 size 4 type u32
+    value at 8 size 4 type f32
+    id at 12 size 4 type u32
+    owner at 16 size 4 type u32
 Status size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 Str size 16 align 8
-    ptr at 0 size 8
-    len at 8 size 8
+    ptr at 0 size 8 type *const u8
+    len at 8 size 8 type usize
 Summon size 80 align 8
-    header at 0 size 8
-    item at 8 size 4
-    ammo at 12 size 4
-    template at 16 size 16
-    target at 32 size 24
-    slot at 56 size 8
-    pide at 64 size 4
-    meter at 68 size 4
-    consumed at 72 size 1
-    reserved at 73 size 3
+    header at 0 size 8 type Header
+    item at 8 size 4 type ItemId
+    ammo at 12 size 4 type ItemId
+    template at 16 size 16 type [u8; 16]
+    target at 32 size 24 type [i64; 3]
+    slot at 56 size 8 type u64
+    pide at 64 size 4 type Entity
+    meter at 68 size 4 type [u16; 2]
+    consumed at 72 size 1 type u8
+    reserved at 73 size 3 type [u8; 3]
 SurvivorLookup size 64 align 8
-    header at 0 size 8
-    survivor at 8 size 4
-    vanilla at 12 size 4
-    purpose at 16 size 4
-    entity at 20 size 4
-    cell at 24 size 24
-    bed_of at 48 size 8
-    token at 56 size 8
+    header at 0 size 8 type Header
+    survivor at 8 size 4 type NpcId
+    vanilla at 12 size 4 type Entity
+    purpose at 16 size 4 type u32
+    entity at 20 size 4 type Entity
+    cell at 24 size 24 type [i64; 3]
+    bed_of at 48 size 8 type Option<unsafe extern "system" fn(*mut c_void, Entity) -> Entity>
+    token at 56 size 8 type *mut c_void
 Symbol size 24 align 8
-    name at 0 size 16
-    rva at 16 size 8
+    name at 0 size 16 type Str
+    rva at 16 size 8 type u64
 TeleportRequest size 56 align 8
-    header at 0 size 8
-    entity at 8 size 4
-    flags at 12 size 4
-    position at 16 size 24
-    orientation at 40 size 16
+    header at 0 size 8 type Header
+    entity at 8 size 4 type Entity
+    flags at 12 size 4 type u32
+    position at 16 size 24 type [i64; 3]
+    orientation at 40 size 16 type [f32; 4]
 TerrainEdit size 60 align 4
-    header at 0 size 8
-    kind at 8 size 4
-    shape at 12 size 4
-    flags at 16 size 4
-    material at 20 size 4
-    position at 24 size 12
-    radius at 36 size 4
-    height at 40 size 4
-    protect at 44 size 16
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    shape at 12 size 4 type u32
+    flags at 16 size 4 type u32
+    material at 20 size 4 type u32
+    position at 24 size 12 type [f32; 3]
+    radius at 36 size 4 type f32
+    height at 40 size 4 type f32
+    protect at 44 size 16 type [u8; 16]
 TerrainMaterialInfo size 20 align 4
-    header at 0 size 8
-    id at 8 size 1
-    flags at 9 size 1
-    hardness at 10 size 1
-    reserved at 11 size 1
-    item at 12 size 4
-    health at 16 size 4
-TickData size 48 align 8
-    header at 0 size 8
-    step at 8 size 8
-    elapsed_steps at 16 size 8
-    elapsed_nanos at 24 size 8
-    step_nanos at 32 size 8
-    cost_nanos at 40 size 8
+    header at 0 size 8 type Header
+    id at 8 size 1 type u8
+    flags at 9 size 1 type u8
+    hardness at 10 size 1 type u8
+    reserved at 11 size 1 type u8
+    item at 12 size 4 type ItemId
+    health at 16 size 4 type i32
+TickData size 56 align 8
+    header at 0 size 8 type Header
+    step at 8 size 8 type u64
+    elapsed_steps at 16 size 8 type u64
+    elapsed_nanos at 24 size 8 type u64
+    step_nanos at 32 size 8 type u64
+    cost_nanos at 40 size 8 type u64
+    game at 48 size 8 type u64
 TickHandle size 4 align 4
-    0 at 0 size 4
+    0 at 0 size 4 type u32
 TransactionInfo size 48 align 8
-    header at 0 size 8
-    state at 8 size 4
-    reason at 12 size 4
-    ops at 16 size 4
-    applied at 20 size 4
-    bricks at 24 size 8
-    refusal at 32 size 4
-    reserved at 36 size 4
-    holds at 40 size 4
-    created at 44 size 4
+    header at 0 size 8 type Header
+    state at 8 size 4 type u32
+    reason at 12 size 4 type Status
+    ops at 16 size 4 type u32
+    applied at 20 size 4 type u32
+    bricks at 24 size 8 type u64
+    refusal at 32 size 4 type u32
+    reserved at 36 size 4 type u32
+    holds at 40 size 4 type u32
+    created at 44 size 4 type u32
 TransactionOp size 16 align 8
-    kind at 0 size 4
-    reserved at 4 size 4
-    data at 8 size 8
+    kind at 0 size 4 type u32
+    reserved at 4 size 4 type u32
+    data at 8 size 8 type *const c_void
 UiDialog size 64 align 8
-    header at 0 size 8
-    title at 8 size 16
-    message at 24 size 16
-    detail at 40 size 16
-    buttons at 56 size 4
-    flags at 60 size 4
+    header at 0 size 8 type Header
+    title at 8 size 16 type Str
+    message at 24 size 16 type Str
+    detail at 40 size 16 type Str
+    buttons at 56 size 4 type u32
+    flags at 60 size 4 type u32
 UiFrame size 24 align 8
-    header at 0 size 8
-    token at 8 size 8
-    screen at 16 size 4
-    reserved at 20 size 4
+    header at 0 size 8 type Header
+    token at 8 size 8 type u64
+    screen at 16 size 4 type u32
+    reserved at 20 size 4 type u32
 UiMarker size 56 align 8
-    header at 0 size 8
-    position at 8 size 24
-    label at 32 size 16
-    color at 48 size 4
-    reserved at 52 size 4
+    header at 0 size 8 type Header
+    position at 8 size 24 type [i64; 3]
+    label at 32 size 16 type Str
+    color at 48 size 4 type u32
+    reserved at 52 size 4 type u32
 UiWidget size 96 align 8
-    header at 0 size 8
-    kind at 8 size 4
-    flags at 12 size 4
-    style at 16 size 4
-    steps at 20 size 4
-    text at 24 size 16
-    detail at 40 size 16
-    options at 56 size 8
-    option_count at 64 size 4
-    index at 68 size 4
-    value at 72 size 4
-    min at 76 size 4
-    max at 80 size 4
-    result at 84 size 4
-    anchor at 88 size 4
-    reserved at 92 size 4
+    header at 0 size 8 type Header
+    kind at 8 size 4 type u32
+    flags at 12 size 4 type u32
+    style at 16 size 4 type u32
+    steps at 20 size 4 type u32
+    text at 24 size 16 type Str
+    detail at 40 size 16 type Str
+    options at 56 size 8 type *const Str
+    option_count at 64 size 4 type u32
+    index at 68 size 4 type u32
+    value at 72 size 4 type f32
+    min at 76 size 4 type f32
+    max at 80 size 4 type f32
+    result at 84 size 4 type u32
+    anchor at 88 size 4 type u32
+    reserved at 92 size 4 type u32
 Voxel size 4 align 1
-    kind at 0 size 1
-    material at 1 size 1
-    fill at 2 size 1
-    reserved at 3 size 1
+    kind at 0 size 1 type u8
+    material at 1 size 1 type u8
+    fill at 2 size 1 type u8
+    reserved at 3 size 1 type u8
 VoxelRegion size 32 align 4
-    header at 0 size 8
-    min at 8 size 12
-    size at 20 size 12
+    header at 0 size 8 type Header
+    min at 8 size 12 type [u32; 3]
+    size at 20 size 12 type [u32; 3]
 VoxelWrite size 48 align 8
-    header at 0 size 8
-    min at 8 size 12
-    size at 20 size 12
-    voxels at 32 size 8
-    count at 40 size 8
+    header at 0 size 8 type Header
+    min at 8 size 12 type [u32; 3]
+    size at 20 size 12 type [u32; 3]
+    voxels at 32 size 8 type *const Voxel
+    count at 40 size 8 type u64
 WeatherFront size 56 align 8
-    header at 0 size 8
-    layer at 8 size 4
-    effect at 12 size 4
-    position at 16 size 24
-    radius at 40 size 4
-    reserved at 44 size 4
-    remaining at 48 size 8
+    header at 0 size 8 type Header
+    layer at 8 size 4 type u32
+    effect at 12 size 4 type u32
+    position at 16 size 24 type [i64; 3]
+    radius at 40 size 4 type f32
+    reserved at 44 size 4 type u32
+    remaining at 48 size 8 type i64

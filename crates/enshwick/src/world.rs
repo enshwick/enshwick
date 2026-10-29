@@ -268,7 +268,9 @@ pub enum Notice {
     /// On screen, as the game shows its own messages: the player's client
     /// runs Enshwick.
     OnScreen,
-    /// As a chat line: the player's client lacks Enshwick.
+    /// Handed to chat: the player's client lacks Enshwick, or the notice
+    /// could not leave now. A full line queue on the server can still drop
+    /// the chat line.
     Chat,
 }
 

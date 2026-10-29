@@ -39,28 +39,76 @@ pub fn host() -> Option<Host> {
 }
 
 /// Runs a mod's callback for the loader; a panic faults the mod with
-/// `reason`, and `fallback` answers in its place.
+/// `reason` and the panic's message, and `fallback` answers in its place.
 #[inline]
 pub(crate) fn guard<R>(reason: &str, fallback: impl FnOnce() -> R, call: impl FnOnce() -> R) -> R {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|_| {
-        fault(reason);
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|payload| {
+        fault_with(reason, payload.as_ref());
         fallback()
     })
 }
 
+/// Faults the mod for `reason`, followed by the message of the panic that
+/// left `payload`.
 #[cold]
 #[inline(never)]
-fn fault(reason: &str) {
+pub(crate) fn fault_with(reason: &str, payload: &(dyn core::any::Any + Send)) {
     if let Some(host) = host() {
-        host.fault(reason);
+        host.fault(&format!("{reason}: {}", panic_text(payload)));
+    }
+}
+
+/// The first line of a panic's message, which a reason shows on one line.
+pub(crate) fn panic_text(payload: &(dyn core::any::Any + Send)) -> &str {
+    let text = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or(NO_MESSAGE);
+    text.lines().next().unwrap_or(NO_MESSAGE)
+}
+
+/// What a panic without a text message reads as.
+const NO_MESSAGE: &str = "a panic without a message";
+
+/// Logs every panic of this mod's code through the loader, with its message,
+/// place and thread, before the panic's own handling runs. Each mod DLL has
+/// its own panic hook, so the line goes to the mod's log; the previous hook
+/// still runs.
+pub(crate) fn log_panics() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if let Some(host) = host() {
+                host.log(Level::ERROR, &panic_line(info));
+            }
+            previous(info);
+        }));
+    });
+}
+
+/// `panicked at src/lib.rs:4:9 on thread main: the message`, on one line.
+fn panic_line(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let message = info
+        .payload_as_str()
+        .unwrap_or(NO_MESSAGE)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ");
+    let thread = std::thread::current();
+    let thread = thread.name().unwrap_or("without a name");
+    match info.location() {
+        Some(at) => format!("panicked at {at} on thread {thread}: {message}"),
+        None => format!("panicked on thread {thread}: {message}"),
     }
 }
 
 impl Host {
     /// Wraps the loader's table for the mod `me`; `None` for a table of
-    /// another major or one shorter than this build's. The loader refuses a
-    /// mod built for a newer minor before it starts, so a mod meets a table
-    /// at least as long as its own.
+    /// another ABI version or one shorter than this build's.
     ///
     /// # Safety
     ///
@@ -73,7 +121,7 @@ impl Host {
         // table that starts with its header and lives for the process;
         // `as_ref` maps null to `None`.
         let header = unsafe { api.cast::<Header>().as_ref() }?;
-        if header.abi_major != crate::abi::ABI_MAJOR || !header.covers(size_of::<HostApi>()) {
+        if header.abi_version != crate::abi::ABI_VERSION || !header.covers(size_of::<HostApi>()) {
             return None;
         }
         // SAFETY: the table is readable for its header's size by this
@@ -94,7 +142,7 @@ impl Host {
     ///
     /// ```
     /// if let Some(host) = enshwick::host() {
-    ///     assert_eq!(host.api().header.abi_major, enshwick::abi::ABI_MAJOR);
+    ///     assert_eq!(host.api().header.abi_version, enshwick::abi::ABI_VERSION);
     /// }
     /// ```
     #[must_use]

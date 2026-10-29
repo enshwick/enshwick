@@ -29,9 +29,9 @@ impl Load<'_> {
     ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
     /// }
     ///
-    /// fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+    /// fn upgrade(next: enshwick::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     ///     // SAFETY: the original takes the same context.
-    ///     unsafe { next.get()(ctx) }
+    ///     unsafe { next.call(ctx) }
     /// }
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

@@ -256,6 +256,8 @@ pub(crate) struct Loader {
     pub(crate) configs_dir: PathBuf,
     /// The `mod-data` folder.
     pub(crate) data_dir: PathBuf,
+    /// Whether developer tools are on, by the marker file read at start.
+    pub(crate) developer_tools: bool,
     /// Loaded mods, in load order; handle `n` is index `n - 1`.
     pub(crate) mods: Vec<ModRecord>,
     /// The DLLs that run beside the mods without the API.

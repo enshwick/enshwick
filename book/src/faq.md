@@ -13,6 +13,7 @@ Everything is under `logs/enshwick/` in the game's folder (beside
 | `status.log`    | The latest status summary                             |
 | `crash.log`     | Crashes, each blamed on a mod, the loader or the game |
 | `report.md`     | One report to attach when you ask for help            |
+| `start.log`     | Why the loader did not start, when it stopped early   |
 
 To ask for help, attach `report.md` to an issue. It holds the versions, your
 system, the status summary, the files in `mods/` and the latest warnings and
@@ -95,6 +96,17 @@ when the mod itself returned `Err(Off)` from `init`, the line before it, at
 | `<name> is not where the build table says; nothing loads`                                       | The build looks known but does not match; treat it as unknown                         |
 | `this is not Enshrouded or its dedicated server; nothing loads`                                 | `powrprof.dll` was loaded by another program                                          |
 
+When `loader.log` is missing or empty, read `logs/enshwick/start.log`. The
+stub and the loader write a line there, with the Windows error, when they
+stop before the log opens: the loader DLL is missing or does not load, or
+the game's folder takes no files. When the game's folder takes no files,
+the line goes to `enshwick/start.log` in the Windows temporary folder
+(`%TEMP%`) instead. Each line starts with its date and time (UTC), and the
+file keeps lines from earlier sessions.
+
+A panic in the loader or a mod writes a line at `error` with the message,
+the place in the code and the thread, to `loader.log` or to the mod's log.
+
 On an unknown build every mod's hold applies; see
 [The game stops before the world loads](#the-game-stops-before-the-world-loads).
 
@@ -120,7 +132,7 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `<file> is not an Enshwick mod`                                                                                 | The DLL lacks the four required exports of `declare_mod!`              |
 | `<file> could not be loaded`                                                                                    | Windows could not load the DLL, such as a missing dependency           |
-| `<file> is built for ABI 2, the loader speaks 1`                                                                | The mod was built for another ABI major                                |
+| `<file> skipped: built for another Enshwick: rebuild it for Enshwick <version>`                                 | The mod was built for another Enshwick release                         |
 | `skipped: not for this side of the game`                                                                        | A client-only mod on the dedicated server                              |
 | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
 | `skipped: requires trading-post, which is not loaded`                                                           | A required mod is absent or was skipped itself                         |
@@ -145,8 +157,6 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `hook REWARD: refused by the loader`                   | Another mod holds the function exclusively, or the mod hooked it twice |
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
 
-A mod built for a newer ABI minor than the loader's never starts: the log
-shows `built for ABI 3.<n>, newer than the loader's 3.<m>: update Enshwick`.
 A settings file that stops parsing while the game runs does
 not turn the mod off: the mod logs
 `settings change skipped, the running values stay: ...` and keeps its values.
@@ -158,8 +168,7 @@ not turn the mod off: the mod logs
 | `init returned 6` after `off: init panicked`                   | `Mod::init` panicked                                                              |
 | `its hook at 0x... could not be armed`                         | The loader could not detour the function; `hook at 0x... not armed: ...` says why |
 | `its code patch at 0x... was skipped`                          | The bytes no longer read as expected, or overlap a hook                           |
-| `panic in hook REWARD`                                         | A detour panicked; the call went on to the original                               |
-| `panic in hook REWARD after next`                              | Work in `REWARD.after_next` panicked; the call kept what `next` gave              |
+| `panic in hook REWARD`                                         | A detour panicked; the original ran once                                          |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |
 | `panic in an event handler`                                    | An event handler panicked                                                         |
 | `panic in an action`, `panic in a rename filter`               | An action's handler or a rename filter panicked                                   |

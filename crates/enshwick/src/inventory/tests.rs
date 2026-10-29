@@ -231,3 +231,17 @@ fn outcomes_read_the_loaders_result() {
 fn op_errors_take_the_engine_s_names() {
     crate::engine_enum::assert_named_after_engine(&OpError::IDS);
 }
+
+#[test]
+fn only_items_with_an_entity_are_instances() {
+    let slot = |item, count, pide| Slot {
+        at: SlotRef::new(Entity(41), 0),
+        category: InventoryCategory::GENERIC,
+        item,
+        count,
+        pide: Entity::from_raw(pide),
+    };
+    assert!(ItemInstance::of(&slot(crate::ItemId::new(7), 1, 900)).is_some());
+    assert!(ItemInstance::of(&slot(crate::ItemId::new(7), 5, 0)).is_none());
+    assert!(ItemInstance::of(&slot(crate::ItemId::new(0), 0, 900)).is_none());
+}

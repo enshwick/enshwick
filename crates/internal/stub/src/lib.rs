@@ -11,6 +11,7 @@
 
 mod chain;
 mod gate;
+mod note;
 mod proxy;
 
 use core::ffi::c_void;
@@ -61,7 +62,16 @@ pub unsafe extern "system" fn DllMain(
         let spawned = std::thread::Builder::new()
             .name("enshwick-loader-stub".into())
             .spawn(move || {
-                let _started = std::panic::catch_unwind(|| start(missing));
+                if let Err(payload) = std::panic::catch_unwind(|| start(missing)) {
+                    let message = payload
+                        .downcast_ref::<&str>()
+                        .copied()
+                        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+                        .unwrap_or("a panic without a message");
+                    note::note(&format!(
+                        "the stub panicked: {message}; the game runs without mods"
+                    ));
+                }
                 gate::release();
             });
         if spawned.is_err() {
@@ -76,6 +86,10 @@ fn start(missing: u32) {
         return;
     }
     let Some(game_dir) = game_dir() else {
+        note::note(&format!(
+            "the game's folder was not found ({}); the game runs without mods",
+            std::io::Error::last_os_error()
+        ));
         return;
     };
     chain::load(&game_dir);
@@ -90,10 +104,20 @@ fn start(missing: u32) {
         )
     };
     if module.is_null() {
+        note::note(&format!(
+            "{} could not be loaded ({}); the game runs without mods",
+            chain::LOADER,
+            std::io::Error::last_os_error()
+        ));
         return;
     }
     // SAFETY: `module` is loaded and the name is NUL-terminated.
     let Some(start) = (unsafe { GetProcAddress(module, c"enshwick_start".as_ptr().cast()) }) else {
+        note::note(&format!(
+            "{} has no enshwick_start ({}); the game runs without mods. Install the loader again",
+            chain::LOADER,
+            std::io::Error::last_os_error()
+        ));
         return;
     };
     // SAFETY: the loader exports `enshwick_start` with the `Start` signature.

@@ -81,8 +81,8 @@
 /// }
 ///
 /// #[enshwick::hook]
-/// fn moved(next: enshwick::Next<extern "system" fn(Vec3)>, to: Vec3) {
-///     next.get()(to)
+/// fn moved(next: enshwick::Next<'_, extern "system" fn(Vec3)>, to: Vec3) {
+///     next.call(to)
 /// }
 /// ```
 ///
@@ -90,8 +90,8 @@
 ///
 /// ```compile_fail
 /// #[enshwick::hook]
-/// unsafe fn count(next: enshwick::Next<extern "system" fn(u32) -> u32>, n: u32) -> u32 {
-///     next.get()(n)
+/// unsafe fn count(next: enshwick::Next<'_, extern "system" fn(u32) -> u32>, n: u32) -> u32 {
+///     next.call(n)
 /// }
 /// ```
 ///
@@ -100,8 +100,8 @@
 ///
 /// ```compile_fail
 /// #[enshwick::hook]
-/// fn count(next: enshwick::Next<extern "system" fn(u32) -> u32>, n: u32) -> u32 {
-///     next.get()(n)
+/// fn count(next: enshwick::Next<'_, extern "system" fn(u32) -> u32>, n: u32) -> u32 {
+///     next.call(n)
 /// }
 ///
 /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {

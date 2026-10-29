@@ -2,7 +2,7 @@ use core::time::Duration;
 
 use crate::abi::StatModifierData;
 use crate::buffs::BuffTypeId;
-use crate::item_data::ItemInstance;
+use crate::inventory::ItemInstance;
 
 use super::defs::{Stat, StatDef, StatKey, StatType};
 

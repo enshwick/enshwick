@@ -53,6 +53,23 @@ the loader stay the same, so only the first start after an update searches;
 keep `mod-data/` on a volume to keep that file. Rebuild the image with a
 loader that has the table once there is one.
 
+## Move a world
+
+Mods keep each world's data under `mod-data/<mod id>/worlds/<key>/`, and the
+key holds a hash of the save's folder, such as `world0-1a2b3c4d`. A world
+whose save moved to another folder gets a new key, such as a hosted world
+brought to a dedicated server.
+
+The loader finds the old data by itself. When a world with a save but no
+mod data under its key loads, and one other key of the same save name has
+data, the loader takes it over. It moves the folders when the old save is
+gone and copies them when the old save is still there, and logs which.
+
+When two or more keys of the same save name have data, the loader moves
+nothing and logs the keys. The status summary lists them too. Stop the
+server and rename the right folder under each `mod-data/<mod id>/worlds/`
+to the new key, which the log names as `world key <key>, from <path>`.
+
 ## Check what loaded
 
 At every start the loader writes `mods/enshwick/enshwick.lock`: its own

@@ -325,7 +325,8 @@ impl Load<'_> {
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
         let (scheduler, subscribe) = crate::schedule::Scheduler::get(self.host.handle());
         if subscribe
-            && let Err(off) = self.on::<crate::events::Ticked>(move |_| scheduler.run_due())
+            && let Err(off) =
+                self.on::<crate::events::Ticked>(move |tick| scheduler.run_due(tick.game))
         {
             scheduler.unsubscribed();
             return Err(off);
@@ -360,11 +361,14 @@ impl Load<'_> {
 
     /// A value of type `T` kept per world under the mod's data folder,
     /// opened when the world loads and written when it saves; see
-    /// [`WorldStore`](crate::state::WorldStore).
+    /// [`WorldStore`](crate::state::WorldStore). A world file that does not
+    /// read keeps the store shut, with the reason in the status summary and
+    /// on the Mods screen, as the feature `world store <name>` off.
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, the data folder
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]` or is `settings`
+    /// or `save`, which the loader keeps for its own files, the data folder
     /// cannot be created or the world events are refused.
     ///
     /// # Examples
@@ -377,16 +381,29 @@ impl Load<'_> {
         let store = crate::state::WorldStore::new(&self.data_dir()?, name)?;
         let host = self.host;
         let opened = store.clone();
+        let feature = format!("world store {name}");
         self.on::<crate::events::WorldLoaded>(move |()| match crate::state::world_key(host) {
             Some(key) => {
-                if let Err(error) = opened.open(&key) {
+                let shut = opened.open(&key).err().map(|error| error.to_string());
+                if let Some(error) = &shut {
                     crate::error!("world store kept shut: {error}");
                 }
+                let reason = shut.as_deref().unwrap_or_default();
+                let _shown =
+                    (host.api().feature)(host.handle(), Str::new(&feature), Str::new(reason));
             }
             None => crate::warn!("world store kept shut: the loader names no world"),
         })?;
         let saved = store.clone();
         self.on::<crate::events::WorldSaved>(move |()| saved.flush_in_background())?;
+        let shown = store.clone();
+        let named = name.to_owned();
+        self.add_status(move || {
+            shown
+                .shut_reason()
+                .map(|why| format!("world store {named} kept shut: {why}"))
+                .unwrap_or_default()
+        })?;
         let closed = store.clone();
         self.on::<crate::events::ShutdownStarted>(move |()| {
             if let Err(error) = closed.close() {

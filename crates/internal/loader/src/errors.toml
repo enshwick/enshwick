@@ -65,8 +65,8 @@ fix = "Move the other mod's file into mods/chain/, then put Enshwick's powrprof.
 [[error]]
 code = "E2001"
 title = "A mod is made for another Enshwick"
-cause = "The mod was built for a newer Enshwick, or for one that works in another way, so it does not start."
-fix = "Update Enshwick. If the mod is older than your Enshwick, update the mod."
+cause = "The mod was built for another version of Enshwick. A mod starts only with the Enshwick version it was built for."
+fix = "Install the version of the mod made for your Enshwick version, which the log names. If there is none yet, ask the mod author to rebuild the mod for it."
 
 [[error]]
 code = "E2002"

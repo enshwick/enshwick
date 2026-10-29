@@ -58,7 +58,13 @@ mod daytime;
 mod deaths;
 #[cfg(windows)]
 mod detour;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game reads the marker")
+)]
+mod developer_tools;
 pub mod diag;
+pub mod early;
 #[cfg(windows)]
 mod ecs;
 #[cfg(windows)]
@@ -126,10 +132,21 @@ pub mod mod_index;
 pub mod modlist;
 #[cfg(windows)]
 mod module;
+pub mod moved_worlds;
 #[cfg(windows)]
 mod net;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game raises notices")
+)]
+mod notice_queue;
 #[cfg(windows)]
 mod notices;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running server tells a joining player")
+)]
+mod off_line;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "used by the start, which runs on Windows")
@@ -277,5 +294,12 @@ pub unsafe extern "system" fn enshwick_start(
     release: extern "system" fn() -> u32,
 ) {
     let release = (stub_abi >= 2).then_some(release);
-    let _outcome = std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release));
+    if let Err(payload) =
+        std::panic::catch_unwind(|| start::start(stub_abi, missing_forwards, release))
+    {
+        early::note(&format!(
+            "the loader's start panicked: {}; mods that did not start stay off",
+            early::panic_text(payload.as_ref())
+        ));
+    }
 }

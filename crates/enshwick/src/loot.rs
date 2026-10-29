@@ -17,8 +17,10 @@
 
 mod drops;
 
+pub(crate) use drops::replace_group;
+#[cfg(feature = "unstable")]
+pub(crate) use drops::watch_rolls;
 pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_drops};
-pub(crate) use drops::{replace_group, watch_rolls};
 
 use crate::Entity;
 use crate::ecs::{ComponentType, Components, Ecs};
@@ -153,9 +155,9 @@ struct Layout {
 ///
 /// static CONTAINERS: std::sync::OnceLock<Containers> = std::sync::OnceLock::new();
 ///
-/// fn check(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+/// fn check(next: enshwick::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 ///     // SAFETY: the original system takes its own context.
-///     unsafe { next.get()(ctx) };
+///     unsafe { next.call(ctx) };
 ///     if let Some(containers) = CONTAINERS.get() {
 ///         let mut open = 0;
 ///         // SAFETY: `ctx` is the live context of `SYSTEM`, inside its hook.
@@ -457,11 +459,11 @@ crate::detour! {
     static CHECK: unsafe extern "system" fn(ctx: *mut u64) = after_check;
 }
 
-fn after_check(next: crate::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+fn after_check(next: crate::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     // SAFETY: `ctx` is the context the game called `SYSTEM` with on this
     // thread, passed on unchanged, so the rest of the chain gets what the
     // game's own call gave it.
-    unsafe { next.get()(ctx) };
+    unsafe { next.call(ctx) };
     if let Some((containers, worlds, handler)) = PASS.get()
         // SAFETY: `ctx` is the live context the game passed to `SYSTEM`, on
         // its thread, during the hook.

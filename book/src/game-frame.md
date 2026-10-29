@@ -36,13 +36,13 @@ enshwick::detour! {
     static NODE_UNLOCKED: unsafe extern "system" fn(node: u32, bits: *const u64) -> u8 = node_unlocked;
 }
 
-fn node_unlocked(next: Next<unsafe extern "system" fn(u32, *const u64) -> u8>, node: u32, bits: *const u64) -> u8 {
+fn node_unlocked(next: Next<'_, unsafe extern "system" fn(u32, *const u64) -> u8>, node: u32, bits: *const u64) -> u8 {
     // One compare and one relaxed load for every call that is not ours.
     if node == 7 && ENABLED.load(Ordering::Relaxed) {
         return 1;
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next.get()(node, bits) }
+    unsafe { next.call(node, bits) }
 }
 # let _ = &NODE_UNLOCKED;
 ```

@@ -7,13 +7,15 @@
 //! [`MAX_PARTS`] frames. Everything here reads what another player's game
 //! sent, so it never trusts a size or a count.
 
+mod delivery;
 mod frame;
 mod peer;
 
+pub use delivery::{Drops, Outbox, strays};
 #[cfg(all(windows, test))]
 pub(crate) use frame::Partial;
 pub use frame::{Frame, assemble, frames, parse};
-pub use peer::Peer;
+pub use peer::{DATA_AGAIN, Peer};
 
 use enshwick::i18n::Language;
 

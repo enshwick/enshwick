@@ -67,7 +67,10 @@ Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 The console line `enshwick ui-demo <player>` shows every widget at once: it
 opens the loader's own demo window on that player's client, and its last
 page shows samples on the HUD and a marker on the map where the player
-stood.
+stood. It is a developer tool: it works only when the empty file
+`mod-data/enshwick/developer-tools` exists on the server and on that
+player's client when they start. Never leave the file on a server that
+players use.
 
 `frame.screen()` says where the player is: the menus, loading, or in game.
 
@@ -197,6 +200,17 @@ server offers the player: an Actions button above the list, and one under
 each mod that has actions. They show one action at a time, a list of players
 as toggle rows, five to a page, and an action with arguments as rows above
 its button.
+
+The screen says what is off and why. Under a mod, each of its features
+that is off has a line with the reason; a mod that is off says so in its
+heading. Above the list, each part of the loader that is off has a line:
+a part turns off at its first panic, such as the HUD items or map markers,
+and the reason carries the panic's message. The rest of the interface keeps
+working.
+
+A player who joins a server where mods, features or parts of the loader are
+off gets one chat line that names them. The reasons are in the server's log
+and status summary.
 
 ## Testing
 

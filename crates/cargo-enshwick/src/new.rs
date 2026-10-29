@@ -269,7 +269,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-enshwick = "{api}"
+enshwick = "={api}"
 serde = { version = "1", features = ["derive"] }
 "#;
 
@@ -385,7 +385,7 @@ mod tests {
                 .1
         };
         assert!(text("Cargo.toml").contains("name = \"street-lanterns\""));
-        assert!(text("Cargo.toml").contains(&format!("enshwick = \"{}\"", enshwick::VERSION)));
+        assert!(text("Cargo.toml").contains(&format!("enshwick = \"={}\"", enshwick::VERSION)));
         assert!(
             text("src/lib.rs").contains("id: \"you.street-lanterns\",\n            side: BOTH,")
         );

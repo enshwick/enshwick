@@ -62,7 +62,8 @@ summed in this order:
 
 1. **Worn items**: an item keeps its `ItemStats` as [item data](item-data.md)
    of the platform's kind `enshwick:stats`; `stats.item(item)` reads it and
-   `stats.set_item(item, &stats)` writes it, on the server. The items an
+   `stats.set_item(item, &stats)` writes it, on the server; `set_item` is
+   unstable, as item data is. The items an
    entity wears are its equipment: armour, rings, the ranged weapon and the
    shield. Clients that run Enshwick get every item's stats.
 2. **Buffs**: `load.add_buff_modifiers(buff, &modifiers)` gives every entity

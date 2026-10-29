@@ -31,6 +31,7 @@ services and events:
 content: 4 resources served (4 built, 0 failed), 12 texts
 code patches: 1 written, 0 left out (mod off), 0 skipped
 knowledge guard: watching; 3 requests it would refuse let through
+mod messages: 3 lines for one player dropped (queue full, player gone or such lines off), 1 line for one player reached others, lines for one player off
 hooks: 2 functions armed
   calls since start, one in 256 timed:
        1234567     750 ns  building.max_altars (you.lanterns)

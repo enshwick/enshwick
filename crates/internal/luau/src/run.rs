@@ -40,16 +40,23 @@ pub struct Limits {
     /// Bytes the VM may hold; an allocation past it fails the call.
     pub memory: usize,
     /// How long one call into the scripts may run: an event handler, a task.
+    /// Past it the call stops and the mod turns off.
     pub call: Duration,
+    /// How long the calls into the scripts may run together in any one
+    /// second; past it the mod turns off.
+    pub per_second: Duration,
     /// How long `main.luau` may run at start.
     pub start: Duration,
 }
 
 impl Default for Limits {
+    /// 10 ms per call, a fifth of a server step at 20 steps a second, and
+    /// 100 ms per second, a tenth of the server's time.
     fn default() -> Self {
         Self {
             memory: 64 << 20,
-            call: Duration::from_millis(100),
+            call: Duration::from_millis(10),
+            per_second: Duration::from_millis(100),
             start: Duration::from_secs(2),
         }
     }
@@ -69,6 +76,22 @@ impl Limits {
     #[must_use]
     pub const fn with_call(mut self, call: Duration) -> Self {
         self.call = call;
+        self
+    }
+
+    /// The same with `per_second` as the budget of all calls in one second.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let limits = enshwick_luau::Limits::default().with_per_second(Duration::from_millis(50));
+    /// assert_eq!(limits.per_second, Duration::from_millis(50));
+    /// ```
+    #[must_use]
+    pub const fn with_per_second(mut self, per_second: Duration) -> Self {
+        self.per_second = per_second;
         self
     }
 
@@ -162,6 +185,10 @@ pub(crate) struct Inner {
     calls: AtomicU64,
     overruns: Arc<AtomicU64>,
     peak: AtomicUsize,
+    /// When the mod started, which the per-second window counts from.
+    epoch: Instant,
+    /// The script time of the current second.
+    second: crate::budget::Window,
 }
 
 /// A mod event the scripts define: its description and the emitter the
@@ -417,6 +444,8 @@ pub fn start(
         calls: AtomicU64::new(0),
         overruns: Arc::new(AtomicU64::new(0)),
         peak: AtomicUsize::new(0),
+        epoch: Instant::now(),
+        second: crate::budget::Window::default(),
         settings: ArcSwap::from_pointee(toml::Table::new()),
     });
     if let Some(schema) = settings {
@@ -922,8 +951,16 @@ impl Inner {
         if self.off.load(Ordering::Acquire) {
             return None;
         }
+        // A call inside another call counts in the outer one's time.
+        let outermost = DEADLINE.get().is_none();
+        let began = Instant::now();
         match self.enter(&vm.lua, self.limits.call, || body(vm)) {
-            Ok(Ok(value)) => Some(value),
+            Ok(Ok(value)) => {
+                if outermost {
+                    self.charge(began, what);
+                }
+                Some(value)
+            }
             Ok(Err(error)) => {
                 self.fail(&format!("{}: {}", what(), describe(&error)));
                 None
@@ -932,6 +969,24 @@ impl Inner {
                 self.fail(&format!("{}: a call it made panicked", what()));
                 None
             }
+        }
+    }
+
+    /// Adds the call that began at `began` to the second's script time, and
+    /// turns the mod off when the second's time passes its budget.
+    fn charge(&self, began: Instant, what: &dyn Fn() -> String) {
+        let now = Instant::now();
+        let spent = self.second.charge(
+            now.saturating_duration_since(self.epoch),
+            now.saturating_duration_since(began),
+        );
+        if spent > self.limits.per_second {
+            self.fail(&format!(
+                "{}: the scripts ran {} ms within one second, past their budget of {} ms per second",
+                what(),
+                spent.as_millis(),
+                self.limits.per_second.as_millis()
+            ));
         }
     }
 

@@ -11,7 +11,7 @@ mod tests {
 
     use enshwick::Entity;
     use enshwick::content::categories::ItemCategoryMask;
-    use enshwick::item_data::ItemInstance;
+    use enshwick::inventory::ItemInstance;
     use enshwick::stats::{Op, Stat, StatDef, Stats};
     use enshwick::{Load, Mod, Off};
 

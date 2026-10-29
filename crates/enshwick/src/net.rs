@@ -7,6 +7,10 @@
 //! at most [`MAX_MESSAGE`] bytes; each side sends at most about twenty
 //! messages a second to each peer and drops what is over.
 //!
+//! Delivery is best effort: nothing confirms a message, and one lost on the
+//! way does not come again. Send whole values, not changes, and send
+//! important state again once the peer is ready.
+//!
 //! On the server the handler runs on the game thread, with the player's
 //! account key; on a client on the thread that takes the server's chat. A
 //! client that hosts a game is both: its server part talks to the clients,
@@ -99,7 +103,8 @@ pub enum SendError {
     /// who left, or a server that has not answered yet.
     #[error("the peer takes no messages now")]
     NotReady,
-    /// The peer's rate is spent for now.
+    /// The peer's rate is spent for now, or too many lines wait on the
+    /// server.
     #[error("over the rate of messages to the peer")]
     OverRate,
     /// The message does not encode.

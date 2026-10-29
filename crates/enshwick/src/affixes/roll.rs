@@ -32,7 +32,11 @@ pub struct Candidate<'a> {
     pub def: &'a AffixDef,
 }
 
-/// What a roll may give, for [`roll`] and [`Affixes::roll`](crate::affixes::Affixes::roll).
+#[cfg_attr(
+    feature = "unstable",
+    doc = "What a roll may give, for [`roll`] and [`Affixes::roll`](crate::affixes::Affixes::roll)."
+)]
+#[cfg_attr(not(feature = "unstable"), doc = "What a roll may give, for [`roll`].")]
 ///
 /// # Examples
 ///

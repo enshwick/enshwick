@@ -6,6 +6,79 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- A part of the loader that a panic turns off, such as the HUD items, a
+  window or map markers, shows on the Mods screen and in the status summary
+  with its reason; each window and menu entry turns off alone. A player who
+  joins a server gets one chat line naming what is off there (#683).
+
+- A panic in a mod logs a line at `error` with its message, place and
+  thread, and the reason of a mod a panic turns off carries the panic's
+  message; a panicking `init` turns the mod off with that reason (#682).
+
+- A world whose save moved to another folder keeps its mods' data: the
+  loader moves the folders of the world it came from to its new key, or
+  copies them while the old save is still there (#677).
+
+- A world store whose file does not read shows on the Mods screen as the
+  feature `world store <name>` off, with the reason (#675).
+
+- `WorldStore::shut_reason` says why the running world's file did not read
+  while the store stays shut, and the loader's status summary shows it
+  under the mod (#668).
+
+- `PackManifest::enshwick`: a pack's `pack.toml` may name the Enshwick
+  releases it is made for, such as `enshwick = "=1.0.0-alpha.12"`; a loader
+  of another release skips the pack and logs both versions (#661).
+
+- `files`: `read_if_present` and `read_to_string_if_present` tell a
+  missing file from one that does not read, and `write_atomically` writes a
+  file whole, flushed to disk, keeping the old one as `backup_path`.
+  `Store`, `WorldStore` and `Hold` write through it, so a store keeps
+  `<name>.toml.bak` beside its file (#658).
+
+### Changed
+
+- The ABI layout file lists each field's type, and a function pointer's
+  signature, so a changed signature is another `ABI_VERSION`. Every mod
+  needs a rebuild (#681).
+
+- `Stats::set_item`, `Affixes::roll`, `Load::add_loot_affixes`,
+  `Load::add_craft_affixes`, `AffixLoot` and `AffixCraft` need the
+  `unstable` feature: they keep their values as item data, which sets aside
+  a value on an item no load finds after a restart (#673).
+
+- `item_data` and `entity_data` need the `unstable` feature: after a
+  restart, a value on an item no load finds stays aside. `ItemInstance` moved
+  to `inventory`, and `stats::SetError` names the error of
+  `Stats::set_item` (#665).
+
+- `abi::ABI_VERSION`, a hash of the committed ABI layout, replaces
+  `ABI_MAJOR` and `ABI_MINOR`; `Header` carries it as `abi_version`, and the
+  C header defines `ENSHWICK_ABI_VERSION`. The loader, a mod's host check and
+  `cargo enshwick` load only mods built for exactly this version and name the
+  release to rebuild any other for (`abi::OTHER_ABI`). `cargo enshwick new`
+  pins `enshwick` with `=`. Every mod needs a rebuild (#657).
+
+### Fixed
+
+- `Load::world_store` refuses the names `settings` and `save`, whose files
+  the loader keeps in the same world folder, so a store no longer writes
+  over the world's settings (#680).
+
+- Migrations run once per world, all or nothing: each world keeps its own
+  record, `.migrations.toml`, and a copy of the files each migration
+  changed under `.backup/`, put back when a write fails or the game stops
+  part way. A record or store that does not read turns the mod off with
+  the reason instead of being skipped or read as empty (#670).
+
+- `Store` and `WorldStore` fill every key a file lacks from `T::default()`,
+  so a store whose type gained a field still reads (#672).
+
+- `WorldStore` writes a value again at the next save when its background
+  write failed, instead of dropping the change (#667).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added

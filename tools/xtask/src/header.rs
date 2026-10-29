@@ -94,7 +94,39 @@ fn generate(root: &Path) -> Result<String, String> {
     bindings.write(&mut bytes);
     let header =
         String::from_utf8(bytes).map_err(|error| format!("cbindgen wrote no UTF-8: {error}"))?;
-    Ok(tidy(&header))
+    Ok(with_abi_version(&tidy(&header), &layout))
+}
+
+/// The ABI version of a golden layout file, as `enshwick::abi::ABI_VERSION`
+/// computes it: FNV-1a over its bytes without carriage returns, so a
+/// checkout with Windows line endings has the same version. A test of the
+/// API crate holds the committed header to its constant.
+fn layout_version(layout: &str) -> u32 {
+    layout
+        .bytes()
+        .filter(|&byte| byte != b'\r')
+        .fold(0x811c_9dc5, |hash, byte| {
+            (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+        })
+}
+
+/// `header` with `ENSHWICK_ABI_VERSION` defined after its includes, which
+/// cbindgen cannot write since the constant is computed.
+fn with_abi_version(header: &str, layout: &str) -> String {
+    let define = format!(
+        "// The ABI version: a hash of the layout of every ABI type. A loader\n\
+         // loads only mods built for its own.\n\
+         #define ENSHWICK_ABI_VERSION {:#010x}\n\n",
+        layout_version(layout)
+    );
+    let includes = "#include <stdint.h>\n\n";
+    match header.find(includes) {
+        Some(at) => {
+            let end = at + includes.len();
+            format!("{}{define}{}", &header[..end], &header[end..])
+        }
+        None => format!("{header}\n{define}"),
+    }
 }
 
 /// The header as C authors read it: rustdoc's `# Examples` sections, which
@@ -244,14 +276,15 @@ fn copy_abi(root: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// The types of the golden file; its first line names the ABI version.
+/// The types of the golden file.
 fn parse_layout(text: &str) -> Result<Vec<Shape>, String> {
     let mut shapes: Vec<Shape> = Vec::new();
-    for (number, line) in text.lines().enumerate().skip(1) {
+    for (number, line) in text.lines().enumerate() {
         let bad = || format!("{LAYOUT}:{}: unreadable line {line:?}", number + 1);
         let words: Vec<&str> = line.split_whitespace().collect();
         if let Some(field) = line.strip_prefix("    ") {
-            let words: Vec<&str> = field.split_whitespace().collect();
+            let (place, _type) = field.split_once(" type ").ok_or_else(bad)?;
+            let words: Vec<&str> = place.split_whitespace().collect();
             let [name, "at", offset, "size", _] = words[..] else {
                 return Err(bad());
             };
@@ -381,7 +414,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    const GOLDEN: &str = "abi 2.1\nPair size 8 align 4\n    left at 0 size 4\n    right at 4 size 4\nStatus size 4 align 4\n    0 at 0 size 4\n";
+    const GOLDEN: &str = "Pair size 8 align 4\n    left at 0 size 4 type u32\n    right at 4 size 4 type extern \"system\" fn(u32)\nStatus size 4 align 4\n    0 at 0 size 4 type i32\n";
 
     #[test]
     fn the_layout_file_reads_into_shapes() {
@@ -397,8 +430,31 @@ mod tests {
 
     #[test]
     fn a_malformed_layout_line_is_named() {
-        let error = parse_layout("abi 2.1\nPair size eight align 4\n").unwrap_err();
+        let error = parse_layout("Pair size 8 align 4\nPair size eight align 4\n").unwrap_err();
         assert!(error.contains(":2:"), "{error}");
+    }
+
+    #[test]
+    fn the_abi_version_follows_the_includes_as_the_layout_s_hash() {
+        let header = "#include <stdint.h>\n\ntypedef int A;\n";
+        let with = with_abi_version(header, GOLDEN);
+        let define = format!(
+            "#define ENSHWICK_ABI_VERSION {:#010x}",
+            layout_version(GOLDEN)
+        );
+        assert!(with.starts_with("#include <stdint.h>\n\n// "), "{with}");
+        assert!(
+            with.contains(&format!("\n{define}\n\ntypedef int A;\n")),
+            "{with}"
+        );
+        assert_ne!(
+            layout_version(GOLDEN),
+            layout_version(&GOLDEN.replace('4', "8"))
+        );
+        assert_eq!(
+            layout_version(GOLDEN),
+            layout_version(&GOLDEN.replace('\n', "\r\n"))
+        );
     }
 
     #[test]
