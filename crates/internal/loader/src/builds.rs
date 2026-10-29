@@ -423,6 +423,23 @@ mod tests {
         }
     }
 
+    /// On each client executable, every client table reads where the
+    /// slider's config fields end, before its stop list.
+    #[test]
+    fn the_slider_extent_reads_on_each_client() {
+        let rows = constants_on_executables(&["ui.slider_extent"]);
+        let clients: Vec<_> = rows
+            .iter()
+            .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
+            .collect();
+        if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+            assert!(clients.len() >= 2, "{rows:?}");
+        }
+        for (table, values) in clients {
+            assert_eq!(values, &[Some(0xa0)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads where the zone size's answer
     /// holds its valid byte.
     #[test]
