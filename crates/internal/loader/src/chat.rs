@@ -92,15 +92,35 @@ struct Layout {
     delivered: usize,
     max_text: usize,
     reply_type: u8,
+    /// What lines to one connection need; without it only those lines are
+    /// off.
+    one: Option<OneLine>,
+}
+
+/// What a line to one connection needs from the table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OneLine {
     /// The bits of a connection handle that name its slot in the store.
     handle_slot: u32,
     /// The bytes a line counts beyond its text, before rounding to 4.
     line_overhead: usize,
 }
 
-/// The largest line overhead taken from the table: the game adds it as a
-/// sign-extended byte, so a larger byte would be a negative.
-const MOST_OVERHEAD: usize = 0x7f; // bound, not a game offset: the largest positive imm8
+/// The largest row value taken for a mask or an overhead: the game uses
+/// both as a sign-extended byte, so a larger byte would be a negative.
+const MOST_BYTE: u64 = 0x7f; // bound, not a game offset: the largest positive imm8
+
+impl OneLine {
+    /// The handle mask and line overhead from the table's rows; `None`
+    /// without either or with one that is zero or past a positive byte.
+    fn from_rows(handle_slot: Option<u64>, line_overhead: Option<u64>) -> Option<Self> {
+        let byte = |value: Option<u64>| value.filter(|&value| (1..=MOST_BYTE).contains(&value));
+        Some(Self {
+            handle_slot: u32::try_from(byte(handle_slot)?).ok()?,
+            line_overhead: usize::try_from(byte(line_overhead)?).ok()?,
+        })
+    }
+}
 
 /// The bytes the store counts for a line of `text_len` bytes, `overhead`
 /// bytes beyond its text, rounded up to 4 as the game rounds them.
@@ -159,8 +179,9 @@ struct Delivery {
     dropped: Drops,
     /// Lines for one player that reached other players too.
     strayed: Drops,
-    /// Set once a line for one player reached others: no line goes to one
-    /// player from then on, since this build's chat does not keep it there.
+    /// Set when this build has no usable handle mask or line overhead, or
+    /// once a line for one player reached others: no line goes to one player
+    /// from then on, since this build's chat does not keep it there.
     one_player_off: AtomicBool,
 }
 
@@ -303,9 +324,10 @@ pub(crate) fn link(loader: &'static Loader) {
             delivered: constant(pinned::chat::NODE_DELIVERED)?,
             max_text: constant(pinned::chat::MAX_TEXT)?,
             reply_type: u8::try_from(constant(pinned::chat::REPLY_TYPE)?).ok()?,
-            handle_slot: u32::try_from(constant(pinned::chat::HANDLE_SLOT)?).ok()?,
-            line_overhead: constant(pinned::chat::LINE_OVERHEAD)
-                .filter(|&overhead| overhead <= MOST_OVERHEAD)?,
+            one: OneLine::from_rows(
+                loader.build.constant(pinned::chat::HANDLE_SLOT.id()),
+                loader.build.constant(pinned::chat::LINE_OVERHEAD.id()),
+            ),
         })
     })();
     let Some(layout) = layout else {
@@ -314,6 +336,14 @@ pub(crate) fn link(loader: &'static Loader) {
     };
     if LOADED.get().is_some() {
         return;
+    }
+    if layout.one.is_none() {
+        // Refused at the queue, so callers and the status see them off.
+        DELIVERY.one_player_off.store(true, Ordering::Relaxed);
+        crate::log!(
+            WARN,
+            "chat lines to one player off: this build has no usable handle mask or line overhead"
+        );
     }
     // Linked first: without the post, mods' lines must stay refused.
     let target = Target::Pinned(pinned::chat::POST);
@@ -645,12 +675,16 @@ pub(crate) fn drain() {
 unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &str) {
     let (handle, key, target) = match to {
         To::Machine(handle, key) => {
-            let target = (handle & layout.handle_slot) as usize;
+            let Some(one) = layout.one else {
+                dropped(1);
+                return;
+            };
+            let target = (handle & one.handle_slot) as usize;
             if target >= layout.slot_count {
                 dropped(1);
                 return;
             }
-            (handle, key, Some(target))
+            (handle, key, Some((target, one)))
         }
         _ => (0, 0, None),
     };
@@ -675,7 +709,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
             &raw const extra,
         );
     };
-    let Some(target) = target else {
+    let Some((target, one)) = target else {
         return;
     };
     if result[0] != POSTED {
@@ -711,7 +745,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         // target's bit stays unset until the game sends the line to the
         // target on a later step.
         let read_mask = || unsafe { crate::memory::read::<u32>(node, layout.delivered) };
-        let bytes = line_bytes(text.len(), layout.line_overhead);
+        let bytes = line_bytes(text.len(), one.line_overhead);
         let unmarked = strays(active, target, Some(read_mask()));
         for slot in (0..32).filter(|&slot| unmarked & 1 << slot != 0) {
             // SAFETY: `layout.mark` is the table's `chat.mark_delivered`, the
@@ -739,6 +773,33 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_to_one_player_needs_a_positive_byte_mask_and_overhead() {
+        let one = OneLine {
+            handle_slot: 0x7f,
+            line_overhead: 0x17,
+        };
+        assert_eq!(OneLine::from_rows(Some(0x7f), Some(0x17)), Some(one));
+        assert_eq!(OneLine::from_rows(None, Some(0x17)), None, "no mask");
+        assert_eq!(OneLine::from_rows(Some(0x7f), None), None, "no overhead");
+        assert_eq!(
+            OneLine::from_rows(Some(0x80), Some(0x17)),
+            None,
+            "a negative mask"
+        );
+        assert_eq!(
+            OneLine::from_rows(Some(0x7f), Some(0xe9)),
+            None,
+            "a negative overhead"
+        );
+        assert_eq!(OneLine::from_rows(Some(0), Some(0x17)), None, "a zero mask");
+        assert_eq!(
+            OneLine::from_rows(Some(0x7f), Some(0)),
+            None,
+            "a zero overhead"
+        );
+    }
 
     #[test]
     fn a_line_counts_its_text_and_overhead_rounded_up_to_four() {
