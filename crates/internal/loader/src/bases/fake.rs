@@ -3,6 +3,7 @@
 
 use enshwick::raw::{read_at, write_at};
 
+use super::heap::Slots;
 use super::loops::{Layout, MapFields, ObjectFields, RecordFields, StockFields};
 use super::{Answer, Container, Fields};
 use crate::base_groups::limit::Aabb;
@@ -36,6 +37,10 @@ pub(super) const FIELDS: Fields = Fields {
         grow: 0x18,
         allocator: 0x20,
         boxed: 0x20,
+    },
+    heap: Slots {
+        allocate: 0x8,
+        free: 0x10,
     },
 };
 

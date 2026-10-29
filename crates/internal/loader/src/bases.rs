@@ -153,6 +153,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::STOCK_COUNT.id(),
     pinned::bases::STOCK_ENTITIES.id(),
     pinned::bases::ZONE_LIST_ALLOCATOR.id(),
+    pinned::bases::HEAP_ALLOCATE.id(),
+    pinned::bases::HEAP_FREE.id(),
     pinned::building::MAX_ALTARS.id(),
 ];
 
@@ -200,6 +202,7 @@ struct Fields {
     allocator: usize,
     answer: Answer,
     container: Container,
+    heap: heap::Slots,
 }
 
 /// The answer of the zone lookups: an error byte, a u32 the game sets to 0,
@@ -265,6 +268,10 @@ impl Fields {
                     .checked_sub(zone_list)
                     .ok_or("the zone list's allocator lies before its list")?,
             },
+            heap: heap::Slots {
+                allocate: f(pinned::bases::HEAP_ALLOCATE)?,
+                free: f(pinned::bases::HEAP_FREE)?,
+            },
         };
         if !fields.fits() {
             return Err(format!(
@@ -276,7 +283,8 @@ impl Fields {
 
     /// Whether a zone box holds both corners, the answer holds its error,
     /// zero word, index and a whole box, and the zone list's length is the
-    /// container's, whose boxes are the zone list's.
+    /// container's, whose boxes are the zone list's, and the heap's slots
+    /// fit its vtable.
     fn fits(&self) -> bool {
         let Answer {
             error,
@@ -293,6 +301,7 @@ impl Fields {
             && boxed + self.zone_size <= size
             && self.zone_list + self.container.len == self.zone_list_len
             && self.container.boxed == self.zone_size
+            && self.heap.fit()
     }
 }
 
@@ -1164,6 +1173,8 @@ mod tests {
             (pinned::bases::CONTAINER_CAP, f.container.cap),
             (pinned::bases::CONTAINER_GROW, f.container.grow),
             (pinned::bases::CONTAINER_BOX, f.container.boxed),
+            (pinned::bases::HEAP_ALLOCATE, f.heap.allocate),
+            (pinned::bases::HEAP_FREE, f.heap.free),
             (
                 pinned::bases::ZONE_LIST_ALLOCATOR,
                 f.zone_list + f.container.allocator,

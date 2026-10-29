@@ -525,11 +525,13 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
         if cap < len + 1 {
             // SAFETY: the caller guarantees a live container; its allocator
             // field.
-            if unsafe { read_at::<usize>(vec, c.allocator) } == 0 {
+            if unsafe { read_at::<usize>(vec, c.allocator) } == 0
+                && let Some(heap) = super::heap::handed(game.fields.heap)
+            {
                 // SAFETY: the same live container, whose caller never reads
                 // the field, and its grow and free reach the loader's heap
                 // through it.
-                unsafe { write_at(vec, c.allocator, super::heap::handed()) };
+                unsafe { write_at(vec, c.allocator, heap) };
             }
             // SAFETY: the same live container; its grow callback, null or the
             // game's own.
@@ -762,7 +764,10 @@ mod tests {
             (40, 64),
             "16 inline, then 32, then 64"
         );
-        assert_eq!(list.allocator, super::super::heap::handed());
+        assert_eq!(
+            list.allocator,
+            super::super::heap::handed(FIELDS.heap).unwrap_or(0)
+        );
         assert_ne!(list.data, list.inline.as_mut_ptr());
         // SAFETY: the container holds `len` boxes.
         let got = unsafe { core::slice::from_raw_parts(list.data, 40) };
