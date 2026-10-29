@@ -35,6 +35,37 @@ pub const TABLE_IDS: &[&str] = &[
 pub(crate) const MAX_PLAYERS: usize = 64;
 /// How long a kick that did not remove the player waits to be tried again.
 const KICK_AGAIN: Duration = Duration::from_secs(10);
+/// What a join's guard, the allowlist or the offline ban, did with a player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Guard {
+    /// The guard let the player stay.
+    Passed,
+    /// The guard removed the player.
+    Removed,
+    /// The guard could not run: it panicked, or an earlier panic turned it
+    /// off. The player must still go, so a broken guard never lets anyone in.
+    Broken,
+}
+
+impl Guard {
+    /// The guard's run through its fuse: whether it removed the player, or
+    /// `None` when it could not run.
+    #[must_use]
+    pub const fn of(ran: Option<bool>) -> Self {
+        match ran {
+            Some(true) => Self::Removed,
+            Some(false) => Self::Passed,
+            None => Self::Broken,
+        }
+    }
+
+    /// Whether the player must not stay.
+    #[must_use]
+    pub const fn keeps_out(self) -> bool {
+        !matches!(self, Self::Passed)
+    }
+}
+
 /// How long the server waits on a player who entered the world.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rules {
@@ -415,6 +446,26 @@ mod runtime;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_guard_that_cannot_run_keeps_the_player_out() {
+        let fuse = crate::fuse::Fuse::new("test guard");
+        let panicked = fuse.run("an unlisted account's join", || -> bool {
+            panic!("broken")
+        });
+        assert_eq!(Guard::of(panicked), Guard::Broken);
+        let tripped = fuse.run("the next join", || false);
+        assert_eq!(Guard::of(tripped), Guard::Broken);
+        assert!(Guard::Broken.keeps_out());
+    }
+
+    #[test]
+    fn a_guard_that_ran_says_whether_it_removed_the_player() {
+        assert_eq!(Guard::of(Some(true)), Guard::Removed);
+        assert!(Guard::Removed.keeps_out());
+        assert_eq!(Guard::of(Some(false)), Guard::Passed);
+        assert!(!Guard::Passed.keeps_out());
+    }
 
     const SERVER: &str = "you.trading-post@0.3.0,zones@0.1.0";
 

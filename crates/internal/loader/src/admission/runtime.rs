@@ -14,7 +14,7 @@ use crate::join::Names;
 use crate::locks::Relock;
 use crate::pinned;
 
-use super::{Gate, Hello, Rules, Step};
+use super::{Gate, Guard, Hello, Rules, Step};
 
 /// The game's kick of one machine from its session: the session, the
 /// machine's handle, and whether to ban it too. The server's own
@@ -66,6 +66,8 @@ struct State {
     /// Set once the host's hello came under a second key.
     rehosted: AtomicBool,
     fuse: Fuse,
+    /// The removals a guard that could not decide asks for.
+    closing: Fuse,
 }
 
 static STATE: State = State {
@@ -80,6 +82,7 @@ static STATE: State = State {
     unkeyed: AtomicBool::new(false),
     rehosted: AtomicBool::new(false),
     fuse: Fuse::new("join admission"),
+    closing: Fuse::new("removals while a join guard is off"),
 };
 
 /// Takes the loader settings' rules, before the loader starts.
@@ -189,17 +192,27 @@ pub(crate) fn host() -> Option<u64> {
 
 /// The player `key` entered the world; on the game thread.
 pub(crate) fn joined(key: u64) {
-    if key != 0
-        && crate::console::banned_offline(key)
-        && STATE
-            .fuse
-            .run("a banned account's join", || refuse_banned(key))
-            .unwrap_or(false)
-    {
-        return;
+    if key != 0 && crate::console::banned_offline(key) {
+        let guard = Guard::of(
+            STATE
+                .fuse
+                .run("a banned account's join", || refuse_banned(key)),
+        );
+        if guard == Guard::Broken {
+            refuse_unchecked(key, true, "the ban check");
+        }
+        if guard.keeps_out() {
+            return;
+        }
     }
-    if crate::allowlist::guarded(|| refuse_unlisted(key)).unwrap_or(false) {
-        return;
+    if crate::allowlist::is_on() {
+        let guard = Guard::of(crate::allowlist::guarded(|| refuse_unlisted(key)));
+        if guard == Guard::Broken {
+            refuse_unchecked(key, false, "the allowlist");
+        }
+        if guard.keeps_out() {
+            return;
+        }
     }
     let Some(serving) = STATE.serving.get() else {
         return;
@@ -223,6 +236,41 @@ pub(crate) fn joined(key: u64) {
             run(crate::host::loader(), serving, step);
         }
     });
+}
+
+/// Removes the player `key`, and bans the account with `ban`, when `guard`
+/// could not decide after a panic: a broken guard keeps every player but
+/// the host out rather than letting the ones it should refuse in. Admins go
+/// too, since telling them apart is part of what broke.
+#[cold]
+fn refuse_unchecked(key: u64, ban: bool, guard: &str) {
+    let removed = STATE.closing.run("a removal by a broken guard", || {
+        let loader = crate::host::loader().ok_or("the loader is not running")?;
+        let kick = STATE
+            .kick
+            .get()
+            .and_then(Option::as_ref)
+            .ok_or("this build lacks the session's kick")?;
+        let host = STATE
+            .serving
+            .get()
+            .and_then(|serving| with_gate(serving, |gate| gate.host));
+        disconnect(loader, kick, key, host, ban)
+    });
+    match removed {
+        Some(Ok(machine)) => crate::log!(
+            WARN,
+            "{guard} is off after a panic: {key:016x} removed to keep the server closed (machine {machine})"
+        ),
+        Some(Err(why)) => crate::log!(
+            ERROR,
+            "{guard} is off after a panic and {key:016x} could not be removed: {why}"
+        ),
+        None => crate::log!(
+            ERROR,
+            "{guard} is off after a panic and {key:016x} could not be removed: the removal panicked too"
+        ),
+    }
 }
 
 /// Removes the player `key` from a dedicated server whose allowlist is on
