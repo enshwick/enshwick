@@ -72,11 +72,11 @@ before the state exists, or whose mod failed at init, forwards to `next`:
 # enshwick::declare_mod!(MyMod);
 use enshwick::Next;
 
-fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
+fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
     match MyMod::instance() {
         Some(state) => state.altars,
         // SAFETY: the original takes the arguments the game passed.
-        None => unsafe { next.get()(balancing, level) },
+        None => unsafe { next.call(balancing, level) },
     }
 }
 ```

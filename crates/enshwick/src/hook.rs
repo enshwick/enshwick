@@ -1,5 +1,6 @@
 //! Typed links in the loader's hook chains.
 
+use core::cell::Cell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::abi::HookFlags;
@@ -23,20 +24,27 @@ mod sealed {
 /// fn takes<F: enshwick::FnPtr>() {}
 /// takes::<unsafe extern "system" fn(*mut u64) -> u32>();
 /// ```
-pub unsafe trait FnPtr: Copy + Send + Sync + 'static + sealed::Sealed {}
+pub unsafe trait FnPtr: Copy + Send + Sync + 'static + sealed::Sealed {
+    /// What the function returns, `()` when it returns nothing.
+    type Output: 'static;
+}
 
 macro_rules! fn_ptr {
     ($($arg:ident),*) => {
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed for extern "system" fn($($arg),*) -> R {}
         // SAFETY: a function pointer has the size of `usize` on every target
         // the game runs on.
-        unsafe impl<R: 'static, $($arg: 'static),*> FnPtr for extern "system" fn($($arg),*) -> R {}
+        unsafe impl<R: 'static, $($arg: 'static),*> FnPtr for extern "system" fn($($arg),*) -> R {
+            type Output = R;
+        }
         impl<R: 'static, $($arg: 'static),*> sealed::Sealed
             for unsafe extern "system" fn($($arg),*) -> R {}
         // SAFETY: an unsafe function pointer has the size of `usize` on every
         // target the game runs on.
         unsafe impl<R: 'static, $($arg: 'static),*> FnPtr
-            for unsafe extern "system" fn($($arg),*) -> R {}
+            for unsafe extern "system" fn($($arg),*) -> R {
+            type Output = R;
+        }
     };
 }
 
@@ -71,9 +79,9 @@ const _: () = assert!(size_of::<extern "system" fn()>() == size_of::<usize>());
 ///     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
 /// }
 ///
-/// fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+/// fn upgrade(next: enshwick::Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 ///     // SAFETY: the original takes the same context.
-///     unsafe { next.get()(ctx) }
+///     unsafe { next.call(ctx) }
 /// }
 ///
 /// assert_eq!(UPGRADE.name(), "UPGRADE");
@@ -124,8 +132,8 @@ impl<F: FnPtr> Hook<F> {
     ///     static TICK: extern "system" fn() = tick;
     /// }
     ///
-    /// fn tick(next: enshwick::Next<extern "system" fn()>) {
-    ///     next.get()();
+    /// fn tick(next: enshwick::Next<'_, extern "system" fn()>) {
+    ///     next.call();
     /// }
     ///
     /// let entry: extern "system" fn() = TICK.entry();
@@ -136,50 +144,16 @@ impl<F: FnPtr> Hook<F> {
         self.detour
     }
 
-    /// The rest of the chain: the next link or the original function.
-    ///
-    /// # Examples
-    ///
-    /// See [`Hook`].
+    /// The rest of the chain for one call of the entry, which keeps what
+    /// `next` returned in `frame`; used by [`detour!`](crate::detour).
+    #[doc(hidden)]
     #[must_use]
-    pub fn next(&'static self) -> Next<F> {
+    pub fn next<'frame>(&'static self, frame: &'frame Frame<F::Output>) -> Next<'frame, F> {
         Next {
             slot: &self.next,
+            frame,
             _f: core::marker::PhantomData,
         }
-    }
-
-    /// Runs `work` that a detour does after calling `next`, so that a panic
-    /// in it turns the mod off without running the rest of the chain again.
-    ///
-    /// A panic in the body falls through to the rest of the chain, which is
-    /// right before `next` and wrong after it: the game's function would run
-    /// twice. Work after `next` belongs in here. A panic in `work` reports a
-    /// fault, as a panic in the body does, and gives `None`; the detour then
-    /// returns what `next` gave. The guard costs nothing until a panic.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::sync::atomic::{AtomicU32, Ordering};
-    ///
-    /// static RAISED: AtomicU32 = AtomicU32::new(0);
-    ///
-    /// enshwick::detour! {
-    ///     static RAISE: extern "system" fn(level: u32) -> u32 = raise;
-    /// }
-    ///
-    /// fn raise(next: enshwick::Next<extern "system" fn(u32) -> u32>, level: u32) -> u32 {
-    ///     let raised = next.get()(level);
-    ///     let _counted = RAISE.after_next(|| RAISED.fetch_add(raised - level, Ordering::Relaxed));
-    ///     raised
-    /// }
-    /// # let _ = &RAISE;
-    /// ```
-    pub fn after_next<R>(&self, work: impl FnOnce() -> R) -> Option<R> {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(work))
-            .inspect_err(|_| fault_after_next(self.name))
-            .ok()
     }
 
     pub(crate) fn spec(&'static self, target: u64) -> crate::abi::HookSpec {
@@ -193,14 +167,6 @@ impl<F: FnPtr> Hook<F> {
     }
 }
 
-#[cold]
-#[inline(never)]
-fn fault_after_next(hook: &str) {
-    if let Some(host) = crate::host() {
-        host.fault(&format!("panic in hook {hook} after next"));
-    }
-}
-
 fn address<F: FnPtr>(f: F) -> usize {
     // SAFETY: `FnPtr` implementors are function pointers the size of `usize`.
     unsafe { core::mem::transmute_copy(&f) }
@@ -209,36 +175,28 @@ fn address<F: FnPtr>(f: F) -> usize {
 /// What a detour calls to continue: the next link, or the game's original
 /// function.
 ///
-/// One atomic load and an indirect call; copy it freely. Work a detour does
-/// after calling it goes in [`Hook::after_next`].
+/// [`call`](Self::call) keeps what the chain returned for the one call of the
+/// detour this belongs to: when the body panics after calling it, the detour
+/// returns that value instead of running the game's function again. One
+/// atomic load, one store on the stack and an indirect call; copy it freely.
 ///
 /// # Examples
 ///
 /// See [`Hook`].
 #[derive(Debug, Clone, Copy)]
-pub struct Next<F: FnPtr> {
+pub struct Next<'frame, F: FnPtr> {
     slot: &'static AtomicUsize,
+    frame: &'frame Frame<F::Output>,
     _f: core::marker::PhantomData<F>,
 }
 
-impl<F: FnPtr> Next<F> {
-    /// The function to call to continue the chain.
-    ///
-    /// # Panics
-    ///
-    /// When the loader has not linked the hook, as when a unit test calls the
-    /// detour's body itself.
-    ///
-    /// # Examples
-    ///
-    /// See [`Hook`].
+impl<F: FnPtr> Next<'_, F> {
     #[inline]
-    #[must_use]
-    pub fn get(self) -> F {
+    fn function(self) -> F {
         let address = self.slot.load(Ordering::Acquire);
         assert!(
             address != 0,
-            "Next::get on a hook the loader has not linked"
+            "Next::call on a hook the loader has not linked"
         );
         // SAFETY: the loader stores a function of type `F` in the slot before
         // the detour can run, and the slot is not empty; `F` is a function
@@ -247,16 +205,116 @@ impl<F: FnPtr> Next<F> {
     }
 }
 
+macro_rules! next_call {
+    ($(#[$attr:meta])* $($arg:ident: $ty:ident),*) => {
+        impl<R: Copy + 'static, $($ty: 'static),*> Next<'_, extern "system" fn($($ty),*) -> R> {
+            /// Runs the rest of the chain and keeps what it returned for this
+            /// call of the detour.
+            ///
+            /// # Panics
+            ///
+            /// When the loader has not linked the hook, as when a unit test
+            /// calls the detour's body itself.
+            ///
+            /// # Examples
+            ///
+            /// See [`Hook`].
+            #[inline]
+            $(#[$attr])*
+            pub fn call(self, $($arg: $ty),*) -> R {
+                let returned = self.function()($($arg),*);
+                self.frame.returned.set(Some(returned));
+                returned
+            }
+        }
+
+        impl<R: Copy + 'static, $($ty: 'static),*> Next<'_, unsafe extern "system" fn($($ty),*) -> R> {
+            /// Runs the rest of the chain and keeps what it returned for this
+            /// call of the detour.
+            ///
+            /// # Safety
+            ///
+            /// - The arguments meet the contract of the game function the
+            ///   hook stands in for, as the arguments of the game's own call do.
+            ///
+            /// # Panics
+            ///
+            /// When the loader has not linked the hook, as when a unit test
+            /// calls the detour's body itself.
+            ///
+            /// # Examples
+            ///
+            /// See [`Hook`].
+            #[inline]
+            $(#[$attr])*
+            pub unsafe fn call(self, $($arg: $ty),*) -> R {
+                // SAFETY: the caller passes arguments that meet the target's
+                // contract; the rest of the chain is a function of that type.
+                let returned = unsafe { self.function()($($arg),*) };
+                self.frame.returned.set(Some(returned));
+                returned
+            }
+        }
+    };
+}
+
+next_call!();
+next_call!(a: A);
+next_call!(a: A, b: B);
+next_call!(a: A, b: B, c: C);
+next_call!(a: A, b: B, c: C, d: D);
+next_call!(a: A, b: B, c: C, d: D, e: E);
+next_call!(a: A, b: B, c: C, d: D, e: E, g: G);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I, j: J);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I, j: J, k: K);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I, j: J, k: K, l: L);
+next_call!(#[expect(clippy::too_many_arguments, reason = "the game function's own arguments")] a: A, b: B, c: C, d: D, e: E, g: G, h: H, i: I, j: J, k: K, l: L, m: M);
+
+/// What one call of a detour's entry keeps on its stack: the value the rest
+/// of the chain returned, once the body called it.
+#[doc(hidden)]
+pub struct Frame<R> {
+    returned: Cell<Option<R>>,
+}
+
+impl<R> Frame<R> {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            returned: Cell::new(None),
+        }
+    }
+
+    /// What the rest of the chain returned, `None` when the body never
+    /// called it.
+    pub fn take(&self) -> Option<R> {
+        self.returned.take()
+    }
+}
+
+impl<R> Default for Frame<R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<R> core::fmt::Debug for Frame<R> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Frame").finish_non_exhaustive()
+    }
+}
+
 /// Declares a hook: a static [`Hook`] and the entry point the loader links into
 /// the chain.
 ///
 /// The body is an ordinary function taking a [`Next`] and the target's
 /// arguments. A panic in it is caught: the mod reports a fault, the loader
-/// unlinks the mod, and this call falls through to the rest of the chain, so
-/// the game runs vanilla instead of crashing. The fall-through cannot tell
-/// whether the body already called `next`, and calls the rest of the chain
-/// again if it did: the game's function runs twice. Work after `next` goes
-/// in [`Hook::after_next`], whose panic turns the mod off without that.
+/// unlinks the mod, and the game runs vanilla instead of crashing. The game's
+/// function runs once at most: when the body panics before
+/// [`Next::call`], this call falls through to the rest of the chain; when it
+/// panics after, it returns what the chain gave.
 ///
 /// Optional settings follow the function: `priority = <i32>` (lower runs
 /// earlier) and `flags = <HookFlags>`. [`#[hook]`](macro@crate::hook) writes the
@@ -272,14 +330,14 @@ impl<F: FnPtr> Next<F> {
 /// }
 ///
 /// fn lookup(
-///     next: enshwick::Next<unsafe extern "system" fn(*mut u8, *const u32) -> u32>,
+///     next: enshwick::Next<'_, unsafe extern "system" fn(*mut u8, *const u32) -> u32>,
 ///     bases: *mut u8,
 ///     npc: *const u32,
 /// ) -> u32 {
 ///     // SAFETY: `bases` and `npc` are the arguments the game called the
 ///     // lookup with on this thread, passed on unchanged, so the rest of the
 ///     // chain gets what the game's own call gave it.
-///     unsafe { next.get()(bases, npc) }
+///     unsafe { next.call(bases, npc) }
 /// }
 /// # let _ = &LOOKUP;
 /// ```
@@ -309,17 +367,20 @@ macro_rules! detour {
             const _: () = {
                 $($crate::__private::hook_argument::<$ty>();)*
             };
-            const BODY: fn($crate::Next<$($unsafe)? extern "system" fn($($ty),*) $(-> $ret)?>, $($ty),*) $(-> $ret)? = $body;
+            const BODY: fn($crate::Next<'_, $($unsafe)? extern "system" fn($($ty),*) $(-> $ret)?>, $($ty),*) $(-> $ret)? = $body;
             $($unsafe)? extern "system" fn __enshwick_entry($($arg: $ty),*) $(-> $ret)? {
-                let next = $name.next();
+                let frame = $crate::__private::Frame::new();
+                let next = $name.next(&frame);
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(|| BODY(next, $($arg),*))) {
                     ::core::result::Result::Ok(value) => value,
-                    // Whether the body called `next` is not known here: tracking it
-                    // would cost every call a thread-local write, and the value it
-                    // returned is gone anyway.
                     ::core::result::Result::Err(_) => {
                         $crate::__private::fault_in(::core::stringify!($name));
-                        $crate::detour!(@call [$($unsafe)?] next ($($arg),*))
+                        match frame.take() {
+                            ::core::option::Option::Some(returned) => returned,
+                            ::core::option::Option::None => {
+                                $crate::detour!(@call [$($unsafe)?] next ($($arg),*))
+                            }
+                        }
                     }
                 }
             }
@@ -333,16 +394,16 @@ macro_rules! detour {
     };
     (@call [unsafe] $next:ident ($($arg:ident),*)) => {
         // SAFETY: the rest of the chain takes the arguments the game passed.
-        unsafe { $next.get()($($arg),*) }
+        unsafe { $next.call($($arg),*) }
     };
     (@call [] $next:ident ($($arg:ident),*)) => {
-        $next.get()($($arg),*)
+        $next.call($($arg),*)
     };
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Hook;
+    use super::{Frame, Hook};
     use crate::abi::HookFlags;
 
     extern "system" fn original() {}
@@ -353,6 +414,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "not linked")]
     fn an_unlinked_next_panics_instead_of_calling_null() {
-        let _never = UNLINKED.next().get();
+        let frame = Frame::new();
+        UNLINKED.next(&frame).call();
     }
 }

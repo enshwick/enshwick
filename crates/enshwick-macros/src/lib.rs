@@ -100,7 +100,7 @@ fn expand_hook(
     let target = inputs.next().and_then(next_type).ok_or_else(|| {
         syn::Error::new_spanned(
             &sig.ident,
-            "a hook body takes `next: Next<extern \"system\" fn(..)>` first",
+            "a hook body takes `next: Next<'_, extern \"system\" fn(..)>` first",
         )
     })?;
     let mut idents = Vec::new();
@@ -131,10 +131,12 @@ fn expand_hook(
         .filter(|a| a.path().is_ident("doc") || a.path().is_ident("cfg"));
     let priority = priority.map_or_else(|| quote!(0), |p| quote!(#p));
     let flags = flags.map_or_else(|| quote!(::enshwick::abi::HookFlags::NONE), |f| quote!(#f));
-    let (entry, next, value) = (
+    let (entry, next, value, frame, returned) = (
         Ident::new("__enshwick_entry", Span::mixed_site()),
         Ident::new("next", Span::mixed_site()),
         Ident::new("value", Span::mixed_site()),
+        Ident::new("frame", Span::mixed_site()),
+        Ident::new("returned", Span::mixed_site()),
     );
     // The arguments go to the body and, after a panic, to `next` again.
     let copies = arg_types.iter().map(|ty| {
@@ -153,17 +155,21 @@ fn expand_hook(
                 #(#copies)*
             };
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
-                let #next = #name.next();
+                let #frame = ::enshwick::__private::Frame::new();
+                let #next = #name.next(&#frame);
                 match ::std::panic::catch_unwind(::std::panic::AssertUnwindSafe(
                     || #body(#next, #(#idents),*),
                 )) {
                     ::core::result::Result::Ok(#value) => #value,
                     ::core::result::Result::Err(_) => {
                         ::enshwick::__private::fault_in(::core::stringify!(#name));
-                        #[allow(unused_unsafe)]
-                        // SAFETY: the rest of the chain takes the arguments
-                        // the game passed.
-                        unsafe { #next.get()(#(#idents),*) }
+                        match #frame.take() {
+                            ::core::option::Option::Some(#returned) => #returned,
+                            #[allow(unused_unsafe)]
+                            // SAFETY: the rest of the chain takes the
+                            // arguments the game passed.
+                            ::core::option::Option::None => unsafe { #next.call(#(#idents),*) },
+                        }
                     }
                 }
             }
@@ -750,10 +756,10 @@ fn next_type(arg: &FnArg) -> Option<&Type> {
     let PathArguments::AngleBracketed(generics) = &segment.arguments else {
         return None;
     };
-    match generics.args.first()? {
+    generics.args.iter().find_map(|arg| match arg {
         GenericArgument::Type(ty) => Some(ty),
         _ => None,
-    }
+    })
 }
 
 /// The doc comment of `attrs` for a point schema: its prose before the
