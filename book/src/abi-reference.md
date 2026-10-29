@@ -32,6 +32,17 @@ requirement lets `cargo update` move the mod to the next release, whose
 layout may differ. Releases with the same layout share a version, so a mod
 keeps loading across them.
 
+CI builds the rolling `dev` loader from the newest commit of `main`. To load
+under it, build the mod against `main` from git, pinned to a commit:
+
+```toml
+[dependencies]
+enshwick = { git = "https://github.com/enshwick/enshwick", rev = "<commit>" }
+```
+
+The mod loads while that commit has the loader's `abi/layout.txt`. Move
+`rev` forward when the `dev` loader moves.
+
 Until 1.0.0 the layout changes whenever the API needs it. From 1.0.0 it is
 frozen, structs grow only by appending fields, and a loader loads mods built
 against older releases.
