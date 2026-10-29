@@ -402,10 +402,10 @@ fn stable_api_steps(code: bool) -> Vec<Step> {
         );
     }
     // The script binding, the rates and item data are public only with
-    // `unstable`, so
-    // their examples fail to build without it. One example that fails to
-    // build makes rustdoc build the rest one by one, which takes minutes;
-    // with every one building they share one binary and take seconds.
+    // `unstable`, so their examples fail to build without it. They are
+    // marked `standalone_crate` and skipped here: one example that fails
+    // in the merged build makes rustdoc build the rest one by one, which
+    // takes minutes; merged they share one binary and take seconds.
     steps.push(Step::new(&["test", "--doc"]).then(&STABLE_API).then(&[
         "--",
         "--skip",

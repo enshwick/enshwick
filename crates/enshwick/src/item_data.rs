@@ -31,7 +31,7 @@
 //!
 //! # Examples
 //!
-//! ```
+//! ```rust,standalone_crate
 //! use enshwick::inventory::ItemInstance;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
@@ -61,7 +61,7 @@ pub const MAX_VALUE: usize = 512;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::item_data::SetError;
 ///
 /// assert_eq!(SetError::NoEntity.to_string(), "no such entity");
@@ -189,7 +189,7 @@ where
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,standalone_crate
     /// fn wipe(kind: &enshwick::item_data::ItemData<u16>, item: enshwick::inventory::ItemInstance) {
     ///     let _removed = kind.remove(item);
     /// }
