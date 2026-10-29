@@ -146,10 +146,8 @@ impl Mod for AltarCount {
     }
 
     fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.config()?;
-        apply(&settings);
+        let settings: Settings = load.apply_config(apply)?;
         load.on_altar_limit(|limit| limit.allowed = ALTARS.load(Ordering::Relaxed))?;
-        load.on_config_change(|settings: Settings| apply(&settings))?;
         enshwick::info!("{} altars per Flame level", settings.altars);
         Ok(Self)
     }
@@ -162,7 +160,7 @@ What each piece does:
 
 - `Settings` derives [`Config`](settings.md): the file
   `mod-configs/you.my-altar-count.toml` is written from its doc comments and
-  `Default` on first start, and `load.config()` reads it.
+  `Default` on first start, and `load.apply_config(apply)` reads it.
 - `manifest!` names the mod and where it runs. `side: BOTH` and
   `join: true` because the client's interface asks the same limit, so
   players and their server must agree. See
@@ -172,8 +170,9 @@ What each piece does:
   count and the count so far each time the game needs the number. Any `?` that fails turns the mod off with the reason in
   the log; the game then runs vanilla. See
   [The life of a mod](concepts/lifecycle.md).
-- `on_config_change` applies an edited file while the game runs. The limit
-  reads an atomic, so the handler can change it under a running game.
+- `apply_config` runs `apply` once now and again on each edit of the file
+  while the game runs. The limit reads an atomic, so `apply` can change it
+  under a running game.
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
 [`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars)
