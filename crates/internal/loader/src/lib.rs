@@ -129,6 +129,11 @@ pub mod listing;
 mod lobby;
 mod locks;
 pub mod log;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build links the loot rate")
+)]
+mod loot_slot;
 pub mod manifest;
 pub mod map_frame;
 #[cfg_attr(
