@@ -501,12 +501,12 @@ impl Installed {
     ///
     /// ```
     /// use enshwick::Entity;
-    /// use enshwick::item_data::ItemInstance;
+    /// use enshwick::inventory::ItemInstance;
     ///
     /// let loader = enshwick::test::FakeHost::new().install();
     /// loader.wear(Entity(2), ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) });
     /// ```
-    pub fn wear(&self, entity: Entity, item: crate::item_data::ItemInstance) {
+    pub fn wear(&self, entity: Entity, item: crate::inventory::ItemInstance) {
         table::with((), |s| s.stats.worn.entry(entity.0).or_default().push(item));
     }
 

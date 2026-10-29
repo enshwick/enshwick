@@ -2,6 +2,10 @@
 //! ring's rolled bonus: typed values in kinds named `<mod>:<name>`, kept
 //! per world and sent to players.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//! After a restart, a value on an item a load cannot find, such as one in a
+//! player's inventory, stays aside and no longer reads.
+//!
 //! An item with an entity of its own, its PIDE (see
 //! [`Slot::pide`](crate::inventory::Slot::pide)), is an [`ItemInstance`]:
 //! the entity and the item id it holds. Within a session a value stays with
@@ -28,7 +32,7 @@
 //! # Examples
 //!
 //! ```
-//! use enshwick::item_data::ItemInstance;
+//! use enshwick::inventory::ItemInstance;
 //!
 //! #[derive(serde::Serialize, serde::Deserialize)]
 //! struct Engraving {
@@ -47,51 +51,11 @@
 use core::marker::PhantomData;
 
 use crate::abi::{Status, Str};
-use crate::inventory::Slot;
-use crate::{Entity, ItemId};
+use crate::inventory::ItemInstance;
 use crate::{Host, Load, Off};
 
 /// The largest encoded value.
 pub const MAX_VALUE: usize = 512;
-
-/// One item: its own entity and the item id it holds.
-///
-/// # Examples
-///
-/// ```
-/// use enshwick::Entity;
-/// use enshwick::inventory::{InventoryCategory, Slot, SlotRef};
-/// use enshwick::item_data::ItemInstance;
-///
-/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0x5e01), count: 1, pide: Some(Entity(900)) };
-/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) }));
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ItemInstance {
-    /// The item's own entity.
-    pub pide: Entity,
-    /// The item id.
-    pub item: ItemId,
-}
-
-impl ItemInstance {
-    /// The item in `slot`; `None` for an empty slot or an item without an
-    /// entity of its own.
-    ///
-    /// # Examples
-    ///
-    /// See [`ItemInstance`].
-    #[must_use]
-    pub const fn of(slot: &Slot) -> Option<Self> {
-        match slot.pide {
-            Some(pide) if !slot.is_empty() => Some(Self {
-                pide,
-                item: slot.item,
-            }),
-            _ => None,
-        }
-    }
-}
 
 /// Why a value was not set.
 ///
@@ -219,7 +183,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// fn wipe(kind: &enshwick::item_data::ItemData<u16>, item: enshwick::item_data::ItemInstance) {
+    /// fn wipe(kind: &enshwick::item_data::ItemData<u16>, item: enshwick::inventory::ItemInstance) {
     ///     let _removed = kind.remove(item);
     /// }
     /// ```
@@ -259,7 +223,17 @@ impl Load<'_> {
     /// # Examples
     ///
     /// See the [module](self).
+    #[cfg(feature = "unstable")]
     pub fn item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        self.open_item_data(id)
+    }
+
+    /// [`Load::item_data`] for the stable parts built on item data, such as
+    /// the stats of single items.
+    pub(crate) fn open_item_data<T>(&mut self, id: &str) -> Result<ItemData<T>, Off>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
@@ -275,25 +249,5 @@ impl Load<'_> {
             },
             || format!("item data {id:?}"),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::inventory::{InventoryCategory, SlotRef};
-
-    #[test]
-    fn only_items_with_an_entity_are_instances() {
-        let slot = |item, count, pide| Slot {
-            at: SlotRef::new(Entity(41), 0),
-            category: InventoryCategory::GENERIC,
-            item,
-            count,
-            pide: Entity::from_raw(pide),
-        };
-        assert!(ItemInstance::of(&slot(ItemId::new(7), 1, 900)).is_some());
-        assert!(ItemInstance::of(&slot(ItemId::new(7), 5, 0)).is_none());
-        assert!(ItemInstance::of(&slot(ItemId::new(0), 0, 900)).is_none());
     }
 }

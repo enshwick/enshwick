@@ -32,6 +32,7 @@ mod daytime;
 #[cfg(feature = "unstable")]
 mod effects;
 mod engine_names;
+#[cfg(feature = "unstable")]
 mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
@@ -52,6 +53,7 @@ mod icons_hidden;
 mod init_off;
 mod inventory;
 mod item_changes;
+#[cfg(feature = "unstable")]
 mod item_data;
 mod knowledge;
 mod language;

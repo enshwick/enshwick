@@ -2,6 +2,8 @@
 //! survivor's nickname: typed values in kinds named `<mod>:<name>`, kept
 //! per world and, for kinds that ask for it, sent to players.
 //!
+//! Unstable: needs the `unstable` feature and may change in any release.
+//!
 //! A load numbers the world's entities anew, so the server keeps each value
 //! under its entity's place: the template and the position as the save
 //! keeps it. After the first step of a loaded world every value finds its

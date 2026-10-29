@@ -42,8 +42,8 @@ use std::time::{Duration, Instant};
 use crate::Entity;
 use crate::abi::{AffixRoll, Header, ItemLine, StatRef, Status, Str};
 use crate::game_events::CraftRecipeEvent;
+use crate::inventory::ItemInstance;
 use crate::inventory::Slot;
-use crate::item_data::ItemInstance;
 use crate::locks::Relock;
 use crate::loot::Source;
 use crate::stats::Op;
@@ -123,7 +123,7 @@ impl Affixes {
     /// ```
     /// use enshwick::affixes::RollRules;
     ///
-    /// fn reroll(affixes: &enshwick::affixes::Affixes, item: enshwick::item_data::ItemInstance) {
+    /// fn reroll(affixes: &enshwick::affixes::Affixes, item: enshwick::inventory::ItemInstance) {
     ///     let _rolled = affixes.roll(item, RollRules::new(1, 3), None, false);
     /// }
     /// ```
@@ -160,7 +160,7 @@ impl Affixes {
     /// # Examples
     ///
     /// ```
-    /// fn tooltip(affixes: &enshwick::affixes::Affixes, item: enshwick::item_data::ItemInstance) -> usize {
+    /// fn tooltip(affixes: &enshwick::affixes::Affixes, item: enshwick::inventory::ItemInstance) -> usize {
     ///     affixes.lines(item).iter().filter(|line| line.affix.is_some()).count()
     /// }
     /// ```

@@ -47,14 +47,14 @@
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
-//! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`] |
+//! | Players and their things | [`inventory`], [`interactions`], [`knowledge`], [`progress`] |
 //! | Game rules | [`damage`], [`loot`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
 //! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
 //! | Interface | [`ui`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
@@ -134,6 +134,7 @@ pub mod ecs;
 pub mod effects;
 mod engine_enum;
 mod engine_ids;
+#[cfg(feature = "unstable")]
 pub mod entity_data;
 pub mod events;
 pub mod files;
@@ -145,7 +146,12 @@ mod host;
 pub mod i18n;
 pub mod interactions;
 pub mod inventory;
+#[cfg(feature = "unstable")]
 pub mod item_data;
+// Without `unstable` item data stays inside, for the stats of single items.
+#[cfg(not(feature = "unstable"))]
+#[expect(unreachable_pub, reason = "item data is public only with `unstable`")]
+mod item_data;
 pub mod knowledge;
 mod load;
 mod locks;
