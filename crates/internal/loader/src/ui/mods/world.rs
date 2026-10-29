@@ -106,14 +106,11 @@ pub(super) unsafe extern "system" fn world_settings(
     // whose byte at the table's `ui.view_read_only` makes every row read-only,
     // as for a player who is no host.
     let read_only = unsafe { crate::memory::read::<u8>(view, layout.read_only) } != 0;
-    let drawn = std::panic::catch_unwind(|| world(read_only));
-    if drawn.is_err() {
-        crate::log!(
-            ERROR,
-            "interface: the loader panicked in the world settings"
-        );
-    }
+    let _drawn = WORLD_ROWS_FUSE.run("the world settings' draw", || world(read_only));
 }
+
+/// Turns the mods' world settings rows off at their first panic.
+static WORLD_ROWS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("world settings rows");
 
 /// Draws the mods' rows under the world settings' last tab, in its scroll
 /// area; read-only for a player who may not change the world.

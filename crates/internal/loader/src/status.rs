@@ -167,6 +167,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             .map(crate::modlist::Replaced::line)
             .collect(),
         turned_off: crate::diag::history(),
+        parts_off: crate::diag::parts_off(),
         links: {
             let mut links = crate::services::lines(loader);
             links.extend(crate::points::lines(loader));

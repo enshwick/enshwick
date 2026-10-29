@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -30,6 +30,8 @@ const HOOK_LINES: usize = 40;
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
 static STATUS_MINUTES: AtomicU32 = AtomicU32::new(crate::settings::STATUS_MINUTES);
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
+static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
+static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static PATCHES: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 
@@ -98,6 +100,50 @@ pub fn turned_off(id: &str, reason: &str) {
 #[must_use]
 pub fn history() -> Vec<TurnedOff> {
     TURNED_OFF.relock().clone()
+}
+
+/// A part of the loader turned off while the game runs, and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartOff {
+    /// The part, as its fuse or its link names it.
+    pub part: String,
+    /// Why, as the log says.
+    pub reason: String,
+    /// When, in seconds since the Unix epoch.
+    pub at: u64,
+}
+
+/// Remembers that the loader's `part` is off for `reason`, for the status
+/// summary and the Mods screen. A part keeps its first reason; past
+/// [`HISTORY`] parts, later ones reach only the log.
+pub fn part_off(part: &str, reason: &str) {
+    keep_part(&mut PARTS_OFF.relock(), part, reason, now());
+    ANY_PART_OFF.store(true, Ordering::Release);
+}
+
+/// Whether any part is off, read without the lock, for a per-frame check.
+#[must_use]
+pub fn any_part_off() -> bool {
+    ANY_PART_OFF.load(Ordering::Acquire)
+}
+
+/// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
+/// `parts` is full.
+fn keep_part(parts: &mut Vec<PartOff>, part: &str, reason: &str, at: u64) {
+    if parts.len() == HISTORY || parts.iter().any(|p| p.part == part) {
+        return;
+    }
+    parts.push(PartOff {
+        part: part.to_owned(),
+        reason: reason.to_owned(),
+        at,
+    });
+}
+
+/// The loader's parts that are off, in the order they went off.
+#[must_use]
+pub fn parts_off() -> Vec<PartOff> {
+    PARTS_OFF.relock().clone()
 }
 
 /// Remembers that `address` was found as `name`, a symbol or a system, so the
@@ -260,6 +306,8 @@ pub struct Summary {
     pub replaced: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
+    /// The loader's parts turned off while the game runs, oldest first.
+    pub parts_off: Vec<PartOff>,
     /// The services mods publish and the events they define, a line each.
     pub links: Vec<String>,
     /// What mods serve.
@@ -407,6 +455,7 @@ impl Summary {
                 let _w = writeln!(out, "  {} {}: {}", clock(t.at), t.id, t.reason);
             }
         }
+        self.render_parts_off(&mut out);
         if !self.links.is_empty() {
             let _w = writeln!(
                 out,
@@ -533,6 +582,16 @@ conflicts:"
         }
     }
 
+    /// The loader's parts that are off, under their own heading.
+    fn render_parts_off(&self, out: &mut String) {
+        if !self.parts_off.is_empty() {
+            let _w = writeln!(out, "\nloader parts off:");
+            for p in &self.parts_off {
+                let _w = writeln!(out, "  {} {}: {}", clock(p.at), p.part, p.reason);
+            }
+        }
+    }
+
     /// A few lines for the console, in the reader's language.
     #[must_use]
     pub fn short(&self) -> String {
@@ -558,6 +617,12 @@ conflicts:"
             lines.push(crate::texts::fill(
                 "status.off",
                 &[("id", &t.id), ("reason", &t.reason)],
+            ));
+        }
+        for p in self.parts_off.iter().take(3) {
+            lines.push(crate::texts::fill(
+                "status.off",
+                &[("id", &p.part), ("reason", &p.reason)],
             ));
         }
         let hooks = self.targets.to_string();
@@ -722,6 +787,7 @@ mod tests {
                 reason: "panic in an action".into(),
                 at: 44_000,
             }],
+            parts_off: Vec::new(),
             links: vec!["event trading-post:sold from trading-post 0.3.0 to market-stalls".into()],
             served: Served {
                 resources: 4,
@@ -945,6 +1011,50 @@ conflicts:
         assert_eq!(nanos(850.0), "850 ns");
         assert_eq!(nanos(12_400.0), "12.4 us");
         assert_eq!(nanos(3_100_000.0), "3.1 ms");
+    }
+
+    #[test]
+    fn a_part_off_keeps_its_first_reason_and_the_list_stays_bounded() {
+        let mut off = Vec::new();
+        keep_part(
+            &mut off,
+            "map markers",
+            "the loader panicked in the marker pass: boom",
+            1,
+        );
+        keep_part(&mut off, "map markers", "a later reason", 2);
+        for i in 0..HISTORY + 2 {
+            keep_part(&mut off, &format!("part {i}"), "off", 3);
+        }
+        assert_eq!(off.len(), HISTORY);
+        let markers = off.iter().find(|p| p.part == "map markers");
+        assert_eq!(
+            markers.map(|p| p.reason.as_str()),
+            Some("the loader panicked in the marker pass: boom")
+        );
+    }
+
+    #[test]
+    fn the_summary_lists_the_loader_s_parts_that_are_off() {
+        let mut s = summary();
+        s.parts_off = vec![PartOff {
+            part: "map markers".into(),
+            reason: "the loader panicked in the marker pass: boom".into(),
+            at: 44_100,
+        }];
+        let text = s.render();
+        assert!(
+            text.contains(
+                "loader parts off:\n  12:15:00Z map markers: the loader panicked in the marker pass: boom"
+            ),
+            "{text}"
+        );
+        assert!(
+            s.short()
+                .contains("map markers off: the loader panicked in the marker pass: boom"),
+            "{}",
+            s.short()
+        );
     }
 
     #[test]
