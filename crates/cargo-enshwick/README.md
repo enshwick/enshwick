@@ -147,6 +147,7 @@ without, it prints it. `--from <id>=<pick>`, or `--from-file` with one
 | `confirm:<rva>` | a constant | fixes the instruction, which confirms the value while it stands |
 | `ref:<rva>` | a symbol | follows the rel32 of the call, jump or RIP-relative operand at `rva` |
 | `direct` | a symbol | its own code |
+| `body` | a symbol | its whole function, so a change to its logic stops it matching (`body = true`) |
 
 An entry keeps its instruction from then on: each run finds it again by the
 entry's pattern. A constant without a pick gets no pattern, as a value found

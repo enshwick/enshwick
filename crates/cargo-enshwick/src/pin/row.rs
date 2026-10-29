@@ -393,7 +393,7 @@ pub(crate) fn port_anchors<'r>(
                     format!("what the code at {} reaches", hex(*site)),
                 )
             }),
-            Anchor::Confirm(_) | Anchor::Own => None,
+            Anchor::Confirm(_) | Anchor::Own | Anchor::Body => None,
         };
         let Some((value, status, confidence, note)) = settled else {
             continue;

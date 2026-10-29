@@ -86,6 +86,8 @@ struct SymbolFull {
     at: u64,
     rel: Option<u64>,
     end: Option<u64>,
+    #[serde(default)]
+    body: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -264,8 +266,8 @@ impl Table {
                         "{id}: pinned bytes are a constant, not a symbol"
                     )));
                 }
-                let (rva, text, locate) = match value {
-                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0)),
+                let (rva, text, locate, body) = match value {
+                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0), false),
                     SymbolValue::Full(full) => {
                         let locate = match (full.rel, full.end) {
                             (Some(at), end) => Locate::Rel {
@@ -277,7 +279,12 @@ impl Table {
                                 return Err(TableError::Toml(format!("{id}: `end` needs `rel`")));
                             }
                         };
-                        (full.rva, full.pattern, locate)
+                        if full.body && (full.pattern.is_none() || locate != Locate::At(0)) {
+                            return Err(TableError::Toml(format!(
+                                "{id}: a body pattern starts at the symbol"
+                            )));
+                        }
+                        (full.rva, full.pattern, locate, full.body)
                     }
                 };
                 Ok(Symbol {
@@ -285,6 +292,7 @@ impl Table {
                     id,
                     rva,
                     locate,
+                    body,
                 })
             })
             .collect::<Result<_, TableError>>()?;

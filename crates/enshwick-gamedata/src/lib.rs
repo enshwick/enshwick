@@ -266,6 +266,31 @@ mod tests {
         assert!(error.to_string().contains("f.hook.bytes"), "{error}");
     }
 
+    /// A body pattern covers a whole function from its first byte, so the
+    /// symbol is where it starts; a body without a pattern, or found through
+    /// a displacement or inside its match, is refused.
+    #[test]
+    fn a_body_pattern_starts_at_its_symbol() {
+        let table = |row: &str| {
+            Table::parse(&format!(
+                "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[symbols]\n{row}\n"
+            ))
+        };
+        let body =
+            table(r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", body = true }"#).unwrap();
+        assert!(body.symbols()[0].body());
+        let plain = table(r#""f.head" = { rva = 0x1000, pattern = "33 C0 C3" }"#).unwrap();
+        assert!(!plain.symbols()[0].body());
+        for bad in [
+            r#""f.whole" = { rva = 0x1000, body = true }"#,
+            r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", at = 1, body = true }"#,
+            r#""f.whole" = { rva = 0x1000, pattern = "E8 ?? ?? ?? ??", rel = 1, body = true }"#,
+        ] {
+            let error = table(bad).unwrap_err();
+            assert!(error.to_string().contains("body"), "{bad}: {error}");
+        }
+    }
+
     /// A constant on a pattern says where its value lies: read from an
     /// operand, or held by the pattern's own fixed bytes. Without either, a
     /// build without a table would keep the old value without a sign.
@@ -519,6 +544,7 @@ age = 1
             rva: 0x10,
             pattern: Some(Pattern::parse("11 ?? 33").unwrap()),
             locate: Locate::At(0),
+            body: false,
         };
         let code = [0x11, 0x99, 0x33, 4, 5, 6, 7, 8, 9];
         let want = u64::from_le_bytes([0x11, 0x22, 0x33, 4, 5, 6, 7, 8]);

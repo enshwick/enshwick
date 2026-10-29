@@ -70,7 +70,8 @@ pub(crate) struct Args {
     /// `imm:` or `shl:` before it to choose, `+<n>` or `-<n>` after it for a
     /// value next to it), or `confirm:<rva>` for an instruction that
     /// confirms it; for a symbol, `<rva>` of an instruction that calls,
-    /// jumps to or addresses it, or `direct`.
+    /// jumps to or addresses it, `direct`, or `body` for a pattern over its
+    /// whole function.
     #[arg(long, requires = "patterns")]
     from: Vec<String>,
     /// With `--patterns`: a file of `--from` picks, one `<id>=<pick>` or
