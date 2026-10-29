@@ -96,15 +96,14 @@ impl Pins<'_> {
             .ok_or(SiteError::Missing(id.id()))
     }
 
-    /// The code of symbol `id`, as far as its pattern covers it.
+    /// The whole code of symbol `id`'s function, as its table body spans it.
     fn body(&self, id: Symbol) -> Result<Range<usize>, SiteError> {
-        let missing = || SiteError::Missing(id.id());
-        let (pattern, before) = self.table.head(id.id()).ok_or_else(missing)?;
-        let start = usize::try_from(before)
-            .ok()
-            .and_then(|before| self.at(id).ok()?.checked_sub(before))
-            .ok_or_else(missing)?;
-        Ok(start..start + pattern.len())
+        let body = self
+            .table
+            .body(id.id())
+            .ok_or(SiteError::Missing(id.id()))?;
+        let start = self.at(id)?;
+        Ok(start..start + body.len())
     }
 
     /// Constant `id`, a 32-bit size, with its id.
@@ -258,10 +257,10 @@ fn find(
     let address = |id: Symbol| pins.at(id).map(|offset| start + offset);
     let code_of = Code {
         // SAFETY: the table's `bases.ctor`, `fn(obj) -> obj`, whose whole
-        // code its pattern holds.
+        // code its table body checks.
         ctor: unsafe { core::mem::transmute::<usize, CtorFn>(address(bases::CTOR)?) },
         // SAFETY: the table's `bases.teardown`, `fn(first record)`, whose
-        // whole code its pattern holds.
+        // whole code its table body checks.
         teardown: unsafe { core::mem::transmute::<usize, TeardownFn>(address(bases::TEARDOWN)?) },
         // SAFETY: the table's `bases.slot_init`, the stock slot init the
         // server's create calls.

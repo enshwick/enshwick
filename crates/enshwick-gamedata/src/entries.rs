@@ -31,6 +31,111 @@ pub enum Locate {
     },
 }
 
+/// The whole code of a function, checked without the table holding it.
+///
+/// A body is the function's length, the 4-byte fields in it that move when
+/// code moves (call and jump targets, RIP-relative displacements, pointers
+/// into the image), and a hash of every other byte.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_gamedata::Body;
+///
+/// // mov rax, [rip+0x100]; ret
+/// let code = [0x48, 0x8b, 0x05, 0x00, 0x01, 0x00, 0x00, 0xc3];
+/// let body = Body::of(&code, vec![3]).ok_or("no body")?;
+/// let moved = [0x48, 0x8b, 0x05, 0x40, 0x02, 0x00, 0x00, 0xc3];
+/// assert!(body.holds(&moved));
+/// let changed = [0x48, 0x8b, 0x0d, 0x00, 0x01, 0x00, 0x00, 0xc3];
+/// assert!(!body.holds(&changed));
+/// # Ok::<(), &str>(())
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Body {
+    len: u32,
+    open: Vec<u32>,
+    hash: u128,
+}
+
+impl Body {
+    /// The longest function a body covers.
+    pub const MAX_LEN: u32 = 0x4000;
+    /// How many bytes each open field spans.
+    pub const FIELD: u32 = 4;
+
+    /// The body of the function whose code is all of `code`, with the
+    /// 4-byte fields at the offsets `open` left out of its hash; `None` when
+    /// the code is empty or longer than [`Body::MAX_LEN`], or the fields are
+    /// not in order, overlap or run past the code.
+    #[must_use]
+    pub fn of(code: &[u8], open: Vec<u32>) -> Option<Self> {
+        let len = u32::try_from(code.len()).ok()?;
+        Self::checked(len, open, 0).map(|body| Self {
+            hash: digest(code, &body.open),
+            ..body
+        })
+    }
+
+    /// A body as a table spells it; `None` under the same terms as
+    /// [`Body::of`].
+    pub(crate) fn checked(len: u32, open: Vec<u32>, hash: u128) -> Option<Self> {
+        let ordered = open.windows(2).all(|pair| {
+            pair[0]
+                .checked_add(Self::FIELD)
+                .is_some_and(|end| end <= pair[1])
+        });
+        let inside = open
+            .last()
+            .is_none_or(|&last| last.checked_add(Self::FIELD).is_some_and(|end| end <= len));
+        (len > 0 && len <= Self::MAX_LEN && ordered && inside).then_some(Self { len, open, hash })
+    }
+
+    /// How many bytes the function spans from its first.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    /// Always false: a body spans at least one byte.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The offsets of the 4-byte fields left out of the hash.
+    #[must_use]
+    pub fn open(&self) -> &[u32] {
+        &self.open
+    }
+
+    /// The XXH3-128 of the function's bytes with its open fields zeroed.
+    #[must_use]
+    pub const fn hash(&self) -> u128 {
+        self.hash
+    }
+
+    /// Whether `code`, from the function's first byte on, is the function
+    /// this body was made from but for its open fields.
+    #[must_use]
+    pub fn holds(&self, code: &[u8]) -> bool {
+        code.get(..self.len())
+            .is_some_and(|code| digest(code, &self.open) == self.hash)
+    }
+}
+
+/// The XXH3-128 of `code` with the 4-byte fields at `open` zeroed.
+fn digest(code: &[u8], open: &[u32]) -> u128 {
+    let mut masked = code.to_vec();
+    for &at in open {
+        let at = at as usize;
+        if let Some(field) = masked.get_mut(at..at + Body::FIELD as usize) {
+            field.fill(0);
+        }
+    }
+    twox_hash::XxHash3_128::oneshot(&masked)
+}
+
 /// A pinned engine function or address.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Symbol {
@@ -38,15 +143,16 @@ pub struct Symbol {
     pub(crate) rva: u64,
     pub(crate) pattern: Option<Pattern>,
     pub(crate) locate: Locate,
-    pub(crate) body: bool,
+    pub(crate) body: Option<Body>,
 }
 
 impl Symbol {
-    /// Whether the symbol's pattern covers its whole function, so that a
-    /// change to the function's code is a change of the symbol.
+    /// The whole code of the symbol's function, for a symbol whose code the
+    /// loader replaces or relies on as a whole: a change to the function's
+    /// code is a change of the symbol.
     #[must_use]
-    pub const fn body(&self) -> bool {
-        self.body
+    pub const fn body(&self) -> Option<&Body> {
+        self.body.as_ref()
     }
 
     /// The symbolic id, such as `npc.lookup`.

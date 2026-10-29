@@ -155,12 +155,19 @@ the run stays unique without them.
   found through code that reaches it: `rel` names the offset of the call's,
   jump's or RIP-relative operand's rel32 in the match, and the symbol is
   where it points.
-- A function whose code the loader replaces or relies on as a whole says
-  `body = true`: its pattern covers the whole function from its first
-  byte, with only call and jump targets and RIP-relative addresses open.
-  When Keen changes that function's logic, the pattern stops matching, and
-  the feature that relies on it turns off on that build instead of running
-  over code it does not know.
+- A function whose code the loader replaces or relies on as a whole also
+  carries a `body`: the function's length in bytes (`len`), the offsets of
+  the 4-byte fields that move between builds (`open`: call and jump
+  targets, RIP-relative addresses), and a hash of every other byte
+  (`hash`, XXH3-128 in hex). Of the function's code the table holds only
+  the short window that finds it: a window from its start over at most
+  half of it, or a call to it (`rel`) for a short function or one whose
+  start has a twin. The loader hashes the live code before it hooks or
+  calls it. When Keen changes that function's logic, the hash differs,
+  and the feature that relies on it turns off on
+  that build instead of running over code it does not know.
+- No pattern spans more than 192 bytes; a table with a longer one does not
+  read.
 - A **constant's** pattern is the instruction that uses the value, picked
   by hand as the use the loader relies on: a read of the field, the
   multiplier of a stride, the id passed to a lookup. The operand that
@@ -219,7 +226,8 @@ of an instruction whose displacement or immediate carries the constant
 (`disp:`, `neg:`, `imm:` or `shl:` before it to choose, `+<n>` after it for a
 value next to it), `confirm:<rva>` for an instruction that only confirms it,
 or, for a symbol, `ref:<rva>` of code that calls or addresses it, or `body`
-for a pattern over its whole function. The tool
+to check its whole function by a hash (`body:<rva>` finds it through the
+call at `rva`, for a function whose start has a twin). The tool
 checks that the operand holds the table's value, grows the smallest unique
 window around the instruction and writes it. Once written, the entry keeps
 its instruction: later runs and

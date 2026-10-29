@@ -410,10 +410,11 @@ impl Loader {
     /// before a hook patches it or a detour relies on it, by
     /// [`crate::builds::code_holds`]: on the build the table was made for,
     /// the symbol's pattern matches where its code starts, when its pattern
-    /// finds it directly, and its first eight bytes are the table's
-    /// `<id>.bytes`, when the table pins them. A table carried over already
-    /// checked both while it found the symbol, so there only the presence of
-    /// a check counts. False for a symbol the build lacks.
+    /// finds it directly, its first eight bytes are the table's
+    /// `<id>.bytes`, when the table pins them, and its whole function holds
+    /// the table's body, when the table has one. A table carried over already
+    /// made every check while it found the symbol, so there only the
+    /// presence of a check counts. False for a symbol the build lacks.
     pub(crate) fn code_holds(&self, id: Symbol) -> bool {
         let Some(address) = self.address(id) else {
             return false;
@@ -450,7 +451,21 @@ impl Loader {
                 found == expected
             }
         });
-        crate::builds::code_holds(head, bytes)
+        let body = self.build.body(id.id()).map(|body| {
+            !exact || {
+                let Ok(start) = usize::try_from(address) else {
+                    return false;
+                };
+                let mut code = vec![0u8; body.len()];
+                // SAFETY: `start` is the table's `id`, the first byte of a
+                // function of `body.len()` bytes inside the game's image,
+                // which stays mapped and readable for the life of the
+                // process and is not patched before this check.
+                unsafe { crate::memory::read_bytes(start, 0, &mut code) };
+                body.holds(&code)
+            }
+        });
+        crate::builds::code_holds(&[head, bytes, body])
     }
 
     /// [`Loader::link`] for a feature, after checking its target: a table

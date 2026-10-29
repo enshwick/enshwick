@@ -30,10 +30,10 @@ mod version;
 pub use carry::CarryKey;
 pub use parts::{Part, PartState};
 
-pub use entries::{Constant, Locate, Operand, Symbol};
+pub use entries::{Body, Constant, Locate, Operand, Symbol};
 pub use reflect::Fingerprint;
 pub use resolve::{Kind, Resolved, embedded, exact, newest};
-pub use table::{Table, TableError, file_name};
+pub use table::{MAX_PATTERN, Table, TableError, file_name};
 pub use version::{GameVersion, SteamBuild};
 
 /// The binary a table is for.
@@ -269,29 +269,154 @@ mod tests {
         assert!(error.to_string().contains("f.hook.bytes"), "{error}");
     }
 
-    /// A body pattern covers a whole function from its first byte, so the
-    /// symbol is where it starts; a body without a pattern, or found through
-    /// a displacement or inside its match, is refused.
+    fn body_table(row: &str) -> Result<Table, TableError> {
+        Table::parse(&format!(
+            "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[symbols]\n{row}\n"
+        ))
+    }
+
+    /// `mov rax, [rip+0x100]; test eax, eax; je +1; ret; xor eax, eax; ret`.
+    const FUNCTION: [u8; 15] = [
+        0x48, 0x8b, 0x05, 0x00, 0x01, 0x00, 0x00, 0x85, 0xc0, 0x74, 0x01, 0xc3, 0x33, 0xc0, 0xc3,
+    ];
+
+    /// A body row holds the function's length, its open fields and a hash,
+    /// never its bytes, and a pattern that finds it: its own window over at
+    /// most half of it, or a call to it. A malformed one, one no pattern
+    /// finds, one whose own window covers most of it, or the old whole-code
+    /// flag, is refused.
     #[test]
-    fn a_body_pattern_starts_at_its_symbol() {
-        let table = |row: &str| {
-            Table::parse(&format!(
-                "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[symbols]\n{row}\n"
-            ))
-        };
-        let body =
-            table(r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", body = true }"#).unwrap();
-        assert!(body.symbols()[0].body());
-        let plain = table(r#""f.head" = { rva = 0x1000, pattern = "33 C0 C3" }"#).unwrap();
-        assert!(!plain.symbols()[0].body());
+    fn a_body_row_reads_its_length_open_fields_and_hash() {
+        let body = Body::of(&FUNCTION, vec![3]).unwrap();
+        let row = format!(
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ??", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            body.hash()
+        );
+        let table = body_table(&row).unwrap();
+        assert_eq!(table.symbols()[0].body(), Some(&body));
+        assert_eq!(table.resolve().body("f.whole"), Some(&body));
+        let plain = body_table(r#""f.head" = { rva = 0x1000, pattern = "33 C0 C3" }"#).unwrap();
+        assert_eq!(plain.symbols()[0].body(), None);
+        assert_eq!(plain.resolve().body("f.head"), None);
+        let through = format!(
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B CB E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 74 10", rel = 4, body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            body.hash()
+        );
+        assert_eq!(
+            body_table(&through).unwrap().symbols()[0].body(),
+            Some(&body)
+        );
+        let hash = "0123456789abcdef0123456789abcdef";
         for bad in [
-            r#""f.whole" = { rva = 0x1000, body = true }"#,
-            r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", at = 1, body = true }"#,
-            r#""f.whole" = { rva = 0x1000, pattern = "E8 ?? ?? ?? ??", rel = 1, body = true }"#,
+            r#""f.whole" = { rva = 0x1000, pattern = "33 C0 C3", body = true }"#.to_owned(),
+            format!(r#""f.whole" = {{ rva = 0x1000, body = {{ len = 0, hash = "{hash}" }} }}"#),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, body = {{ len = 0x4001, hash = "{hash}" }} }}"#
+            ),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, body = {{ len = 8, open = [5], hash = "{hash}" }} }}"#
+            ),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, body = {{ len = 16, open = [4, 2], hash = "{hash}" }} }}"#
+            ),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, body = {{ len = 16, open = [0, 3], hash = "{hash}" }} }}"#
+            ),
+            format!(r#""f.whole" = {{ rva = 0x1000, body = {{ len = 8, hash = "{hash}" }} }}"#),
+            format!(
+                r#""f.whole" = {{ rva = 0x1000, pattern = "33 C0 31 C9 C3", body = {{ len = 8, hash = "{hash}" }} }}"#
+            ),
+            r#""f.whole" = { rva = 0x1000, body = { len = 8, hash = "12" } }"#.to_owned(),
+            r#""f.whole" = { rva = 0x1000, body = { len = 8, hash = "zz23456789abcdef0123456789abcdef" } }"#.to_owned(),
         ] {
-            let error = table(bad).unwrap_err();
-            assert!(error.to_string().contains("body"), "{bad}: {error}");
+            let error = body_table(&bad).unwrap_err().to_string();
+            assert!(error.contains("f.whole"), "{bad}: {error}");
         }
+    }
+
+    /// A body holds the code it was made from with its open fields moved,
+    /// and nothing with another byte changed, a byte missing, or another
+    /// field open.
+    #[test]
+    fn a_body_holds_only_its_own_code_but_for_its_open_fields() {
+        let body = Body::of(&FUNCTION, vec![3]).unwrap();
+        assert_eq!(body.len(), FUNCTION.len());
+        assert_eq!(body.open(), [3]);
+        let mut moved = FUNCTION.to_vec();
+        moved[3..7].copy_from_slice(&[0x10, 0x20, 0x30, 0x40]);
+        moved.extend_from_slice(&[0xcc, 0xcc]);
+        assert!(body.holds(&moved), "moved, with code after it");
+        for at in (0..FUNCTION.len()).filter(|at| !(3..7).contains(at)) {
+            let mut changed = FUNCTION;
+            changed[at] ^= 0x01;
+            assert!(!body.holds(&changed), "byte {at} changed");
+        }
+        assert!(!body.holds(&FUNCTION[..14]));
+        let other = Body::of(&FUNCTION, vec![2]).unwrap();
+        assert_ne!(body.hash(), other.hash());
+        assert!(Body::of(&[], Vec::new()).is_none());
+        assert!(Body::of(&FUNCTION, vec![12]).is_none(), "past the end");
+    }
+
+    /// A table carried to a build without its own takes a body symbol only
+    /// where its pattern finds it and its whole function holds.
+    #[test]
+    fn a_carried_body_symbol_counts_only_where_its_whole_function_holds() {
+        let body = Body::of(&FUNCTION, vec![3]).unwrap();
+        let row = format!(
+            r#""f.whole" = {{ rva = 0x1000, pattern = "48 8B 05 ?? ?? ?? ??", body = {{ len = 15, open = [3], hash = "{:032x}" }} }}"#,
+            body.hash()
+        );
+        let table = body_table(&row).unwrap();
+        let mut code = vec![0x90; 8];
+        code.extend_from_slice(&FUNCTION);
+        code[11] = 0x7f;
+        let carried = table.fall_back(&code, 0x5000, |_| None);
+        assert_eq!(carried.symbol("f.whole"), Some(0x5008));
+        assert_eq!(carried.body("f.whole"), Some(&body));
+        code[8 + 13] = 0xc9;
+        let changed = table.fall_back(&code, 0x5000, |_| None);
+        assert_eq!(changed.symbol("f.whole"), None);
+        assert_eq!(changed.missing(), ["f.whole"]);
+    }
+
+    /// A pattern finds code by a short window; one longer than
+    /// [`MAX_PATTERN`] is refused, so no table holds a function's code.
+    #[test]
+    fn a_pattern_longer_than_a_window_is_refused() {
+        let window = vec!["90"; MAX_PATTERN].join(" ");
+        let row =
+            |pattern: &str| format!(r#""f.long" = {{ rva = 0x1000, pattern = "{pattern}" }}"#);
+        assert!(body_table(&row(&window)).is_ok());
+        let error = body_table(&row(&format!("{window} C3"))).unwrap_err();
+        assert!(error.to_string().contains("f.long"), "{error}");
+        let constant = format!(
+            "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n\"c.long\" = {{ value = 1, pattern = \"{window} C3\", fixed = true }}\n"
+        );
+        assert!(Table::parse(&constant).is_err());
+    }
+
+    /// No embedded table spells a pattern longer than a window, read from
+    /// the text so a table never carries one past the parser.
+    #[test]
+    fn no_embedded_pattern_spans_more_than_a_window() {
+        let mut long = Vec::new();
+        for (file, text) in embedded() {
+            for (line, row) in text.lines().enumerate() {
+                for pattern in row.split("pattern = \"").skip(1) {
+                    let tokens = pattern
+                        .split('"')
+                        .next()
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .count();
+                    if tokens > MAX_PATTERN {
+                        long.push(format!("{file}:{}: {tokens} bytes", line + 1));
+                    }
+                }
+            }
+        }
+        assert!(long.is_empty(), "{long:#?}");
     }
 
     /// A constant on a pattern says where its value lies: read from an
@@ -547,7 +672,7 @@ age = 1
             rva: 0x10,
             pattern: Some(Pattern::parse("11 ?? 33").unwrap()),
             locate: Locate::At(0),
-            body: false,
+            body: None,
         };
         let code = [0x11, 0x99, 0x33, 4, 5, 6, 7, 8, 9];
         let want = u64::from_le_bytes([0x11, 0x22, 0x33, 4, 5, 6, 7, 8]);
@@ -715,6 +840,16 @@ age = 1
                 let found = symbol.find(code, code_rva);
                 if symbol.pattern().is_some() && found != Some(symbol.rva()) {
                     wrong.push(format!("{}: found at {found:x?}", symbol.id()));
+                }
+                if let Some(body) = symbol.body() {
+                    let holds = symbol
+                        .rva()
+                        .checked_sub(code_rva)
+                        .and_then(|at| code.get(usize::try_from(at).ok()?..))
+                        .is_some_and(|at| body.holds(at));
+                    if !holds {
+                        wrong.push(format!("{}: its body does not hold", symbol.id()));
+                    }
                 }
             }
             for constant in table.constants() {

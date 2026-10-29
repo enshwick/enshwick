@@ -27,16 +27,21 @@ pub(crate) enum Anchor {
     Through(u64),
     /// A symbol found by its own code.
     Own,
-    /// A symbol found by its whole function's code.
-    Body,
+    /// A symbol checked by its whole function's code, found by its own code
+    /// or, with a site, through what the instruction there calls, jumps to
+    /// or addresses.
+    Body(Option<u64>),
 }
 
 impl Anchor {
     /// The instruction it rests on.
     pub(crate) const fn site(&self) -> Option<u64> {
         match self {
-            Self::Read(site, ..) | Self::Confirm(site) | Self::Through(site) => Some(*site),
-            Self::Own | Self::Body => None,
+            Self::Read(site, ..)
+            | Self::Confirm(site)
+            | Self::Through(site)
+            | Self::Body(Some(site)) => Some(*site),
+            Self::Own | Self::Body(None) => None,
         }
     }
 
@@ -47,7 +52,8 @@ impl Anchor {
             Self::Confirm(_) => Self::Confirm(site),
             Self::Through(_) => Self::Through(site),
             Self::Own => Self::Own,
-            Self::Body => Self::Body,
+            Self::Body(None) => Self::Body(None),
+            Self::Body(Some(_)) => Self::Body(Some(site)),
         }
     }
 }
@@ -55,7 +61,8 @@ impl Anchor {
 /// Reads a `--from` pick for the entry whose value is `value`: for a
 /// constant `<rva>`, optionally prefixed `disp:`, `neg:`, `imm:` or `shl:` and
 /// followed by `+<n>` or `-<n>` for a value next to the operand, or
-/// `confirm:<rva>`; for a symbol `<rva>`, `ref:<rva>`, `direct` or `body`.
+/// `confirm:<rva>`; for a symbol `<rva>`, `ref:<rva>`, `direct`, `body` or
+/// `body:<rva>`.
 ///
 /// # Errors
 ///
@@ -73,11 +80,15 @@ pub(crate) fn parse_pick(
     if text == "direct" {
         return Ok(Anchor::Own);
     }
-    if text == "body" {
+    if let Some(rest) = text.strip_prefix("body") {
         if !symbol {
-            bail!("only a symbol takes a body pattern");
+            bail!("only a symbol is checked by its body");
         }
-        return Ok(Anchor::Body);
+        return Ok(Anchor::Body(match rest.strip_prefix(':') {
+            Some(site) => Some(number(site)?),
+            None if rest.is_empty() => None,
+            None => bail!("{text:?} is `body` or `body:<rva>`"),
+        }));
     }
     if let Some(rest) = text.strip_prefix("confirm:") {
         return Ok(Anchor::Confirm(number(rest)?));
@@ -185,22 +196,19 @@ pub(crate) fn of_table(
         );
     }
     for symbol in table.symbols() {
-        if symbol.body() {
-            out.insert(symbol.id().to_owned(), Anchor::Body);
-            continue;
-        }
-        let Some((pattern, Locate::Rel { at, .. })) = symbol.pattern() else {
-            continue;
+        let site = || {
+            let Some((pattern, Locate::Rel { at, .. })) = symbol.pattern() else {
+                return None;
+            };
+            let start = code_rva + pattern.find_unique(code).ok()? as u64;
+            let (masked, function, index) = patterns::instruction_holding(exe, start, start + at)?;
+            Some(function + masked.insns[index].offset as u64)
         };
-        let Ok(start) = pattern.find_unique(code) else {
-            continue;
-        };
-        let start = code_rva + start as u64;
-        if let Some((masked, function, index)) =
-            patterns::instruction_holding(exe, start, start + at)
-        {
-            let site = function + masked.insns[index].offset as u64;
-            out.insert(symbol.id().to_owned(), Anchor::Through(site));
+        let id = symbol.id().to_owned();
+        if symbol.body().is_some() {
+            out.insert(id, Anchor::Body(site()));
+        } else if let Some(site) = site() {
+            out.insert(id, Anchor::Through(site));
         }
     }
     out

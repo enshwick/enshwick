@@ -160,7 +160,7 @@ pub(crate) const HOOKED: &[Symbol] = &[
 ];
 
 /// Every symbol whose code the loader replaces or calls as a whole, which a
-/// test checks carries a body pattern in every table that pins it, so a
+/// test checks carries a body in every table that pins it, so a
 /// change to the game's logic there turns its feature off.
 #[cfg(test)]
 pub(crate) const BODIES: &[Symbol] = &[

@@ -11,8 +11,14 @@ Each entry names the pull request that made the change.
 - `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a
   commit of the platform's `main` branch from git (#696).
 
+- The `body:<rva>` pick of `pin --patterns`: a symbol checked by its whole
+  function, found through the call at `rva` (#710).
+
 ### Changed
 
+- The `body` pick of `pin --patterns` writes a short window that finds the
+  function and a hash of its whole code, never the code itself; a window
+  over more than half of the function asks for `body:<rva>` (#710).
 - `cargo enshwick new` writes the crate the mod template makes, with its
   toolchain file, build flags, lints, texts and tests. Mod names are in
   title case (#696).

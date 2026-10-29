@@ -10,7 +10,7 @@ use toml_edit::{DocumentMut, Item, Table as TomlTable, Value};
 
 use super::anchor::{self, Anchor};
 use super::exe::Exe;
-use super::patterns::{self, ConstantPattern, SymbolPattern};
+use super::patterns::{self, BodyPattern, ConstantPattern, SymbolPattern};
 use super::rows::{Edit, Entry, Row, Side, hex};
 
 /// Where the tables live, relative to the repository.
@@ -331,7 +331,7 @@ fn symbol_written(exe: &Exe<'_>, id: &str, rva: u64, anchor: Option<&Anchor>) ->
             )),
             Err(why) => Err(anyhow!("{id}: {why}")),
         },
-        Some(Anchor::Body) => match patterns::body(exe, rva) {
+        Some(Anchor::Body(site)) => match patterns::body(exe, rva, *site) {
             Ok(pattern) => Ok(Some(body_text(rva, &pattern))),
             Err(why) => Err(anyhow!("{id}: {why}")),
         },
@@ -478,6 +478,11 @@ fn write_section(
 
 /// A symbol entry with its pattern, as a table spells it.
 fn symbol_text(rva: u64, pattern: &SymbolPattern) -> String {
+    format!("{{ {} }}", symbol_fields(rva, pattern))
+}
+
+/// The fields of a symbol entry with its pattern.
+fn symbol_fields(rva: u64, pattern: &SymbolPattern) -> String {
     let locate = match pattern.locate {
         Locate::At(0) => String::new(),
         Locate::At(at) => format!(", at = {at}"),
@@ -485,19 +490,24 @@ fn symbol_text(rva: u64, pattern: &SymbolPattern) -> String {
         Locate::Rel { at, end } => format!(", rel = {at}, end = {end}"),
         _ => String::new(),
     };
-    format!(
-        "{{ rva = {}, pattern = \"{}\"{locate} }}",
-        hex(rva),
-        pattern.text
-    )
+    format!("rva = {}, pattern = \"{}\"{locate}", hex(rva), pattern.text)
 }
 
-/// A symbol entry on a body pattern, as a table spells it.
-fn body_text(rva: u64, pattern: &SymbolPattern) -> String {
+/// A symbol entry checked by its whole function, as a table spells it: the
+/// window that finds it, and the function's length, open fields and hash.
+fn body_text(rva: u64, pattern: &BodyPattern) -> String {
+    let open: Vec<String> = pattern
+        .body
+        .open()
+        .iter()
+        .map(|&at| format!("{at:#x}"))
+        .collect();
     format!(
-        "{{ rva = {}, pattern = \"{}\", body = true }}",
-        hex(rva),
-        pattern.text
+        "{{ {}, body = {{ len = {:#x}, open = [{}], hash = \"{:032x}\" }} }}",
+        symbol_fields(rva, &pattern.window),
+        pattern.body.len(),
+        open.join(", "),
+        pattern.body.hash()
     )
 }
 
@@ -712,5 +722,40 @@ revision = 1
         let neither = text(TABLE, identity(None, None));
         assert!(!neither.contains("steam_build"));
         assert!(!neither.contains("game_version"));
+    }
+
+    #[test]
+    fn a_body_row_reads_back_as_written_without_the_function_s_code() {
+        // call +0x10; mov eax, 1; ret
+        let code = [
+            0xe8, 0x10, 0x00, 0x00, 0x00, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3,
+        ];
+        let body = enshwick_gamedata::Body::of(&code, vec![1]).unwrap();
+        let pattern = BodyPattern {
+            window: SymbolPattern {
+                text: "E8 ?? ?? ?? ??".to_owned(),
+                locate: Locate::At(0),
+            },
+            body: body.clone(),
+        };
+        let row = body_text(0x1000, &pattern);
+        assert!(row.contains("len = 0xb, open = [0x1], hash = \""), "{row}");
+        let table = enshwick_gamedata::Table::parse(&format!(
+            "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[symbols]\n\"f.whole\" = {row}\n"
+        ))
+        .unwrap();
+        let symbol = &table.symbols()[0];
+        assert_eq!(symbol.body(), Some(&body));
+        assert_eq!(symbol.rva(), 0x1000);
+        assert!(symbol.body().unwrap().holds(&code));
+        let through = BodyPattern {
+            window: SymbolPattern {
+                text: "48 8B CB E8 ?? ?? ?? ?? 48 8B D8 48 85 C0 74 10".to_owned(),
+                locate: Locate::Rel { at: 4, end: 8 },
+            },
+            body,
+        };
+        let row = body_text(0x1000, &through);
+        assert!(row.contains("\", rel = 4, body = {"), "{row}");
     }
 }
