@@ -243,7 +243,48 @@ fn remember(path: &str, side: Side) {
         now.is_some() && now != before
     };
     if changed && let Some(loader) = crate::host::loader() {
+        arrive(loader, key, path);
         crate::holds::enforce_world(loader, key);
+    }
+}
+
+/// The world `key`, saved at `path`, appears: takes over the mod data of the
+/// world it moved or was copied from, before anything reads that data.
+fn arrive(loader: &Loader, key: &str, path: &str) {
+    use crate::moved_worlds::Arrival;
+    let arrival = crate::moved_worlds::arrive(
+        &loader.data_dir,
+        crate::settings::LOADER_ID,
+        key,
+        Path::new(path),
+    );
+    match arrival {
+        Ok(Arrival::Moved { from }) => {
+            crate::log!(
+                INFO,
+                "world {key}: its save moved, so it took over the mod data of world {from}"
+            );
+            crate::migrations::world_arrived(loader, &from, key, false);
+        }
+        Ok(Arrival::Copied { from }) => {
+            crate::log!(
+                INFO,
+                "world {key}: a copy of world {from}, whose save is still there, got a copy of its mod data"
+            );
+            crate::migrations::world_arrived(loader, &from, key, true);
+        }
+        Ok(Arrival::Unclear(others)) => crate::log!(
+            WARN,
+            "world {key} has no mod data, and several worlds of its save name have some: {}; \
+             it starts without, and an admin who moved it renames the right folders under \
+             mod-data/<mod>/worlds/ to {key}",
+            others.join(", ")
+        ),
+        Ok(_) => {}
+        Err(e) => crate::log!(
+            WARN,
+            "world {key}: the mod data of the world it came from was not taken over: {e}"
+        ),
     }
 }
 

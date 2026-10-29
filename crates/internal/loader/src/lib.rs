@@ -131,6 +131,7 @@ pub mod mod_index;
 pub mod modlist;
 #[cfg(windows)]
 mod module;
+pub mod moved_worlds;
 #[cfg(windows)]
 mod net;
 #[cfg_attr(

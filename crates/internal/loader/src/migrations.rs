@@ -417,6 +417,21 @@ impl Record {
         }
         true
     }
+
+    /// The world `from` arrived as `to`, its data moved there, or copied
+    /// when `copied`: what ran on `from` from before worlds kept their own
+    /// record counts for `to` too. Whether that changed the record.
+    pub fn world_arrived(&mut self, from: &str, to: &str, copied: bool) -> bool {
+        let Some(ran) = (if copied {
+            self.worlds.get(from).cloned()
+        } else {
+            self.worlds.remove(from)
+        }) else {
+            return false;
+        };
+        self.worlds.insert(to.to_owned(), ran);
+        true
+    }
 }
 
 /// The migrations of `all` not in `ran`, in order, with their indices.
@@ -919,7 +934,7 @@ impl Target<'_> {
 }
 
 #[cfg(windows)]
-pub(crate) use live::{register, renamed, settings_written, world_loaded};
+pub(crate) use live::{register, renamed, settings_written, world_arrived, world_loaded};
 
 #[cfg(windows)]
 mod live;
