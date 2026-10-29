@@ -280,7 +280,10 @@ fn patterns_into(
             match anchors_here.get(id) {
                 Some(anchor) => constant_written(exe, id, *value, anchor),
                 None => Ok(confirmed.get(id.as_str()).map(|text| {
-                    format!("{{ value = {}, pattern = \"{text}\" }}", spelled(*value))
+                    format!(
+                        "{{ value = {}, pattern = \"{text}\", fixed = true }}",
+                        spelled(*value)
+                    )
                 })),
             }
         },
@@ -488,7 +491,7 @@ fn symbol_text(rva: u64, pattern: &SymbolPattern) -> String {
 /// A constant entry with its pattern, as a table spells it.
 fn constant_text(value: u64, pattern: &ConstantPattern, plus: i64) -> String {
     let operand = match pattern.operand {
-        None => String::new(),
+        None => ", fixed = true".to_owned(),
         Some((at, size)) => {
             let neg = match (pattern.negative, pattern.shift) {
                 (true, _) => ", neg = true",

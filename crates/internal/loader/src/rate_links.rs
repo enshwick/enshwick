@@ -11,7 +11,7 @@ use enshwick::content::recipes::RecipeLayout;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::pinned::{self, Symbol};
 use crate::rates::{
     LINKS, RATES, experience_rates, scale_points, scale_stack, scale_whole, workshop_duration,
@@ -183,16 +183,13 @@ fn link_one<F: Copy>(
     if !wanted(symbol) {
         return false;
     }
-    let target = loader.address(symbol).filter(|_| loader.code_holds(symbol));
-    let Some(target) = target else {
-        crate::log!(
-            WARN,
-            "{feature} off on {}: the code at `{symbol}` is not what the table expects",
-            loader.build.name
-        );
-        return false;
-    };
-    loader.link_feature(feature, Some(target), next, detour, HookFlags::NONE)
+    loader.link_feature(
+        feature,
+        Target::Pinned(symbol),
+        next,
+        detour,
+        HookFlags::NONE,
+    )
 }
 
 unsafe extern "system" fn resource_drops(data: *const u8) -> f32 {

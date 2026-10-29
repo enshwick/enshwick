@@ -20,7 +20,7 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick_gamedata::reflect::fnv1a32;
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::Constant;
@@ -144,7 +144,7 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "world keys off: this build has no save layout");
         return;
     }
-    let target = loader.address(pinned::save::PATH);
+    let target = Target::Pinned(pinned::save::PATH);
     loader.link_feature("world keys", target, &PATH_NEXT, built, HookFlags::NONE);
 }
 

@@ -5,7 +5,7 @@ use enshwick::abi::{HookFlags, Side, Status};
 use enshwick::raw::{read_at, write_at};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 
@@ -184,7 +184,7 @@ pub(super) fn seal_texts(loader: &'static Loader) {
         return;
     }
     // Only the client shows text; the server has no lookups to link.
-    let (Some(lookup_rva), Some(english_rva), Some(offset)) = (
+    let (Some(_), Some(_), Some(offset)) = (
         loader.build.symbol(pinned::text::LOOKUP.id()),
         loader.build.symbol(pinned::text::LOOKUP_ENGLISH.id()),
         loader.build.constant(pinned::text::POOL_LANGUAGE.id()),
@@ -195,17 +195,16 @@ pub(super) fn seal_texts(loader: &'static Loader) {
         usize::try_from(offset).unwrap_or(usize::MAX),
         Ordering::Relaxed,
     );
-    let base = loader.base;
     loader.link_feature(
         "mod texts",
-        Some(base + lookup_rva),
+        Target::Pinned(pinned::text::LOOKUP),
         &TEXT_NEXT,
         lookup as TextFn,
         HookFlags::NONE,
     );
     loader.link_feature(
         "mod English texts",
-        Some(base + english_rva),
+        Target::Pinned(pinned::text::LOOKUP_ENGLISH),
         &ENGLISH_NEXT,
         lookup_english as TextFn,
         HookFlags::NONE,

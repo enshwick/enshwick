@@ -182,9 +182,14 @@ revision = 1
 "pacing.background_workers" = { rva = 0x5c_f3d0, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 34 }
 
 [constants]
+# The first eight bytes of the survivor functions the loader hooks, which
+# their call-site patterns reach without a head of their own.
+"npc.lookup.bytes" = "0x8d48_20ec_8348_5340"
+"npc.lookup_cursor.bytes" = "0x8d48_20ec_8348_5340"
+"npc.update.bytes" = "0xcccc_cc00_0000_0be9"
 "ecs.context_row" = { value = 0x8, pattern = "F2 0F 11 44 24 ?? E8 ?? ?? ?? ?? 48 8B 0F 8B 47 ?? 4C 8B 51 ?? 85 C0 74 10", at = 16, size = 1 }
 "ecs.descriptor_entity_records" = { value = 0x828, pattern = "74 10 8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ??", at = 8, size = 4 }
-"ecs.entity_record_size" = { value = 0x10, pattern = "8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ?? 89 44 24 ??" }
+"ecs.entity_record_size" = { value = 0x10, pattern = "8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ?? 89 44 24 ??", fixed = true }
 "ecs.level_data_offset" = { value = 0x4, pattern = "0F 85 ?? ?? ?? ?? 0F B7 51 ?? 0F B7 4B ?? 48 03 CB 44 0F B6 04 91", at = 13, size = 1 }
 "ecs.level_flags" = { value = 0x6, pattern = "66 90 48 8B 5D ?? 48 85 DB 0F 84 ?? ?? ?? ?? F6 43 ?? 01 0F 84 ?? ?? ?? ?? 4C 8B 45 ?? 48 8D 4D ?? BA 68 F5 4B 72", at = 17, size = 1 }
 "ecs.attribute_slot" = { value = 0xc, pattern = "39 01 0F 85 ?? ?? ?? ?? 0F B7 51 ?? 0F B7 4B ?? 48 03 CB 44 0F B6 04 91", at = 11, size = 1 }
@@ -214,7 +219,7 @@ revision = 1
 "server.game_settings_preset" = { value = 0x1760, pattern = "0F 10 45 ?? 41 0F B6 84 24 ?? ?? ?? ?? 88 87 ?? ?? ?? ?? 0F 11 45 ?? E8 ?? ?? ?? ?? 8B 08", at = 15, size = 4 }
 "server.game_settings_resend" = { value = 0x18e0, pattern = "48 89 44 24 ?? E8 ?? ?? ?? ?? 45 33 D2 80 BB ?? ?? ?? ?? 00 74 67 48 8B 83 ?? ?? ?? ?? 0F 10 00", at = 15, size = 4 }
 "server.permission_table" = { value = 0x498, pattern = "4C 8D 8D ?? ?? ?? ?? 48 89 85 ?? ?? ?? ?? 4C 8D 87 ?? ?? ?? ?? C6 85 ?? ?? ?? ?? 00 48 8D 95 ?? ?? ?? ?? 48 89 9D ?? ?? ?? ??", at = 17, size = 4 }
-"server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01" }
+"server.permission_entry_size" = { value = 0xa0, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", fixed = true }
 # How many permission entries the game indexes: its own bound before it
 # reads one, `cmp eax, 0x3fe; ja`.
 "server.permission_entries" = { value = 0x3ff, pattern = "3D ?? ?? ?? ?? 77 1D 4C 8D 0C 80 49 C1 E1 05 43 39 14 01", at = 1, size = 4, plus = 1 }
@@ -244,7 +249,7 @@ revision = 1
 "server.chat_store" = { value = 0x60, pattern = "48 8D 8D ?? ?? ?? ?? 89 54 24 ?? 48 8B 56 ?? 89 44 24 ?? 44 89 44 24 ??", at = 14, size = 1 }
 "server.custom_strings" = { value = 0x58, pattern = "EB 03 4C 8B 03 49 8B 55 ?? 48 8D 85 ?? ?? ?? ?? 48 89 45 ?? 4C 8D 4D ??", at = 8, size = 1 }
 "chat.store_slots" = { value = 0xc, pattern = "4C 8B D9 4C 8D 14 40 42 80 7C 91 ?? 00 74 11 46 39 4C 91 ??", at = 11, size = 1 }
-"chat.store_slot_size" = { value = 0xc, pattern = "48 8B DA 4C 8B D9 4C 8D 14 40 42 80 7C 91 ?? 00 74 11" }
+"chat.store_slot_size" = { value = 0xc, pattern = "48 8B DA 4C 8B D9 4C 8D 14 40 42 80 7C 91 ?? 00 74 11", fixed = true }
 "chat.store_slot_count" = { value = 0x20, pattern = "49 83 C2 10 48 05 C0 00 00 00 49 83 FA ?? 0F 82 ?? ?? ?? ?? 48 8B 7C 24 ??", at = 13, size = 1 }
 "chat.store_tail" = { value = 0x1c8, pattern = "48 8B 86 ?? ?? ?? ?? 48 89 47 ?? 48 89 BE ?? ?? ?? ?? 48 FF 86 ?? ?? ?? ?? 44 8B 47 ?? 49 83 C0 17", at = 14, size = 4 }
 "chat.node_delivered" = { value = 0x20, pattern = "44 88 27 83 E0 3C 89 6F ?? 49 8B 4F ?? 89 47 ?? 8B 84 24 ?? ?? ?? ??", at = 8, size = 1 }
@@ -260,7 +265,9 @@ revision = 1
 "inventory.view_frame" = { value = 0x60, pattern = "0F 85 ?? ?? ?? ?? 41 B8 B0 01 00 00 48 8D 55 ?? 49 8B CD E8 ?? ?? ?? ?? 41 B8 B0 01 00 00", at = 15, size = 1, neg = true }
 "inventory.view_owners" = { value = 0x178, pattern = "85 DB 75 26 4D 8B 87 ?? ?? ?? ?? 48 8D 4C 24 ?? 48 8B 56 ?? 4D 8B CC", at = 7, size = 4 }
 "inventory.view_actors" = { value = 0x118, pattern = "49 8B 87 ?? ?? ?? ?? 88 54 24 ?? 49 8B 97 ?? ?? ?? ?? 4C 89 74 24 ?? 4C 89 75 ??", at = 14, size = 4 }
-"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B" }
+# The replication pointer: `rbp + 0x98` in the pattern, from the view frame
+# at `rbp - 0x60`.
+"inventory.view_replication" = { value = 0xf8, pattern = "48 8B 5D ?? 4C 8B B5 ?? ?? ?? ?? 48 8B BD 98 00 00 00 83 7B ?? 00 74 0B", fixed = true }
 "inventory.view_item_registry" = { value = 0xd8, pattern = "89 45 ?? 0F 57 C9 49 8B 87 ?? ?? ?? ?? 8D 4F ?? 48 89 44 24 ?? 81 F9 FE 03 00 00", at = 9, size = 4 }
 "inventory.desc_size" = { value = 0xf0, pattern = "48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 89 81 ?? ?? ?? ?? 48 8B C1 C3", at = 93, size = 4, plus = 8 }
 "inventory.desc_context" = { value = 0x8, pattern = "C6 81 ?? ?? ?? ?? 00 48 8B 42 ?? 48 89 01 48 8B 42 ?? 48 89 41 ?? 48 8B 42 ??", at = 10, size = 1 }
@@ -299,9 +306,9 @@ revision = 1
 "inventory.copy_discovered.view" = { value = 0xf0, pattern = "49 8B 87 ?? ?? ?? ?? 48 89 45 ?? 49 8B 87 ?? ?? ?? ?? 40 C0 EF 03 48 89 45 ??", at = 14, size = 4 }
 "inventory.copy_discovered.desc" = { value = 0xc0, pattern = "48 89 81 ?? ?? ?? ?? 48 8B 82 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 8B 82 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 48 8B 82 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 8B 82 ?? ?? ?? ?? 89 81 ?? ?? ?? ?? 8B 82 ?? ?? ?? ?? 89 81 ?? ?? ?? ??", at = 38, size = 4 }
 "inventory.txn_size" = { value = 0x71b0, pattern = "C6 81 ?? ?? ?? ?? 00 48 8B 42 ?? 48 89 01 48 8B 42 ?? 48 89 41 ?? 48 8B 42 ??", at = 2, size = 4, plus = 8 }
-"loot.txn_context" = { value = 0x0, pattern = "C6 81 ?? ?? ?? ?? 00 48 8B 42 ?? 48 89 01 48 8B 42 ?? 48 89 41 ?? 48 8B 42 ??" }
+"loot.txn_context" = { value = 0x0, pattern = "C6 81 ?? ?? ?? ?? 00 48 8B 42 ?? 48 89 01 48 8B 42 ?? 48 89 41 ?? 48 8B 42 ??", fixed = true }
 "loot.txn_entity" = { value = 0xe0, pattern = "48 89 81 ?? ?? ?? ?? 48 8B 82 ?? ?? ?? ?? 48 89 81 ?? ?? ?? ?? 8B 82 ?? ?? ?? ?? 89 81 ?? ?? ?? ?? 8B 82 ?? ?? ?? ?? 89 81 ?? ?? ?? ?? C3", at = 29, size = 4 }
-"loot.request_node" = { value = 0x0, pattern = "F3 0F 11 83 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? 8B 07 48 8D 54 24 ?? 89 44 24 ??" }
+"loot.request_node" = { value = 0x0, pattern = "F3 0F 11 83 ?? ?? ?? ?? 48 8D 8D ?? ?? ?? ?? 8B 07 48 8D 54 24 ?? 89 44 24 ??", fixed = true }
 "loot.request_labels" = { value = 0x4, pattern = "74 08 48 8B CB E8 ?? ?? ?? ?? 8B 57 ?? 49 8B CE E8 ?? ?? ?? ?? 48 85 C0 74 0B", at = 12, size = 1 }
 "experience.gained" = { value = 0x1d7d_d102, pattern = "74 3D 4C 8B C6 48 8D 4D ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 0F B6 75 ?? 40 84 F6", at = 10, size = 4 }
 "experience.progress" = { value = 0x8dcd_daf4, pattern = "74 3D 4C 8B C7 48 8D 4D ?? BA ?? ?? ?? ?? E8 ?? ?? ?? ?? 44 0F B6 75 ?? 45 84 F6", at = 10, size = 4 }
@@ -365,7 +372,7 @@ revision = 1
 "save.phase" = { value = 0x78, pattern = "75 37 48 8B 49 ?? 80 79 ?? 00 75 2D 0F B6 51 ?? 48 8B 83 ?? ?? ?? ??", at = 8, size = 1 }
 "save.path_data" = { value = 0x8, pattern = "0F 29 44 24 ?? E8 ?? ?? ?? ?? 4C 8B 4F ?? 33 C9 4C 03 CB 4D 8D 04 01", at = 13, size = 1 }
 "save.path_lengths" = { value = 0x830, pattern = "48 8B 99 ?? ?? ?? ?? 4C 8D 4C 24 ?? 48 03 99 ?? ?? ?? ?? 48 8B F9 4C 8B 81 ?? ?? ?? ??", at = 15, size = 4 }
-"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??" }
+"save.path_parts" = { value = 0x4, pattern = "4C 8B 81 ?? ?? ?? ?? 48 8B D3 4C 03 81 48 08 00 00 0F 29 44 24 ?? E8 ?? ?? ?? ??", fixed = true }
 # Attribute sets by the id of their first attribute, which a set
 # keeps, and the slots of the attributes read from them.
 "ecs.attribute_count" = { value = 0x7, pattern = "48 89 44 24 ?? 48 8D 4C 24 ?? 0F B6 43 ?? 45 33 C9 48 89 44 24 ??", at = 13, size = 1 }
@@ -428,7 +435,7 @@ revision = 1
 # The saved-buff record the restore of a character's buffs
 # reads: type, total and remaining time, level and whether it
 # is set, the strength (f32) and whether it is set.
-"buffs.record_type" = { value = 0x0, pattern = "4D 8B F0 8B DA E8 ?? ?? ?? ?? 41 8B 0E 48 8B D0 E8 ?? ?? ?? ?? 4C 8D 4C 24 ??" }
+"buffs.record_type" = { value = 0x0, pattern = "4D 8B F0 8B DA E8 ?? ?? ?? ?? 41 8B 0E 48 8B D0 E8 ?? ?? ?? ?? 4C 8D 4C 24 ??", fixed = true }
 "buffs.record_lifetime" = { value = 0x8, pattern = "48 8B D8 49 8B 46 ?? 49 B8 FF FF FF FF FF FF FF 7F", at = 6, size = 1 }
 "buffs.record_remaining" = { value = 0x10, pattern = "88 44 24 ?? E8 ?? ?? ?? ?? 49 8B 56 ?? 48 8B D8 49 8B 46 ?? 49 B8 FF FF FF FF FF FF FF 7F", at = 12, size = 1 }
 "buffs.record_level" = { value = 0x18, pattern = "48 8B D3 E8 ?? ?? ?? ?? 45 0F B6 46 ?? 48 8D 4C 24 ?? 41 B9 9A 97 8A 63", at = 12, size = 1 }
@@ -461,7 +468,7 @@ revision = 1
 "knowledge.log_entry_size" = { value = 0x10, pattern = "80 78 ?? 02 75 0E 48 83 C0 ?? 48 FF 4C 24 ?? 48 89 44 24 ??", at = 9, size = 1 }
 # A log entry's u32 id and u32 value, from the stack slots the writer
 # fills before it appends the entry.
-"knowledge.log_entry_id" = { value = 0x0, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 24 C6 44 24 2C 00 49 3B 56 ??" }
+"knowledge.log_entry_id" = { value = 0x0, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 24 C6 44 24 2C 00 49 3B 56 ??", fixed = true }
 "knowledge.log_entry_value" = { value = 0x4, pattern = "49 8B 56 ?? 48 FF C2 89 5C 24 20 48 89 7C 24 ?? C6 44 24 2C 00 49 3B 56 ??", at = 15, size = 1, plus = -32 }
 "knowledge.queue" = { value = 0x1d0, pattern = "48 89 87 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 15, size = 4 }
 "knowledge.journal" = { value = 0x1e8, pattern = "49 8B CF E8 ?? ?? ?? ?? 48 89 87 ?? ?? ?? ?? 4C 8D 85 ?? ?? ?? ?? 49 8B 86 ?? ?? ?? ?? 49 8B CF", at = 11, size = 4 }
@@ -486,7 +493,7 @@ revision = 1
 # (pages, page count, shift, mask) and its layer slots and their
 # number; an instance its phenomenon (u8), place, radius and end.
 "weather.system" = { value = 0x1798, pattern = "48 81 EC 10 01 00 00 48 83 B9 ?? ?? ?? ?? 00 48 8B F9 0F 84 ?? ?? ?? ??", at = 10, size = 4 }
-"weather.manager" = { value = 0x0, pattern = "44 8B 42 ?? 4C 8B EA 48 8B 12 48 8B F9 0F 29 78 ?? 48 8D 4C 24 ??" }
+"weather.manager" = { value = 0x0, pattern = "44 8B 42 ?? 4C 8B EA 48 8B 12 48 8B F9 0F 29 78 ?? 48 8D 4C 24 ??", fixed = true }
 "weather.resource" = { value = 0xc, pattern = "0F 29 70 ?? 4D 8B E0 44 8B 42 ?? 4C 8B EA 48 8B 12 48 8B F9", at = 10, size = 1 }
 "weather.generation" = { value = 0x10, pattern = "84 C0 0F 84 ?? ?? ?? ?? 41 8B 45 ?? 39 44 24 ?? 0F 85 ?? ?? ?? ?? F3 44 0F 10 05 ?? ?? ?? ??", at = 11, size = 1 }
 "weather.pages" = { value = 0x28, pattern = "48 3B 57 ?? 0F 83 ?? ?? ?? ?? 48 8B 47 ?? 48 C1 E2 06 4C 3B 44 02 ??", at = 13, size = 1 }
@@ -521,7 +528,7 @@ revision = 1
 # `voxel.grid_pages` from the editor) and along z.
 "voxel.grids" = { value = 0x40, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 19, size = 1 }
 "voxel.grid_pages" = { value = 0x48, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 28, size = 1 }
-"voxel.grid_stride" = { value = 0x28, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7" }
+"voxel.grid_stride" = { value = 0x28, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", fixed = true }
 # The voxel materials a byte names, and the first building material, from
 # the loop that builds the replace table and the test inside it.
 "voxel.materials" = { value = 0x100, pattern = "80 78 14 05 73 08 0F B6 C3 42 C6 04 38 01 48 FF C3 48 81 FB ?? ?? ?? ?? 72", at = 20, size = 4 }
@@ -551,20 +558,20 @@ revision = 1
 "weather.slot_size" = { value = 0x18, pattern = "E8 ?? ?? ?? ?? 48 FF C6 48 8D 6D ?? 48 3B B3 ?? ?? ?? ?? 72 D1 48 8B 7C 24 ??", at = 11, size = 1 }
 "weather.slot_current" = { value = 0x10, pattern = "48 8B BB ?? ?? ?? ?? 48 8B CB 8B 54 2F ?? E8 ?? ?? ?? ?? 8B 54 2F ?? 48 8B CB", at = 13, size = 1 }
 "weather.slot_next" = { value = 0x14, pattern = "48 8B CB 8B 54 2F ?? E8 ?? ?? ?? ?? 8B 54 2F ?? 48 8B CB E8 ?? ?? ?? ?? 48 FF C6", at = 15, size = 1 }
-"weather.slot_time" = { value = 0x0, pattern = "48 B8 00 00 00 00 00 00 00 80 48 89 07 33 C0 48 C7 47 ?? FF FF FF FF" }
+"weather.slot_time" = { value = 0x0, pattern = "48 B8 00 00 00 00 00 00 00 80 48 89 07 33 C0 48 C7 47 ?? FF FF FF FF", fixed = true }
 "weather.slot_phenomenon" = { value = 0x8, pattern = "48 89 07 33 C0 48 C7 47 ?? FF FF FF FF 48 89 47 ?? 88 44 24 ??", at = 8, size = 1 }
 "weather.page_size" = { value = 0x40, pattern = "0F 83 ?? ?? ?? ?? 48 8B 47 ?? 48 C1 E2 ?? 4C 3B 44 02 ?? 0F 83 ?? ?? ?? ?? 48 8B 44 02 ??", at = 13, size = 1, shl = true }
 "weather.page_entries" = { value = 0x8, pattern = "4C 3B 44 02 ?? 0F 83 ?? ?? ?? ?? 48 8B 44 02 ?? 4B 8D 0C C0 48 8D 14 C8", at = 15, size = 1 }
 "weather.page_entry_count" = { value = 0x10, pattern = "48 8B 47 ?? 48 C1 E2 06 4C 3B 44 02 ?? 0F 83 ?? ?? ?? ?? 48 8B 44 02 ??", at = 12, size = 1 }
-"weather.entry_size" = { value = 0x48, pattern = "0F 83 ?? ?? ?? ?? 48 8B 44 02 ?? 4B 8D 0C C0 48 8D 14 C8 8B CB" }
-"weather.entry_generation" = { value = 0x0, pattern = "48 8D 14 C8 8B CB 8B 02 0F BA F0 1F C1 E9 10 3B C1" }
+"weather.entry_size" = { value = 0x48, pattern = "0F 83 ?? ?? ?? ?? 48 8B 44 02 ?? 4B 8D 0C C0 48 8D 14 C8 8B CB", fixed = true }
+"weather.entry_generation" = { value = 0x0, pattern = "48 8D 14 C8 8B CB 8B 02 0F BA F0 1F C1 E9 10 3B C1", fixed = true }
 "weather.entry_data" = { value = 0x8, pattern = "0F 85 ?? ?? ?? ?? 48 89 74 24 ?? 48 8D 4A ?? 33 F6 48 85 D2 8B C6", at = 14, size = 1 }
 "buffs.record_size" = { value = 0x78, pattern = "8B C7 4D 8B CD 4C 6B C0 ?? 44 88 74 24 ?? 8B D3 4C 03 85 ?? ?? ?? ??", at = 8, size = 1 }
-"building.pickup_entity" = { value = 0x0, pattern = "41 8B F8 4C 8B F2 44 8B 02 4C 8B F9 48 8B 09 48 8D 55 ??" }
+"building.pickup_entity" = { value = 0x0, pattern = "41 8B F8 4C 8B F2 44 8B 02 4C 8B F9 48 8B 09 48 8D 55 ??", fixed = true }
 "building.pickup_mode" = { value = 0x4, pattern = "8B 06 89 41 ?? 41 0F B6 4E ?? 83 E9 01 74 28 83 F9 01", at = 9, size = 1 }
-"knowledge.request_kind" = { value = 0x4, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
-"knowledge.request_value" = { value = 0x8, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
-"knowledge.request_target" = { value = 0xc, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??" }
+"knowledge.request_kind" = { value = 0x4, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??", fixed = true }
+"knowledge.request_value" = { value = 0x8, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??", fixed = true }
+"knowledge.request_target" = { value = 0xc, pattern = "F2 0F 10 83 ?? ?? ?? ?? 48 8D 55 ?? 8B 83 ?? ?? ?? ?? 48 8B CF F2 0F 11 45 F7 89 45 FF E8 ?? ?? ?? ?? 8B 08 E8 ?? ?? ?? ?? 48 8B 4D ?? 48 8D 55 F7 89 45 03 E8 ?? ?? ?? ??", fixed = true }
 "skill.airborne_architect" = { value = 0x4475_e8dd, cell = "skill.airborne_architect_cell" }
 "pacing.loop_wait.bytes" = "0x8bc0_3345_d855_8b48"
 "pacing.server_wait.bytes" = 0x48c7_558d_48c4_8b4d

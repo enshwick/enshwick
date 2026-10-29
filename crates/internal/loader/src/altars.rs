@@ -40,7 +40,7 @@ use enshwick::raw::{read_at, read_ptr_at};
 use self::geometry::Placed;
 use crate::chains::Next;
 use crate::ecs::Engine;
-use crate::host::{Loader, Registered};
+use crate::host::{Loader, Registered, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -571,17 +571,12 @@ pub(crate) fn link(loader: &'static Loader) {
             upgrade_flags,
         ),
     ] {
-        let entry = match loader.reflection.system(system) {
-            Ok(found) if found.entry() != 0 => found.entry(),
-            _ => {
-                crate::log!(WARN, "altars off: no system {system} in this build");
-                OFF.store(true, Ordering::Release);
-                return;
-            }
-        };
-        let status = loader.link(entry, next, detour, flags);
-        if !status.is_ok() {
-            crate::log!(WARN, "altars off: {system} refused ({})", status.0);
+        let entry = loader
+            .reflection
+            .system(system)
+            .ok()
+            .map(enshwick_gamedata::reflect::System::entry);
+        if !loader.link_feature("altars", Target::Found(system, entry), next, detour, flags) {
             OFF.store(true, Ordering::Release);
             return;
         }
@@ -614,17 +609,14 @@ fn link_seam(loader: &'static Loader) {
             corner_size: size(pinned::building::CORNER_SIZE)?,
         })
     })();
-    let (Some(layout), Some(target)) = (layout, loader.address(pinned::building::SEAM_CHECK))
-    else {
+    let Some(layout) = layout else {
         crate::log!(WARN, "zone checks off: this build lacks the zone list");
         return;
     };
     let _first = SEAM.set(layout);
-    let status = loader.link(target, &SEAM_NEXT, seam, HookFlags::NONE);
-    if status.is_ok() {
+    let target = Target::Pinned(pinned::building::SEAM_CHECK);
+    if loader.link_feature("zone checks", target, &SEAM_NEXT, seam, HookFlags::NONE) {
         crate::log!(INFO, "zone checks on");
-    } else {
-        crate::log!(WARN, "zone checks off: refused ({})", status.0);
     }
 }
 

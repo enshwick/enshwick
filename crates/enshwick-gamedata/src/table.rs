@@ -97,6 +97,10 @@ enum ConstantValue {
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the switches of a table row, as its TOML keys spell them"
+)]
 struct ConstantFull {
     value: Number,
     pattern: Option<String>,
@@ -114,6 +118,8 @@ struct ConstantFull {
     cell: Option<String>,
     #[serde(default = "carried")]
     carried: bool,
+    #[serde(default)]
+    fixed: bool,
 }
 
 const fn carried() -> bool {
@@ -161,6 +167,17 @@ impl ConstantFull {
             && (self.pattern.is_some() || self.via.is_some() || self.attribute.is_some())
         {
             return bad("`carried = false` takes no pattern, `via` or `attribute`");
+        }
+        match (self.pattern.is_some(), self.at.is_some(), self.fixed) {
+            (true, false, false) => {
+                return bad(
+                    "a pattern reads the value with `at` and `size`, or holds it in its fixed bytes with `fixed = true`; a value no code holds takes `carried = false`",
+                );
+            }
+            (_, true, true) | (false, _, true) => {
+                return bad("`fixed = true` takes a pattern and no `at`");
+            }
+            _ => {}
         }
         if let Some(cell) = &self.cell {
             if self.pattern.is_some()
@@ -275,25 +292,35 @@ impl Table {
             .constants
             .into_iter()
             .map(|(id, value)| {
-                let (value, text, operand, via, within, attribute, cell, carried) = match value {
-                    ConstantValue::Plain(value) => {
-                        (value.value(&id)?, None, None, None, None, None, None, true)
-                    }
-                    ConstantValue::Full(full) => {
-                        let operand = full.operand(&id)?;
-                        full.check(&id, &symbols)?;
-                        (
-                            full.value.value(&id)?,
-                            full.pattern,
-                            operand,
-                            full.via,
-                            full.within,
-                            full.attribute,
-                            full.cell,
-                            full.carried,
-                        )
-                    }
-                };
+                let (value, text, operand, via, within, attribute, cell, carried, fixed) =
+                    match value {
+                        ConstantValue::Plain(value) => (
+                            value.value(&id)?,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            true,
+                            false,
+                        ),
+                        ConstantValue::Full(full) => {
+                            let operand = full.operand(&id)?;
+                            full.check(&id, &symbols)?;
+                            (
+                                full.value.value(&id)?,
+                                full.pattern,
+                                operand,
+                                full.via,
+                                full.within,
+                                full.attribute,
+                                full.cell,
+                                full.carried,
+                                full.fixed,
+                            )
+                        }
+                    };
                 Ok(Constant {
                     pattern: pattern(&id, text)?,
                     id,
@@ -304,6 +331,7 @@ impl Table {
                     attribute,
                     cell,
                     carried,
+                    fixed,
                 })
             })
             .collect::<Result<_, TableError>>()?;

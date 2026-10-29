@@ -26,7 +26,7 @@ use rustc_hash::FxHashMap;
 
 use crate::catalogue::types::UI_IMAGE;
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 
@@ -242,19 +242,19 @@ pub(crate) fn link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let linked = loader.link_feature(
         "mod textures (content)",
-        loader.address(pinned::textures::REQUEST),
+        Target::Pinned(pinned::textures::REQUEST),
         &REQUEST_NEXT,
         request as RequestFn,
         none,
     ) && loader.link_feature(
         "mod textures (keys)",
-        loader.address(pinned::textures::KEYS),
+        Target::Pinned(pinned::textures::KEYS),
         &KEYS_NEXT,
         keys as KeysFn,
         none,
     ) && loader.link_feature(
         "mod textures (UI registry)",
-        loader.address(pinned::textures::REGISTRY_FILL),
+        Target::Pinned(pinned::textures::REGISTRY_FILL),
         &FILL_NEXT,
         fill as FillFn,
         none,

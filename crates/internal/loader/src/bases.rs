@@ -54,7 +54,7 @@ use crate::base_groups::limit::{Limits, MAX_BASES, VANILLA_ZONES, Zone, Zones};
 use crate::base_groups::window::{self, Kind};
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
-use crate::host::{Loader, Registered};
+use crate::host::{Loader, Registered, Target};
 use crate::registry::Registry;
 
 /// The build table ids this part of the loader names.
@@ -496,13 +496,14 @@ pub(crate) fn forget() {
 
 pub(crate) fn link(loader: &'static Loader) {
     let limits = LIMITS.seal();
-    if !limits.is_empty()
-        && let Some(target) = loader.address(pinned::building::MAX_ALTARS)
-    {
-        let status = loader.link(target, &MAX_ALTARS_NEXT, max_altars, HookFlags::NONE);
-        if !status.is_ok() {
-            crate::log!(WARN, "altar limit: refused ({})", status.0);
-        }
+    if !limits.is_empty() {
+        loader.link_feature(
+            "altar limit",
+            Target::Pinned(pinned::building::MAX_ALTARS),
+            &MAX_ALTARS_NEXT,
+            max_altars,
+            HookFlags::NONE,
+        );
     }
     let Some(sites) = SITES.get() else {
         return;

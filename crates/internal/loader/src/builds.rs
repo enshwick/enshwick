@@ -282,6 +282,54 @@ pub fn code_holds(head: Option<bool>, bytes: Option<bool>) -> bool {
     (head.is_some() || bytes.is_some()) && head != Some(false) && bytes != Some(false)
 }
 
+/// Why a hook stays off before anything is patched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unhooked {
+    /// The build has no address for the target.
+    Absent,
+    /// The code at the target is not what the table expects.
+    Moved,
+}
+
+impl core::fmt::Display for Unhooked {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Absent => "is not in this build",
+            Self::Moved => "does not read as the build table says",
+        })
+    }
+}
+
+/// The address a hook may patch: present, not zero, and with code that
+/// `holds` confirms, asked only once there is an address to read.
+///
+/// # Errors
+///
+/// [`Unhooked`] says why the hook stays off.
+pub fn hook_target(address: Option<u64>, holds: impl FnOnce() -> bool) -> Result<u64, Unhooked> {
+    let address = address.filter(|&a| a != 0).ok_or(Unhooked::Absent)?;
+    if holds() {
+        Ok(address)
+    } else {
+        Err(Unhooked::Moved)
+    }
+}
+
+/// The line that says why `feature` is off on the build named `build`: the
+/// table entry `id` and the `reason` it failed.
+#[must_use]
+pub fn off_line(feature: &str, build: &str, id: &str, reason: &str) -> String {
+    format!("{feature} off on {build}: {id} {reason}")
+}
+
+/// Whether the reflection scan read the game: a build whose scan finds no
+/// type or no system has a reflection format the loader does not know, so
+/// it runs vanilla as an unknown build.
+#[must_use]
+pub const fn reflection_read(types: usize, systems: usize) -> bool {
+    types > 0 && systems > 0
+}
+
 /// The embedded table of `side`'s newest build, for tests.
 ///
 /// # Panics
@@ -323,6 +371,75 @@ mod tests {
         assert!(!code_holds(Some(false), None));
         assert!(code_holds(None, Some(true)));
         assert!(!code_holds(None, Some(false)));
+    }
+
+    #[test]
+    fn a_hook_goes_only_where_the_code_is_found_and_holds() {
+        assert_eq!(hook_target(Some(0x10), || true), Ok(0x10));
+        assert_eq!(hook_target(None, || true), Err(Unhooked::Absent));
+        assert_eq!(hook_target(Some(0), || true), Err(Unhooked::Absent));
+        assert_eq!(hook_target(Some(0x10), || false), Err(Unhooked::Moved));
+    }
+
+    #[test]
+    fn the_code_of_an_absent_hook_is_never_read() {
+        assert_eq!(
+            hook_target(None, || unreachable!("read")),
+            Err(Unhooked::Absent)
+        );
+    }
+
+    #[test]
+    fn an_off_line_names_the_feature_the_build_the_entry_and_why() {
+        assert_eq!(
+            off_line(
+                "fog of war",
+                "1.0 client (26082781)",
+                "map.fog_reveal",
+                &Unhooked::Moved.to_string()
+            ),
+            "fog of war off on 1.0 client (26082781): map.fog_reveal does not read as the build table says"
+        );
+        assert_eq!(
+            off_line(
+                "chat lines",
+                "b",
+                "chat.post",
+                &Unhooked::Absent.to_string()
+            ),
+            "chat lines off on b: chat.post is not in this build"
+        );
+    }
+
+    #[test]
+    fn a_scan_that_reflects_no_type_or_no_system_is_an_unknown_build() {
+        assert!(reflection_read(4000, 300));
+        assert!(!reflection_read(0, 300));
+        assert!(!reflection_read(4000, 0));
+        assert!(!reflection_read(0, 0));
+    }
+
+    /// Every symbol the loader hooks offers a check of its code in every
+    /// table that pins it, so a table pinned wrong turns one feature off
+    /// instead of patching another function.
+    #[test]
+    fn every_hooked_symbol_offers_a_check_of_its_code_in_every_table() {
+        let mut unchecked = Vec::new();
+        for table in load() {
+            let resolved = table.resolve();
+            for symbol in crate::pinned::HOOKED {
+                let id = symbol.id();
+                if resolved.symbol(id).is_none() {
+                    continue;
+                }
+                let head = resolved.head(id).is_some();
+                let bytes = resolved.constant(&format!("{id}.bytes")).is_some();
+                if !head && !bytes {
+                    unchecked.push(format!("{}: {id}", table.name()));
+                }
+            }
+        }
+        assert!(unchecked.is_empty(), "no check offered: {unchecked:#?}");
     }
 
     #[cfg(windows)]

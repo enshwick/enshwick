@@ -41,7 +41,7 @@ pub(crate) use map::set as set_markers;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
-use crate::host::{Loader, Registered};
+use crate::host::{Loader, Registered, Target};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -472,8 +472,6 @@ pub(crate) fn link(loader: &'static Loader) {
             return;
         }
     };
-    let popup = engine.popup;
-    let hud = engine.hud;
     let _first = ENGINE.set(engine);
     if let Some(engine) = ENGINE.get() {
         mods::link(loader, engine);
@@ -481,14 +479,14 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     loader.link_feature(
         "HUD",
-        Some(hud),
+        Target::Pinned(pinned::ui::HUD),
         &HUD_NEXT,
         hud_detour as HudFn,
         HookFlags::NONE,
     );
     if loader.link_feature(
         "interface",
-        Some(popup),
+        Target::Pinned(pinned::ui::POPUP),
         &NEXT,
         detour as PopupFn,
         HookFlags::NONE,

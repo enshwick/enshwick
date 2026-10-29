@@ -25,7 +25,7 @@ use enshwick::abi::{FogInfo, Header, HookFlags, Side, Status};
 
 use crate::chains::Next;
 use crate::fog_image::{FogImage, FogShape, Plan, ReadError, TileRect, plan};
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -155,7 +155,7 @@ pub(crate) fn link(loader: &'static Loader) {
     // The destroy goes first: a copy must never outlive its fog.
     if !loader.link_feature(
         "fog of war",
-        loader.address(pinned::map::FOG_DESTROY),
+        Target::Pinned(pinned::map::FOG_DESTROY),
         &DESTROY_NEXT,
         destroy,
         HookFlags::NONE,
@@ -164,7 +164,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     loader.link_feature(
         "fog of war",
-        loader.address(pinned::map::FOG_REVEAL),
+        Target::Pinned(pinned::map::FOG_REVEAL),
         &NEXT,
         reveal,
         HookFlags::NONE,

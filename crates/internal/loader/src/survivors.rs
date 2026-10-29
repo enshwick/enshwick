@@ -21,7 +21,7 @@ use moves::{bed_check_link, move_link, update_link};
 use summons::spawn_link;
 
 use crate::chains::Next;
-use crate::host::{Loader, Registered, take};
+use crate::host::{Loader, Registered, Target, take};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Symbol};
@@ -481,19 +481,26 @@ pub(crate) fn register_status(
 
 /// `ui_npc_status`, while it reads the components its iterator layout
 /// assumes.
-fn menu_system(loader: &Loader) -> Option<u64> {
-    match crate::ecs::components_match(loader, "ui_npc_status", &UI_READS, &[]) {
-        Ok(()) => loader
-            .reflection
-            .system("ui_npc_status")
-            .ok()
-            .map(enshwick_gamedata::reflect::System::entry),
+fn menu_system(loader: &Loader) -> Option<Target<'static>> {
+    match crate::ecs::components_match(loader, MENU_SYSTEM, &UI_READS, &[]) {
+        Ok(()) => Some(Target::Found(
+            MENU_SYSTEM,
+            loader
+                .reflection
+                .system(MENU_SYSTEM)
+                .ok()
+                .map(enshwick_gamedata::reflect::System::entry),
+        )),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
+            crate::diag::part_off("survivor menu", &why);
             None
         }
     }
 }
+
+/// The system that fills the survivor menu.
+const MENU_SYSTEM: &str = "ui_npc_status";
 
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
@@ -513,32 +520,31 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let _first = SEALED.set(sealed);
     let _first = LOADED.set(loader);
-    let at = |name: Symbol| symbol(loader, name);
     if lookup {
         loader.link_feature(
-            pinned::npc::LOOKUP.id(),
-            at(pinned::npc::LOOKUP),
+            "survivor lookup",
+            Target::Pinned(pinned::npc::LOOKUP),
             &LOOKUP_NEXT,
             lookup_link as LookupFn,
             HookFlags::CALLER_FRAME,
         );
         loader.link_feature(
-            pinned::npc::LOOKUP_CURSOR.id(),
-            at(pinned::npc::LOOKUP_CURSOR),
+            "survivor lookup",
+            Target::Pinned(pinned::npc::LOOKUP_CURSOR),
             &CURSOR_NEXT,
             cursor_link as LookupFn,
             HookFlags::CALLER_FRAME,
         );
         loader.link_feature(
-            pinned::npc::MOVE.id(),
-            at(pinned::npc::MOVE),
+            "survivor lookup",
+            Target::Pinned(pinned::npc::MOVE),
             &MOVE_NEXT,
             move_link,
             HookFlags::NONE,
         );
         loader.link_feature(
-            pinned::npc::UPDATE.id(),
-            at(pinned::npc::UPDATE),
+            "survivor lookup",
+            Target::Pinned(pinned::npc::UPDATE),
             &UPDATE_NEXT,
             update_link,
             HookFlags::NONE,
@@ -546,8 +552,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if beds {
         loader.link_feature(
-            pinned::npc::BED_CHECK.id(),
-            at(pinned::npc::BED_CHECK),
+            "survivor bed checks",
+            Target::Pinned(pinned::npc::BED_CHECK),
             &BED_CHECK_NEXT,
             bed_check_link,
             HookFlags::NONE,
@@ -555,8 +561,8 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if summons {
         loader.link_feature(
-            pinned::survivors::SPAWN.id(),
-            at(pinned::survivors::SPAWN),
+            "survivor staffs",
+            Target::Pinned(pinned::survivors::SPAWN),
             &SPAWN_NEXT,
             spawn_link,
             HookFlags::NONE,
@@ -564,15 +570,14 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if items {
         loader.link_feature(
-            pinned::survivors::REGISTRY_LOAD.id(),
-            at(pinned::survivors::REGISTRY_LOAD),
+            "survivor filed items",
+            Target::Pinned(pinned::survivors::REGISTRY_LOAD),
             &REGISTRY_NEXT,
             registry_link,
             HookFlags::NONE,
         );
     }
-    if status {
-        let menu = menu_system(loader);
+    if status && let Some(menu) = menu_system(loader) {
         loader.link_feature(
             "survivor menu",
             menu,

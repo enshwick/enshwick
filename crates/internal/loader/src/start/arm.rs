@@ -42,19 +42,24 @@ pub(super) fn arm(loader: &Loader, frame: Option<FrameSlot>) {
         loader,
         failures.iter().filter(|f| f.inside).map(|f| f.target),
     );
+    let named =
+        |target: u64| crate::diag::name_of(target).unwrap_or_else(|| format!("{target:#x}"));
     for failure in &failures {
+        let id = named(failure.target);
+        let reason = format!("could not be armed: {}", failure.reason);
         crate::log!(
             ERROR,
-            "hook at {:#x} not armed: {}",
-            failure.target,
-            failure.reason
+            "{}",
+            crate::builds::off_line("hook", &loader.build.name, &id, &reason)
         );
     }
     for (owner, target) in owners {
-        loader.turn_off(
-            owner,
-            &format!("its hook at {target:#x} could not be armed"),
-        );
+        let id = named(target);
+        if owner.is_loader() {
+            crate::diag::part_off(&id, "its hook could not be armed");
+        } else {
+            loader.turn_off(owner, &format!("its hook on {id} could not be armed"));
+        }
     }
     crate::log!(INFO, "{armed} hook targets armed");
     if crate::diag::timing() {

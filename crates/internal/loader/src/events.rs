@@ -23,7 +23,7 @@ use enshwick::raw::read_at;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -272,28 +272,28 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     // A client follows every hosted game's start and stop.
     let client = loader.side == Side::CLIENT;
-    let link = |events: &[Event], symbol: Symbol| -> Option<u64> {
+    let link = |events: &[Event], symbol: Symbol| -> Option<Target<'static>> {
         let session = client && symbol == pinned::server::SET_STATE;
-        (events.is_empty() || wants(events) || session).then(|| loader.address(symbol).unwrap_or(0))
+        (events.is_empty() || wants(events) || session).then_some(Target::Pinned(symbol))
     };
     let none = HookFlags::NONE;
     let feature = "server events";
     let stepped = link(&[], pinned::server::POST_STEP)
-        .is_some_and(|target| loader.link_feature(feature, Some(target), &STEP_NEXT, step, none));
+        .is_some_and(|target| loader.link_feature(feature, target, &STEP_NEXT, step, none));
     if let Some(target) = link(
         &[Event::WORLD_LOADED, Event::SHUTDOWN_STARTED],
         pinned::server::SET_STATE,
     ) {
-        loader.link_feature(feature, Some(target), &STATE_NEXT, set_state, none);
+        loader.link_feature(feature, target, &STATE_NEXT, set_state, none);
     }
     if let Some(target) = link(&[Event::WORLD_SAVED], pinned::server::SAVE_STEP) {
-        loader.link_feature(feature, Some(target), &SAVE_NEXT, save, none);
+        loader.link_feature(feature, target, &SAVE_NEXT, save, none);
     }
     if let Some(target) = link(
         &[Event::PLAYER_LEFT, Event::PLAYER_JOINED],
         pinned::server::PLAYER_REMOVE,
     ) {
-        loader.link_feature(feature, Some(target), &REMOVE_NEXT, remove, none);
+        loader.link_feature(feature, target, &REMOVE_NEXT, remove, none);
     }
     // Building events wait in a queue only the step drains.
     if !stepped {
@@ -301,10 +301,10 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if let Some(target) = link(&[Event::BUILDING_PLACED], pinned::building::SPAWN_PROP) {
-        loader.link_feature(feature, Some(target), &PLACE_NEXT, place, none);
+        loader.link_feature(feature, target, &PLACE_NEXT, place, none);
     }
     if let Some(target) = link(&[Event::BUILDING_REMOVED], pinned::building::PICKUP) {
-        loader.link_feature(feature, Some(target), &PICKUP_NEXT, pickup, none);
+        loader.link_feature(feature, target, &PICKUP_NEXT, pickup, none);
     }
 }
 

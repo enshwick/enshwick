@@ -21,7 +21,7 @@ use rustc_hash::FxHashSet;
 
 use crate::chains::Next;
 use crate::fuse::Fuse;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -209,7 +209,7 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout));
-    let target = loader.address(pinned::ecs::EVENT_MERGE);
+    let target = Target::Pinned(pinned::ecs::EVENT_MERGE);
     if loader.link_feature("game events", target, &MERGE_NEXT, merge, HookFlags::NONE) {
         crate::log!(INFO, "game events: {count} subscriptions");
     }

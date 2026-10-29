@@ -16,7 +16,7 @@ use enshwick::Entity;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, RenameCall, RenameCallFn, Status, Str};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -159,16 +159,14 @@ pub(crate) fn link(loader: &'static Loader) {
     if !wanted {
         return;
     }
-    let Some(layout) = layout(loader) else {
+    if layout(loader).is_none() {
         crate::log!(WARN, "rename filters off: this build has no label layout");
         return;
-    };
-    let target = (layout.replace as *const ()).addr() as u64;
-    let status = loader.link(target, &REPLACE_NEXT, replace, HookFlags::CALLER_FRAME);
-    if status.is_ok() {
+    }
+    let target = Target::Pinned(pinned::label::REPLACE);
+    let flags = HookFlags::CALLER_FRAME;
+    if loader.link_feature("rename filters", target, &REPLACE_NEXT, replace, flags) {
         crate::log!(INFO, "rename filters on");
-    } else {
-        crate::log!(WARN, "rename filters off: refused ({})", status.0);
     }
 }
 

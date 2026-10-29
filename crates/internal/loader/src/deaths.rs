@@ -16,7 +16,7 @@ use enshwick::Entity;
 use enshwick::abi::{Event, Header, HookFlags, PlayerDeathData};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 
@@ -162,7 +162,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     loader.link_feature(
         "player deaths",
-        loader.address(pinned::player::DEATH_SINK),
+        Target::Pinned(pinned::player::DEATH_SINK),
         &SINK_NEXT,
         sink,
         HookFlags::NONE,
