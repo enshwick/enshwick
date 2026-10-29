@@ -38,6 +38,12 @@ Each entry names the pull request that made the change.
 
 ### Fixed
 
+- Migrations run once per world, all or nothing: each world keeps its own
+  record, `.migrations.toml`, and a copy of the files each migration
+  changed under `.backup/`, put back when a write fails or the game stops
+  part way. A record or store that does not read turns the mod off with
+  the reason instead of being skipped or read as empty (#670).
+
 - `WorldStore` writes a value again at the next save when its background
   write failed, instead of dropping the change (#667).
 
