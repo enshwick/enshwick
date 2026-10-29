@@ -470,6 +470,22 @@ mod tests {
         }
     }
 
+    /// On each executable, every table that pins a column grid's pages
+    /// reads where it holds its pages along x and along z.
+    #[test]
+    fn the_grid_depth_reads_on_each_executable() {
+        let rows = pinned_constants_on_executables(&["voxel.grid_pages", "voxel.grid_depth"]);
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            if std::env::var(var).is_ok() {
+                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
+                assert!(own.count() >= 2, "{var}: {rows:?}");
+            }
+        }
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x48), Some(0x4c)], "{table}");
+        }
+    }
+
     /// On each client executable, every client table reads where the
     /// slider's config fields end, before its stop list.
     #[test]
@@ -501,6 +517,22 @@ mod tests {
         }
         for (table, values) in clients {
             assert_eq!(values, &[Some(0x20)], "{table}");
+        }
+    }
+
+    /// On each executable, every table reads the bits of a connection
+    /// handle that name its chat slot, and the bytes a chat line counts
+    /// beyond its text.
+    #[test]
+    fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
+        let rows = constants_on_executables(&["chat.handle_slot", "chat.line_overhead"]);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        assert!(rows.len() >= named * 2, "{rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x7f), Some(0x17)], "{table}");
         }
     }
 
