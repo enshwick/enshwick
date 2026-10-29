@@ -28,6 +28,7 @@ type UndoApplyFn =
 /// server runs.
 pub(crate) fn ready(loader: &Loader) -> bool {
     crate::world::hosting()
+        && UndoRecord::head_holds(loader.offset(pinned::voxel::UNDO_EXTENT))
         && [
             pinned::voxel::UNDO_APPLY,
             pinned::voxel::READ_BOX,
