@@ -41,10 +41,7 @@ pub use rules::{
     changes, mod_rules_value, mods_complete, name, page, query_rules, rule, server_values,
     sync_value,
 };
-pub use target::{
-    Destination, GAME_PORT, HAS_ADDRESS, HOST, IP, PASSWORD, QUERY_PORT, TARGET_BYTES, Target,
-    destination, refuse,
-};
+pub use target::{Destination, Layout, LayoutError, TARGET_BYTES, Target};
 
 /// The names players read, by mod id: the client's own and those the server
 /// advertises.
@@ -67,4 +64,4 @@ pub(crate) use runtime::{NEXT, detour};
 mod runtime;
 
 #[cfg(windows)]
-pub(crate) use runtime::{names, set_names};
+pub(crate) use runtime::{names, set_layout, set_names};
