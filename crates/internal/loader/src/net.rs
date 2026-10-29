@@ -49,6 +49,9 @@ const MAX_WAITING: usize = 512;
 /// queue's size is not known, so the client sends no more than the server
 /// posts in one step.
 const LINES_PER_SEND: usize = 16;
+/// Tries to hand a client its join data, one a second, before the server
+/// stops and leaves the queue to other players.
+const MAX_HANDOVERS: u8 = 5;
 /// Frames a client takes from its server per second, and in one burst. The
 /// server's chat sends at most 16 lines a step to all its players and holds
 /// at most 256 waiting, so its own frames always fit; a server that sends
@@ -88,8 +91,9 @@ struct State {
     /// peers yet, by key.
     greeting: FxHashMap<u64, Peer>,
     /// On the server: the clients whose join data was dropped on the way,
-    /// by key; it goes again with the next look at the live slots.
-    owed: Vec<u64>,
+    /// by key, with the tries so far; it goes again with the next look at
+    /// the live slots.
+    owed: Vec<(u64, u8)>,
 }
 
 static CHANNELS: Registry<Channel> = Registry::new();
@@ -398,9 +402,10 @@ fn make_greeting_room(state: &mut State, key: u64, live: impl FnOnce() -> Option
 /// player slot in `live`, and sends the join data again to the clients in
 /// `live` that are owed it.
 pub(crate) fn keep_greeting(live: &[u64]) {
+    let sending = crate::chat::one_player_on();
     let owed = state(|s| {
         keep_greeting_in(s, live);
-        owed_in(s, live)
+        owed_in(s, live, sending)
     });
     for key in owed {
         hand_data(key);
@@ -408,24 +413,47 @@ pub(crate) fn keep_greeting(live: &[u64]) {
 }
 
 /// The clients still owed their join data: peers with a live slot in
-/// `live`; the rest are forgotten.
-fn owed_in(state: &mut State, live: &[u64]) -> Vec<u64> {
+/// `live`, while the server is `sending` lines to one player; the rest are
+/// forgotten.
+fn owed_in(state: &mut State, live: &[u64], sending: bool) -> Vec<u64> {
     let peers = &state.peers;
     state
         .owed
-        .retain(|key| live.contains(key) && peers.contains_key(key));
-    state.owed.clone()
+        .retain(|(key, _)| sending && live.contains(key) && peers.contains_key(key));
+    state.owed.iter().map(|&(key, _)| key).collect()
 }
 
-/// Notes whether client `key`'s join data went `whole` at `now`; what did
-/// not is owed.
-fn handed(state: &mut State, key: u64, whole: bool, now: Instant) {
-    state.owed.retain(|&k| k != key);
-    if !whole {
-        state.owed.push(key);
-    } else if let Some(peer) = state.peers.get_mut(&key) {
-        peer.handed_data(now);
+/// What became of a try to hand a client its join data.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handover {
+    /// All of it went.
+    Whole,
+    /// Some was dropped; it goes again. `first` for the first miss.
+    Again { first: bool },
+    /// Some was dropped [`MAX_HANDOVERS`] times; it goes no more.
+    GaveUp,
+}
+
+/// Notes whether client `key`'s join data went `whole` at `now`.
+fn handed(state: &mut State, key: u64, whole: bool, now: Instant) -> Handover {
+    let tries = state
+        .owed
+        .iter()
+        .find(|&&(k, _)| k == key)
+        .map_or(0, |&(_, tries)| tries);
+    state.owed.retain(|&(k, _)| k != key);
+    if whole {
+        if let Some(peer) = state.peers.get_mut(&key) {
+            peer.handed_data(now);
+        }
+        return Handover::Whole;
     }
+    let tries = tries.saturating_add(1);
+    if tries >= MAX_HANDOVERS {
+        return Handover::GaveUp;
+    }
+    state.owed.push((key, tries));
+    Handover::Again { first: tries == 1 }
 }
 
 /// Sends client `key` the data a joining client gets: item data, the
@@ -436,13 +464,17 @@ fn hand_data(key: u64) {
         .all(|records| item_data(key, records))
         && crate::recipes::hello(key)
         && crate::remote::sync_to(key);
-    if !whole {
-        crate::log!(
+    match state(|s| handed(s, key, whole, Instant::now())) {
+        Handover::Whole | Handover::Again { first: false } => {}
+        Handover::Again { first: true } => crate::log!(
             WARN,
             "mod messages: the join data for {key:016x} did not fit the line queue; it goes again"
-        );
+        ),
+        Handover::GaveUp => crate::log!(
+            WARN,
+            "mod messages: the join data for {key:016x} did not fit the line queue in {MAX_HANDOVERS} tries; the player gets it on joining again"
+        ),
     }
-    state(|s| handed(s, key, whole, Instant::now()));
 }
 
 fn keep_greeting_in(state: &mut State, live: &[u64]) {
@@ -813,19 +845,47 @@ mod tests {
         let mut state = State::default();
         let now = Instant::now();
         assert!(greet(&mut state, 7, now).data);
-        handed(&mut state, 7, false, now);
-        assert_eq!(owed_in(&mut state, &[7, 8]), [7]);
+        assert_eq!(
+            handed(&mut state, 7, false, now),
+            Handover::Again { first: true }
+        );
+        assert_eq!(owed_in(&mut state, &[7, 8], true), [7]);
         assert!(
             greet(&mut state, 7, now + Duration::from_secs(5)).data,
             "a hello before it went whole brings it again"
         );
-        handed(&mut state, 7, true, now + Duration::from_secs(6));
-        assert!(owed_in(&mut state, &[7]).is_empty());
+        assert_eq!(
+            handed(&mut state, 7, false, now),
+            Handover::Again { first: false },
+            "only the first miss is logged"
+        );
+        assert_eq!(
+            handed(&mut state, 7, true, now + Duration::from_secs(6)),
+            Handover::Whole
+        );
+        assert!(owed_in(&mut state, &[7], true).is_empty());
         assert!(!greet(&mut state, 7, now + Duration::from_secs(10)).data);
         handed(&mut state, 9, false, now);
         assert!(
-            owed_in(&mut state, &[7]).is_empty(),
+            owed_in(&mut state, &[7], true).is_empty(),
             "no peer and no live slot, nothing owed"
+        );
+    }
+
+    #[test]
+    fn owed_data_stops_after_a_few_tries_or_when_lines_for_one_player_are_off() {
+        let mut state = State::default();
+        let now = Instant::now();
+        let _greeting = greet(&mut state, 7, now);
+        let tries: Vec<Handover> = (0..MAX_HANDOVERS)
+            .map(|_| handed(&mut state, 7, false, now))
+            .collect();
+        assert_eq!(tries.last(), Some(&Handover::GaveUp));
+        assert!(owed_in(&mut state, &[7], true).is_empty());
+        handed(&mut state, 7, false, now);
+        assert!(
+            owed_in(&mut state, &[7], false).is_empty(),
+            "no line could go"
         );
     }
 
