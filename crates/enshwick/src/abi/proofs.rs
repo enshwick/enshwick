@@ -67,16 +67,23 @@ fn headed_write(stated: u8, step: u64, bytes: [u8; 64]) {
         return;
     }
     let mut buffer = written(&bytes, stated);
-    let before = buffer.clone();
     let value = TickData::new(step);
     // SAFETY: `buffer` holds exactly the `stated` bytes its header states,
     // and nothing else touches it.
     assert!(unsafe { write_headed(buffer.as_mut_ptr().cast::<TickData>(), value) });
     let known = stated.min(size_of::<TickData>());
-    let size = u32::try_from(known).unwrap();
-    assert_eq!(buffer[..4], size.to_le_bytes());
-    assert_eq!(buffer[4..known], bytes_of(&value)[4..known]);
-    assert_eq!(buffer[known..], before[known..]);
+    let size = u32::try_from(known).unwrap().to_le_bytes();
+    let fields = bytes_of(&value);
+    // One pass over the bytes: the solver keeps one copy of the buffer, not
+    // three slices and a clone of it.
+    for (i, &byte) in buffer.iter().enumerate() {
+        let expected = match i {
+            0..4 => size[i],
+            _ if i < known => fields[i],
+            _ => bytes[i],
+        };
+        assert_eq!(byte, expected, "byte {i} of {stated}");
+    }
 }
 
 #[expect(
