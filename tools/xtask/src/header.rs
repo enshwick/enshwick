@@ -283,7 +283,8 @@ fn parse_layout(text: &str) -> Result<Vec<Shape>, String> {
         let bad = || format!("{LAYOUT}:{}: unreadable line {line:?}", number + 1);
         let words: Vec<&str> = line.split_whitespace().collect();
         if let Some(field) = line.strip_prefix("    ") {
-            let words: Vec<&str> = field.split_whitespace().collect();
+            let (place, _type) = field.split_once(" type ").ok_or_else(bad)?;
+            let words: Vec<&str> = place.split_whitespace().collect();
             let [name, "at", offset, "size", _] = words[..] else {
                 return Err(bad());
             };
@@ -413,7 +414,7 @@ fn compile_asserts(header: &Path, source: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    const GOLDEN: &str = "Pair size 8 align 4\n    left at 0 size 4\n    right at 4 size 4\nStatus size 4 align 4\n    0 at 0 size 4\n";
+    const GOLDEN: &str = "Pair size 8 align 4\n    left at 0 size 4 type u32\n    right at 4 size 4 type extern \"system\" fn(u32)\nStatus size 4 align 4\n    0 at 0 size 4 type i32\n";
 
     #[test]
     fn the_layout_file_reads_into_shapes() {

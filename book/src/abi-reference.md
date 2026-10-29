@@ -11,7 +11,8 @@ C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 The layout file
 [`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/layout.txt)
-lists the layout of every ABI type, field by field. Its hash is the ABI
+lists the layout of every ABI type, field by field: offset, size and type,
+and for a function pointer its signature. Its hash is the ABI
 version,
 [`ABI_VERSION`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
 Any change to the layout is another version, and a loader loads only mods
