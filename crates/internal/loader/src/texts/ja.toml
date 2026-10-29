@@ -22,6 +22,7 @@
 "mods.others.beside" = "ゲームと同じ場所にあるほかの MOD のファイル：{files}"
 "mods.others.chain-failed" = "mods/chain から読み込めなかったもの：{files}"
 "mods.features.off" = "このゲームバージョンでオフまたは一部オフ：{features}"
+"mods.discovery.off" = "Mod の検出はオフです。プレイヤーがホストするゲームでは、ホストと参加するプレイヤーがお互いの Mod を確認できません。"
 "mods.extends" = "拡張先：{points}"
 "mods.settings" = "設定"
 "mods.settings.yours" = "あなたの設定"

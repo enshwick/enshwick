@@ -22,6 +22,7 @@
 "mods.others.beside" = "游戏旁的其他模组文件：{files}"
 "mods.others.chain-failed" = "未能从 mods/chain 加载：{files}"
 "mods.features.off" = "在此游戏版本上全部或部分关闭：{features}"
+"mods.discovery.off" = "模组检测已关闭：在玩家主持的游戏中，主机和加入的玩家看不到彼此的模组。"
 "mods.extends" = "扩展：{points}"
 "mods.settings" = "设置"
 "mods.settings.yours" = "你的设置"

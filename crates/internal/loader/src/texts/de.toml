@@ -22,6 +22,7 @@
 "mods.others.beside" = "Dateien anderer Mods neben dem Spiel: {files}"
 "mods.others.chain-failed" = "Nicht aus mods/chain geladen: {files}"
 "mods.features.off" = "Ganz oder teilweise aus in dieser Spielversion: {features}"
+"mods.discovery.off" = "Mod-Erkennung ist aus: In Spielen, die ein Spieler hostet, sehen der Host und die beitretenden Spieler die Mods der anderen nicht."
 "mods.extends" = "Erweitert: {points}"
 "mods.settings" = "Einstellungen"
 "mods.settings.yours" = "Deine Einstellungen"

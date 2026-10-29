@@ -22,6 +22,7 @@
 "mods.others.beside" = "ไฟล์ของม็อดอื่นที่อยู่ข้างเกม: {files}"
 "mods.others.chain-failed" = "โหลดจาก mods/chain ไม่สำเร็จ: {files}"
 "mods.features.off" = "ปิดทั้งหมดหรือบางส่วนในเกมเวอร์ชันนี้: {features}"
+"mods.discovery.off" = "การตรวจหาม็อดปิดอยู่ ในเกมที่ผู้เล่นเป็นโฮสต์ โฮสต์และผู้เล่นที่เข้าร่วมจะไม่เห็นม็อดของกันและกัน"
 "mods.extends" = "ขยาย: {points}"
 "mods.settings" = "การตั้งค่า"
 "mods.settings.yours" = "การตั้งค่าของคุณ"
