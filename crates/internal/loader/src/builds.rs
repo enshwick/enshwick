@@ -382,6 +382,29 @@ pub(crate) fn pinned_constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<
     })
 }
 
+/// The executables named in `named` that no row of `rows` was read on, so a
+/// test over rows only some tables pin still fails where nothing reads them.
+#[cfg(test)]
+pub(crate) fn executables_without_rows<'a>(
+    rows: &[(String, Vec<Option<u64>>)],
+    named: &[&'a str],
+) -> Vec<&'a str> {
+    named
+        .iter()
+        .copied()
+        .filter(|var| !rows.iter().any(|(table, _)| table.starts_with(var)))
+        .collect()
+}
+
+/// The executable variables this test run names.
+#[cfg(test)]
+pub(crate) fn named_executables() -> Vec<&'static str> {
+    ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+        .into_iter()
+        .filter(|var| std::env::var(var).is_ok())
+        .collect()
+}
+
 #[cfg(test)]
 fn constants_on_executables_by(
     ids: &[&str],
@@ -446,12 +469,8 @@ mod tests {
     #[test]
     fn the_grid_depth_reads_on_each_executable() {
         let rows = pinned_constants_on_executables(&["voxel.grid_pages", "voxel.grid_depth"]);
-        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            if std::env::var(var).is_ok() {
-                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
-                assert!(own.count() >= 2, "{var}: {rows:?}");
-            }
-        }
+        let unread = executables_without_rows(&rows, &named_executables());
+        assert!(unread.is_empty(), "{unread:?}: {rows:?}");
         for (table, values) in rows {
             assert_eq!(values, [Some(0x48), Some(0x4c)], "{table}");
         }
@@ -530,12 +549,8 @@ mod tests {
             "bases.sort_answer_word",
             "bases.sort_entity_position",
         ]);
-        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            if std::env::var(var).is_ok() {
-                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
-                assert!(own.count() >= 2, "{var}: {rows:?}");
-            }
-        }
+        let unread = executables_without_rows(&rows, &named_executables());
+        assert!(unread.is_empty(), "{unread:?}: {rows:?}");
         for (table, values) in rows {
             assert_eq!(values, [Some(0x4), Some(0x8)], "{table}");
         }
@@ -559,6 +574,26 @@ mod tests {
         for (table, values) in rows {
             assert_eq!(values, [Some(0x4), Some(0x8), Some(0x10)], "{table}");
         }
+    }
+
+    /// An executable whose own table lacks a row still counts as read when
+    /// a newer table carried onto it reads the row.
+    #[test]
+    fn a_carried_row_alone_reads_an_executable() {
+        let rows = vec![(
+            "ENSH_CLIENT_EXE: 1.0 client (26082781)".to_owned(),
+            vec![Some(4)],
+        )];
+        assert!(executables_without_rows(&rows, &["ENSH_CLIENT_EXE"]).is_empty());
+    }
+
+    #[test]
+    fn an_executable_with_no_row_is_named() {
+        let rows = vec![("ENSH_CLIENT_EXE: own".to_owned(), vec![Some(4)])];
+        assert_eq!(
+            executables_without_rows(&rows, &["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]),
+            ["ENSH_SERVER_EXE"]
+        );
     }
 
     #[test]
