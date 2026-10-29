@@ -113,18 +113,25 @@ pub(crate) fn run(args: &Args) -> anyhow::Result<bool> {
     if sections.is_empty() {
         bail!("no row is for the old build {}", spell(old_fp));
     }
-    staged.commit()?;
     let text = report::render(&spell(old_fp), &spell(new_fp), &sections);
-    match &args.report {
-        Some(path) => fs::write(path, &text).with_context(|| path.display().to_string())?,
-        None => {
-            let _shown = write!(std::io::stdout(), "{text}");
-        }
-    }
+    finish(staged, args.report.as_deref(), &text)?;
     Ok(sections
         .iter()
         .flat_map(|s| &s.lines)
         .all(|l| !l.status.needs_human()))
+}
+
+/// Writes the report to `report` before the staged files, so a report that
+/// cannot be written leaves every file as it was; without `report`, prints it
+/// once the files are written.
+fn finish(staged: Staged, report: Option<&Path>, text: &str) -> anyhow::Result<()> {
+    if let Some(path) = report {
+        fs::write(path, text).with_context(|| path.display().to_string())?;
+        return staged.commit();
+    }
+    staged.commit()?;
+    let _shown = write!(std::io::stdout(), "{text}");
+    Ok(())
 }
 
 /// Ports the loader's table for `old`'s build to `new`'s build; with
@@ -415,6 +422,25 @@ fn new_name(old: &str, steam_build: Option<u64>, fingerprint: Fingerprint) -> St
 mod tests {
     use super::rows::Table;
     use super::*;
+
+    #[test]
+    fn a_report_that_cannot_be_written_leaves_the_tables_unwritten() {
+        let dir = std::env::temp_dir().join(format!("enshwick-pin-report-{}", std::process::id()));
+        let _old = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let mut staged = Staged::default();
+        staged.create(dir.join("new.toml"), "table".into());
+        let report = dir.join("missing").join("report.md");
+        assert!(finish(staged, Some(&report), "report").is_err());
+        assert!(!dir.join("new.toml").exists());
+        let mut staged = Staged::default();
+        staged.create(dir.join("new.toml"), "table".into());
+        let report = dir.join("report.md");
+        finish(staged, Some(&report), "report").unwrap();
+        assert_eq!(fs::read_to_string(dir.join("new.toml")).unwrap(), "table");
+        assert_eq!(fs::read_to_string(report).unwrap(), "report");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn the_new_name_carries_the_new_build() {
