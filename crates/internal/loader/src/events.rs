@@ -59,7 +59,7 @@ const STATE_RUN: u8 = 5;
 const STATE_SHUTDOWN: u8 = 6;
 /// The state whose updates tear the server down and free it, the
 /// game-systems holder and the world, after `set_state` enters it (server
-/// 399, client 426). The name is enshwick's.
+/// 399, client 426). The name is Enshwick's.
 const STATE_TEAR_DOWN: u8 = 7;
 use crate::world::SLOT_IN_GAME;
 /// Slots the joined set can hold; the game has 16.

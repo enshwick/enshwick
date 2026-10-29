@@ -175,7 +175,7 @@ fn turn(rotation: [f32; 4], vector: [f64; 3]) -> [f64; 3] {
 
 /// Half the side of the box a player's rights are checked for around a
 /// prop's position, in metres, for an item without a placement box: this
-/// fallback box is enshwick's own.
+/// fallback box is Enshwick's own.
 pub(crate) const REACH: f64 = 2.0;
 
 /// A prop as the world holds it: the template its item places, the item,

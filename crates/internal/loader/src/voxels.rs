@@ -75,7 +75,7 @@ impl ReadBox {
 /// The height of the world a box may reach, in voxels: 1,024 metres.
 /// The game keeps no height: each column holds as many bricks as its
 /// ground reaches and reads as air above (server 399, client 426). The
-/// cap is enshwick's, above every place the game builds.
+/// cap is Enshwick's, above every place the game builds.
 pub(crate) const HEIGHT: u32 = 2048;
 
 /// The voxels of the world on each axis, x, y and z: the game's own edge

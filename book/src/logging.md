@@ -260,11 +260,11 @@ a warning in the loader's log and listed with the conflicts:
 
 | Line ends with | The change came |
 | --- | --- |
-| `by another program before enshwick started` | before the loader, from a DLL in `mods/chain/` or another program |
+| `by another program before Enshwick started` | before the loader, from a DLL in `mods/chain/` or another program |
 | `by a.dll while it loaded` | while that DLL loaded, from its own start-up code |
-| `by another program while enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
+| `by another program while Enshwick unloaded the DLLs it skips` | while the loader unloaded a mod that is off or an older copy |
 | `by you.mod in its init` or `in its ready` | while that mod's `init` or `ready` ran |
-| `by another program after every init, before enshwick armed its hooks` | between the last `init` and arming, from a thread of some mod or another program |
+| `by another program after every init, before Enshwick turned on its hooks` | between the last `init` and arming, from a thread of some mod or another program |
 
 The copy starts from the executable on disk, so code changed before the
 loader started shows too; when the file's code does not read as the code in
