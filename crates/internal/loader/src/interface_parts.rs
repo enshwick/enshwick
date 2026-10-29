@@ -187,7 +187,7 @@ mod tests {
     /// A function of an optional part that does not read turns only that
     /// part off, with its reason, and the interface stays on.
     #[test]
-    fn a_part_s_broken_function_turns_only_that_part_off() {
+    fn a_broken_part_function_turns_only_that_part_off() {
         assert!(check_functions(|_| Ok(())).unwrap().is_empty());
         for part in Part::ALL {
             for &name in part.functions {

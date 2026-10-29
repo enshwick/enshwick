@@ -813,10 +813,11 @@ impl Engine {
         macro_rules! function {
             ($name:expr, $ty:ty) => {{
                 let address = at($name);
-                // SAFETY: `check_functions` with `check_function` returned unless every function of `FUNCTIONS` but
-                // `ui.context`, a data address, has first eight bytes that
-                // match its `<name>.bytes` constant, so the address is the game
-                // function the build table types as `$ty`.
+                // SAFETY: `check_functions` with `check_function` returned
+                // unless every function of `FUNCTIONS` but `ui.context`, a
+                // data address, has first eight bytes that match its
+                // `<name>.bytes` constant, so the address is the game function
+                // the build table types as `$ty`.
                 unsafe { core::mem::transmute::<usize, $ty>(address) }
             }};
         }
