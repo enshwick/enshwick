@@ -998,6 +998,11 @@ revision = 1
 "bases.stock_entities" = { value = 0x18, via = "bases.stock_cache", within = 0x24c, pattern = "4C 89 59 ?? E9 ?? ?? ?? ?? 48 89 7C 24 60", at = 3, size = 1 }
 "bases.stock_count" = { value = 0x20, via = "bases.stock_cache", within = 0x24c, pattern = "48 89 41 ?? 4C 89 59 18 E9 ?? ?? ?? ??", at = 3, size = 1 }
 "bases.stock_answer_size" = { value = 0x28, via = "bases.stock_cache", within = 0x24c, pattern = "4C 89 7E ?? 48 8B 5C 24 50 48 83 C4 30", at = 3, size = 1, plus = 8 }
+# Where the game calls an allocator through its vtable: the allocate a
+# container grows by, with kind 4, and the free the grouping releases a
+# base's list by.
+"bases.heap_allocate" = { value = 0x8, pattern = "4C 8B 09 88 44 24 20 4D 8B 51 ?? 41 B1 04 41 FF D2", at = 10, size = 1 }
+"bases.heap_free" = { value = 0x10, via = "bases.grouping", within = 0x468, pattern = "48 8B 0B 45 33 C0 48 8B 01 FF 50 ??", at = 11, size = 1 }
 "weather.slot_size" = { value = 0x18, pattern = "E8 ?? ?? ?? ?? 48 FF C6 48 8D 6D ?? 48 3B B3 ?? ?? ?? ?? 72 D1 48 8B 7C 24 ??", at = 11, size = 1 }
 "weather.slot_current" = { value = 0x10, pattern = "48 8B BB ?? ?? ?? ?? 48 8B CB 8B 54 2F ?? E8 ?? ?? ?? ?? 8B 54 2F ?? 48 8B CB", at = 13, size = 1 }
 "weather.slot_next" = { value = 0x14, pattern = "48 8B CB 8B 54 2F ?? E8 ?? ?? ?? ?? 8B 54 2F ?? 48 8B CB E8 ?? ?? ?? ?? 48 FF C6", at = 15, size = 1 }
