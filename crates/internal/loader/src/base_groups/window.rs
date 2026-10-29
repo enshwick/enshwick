@@ -338,6 +338,73 @@ mod tests {
     }
 
     #[test]
+    fn the_tightest_geometry_every_check_allows_holds_the_window() {
+        let (records, slots) = ((0, 0x100), (0x1000, 0x4d));
+        let server = slots.0 + VANILLA * slots.1;
+        let client = slots.0 + WINDOW * slots.1;
+        let geometry = Geometry::new(records, slots, (server, client)).unwrap();
+        assert_eq!(geometry.record_at(VANILLA), geometry.slots());
+        assert_eq!(geometry.slot_at(WINDOW), client);
+        assert_eq!(geometry.record_at(WINDOW), geometry.slot_at(INDICES));
+        assert_eq!(geometry.block(), 0x1_0000);
+        let refused = [
+            (
+                ((1, records.1), slots, (server, client)),
+                GeometryError::Records,
+            ),
+            ((records, slots, (server - 1, client)), GeometryError::Slots),
+            (
+                (records, slots, (server, client + 1)),
+                GeometryError::Overlap,
+            ),
+            (
+                (records, slots, (client + 1, server)),
+                GeometryError::Overlap,
+            ),
+            (
+                ((0, records.1 - 1), slots, (server, client)),
+                GeometryError::Overlap,
+            ),
+        ];
+        for ((records, slots, sizes), why) in refused {
+            assert_eq!(
+                Geometry::new(records, slots, sizes),
+                Err(why),
+                "{records:?} {slots:?} {sizes:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_widest_strides_are_taken() {
+        let slots = (0x4000, MOST_SLOT);
+        let server = slots.0 + VANILLA * MOST_SLOT;
+        let geometry = Geometry::new((0, MOST_RECORD), slots, (server, 0)).unwrap();
+        assert_eq!(geometry.block(), INDICES * MOST_RECORD);
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn an_accepted_geometry_puts_every_window_index_behind_the_game_s_fields(
+            (records, record) in (0usize..0x100, 1..=MOST_RECORD),
+            (slot, gaps) in (1..=MOST_SLOT, (0usize..0x100, 0usize..0x800)),
+            client in 0usize..0x1_0000,
+        ) {
+            let slots = records + VANILLA * record + gaps.0;
+            let server = slots + VANILLA * slot + gaps.1;
+            let Ok(geometry) = Geometry::new((records, record), (slots, slot), (server, client)) else {
+                return Ok(());
+            };
+            proptest::prop_assert!(geometry.record_at(VANILLA) <= geometry.slots());
+            proptest::prop_assert!(geometry.slot_at(VANILLA) <= server);
+            proptest::prop_assert!(geometry.slot_at(WINDOW) >= server.max(client));
+            proptest::prop_assert!(geometry.slot_at(INDICES) <= geometry.record_at(WINDOW));
+            proptest::prop_assert_eq!(geometry.record_at(INDICES), geometry.block());
+            proptest::prop_assert!(u32::try_from(geometry.block()).is_ok());
+        }
+    }
+
+    #[test]
     fn indices_follow_base_order_and_stop_at_the_most() {
         assert_eq!(indices(3).collect::<Vec<_>>(), [0, 1, 2]);
         let all: Vec<usize> = indices(500).collect();
