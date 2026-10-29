@@ -1462,6 +1462,43 @@ pub const FACTS: &[(&str, Fact)] = &[
             name: "Visible",
         },
     ),
+    (
+        "map_marker_registry",
+        Fact::Type("keen::MapMarkerRegistryResource"),
+    ),
+    (
+        "map_marker_type.type_name",
+        offset("keen::MapMarkerType", "typeName"),
+    ),
+    (
+        "map_marker_type.sorting_category",
+        offset("keen::MapMarkerType", "sortingCategory"),
+    ),
+    (
+        "map_marker_type.is_fast_travel_destination",
+        offset("keen::MapMarkerType", "isFastTravelDestination"),
+    ),
+    ("marker_type_sorting", Fact::Type("keen::MarkerTypeSorting")),
+    (
+        "marker_type_sorting.none",
+        enum_constant("keen::MarkerTypeSorting", "None"),
+    ),
+    (
+        "marker_type_sorting.flame_related",
+        enum_constant("keen::MarkerTypeSorting", "FlameRelated"),
+    ),
+    (
+        "marker_type_sorting.dungeons",
+        enum_constant("keen::MarkerTypeSorting", "Dungeons"),
+    ),
+    (
+        "marker_type_sorting.locations",
+        enum_constant("keen::MarkerTypeSorting", "Locations"),
+    ),
+    (
+        "marker_type_sorting.custom_marker",
+        enum_constant("keen::MarkerTypeSorting", "CustomMarker"),
+    ),
     ("scene_chunk", Fact::Type("keen::SceneEntityChunkResource")),
     (
         "scene_chunk.templates",

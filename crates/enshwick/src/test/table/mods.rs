@@ -112,7 +112,8 @@ pub(crate) extern "system" fn replaced(
 }
 
 /// Copies up to `capacity` of `items` to `out`, `entry_size` bytes apart, and
-/// writes how many there are.
+/// writes how many there are; refuses a non-null `out` whose entries are
+/// shorter than a header, as the loader does.
 pub(crate) fn list<T: Copy>(
     items: &[T],
     out: *mut T,
@@ -124,6 +125,10 @@ pub(crate) fn list<T: Copy>(
     let shared = stride.min(size_of::<T>());
     let capacity = usize::try_from(capacity).unwrap_or(0);
     if !out.is_null() {
+        if stride < size_of::<crate::abi::Header>() {
+            return Status::BAD_ARGS;
+        }
+        let size = u32::try_from(shared).unwrap_or(u32::MAX);
         for (i, info) in items.iter().take(capacity).enumerate() {
             let entry = out.cast::<u8>().wrapping_add(i * stride);
             // SAFETY: the safe layer passes room for `capacity` entries of
@@ -131,6 +136,9 @@ pub(crate) fn list<T: Copy>(
             unsafe {
                 core::ptr::copy_nonoverlapping(core::ptr::from_ref(info).cast(), entry, shared);
             }
+            // SAFETY: the header's `size` is the entry's first field, inside
+            // its `stride` bytes, at least a header as checked above.
+            unsafe { entry.cast::<u32>().write_unaligned(size) };
         }
     }
     put(count, u32::try_from(items.len()).unwrap_or(u32::MAX))

@@ -47,8 +47,11 @@ is not finite.
 
 A marker's type is a `MapMarkerTypeId`, the key of the game's marker type
 registry. The registry is game data and grows with the game, so the API
-has no list of types; compare ids, or keep your own table of the ones a mod
-cares about. A marker without a type or a label has `None` there.
+has no fixed list of types. A client reads the registry with
+`Ui::map_marker_types` ([Map markers](interface.md#map-markers)), whose
+`MapMarkerType` entries carry the same keys with their group and flags; a
+dedicated server's data has no registry. A marker without a type or a
+label has `None` there.
 
 The label is a text tag. A client reads its text with
 `enshwick::i18n::game_text(label.id())`; a dedicated server has no texts.

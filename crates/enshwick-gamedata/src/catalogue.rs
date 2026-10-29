@@ -626,6 +626,63 @@ mod tests {
     }
 
     /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
+    /// (skipped without them), the marker type registry keeps its types as
+    /// a blob array of marker types, and each marker type sorting resolves
+    /// to a value of its own.
+    #[test]
+    fn the_marker_type_registry_is_reflected_as_a_blob_array_of_marker_types() {
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            let Ok(path) = std::env::var(var) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image =
+                crate::reflect::Image::parse(&bytes, crate::reflect::Layout::File, None).unwrap();
+            let reflection = Reflection::scan(&image);
+            let Some(Fact::Path(path)) = fact(ids::MAP_MARKER_REGISTRY_TYPES) else {
+                panic!("{} is not a path", ids::MAP_MARKER_REGISTRY_TYPES);
+            };
+            assert_eq!(path[0].0, type_name(ids::MAP_MARKER_REGISTRY), "{var}");
+            let &(ty, field) = path.last().unwrap();
+            let fields = reflection.type_info(ty).unwrap().fields();
+            let types = fields.iter().find(|f| f.name() == field).unwrap();
+            let array = reflection.type_info(types.type_name().unwrap()).unwrap();
+            assert_eq!(array.kind(), crate::reflect::Kind::BlobArray, "{var}");
+            assert_eq!(
+                array.inner(),
+                Some(type_name(ids::MAP_MARKER_TYPE)),
+                "{var}"
+            );
+            let groups: Vec<&str> = FACTS
+                .iter()
+                .filter_map(|&(id, fact)| match fact {
+                    Fact::Constant { ty, .. } if ty == type_name(ids::MARKER_TYPE_SORTING) => {
+                        Some(id)
+                    }
+                    _ => None,
+                })
+                .collect();
+            let mut values: Vec<u64> = groups
+                .iter()
+                .map(|&id| constant(id, &reflection).unwrap())
+                .collect();
+            values.sort_unstable();
+            values.dedup();
+            assert_eq!(values.len(), groups.len(), "{var}");
+            let declared = reflection
+                .type_info(type_name(ids::MARKER_TYPE_SORTING))
+                .unwrap()
+                .enum_values()
+                .len();
+            assert_eq!(
+                groups.len(),
+                declared,
+                "{var}: a sorting the catalogue lacks"
+            );
+        }
+    }
+
+    /// With either executable `ENSH_SERVER_EXE` or `ENSH_CLIENT_EXE` names
     /// (skipped without them), every slot constant of the kinds resolves,
     /// each to a value of its own.
     #[test]

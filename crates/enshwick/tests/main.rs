@@ -67,6 +67,8 @@ mod loot_drops;
 mod loot_table_changes;
 #[cfg(feature = "unstable")]
 mod map;
+#[cfg(feature = "unstable")]
+mod map_marker_types;
 mod mid_hook;
 mod migrations;
 mod mod_index;

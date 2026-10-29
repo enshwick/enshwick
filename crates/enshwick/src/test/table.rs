@@ -61,7 +61,9 @@ use transactions::{
     transaction_commit, transaction_commit_for, transaction_entities, transaction_status,
     transaction_undo,
 };
-use ui::{fog_open, fog_read, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget};
+use ui::{
+    fog_open, fog_read, map_marker_types, ui_dialog, ui_frame, ui_hud, ui_markers, ui_widget,
+};
 use world::{
     account_action, actions, allowlist_has, allowlist_set, build_rights, chat, component,
     component_write, destroy, emit, entities, entity_template, event_types, feature,
@@ -799,4 +801,5 @@ pub(crate) static TABLE: HostApi = HostApi {
     set_tick_every: super::ticks::set_tick_every,
     map_frame,
     request_base_limits,
+    map_marker_types,
 };
