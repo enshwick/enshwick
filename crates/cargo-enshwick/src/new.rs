@@ -491,4 +491,52 @@ mod tests {
     fn a_bad_id_is_refused() {
         assert!(files("Area Loot", Side::Server, &Place::Alone).is_err());
     }
+
+    /// The target folder this test binary runs from, which the checked crate
+    /// shares so the API crate compiles once across runs.
+    fn target_dir() -> PathBuf {
+        let exe = std::env::current_exe().unwrap();
+        exe.ancestors()
+            .find(|dir| dir.file_name().is_some_and(|name| name == "target"))
+            .map_or_else(
+                || std::env::temp_dir().join("enshwick-new-target"),
+                Path::to_path_buf,
+            )
+            .join("new-mod")
+    }
+
+    #[test]
+    fn a_new_mod_compiles_against_this_api() {
+        let dir = scratch("compiles");
+        create(&dir, "you.street-lanterns", Side::Both).unwrap();
+        let root = dir.join("street-lanterns");
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let api = workspace.join("crates/enshwick");
+        let manifest = root.join("Cargo.toml");
+        let pinned = format!("enshwick = \"={}\"", enshwick::VERSION);
+        let cargo = std::fs::read_to_string(&manifest).unwrap();
+        assert!(cargo.contains(&pinned), "{cargo}");
+        let local = format!("enshwick = {{ path = {:?} }}", api.display().to_string());
+        std::fs::write(&manifest, cargo.replace(&pinned, &local)).unwrap();
+        // The workspace's lock holds every version the crate needs, so the
+        // check runs offline.
+        std::fs::copy(workspace.join("Cargo.lock"), root.join("Cargo.lock")).unwrap();
+        let output = std::process::Command::new(env!("CARGO"))
+            .args(["check", "--offline", "--quiet", "--manifest-path"])
+            .arg(&manifest)
+            .arg("--target-dir")
+            .arg(target_dir())
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_TARGET_DIR")
+            .output();
+        let Ok(output) = output else {
+            eprintln!("skipped: cargo does not run in this process");
+            std::fs::remove_dir_all(&dir).unwrap();
+            return;
+        };
+        std::fs::remove_dir_all(&dir).unwrap();
+        let errors = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{errors}");
+        assert!(!errors.contains("warning"), "{errors}");
+    }
 }

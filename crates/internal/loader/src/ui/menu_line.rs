@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 
 use enshwick::abi::Registers;
 
+use crate::diag::KeptLine;
 use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::locks::Relock;
@@ -16,9 +17,8 @@ use super::engine::Engine;
 use super::{ENGINE, copy};
 
 thread_local! {
-    /// The line, with the count of mods off it was made for, so a frame
-    /// only builds it again when that count changes.
-    static LINE: RefCell<Option<(usize, String)>> = const { RefCell::new(None) };
+    /// The line, made again only when the count of mods off changes.
+    static LINE: RefCell<KeptLine> = const { RefCell::new(KeptLine::new()) };
 }
 
 /// Turns the line off, alone, at its first panic.
@@ -28,22 +28,15 @@ static FUSE: Fuse = Fuse::new("the main menu's Enshwick line");
 /// whose site holds and that has the version line's look.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
     let build = &loader.build.name;
-    if engine.legal_line_site == 0 {
-        let why = if loader.address(pinned::ui::LEGAL_LINE_SITE).is_none() {
-            "its table has no ui.legal_line_site"
-        } else {
-            "the code at ui.legal_line_site does not match its pattern or bytes"
-        };
+    let off = crate::diag::menu_line_off(
+        engine.legal_line_site != 0,
+        loader.address(pinned::ui::LEGAL_LINE_SITE).is_some(),
+        engine.has_legal_look(),
+    );
+    if let Some(why) = off {
         crate::log!(
             WARN,
             "interface: the main menu's Enshwick line off on {build}: {why}"
-        );
-        return;
-    }
-    if !engine.has_legal_look() {
-        crate::log!(
-            WARN,
-            "interface: the main menu's Enshwick line off on {build}: reflection lacks the version line's look (legalText, fontSizes.xsmall)"
         );
         return;
     }
@@ -73,13 +66,10 @@ fn line(loader: &Loader) -> super::engine::UiText {
         .filter(|m| m.off.load(Ordering::Acquire))
         .count();
     LINE.with_borrow_mut(|kept| {
-        if kept.as_ref().is_none_or(|(was, _)| *was != off) {
+        let line = kept.get(off, || {
             let lacking = !loader.build.lacking(crate::TABLE_IDS).is_empty();
-            let line =
-                crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, lacking);
-            *kept = Some((off, line));
-        }
-        let line = kept.as_ref().map_or("", |(_, line)| line.as_str());
+            crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, lacking)
+        });
         copy(&[line.as_bytes()])
     })
 }

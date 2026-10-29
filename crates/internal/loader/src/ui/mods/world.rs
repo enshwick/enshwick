@@ -1,16 +1,16 @@
 use std::sync::atomic::Ordering;
 
 use enshwick::abi::{Registers, UiWidget};
-use enshwick::config::{Scope, Stage};
 
 use crate::configure::rows;
-use crate::configure::rows::{Lock, Row};
+use crate::configure::rows::Row;
 use crate::host::Loader;
 use crate::locks::Relock;
+use crate::mods_screen;
 use crate::texts;
 use crate::ui::{ENGINE, Painter};
 
-use super::{FRAME, LAST_TAB, WORLD, draw_row, joined_elsewhere, server_table};
+use super::{FRAME, LAST_TAB, WORLD, draw_row, joined_elsewhere};
 
 /// The mods' rows in the world settings, kept while the view shows.
 pub(super) struct WorldRows {
@@ -31,24 +31,14 @@ pub(super) fn world_rows(
         .iter()
         .enumerate()
         .filter_map(|(index, record)| {
-            let mut schema = record.schema.relock().clone()?;
-            schema.fields.retain(|f| f.scope == Scope::World);
-            if schema.fields.is_empty() {
-                return None;
-            }
             // Joined to another's game: its join values, shown, not changed.
             let joined = joined_elsewhere();
+            let schema = mods_screen::world_settings(record.schema.relock().clone()?, joined)?;
             let server = record
                 .server_synced
                 .relock()
                 .clone()
-                .and_then(|values| server_table(&values));
-            if joined {
-                schema.fields.retain(|f| f.stage == Stage::Sync);
-                if schema.fields.is_empty() {
-                    return None;
-                }
-            }
+                .and_then(|values| mods_screen::server_table(&values));
             let file = crate::worlds::show_text(loader, record);
             let texts = record.texts.relock().clone();
             let words = texts.as_ref().map(|texts| rows::Words {
@@ -57,9 +47,7 @@ pub(super) fn world_rows(
             });
             let mut rows = rows::rows(&schema, &file, server.as_ref().filter(|_| joined), words);
             if joined {
-                for row in &mut rows {
-                    row.lock = Lock::Server;
-                }
+                mods_screen::lock_to_server(&mut rows);
             }
             Some((index, record.label(), schema, rows))
         })
@@ -129,7 +117,9 @@ pub(super) fn world(read_only: bool) {
     // it, and `paint` stays inside this call.
     let paint = unsafe { Painter::new(engine, context) };
     WORLD.with_borrow_mut(|slot| {
-        let fresh = slot.as_ref().is_none_or(|w| w.frame + 1 < frame);
+        let fresh = slot
+            .as_ref()
+            .is_none_or(|w| mods_screen::missed_frame(w.frame, frame));
         if fresh {
             *slot = Some(WorldRows {
                 frame,
@@ -168,10 +158,11 @@ pub(super) fn world(read_only: bool) {
         for (index, label, schema, rows) in &world.mods {
             paint.label(label.as_bytes(), UiWidget::STYLE_H3, false, false);
             for row in rows {
-                let mut row = row.clone();
-                if read_only && row.lock == Lock::Open {
-                    row.lock = Lock::File;
-                }
+                let row = if read_only {
+                    mods_screen::read_only(row.clone())
+                } else {
+                    row.clone()
+                };
                 let id = loader.mods.get(*index).map_or("", |m| m.id.as_str());
                 if let Some(value) = draw_row(&paint, id, schema, &row, None) {
                     changed = Some((*index, row.key.clone(), value));

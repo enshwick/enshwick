@@ -64,6 +64,11 @@ mod detour;
 )]
 mod developer_tools;
 pub mod diag;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game discovers mods")
+)]
+mod discovery;
 pub mod early;
 #[cfg(windows)]
 mod ecs;
@@ -130,6 +135,7 @@ mod mid;
 pub mod migrations;
 pub mod mod_index;
 pub mod modlist;
+pub mod mods_screen;
 #[cfg(windows)]
 mod module;
 pub mod moved_worlds;
@@ -270,6 +276,7 @@ mod voxels;
 mod watch;
 #[cfg(windows)]
 mod weather;
+pub mod widget_checks;
 pub mod wire;
 #[cfg(windows)]
 mod world;

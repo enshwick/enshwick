@@ -173,7 +173,7 @@ impl Rates {
         if Rate::from_id(rate).is_none() {
             return Status::BAD_ARGS;
         }
-        if Rate::from_id(rate).is_some_and(Rate::seen_by_clients) && !joins {
+        if !enshwick::__private::rules::may_declare_rate(rate, joins) {
             return Status::REFUSED;
         }
         if !available {

@@ -4,6 +4,7 @@ use enshwick::abi::{Status, Str, UiWidget};
 
 use crate::host::Loader;
 use crate::mod_index::ModIndex;
+use crate::widget_checks;
 
 use super::engine::{Engine, TextBuffer, Typed, UiText};
 use super::{ARENA, DRAWING, WINDOW};
@@ -196,11 +197,12 @@ pub(super) fn draw(
         return Status::BAD_ARGS;
     };
     let read_only = raw.flags & UiWidget::READ_ONLY != 0;
+    let order = widget_checks::order(raw.kind, drawing.window_open);
+    if !order.is_ok() {
+        return order;
+    }
     match raw.kind {
         UiWidget::WINDOW => {
-            if drawing.window_open {
-                return Status::REFUSED;
-            }
             let (Some(record), Some(title)) =
                 (loader.mods.get(drawing.owner.get()), read(raw.detail))
             else {
@@ -220,10 +222,7 @@ pub(super) fn draw(
             Status::OK
         }
         UiWidget::END => {
-            if !drawing.window_open {
-                return Status::REFUSED;
-            }
-            // SAFETY: `window_open`, checked by the guard before it, is set
+            // SAFETY: `window_open`, checked by `widget_checks::order`, is set
             // only when this callback's `WINDOW` widget started the
             // thread-local window in this frame with this `context`; it stayed
             // in place, and widgets close every frame they open.
@@ -238,10 +237,9 @@ pub(super) fn draw(
             unsafe { engine.sound(context, raw.style) };
             Status::OK
         }
-        _ if !drawing.window_open => Status::REFUSED,
         UiWidget::LABEL => {
             let text = copy(&[text]);
-            // SAFETY: `window_open`, checked by the guard before it, means this
+            // SAFETY: `window_open`, checked by `widget_checks::order`, means this
             // callback's window is open in this frame on this thread with its
             // non-zero `context`; the text lives in the frame's arena.
             unsafe {
@@ -257,7 +255,7 @@ pub(super) fn draw(
         }
         UiWidget::BUTTON => {
             let text = copy(&[text]);
-            // SAFETY: `window_open`, checked by the guard before it, means this
+            // SAFETY: `window_open`, checked by `widget_checks::order`, means this
             // callback's window is open in this frame on this thread; the text
             // lives in the frame's arena.
             raw.result = u32::from(unsafe { engine.button(&text, !read_only) });
@@ -267,14 +265,12 @@ pub(super) fn draw(
             row(engine, context, copy(&[text]), raw, read_only)
         }
         UiWidget::PROGRESS => {
-            if !(raw.min.is_finite() && raw.max.is_finite() && raw.value.is_finite())
-                || raw.max <= raw.min
-            {
+            let Some(value) = widget_checks::progress(raw.value, raw.min, raw.max) else {
                 return Status::BAD_ARGS;
-            }
-            // SAFETY: `window_open`, checked by the guard before it, means this
+            };
+            // SAFETY: `window_open`, checked by `widget_checks::order`, means this
             // callback's window is open in this frame on this thread.
-            unsafe { engine.progress(raw.value.clamp(raw.min, raw.max), raw.min, raw.max) };
+            unsafe { engine.progress(value, raw.min, raw.max) };
             Status::OK
         }
         _ => Status::MISSING,
@@ -301,11 +297,9 @@ pub(super) fn row(
             }
         }
         UiWidget::SLIDER => {
-            if !(raw.min.is_finite() && raw.max.is_finite() && raw.value.is_finite()) {
+            let Some((range, value)) = widget_checks::slider(raw.value, raw.min, raw.max) else {
                 return Status::BAD_ARGS;
-            }
-            let range = (raw.min.min(raw.max), raw.max.max(raw.min));
-            let value = raw.value.clamp(range.0, range.1);
+            };
             // SAFETY: `draw` calls this only with this callback's window open
             // in this frame on this thread; the label lives in the frame's
             // arena.
@@ -317,12 +311,12 @@ pub(super) fn row(
             }
         }
         _ => {
-            let count = (raw.option_count as usize).min(enshwick::ui::MAX_OPTIONS);
-            if raw.options.is_null() || count == 0 {
+            let Some(count) = widget_checks::options(raw.option_count, !raw.options.is_null())
+            else {
                 return Status::BAD_ARGS;
-            }
-            // SAFETY: `raw.options` is non-null, checked by the guard before
-            // it, and the mod's `UiWidget` holds `option_count` aligned `Str`s
+            };
+            // SAFETY: `raw.options` is non-null, checked by
+            // `widget_checks::options`, and the mod's `UiWidget` holds `option_count` aligned `Str`s
             // there for the call by the ABI's borrow rule; `count` is at most
             // that.
             let given = unsafe { core::slice::from_raw_parts(raw.options, count) };
