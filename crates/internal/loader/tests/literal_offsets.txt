@@ -7,4 +7,3 @@
 # A constant or a call that is no offset into game memory ends with
 # `// bound, not a game offset: <why>`.
 1 src/base_groups/grouping.rs
-4 src/base_groups/window.rs

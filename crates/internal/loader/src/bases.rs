@@ -1172,6 +1172,30 @@ mod tests {
         }
     }
 
+    /// A table whose stock slots are too narrow to put index 93 behind the
+    /// server's fields keeps 16 bases, naming the stock slots.
+    #[test]
+    fn a_table_that_puts_the_window_on_a_vanilla_field_keeps_16_bases() {
+        use enshwick_gamedata::{Side as TableSide, newest};
+
+        let tables = crate::builds::load();
+        let resolved = newest(&tables, TableSide::Server).unwrap().resolve();
+        let offset = |id: Constant| {
+            if id == pinned::bases::SLOT {
+                return Some(0x10);
+            }
+            resolved
+                .constant(id.id())
+                .and_then(|value| usize::try_from(value).ok())
+        };
+        let why = loops::Layout::read(&offset).unwrap_err();
+        assert_eq!(
+            why,
+            past16::SiteError::Window(window::GeometryError::Overlap)
+        );
+        assert_eq!(why.entry(), pinned::bases::SLOTS.id());
+    }
+
     /// Fields whose answer cannot hold a zone box are refused, with the
     /// fields named.
     #[test]

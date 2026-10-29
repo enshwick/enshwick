@@ -83,14 +83,9 @@ pub(super) unsafe fn count_npcs(obj: *mut u8, game: &Game, layout: &Layout) {
         }
     }
     for i in window_of(game) {
+        let record = rec(obj, i, &layout.window);
         // SAFETY: record `i` holds a base; its u16 count of NPCs at home.
-        unsafe {
-            write_at(
-                rec(obj, i, &layout.window),
-                layout.record.npcs_home,
-                home[i],
-            )
-        };
+        unsafe { write_at(record, layout.record.npcs_home, home[i]) };
         // SAFETY: the live object's u16 total of placed NPCs.
         unsafe { add_u16(obj, object.npcs, placed[i]) };
         // SAFETY: the live object's u16 total of NPCs at home.
@@ -167,8 +162,8 @@ unsafe fn clean(obj: *mut u8, site: &str, clear: Clear) {
     }
 }
 
-/// `clear` for every window record of the object `game` views, whose fields
-/// are `record`.
+/// `clear` for every window record of the object `game` views, laid out as
+/// `layout`.
 ///
 /// # Safety
 ///

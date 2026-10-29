@@ -242,8 +242,10 @@ impl Layout {
         let o = &self.object;
         let m = &self.map;
         let s = &self.stock;
-        let w = &self.window;
-        let object_end = w.record_at(window::WINDOW).min(w.slot_at(window::WINDOW));
+        let geometry = &self.window;
+        let object_end = geometry
+            .record_at(window::WINDOW)
+            .min(geometry.slot_at(window::WINDOW));
         let map_end = [
             m.bitmap + 8,
             m.buckets + 8,
@@ -267,7 +269,7 @@ impl Layout {
             (bases::RECORD_NPCS_HOME, r.npcs_home + 2),
             (bases::RECORD_ANIMALS, r.animals + ANIMAL_COUNTS * 2),
         ]
-        .map(|(id, end)| (id, end, w.record()));
+        .map(|(id, end)| (id, end, geometry.record()));
         let in_object = [
             (bases::REBUILT, o.rebuilt + 4),
             (bases::CHANGES, o.changes + 4),
@@ -284,7 +286,7 @@ impl Layout {
         ]
         .map(|(id, end)| (id, end, object_end));
         let in_values = [
-            (bases::MAP_COUNT, map_end, w.slot()),
+            (bases::MAP_COUNT, map_end, geometry.slot()),
             (
                 bases::RECORD_SET,
                 r.set,

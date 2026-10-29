@@ -422,7 +422,7 @@ fn the_cleanups_clear_the_window_records_and_leave_the_rest() {
         clear_props,
     ] {
         // SAFETY: the test's object; each clear writes in its record.
-        unsafe { clean_window(obj, &game, &RECORD, clear) };
+        unsafe { clean_window(obj, &game, &LAYOUT, clear) };
     }
     for i in [93, 96] {
         assert_eq!(fake.u32_at(at(i) + RECORD.beds + 4), 0);

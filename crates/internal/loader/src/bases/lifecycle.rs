@@ -301,6 +301,7 @@ mod tests {
         teardown,
         slot_init,
         slot_free,
+        window: GEOMETRY,
     };
 
     /// A grown object full of garbage, as the game's allocator may hand it.
@@ -331,7 +332,7 @@ mod tests {
         // SAFETY: a fresh block of the grown size.
         assert!(unsafe { init(obj, &CODE) });
         let bytes: &[u8] = bytemuck::cast_slice(&block);
-        let made = constructed(ctor);
+        let made = constructed(&CODE);
         for i in window::WINDOW..window::INDICES {
             let at = GEOMETRY.record_at(i);
             assert_eq!(&bytes[at..at + GEOMETRY.record()], made, "record {i}");

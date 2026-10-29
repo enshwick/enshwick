@@ -130,23 +130,12 @@ pub(super) unsafe extern "system" fn sort_all(obj: *mut u8, world: *mut u8) {
 pub(super) unsafe fn empty_lists(obj: *mut u8, game: &Game, layout: &Layout) {
     let len = game.fields().container.len;
     for i in window_of(game) {
+        let record = rec(obj, i, &layout.window);
         // SAFETY: record `i` holds a base; the u64 length of its first list.
-        unsafe {
-            write_at(
-                rec(obj, i, &layout.window),
-                layout.record.list_all + len,
-                0u64,
-            )
-        };
+        unsafe { write_at(record, layout.record.list_all + len, 0u64) };
         // SAFETY: record `i` holds a base; the u64 length of its second
         // list.
-        unsafe {
-            write_at(
-                rec(obj, i, &layout.window),
-                layout.record.list_kept + len,
-                0u64,
-            )
-        };
+        unsafe { write_at(record, layout.record.list_kept + len, 0u64) };
     }
 }
 
