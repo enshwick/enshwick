@@ -18,7 +18,8 @@ use enshwick::abi::Status;
 
 use crate::host::Loader;
 use crate::locks::Relock;
-use crate::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, push, step_batch};
+pub(crate) use crate::notice_queue::MAX_TEXT;
+use crate::notice_queue::{MAX_WAITING, Pushed, SLOTS, Waiting, cut, push, step_batch};
 use crate::pinned;
 use crate::pinned::Symbol;
 
@@ -29,9 +30,6 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::world::ENTITIES.id(),
     pinned::world::TIME.id(),
 ];
-
-/// The longest notice text, in bytes.
-pub(crate) const MAX_TEXT: usize = 255;
 
 /// The GUIDs of the loader's notice text tags.
 #[expect(clippy::cast_possible_truncation, reason = "the slot fits a byte")]
@@ -177,15 +175,6 @@ pub(crate) fn queue(entity: Entity, text: &str) {
             "notices arrive faster than the game shows them: {MAX_WAITING} wait, newer ones are dropped"
         );
     }
-}
-
-/// `text` cut to the [`MAX_TEXT`] bytes the game shows, at a character.
-fn cut(text: &str) -> &str {
-    let mut end = text.len().min(MAX_TEXT);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
 }
 
 /// Writes `text` into the next notice text tag; its GUID.

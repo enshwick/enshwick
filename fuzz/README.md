@@ -11,6 +11,8 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `remote_edit` | a remote settings edit, applied to a settings file |
 | `join_lists` | the mod lists in a server's advertisement and a player's hello |
 | `server_rules` | a server's query rules reply |
+| `item_records` | the mod item data records a server sends a client |
+| `notices` | notice messages from a server, queued and shown as the client's steps show them |
 | `action_sheet` | an actions sheet and the arguments of an action |
 | `pattern` | a code pattern, run over code |
 | `table` | a build table, its patterns run over code |
@@ -20,6 +22,7 @@ built by cargo-fuzz with the nightly compiler and AddressSanitizer.
 | `mod_manifests` | mod manifests, resolved into a load order |
 | `point_schemas` | another mod's point schemas, from its DLL or as text, written as definitions |
 | `settings_files` | the mod list, its lock, a settings schema, texts, a pack manifest |
+| `item_save` | a world's file of mod item data |
 
 Targets that take several fields split their input at the byte `0xff`, which
 no UTF-8 text holds, so a seed is text fields joined by that byte.
@@ -37,5 +40,6 @@ holds the small seed corpus kept in the repository. A crash is written to
 `cargo +nightly fuzz run -O --target-dir target/fuzz <target> <file>`.
 A crash becomes a regression test beside the code it found, then a fix.
 
-The nightly CI lane runs every target for a few minutes; a pull request that
+The nightly CI lane runs every target for a few minutes, from the corpus the
+nights before found, and minimises that corpus after; a pull request that
 changes what the targets read runs each for a few seconds.

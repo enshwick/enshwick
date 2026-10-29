@@ -174,6 +174,47 @@ pub fn remote_message(data: &[u8]) -> Option<Message> {
     Message::read(kind, body)
 }
 
+/// A notice message for the player of entity `entity`: the control kind,
+/// the entity's id and the text.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::{NOTICE, control, notice, read_notice};
+///
+/// let data = notice(42, "Low fuel");
+/// let rest = data.strip_prefix(control(NOTICE).as_slice()).unwrap();
+/// assert_eq!(read_notice(rest), Some((42, "Low fuel")));
+/// ```
+#[must_use]
+pub fn notice(entity: u32, text: &str) -> Vec<u8> {
+    let mut data = control(NOTICE);
+    data.extend_from_slice(&entity.to_le_bytes());
+    data.extend_from_slice(text.as_bytes());
+    data
+}
+
+/// The entity and text of a notice message, after its control kind; `None`
+/// when the text is not UTF-8 or the entity is cut short.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::wire::read_notice;
+///
+/// assert_eq!(read_notice(b"\x07\0\0\0hi"), Some((7, "hi")));
+/// assert_eq!(read_notice(b"\x07\0\0"), None);
+/// assert_eq!(read_notice(b"\x07\0\0\0\xff"), None);
+/// ```
+#[must_use]
+pub fn read_notice(bytes: &[u8]) -> Option<(u32, &str)> {
+    let (entity, text) = bytes.split_first_chunk::<4>()?;
+    Some((
+        u32::from_le_bytes(*entity),
+        core::str::from_utf8(text).ok()?,
+    ))
+}
+
 /// The position a demo message carries: three little-endian `i64`.
 ///
 /// # Examples

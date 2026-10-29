@@ -19,7 +19,7 @@ const ASIDE: u8 = 1;
 
 /// One record as the file holds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Saved<'a> {
+pub struct Saved<'a> {
     pub(crate) id: &'a str,
     pub(crate) anchor: Anchor,
     pub(crate) check: u32,
@@ -96,7 +96,8 @@ fn record_with_id(bytes: &[u8]) -> Option<(Saved<'_>, &[u8])> {
 /// The records of a file; `None` for a file of another kind, a newer
 /// version or a record that does not read, which the loader leaves alone
 /// rather than write back without what it could not read.
-pub(crate) fn read(bytes: &[u8]) -> Option<Vec<Saved<'_>>> {
+#[must_use]
+pub fn read(bytes: &[u8]) -> Option<Vec<Saved<'_>>> {
     let rest = bytes.strip_prefix(MAGIC.as_slice())?;
     let (&version, mut rest) = rest.split_first()?;
     let next = match version {
@@ -116,7 +117,7 @@ pub(crate) fn read(bytes: &[u8]) -> Option<Vec<Saved<'_>>> {
 }
 
 /// A file's bytes: the header, then `records` in order.
-pub(crate) fn write<'a>(records: impl IntoIterator<Item = Saved<'a>>) -> Vec<u8> {
+pub fn write<'a>(records: impl IntoIterator<Item = Saved<'a>>) -> Vec<u8> {
     let mut bytes = MAGIC.to_vec();
     bytes.push(VERSION);
     for record in records {

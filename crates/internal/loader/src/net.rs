@@ -38,7 +38,7 @@ use crate::mod_index::ModIndex;
 use crate::registry::Registry;
 use crate::wire::{
     CONTROL, Frame, ITEM_DATA, NOTICE, PART_BYTES, PREFIX, Peer, UI_DEMO, WELCOME, assemble,
-    control, demo_position, frames, hello, parse, read_hello, remote_message,
+    control, demo_position, frames, hello, parse, read_hello, read_notice, remote_message,
 };
 pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE, frame_body, is_frame};
 
@@ -217,9 +217,7 @@ pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status>
     if !ready(key) {
         return Err(Status::MISSING);
     }
-    let mut data = control(NOTICE);
-    data.extend_from_slice(&entity.0.to_le_bytes());
-    data.extend_from_slice(text.as_bytes());
+    let data = crate::wire::notice(entity.0, text);
     let lines = control_frames(&data).ok_or(Status::BAD_ARGS)?;
     if !crate::chat::send_frames(key, &lines) {
         return Err(Status::REFUSED);
@@ -572,10 +570,9 @@ pub(crate) fn client_received(text: &str) -> bool {
             crate::item_data::received(records);
         } else if single
             && let Some(rest) = frame.part().strip_prefix(control(NOTICE).as_slice())
-            && let Some((entity, text)) = rest.split_first_chunk::<4>()
-            && let Ok(text) = core::str::from_utf8(text)
+            && let Some((entity, text)) = read_notice(rest)
         {
-            crate::notices::queue(Entity(u32::from_le_bytes(*entity)), text);
+            crate::notices::queue(Entity(entity), text);
         } else if single && let Some(rest) = frame.part().strip_prefix(control(UI_DEMO).as_slice())
         {
             if crate::host::loader().is_some_and(|loader| loader.developer_tools) {
