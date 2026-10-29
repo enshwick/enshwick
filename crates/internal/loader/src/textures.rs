@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use arc_swap::ArcSwapOption;
 use enshwick::abi::{HookFlags, Side, Status};
-use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_ptr_at};
+use enshwick::raw::{read_at, read_bytes_at, read_ptr_at, write_at, write_bytes_at, write_ptr_at};
 use rustc_hash::FxHashMap;
 
 use crate::catalogue::types::UI_IMAGE;
@@ -47,6 +47,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::textures::RING_EVENT.id(),
     pinned::textures::RING_HEAD.id(),
     pinned::textures::RING_LAST.id(),
+    pinned::textures::RING_RECORD_CONTEXT.id(),
+    pinned::textures::RING_RECORD_SIZE.id(),
     pinned::textures::RING_RECORDS.id(),
     pinned::textures::RING_TAIL.id(),
     pinned::textures::RING_TAIL_NEXT.id(),
@@ -116,6 +118,18 @@ struct KeysOut {
     count: u64,
 }
 
+/// The start of a request: its buffer and how many bytes it asks for, which
+/// the game copies as one 16-byte span (client builds 410 and 426).
+#[derive(Clone, Copy, bytemuck::Zeroable, bytemuck::Pod)]
+#[repr(C)]
+struct RequestSpan {
+    buffer: usize,
+    wanted: u64,
+}
+
+/// The room the loader keeps for one completion record of a ring.
+const RECORD_ROOM: usize = 0x40; // bound, not a game offset: the loader's room for a ring record
+
 /// A key in the database's tables: GUID, type, part and two zero words.
 const KEY: usize = 32;
 
@@ -128,6 +142,12 @@ struct Layout {
     request_context: usize,
     request_offset: usize,
     ring_records: usize,
+    /// How many bytes a ring's completion record takes, at most
+    /// [`RECORD_ROOM`].
+    ring_record_size: usize,
+    /// Where a completion record holds its 16-byte context, after its code
+    /// byte and inside the record.
+    ring_record_context: usize,
     ring_head: usize,
     ring_last: usize,
     ring_tail: usize,
@@ -170,6 +190,14 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 request_context: o("request_context")?,
                 request_offset: o("request_offset")?,
                 ring_records: o("ring_records")?,
+                ring_record_size: o("ring_record_size").filter(|&size| size <= RECORD_ROOM)?,
+                ring_record_context: o("ring_record_context").filter(|&at| {
+                    at > 0
+                        && at
+                            .checked_add(size_of::<[u8; 16]>())
+                            .zip(o("ring_record_size"))
+                            .is_some_and(|(end, size)| end <= size)
+                })?,
                 ring_head: o("ring_head")?,
                 ring_last: o("ring_last")?,
                 ring_tail: o("ring_tail")?,
@@ -366,12 +394,10 @@ unsafe extern "system" fn request(requester: *mut u8, requests: *mut Requests) {
 /// - `requester` is the live, non-null requester that asked.
 /// - Called on the requesting thread, inside the content request.
 unsafe fn answer(layout: &Layout, requester: *mut u8, request: *const u8, data: &[u8]) {
-    // SAFETY: the caller guarantees a live request; a request starts with
-    // the pointer to its buffer.
-    let buffer = unsafe { read_ptr_at::<u8>(request, 0) };
-    // SAFETY: the caller guarantees a live request; its second word is the
-    // u64 count of bytes it asks for.
-    let wanted: u64 = unsafe { read_at(request, 8) };
+    // SAFETY: the caller guarantees a live request, which starts with the
+    // span of its buffer and the count of bytes it asks for.
+    let RequestSpan { buffer, wanted } = unsafe { read_at(request, 0) };
+    let buffer = core::ptr::with_exposed_provenance_mut::<u8>(buffer);
     // SAFETY: the caller guarantees a live request; its u32 offset into the
     // content sits at the build table's `textures.request_offset` offset.
     let offset: u32 = unsafe { read_at(request, layout.request_offset) };
@@ -431,13 +457,15 @@ unsafe fn post(layout: &Layout, requester: *mut u8, code: u8, context: [u8; 16])
         // SAFETY: the caller guarantees a live requester; its ring records
         // pointer sits at the build table's `textures.ring_records` offset.
         let records = unsafe { read_ptr_at::<u8>(requester, layout.ring_records) };
-        let mut record = [0u8; 24];
+        let (size, at) = (layout.ring_record_size, layout.ring_record_context);
+        let mut record = [0u8; RECORD_ROOM];
         record[0] = code;
-        record[8..].copy_from_slice(&context);
-        // SAFETY: `records` is the live requester's ring of 24-byte records
-        // and `head` its current head, the record the game's own post writes
-        // next; the caller's requesting thread is the ring's only writer now.
-        unsafe { write_at(records, head as usize * 24, record) };
+        record[at..at + context.len()].copy_from_slice(&context);
+        // SAFETY: `records` is the live requester's ring of records of the
+        // build table's `textures.ring_record_size` and `head` its current
+        // head, the record the game's own post writes next; the caller's
+        // requesting thread is the ring's only writer now.
+        unsafe { write_bytes_at(records, head as usize * size, &record[..size]) };
         // SAFETY: the caller guarantees a live requester on the requesting
         // thread; its u32 ring head sits at the build table's
         // `textures.ring_head` offset.
