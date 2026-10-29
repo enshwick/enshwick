@@ -11,7 +11,7 @@ use crate::abi::{
 use crate::points::{Decision, LinkPlace, Point, Verdict, order};
 
 use super::Installed;
-use super::table::{put, view, with};
+use super::table::{Registration, put, view, with};
 
 /// A point as declared: name, input and answer layouts, whether links
 /// change the answer and whether they may refuse.
@@ -133,17 +133,24 @@ pub(crate) extern "system" fn define_point(
     spec: *const PointSpec,
     out: *mut PointHandle,
 ) -> Status {
+    if with(false, |s| s.registration == Registration::Closed) {
+        return Status::TOO_LATE;
+    }
     let Some(declared) = declared(spec) else {
         return Status::BAD_ARGS;
     };
-    let id = with(None, |s| {
+    let defined = with(Err(Status::MISSING), |s| {
+        let named_after_the_mod = s
+            .manifest
+            .as_ref()
+            .is_none_or(|manifest| crate::rules::is_named_after(&declared.name, &manifest.names()));
         let points = &mut s.points;
-        if points
+        let defined_twice = points
             .defined
             .iter()
-            .any(|d| d.declared.name == declared.name)
-        {
-            return None;
+            .any(|d| d.declared.name == declared.name);
+        if !named_after_the_mod || defined_twice {
+            return Err(Status::REFUSED);
         }
         let live: &'static AtomicU32 = Box::leak(Box::new(AtomicU32::new(0)));
         points.defined.push(Defined {
@@ -151,12 +158,11 @@ pub(crate) extern "system" fn define_point(
             live,
             links: Vec::new(),
         });
-        u32::try_from(points.defined.len() - 1)
-            .ok()
-            .map(|id| (id, live))
+        let id = u32::try_from(points.defined.len() - 1).map_err(|_| Status::REFUSED)?;
+        Ok((id, live))
     });
-    match id {
-        Some((id, live)) => put(
+    match defined {
+        Ok((id, live)) => put(
             out,
             PointHandle {
                 header: crate::abi::Header::of::<PointHandle>(),
@@ -164,7 +170,7 @@ pub(crate) extern "system" fn define_point(
                 live,
             },
         ),
-        None => Status::REFUSED,
+        Err(status) => status,
     }
 }
 
@@ -174,6 +180,9 @@ pub(crate) extern "system" fn attach_point(
     callback: PointFn,
     user: *mut c_void,
 ) -> Status {
+    if with(false, |s| s.registration == Registration::Closed) {
+        return Status::TOO_LATE;
+    }
     // SAFETY: the safe layer passes a valid link.
     let Some(link) = (unsafe { link.as_ref() }) else {
         return Status::BAD_ARGS;

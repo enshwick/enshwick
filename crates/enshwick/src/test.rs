@@ -90,7 +90,7 @@ mod props;
 mod rates;
 mod settings;
 mod stats;
-mod table;
+pub(crate) mod table;
 mod ticks;
 mod transactions;
 mod ui;
@@ -465,7 +465,11 @@ impl Installed {
     pub unsafe fn init(&self, init: InitFn) -> Status {
         // SAFETY: the caller guarantees `init` is the `enshwick_mod_init` of a
         // `declare_mod!`, which takes the static fake table and a handle.
-        unsafe { init(self.api(), self.handle) }
+        let status = unsafe { init(self.api(), self.handle) };
+        // The loader arms once every mod is initialised; what only init may
+        // ask for comes too late from here on.
+        table::with((), |s| s.registration = table::Registration::Closed);
+        status
     }
 
     /// Tells the mod its hooks are armed.
