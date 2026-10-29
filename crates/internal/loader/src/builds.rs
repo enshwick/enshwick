@@ -533,12 +533,8 @@ mod tests {
             "building.box_extent",
             "voxel.undo_extent",
         ]);
-        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
-            if std::env::var(var).is_ok() {
-                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
-                assert!(own.count() >= 2, "{var}: {rows:?}");
-            }
-        }
+        let unread = executables_without_rows(&rows, &named_executables());
+        assert!(unread.is_empty(), "{unread:?}: {rows:?}");
         for (table, values) in rows {
             assert_eq!(
                 values,

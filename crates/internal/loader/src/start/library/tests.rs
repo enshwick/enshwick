@@ -255,8 +255,14 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
     let dir = std::env::temp_dir().join(format!("enshwick-discovery-{}", std::process::id()));
     let _old = std::fs::remove_dir_all(&dir);
     let Some(built) = build_fixtures(&dir.join("fixtures")) else {
-        eprintln!("skipped: cargo does not run in this process");
-        std::fs::remove_dir_all(&dir).unwrap();
+        eprintln!(
+            "skipped: the cargo that built these tests ({}) does not run in this process, as under Wine",
+            env!("CARGO")
+        );
+        // Under Wine the fixtures are refused before their folder is made.
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir).unwrap();
+        }
         return;
     };
     let mods = dir.join("game").join("mods");
