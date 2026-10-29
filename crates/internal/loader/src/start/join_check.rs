@@ -8,12 +8,14 @@ use super::game::identify;
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
 pub(crate) const TABLE_IDS: &[&str] = &[
-    pinned::join::TARGET_GAME_PORT.id(),
+    pinned::join::TARGET_COPY.id(),
+    pinned::join::TARGET_GAME_PORT_READ.id(),
     pinned::join::TARGET_HAS_ADDRESS.id(),
     pinned::join::TARGET_HOST.id(),
-    pinned::join::TARGET_IP.id(),
+    pinned::join::TARGET_IP_READ.id(),
     pinned::join::TARGET_PASSWORD.id(),
-    pinned::join::TARGET_QUERY_PORT.id(),
+    pinned::join::TARGET_QUERY_PORT_READ.id(),
+    pinned::join::TARGET_WORD_COPY.id(),
     pinned::net::JOIN_GAME.id(),
     pinned::net::PROVIDER_VTABLE.id(),
     pinned::user::START_INTERACTION.id(),
