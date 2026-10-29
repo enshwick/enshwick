@@ -9,7 +9,7 @@
 
 // The ABI version: a hash of the layout of every ABI type. A loader
 // loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0xb1ad3412
+#define ENSHWICK_ABI_VERSION 0x6e14bb78
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
