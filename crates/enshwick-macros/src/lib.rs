@@ -47,9 +47,9 @@ pub fn derive_config(input: TokenStream) -> TokenStream {
 /// named after it in upper case joins it, as `enshwick::detour!`
 /// declares one.
 ///
-/// The first argument is `next: Next<F>` with `F` the target's
+/// The first argument is `next: Next<'_, F>` with `F` the target's
 /// `extern "system" fn` type or an alias of it, the rest are the target's
-/// arguments by plain names. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// arguments by plain names; arguments and the return value are `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. Examples are on `enshwick::hook`.
 #[proc_macro_attribute]
 pub fn hook(args: TokenStream, item: TokenStream) -> TokenStream {
@@ -119,7 +119,7 @@ fn expand_hook(
             ));
         };
         idents.push(&pat.ident);
-        arg_types.push(&typed.ty);
+        arg_types.push(&*typed.ty);
     }
     let output = &sig.output;
     let body = &sig.ident;
@@ -138,12 +138,7 @@ fn expand_hook(
         Ident::new("frame", Span::mixed_site()),
         Ident::new("returned", Span::mixed_site()),
     );
-    // The arguments go to the body and, after a panic, to `next` again.
-    let copies = arg_types.iter().map(|ty| {
-        quote::quote_spanned! {ty.span()=>
-            ::enshwick::__private::hook_argument::<#ty>();
-        }
-    });
+    let copies = copy_checks(&arg_types, output);
     // The entry point is a safe fn, which coerces to the target's type
     // whether that is `unsafe` or not, so `F` may be any name for it.
     Ok(quote! {
@@ -152,7 +147,7 @@ fn expand_hook(
         #(#kept)*
         #vis static #name: ::enshwick::Hook<#target> = {
             const _: () = {
-                #(#copies)*
+                #copies
             };
             extern "system" fn #entry(#(#idents: #arg_types),*) #output {
                 let #frame = ::enshwick::__private::Frame::new();
@@ -165,10 +160,15 @@ fn expand_hook(
                         ::enshwick::__private::fault_in(::core::stringify!(#name));
                         match #frame.take() {
                             ::core::option::Option::Some(#returned) => #returned,
-                            #[allow(unused_unsafe)]
-                            // SAFETY: the rest of the chain takes the
-                            // arguments the game passed.
-                            ::core::option::Option::None => unsafe { #next.call(#(#idents),*) },
+                            #[allow(
+                                unused_unsafe,
+                                reason = "the target may be a safe or an unsafe fn"
+                            )]
+                            ::core::option::Option::None => {
+                                // SAFETY: the rest of the chain takes the
+                                // arguments the game passed.
+                                unsafe { #next.call(#(#idents),*) }
+                            }
                         }
                     }
                 }
@@ -744,7 +744,25 @@ fn local(name: &str) -> Ident {
     Ident::new(&format!("__enshwick_{name}"), Span::mixed_site())
 }
 
-/// The `F` of `next: Next<F>`; `None` when the argument has another shape.
+/// The checks that a hook's arguments and return value are `Copy`: the
+/// arguments go to the body and, after a panic, to `next` again, and the
+/// value `next` returned is kept for a panic after it.
+fn copy_checks(arg_types: &[&Type], output: &syn::ReturnType) -> proc_macro2::TokenStream {
+    let arguments = arg_types.iter().map(|ty| {
+        quote::quote_spanned! {ty.span()=>
+            ::enshwick::__private::hook_argument::<#ty>();
+        }
+    });
+    let value = match output {
+        syn::ReturnType::Type(_, ty) => quote::quote_spanned! {ty.span()=>
+            ::enshwick::__private::hook_return::<#ty>();
+        },
+        syn::ReturnType::Default => quote!(),
+    };
+    quote!(#(#arguments)* #value)
+}
+
+/// The `F` of `next: Next<'_, F>`; `None` when the argument has another shape.
 fn next_type(arg: &FnArg) -> Option<&Type> {
     let FnArg::Typed(typed) = arg else {
         return None;

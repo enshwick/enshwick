@@ -310,7 +310,8 @@ impl<R> core::fmt::Debug for Frame<R> {
 /// the chain.
 ///
 /// The body is an ordinary function taking a [`Next`] and the target's
-/// arguments. A panic in it is caught: the mod reports a fault, the loader
+/// arguments; arguments and the return value are `Copy`. A panic in it is
+/// caught: the mod reports a fault, the loader
 /// unlinks the mod, and the game runs vanilla instead of crashing. The game's
 /// function runs once at most: when the body panics before
 /// [`Next::call`], this call falls through to the rest of the chain; when it
@@ -366,6 +367,8 @@ macro_rules! detour {
             // The arguments go to the body and, after a panic, to `next` again.
             const _: () = {
                 $($crate::__private::hook_argument::<$ty>();)*
+                // The return value is kept for a panic after `next`.
+                $($crate::__private::hook_return::<$ret>();)?
             };
             const BODY: fn($crate::Next<'_, $($unsafe)? extern "system" fn($($ty),*) $(-> $ret)?>, $($ty),*) $(-> $ret)? = $body;
             $($unsafe)? extern "system" fn __enshwick_entry($($arg: $ty),*) $(-> $ret)? {

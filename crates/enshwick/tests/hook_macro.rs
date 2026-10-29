@@ -95,6 +95,23 @@ mod tests {
         n + 1
     }
 
+    enshwick::detour! {
+        /// Panics before the chain ran: the original runs once, from the entry.
+        static EARLY: extern "system" fn(n: u32) -> u32 = early;
+    }
+
+    fn early(next: Next<'_, Count>, n: u32) -> u32 {
+        assert_ne!(n, 13, "unlucky");
+        next.call(n) + 100
+    }
+
+    static EARLY_RAN: AtomicU32 = AtomicU32::new(0);
+
+    extern "system" fn early_ran(n: u32) -> u32 {
+        EARLY_RAN.fetch_add(1, Ordering::Relaxed);
+        n
+    }
+
     unsafe extern "system" fn upgrade(level: u32) -> u32 {
         level + 1
     }
@@ -121,6 +138,8 @@ mod tests {
             unsafe { load.hook(&TALLY, load.symbol("tallied")?) }?;
             // SAFETY: the fake's symbol is a function of the hook's type.
             unsafe { load.hook(&TALLY_TOO, load.symbol("counted_once")?) }?;
+            // SAFETY: the fake's symbol is a function of the hook's type.
+            unsafe { load.hook(&EARLY, load.symbol("early_ran")?) }?;
             Result::Ok(Self)
         }
     }
@@ -135,6 +154,7 @@ mod tests {
             .symbol("plain", address(plain as Count))
             .symbol("tallied", address(tallied as Count))
             .symbol("counted_once", address(counted_once as Upgrade))
+            .symbol("early_ran", address(early_ran as Count))
             .install();
         // SAFETY: `enshwick_mod_init` is the export of this file's `declare_mod!(Hooks)`.
         let status = unsafe { loader.init(enshwick_mod_init) };
@@ -173,6 +193,18 @@ mod tests {
                 "panic in hook TALLY",
                 "panic in hook TALLY_TOO"
             ]
+        );
+
+        let early = loader.detour(&EARLY).expect("linked");
+        assert_eq!(early(13), 13, "the original's own answer");
+        assert_eq!(
+            EARLY_RAN.load(Ordering::Relaxed),
+            1,
+            "the original ran once"
+        );
+        assert_eq!(
+            loader.faults().last().map(String::as_str),
+            Some("panic in hook EARLY")
         );
     }
 

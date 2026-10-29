@@ -334,7 +334,7 @@ pub use enshwick_macros::event;
 ///
 /// The first argument is `next: Next<'_, F>`, where `F` is the target's
 /// `extern "system" fn` type or an alias of it; the other arguments are the
-/// target's, by plain names, and `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// target's, by plain names. Arguments and the return value are `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
 /// comment. A panic in the body runs the game's function at most once, as
 /// with [`detour!`].
@@ -593,6 +593,9 @@ pub mod __private {
 
     /// Compiles only for a `Copy` hook argument.
     pub const fn hook_argument<T: Copy>() {}
+
+    /// Compiles only for a `Copy` hook return value.
+    pub const fn hook_return<T: Copy>() {}
 
     #[must_use]
     pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {
