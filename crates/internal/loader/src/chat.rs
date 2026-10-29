@@ -179,8 +179,9 @@ struct Delivery {
     dropped: Drops,
     /// Lines for one player that reached other players too.
     strayed: Drops,
-    /// Set once a line for one player reached others: no line goes to one
-    /// player from then on, since this build's chat does not keep it there.
+    /// Set when this build has no usable handle mask or line overhead, or
+    /// once a line for one player reached others: no line goes to one player
+    /// from then on, since this build's chat does not keep it there.
     one_player_off: AtomicBool,
 }
 
@@ -337,6 +338,8 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     }
     if layout.one.is_none() {
+        // Refused at the queue, so callers and the status see them off.
+        DELIVERY.one_player_off.store(true, Ordering::Relaxed);
         crate::log!(
             WARN,
             "chat lines to one player off: this build has no usable handle mask or line overhead"
