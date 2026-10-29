@@ -365,8 +365,8 @@ pub fn embedded(running: Side) -> KnownBuild {
 
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
 /// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
-/// executable's own table, then by every table of its side carried to it by
-/// patterns, each row named after its table.
+/// executable's own table, then by every table of its side that pins them,
+/// carried to it by patterns, each row named after its table.
 #[cfg(test)]
 pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<u64>>)> {
     let tables = load();
@@ -389,11 +389,14 @@ pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<
             .unwrap()
             .resolve();
         let read = |resolved: &Resolved| ids.iter().map(|id| resolved.constant(id)).collect();
-        rows.push((format!("{var}: own"), read(&own)));
+        if ids.iter().all(|id| own.constant(id).is_some()) {
+            rows.push((format!("{var}: own"), read(&own)));
+        }
         let base = image.base();
         let text = image.range(image.section(".text").unwrap());
         let code = image.read(text.start, text.end - text.start).unwrap();
-        for other in tables.iter().filter(|t| t.side() == side) {
+        let pins = |t: &&Table| ids.iter().all(|id| t.resolve().constant(id).is_some());
+        for other in tables.iter().filter(|t| t.side() == side).filter(pins) {
             let carried = other.fall_back(code, text.start - base, |rva| image.u32(base + rva));
             rows.push((format!("{var}: {}", other.name()), read(&carried)));
         }
@@ -417,6 +420,22 @@ mod tests {
         assert!(rows.len() >= named * 2, "{rows:?}");
         for (table, values) in rows {
             assert_eq!(values, [Some(0xc)], "{table}");
+        }
+    }
+
+    /// On each executable, every table that pins them reads where the sort
+    /// into bases zeroes its answer's word and reads the entity's position.
+    #[test]
+    fn the_sort_answer_and_entity_read_on_each_executable() {
+        let rows =
+            constants_on_executables(&["bases.sort_answer_word", "bases.sort_entity_position"]);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        assert!(rows.len() >= named, "{rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x4), Some(0x8)], "{table}");
         }
     }
 

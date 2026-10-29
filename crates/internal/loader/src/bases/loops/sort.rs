@@ -67,11 +67,12 @@ pub(super) unsafe fn sort_into(
     filtered: bool,
 ) {
     let container = &game.fields().container;
-    // SAFETY: the caller's writable answer; its u32 at 4, which the game
-    // zeroes first.
-    unsafe { write_at(out, 4, 0u32) };
-    // SAFETY: the caller's entity; its fixed-point position at 8.
-    let p = unsafe { point(entity.wrapping_add(8)) };
+    // SAFETY: the caller's writable answer; its u32 the game zeroes first
+    // sits at the build table's `bases.sort_answer_word`.
+    unsafe { write_at(out, layout.sort.answer_word, 0u32) };
+    // SAFETY: the caller's entity; its fixed-point position sits at the
+    // build table's `bases.sort_entity_position`.
+    let p = unsafe { point(entity.wrapping_add(layout.sort.entity_position)) };
     let hit = window::indices(game.count()).find(|&i| lookup::in_base(game, i, p));
     let answer = match hit {
         Some(i) => {

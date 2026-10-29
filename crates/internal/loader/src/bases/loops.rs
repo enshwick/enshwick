@@ -58,8 +58,18 @@ pub(super) struct Layout {
     pub(super) object: ObjectFields,
     pub(super) map: MapFields,
     pub(super) stock: StockFields,
+    pub(super) sort: SortFields,
     /// The object's u32 base count, which the client's count getter reads.
     pub(super) count: usize,
+}
+
+/// What the sort of one stock entity reads and writes besides the bases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SortFields {
+    /// The answer's u32 the game zeroes, after its code byte.
+    pub(super) answer_word: usize,
+    /// The entity's fixed-point position, three i64 after its u32 id.
+    pub(super) entity_position: usize,
 }
 
 /// A record's fields, from its start.
@@ -200,6 +210,10 @@ impl Layout {
                 count: f(bases::STOCK_COUNT)?,
                 size: f(bases::STOCK_ANSWER_SIZE)?,
             },
+            sort: SortFields {
+                answer_word: f(bases::SORT_ANSWER_WORD)?,
+                entity_position: f(bases::SORT_ENTITY_POSITION)?,
+            },
             count: f(bases::COUNT)?,
         };
         layout
@@ -268,6 +282,16 @@ impl Layout {
             (bases::ANIMAL_VALUE, 3, o.animal_value),
             (bases::STOCK_ENTITIES, s.entities + 8, s.size),
             (bases::STOCK_COUNT, s.count + 8, s.size),
+            (
+                bases::SORT_ANSWER_WORD,
+                size_of::<u8>(),
+                self.sort.answer_word,
+            ),
+            (
+                bases::SORT_ENTITY_POSITION,
+                size_of::<u32>(),
+                self.sort.entity_position,
+            ),
         ];
         in_record
             .into_iter()

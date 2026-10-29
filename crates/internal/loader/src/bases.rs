@@ -97,6 +97,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::TEARDOWN.id(),
     pinned::bases::ZONES_AT.id(),
     pinned::bases::COUNT.id(),
+    pinned::bases::SORT_ANSWER_WORD.id(),
+    pinned::bases::SORT_ENTITY_POSITION.id(),
     pinned::bases::ITEM_ALTAR.id(),
     pinned::bases::MAX_ALTARS_REACHED.id(),
     pinned::bases::MEMBERS.id(),

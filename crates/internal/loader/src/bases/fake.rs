@@ -4,7 +4,7 @@
 use enshwick::raw::{read_at, write_at};
 
 use super::heap::Slots;
-use super::loops::{Layout, MapFields, ObjectFields, RecordFields, StockFields};
+use super::loops::{Layout, MapFields, ObjectFields, RecordFields, SortFields, StockFields};
 use super::{Answer, Container, Fields};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::window;
@@ -89,6 +89,10 @@ pub(super) const LAYOUT: Layout = Layout {
         entities: 0x18,
         count: 0x20,
         size: 0x28,
+    },
+    sort: SortFields {
+        answer_word: 0x4,
+        entity_position: 0x8,
     },
     count: 0x24,
 };
