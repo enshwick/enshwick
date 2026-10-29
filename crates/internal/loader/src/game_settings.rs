@@ -293,21 +293,32 @@ fn file(loader: &Loader, key: &str) -> PathBuf {
         .join(FILE)
 }
 
-/// Reads the kept fields of world `key`; none for a missing or broken file.
-fn read_kept(loader: &Loader, key: &str) -> BTreeMap<String, Vec<u8>> {
+/// Reads the kept fields of world `key`; none for a missing file, `None`
+/// for one that does not read, which then stays as it is.
+fn read_kept(loader: &Loader, key: &str) -> Option<BTreeMap<String, Vec<u8>>> {
     let path = file(loader, key);
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return BTreeMap::new();
-    };
-    match toml::from_str::<KeptFile>(&text) {
-        Ok(kept) => kept
-            .kept
-            .into_iter()
-            .filter_map(|(name, value)| Some((name, unhex(&value)?)))
-            .collect(),
+    let read = enshwick::files::read_to_string_if_present(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|text| {
+            text.map(|text| toml::from_str::<KeptFile>(&text))
+                .transpose()
+                .map_err(|e| e.to_string())
+        });
+    match read {
+        Ok(kept) => Some(
+            kept.map(|kept| kept.kept)
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(name, value)| Some((name, unhex(&value)?)))
+                .collect(),
+        ),
         Err(error) => {
-            crate::log!(WARN, "game settings: {} not read: {error}", path.display());
-            BTreeMap::new()
+            crate::log!(
+                WARN,
+                "game settings: {} does not read and stays as it is: {error}",
+                path.display()
+            );
+            None
         }
     }
 }
@@ -345,11 +356,16 @@ fn write_kept(loader: &Loader, key: &str, fields: &BTreeMap<String, Vec<u8>>) {
 pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
-            let key = crate::saves::world_key(loader).map(str::to_owned);
-            let fields = key
-                .as_deref()
-                .map(|key| read_kept(loader, key))
-                .unwrap_or_default();
+            let mut key = crate::saves::world_key(loader).map(str::to_owned);
+            let fields = match key.as_deref().map(|key| read_kept(loader, key)) {
+                Some(Some(fields)) => fields,
+                // A world without a key keeps nothing, so nothing is written.
+                Some(None) => {
+                    key = None;
+                    BTreeMap::new()
+                }
+                None => BTreeMap::new(),
+            };
             *KEPT.relock() = Kept {
                 key,
                 fields,

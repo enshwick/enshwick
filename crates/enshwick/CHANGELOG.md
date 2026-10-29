@@ -32,6 +32,11 @@ Each entry names the pull request that made the change.
   release to rebuild any other for (`abi::OTHER_ABI`). `cargo enshwick new`
   pins `enshwick` with `=`. Every mod needs a rebuild (#657).
 
+### Fixed
+
+- `WorldStore` writes a value again at the next save when its background
+  write failed, instead of dropping the change (#667).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added

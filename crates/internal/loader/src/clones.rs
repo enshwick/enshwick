@@ -98,18 +98,28 @@ pub(crate) fn update(
     served: impl IntoIterator<Item = (ResourceKey, ResourceKey)>,
 ) -> FxHashMap<[u8; 16], [u8; 16]> {
     let path = data_dir.join(FILE);
-    let mut clones = match std::fs::read_to_string(&path) {
-        Ok(text) => toml::from_str::<Clones>(&text).unwrap_or_else(|error| {
+    let read = enshwick::files::read_to_string_if_present(&path)
+        .map_err(|error| error.to_string())
+        .and_then(|text| {
+            text.map_or_else(
+                || Ok(Clones::default()),
+                |text| toml::from_str::<Clones>(&text).map_err(|error| error.to_string()),
+            )
+        });
+    let (mut clones, readable) = match read {
+        Ok(clones) => (clones, true),
+        // Saved stations fall back to what the file names: it stays for a
+        // fix by hand, and this session records nothing.
+        Err(error) => {
             crate::log!(
                 WARN,
-                "{} unreadable, started again: {error}",
+                "{} does not read and stays as it is: {error}",
                 path.display()
             );
-            Clones::default()
-        }),
-        Err(_) => Clones::default(),
+            (Clones::default(), false)
+        }
     };
-    if clones.add(served) {
+    if clones.add(served) && readable {
         let written = toml::to_string(&clones)
             .map_err(|error| error.to_string())
             .and_then(|text| write(&path, &text).map_err(|error| error.to_string()));
@@ -190,6 +200,29 @@ mod tests {
         assert_eq!(update(&dir, served).len(), 1);
         let aliases = update(&dir, []);
         assert_eq!(aliases.get(&CLONE.0), Some(&BENCH.0));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_record_that_does_not_read_stays_as_it_is() {
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-clones-unread-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(FILE).parent().unwrap()).unwrap();
+        let served = || {
+            [(
+                CLONE.key_by_hash(types::TEMPLATE),
+                BENCH.key_by_hash(types::TEMPLATE),
+            )]
+        };
+        let damaged = "[items\nnot toml";
+        std::fs::write(dir.join(FILE), damaged).unwrap();
+        let _aliases = update(&dir, served());
+        assert_eq!(std::fs::read_to_string(dir.join(FILE)).unwrap(), damaged);
+        std::fs::remove_file(dir.join(FILE)).unwrap();
+        std::fs::create_dir(dir.join(FILE)).unwrap();
+        let _aliases = update(&dir, served());
+        assert!(dir.join(FILE).is_dir(), "nothing written in its place");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -682,9 +682,10 @@ fn change(
         ),
         _ => (loader.configs_dir.join(FILE), format!("mod-configs/{FILE}")),
     };
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    // Through a rename: the poll never reads a half-written file.
-    let written = edit_file(&text, kind, name, disable)
+    // A file that does not read is never replaced by one with this rule alone.
+    let written = enshwick::files::read_to_string_if_present(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|text| edit_file(&text.unwrap_or_default(), kind, name, disable))
         .and_then(|text| crate::worlds::write_target(&path, &text).map_err(|e| e.to_string()));
     match written {
         Ok(()) => {
