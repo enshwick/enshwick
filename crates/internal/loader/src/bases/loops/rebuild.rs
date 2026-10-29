@@ -3,7 +3,7 @@
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
-use super::{CODE, Code, Game, GrowFn, ObjWorldFn, object, point, rec, record, windowed};
+use super::{CODE, Code, Game, GrowFn, Layout, ObjWorldFn, RecordFields, point, rec, windowed};
 use crate::base_groups::lookup::{self, Bases};
 use crate::base_groups::window;
 use crate::chains::Next;
@@ -88,10 +88,10 @@ unsafe extern "system" fn grow_found(vec: *mut u8, wanted: i64, _keep: u64) -> u
 
 pub(super) unsafe extern "system" fn rebuild(obj: *mut u8, world: *mut u8) {
     // SAFETY: the client's object in its serial bases update.
-    if let (Some(game), Some(code)) = (unsafe { windowed(obj) }, CODE.get()) {
+    if let (Some((game, layout)), Some(code)) = (unsafe { windowed(obj) }, CODE.get()) {
         // SAFETY: the rebuild's own object and world.
         let done = crate::bases::BASES_FUSE.run("the logic entity sets", || unsafe {
-            rebuild_sets(obj, world, &game, code);
+            rebuild_sets(obj, world, &game, layout, code);
         });
         if done.is_some() {
             return;
@@ -106,17 +106,17 @@ pub(super) unsafe extern "system" fn rebuild(obj: *mut u8, world: *mut u8) {
 ///
 /// # Safety
 ///
-/// - `set` is a live set of the game's layout, made by the client's new
-///   base code.
-unsafe fn empty_set(set: *mut u8) {
+/// - `set` is a live set of the game's, laid out as `record` reads it from
+///   the set's place, made by the client's new base code.
+unsafe fn empty_set(set: *mut u8, record: &RecordFields) {
     // SAFETY: the caller's live set; its u32 count.
-    if unsafe { read_at::<u32>(set, record::SET_COUNT - record::SET) } == 0 {
+    if unsafe { read_at::<u32>(set, record.set_count - record.set) } == 0 {
         return;
     }
     // SAFETY: the caller's live set; its bitmap pointer.
-    let bitmap = unsafe { read_ptr_at::<u8>(set, record::SET_BITMAP - record::SET) };
+    let bitmap = unsafe { read_ptr_at::<u8>(set, record.set_bitmap - record.set) };
     // SAFETY: the caller's live set; its u64 bucket count.
-    let buckets = unsafe { read_at::<u64>(set, record::SET_BUCKETS - record::SET) };
+    let buckets = unsafe { read_at::<u64>(set, record.set_buckets - record.set) };
     let bytes = usize::try_from(((buckets + 63) >> 3) & !7).unwrap_or(0);
     if !bitmap.is_null() {
         // SAFETY: the set's bitmap, a bit per bucket, as many bytes as the
@@ -124,7 +124,7 @@ unsafe fn empty_set(set: *mut u8) {
         unsafe { bitmap.write_bytes(0, bytes) };
     }
     // SAFETY: the caller's live set; its u32 count.
-    unsafe { write_at(set, record::SET_COUNT - record::SET, 0u32) };
+    unsafe { write_at(set, record.set_count - record.set, 0u32) };
 }
 
 /// The rebuild over every base of `game`.
@@ -133,20 +133,28 @@ unsafe fn empty_set(set: *mut u8) {
 ///
 /// - `obj` is the live client object `game` views and `world` its world,
 ///   in the serial bases update.
-pub(super) unsafe fn rebuild_sets(obj: *mut u8, world: *mut u8, game: &Game, code: &Code) {
+pub(super) unsafe fn rebuild_sets(
+    obj: *mut u8,
+    world: *mut u8,
+    game: &Game,
+    layout: &Layout,
+    code: &Code,
+) {
+    let object = &layout.object;
+    let record = &layout.record;
     // SAFETY: the caller's live object; the u32 version its grouping saw.
-    let grouped = unsafe { read_at::<u32>(obj, object::GROUPED) };
+    let grouped = unsafe { read_at::<u32>(obj, object.grouped) };
     // SAFETY: the caller's live object; the u32 version the rebuild saw.
-    if unsafe { read_at::<u32>(obj, object::REBUILT) } == grouped {
+    if unsafe { read_at::<u32>(obj, object.rebuilt) } == grouped {
         return;
     }
     // SAFETY: the caller's live object; the u32 version the rebuild saw.
-    unsafe { write_at(obj, object::REBUILT, grouped) };
+    unsafe { write_at(obj, object.rebuilt, grouped) };
     let indices = || window::indices(game.count());
     for i in indices() {
         // SAFETY: record `i` holds a base the client's new base code started,
         // which made its set.
-        unsafe { empty_set(rec(obj, i).wrapping_add(record::SET)) };
+        unsafe { empty_set(rec(obj, i).wrapping_add(record.set), record) };
     }
     let mut found = Found::new();
     // SAFETY: the game's entity query on its world, appending only through
@@ -162,7 +170,7 @@ pub(super) unsafe fn rebuild_sets(obj: *mut u8, world: *mut u8, game: &Game, cod
         let mut result = [0u8; 16];
         // SAFETY: the element's u32 id comes first.
         let id = unsafe { read_at::<u32>(at, 0) };
-        let set = rec(obj, i).wrapping_add(record::SET);
+        let set = rec(obj, i).wrapping_add(record.set);
         // SAFETY: the game's insert into record `i`'s set, which the client's
         // new base code made with room, as the game's rebuild calls it.
         let _same = unsafe { (code.insert)(set, result.as_mut_ptr(), &raw const id) };
@@ -171,7 +179,7 @@ pub(super) unsafe fn rebuild_sets(obj: *mut u8, world: *mut u8, game: &Game, cod
         }
     }
     // SAFETY: the caller's live object; its u32 change counter.
-    let changes = unsafe { read_at::<u32>(obj, object::CHANGES) };
+    let changes = unsafe { read_at::<u32>(obj, object.changes) };
     // SAFETY: the caller's live object; its u32 change counter.
-    unsafe { write_at(obj, object::CHANGES, changes.wrapping_add(1)) };
+    unsafe { write_at(obj, object.changes, changes.wrapping_add(1)) };
 }

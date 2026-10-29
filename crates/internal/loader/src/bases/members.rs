@@ -17,62 +17,41 @@ use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering
 
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
-use super::Fields;
+use super::{Answer, Container, Fields};
 use crate::base_groups::grouping::{self, Grouped, MAX_LISTED, ZoneSet};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::lookup::{self, Bases, Holder};
 use crate::base_groups::window::{self, Kind};
-
-/// The byte that tells the server's bases object (1) from the client's (0).
-const KIND_AT: usize = 0x08;
-/// The size of a zone box, in the zone list, a base's record, the answer and
-/// the game's container alike.
-pub(super) const ZONE_ENTRY: usize = 0x20;
 
 /// The kind of bases object `obj` as an index of the per-kind state: the
 /// client's object 0, the server's 1.
 ///
 /// # Safety
 ///
-/// - `obj` is a live, non-null bases object.
-pub(super) unsafe fn kind(obj: *const u8) -> usize {
-    // SAFETY: the caller guarantees a live object; its kind byte sits at
-    // `KIND_AT`.
-    usize::from(unsafe { read_at::<u8>(obj, KIND_AT) } & 1)
+/// - `obj` is a live, non-null bases object laid out as `fields`.
+pub(super) unsafe fn kind(obj: *const u8, fields: &Fields) -> usize {
+    // SAFETY: the caller guarantees a live object; its kind byte sits at the
+    // build table's `bases.kind`.
+    usize::from(unsafe { read_at::<u8>(obj, fields.kind) } & 1)
 }
 
 /// The side a bases object serves.
 ///
 /// # Safety
 ///
-/// - `obj` is a live, non-null bases object.
-pub(super) unsafe fn side_of(obj: *const u8) -> Kind {
+/// - `obj` is a live, non-null bases object laid out as `fields`.
+pub(super) unsafe fn side_of(obj: *const u8, fields: &Fields) -> Kind {
     // SAFETY: the caller's guarantee, passed on.
-    if unsafe { kind(obj) } == 1 {
+    if unsafe { kind(obj, fields) } == 1 {
         Kind::Server
     } else {
         Kind::Client
     }
 }
-/// The lookups' answer: an error byte, a u32 the game sets to 0, then the
-/// base index or the box that holds the point.
-const OUT_ERROR: usize = 0x0;
-const OUT_ZERO: usize = 0x4;
-const OUT_INDEX: usize = 0x8;
-const OUT_BOX: usize = 0x10;
 /// The error byte for a point outside every base.
 const NOT_IN_A_BASE: u8 = 0x1f;
-/// The game's zone box container, also the bases object's own zone list:
-/// data, length, capacity, the callback that grows it, and the allocator it
-/// grows through, null when it may not leave its inline room.
-const VEC_DATA: usize = 0x0;
-const VEC_LEN: usize = 0x8;
-const VEC_CAP: usize = 0x10;
-const VEC_GROW: usize = 0x18;
-const VEC_ALLOCATOR: usize = 0x20;
-/// The world allocator a bases object keeps first, and the bit the game sets
-/// when it hands it to a container.
-const OBJECT_ALLOCATOR: usize = 0x0;
+/// The bit the game sets in the world allocator when it hands it to a
+/// container.
 const HANDED: usize = 1;
 
 /// The callback that grows a zone box container to hold `-wanted` boxes.
@@ -167,11 +146,16 @@ impl Game {
     ///   long as the view is used, with no grouping running meanwhile.
     pub(super) unsafe fn new(obj: *const u8, fields: Fields) -> Self {
         // SAFETY: the caller guarantees a live bases object.
-        let kind = unsafe { kind(obj) };
+        let kind = unsafe { kind(obj, &fields) };
         let side = SIDES
             .get(kind)
             .filter(|side| side.owner.load(Ordering::Acquire) == obj.addr());
         Self { obj, fields, side }
+    }
+
+    /// The build table's fields the view reads by.
+    pub(super) const fn fields(&self) -> &Fields {
+        &self.fields
     }
 
     fn record(&self, i: usize) -> usize {
@@ -268,13 +252,14 @@ impl Bases for Game {
 /// - `obj` is a live bases object, on the grouping's thread before the game
 ///   copies the world's list, with no reader meanwhile.
 pub(super) unsafe fn let_zone_list_grow(obj: *mut u8, fields: Fields) {
-    let allocator_at = fields.zone_list + VEC_ALLOCATOR;
+    let allocator_at = fields.zone_list + fields.container.allocator;
     // SAFETY: the caller guarantees a live object; its zone list container
     // starts at the build table's `bases.zone_list`, its allocator field at
-    // `VEC_ALLOCATOR` in it.
+    // `bases.zone_list_allocator`.
     let given = unsafe { read_at::<usize>(obj, allocator_at) };
-    // SAFETY: the caller guarantees a live object; its world allocator sits at `OBJECT_ALLOCATOR`.
-    let allocator = unsafe { read_at::<usize>(obj, OBJECT_ALLOCATOR) };
+    // SAFETY: the caller guarantees a live object; its world allocator sits
+    // at the build table's `bases.allocator`.
+    let allocator = unsafe { read_at::<usize>(obj, fields.allocator) };
     if given == 0 && allocator != 0 {
         // SAFETY: the caller guarantees a live object and no reader before
         // the copy; the list's allocator field sits at `allocator_at`.
@@ -409,7 +394,7 @@ pub(super) unsafe fn settle(
         unsafe { write_at(obj, game.record(i) + fields.members, base.zones.low_mask()) };
     }
     // SAFETY: the caller guarantees a live object.
-    Side::of(unsafe { side_of(obj) }).store(obj, &bases);
+    Side::of(unsafe { side_of(obj, &fields) }).store(obj, &bases);
     Some(bases)
 }
 
@@ -420,32 +405,37 @@ pub(super) fn forget() {
     }
 }
 
-/// Writes the lookups' answer at `out`: the error byte and the zero word.
+/// Writes the lookups' answer at `out`, laid out as `a`: the error byte and
+/// the zero word.
 ///
 /// # Safety
 ///
-/// - `out` is the lookup's answer, writable for its 0x10 bytes.
-unsafe fn answer(out: *mut u8, error: u8) {
-    // SAFETY: the caller guarantees a writable answer.
-    unsafe { write_at(out, OUT_ERROR, error) };
-    // SAFETY: the same answer, writable for at least 0x10 bytes; the zero
-    // word sits at `OUT_ZERO`.
-    unsafe { write_at(out, OUT_ZERO, 0u32) };
+/// - `out` is the lookup's answer, writable for its `a.size` bytes.
+unsafe fn answer(out: *mut u8, a: &Answer, error: u8) {
+    // SAFETY: the caller guarantees a writable answer; its error byte lies
+    // inside it, as `Fields::read` checked.
+    unsafe { write_at(out, a.error, error) };
+    // SAFETY: the same answer; its zero word lies inside it, as
+    // `Fields::read` checked.
+    unsafe { write_at(out, a.zero, 0u32) };
 }
 
 /// Point in base: the first base holding `p`, into `out`.
 ///
 /// # Safety
 ///
-/// - `out` is writable for 0x10 bytes, `obj` a live bases object, `p`
-///   readable for three `f32`; the game's own arguments to the lookup.
+/// - `out` is writable for the answer's size the build table gives, `obj`
+///   a live bases object, `p` readable for three `f32`; the game's own
+///   arguments to the lookup.
 pub(super) unsafe fn base_at(out: *mut u8, game: &Game, p: [f32; 3]) {
+    let a = &game.fields.answer;
     let found = lookup::base_at(game, p);
     // SAFETY: the caller guarantees a writable answer.
-    unsafe { answer(out, if found.is_some() { 0 } else { NOT_IN_A_BASE }) };
+    unsafe { answer(out, a, if found.is_some() { 0 } else { NOT_IN_A_BASE }) };
     let index = found.and_then(|i| u8::try_from(i).ok()).unwrap_or(0);
-    // SAFETY: the caller guarantees an answer writable for 0x10 bytes; the index byte sits at `OUT_INDEX`.
-    unsafe { write_at(out, OUT_INDEX, index) };
+    // SAFETY: the caller guarantees a writable answer; its index byte lies
+    // inside it, as `Fields::read` checked.
+    unsafe { write_at(out, a.index, index) };
 }
 
 /// Point in base `i`.
@@ -457,15 +447,18 @@ pub(super) fn in_base(game: &Game, i: usize, p: [f32; 3]) -> bool {
 ///
 /// # Safety
 ///
-/// - `out` is writable for 0x30 bytes; the rest as for [`base_at`].
+/// - As for [`base_at`].
 pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
+    let a = &game.fields.answer;
     let Some(holder) = lookup::holder_at(game, p) else {
         // SAFETY: the caller guarantees a writable answer.
-        unsafe { answer(out, NOT_IN_A_BASE) };
-        let low = out.wrapping_add(OUT_BOX);
-        // SAFETY: the caller guarantees an answer writable for 0x30 bytes; the box's low corner sits at `OUT_BOX`.
+        unsafe { answer(out, a, NOT_IN_A_BASE) };
+        let low = out.wrapping_add(a.boxed);
+        // SAFETY: the caller guarantees a writable answer; its box, the low
+        // corner first, lies inside it, as `Fields::read` checked.
         unsafe { write_at(low, 0, [f32::MAX; 3]) };
-        // SAFETY: the same answer; the box's high corner sits `zone_high` after its low one, inside the 0x30 bytes.
+        // SAFETY: the same answer; the box's high corner sits `zone_high`
+        // after its low one, inside the box.
         unsafe { write_at(low, game.fields.zone_high, [-f32::MAX; 3]) };
         return;
     };
@@ -474,37 +467,36 @@ pub(super) unsafe fn holder_at(out: *mut u8, game: &Game, p: [f32; 3]) {
         Holder::Zone(z) => game.zone_entry(z),
     };
     // SAFETY: the caller guarantees a writable answer.
-    unsafe { answer(out, 0) };
+    unsafe { answer(out, a, 0) };
     // SAFETY: `from` is a live box of the zone layout, `zone_size` bytes,
-    // which `Fields::read` holds to `ZONE_ENTRY`, and the answer holds that
-    // many at `OUT_BOX`; the two never overlap.
+    // and the answer holds that many at its box, as `Fields::read` checked;
+    // the two never overlap.
     unsafe {
-        core::ptr::copy_nonoverlapping(from, out.wrapping_add(OUT_BOX), game.fields.zone_size);
+        core::ptr::copy_nonoverlapping(from, out.wrapping_add(a.boxed), game.fields.zone_size);
     }
 }
 
-/// How many boxes the game's container `vec` holds.
+/// How many boxes the game's container `vec`, laid out as `c`, holds.
 ///
 /// # Safety
 ///
 /// - `vec` is the game's live zone box container.
-pub(super) unsafe fn list_len(vec: *const u8) -> u64 {
-    // SAFETY: the caller guarantees a live container; its u64 length sits at
-    // `VEC_LEN`.
-    unsafe { read_at::<u64>(vec, VEC_LEN) }
+pub(super) unsafe fn list_len(vec: *const u8, c: &Container) -> u64 {
+    // SAFETY: the caller guarantees a live container; its u64 length.
+    unsafe { read_at::<u64>(vec, c.len) }
 }
 
-/// Cuts the game's container `vec` back to `len` boxes, `len` at most what
-/// it holds.
+/// Cuts the game's container `vec`, laid out as `c`, back to `len` boxes,
+/// `len` at most what it holds.
 ///
 /// # Safety
 ///
 /// - `vec` is the game's live, writable zone box container holding at least
 ///   `len` boxes.
-pub(super) unsafe fn set_list_len(vec: *mut u8, len: u64) {
+pub(super) unsafe fn set_list_len(vec: *mut u8, c: &Container, len: u64) {
     // SAFETY: the caller guarantees a writable container holding `len`
-    // boxes; its u64 length sits at `VEC_LEN`.
-    unsafe { write_at(vec, VEC_LEN, len) };
+    // boxes; its u64 length.
+    unsafe { write_at(vec, c.len, len) };
 }
 
 /// Appends the zones of the base holding `p` to the game's container `vec`,
@@ -517,27 +509,28 @@ pub(super) unsafe fn set_list_len(vec: *mut u8, len: u64) {
 pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 3]) {
     let Some(zones) = lookup::zones_at(game, p) else {
         // SAFETY: the caller guarantees a writable answer.
-        unsafe { answer(out, NOT_IN_A_BASE) };
+        unsafe { answer(out, &game.fields.answer, NOT_IN_A_BASE) };
         return;
     };
     let size = game.fields.zone_size;
+    let c = &game.fields.container;
     for z in zones {
-        // SAFETY: the caller guarantees a live container; its u64 length
-        // and capacity sit at `VEC_LEN` and `VEC_CAP`.
-        let len = unsafe { read_at::<u64>(vec, VEC_LEN) };
-        // SAFETY: the same live container; its u64 capacity sits at
-        // `VEC_CAP`.
-        let cap = unsafe { read_at::<u64>(vec, VEC_CAP) };
+        // SAFETY: the caller guarantees a live container; its u64 length.
+        let len = unsafe { read_at::<u64>(vec, c.len) };
+        // SAFETY: the same live container; its u64 capacity.
+        let cap = unsafe { read_at::<u64>(vec, c.cap) };
         if cap < len + 1 {
-            // SAFETY: the caller guarantees a live container; its allocator field sits at `VEC_ALLOCATOR`.
-            if unsafe { read_at::<usize>(vec, VEC_ALLOCATOR) } == 0 {
-                // SAFETY: the same live container, whose caller never reads the field,
-                // and its grow and free reach the loader's heap through it.
-                unsafe { write_at(vec, VEC_ALLOCATOR, super::heap::handed()) };
+            // SAFETY: the caller guarantees a live container; its allocator
+            // field.
+            if unsafe { read_at::<usize>(vec, c.allocator) } == 0 {
+                // SAFETY: the same live container, whose caller never reads
+                // the field, and its grow and free reach the loader's heap
+                // through it.
+                unsafe { write_at(vec, c.allocator, super::heap::handed()) };
             }
-            // SAFETY: the same live container; its grow callback sits at `VEC_GROW`, null or the
+            // SAFETY: the same live container; its grow callback, null or the
             // game's own.
-            let grow = unsafe { read_ptr_at::<u8>(vec, VEC_GROW) };
+            let grow = unsafe { read_ptr_at::<u8>(vec, c.grow) };
             if grow.is_null() {
                 continue;
             }
@@ -552,22 +545,23 @@ pub(super) unsafe fn zones_at(out: *mut u8, vec: *mut u8, game: &Game, p: [f32; 
             }
         }
         // SAFETY: the container now holds room for `len + 1` boxes at its
-        // data pointer, at `VEC_DATA`.
-        let data = unsafe { read_ptr_at::<u8>(vec, VEC_DATA) };
+        // data pointer.
+        let data = unsafe { read_ptr_at::<u8>(vec, c.data) };
         let Ok(at) = usize::try_from(len) else {
             return;
         };
         // SAFETY: zone `z` is listed, `size` bytes in the live list, and box
-        // `len` of the container is room it owns, its boxes `ZONE_ENTRY`
-        // bytes as `size` is by `Fields::read`; the two never overlap.
+        // `len` of the container is room it owns, its boxes the zone list's
+        // `size` bytes, as the game's own lookup copies them; the two never
+        // overlap.
         unsafe {
             core::ptr::copy_nonoverlapping(game.zone_entry(z), data.wrapping_add(at * size), size);
         }
-        // SAFETY: the same live container; its length sits at `VEC_LEN`.
-        unsafe { write_at(vec, VEC_LEN, len + 1) };
+        // SAFETY: the same live container; its u64 length.
+        unsafe { write_at(vec, c.len, len + 1) };
     }
     // SAFETY: the caller guarantees a writable answer.
-    unsafe { answer(out, 0) };
+    unsafe { answer(out, &game.fields.answer, 0) };
 }
 
 #[cfg(test)]

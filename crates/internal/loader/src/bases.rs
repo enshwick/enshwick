@@ -105,6 +105,53 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::ZONE_LIST.id(),
     pinned::bases::ZONE_LIST_LEN.id(),
     pinned::bases::ZONE_SIZE.id(),
+    pinned::bases::ALLOCATOR.id(),
+    pinned::bases::ANIMAL_MAP.id(),
+    pinned::bases::ANIMAL_VALUE.id(),
+    pinned::bases::ANIMALS.id(),
+    pinned::bases::ANSWER_BOX.id(),
+    pinned::bases::ANSWER_ERROR.id(),
+    pinned::bases::ANSWER_INDEX.id(),
+    pinned::bases::ANSWER_SIZE.id(),
+    pinned::bases::ANSWER_ZERO.id(),
+    pinned::bases::CHANGES.id(),
+    pinned::bases::CONTAINER_CAP.id(),
+    pinned::bases::CONTAINER_DATA.id(),
+    pinned::bases::CONTAINER_GROW.id(),
+    pinned::bases::CONTAINER_LEN.id(),
+    pinned::bases::GROUPED.id(),
+    pinned::bases::KIND.id(),
+    pinned::bases::MAP_BITMAP.id(),
+    pinned::bases::MAP_BUCKETS.id(),
+    pinned::bases::MAP_COUNT.id(),
+    pinned::bases::MAP_KEYS.id(),
+    pinned::bases::MAP_VALUES.id(),
+    pinned::bases::NPC_KIND.id(),
+    pinned::bases::NPC_MAP.id(),
+    pinned::bases::NPC_VALUE.id(),
+    pinned::bases::NPCS.id(),
+    pinned::bases::NPCS_HOME.id(),
+    pinned::bases::PAGE.id(),
+    pinned::bases::POSITION.id(),
+    pinned::bases::REBUILT.id(),
+    pinned::bases::RECORD_ANIMALS.id(),
+    pinned::bases::RECORD_BASE_ID.id(),
+    pinned::bases::RECORD_BEDS.id(),
+    pinned::bases::RECORD_COMFORT.id(),
+    pinned::bases::RECORD_COMFORT_LEN.id(),
+    pinned::bases::RECORD_LIST_ALL.id(),
+    pinned::bases::RECORD_LIST_KEPT.id(),
+    pinned::bases::RECORD_NPCS_HOME.id(),
+    pinned::bases::RECORD_PROPS.id(),
+    pinned::bases::RECORD_SET.id(),
+    pinned::bases::RECORD_SET_BITMAP.id(),
+    pinned::bases::RECORD_SET_BUCKETS.id(),
+    pinned::bases::RECORD_SET_COUNT.id(),
+    pinned::bases::STAGING.id(),
+    pinned::bases::STOCK_ANSWER_SIZE.id(),
+    pinned::bases::STOCK_COUNT.id(),
+    pinned::bases::STOCK_ENTITIES.id(),
+    pinned::bases::ZONE_LIST_ALLOCATOR.id(),
     pinned::building::MAX_ALTARS.id(),
 ];
 
@@ -133,8 +180,10 @@ const SITE_SYMBOLS: [pinned::Symbol; 7] = [
 /// and the zone boxes in a list of `zone_size` bytes each, the low corner
 /// first and the high one at `zone_high`; the placement cursor's altar flag
 /// in an item and its "too many altars" bit, and the balancing its context
-/// holds.
-#[derive(Debug, Clone, Copy)]
+/// holds; the byte that tells the server's object from the client's, the
+/// world allocator the object keeps, the lookups' answer and the game's zone
+/// box container.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Fields {
     count: usize,
     stride: usize,
@@ -146,20 +195,47 @@ struct Fields {
     item_altar: usize,
     max_altars_reached: u32,
     balancing: usize,
+    kind: usize,
+    allocator: usize,
+    answer: Answer,
+    container: Container,
+}
+
+/// The answer of the zone lookups: an error byte, a u32 the game sets to 0,
+/// then the base index or the box that holds the point, in `size` bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Answer {
+    error: usize,
+    zero: usize,
+    index: usize,
+    boxed: usize,
+    size: usize,
+}
+
+/// The game's container, also the bases object's own zone list: data,
+/// length, capacity, the callback that grows it, and the allocator it grows
+/// through, null when it may not leave its inline room.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Container {
+    data: usize,
+    len: usize,
+    cap: usize,
+    grow: usize,
+    allocator: usize,
 }
 
 impl Fields {
-    fn read(loader: &Loader) -> Result<Self, String> {
-        let f = |id: Constant| {
-            loader
-                .offset(id)
-                .ok_or(format!("{id} is not in this build"))
-        };
+    /// The fields as `offset` reads the build table's constants, checked to
+    /// fit the copies and answers the lookups make.
+    fn read(offset: &dyn Fn(Constant) -> Option<usize>) -> Result<Self, String> {
+        let f = |id: Constant| offset(id).ok_or(format!("{id} is not in this build"));
+        let zone_list = f(pinned::bases::ZONE_LIST)?;
+        let zone_list_allocator = f(pinned::bases::ZONE_LIST_ALLOCATOR)?;
         let fields = Self {
             count: f(pinned::bases::COUNT)?,
             stride: f(pinned::bases::STRIDE)?,
             members: f(pinned::bases::MEMBERS)?,
-            zone_list: f(pinned::bases::ZONE_LIST)?,
+            zone_list,
             zone_list_len: f(pinned::bases::ZONE_LIST_LEN)?,
             zone_size: f(pinned::bases::ZONE_SIZE)?,
             zone_high: f(pinned::bases::ZONE_HIGH)?,
@@ -167,14 +243,51 @@ impl Fields {
             max_altars_reached: u32::try_from(f(pinned::bases::MAX_ALTARS_REACHED)?)
                 .map_err(|e| e.to_string())?,
             balancing: f(pinned::bases::CURSOR_BALANCING)?,
+            kind: f(pinned::bases::KIND)?,
+            allocator: f(pinned::bases::ALLOCATOR)?,
+            answer: Answer {
+                error: f(pinned::bases::ANSWER_ERROR)?,
+                zero: f(pinned::bases::ANSWER_ZERO)?,
+                index: f(pinned::bases::ANSWER_INDEX)?,
+                boxed: f(pinned::bases::ANSWER_BOX)?,
+                size: f(pinned::bases::ANSWER_SIZE)?,
+            },
+            container: Container {
+                data: f(pinned::bases::CONTAINER_DATA)?,
+                len: f(pinned::bases::CONTAINER_LEN)?,
+                cap: f(pinned::bases::CONTAINER_CAP)?,
+                grow: f(pinned::bases::CONTAINER_GROW)?,
+                allocator: zone_list_allocator
+                    .checked_sub(zone_list)
+                    .ok_or("the zone list's allocator lies before its list")?,
+            },
         };
-        if fields.zone_size != members::ZONE_ENTRY
-            || fields.members < fields.zone_size
-            || fields.zone_high + 12 > fields.zone_size
-        {
-            return Err("the bases' fields are not the zone boxes the lookups copy".into());
+        if !fields.fits() {
+            return Err(format!(
+                "the bases' fields are not the zone boxes the lookups copy ({fields:x?})"
+            ));
         }
         Ok(fields)
+    }
+
+    /// Whether a zone box holds both corners, the answer holds its error,
+    /// zero word, index and a whole box, and the zone list's length is the
+    /// container's.
+    fn fits(&self) -> bool {
+        let Answer {
+            error,
+            zero,
+            index,
+            boxed,
+            size,
+        } = self.answer;
+        self.members >= self.zone_size
+            && self.zone_high + 12 <= self.zone_size
+            && error < size
+            && zero + 4 <= size
+            && index < size
+            && boxed + self.zone_size <= size
+            && self.zone_list + self.container.len == self.zone_list_len
     }
 }
 
@@ -407,7 +520,7 @@ fn find(loader: &Loader) -> Status {
     if crate::ecs::engine(loader).is_none() {
         return Status::MISSING;
     }
-    let fields = match Fields::read(loader) {
+    let fields = match Fields::read(&|id| loader.offset(id)) {
         Ok(fields) => fields,
         Err(reason) => {
             crate::log!(WARN, "bases keep 16 altar zones: {reason}");
@@ -646,7 +759,10 @@ fn chain_limit<'a>(
 
 unsafe extern "system" fn group(bases: *mut u8, world: *mut u8) {
     // SAFETY: `bases` is the grouping's own bases object when not null.
-    let kind = (!bases.is_null()).then(|| unsafe { side_of(bases) });
+    let kind = SITES
+        .get()
+        .filter(|_| !bases.is_null())
+        .map(|sites| unsafe { side_of(bases, &sites.fields) });
     if let Some(kind) = kind {
         PLANNED[kind_index(kind)].store(window::VANILLA, Ordering::Relaxed);
     }
@@ -694,7 +810,7 @@ unsafe fn regroup(bases: *mut u8, kind: Kind, sites: &Sites) -> Option<Grouped> 
         // thread, which no reader runs beside.
         unsafe { lifecycle::release(bases, &code) };
         // SAFETY: the same object, live while `settle` uses the answer.
-        unsafe { lifecycle::ready(bases, code) }
+        unsafe { lifecycle::ready(bases, sites.fields.allocator, code) }
     });
     // SAFETY: the caller's guarantees; `ready` is there only for an object
     // whose window `release` has just released.
@@ -767,22 +883,20 @@ unsafe fn keep(bases: *const u8, kind: Kind, fields: Fields, grouped: &Grouped) 
 }
 
 unsafe extern "system" fn add_base(bases: *mut u8, zone: *const u8, index: u32) {
-    if let Some(count) = SITES
+    if let Some(fields) = SITES
         .get()
         .filter(|_| raised() && !bases.is_null())
-        .map(|sites| sites.fields.count)
+        .map(|sites| sites.fields)
     {
         // SAFETY: `bases` is non-null by the filter before it and is the
         // bases object the grouping passes; its u32 base count sits at the
         // build table's `bases.count`.
-        let started = unsafe { read_at::<u32>(bases, count) };
+        let started = unsafe { read_at::<u32>(bases, fields.count) };
         // SAFETY: `bases` is non-null by the filter and is the live object
         // the grouping passes to its new base code.
-        let kind = unsafe { side_of(bases) };
+        let kind = unsafe { side_of(bases, &fields) };
         let planned = &PLANNED[kind_index(kind)];
-        if started == 0
-            && let Some(fields) = SITES.get().map(|sites| sites.fields)
-        {
+        if started == 0 {
             // SAFETY: the game's grouping calls the new base code only after
             // it refilled the object's zone list, on its own thread.
             let plan = BASES_FUSE.run("the base plan", || unsafe {
@@ -901,7 +1015,7 @@ unsafe extern "system" fn zones_at(
     let game = unsafe { view(bases) };
     if let (Some(p), Some(game), false) = (p, game, out.is_null() || list.is_null()) {
         // SAFETY: the game's live zone box container.
-        let len = unsafe { members::list_len(list) };
+        let len = unsafe { members::list_len(list, &game.fields().container) };
         // SAFETY: the lookup's own answer and the game's live zone box
         // container with its own grow callback.
         let done = BASES_FUSE.run("a zone list lookup", || unsafe {
@@ -912,7 +1026,7 @@ unsafe extern "system" fn zones_at(
         }
         // SAFETY: the same container, whose boxes past `len` the game's own
         // lookup appends again.
-        unsafe { members::set_list_len(list, len) };
+        unsafe { members::set_list_len(list, &game.fields().container, len) };
     }
     // SAFETY: this detour runs only as the lookup's link, so the slot holds
     // the next function of that signature; the game's arguments pass
@@ -974,6 +1088,85 @@ mod tests {
             sites_of(fake::FIELDS, without_zones).map(|_| ()),
             Err(pinned::bases::ZONES_AT)
         );
+    }
+
+    /// The newest table of each side reads as the fields and the loops'
+    /// layout the tests' fake object is laid out by; the client's placement
+    /// cursor holds more before its balancing.
+    #[test]
+    fn the_newest_tables_read_as_the_fake_object_s_layout() {
+        use enshwick_gamedata::{Side as TableSide, newest};
+
+        let tables = crate::builds::load();
+        for (side, balancing) in [(TableSide::Server, 0x170), (TableSide::Client, 0x180)] {
+            let resolved = newest(&tables, side).unwrap().resolve();
+            let offset = |id: Constant| {
+                resolved
+                    .constant(id.id())
+                    .and_then(|value| usize::try_from(value).ok())
+            };
+            let fields = Fields {
+                balancing,
+                ..fake::FIELDS
+            };
+            assert_eq!(Fields::read(&offset), Ok(fields), "{side:?}");
+            assert_eq!(loops::Layout::read(&offset), Ok(fake::LAYOUT), "{side:?}");
+        }
+    }
+
+    /// Fields whose answer cannot hold a zone box are refused, with the
+    /// fields named.
+    #[test]
+    fn an_answer_too_small_for_a_zone_box_is_refused() {
+        let offset = |id: Constant| {
+            if id == pinned::bases::ANSWER_SIZE {
+                Some(0x2c)
+            } else {
+                fake_offset(id)
+            }
+        };
+        let refused = Fields::read(&offset).unwrap_err();
+        assert!(refused.contains("not the zone boxes"), "{refused}");
+        assert_eq!(Fields::read(&fake_offset), Ok(fake::FIELDS));
+    }
+
+    /// The fake object's fields as the build table would give them.
+    fn fake_offset(id: Constant) -> Option<usize> {
+        let f = fake::FIELDS;
+        let pairs = [
+            (pinned::bases::COUNT, f.count),
+            (pinned::bases::STRIDE, f.stride),
+            (pinned::bases::MEMBERS, f.members),
+            (pinned::bases::ZONE_LIST, f.zone_list),
+            (pinned::bases::ZONE_LIST_LEN, f.zone_list_len),
+            (pinned::bases::ZONE_SIZE, f.zone_size),
+            (pinned::bases::ZONE_HIGH, f.zone_high),
+            (pinned::bases::ITEM_ALTAR, f.item_altar),
+            (
+                pinned::bases::MAX_ALTARS_REACHED,
+                f.max_altars_reached as usize,
+            ),
+            (pinned::bases::CURSOR_BALANCING, f.balancing),
+            (pinned::bases::KIND, f.kind),
+            (pinned::bases::ALLOCATOR, f.allocator),
+            (pinned::bases::ANSWER_ERROR, f.answer.error),
+            (pinned::bases::ANSWER_ZERO, f.answer.zero),
+            (pinned::bases::ANSWER_INDEX, f.answer.index),
+            (pinned::bases::ANSWER_BOX, f.answer.boxed),
+            (pinned::bases::ANSWER_SIZE, f.answer.size),
+            (pinned::bases::CONTAINER_DATA, f.container.data),
+            (pinned::bases::CONTAINER_LEN, f.container.len),
+            (pinned::bases::CONTAINER_CAP, f.container.cap),
+            (pinned::bases::CONTAINER_GROW, f.container.grow),
+            (
+                pinned::bases::ZONE_LIST_ALLOCATOR,
+                f.zone_list + f.container.allocator,
+            ),
+        ];
+        pairs
+            .into_iter()
+            .find(|&(c, _)| c == id)
+            .map(|(_, value)| value)
     }
 
     /// The cursor's code check covers the offsets the detour reads: on each

@@ -2,7 +2,7 @@
 
 use enshwick::raw::{read_at, write_at};
 
-use super::{Game, ObjWorldFn, append, point, rec, record, vec, window_of, windowed};
+use super::{Game, Layout, ObjWorldFn, append, point, rec, window_of, windowed};
 use crate::base_groups::lookup::{self, Bases};
 use crate::base_groups::window;
 use crate::chains::Next;
@@ -38,10 +38,10 @@ pub(super) unsafe extern "system" fn sort(
 ) -> *mut u8 {
     // SAFETY: the sort's own object, in the serial bases update.
     let game = unsafe { windowed(obj) };
-    if let (Some(game), false) = (game, out.is_null() || entity.is_null()) {
+    if let (Some((game, layout)), false) = (game, out.is_null() || entity.is_null()) {
         // SAFETY: the sort's own answer, entity and object.
         let done = crate::bases::BASES_FUSE.run("the sort into bases", || unsafe {
-            sort_into(out, obj, &game, entity, filtered & 0xff != 0);
+            sort_into(out, obj, &game, layout, entity, filtered & 0xff != 0);
         });
         if done.is_some() {
             return out;
@@ -62,9 +62,11 @@ pub(super) unsafe fn sort_into(
     out: *mut u8,
     obj: *mut u8,
     game: &Game,
+    layout: &Layout,
     entity: *const u8,
     filtered: bool,
 ) {
+    let container = &game.fields().container;
     // SAFETY: the caller's writable answer; its u32 at 4, which the game
     // zeroes first.
     unsafe { write_at(out, 4, 0u32) };
@@ -74,15 +76,15 @@ pub(super) unsafe fn sort_into(
     let answer = match hit {
         Some(i) => {
             let list = if filtered {
-                record::LIST_KEPT
+                layout.record.list_kept
             } else {
-                record::LIST_ALL
+                layout.record.list_all
             };
             // SAFETY: the caller's entity; its u32 id comes first.
             let id = unsafe { read_at::<u32>(entity, 0) };
             // SAFETY: record `i` holds a base the game's new base code
             // started, whose lists are the game's with its grower.
-            if unsafe { append(rec(obj, i).wrapping_add(list), id) } {
+            if unsafe { append(rec(obj, i).wrapping_add(list), container, id) } {
                 SORTED
             } else {
                 GROW_FAILED
@@ -96,10 +98,10 @@ pub(super) unsafe fn sort_into(
 
 pub(super) unsafe extern "system" fn sort_all(obj: *mut u8, world: *mut u8) {
     // SAFETY: the object of the serial bases update.
-    if let Some(game) = unsafe { windowed(obj) } {
+    if let Some((game, layout)) = unsafe { windowed(obj) } {
         // SAFETY: the same live object, viewed by `game`.
         let _done = crate::bases::BASES_FUSE.run("the sort of every entity", || unsafe {
-            empty_lists(obj, &game);
+            empty_lists(obj, &game, layout);
         });
     }
     // SAFETY: this detour runs only as the sort of every entity's link, so
@@ -113,13 +115,14 @@ pub(super) unsafe extern "system" fn sort_all(obj: *mut u8, world: *mut u8) {
 /// # Safety
 ///
 /// - `obj` is the live object `game` views, in the serial bases update.
-pub(super) unsafe fn empty_lists(obj: *mut u8, game: &Game) {
+pub(super) unsafe fn empty_lists(obj: *mut u8, game: &Game, layout: &Layout) {
+    let len = game.fields().container.len;
     for i in window_of(game) {
         // SAFETY: record `i` holds a base; the u64 length of its first list.
-        unsafe { write_at(rec(obj, i), record::LIST_ALL + vec::LEN, 0u64) };
+        unsafe { write_at(rec(obj, i), layout.record.list_all + len, 0u64) };
         // SAFETY: record `i` holds a base; the u64 length of its second
         // list.
-        unsafe { write_at(rec(obj, i), record::LIST_KEPT + vec::LEN, 0u64) };
+        unsafe { write_at(rec(obj, i), layout.record.list_kept + len, 0u64) };
     }
 }
 
@@ -128,10 +131,10 @@ pub(super) unsafe extern "system" fn base_ids(vec: *mut u8, obj: *mut u8) -> u64
     // holds the next function of that signature.
     let vanilla = unsafe { BASE_IDS_NEXT.get()(vec, obj) };
     // SAFETY: the list's own object.
-    if let (Some(game), false) = (unsafe { windowed(obj) }, vec.is_null()) {
+    if let (Some((game, layout)), false) = (unsafe { windowed(obj) }, vec.is_null()) {
         // SAFETY: the list's own container and object.
         let _done = crate::bases::BASES_FUSE.run("the base ids", || unsafe {
-            append_ids(vec, obj, &game);
+            append_ids(vec, obj, &game, layout);
         });
     }
     vanilla
@@ -144,12 +147,13 @@ pub(super) unsafe extern "system" fn base_ids(vec: *mut u8, obj: *mut u8) -> u64
 ///
 /// - `vec` is the game's live container of 16-byte ids; `obj` the live
 ///   object `game` views.
-pub(super) unsafe fn append_ids(vec: *mut u8, obj: *mut u8, game: &Game) {
+pub(super) unsafe fn append_ids(vec: *mut u8, obj: *mut u8, game: &Game, layout: &Layout) {
+    let container = &game.fields().container;
     for i in window_of(game) {
         // SAFETY: record `i` holds a base; its 16-byte id.
-        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i), record::BASE_ID) };
+        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i), layout.record.base_id) };
         // SAFETY: the caller's live container of 16-byte ids.
-        if id != [0, 0] && !unsafe { append(vec, id) } {
+        if id != [0, 0] && !unsafe { append(vec, container, id) } {
             break;
         }
     }

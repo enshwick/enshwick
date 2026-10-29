@@ -35,8 +35,6 @@ pub(super) type SlotFreeFn = unsafe extern "system" fn(slot: *mut u8);
 /// The bytes the constructor writes from the object's start, up to the
 /// first stock slot.
 const CONSTRUCTED: usize = window::SLOTS;
-/// The world allocator a bases object keeps first.
-const OBJECT_ALLOCATOR: usize = 0x0;
 /// The entries of a stock slot's map, as create makes the 16 of the array.
 const SLOT_ENTRIES: u64 = 0x106;
 
@@ -196,7 +194,12 @@ pub(super) unsafe fn release(obj: *mut u8, code: &Code) {
 ///
 /// - `obj` is a live bases object, on the grouping's thread, and stays so
 ///   for as long as the answer is used.
-pub(super) unsafe fn ready(obj: *mut u8, code: Code) -> Option<impl Fn(usize)> {
+/// - `allocator_at` is where the object keeps its world allocator.
+pub(super) unsafe fn ready(
+    obj: *mut u8,
+    allocator_at: usize,
+    code: Code,
+) -> Option<impl Fn(usize)> {
     let entry = windowed(obj)?;
     Some(move |i: usize| {
         if entry.has_slot(i) || i < window::WINDOW {
@@ -208,8 +211,8 @@ pub(super) unsafe fn ready(obj: *mut u8, code: Code) -> Option<impl Fn(usize)> {
         // zeroed, it holds no map the init would release.
         unsafe { slot.write_bytes(0, window::SLOT) };
         // SAFETY: the caller guarantees a live object; its world allocator
-        // sits at `OBJECT_ALLOCATOR`.
-        let allocator = unsafe { read_at::<usize>(obj, OBJECT_ALLOCATOR) };
+        // sits at `allocator_at`, the build table's `bases.allocator`.
+        let allocator = unsafe { read_at::<usize>(obj, allocator_at) };
         // SAFETY: the game's stock slot init on a zeroed slot with the
         // object's own allocator and entry count, as create calls it for the
         // array's slots.
@@ -260,14 +263,14 @@ mod tests {
     use enshwick::raw::write_at;
 
     use super::*;
-    use crate::bases::fake::{CONSTRUCTED_GROWER, ctor};
+    use crate::bases::fake::{CONSTRUCTED_GROWER, FIELDS, LAYOUT, ctor};
     use crate::locks::Relock;
 
     /// What the fake game code was called with, in order.
     static CALLS: Mutex<Vec<(&'static str, usize)>> = Mutex::new(Vec::new());
 
     /// The constructor's record field the tests check: list A's grower.
-    const GROWER: usize = 0x18;
+    const GROWER: usize = LAYOUT.record.list_all + FIELDS.container.grow;
 
     unsafe extern "system" fn teardown(first: *mut u8) {
         CALLS.relock().push(("teardown", first.addr()));
@@ -339,7 +342,7 @@ mod tests {
         // SAFETY: a fresh block of the grown size.
         assert!(unsafe { init(obj, &CODE) });
         // SAFETY: the windowed block, alive for the call.
-        let readied = unsafe { ready(obj, CODE) }.unwrap();
+        let readied = unsafe { ready(obj, FIELDS.allocator, CODE) }.unwrap();
         readied(100);
         assert!(has_slot(obj, 100));
         // Its destroy was missed; a new object comes at the same address.
@@ -385,7 +388,7 @@ mod tests {
         // SAFETY: a fresh block of the grown size.
         assert!(unsafe { init(obj, &CODE) });
         // SAFETY: the windowed block, a server's object.
-        let readied = unsafe { ready(obj, CODE) }.unwrap();
+        let readied = unsafe { ready(obj, FIELDS.allocator, CODE) }.unwrap();
         readied(93);
         readied(93);
         readied(200);
@@ -408,7 +411,7 @@ mod tests {
             "a second destroy frees nothing"
         );
         // SAFETY: the block, no longer windowed.
-        assert!(unsafe { ready(obj, CODE) }.is_none());
+        assert!(unsafe { ready(obj, FIELDS.allocator, CODE) }.is_none());
     }
 
     #[test]

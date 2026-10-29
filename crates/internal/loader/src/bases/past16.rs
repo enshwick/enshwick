@@ -43,9 +43,6 @@ const CALLED: [Symbol; 7] = [
 ];
 /// `mov edx, imm32`, which each create loads the object's size with.
 const MOV_EDX: u8 = 0xBA;
-/// The base count the window's code reads, `[obj+0x24]` in the count
-/// getter and the cleanups.
-pub(super) const COUNT_AT: usize = 0x24;
 
 type CreateFn = unsafe extern "system" fn(allocator: *mut u8, part: *mut u8) -> *mut u8;
 type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
@@ -62,19 +59,22 @@ pub(super) enum SiteError {
     /// The client's base list calls another getter than the count's.
     #[error("is not the expected count getter")]
     Getter,
-    /// The build table's base layout is not the one the window is laid out
+    /// The build table's record stride is not the one the window is laid out
     /// for.
-    #[error("{stride:#x} with the count at {count:#x} is not the window's layout")]
-    Layout { stride: usize, count: usize },
+    #[error("{0:#x} is not the window's record stride")]
+    Stride(usize),
+    /// A field lies outside its record, the object or an answer.
+    #[error("lies outside its record, the object or its answer")]
+    Fit(&'static str),
 }
 
 impl SiteError {
     /// The table entry the site fails on.
     pub(super) const fn entry(&self) -> &'static str {
         match self {
-            Self::Missing(id) | Self::Size(id) => id,
+            Self::Missing(id) | Self::Size(id) | Self::Fit(id) => id,
             Self::Getter => bases::COUNT_GETTER.id(),
-            Self::Layout { .. } => bases::STRIDE.id(),
+            Self::Stride(_) => bases::STRIDE.id(),
         }
     }
 }
@@ -104,6 +104,13 @@ impl Pins<'_> {
             .ok_or(SiteError::Missing(id.id()))?;
         let start = self.at(id)?;
         Ok(start..start + body.len())
+    }
+
+    /// Constant `id` as an offset.
+    pub(super) fn offset(&self, id: Constant) -> Option<usize> {
+        self.table
+            .constant(id.id())
+            .and_then(|value| usize::try_from(value).ok())
     }
 
     /// Constant `id`, a 32-bit size, with its id.
@@ -186,6 +193,11 @@ pub(super) fn settled() -> bool {
     SETTLED.load(Ordering::Acquire)
 }
 
+/// The window's sites once found, armed or not.
+pub(super) fn found() -> Option<&'static Sites> {
+    SITES.get()
+}
+
 /// The window's sites, while it is armed.
 pub(super) fn sites() -> Option<&'static Sites> {
     SITES.get().filter(|_| armed())
@@ -231,11 +243,8 @@ fn find(
     fields: Fields,
     pins: &Pins<'_>,
 ) -> Result<Sites, SiteError> {
-    if fields.stride != window::RECORD || fields.count != COUNT_AT {
-        return Err(SiteError::Layout {
-            stride: fields.stride,
-            count: fields.count,
-        });
+    if fields.stride != window::RECORD {
+        return Err(SiteError::Stride(fields.stride));
     }
     let patches = vec![
         size_patch(
@@ -513,10 +522,7 @@ mod tests {
         };
         assert_eq!(
             find(&[], 0, false, other, &pins).map(|_| ()),
-            Err(SiteError::Layout {
-                stride: 0x138,
-                count: 0x24
-            })
+            Err(SiteError::Stride(0x138))
         );
     }
 
