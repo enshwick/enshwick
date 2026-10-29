@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use enshwick::abi::Level;
 
-use crate::migrations::{RECORD, Record};
+use crate::migrations::{RECORD, Record, WORLD_RECORD, WorldRecord};
 
 /// Where mods keep their settings and data.
 #[derive(Clone, Copy, Debug)]
@@ -64,9 +64,19 @@ pub fn carry(
             copies.push((file.to_path_buf(), new_data.join(rest)));
         }
     })?;
+    let merges: Vec<(PathBuf, PathBuf)> = copies
+        .iter()
+        .filter(|(from, to)| {
+            to.file_name().is_some_and(|name| name == WORLD_RECORD) && from.is_file() && to.exists()
+        })
+        .cloned()
+        .collect();
     copies.retain(|(from, to)| from.is_file() && !to.exists());
     if dry {
         return Ok(Some(copies.len()));
+    }
+    for (from, to) in &merges {
+        merge_world_records(from, to)?;
     }
     for (from, to) in &copies {
         if let Some(dir) = to.parent() {
@@ -170,6 +180,30 @@ fn files_count(count: usize) -> String {
     } else {
         format!("{count} files")
     }
+}
+
+/// Adds what the world record `from` lists to the world record `to`, which
+/// the new id already has: a migration that ran under either id ran.
+fn merge_world_records(from: &Path, to: &Path) -> Result<(), String> {
+    let read = |path: &Path| {
+        path.parent()
+            .map_or(Ok(None), WorldRecord::read)
+            .map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let (Some(old), Some(mut new)) = (read(from)?, read(to)?) else {
+        return Ok(());
+    };
+    let before = new.ran.len();
+    for migration in old.ran {
+        if !new.ran.contains(&migration) {
+            new.ran.push(migration);
+        }
+    }
+    if new.ran.len() == before {
+        return Ok(());
+    }
+    new.write(to.parent().unwrap_or(to))
+        .map_err(|e| format!("{}: {e}", to.display()))
 }
 
 /// Calls `found` with every file under `dir`; nothing when `dir` is missing.
@@ -278,6 +312,27 @@ mod tests {
             "limit = 6\n"
         );
         assert_eq!(record.carried["new"], ["old"]);
+        let _gone = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_world_record_both_ids_have_counts_what_ran_under_either() {
+        let root = scratch("world-record");
+        let (configs, data) = (root.join("mod-configs"), root.join("mod-data"));
+        let dirs = Dirs {
+            configs: &configs,
+            data: &data,
+        };
+        let record_of = |id: &str| data.join(id).join("worlds/w-1").join(WORLD_RECORD);
+        put(&record_of("old"), "ran = [\"2\", \"3\"]\n");
+        put(&record_of("new"), "ran = [\"3\", \"4\"]\n");
+        let mut record = Record::default();
+        assert_eq!(carry(dirs, &mut record, "new", "old", false), Ok(Some(0)));
+        let world = data.join("new/worlds/w-1");
+        assert_eq!(
+            WorldRecord::read(&world).unwrap().unwrap().ran,
+            ["3", "4", "2"]
+        );
         let _gone = std::fs::remove_dir_all(root);
     }
 

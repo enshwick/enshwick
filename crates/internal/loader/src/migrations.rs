@@ -4,10 +4,11 @@
 //! The settings steps run on a mod's settings file when it registers its
 //! migrations; every step runs on a world's files when the world loads, before
 //! the mod reads the world's settings or opens its stores. `mod-
-//! data/enshwick/migrations.toml` records what ran, for the settings file and
-//! per world, so nothing runs twice; a world or settings file the mod has never
-//! seen starts current. Before changing anything the loader logs what it will
-//! do; in a dry run it only logs.
+//! data/enshwick/migrations.toml` records what ran on the settings files, and
+//! each world folder keeps its own record, [`WORLD_RECORD`], so nothing runs
+//! twice, even on a world copied to another install. A settings file or world
+//! the mod has never seen starts current. Before changing anything the loader
+//! logs what it will do; in a dry run it only logs.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -241,7 +242,16 @@ pub enum MigrationError {
     /// deeper than the reader takes; the file is left as it was.
     #[error("settings after the migration: {0}")]
     Unreadable(SyntaxError),
-    /// A file could not be written or removed.
+    /// Another mod's settings file, read for a take, is there but does not
+    /// read.
+    #[error("settings of {id}: {reason}")]
+    OtherFile {
+        /// The other mod.
+        id: String,
+        /// Why its file does not read.
+        reason: std::io::Error,
+    },
+    /// A file could not be read, written or removed.
     #[error("{file}: {reason}")]
     File {
         /// The file's name.
@@ -249,11 +259,30 @@ pub enum MigrationError {
         /// Why.
         reason: std::io::Error,
     },
+    /// The world's record of the migrations that ran on it does not read,
+    /// so nothing runs: it could run a migration twice.
+    #[error("{WORLD_RECORD}: {0}")]
+    WorldRecord(RecordError),
+    /// The shared record does not read, and the world has no record of its
+    /// own, so nothing runs: it could run a migration twice.
+    #[error("mod-data/{RECORD}: {0}")]
+    SharedRecord(String),
+    /// A commit failed and its files could not all be put back; the backup
+    /// keeps them, and the next load tries again.
+    #[error("{first}; putting the files back failed too: {restore}; they are kept in {backup}")]
+    NotRestored {
+        /// Why the commit failed.
+        first: Box<MigrationError>,
+        /// Why putting the files back failed.
+        restore: Box<MigrationError>,
+        /// The backup folder.
+        backup: String,
+    },
 }
 
 /// The text of another mod's settings file beside the one migrated, by that
 /// mod's id; `None` when it has none.
-pub type SourceFn<'a> = &'a dyn Fn(&str) -> Option<String>;
+pub type SourceFn<'a> = &'a dyn Fn(&str) -> std::io::Result<Option<String>>;
 
 /// What ran, for the settings files and per world: mod id to migration ids;
 /// and the former ids whose files each renamed mod took over.
@@ -262,7 +291,8 @@ pub type SourceFn<'a> = &'a dyn Fn(&str) -> Option<String>;
 pub struct Record {
     /// Migrations that ran on each mod's settings file.
     pub settings: BTreeMap<String, Vec<String>>,
-    /// Migrations that ran on each world, by world key.
+    /// Migrations that ran on each world, by world key, from before each
+    /// world kept its own record: read until the world has one.
     pub worlds: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     /// The former ids each mod carried its files over from.
     pub carried: BTreeMap<String, Vec<String>>,
@@ -316,7 +346,7 @@ impl Record {
         let path = data_dir.join(RECORD);
         let body = toml::to_string(self).map_err(std::io::Error::other)?;
         let text = format!(
-            "# Mod migrations that ran: on each mod's settings file, and per world;\n\
+            "# Mod migrations that ran on each mod's settings file (each world keeps its own);\n\
              # and the former ids whose files each renamed mod took over.\n\
              # The loader keeps this file; nothing listed here runs again.\n\n{body}"
         );
@@ -352,6 +382,40 @@ impl Record {
             Some(key) => self.worlds.entry(key.to_owned()).or_default(),
         };
         list.entry(id.to_owned()).or_default()
+    }
+
+    /// What ran for mod `id` on the settings file, or on the world `world`;
+    /// `None` when nothing is recorded.
+    #[must_use]
+    pub fn entry(&self, world: Option<&str>, id: &str) -> Option<&Vec<String>> {
+        match world {
+            None => self.settings.get(id),
+            Some(key) => self.worlds.get(key)?.get(id),
+        }
+        .filter(|ran| !ran.is_empty())
+    }
+
+    /// Sets what ran for mod `id` on the settings file or the world `world`,
+    /// `None` or an empty list removing the entry; whether that changed the
+    /// record.
+    pub fn set_entry(&mut self, world: Option<&str>, id: &str, ran: Option<Vec<String>>) -> bool {
+        let ran = ran.filter(|ran| !ran.is_empty());
+        if self.entry(world, id) == ran.as_ref() {
+            return false;
+        }
+        match (ran, world) {
+            (Some(ran), _) => *self.ran(world, id) = ran,
+            (None, None) => drop(self.settings.remove(id)),
+            (None, Some(key)) => {
+                if let Some(mods) = self.worlds.get_mut(key) {
+                    mods.remove(id);
+                    if mods.is_empty() {
+                        self.worlds.remove(key);
+                    }
+                }
+            }
+        }
+        true
     }
 }
 
@@ -460,7 +524,11 @@ fn take(
     let Some((id, key)) = from.split_once(':') else {
         return Err(MigrationError::NotModKey(from.to_owned()));
     };
-    let Some(text) = source(id) else {
+    let read = source(id).map_err(|reason| MigrationError::OtherFile {
+        id: id.to_owned(),
+        reason,
+    })?;
+    let Some(text) = read else {
         return Ok(());
     };
     let other: DocumentMut = text.parse().map_err(|e| MigrationError::OtherSettings {
@@ -556,60 +624,7 @@ pub fn apply_stores(
 ) -> Result<(), MigrationError> {
     let mut staged = Staged::default();
     stage_stores(&mut staged, dir, index, migration, map)?;
-    staged.commit()
-}
-
-/// Files a migration changes, held until every step of it succeeded, so a
-/// step that fails leaves the files as they were and the migration runs
-/// whole on the next load: `None` for a file it removes.
-#[derive(Debug, Default)]
-struct Staged {
-    files: Vec<(PathBuf, Option<String>)>,
-}
-
-impl Staged {
-    /// The text of `path` as the steps so far leave it.
-    fn read(&self, path: &Path) -> Option<String> {
-        match self.files.iter().rev().find(|(p, _)| p == path) {
-            Some((_, text)) => text.clone(),
-            None => std::fs::read_to_string(path).ok(),
-        }
-    }
-
-    /// Whether `path` exists as the steps so far leave it.
-    fn exists(&self, path: &Path) -> bool {
-        match self.files.iter().rev().find(|(p, _)| p == path) {
-            Some((_, text)) => text.is_some(),
-            None => path.exists(),
-        }
-    }
-
-    fn put(&mut self, path: PathBuf, text: Option<String>) {
-        self.files.retain(|(p, _)| *p != path);
-        self.files.push((path, text));
-    }
-
-    /// Writes every staged file, then removes the ones staged away.
-    fn commit(self) -> Result<(), MigrationError> {
-        let failed = |path: &Path, reason| MigrationError::File {
-            file: path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            reason,
-        };
-        for (path, text) in &self.files {
-            if let Some(text) = text {
-                write(path, text).map_err(|e| failed(path, e))?;
-            }
-        }
-        for (path, text) in &self.files {
-            if text.is_none() && path.exists() {
-                std::fs::remove_file(path).map_err(|e| failed(path, e))?;
-            }
-        }
-        Ok(())
-    }
+    staged.commit(None)
 }
 
 /// Stages the store steps of migration `index` on the world folder `dir`.
@@ -625,9 +640,9 @@ fn stage_stores(
         match step.kind {
             MigrationStep::RENAME_STORE => {
                 let (from, to) = (file(&step.from), file(&step.to));
-                if staged.exists(&from) && !staged.exists(&to) {
+                if staged.exists(&from)? && !staged.exists(&to)? {
                     let text = staged
-                        .read(&from)
+                        .read(&from)?
                         .ok_or_else(|| MigrationError::StoreUnreadable(step.from.clone()))?;
                     staged.put(to, Some(text));
                     staged.put(from, None);
@@ -635,7 +650,7 @@ fn stage_stores(
             }
             MigrationStep::MAP_STORE => {
                 let path = file(&step.from);
-                let Some(text) = staged.read(&path) else {
+                let Some(text) = staged.read(&path)? else {
                     continue;
                 };
                 let new =
@@ -651,23 +666,21 @@ fn stage_stores(
     Ok(())
 }
 
-fn write(path: &Path, text: &str) -> std::io::Result<()> {
-    enshwick::files::write_atomically(path, text)
-}
-
-/// Runs the pending migrations of mod `id` on its settings file, or on a
-/// world folder with its `settings.toml`, and records them in `record`;
-/// returns the plan line, when anything was pending.
+/// Runs the pending migrations of mod `id` on its settings file, recorded
+/// in `record`, or on a world folder with its `settings.toml`, recorded in
+/// the folder; returns the plan line, when anything was pending.
 ///
 /// A settings file that is not there yet waits, unrecorded, for the loader
 /// to write it. A file or world the mod has never seen starts current: only
 /// the steps that take settings from other mods run, and every migration is
-/// recorded.
+/// recorded. On a world each migration commits all or nothing with its
+/// record, keeping a copy of the files it changed (see [`BACKUPS`]).
 ///
 /// # Errors
 ///
 /// The plan line and why the first failing migration failed; the ones
-/// before it are recorded, and all of them on a file the mod never saw.
+/// before it are recorded, and all of them on a file the mod never saw. On
+/// a world whose record does not read nothing runs, and the plan is empty.
 pub fn run(
     record: &mut Record,
     target: Target<'_>,
@@ -676,34 +689,62 @@ pub fn run(
     map: MapFn<'_>,
     dry: bool,
 ) -> Result<Option<String>, (String, String)> {
-    let (world, fresh) = match target {
-        Target::Settings { path, .. } if !path.exists() => return Ok(None),
-        Target::Settings { born, .. } => (None, born),
-        Target::World { key, dir } => (Some(key), !dir.exists()),
+    match target {
+        Target::Settings { path, born } => {
+            if !path.exists() {
+                return Ok(None);
+            }
+            run_on_settings(record.ran(None, id), path, born, id, all, map, dry)
+        }
+        Target::World { key, dir } => run_on_world(record, key, dir, id, all, map, dry),
+    }
+}
+
+/// The pending migrations of `all` after `ran`, or on a file or world the
+/// mod has never seen, only their steps that take settings from other mods,
+/// in `taking`.
+fn pending_of<'a>(
+    all: &'a [Migration],
+    ran: &[String],
+    fresh: bool,
+    taking: &'a mut Vec<(usize, Migration)>,
+) -> Vec<(usize, &'a Migration)> {
+    if !fresh {
+        return pending(all, ran);
+    }
+    *taking = all
+        .iter()
+        .enumerate()
+        .map(|(index, m)| {
+            let steps = m.steps.iter().filter(|s| s.takes()).cloned().collect();
+            (
+                index,
+                Migration {
+                    id: m.id.clone(),
+                    steps,
+                },
+            )
+        })
+        .filter(|(_, m)| !m.steps.is_empty())
+        .collect();
+    taking.iter().map(|(index, m)| (*index, m)).collect()
+}
+
+/// [`run`] on a mod's settings file, recorded in `ran`.
+fn run_on_settings(
+    ran: &mut Vec<String>,
+    path: &Path,
+    fresh: bool,
+    id: &str,
+    all: &[Migration],
+    map: MapFn<'_>,
+    dry: bool,
+) -> Result<Option<String>, (String, String)> {
+    let source = |other: &str| {
+        enshwick::files::read_to_string_if_present(&path.with_file_name(format!("{other}.toml")))
     };
-    let source = |other: &str| std::fs::read_to_string(target.source(other)).ok();
-    let ran = record.ran(world, id);
-    let taking: Vec<(usize, Migration)>;
-    let pending: Vec<(usize, &Migration)> = if fresh {
-        taking = all
-            .iter()
-            .enumerate()
-            .map(|(index, m)| {
-                let steps = m.steps.iter().filter(|s| s.takes()).cloned().collect();
-                (
-                    index,
-                    Migration {
-                        id: m.id.clone(),
-                        steps,
-                    },
-                )
-            })
-            .filter(|(_, m)| !m.steps.is_empty())
-            .collect();
-        taking.iter().map(|(index, m)| (*index, m)).collect()
-    } else {
-        pending(all, ran)
-    };
+    let mut taking = Vec::new();
+    let pending = pending_of(all, ran, fresh, &mut taking);
     if fresh && !dry {
         ran.clear();
         ran.extend(all.iter().map(|m| m.id.clone()));
@@ -711,31 +752,18 @@ pub fn run(
     if pending.is_empty() {
         return Ok(None);
     }
-    let line = plan(id, &pending, world.is_none());
+    let line = plan(id, &pending, true);
     if dry {
         return Ok(Some(line));
     }
     let mut changed = false;
     for (index, migration) in pending {
         let mut staged = Staged::default();
-        let applied = match target {
-            Target::Settings { path, .. } => {
-                stage_settings(&mut staged, path, index, migration, map, &source)
-            }
-            Target::World { dir, .. } => stage_settings(
-                &mut staged,
-                &dir.join("settings.toml"),
-                index,
-                migration,
-                map,
-                &source,
-            )
-            .and_then(|()| stage_stores(&mut staged, dir, index, migration, map)),
-        }
-        .and_then(|()| {
-            changed |= !staged.files.is_empty();
-            staged.commit()
-        });
+        let applied =
+            stage_settings(&mut staged, path, index, migration, map, &source).and_then(|()| {
+                changed |= !staged.files.is_empty();
+                staged.commit(None)
+            });
         if let Err(reason) = applied {
             return Err((line, format!("migration {}: {reason}", migration.id)));
         }
@@ -744,6 +772,86 @@ pub fn run(
         }
     }
     Ok((changed || !fresh).then_some(line))
+}
+
+/// [`run`] on the world `key` in the mod's folder for it, `dir`, recorded in
+/// the world's own record there; `record`'s entry for the world, kept from
+/// before worlds had their own, counts until the world's record is written,
+/// and then goes.
+fn run_on_world(
+    record: &mut Record,
+    key: &str,
+    dir: &Path,
+    id: &str,
+    all: &[Migration],
+    map: MapFn<'_>,
+    dry: bool,
+) -> Result<Option<String>, (String, String)> {
+    let failed = |reason: MigrationError| (String::new(), reason.to_string());
+    let fresh = !dir
+        .try_exists()
+        .map_err(|e| failed(staged::failed(dir, e)))?;
+    let own = if fresh {
+        None
+    } else {
+        WorldRecord::read(dir).map_err(|e| failed(MigrationError::WorldRecord(e)))?
+    };
+    let shared = record.entry(Some(key), id);
+    let mut ran = match (&own, shared) {
+        (Some(own), _) => own.ran.clone(),
+        (None, Some(shared)) => shared.clone(),
+        (None, None) => Vec::new(),
+    };
+    if !fresh && !dry {
+        recover(dir, &ran).map_err(failed)?;
+    }
+    let source = |other: &str| {
+        enshwick::files::read_to_string_if_present(&Target::World { key, dir }.source(other))
+    };
+    let mut taking = Vec::new();
+    let pending = pending_of(all, &ran, fresh, &mut taking);
+    let line = (!pending.is_empty()).then(|| plan(id, &pending, false));
+    if dry {
+        return Ok(line);
+    }
+    let unrecorded = own.is_none() || fresh;
+    if fresh {
+        ran = all.iter().map(|m| m.id.clone()).collect();
+    }
+    let mut changed = false;
+    for (index, migration) in pending {
+        let mut staged = Staged::default();
+        let applied = stage_settings(
+            &mut staged,
+            &dir.join("settings.toml"),
+            index,
+            migration,
+            map,
+            &source,
+        )
+        .and_then(|()| stage_stores(&mut staged, dir, index, migration, map))
+        .and_then(|()| {
+            changed |= !staged.files.is_empty();
+            if !fresh {
+                ran.push(migration.id.clone());
+            }
+            staged.record(dir, WorldRecord { ran: ran.clone() });
+            staged.commit(Some((&backup_of(dir, &migration.id), &migration.id)))
+        });
+        if let Err(reason) = applied {
+            let line = line.unwrap_or_default();
+            return Err((line, format!("migration {}: {reason}", migration.id)));
+        }
+    }
+    if unrecorded && line.is_none() {
+        let mut staged = Staged::default();
+        staged.record(dir, WorldRecord { ran });
+        staged
+            .commit(None)
+            .map_err(|reason| (line.clone().unwrap_or_default(), reason.to_string()))?;
+    }
+    record.set_entry(Some(key), id, None);
+    Ok(line.filter(|_| changed || !fresh))
 }
 
 /// Stages a migration's settings steps on the file at `path`: on an empty
@@ -760,7 +868,7 @@ fn stage_settings(
     if !migration.steps.iter().any(Step::on_settings) {
         return Ok(());
     }
-    let text = match staged.read(path) {
+    let text = match staged.read(path)? {
         Some(text) => text,
         None if migration.steps.iter().any(Step::takes) => String::new(),
         None => return Ok(()),
@@ -815,6 +923,11 @@ pub(crate) use live::{register, renamed, settings_written, world_loaded};
 
 #[cfg(windows)]
 mod live;
+
+mod staged;
+
+pub use staged::{BACKUPS, WORLD_RECORD, WorldRecord};
+use staged::{Staged, backup_of, recover};
 
 /// Each old GUID to the end of its chain of renames, A to C for A to B and
 /// B to C; a cycle stops where it would come back.
