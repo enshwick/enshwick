@@ -25,7 +25,7 @@ use enshwick::abi::{ChunkData, Event, Header, HookFlags, Status, WeatherFront};
 use enshwick::raw::read_at;
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::memory::{read, write};
 use crate::pinned::{self, Symbol};
@@ -607,7 +607,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = CHUNKS.set(chunks);
     loader.link_feature(
         "chunk events",
-        loader.address(pinned::chunks::STEP),
+        Target::Pinned(pinned::chunks::STEP),
         &CHUNK_NEXT,
         chunk_step as ChunkFn,
         HookFlags::NONE,

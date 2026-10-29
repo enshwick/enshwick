@@ -22,7 +22,7 @@ use enshwick::raw::{read_at, write_at};
 use texts::{TEXTS, seal_texts};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -276,19 +276,19 @@ pub(crate) fn seal_and_link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let _linked = loader.link_feature(
         "served resources (resource.open)",
-        loader.address(pinned::resource::OPEN),
+        Target::Pinned(pinned::resource::OPEN),
         &OPEN_NEXT,
         open,
         none,
     ) && loader.link_feature(
         "served resources (resource.resolve)",
-        loader.address(pinned::resource::RESOLVE),
+        Target::Pinned(pinned::resource::RESOLVE),
         &RESOLVE_NEXT,
         resolve,
         none,
     ) && loader.link_feature(
         "served resources (resource.key_of)",
-        loader.address(pinned::resource::KEY_OF),
+        Target::Pinned(pinned::resource::KEY_OF),
         &KEY_NEXT,
         key_of,
         none,

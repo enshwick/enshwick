@@ -23,7 +23,7 @@ use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 use enshwick_gamedata::catalogue;
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Constant};
@@ -305,11 +305,15 @@ pub(crate) fn link(loader: &Loader) {
         }
     };
     let _set = MARKERS.layout.set(layout);
-    let target = loader
-        .reflection
-        .system("replicate_map_markers_for_ui")
-        .ok()
-        .map(enshwick_gamedata::reflect::System::entry);
+    let system = "replicate_map_markers_for_ui";
+    let target = Target::Found(
+        system,
+        loader
+            .reflection
+            .system(system)
+            .ok()
+            .map(enshwick_gamedata::reflect::System::entry),
+    );
     loader.link_feature(
         "map markers",
         target,

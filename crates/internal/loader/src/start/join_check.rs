@@ -1,6 +1,6 @@
 //! Linking the loader's join check and its dialog hold on the client.
 
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::pinned;
 
 use super::game::identify;
@@ -30,7 +30,7 @@ pub(super) fn link_join(loader: &Loader) {
         Ok((join, code)) => {
             let linked = loader.link_feature(
                 "join check",
-                Some(join),
+                Target::Found(pinned::net::JOIN_GAME.id(), Some(join)),
                 &crate::join::NEXT,
                 crate::join::detour,
                 enshwick::abi::HookFlags::NONE,
@@ -91,7 +91,7 @@ fn link_join_hold(loader: &Loader, code: core::ops::Range<u64>) {
     }
     loader.link_feature(
         "join dialog hold",
-        Some(start),
+        Target::Found(pinned::user::START_INTERACTION.id(), Some(start)),
         &interaction::NEXT,
         interaction::detour,
         enshwick::abi::HookFlags::NONE,

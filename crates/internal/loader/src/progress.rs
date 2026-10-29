@@ -13,7 +13,7 @@ use enshwick::abi::{
 
 use crate::chains::Next;
 use crate::ecs::Engine;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::host::{Registered, take};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -197,6 +197,9 @@ pub(crate) fn register_experience(
     Status::OK
 }
 
+/// The system that levels players up from their experience.
+const LEVEL_SYSTEM: &str = "player_level";
+
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
         skills: take(&SKILLS).into_boxed_slice(),
@@ -214,23 +217,27 @@ pub(crate) fn link(loader: &'static Loader) {
         symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN).unwrap_or(0),
         Ordering::Relaxed,
     );
-    let player_level = match crate::ecs::components_match(loader, "player_level", &READS, &WRITES) {
-        Ok(()) => loader
-            .reflection
-            .system("player_level")
-            .map_or(0, enshwick_gamedata::reflect::System::entry),
+    let player_level = match crate::ecs::components_match(loader, LEVEL_SYSTEM, &READS, &WRITES) {
+        Ok(()) => Some(Target::Found(
+            LEVEL_SYSTEM,
+            loader
+                .reflection
+                .system(LEVEL_SYSTEM)
+                .ok()
+                .map(enshwick_gamedata::reflect::System::entry),
+        )),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");
+                crate::diag::part_off("experience", &why);
             }
-            0
+            None
         }
     };
-    let address = |name| loader.address(name);
     if wants[0]
         && loader.link_feature(
             "skill checks",
-            address(pinned::skill::NODE_UNLOCKED),
+            Target::Pinned(pinned::skill::NODE_UNLOCKED),
             &SKILL_NEXT,
             node_unlocked,
             HookFlags::CALLER_FRAME,
@@ -241,7 +248,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[1]
         && loader.link_feature(
             "comfort",
-            address(pinned::comfort::BASE_REGISTER),
+            Target::Pinned(pinned::comfort::BASE_REGISTER),
             &COMFORT_NEXT,
             register,
             HookFlags::NONE,
@@ -250,9 +257,10 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(INFO, "comfort filtered by mods");
     }
     if wants[2]
+        && let Some(player_level) = player_level
         && loader.link_feature(
             "experience",
-            Some(player_level),
+            player_level,
             &LEVEL_NEXT,
             player_level_link,
             HookFlags::NONE,

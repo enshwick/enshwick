@@ -21,7 +21,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick::abi::{HookFlags, Status};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -288,26 +288,30 @@ pub(crate) fn link(loader: &'static Loader) {
             reply_type: u8::try_from(constant(pinned::chat::REPLY_TYPE)?).ok()?,
         })
     })();
-    let (Some(layout), Some(target)) = (layout, symbol(pinned::chat::POST)) else {
+    let Some(layout) = layout else {
         crate::log!(WARN, "chat lines off: this build has no chat layout");
         return;
     };
-    if LOADED.set((loader, layout)).is_err() {
+    if LOADED.get().is_some() {
         return;
     }
-    let status = loader.link(target, &POST_NEXT, post, HookFlags::CALLER_FRAME);
-    if !status.is_ok() {
-        crate::log!(WARN, "chat lines off: refused ({})", status.0);
+    // Linked first: without the post, mods' lines must stay refused.
+    let target = Target::Pinned(pinned::chat::POST);
+    let flags = HookFlags::CALLER_FRAME;
+    if !loader.link_feature("chat lines", target, &POST_NEXT, post, flags)
+        || LOADED.set((loader, layout)).is_err()
+    {
         return;
     }
     crate::log!(INFO, "chat lines and mod messages on");
-    link_client(loader, symbol(pinned::chat::CLIENT_SEND));
+    if loader.side == enshwick::abi::Side::CLIENT {
+        link_client(loader);
+    }
 }
 
 /// Links the client's chat send, so its own frames go with what it sends.
-fn link_client(loader: &'static Loader, target: Option<u64>) {
-    let (Some(target), Some(queue), Some(store)) = (
-        target,
+fn link_client(loader: &'static Loader) {
+    let (Some(queue), Some(store)) = (
         loader.address(pinned::chat::CLIENT_QUEUE),
         loader.offset(pinned::chat::CLIENT_STORE),
     ) else {
@@ -324,7 +328,7 @@ fn link_client(loader: &'static Loader, target: Option<u64>) {
     });
     loader.link_feature(
         "mod messages to the server",
-        Some(target),
+        Target::Pinned(pinned::chat::CLIENT_SEND),
         &CLIENT_SEND_NEXT,
         client_send as ClientSendFn,
         HookFlags::NONE,

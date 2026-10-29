@@ -19,7 +19,7 @@ use enshwick::Entity;
 use enshwick::abi::{Header, HookFlags, PlayerInfo, Status};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::memory::read;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
@@ -159,7 +159,7 @@ static WORLD_STEP_NEXT: Next<WorldStepFn> = unsafe { Next::new() };
 /// Links the world step, which runs every ECS system of a world, the
 /// server's on its game thread and on a client its own as well.
 pub(crate) fn link(loader: &'static Loader) {
-    let target = loader.address(pinned::world::STEP);
+    let target = Target::Pinned(pinned::world::STEP);
     let linked = loader.link_feature(
         "world-step gate",
         target,

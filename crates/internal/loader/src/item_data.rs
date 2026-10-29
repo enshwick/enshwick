@@ -38,7 +38,7 @@ use enshwick::abi::{Event, HookFlags, Status};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::item_records::anchor::{self, Anchor, Index, Pending};
 use crate::item_records::file::{self, Saved};
 use crate::item_records::{decode, encode};
@@ -293,7 +293,7 @@ pub(crate) fn link(loader: &Loader) {
     }
     loader.link_feature(
         "mod data of destroyed entities",
-        loader.address(pinned::ecs::DESTROY_REQUEST),
+        Target::Pinned(pinned::ecs::DESTROY_REQUEST),
         &DESTROY_NEXT,
         destroy,
         HookFlags::NONE,

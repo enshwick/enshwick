@@ -182,6 +182,11 @@ revision = 1
 "pacing.background_workers" = { rva = 0x5c_f3d0, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 34 }
 
 [constants]
+# The first eight bytes of the survivor functions the loader hooks, which
+# their call-site patterns reach without a head of their own.
+"npc.lookup.bytes" = "0x8d48_20ec_8348_5340"
+"npc.lookup_cursor.bytes" = "0x8d48_20ec_8348_5340"
+"npc.update.bytes" = "0xcccc_cc00_0000_0be9"
 "ecs.context_row" = { value = 0x8, pattern = "F2 0F 11 44 24 ?? E8 ?? ?? ?? ?? 48 8B 0F 8B 47 ?? 4C 8B 51 ?? 85 C0 74 10", at = 16, size = 1 }
 "ecs.descriptor_entity_records" = { value = 0x828, pattern = "74 10 8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ??", at = 8, size = 4 }
 "ecs.entity_record_size" = { value = 0x10, pattern = "8D 50 ?? 48 8B 81 ?? ?? ?? ?? 48 03 D2 8B 04 D0 49 8D 52 ?? 89 44 24 ??", fixed = true }

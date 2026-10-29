@@ -26,7 +26,7 @@ use std::sync::{Mutex, OnceLock};
 use enshwick::abi::{DaytimeInfo, Event, Header, HookFlags, Status};
 
 use crate::chains::Next;
-use crate::host::{Loader, is_off, take};
+use crate::host::{Loader, Target, is_off, take};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::pinned;
@@ -347,7 +347,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wanted {
         loader.link_feature(
             "time speed",
-            loader.address(pinned::daytime::SET_SPEED),
+            Target::Pinned(pinned::daytime::SET_SPEED),
             &SPEED_NEXT,
             speed as SetSpeedFn,
             HookFlags::NONE,
