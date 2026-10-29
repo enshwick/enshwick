@@ -99,6 +99,7 @@ mod recipe_kinds;
 mod recipe_menu;
 mod recipe_rules;
 mod resource_types;
+mod schedule;
 mod services;
 mod shapes;
 mod skills;

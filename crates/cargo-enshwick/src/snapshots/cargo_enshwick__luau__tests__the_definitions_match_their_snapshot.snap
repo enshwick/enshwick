@@ -305,6 +305,8 @@ export type TickData = {
 	step_nanos: string,
 	--- What one call of this mod's event handlers cost on average since this handler's last call, in nanoseconds; 0 for an every-step handler, unless the loader's diagnostics time callbacks, and for about a second after they start, while the loader measures its clock.
 	cost_nanos: string,
+	--- Which game the server steps, from 1: a dedicated server runs one, and a client counts one more for each game it hosts after the first.
+	game: string,
 }
 
 --- A character gained experience.

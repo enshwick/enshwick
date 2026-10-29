@@ -9,7 +9,7 @@
 
 // The ABI version: a hash of the layout of every ABI type. A loader
 // loads only mods built for its own.
-#define ENSHWICK_ABI_VERSION 0xf4f36e0d
+#define ENSHWICK_ABI_VERSION 0xb1ad3412
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -4328,6 +4328,9 @@ typedef struct EnshwickTickData {
   // about a second after they start, while the loader measures its
   // clock.
   uint64_t cost_nanos;
+  // Which game the server steps, from 1: a dedicated server runs one,
+  // and a client counts one more for each game it hosts after the first.
+  uint64_t game;
 } EnshwickTickData;
 
 // A box of voxels, for `TransactionOp::ERASE`.
