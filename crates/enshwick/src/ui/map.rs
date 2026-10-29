@@ -209,7 +209,9 @@ impl Ui {
 
     /// Every marker type of the game's marker type registry, in the
     /// registry's order: an open set the game's data defines. The loader
-    /// reads it from the game's archive at the first call; any thread.
+    /// reads it from the game's archive once, on the thread of the first
+    /// call or of the first marker with a type, which costs that call a few
+    /// milliseconds; any thread.
     ///
     /// Unstable: needs the `unstable` feature and may change in any release.
     ///

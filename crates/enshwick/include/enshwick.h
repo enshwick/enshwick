@@ -3457,7 +3457,12 @@ typedef struct EnshwickHostApi {
   // Replaces the mod's markers on the client's map with the `count` at
   // `markers`, copied; none clears them. Any thread. Client only
   // (`Status::MISSING` on a server); `Status::BAD_ARGS` past 256
-  // markers.
+  // markers. A marker with a non-zero `UiMarker::marker_type` has the
+  // loader read the registry as `HostApi::map_marker_types` does, on
+  // the calling thread at the first such call: `Status::BAD_ARGS` for
+  // a type it does not list, `Status::MISSING` when it does not read.
+  // The mod's markers stay as they were after either. A type the
+  // registry the map runs on lacks shows as the loader's own choice.
   // Every entry is as large as the header of the first one says.
   EnshwickStatus (*ui_markers)(EnshwickModHandle me,
                                const struct EnshwickUiMarker *markers,

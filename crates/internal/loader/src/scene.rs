@@ -349,40 +349,37 @@ pub(crate) fn frame_info(loader: &Loader) -> Result<MapFrameInfo, Status> {
 }
 
 /// The client's marker types, read from the game's archive at the first ask
-/// and kept; any thread. A dedicated server's archive has no registry.
+/// and kept; any thread. A dedicated server's archive has no registry. The
+/// first ask reads under the scene lock, a few milliseconds once, so two
+/// first asks read and report once.
 pub(crate) fn marker_types(loader: &Loader) -> Result<Arc<[MapMarkerTypeInfo]>, Status> {
     if loader.side == Side::SERVER {
         return Err(Status::MISSING);
     }
-    if let Some(known) = STATE.relock().marker_types.get() {
-        return known.clone().ok_or(Status::MISSING);
-    }
-    let started = Instant::now();
-    let read = match read_marker_types(loader) {
-        Ok(read) => {
-            crate::log!(
-                INFO,
-                "map marker types: {} in the registry, read in {} ms",
-                read.len(),
-                started.elapsed().as_millis()
-            );
-            Some(Arc::from(read))
+    let state = STATE.relock();
+    let known = state.marker_types.get_or_init(|| {
+        let started = Instant::now();
+        match read_marker_types(loader) {
+            Ok(read) => {
+                crate::log!(
+                    INFO,
+                    "map marker types: {} in the registry, read in {} ms",
+                    read.len(),
+                    started.elapsed().as_millis()
+                );
+                Some(Arc::from(read))
+            }
+            Err(why) => {
+                loader.feature_off(
+                    "map marker types",
+                    names::ids::MAP_MARKER_REGISTRY,
+                    &why.to_string(),
+                );
+                None
+            }
         }
-        Err(why) => {
-            loader.feature_off(
-                "map marker types",
-                names::ids::MAP_MARKER_REGISTRY,
-                &why.to_string(),
-            );
-            None
-        }
-    };
-    STATE
-        .relock()
-        .marker_types
-        .get_or_init(|| read)
-        .clone()
-        .ok_or(Status::MISSING)
+    });
+    known.clone().ok_or(Status::MISSING)
 }
 
 /// The reflected layout the marker type parse reads, from the catalogue's

@@ -4,6 +4,8 @@
 //! each with its key, name, sorting and flags at offsets from the game's
 //! reflection.
 
+use core::num::NonZeroU32;
+
 use enshwick::abi::{Header, MapMarkerTypeInfo, MarkerTypeSorting};
 
 use crate::scene_markers::array;
@@ -166,6 +168,39 @@ pub fn types(
         .collect()
 }
 
+/// What the loader keeps of the marker type registry the client's map runs
+/// on, which it reads from the game's memory, apart from the archive's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunningTypes {
+    /// The marker type for a mod marker without its own.
+    pub default: u32,
+    /// Every marker type the running registry lists.
+    pub ids: Box<[u32]>,
+}
+
+impl RunningTypes {
+    /// The marker type the map's entry gets for a marker whose mod chose
+    /// `own`: that one where the running registry lists it, else the
+    /// default, so only a type the running map knows reaches its list.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use core::num::NonZeroU32;
+    /// use enshwick_loader::map_marker_types::RunningTypes;
+    ///
+    /// let running = RunningTypes { default: 7, ids: Box::new([7, 9]) };
+    /// assert_eq!(running.choose(NonZeroU32::new(9)), 9);
+    /// assert_eq!(running.choose(None), 7);
+    /// ```
+    #[must_use]
+    pub fn choose(&self, own: Option<NonZeroU32>) -> u32 {
+        own.map(NonZeroU32::get)
+            .filter(|id| self.ids.contains(id))
+            .unwrap_or(self.default)
+    }
+}
+
 fn bytes<const N: usize>(data: &[u8], at: usize) -> Option<[u8; N]> {
     data.get(at..at.checked_add(N)?)?.try_into().ok()
 }
@@ -274,6 +309,21 @@ mod tests {
             ..LAYOUT
         };
         assert!(!overflowing.is_sound());
+    }
+
+    #[test]
+    fn a_mod_s_type_the_running_registry_lacks_falls_back_to_the_default() {
+        let running = RunningTypes {
+            default: 0x10,
+            ids: Box::new([0x10, 0x20]),
+        };
+        assert_eq!(running.choose(NonZeroU32::new(0x20)), 0x20);
+        assert_eq!(
+            running.choose(NonZeroU32::new(0x30)),
+            0x10,
+            "listed only in the archive"
+        );
+        assert_eq!(running.choose(None), 0x10);
     }
 
     proptest::proptest! {
