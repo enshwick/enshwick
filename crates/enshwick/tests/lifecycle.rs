@@ -31,15 +31,15 @@ mod tests {
         static DOUBLE: extern "system" fn(value: u32) -> u32 = double, priority = -5;
     }
 
-    fn double(next: Next<extern "system" fn(u32) -> u32>, value: u32) -> u32 {
+    fn double(next: Next<'_, extern "system" fn(u32) -> u32>, value: u32) -> u32 {
         assert_ne!(value, 13, "unlucky");
-        next.get()(value) * 2
+        next.call(value) * 2
     }
 
     #[hook(priority = 5, flags = HookFlags::EXCLUSIVE)]
-    fn halve(next: Next<unsafe extern "system" fn(u32) -> u32>, value: u32) -> u32 {
+    fn halve(next: Next<'_, unsafe extern "system" fn(u32) -> u32>, value: u32) -> u32 {
         // SAFETY: the chain behind `HALVE` ends in `tripled`, which takes any value.
-        unsafe { next.get()(value) / 2 }
+        unsafe { next.call(value) / 2 }
     }
 
     /// Test settings.

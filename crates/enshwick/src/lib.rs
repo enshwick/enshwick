@@ -336,12 +336,12 @@ pub use enshwick_macros::event;
 /// Declares a hook from its body, as [`detour!`] does: the function stays,
 /// and a static [`Hook`] named after it in upper case joins it.
 ///
-/// The first argument is `next: Next<F>`, where `F` is the target's
+/// The first argument is `next: Next<'_, F>`, where `F` is the target's
 /// `extern "system" fn` type or an alias of it; the other arguments are the
-/// target's, by plain names, and `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// target's, by plain names. Arguments and the return value are `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
-/// comment. A panic in the body falls through as with [`detour!`]; work after
-/// `next` goes in [`Hook::after_next`].
+/// comment. A panic in the body runs the game's function at most once, as
+/// with [`detour!`].
 ///
 /// # Examples
 ///
@@ -351,9 +351,9 @@ pub use enshwick_macros::event;
 ///
 /// /// Counts upgrades.
 /// #[hook(priority = 5, flags = HookFlags::CALLER_FRAME)]
-/// fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+/// fn upgrade(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 ///     // SAFETY: the original takes the same context.
-///     unsafe { next.get()(ctx) }
+///     unsafe { next.call(ctx) }
 /// }
 ///
 /// assert_eq!(UPGRADE.name(), "UPGRADE");
@@ -446,6 +446,7 @@ pub use world_error::WorldError;
 pub mod __private {
     pub use const_format::concatcp;
 
+    pub use crate::hook::Frame;
     pub use crate::locks::Relock;
     pub use crate::script::convert::{argument, record_fields};
 
@@ -596,6 +597,9 @@ pub mod __private {
 
     /// Compiles only for a `Copy` hook argument.
     pub const fn hook_argument<T: Copy>() {}
+
+    /// Compiles only for a `Copy` hook return value.
+    pub const fn hook_return<T: Copy>() {}
 
     #[must_use]
     pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {

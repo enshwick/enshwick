@@ -18,8 +18,8 @@ enshwick::detour! {
     static PASS: extern "system" fn(base: u32) -> u32 = pass;
 }
 
-fn pass(next: Next<Reward>, base: u32) -> u32 {
-    next.get()(base)
+fn pass(next: Next<'_, Reward>, base: u32) -> u32 {
+    next.call(base)
 }
 
 struct Bench;

@@ -87,9 +87,21 @@ the mod as it is now, so the loader records every migration as done and
 runs only the `take_setting` steps. This holds for a world created after the update and for a world
 the mod joins late.
 
-`mod-data/enshwick/migrations.toml` records what ran, per mod, for the
-settings files and for each world by its [key](world.md). Delete a mod's
-line to run its migrations again.
+Each world keeps its own record of what ran, in
+`mod-data/<mod id>/worlds/<key>/.migrations.toml` beside the world's
+settings and stores, so the record goes wherever they go.
+`mod-data/enshwick/migrations.toml` records what ran on the settings files.
+Delete a migration's id from a record to run it again.
+
+On a world, a migration changes its files all or nothing. Before it writes
+anything, the loader copies every file the migration changes to
+`.backup/<migration id>/` in the world's folder. If a write fails, or the
+game stops part way, the loader puts the copies back, at once or at the next
+load, and the migration runs again whole. The copies stay after a migration
+succeeds. To undo it, stop the game and copy them back.
+
+When a record does not read, the mod turns off with the reason instead of
+running a migration twice.
 
 ## Settings from another mod
 

@@ -44,8 +44,16 @@ fn double(_: usize, _: usize, input: &str) -> Result<String, MapError> {
     Ok((n * 2).to_string())
 }
 
-fn none(_: &str) -> Option<String> {
-    None
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "a source of other mods' settings reads a file"
+)]
+fn none(_: &str) -> std::io::Result<Option<String>> {
+    Ok(None)
+}
+
+fn ran_on(world: &Path) -> Vec<String> {
+    WorldRecord::read(world).unwrap().unwrap().ran
 }
 
 fn scratch(name: &str) -> PathBuf {
@@ -153,7 +161,7 @@ fn a_world_runs_its_pending_migrations_once() {
         std::fs::read_to_string(world.join("keepers.toml")).unwrap(),
         "count = 5\n"
     );
-    assert_eq!(record.worlds["w1"]["you.trading-post"], ["2", "3"]);
+    assert_eq!(ran_on(&world), ["2", "3"]);
     assert_eq!(
         run(&mut record, target, "you.trading-post", &all, &map, false).unwrap(),
         None
@@ -220,7 +228,7 @@ fn a_migration_that_fails_midway_changes_nothing() {
     )
     .unwrap_err();
     assert!(reason.contains("refused"), "{reason}");
-    assert!(record.worlds["w1"]["you.trading-post"].is_empty());
+    assert_eq!(WorldRecord::read(&world).unwrap(), None);
     assert_eq!(
         std::fs::read_to_string(world.join("settings.toml")).unwrap(),
         "limit = 2
@@ -274,7 +282,7 @@ fn a_world_the_mod_never_saw_starts_current() {
         ),
         Ok(None)
     );
-    assert_eq!(record.worlds["new"]["you.trading-post"], ["2"]);
+    assert_eq!(ran_on(&world), ["2"]);
     let _gone = std::fs::remove_dir_all(&dir);
 }
 
@@ -353,7 +361,7 @@ fn a_taken_setting_comes_from_the_other_mod_s_file_with_its_value() {
             step(MigrationStep::TAKE_SETTING, "gone:limit", "limit"),
         ],
     );
-    let source = |id: &str| (id == "comfort").then(|| "multiplier = 2.5\n".to_owned());
+    let source = |id: &str| Ok((id == "comfort").then(|| "multiplier = 2.5\n".to_owned()));
     let text = "# Comfort per piece.\ncomfort_multiplier = 1.0\nlimit = 3\n";
     let new = apply_settings(text, 0, &m, &double, &source).unwrap();
     assert_eq!(
@@ -372,8 +380,8 @@ fn a_taken_setting_comes_from_the_other_mod_s_file_with_its_value() {
         ],
     );
     let source = |id: &str| match id {
-        "comfort" => Some("multiplier = 2.5\n".to_owned()),
-        _ => Some("[recipes]\ncost = 3\n".to_owned()),
+        "comfort" => Ok(Some("multiplier = 2.5\n".to_owned())),
+        _ => Ok(Some("[recipes]\ncost = 3\n".to_owned())),
     };
     let new = apply_settings("a = 1\n", 0, &nested, &double, &source).unwrap();
     assert_eq!(new, "a = 1\ncost = 3\n\n[comfort]\nmultiplier = 2.5\n");
@@ -445,7 +453,7 @@ fn a_new_world_takes_the_other_mod_s_world_values() {
         std::fs::read_to_string(dir.join("settings.toml")).unwrap(),
         "comfort = 4.0\n"
     );
-    assert_eq!(record.worlds["w-1"]["rates"], ["2"]);
+    assert_eq!(ran_on(&dir), ["2"]);
     let other = Target::World {
         key: "w-2",
         dir: &data.join("rates/worlds/w-2"),
@@ -454,7 +462,8 @@ fn a_new_world_takes_the_other_mod_s_world_values() {
         run(&mut record, other, "rates", &all, &double, false),
         Ok(None)
     );
-    assert!(!data.join("rates/worlds/w-2").exists());
+    assert_eq!(ran_on(&data.join("rates/worlds/w-2")), ["2"]);
+    assert!(!data.join("rates/worlds/w-2/settings.toml").exists());
     let _gone = std::fs::remove_dir_all(&data);
 }
 
@@ -471,6 +480,20 @@ fn taking_over_a_former_id_counts_its_migrations() {
     assert_eq!(record.settings["new"], ["2"]);
     assert_eq!(record.worlds["w-1"]["new"], ["3", "2"]);
     assert_eq!(record.carried["new"], ["old"]);
+}
+
+#[test]
+fn an_entry_set_to_nothing_leaves_the_record() {
+    let mut record = Record::default();
+    assert!(!record.set_entry(Some("w1"), "a", Some(Vec::new())));
+    assert!(record.set_entry(Some("w1"), "a", Some(vec!["2".to_owned()])));
+    assert!(!record.set_entry(Some("w1"), "a", Some(vec!["2".to_owned()])));
+    assert_eq!(record.entry(Some("w1"), "a"), Some(&vec!["2".to_owned()]));
+    assert!(record.set_entry(Some("w1"), "a", None));
+    assert!(record.worlds.is_empty(), "{record:?}");
+    assert!(record.set_entry(None, "a", Some(vec!["1".to_owned()])));
+    assert!(record.set_entry(None, "a", Some(Vec::new())));
+    assert_eq!(record, Record::default());
 }
 
 #[test]
@@ -577,7 +600,7 @@ fn a_broken_settings_line_is_named_without_its_value() {
         "2",
         vec![step(MigrationStep::TAKE_SETTING, "vault:token", "token")],
     );
-    let source = |_: &str| Some("# Vault.\ntoken = \"hunter2\n".to_owned());
+    let source = |_: &str| Ok(Some("# Vault.\ntoken = \"hunter2\n".to_owned()));
     let error = apply_settings("limit = 4\n", 0, &take, &double, &source).unwrap_err();
     let text = shown_without("hunter2", &error);
     assert!(text.contains("vault") && text.contains("line 2"), "{text}");
@@ -596,6 +619,356 @@ fn a_broken_settings_line_is_named_without_its_value() {
             "{text}"
         );
     }
+}
+
+/// A world folder of `you.lockers` with a settings file and one store, and
+/// two migrations: one on the settings, one renaming and changing the store.
+fn lockers_world(name: &str) -> (PathBuf, PathBuf, [Migration; 2]) {
+    let dir = scratch(name);
+    let world = dir.join("you.lockers/worlds/w1");
+    std::fs::create_dir_all(&world).unwrap();
+    std::fs::write(world.join("settings.toml"), "limit = 2\n").unwrap();
+    std::fs::write(world.join("owners.toml"), "count = 1\n").unwrap();
+    let all = [
+        migration("2", vec![step(MigrationStep::MAP_SETTING, "limit", "")]),
+        migration(
+            "3",
+            vec![
+                step(MigrationStep::RENAME_STORE, "owners", "keepers"),
+                step(MigrationStep::MAP_STORE, "keepers", ""),
+            ],
+        ),
+    ];
+    (dir, world, all)
+}
+
+fn fives(_: usize, step: usize, input: &str) -> Result<String, MapError> {
+    if step == 1 {
+        Ok(input.replace('1', "5"))
+    } else {
+        double(0, 0, input)
+    }
+}
+
+#[test]
+fn a_world_keeps_its_own_record_so_a_lost_shared_record_runs_nothing_twice() {
+    let (dir, world, all) = lockers_world("own-record");
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    let mut record = Record::default();
+    assert!(run(&mut record, target, "you.lockers", &all, &fives, false).is_ok());
+    assert_eq!(ran_on(&world), ["2", "3"]);
+    assert!(record.worlds.is_empty(), "{record:?}");
+
+    let mut lost = Record::default();
+    assert_eq!(
+        run(&mut lost, target, "you.lockers", &all, &fives, false),
+        Ok(None)
+    );
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 4\n"
+    );
+
+    let copy = dir.join("other-install/you.lockers/worlds/w1");
+    std::fs::create_dir_all(&copy).unwrap();
+    for name in [WORLD_RECORD, "settings.toml", "keepers.toml"] {
+        std::fs::copy(world.join(name), copy.join(name)).unwrap();
+    }
+    let copied = Target::World {
+        key: "w1",
+        dir: &copy,
+    };
+    assert_eq!(
+        run(
+            &mut Record::default(),
+            copied,
+            "you.lockers",
+            &all,
+            &fives,
+            false
+        ),
+        Ok(None)
+    );
+    assert_eq!(
+        std::fs::read_to_string(copy.join("keepers.toml")).unwrap(),
+        "count = 5\n"
+    );
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_shared_record_counts_for_a_world_until_it_has_its_own() {
+    let (dir, world, all) = lockers_world("legacy");
+    let mut record = Record::default();
+    record.ran(Some("w1"), "you.lockers").push("2".to_owned());
+    record.ran(Some("w1"), "other").push("9".to_owned());
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    let line = run(&mut record, target, "you.lockers", &all, &fives, false).unwrap();
+    assert_eq!(
+        line.as_deref(),
+        Some("you.lockers 3: rename store owners to keepers, change store keepers")
+    );
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 2\n",
+        "migration 2 ran before, by the shared record"
+    );
+    assert_eq!(ran_on(&world), ["2", "3"]);
+    assert!(!record.worlds["w1"].contains_key("you.lockers"));
+    assert_eq!(record.worlds["w1"]["other"], ["9"]);
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_world_record_that_does_not_read_runs_nothing() {
+    let (dir, world, all) = lockers_world("bad-record");
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    for broken in ["", "ran = ["] {
+        std::fs::write(world.join(WORLD_RECORD), broken).unwrap();
+        let (_, reason) = run(
+            &mut Record::default(),
+            target,
+            "you.lockers",
+            &all,
+            &fives,
+            false,
+        )
+        .unwrap_err();
+        assert!(reason.contains(WORLD_RECORD), "{reason}");
+        assert_eq!(
+            std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+            "limit = 2\n"
+        );
+    }
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_store_that_does_not_read_fails_its_migration_instead_of_counting_as_absent() {
+    let (dir, world, all) = lockers_world("unreadable-store");
+    std::fs::write(world.join("owners.toml"), [0xff, 0xfe, b'\n']).unwrap();
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    let (_, reason) = run(
+        &mut Record::default(),
+        target,
+        "you.lockers",
+        &all,
+        &fives,
+        false,
+    )
+    .unwrap_err();
+    assert!(reason.starts_with("migration 3: owners.toml"), "{reason}");
+    assert_eq!(ran_on(&world), ["2"]);
+    assert!(!world.join("keepers.toml").exists());
+    assert_eq!(
+        std::fs::read(world.join("owners.toml")).unwrap(),
+        [0xff, 0xfe, b'\n']
+    );
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn another_mod_s_settings_that_do_not_read_fail_the_take() {
+    let m = migration(
+        "2",
+        vec![step(MigrationStep::TAKE_SETTING, "comfort:multiplier", "c")],
+    );
+    let held = |_: &str| Err(std::io::Error::other("held by another program"));
+    let error = apply_settings("c = 1.0\n", 0, &m, &double, &held).unwrap_err();
+    assert!(
+        error.to_string().contains("held by another program"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_migration_keeps_the_files_it_changed_as_they_were() {
+    let (dir, world, all) = lockers_world("backup");
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    assert!(
+        run(
+            &mut Record::default(),
+            target,
+            "you.lockers",
+            &all,
+            &fives,
+            false
+        )
+        .is_ok()
+    );
+    let backups = world.join(BACKUPS);
+    assert_eq!(
+        std::fs::read_to_string(backups.join("2/settings.toml")).unwrap(),
+        "limit = 2\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(backups.join("3/owners.toml")).unwrap(),
+        "count = 1\n"
+    );
+    assert_eq!(
+        WorldRecord::read(&backups.join("3")).unwrap().unwrap().ran,
+        ["2"],
+        "the record as it was before migration 3"
+    );
+    assert!(!backups.join("2").join(".under-way.toml").exists());
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_commit_that_fails_part_way_puts_every_file_back() {
+    let (dir, world, _) = lockers_world("part-way");
+    let mut staged = Staged::default();
+    staged.put(world.join("settings.toml"), Some("limit = 4\n".to_owned()));
+    staged.put(world.join("keepers.toml"), Some("count = 5\n".to_owned()));
+    staged.put(world.join("owners.toml"), None);
+    staged.record(
+        &world,
+        WorldRecord {
+            ran: vec!["3".to_owned()],
+        },
+    );
+    let keepers = world.join("keepers.toml");
+    let write = |path: &Path, text: &str| {
+        if path == keepers {
+            Err(std::io::Error::other("disk full"))
+        } else {
+            enshwick::files::write_atomically(path, text)
+        }
+    };
+    let backup = world.join(BACKUPS).join("3");
+    let error = staged
+        .commit_with(Some((&backup, "3")), &write)
+        .unwrap_err();
+    assert!(error.to_string().contains("disk full"), "{error}");
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 2\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(world.join("owners.toml")).unwrap(),
+        "count = 1\n"
+    );
+    assert!(!keepers.exists());
+    assert_eq!(WorldRecord::read(&world).unwrap(), None);
+    assert!(!backup.join(".under-way.toml").exists());
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_commit_a_crash_cut_short_is_put_back_before_its_migration_runs_again() {
+    let (dir, world, all) = lockers_world("crash");
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    let mut staged = Staged::default();
+    staged.put(world.join("settings.toml"), Some("limit = 4\n".to_owned()));
+    staged.record(
+        &world,
+        WorldRecord {
+            ran: vec!["2".to_owned()],
+        },
+    );
+    let crash = |path: &Path, text: &str| {
+        assert!(!path.ends_with(WORLD_RECORD), "the power goes out");
+        enshwick::files::write_atomically(path, text)
+    };
+    let backup = world.join(BACKUPS).join("2");
+    let cut_short = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        staged.commit_with(Some((&backup, "2")), &crash)
+    }));
+    assert!(cut_short.is_err());
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 4\n",
+        "half a migration on disk, as a crash leaves it"
+    );
+
+    assert!(
+        run(
+            &mut Record::default(),
+            target,
+            "you.lockers",
+            &all,
+            &fives,
+            false
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 4\n",
+        "doubled once, not twice"
+    );
+    assert_eq!(ran_on(&world), ["2", "3"]);
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_finished_commit_whose_note_a_crash_left_is_not_put_back() {
+    let (dir, world, all) = lockers_world("note-left");
+    let target = Target::World {
+        key: "w1",
+        dir: &world,
+    };
+    assert!(
+        run(
+            &mut Record::default(),
+            target,
+            "you.lockers",
+            &all[..1],
+            &fives,
+            false
+        )
+        .is_ok()
+    );
+    let backup = world.join(BACKUPS).join("2");
+    std::fs::write(
+        backup.join(".under-way.toml"),
+        "migration = \"2\"\ncopied = [\"settings.toml\"]\n",
+    )
+    .unwrap();
+    assert!(
+        run(
+            &mut Record::default(),
+            target,
+            "you.lockers",
+            &all,
+            &fives,
+            false
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        std::fs::read_to_string(world.join("settings.toml")).unwrap(),
+        "limit = 4\n"
+    );
+    assert!(!backup.join(".under-way.toml").exists());
+    let _gone = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_backup_folder_is_named_safely_for_any_migration_id() {
+    let dir = Path::new("w");
+    assert_eq!(backup_of(dir, "2"), dir.join(BACKUPS).join("2"));
+    assert_eq!(backup_of(dir, "../x"), dir.join(BACKUPS).join("_.._x"));
+    assert_eq!(backup_of(dir, "a b/c"), dir.join(BACKUPS).join("a_b_c"));
+    assert_eq!(backup_of(dir, ""), dir.join(BACKUPS).join("_"));
 }
 
 proptest::proptest! {

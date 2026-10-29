@@ -28,9 +28,9 @@ enshwick::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
-fn max_altars(next: Next<MaxAltars>, balancing: u64, level: u32) -> u8 {
+fn max_altars(next: Next<'_, MaxAltars>, balancing: u64, level: u32) -> u8 {
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    let vanilla = unsafe { next.get()(balancing, level) };
+    let vanilla = unsafe { next.call(balancing, level) };
     vanilla.max(16)
 }
 
@@ -61,9 +61,9 @@ function in upper case:
 use enshwick::{Next, hook};
 
 #[hook]
-fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+fn upgrade(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     // SAFETY: the original takes the same context.
-    unsafe { next.get()(ctx) }
+    unsafe { next.call(ctx) }
 }
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -87,9 +87,9 @@ enshwick::detour! {
         lookup, priority = -10;
 }
 
-fn lookup(next: Next<unsafe extern "system" fn(*mut u8, *const u32) -> u32>, bases: *mut u8, npc: *const u32) -> u32 {
+fn lookup(next: Next<'_, unsafe extern "system" fn(*mut u8, *const u32) -> u32>, bases: *mut u8, npc: *const u32) -> u32 {
     // SAFETY: forwarded unchanged.
-    unsafe { next.get()(bases, npc) }
+    unsafe { next.call(bases, npc) }
 }
 # let _ = (&LOOKUP, HookFlags::NONE);
 ```
@@ -146,7 +146,7 @@ enshwick::detour! {
         node_unlocked, flags = HookFlags::CALLER_FRAME;
 }
 
-fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
+fn node_unlocked(next: Next<'_, NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
     if node == 7 && let Some(host) = enshwick::host() {
         // SAFETY: the frame was taken at entry of this chain.
         let from = unsafe { host.caller_frame().return_address() };
@@ -155,7 +155,7 @@ fn node_unlocked(next: Next<NodeUnlocked>, node: u32, bits: *const u64) -> u8 {
         }
     }
     // SAFETY: the rest of the chain takes the arguments the game passed.
-    unsafe { next.get()(node, bits) }
+    unsafe { next.call(node, bits) }
 }
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -185,11 +185,11 @@ enshwick::detour! {
     static MAX_ALTARS: unsafe extern "system" fn(balancing: u64, level: u32) -> u8 = max_altars;
 }
 
-fn max_altars(next: Next<unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
+fn max_altars(next: Next<'_, unsafe extern "system" fn(u64, u32) -> u8>, balancing: u64, level: u32) -> u8 {
     match MyMod::instance() {
         Some(state) => state.altars,
         // SAFETY: the original takes the arguments the game passed.
-        None => unsafe { next.get()(balancing, level) },
+        None => unsafe { next.call(balancing, level) },
     }
 }
 
@@ -218,15 +218,13 @@ State that changes while the game runs, such as settings applied by
 
 The entry point `detour!` writes catches a panic in the body. The mod then
 reports a fault, the loader turns it off and rewires every chain past all of
-its links, and the call that panicked continues to the rest of the chain with
-the arguments the game passed. The game runs vanilla where the mod was and
-never crashes for it.
+its links. The game runs vanilla where the mod was and never crashes for it.
 
-The entry point cannot tell whether the body called `next` before the panic,
-so a panic after `next` runs the rest of the chain, and the game's function, a
-second time. Work after `next` goes in `Hook::after_next`: a panic there turns
-the mod off the same way, and the detour returns what `next` gave. The guard
-costs nothing until a panic.
+The game's function runs once at most. `next.call` keeps what the rest of the
+chain returned. When the body panics before calling it, the call goes on to
+the rest of the chain with the arguments the game passed. When the body
+panics after, the detour returns the kept value and the chain does not run
+again, so a destroy, a grant or a hit never happens twice.
 
 ```rust
 # use std::sync::atomic::{AtomicU32, Ordering};
@@ -235,9 +233,10 @@ enshwick::detour! {
     static RAISE: extern "system" fn(level: u32) -> u32 = raise;
 }
 
-fn raise(next: enshwick::Next<extern "system" fn(u32) -> u32>, level: u32) -> u32 {
-    let raised = next.get()(level);
-    let _counted = RAISE.after_next(|| RAISED.fetch_add(raised - level, Ordering::Relaxed));
+fn raise(next: enshwick::Next<'_, extern "system" fn(u32) -> u32>, level: u32) -> u32 {
+    let raised = next.call(level);
+    // A panic here returns `raised` without running the game's function again.
+    RAISED.fetch_add(raised - level, Ordering::Relaxed);
     raised
 }
 # fn main() {}

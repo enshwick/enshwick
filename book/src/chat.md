@@ -95,7 +95,12 @@ A dedicated server runs each line appended to
 the file is saved. Only complete lines run, so a line waits for its line
 break; blank lines and lines starting with `#` are skipped, and so are the
 lines already in the file when the server starts. Each line and its answer
-go to `logs/enshwick/loader.log`. Administrators and their scripts reach the
+go to `logs/enshwick/loader.log`.
+
+The file is append-only. When lines that already ran are changed or
+removed, no line runs again: the loader counts the lines that ran, runs only
+the lines past that count, and writes a warning to the log. To start over,
+empty the file; its next lines run from the first. Administrators and their scripts reach the
 console this way without anyone joining. The loader took over the admin
 tools mod: it never loads, the log names its DLL to delete, and its command
 file in `mod-data/enshwick.admin-tools/` is read too.
