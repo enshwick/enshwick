@@ -64,6 +64,11 @@ mod detour;
 )]
 mod developer_tools;
 pub mod diag;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game discovers mods")
+)]
+mod discovery;
 pub mod early;
 #[cfg(windows)]
 mod ecs;

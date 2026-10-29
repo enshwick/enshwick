@@ -9,6 +9,7 @@ use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
 };
 
+use crate::discovery::{self, ListRead, Skip};
 use crate::modlist;
 use crate::module::Export;
 use crate::others::{Origin, OtherDll};
@@ -86,21 +87,14 @@ pub(super) fn libraries(
     let list_file = mods_dir
         .join(crate::settings::LOADER_ID)
         .join(modlist::LIST_FILE);
-    let (mut list, writable) = match std::fs::read_to_string(&list_file) {
-        Ok(text) => match modlist::ModList::parse(&text) {
-            Ok(list) => (list, true),
-            Err(reason) => {
-                crate::log!(
-                    WARN,
-                    "{} is not read, every mod is on: {reason} ({})",
-                    modlist::LIST_PATH,
-                    crate::errors::BAD_MOD_LIST
-                );
-                (modlist::ModList::default(), false)
-            }
-        },
-        Err(_) => (modlist::ModList::default(), true),
-    };
+    let ListRead {
+        mut list,
+        writable,
+        problem,
+    } = discovery::read_list(std::fs::read_to_string(&list_file));
+    if let Some(problem) = problem {
+        crate::log!(WARN, "{problem}");
+    }
     let mut changed = !list_file.exists();
     let mut libraries = Vec::new();
     let mut candidates = Vec::new();
@@ -129,30 +123,16 @@ pub(super) fn libraries(
         match unsafe { crate::manifest::parse(library.manifest) } {
             Ok(candidate) => {
                 changed |= list.note(&candidate.id, &library.file);
-                let off = std::iter::once(candidate.id.as_str())
-                    .chain(candidate.former_ids())
-                    .find(|id| list.is_off(id));
-                if let Some(off) = off {
-                    crate::log!(
-                        INFO,
-                        "{} skipped: {off} is off in {}",
-                        library.file,
-                        modlist::LIST_PATH
-                    );
+                let ids = std::iter::once(candidate.id.as_str()).chain(candidate.former_ids());
+                if let Some(off) = discovery::off_id(&list, ids) {
+                    Skip::IdOff(off.to_owned()).log(&library.file);
                     unload(&library);
                     continue;
                 }
                 candidates.push(candidate);
                 libraries.push(library);
             }
-            Err(reason) => {
-                let code = if reason == crate::manifest::ManifestError::OtherAbi {
-                    crate::errors::OTHER_ABI
-                } else {
-                    crate::errors::BROKEN_DLL
-                };
-                crate::log!(WARN, "{} skipped: {reason} ({code})", library.file);
-            }
+            Err(reason) => Skip::Manifest(reason).log(&library.file),
         }
     }
     let (libraries, candidates) = drop_duplicates(mods_dir, libraries, candidates);
@@ -260,17 +240,13 @@ fn drop_duplicates(
         return (libraries, candidates);
     }
     for &(extra, runs) in &duplicates {
-        crate::log!(
-            WARN,
-            "{} skipped: {} {} is also in {}, which runs {}; {} can be deleted ({})",
-            libraries[extra].file,
-            candidates[extra].id,
-            candidates[extra].version,
-            libraries[runs].file,
-            candidates[runs].version,
-            libraries[extra].file,
-            crate::errors::DUPLICATE_MOD
-        );
+        Skip::Duplicate {
+            id: candidates[extra].id.clone(),
+            version: candidates[extra].version.to_string(),
+            runs: libraries[runs].file.clone(),
+            runs_version: candidates[runs].version.to_string(),
+        }
+        .log(&libraries[extra].file);
     }
     libraries
         .into_iter()
@@ -317,7 +293,7 @@ fn discover(
                 .unwrap_or_default();
             let off = list.is_file_off(&file);
             if off {
-                crate::log!(INFO, "{file} skipped: off in {}", modlist::LIST_PATH);
+                Skip::FileOff.log(&file);
             }
             !off
         })
@@ -444,11 +420,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         find(exports::INIT),
         find(exports::READY),
     ) else {
-        crate::log!(
-            WARN,
-            "{file} is not an Enshwick mod ({})",
-            crate::errors::BROKEN_DLL
-        );
+        Skip::NotAMod.log(file);
         return None;
     };
     // SAFETY: a mod's `ABI` export has the signature `enshwick::abi::exports`
@@ -464,12 +436,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
     if abi() != ABI_VERSION {
-        crate::log!(
-            WARN,
-            "{file} skipped: {} ({})",
-            crate::manifest::ManifestError::OtherAbi,
-            crate::errors::OTHER_ABI
-        );
+        Skip::OtherAbi.log(file);
         return None;
     }
     // SAFETY: `query` returns the mod's static manifest, null or readable
@@ -478,7 +445,7 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     let manifest = match unsafe { crate::manifest::read(query()) } {
         Ok(manifest) => manifest,
         Err(reason) => {
-            crate::log!(WARN, "{file} skipped: {reason}");
+            Skip::Manifest(reason).log(file);
             return None;
         }
     };
@@ -493,3 +460,6 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
         copied: None,
     })
 }
+
+#[cfg(test)]
+mod tests;
