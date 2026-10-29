@@ -549,12 +549,28 @@ struct OpenWorld<T> {
     changed: bool,
 }
 
-/// Whether `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`.
-fn is_store_name(name: &str) -> bool {
-    (1..=64).contains(&name.len())
+/// Names whose `<name>.toml` the loader keeps in a world's folder: the
+/// world's settings, and in the loader's own folder the note naming the save.
+const LOADER_FILE_NAMES: [&str; 2] = ["settings", "save"];
+
+/// Checks that `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`,
+/// and not the name of a file the loader keeps beside it.
+fn check_store_name(name: &str) -> Result<(), Off> {
+    let well_formed = (1..=64).contains(&name.len())
         && name
             .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_');
+    if !well_formed {
+        return Err(Off::new(format!(
+            "world store {name:?}: a name is 1 to 64 of [a-z0-9_-]"
+        )));
+    }
+    if LOADER_FILE_NAMES.contains(&name) {
+        return Err(Off::new(format!(
+            "world store {name:?}: the name is kept for the loader's {name}.toml in the world's folder"
+        )));
+    }
+    Ok(())
 }
 
 impl<T> WorldStore<T>
@@ -566,13 +582,10 @@ where
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`.
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, or is `settings`
+    /// or `save`, which name files the loader keeps beside the store's.
     pub(crate) fn new(dir: &Path, name: &str) -> Result<Self, Off> {
-        if !is_store_name(name) {
-            return Err(Off::new(format!(
-                "world store {name:?}: a name is 1 to 64 of [a-z0-9_-]"
-            )));
-        }
+        check_store_name(name)?;
         Ok(Self {
             slot: std::sync::Arc::new(std::sync::Mutex::new(WorldSlot {
                 worlds: dir.join(WORLDS_DIR),
@@ -858,6 +871,16 @@ mod tests {
         assert_eq!(store.key(), None);
         assert!(WorldStore::<Count>::new(&dir, "a/b").is_err());
         let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_world_store_cannot_take_the_name_of_a_file_kept_beside_it() {
+        let dir = Path::new("mod-data/you.safes");
+        for name in ["settings", "save"] {
+            let refused = WorldStore::<Count>::new(dir, name).unwrap_err().to_string();
+            assert!(refused.contains("kept for the loader"), "{name}: {refused}");
+        }
+        assert!(WorldStore::<Count>::new(dir, "settings-old").is_ok());
     }
 
     #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
