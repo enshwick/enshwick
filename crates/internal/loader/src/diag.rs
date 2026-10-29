@@ -301,7 +301,7 @@ pub struct Summary {
 /// use enshwick_loader::diag::messages_line;
 ///
 /// assert_eq!(messages_line(0, 0, 0), None);
-/// assert!(messages_line(0, 1, 0).is_some_and(|line| line.starts_with("1 frame line dropped")));
+/// assert!(messages_line(0, 1, 0).is_some_and(|line| line.starts_with("1 line for one player dropped")));
 /// ```
 #[must_use]
 pub fn messages_line(messages: u64, lines: u64, strayed: u64) -> Option<String> {
@@ -316,8 +316,12 @@ pub fn messages_line(messages: u64, lines: u64, strayed: u64) -> Option<String> 
     }
     if lines > 0 {
         parts.push(format!(
-            "{} (queue full or player gone)",
-            counted(lines, "frame line dropped", "frame lines dropped")
+            "{} (queue full, player gone or such lines off)",
+            counted(
+                lines,
+                "line for one player dropped",
+                "lines for one player dropped"
+            )
         ));
     }
     if strayed > 0 {
@@ -774,7 +778,7 @@ mod tests {
         assert!(!quiet.render().contains("mod messages:"));
         let text = summary().render();
         assert!(text.contains(
-            "\nmod messages: 3 frame lines dropped (queue full or player gone), \
+            "\nmod messages: 3 lines for one player dropped (queue full, player gone or such lines off), \
              1 line for one player reached others, lines for one player off\n"
         ));
     }
@@ -790,7 +794,7 @@ mod tests {
             messages_line(1, 300, 0).as_deref(),
             Some(
                 "1 message dropped (over a rate or unreadable), \
-                 300 frame lines dropped (queue full or player gone)"
+                 300 lines for one player dropped (queue full, player gone or such lines off)"
             )
         );
         assert_eq!(

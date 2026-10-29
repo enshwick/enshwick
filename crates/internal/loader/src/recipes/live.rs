@@ -450,16 +450,17 @@ pub(crate) fn received(first: bool, last: bool, ids: &[u32]) {
     }
 }
 
-/// A client said hello: it gets the disabled recipes.
-pub(crate) fn hello(key: u64) {
+/// A client said hello: it gets the disabled recipes. False when the line
+/// queue dropped them.
+pub(crate) fn hello(key: u64) -> bool {
     if live(|l| l.server.is_some()) {
-        return;
+        return true;
     }
     let mut ids: Vec<u32> = DISABLED.load().ids.iter().copied().collect();
     ids.sort_unstable();
-    for message in messages(&ids) {
-        crate::net::to_player(key, &message);
-    }
+    messages(&ids)
+        .iter()
+        .all(|message| crate::net::to_player(key, message))
 }
 
 /// The workshop list at `out`, `[address, length]` of recipe addresses the

@@ -516,10 +516,10 @@ mod live {
     /// Sends the client of `key`, which just said hello, the join values
     /// of every running join mod: the values it read before it joined may
     /// be older, and a hosted game advertises none.
-    pub(crate) fn sync_to(key: u64) {
-        for message in super::sync_messages(crate::host::join_values()) {
-            crate::net::to_player(key, &message);
-        }
+    pub(crate) fn sync_to(key: u64) -> bool {
+        super::sync_messages(crate::host::join_values())
+            .iter()
+            .all(|message| crate::net::to_player(key, message))
     }
 
     /// Takes a message the server sent, on the client.
@@ -591,7 +591,10 @@ mod live {
             player(loader, key).is_some_and(|p| p.permissions & PlayerInfo::CAN_KICK_BAN != 0);
         match gate(key, admin, &message) {
             Gate::Pass => {}
-            Gate::Busy(answer) => return crate::net::to_player(key, &answer),
+            Gate::Busy(answer) => {
+                crate::net::to_player(key, &answer);
+                return;
+            }
             Gate::Drop => return,
         }
         match message {

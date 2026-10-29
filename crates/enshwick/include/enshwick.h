@@ -3204,8 +3204,10 @@ typedef struct EnshwickHostApi {
   // Shows `text`, cut at 255 bytes, on the screen of the player with
   // account key `key`, as the game shows its own "can't do that"
   // messages; `Status::MISSING` when the player's client lacks
-  // Enshwick and cannot show it, and nothing is sent. On the server's
-  // game thread only.
+  // Enshwick and cannot show it, and nothing is sent;
+  // `Status::REFUSED` when the server's line queue is full or sends no
+  // lines to one player, and nothing is sent. On the server's game
+  // thread only.
   EnshwickStatus (*notify)(EnshwickModHandle me, EnshwickPlayerKey key, struct EnshwickStr text);
   // Writes the clock of the server's world, as far as the `Header`
   // `out` starts with says the caller's struct reaches. On the server's

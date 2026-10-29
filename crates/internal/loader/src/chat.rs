@@ -153,7 +153,7 @@ static DELIVERY: Delivery = Delivery {
     one_player_off: AtomicBool::new(false),
 };
 
-/// The frame lines dropped and the lines for one player that reached
+/// The lines for one player dropped and those that reached
 /// others, for the status summary.
 pub(crate) fn delivery() -> (u64, u64) {
     (DELIVERY.dropped.total(), DELIVERY.strayed.total())
@@ -171,8 +171,9 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
 
 /// Queues the frame lines of one message, `lines`, for the player with
 /// account key `to`, all of them or none: the one way a line a client takes
-/// as the server's frame leaves the server. False when none were queued,
-/// which counts them as dropped.
+/// as the server's frame leaves the server. False when none were queued;
+/// a full queue, or lines for one player turned off, counts them as
+/// dropped.
 pub(crate) fn send_frames(to: u64, lines: &[String]) -> bool {
     if LOADED.get().is_none() || to == 0 || lines.is_empty() {
         return false;
@@ -192,13 +193,13 @@ pub(crate) fn send_frames(to: u64, lines: &[String]) -> bool {
     queued
 }
 
-/// Counts `count` frame lines dropped, and logs the first and every
+/// Counts `count` lines for one player dropped, and logs the first and every
 /// hundredth.
 fn dropped(count: usize) {
     if let Some(total) = DELIVERY.dropped.add(count as u64) {
         crate::log!(
             WARN,
-            "mod messages: {total} frame lines dropped, the line queue full or the player gone"
+            "mod messages: {total} lines for one player dropped: the line queue was full, the player was gone, or such lines are off"
         );
     }
 }
@@ -644,9 +645,13 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
             &raw const extra,
         );
     };
-    let Some(target) = target.filter(|_| result[0] == POSTED) else {
+    let Some(target) = target else {
         return;
     };
+    if result[0] != POSTED {
+        dropped(1);
+        return;
+    }
     let active = (0..layout.slot_count)
         .filter(|&slot| {
             // SAFETY: `store` is the live chat store on the game thread, by
@@ -666,7 +671,11 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     let delivered = (node != 0).then(|| {
         // SAFETY: `node` is non-zero, checked by `then`, and is the store's
         // tail node just posted; its delivered mask sits at the table's
-        // `chat.node_delivered`.
+        // `chat.node_delivered`. It stays live across the `mark` calls
+        // below, which run between the two reads: the store drops a node
+        // only once every connection received it, and the target's bit
+        // stays unset until the game sends the line to the target on a
+        // later step.
         let read_mask = || unsafe { crate::memory::read::<u32>(node, layout.delivered) };
         let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
         let unmarked = strays(active, target, Some(read_mask()));

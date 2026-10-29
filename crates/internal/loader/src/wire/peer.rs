@@ -8,9 +8,11 @@ use super::{BURST, RATE};
 
 /// How long after a peer got the data a hello of its brings it again.
 ///
-/// A client says hello every few seconds until the answer arrives, so a
-/// hello later than this comes from a client that joined again, whose leave
-/// the server never saw.
+/// A client says hello every few seconds until the answer arrives. A hello
+/// later than this comes from a client that joined again, whose leave the
+/// server never saw, or from one whose answer was lost; both take the data
+/// again, which the client applies twice to the same result. A client that joins
+/// again sooner than this gets nothing new.
 pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 
 /// A peer's messages on their way in, and its rate.
@@ -80,8 +82,8 @@ impl Peer {
     }
 
     /// Whether the peer's hello at `now` brings the data a client gets on
-    /// joining: the first time, and again once [`DATA_AGAIN`] has passed
-    /// since it last did.
+    /// joining: until it was handed over whole, and again once
+    /// [`DATA_AGAIN`] has passed since then.
     ///
     /// # Examples
     ///
@@ -92,17 +94,23 @@ impl Peer {
     /// let mut peer = Peer::new();
     /// let now = Instant::now();
     /// assert!(peer.data_due(now));
+    /// peer.handed_data(now);
     /// assert!(!peer.data_due(now));
     /// assert!(peer.data_due(now + DATA_AGAIN));
     /// ```
-    pub fn data_due(&mut self, now: Instant) -> bool {
-        let due = self
-            .answered
-            .is_none_or(|at| now.saturating_duration_since(at) >= DATA_AGAIN);
-        if due {
-            self.answered = Some(now);
-        }
-        due
+    #[must_use]
+    pub fn data_due(&self, now: Instant) -> bool {
+        self.answered
+            .is_none_or(|at| now.saturating_duration_since(at) >= DATA_AGAIN)
+    }
+
+    /// Notes that the peer's data was handed over whole at `now`.
+    ///
+    /// # Examples
+    ///
+    /// See [`Peer::data_due`].
+    pub fn handed_data(&mut self, now: Instant) {
+        self.answered = Some(now);
     }
 
     /// Takes one message from the peer's rate; false when it is spent.
@@ -156,13 +164,17 @@ mod tests {
         let start = Instant::now();
         assert!(peer.data_due(start), "the first hello gets the data");
         assert!(
-            !peer.data_due(start + Duration::from_secs(5)),
+            peer.data_due(start + Duration::from_secs(5)),
+            "until the data was handed over whole, every hello brings it"
+        );
+        peer.handed_data(start + Duration::from_secs(5));
+        assert!(
+            !peer.data_due(start + Duration::from_secs(10)),
             "a hello sent before the answer arrived gets none again"
         );
         assert!(
-            peer.data_due(start + DATA_AGAIN),
+            peer.data_due(start + Duration::from_secs(5) + DATA_AGAIN),
             "a client that joined again without a leave gets it"
         );
-        assert!(!peer.data_due(start + DATA_AGAIN + Duration::from_secs(1)));
     }
 }
