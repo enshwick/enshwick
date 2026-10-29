@@ -146,7 +146,7 @@ const VSCODE_SETTINGS: &str = r#"{
 
 const README: &str = "# {name}
 
-A Luau mod for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
+A Luau mod for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshwick).
 
 1. Edit `main.luau`. `{definitions}` declares the API for
    [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp); `.vscode/settings.json`

@@ -1,6 +1,6 @@
 # enshwick-loader-stub
 
-Internal, not for mods: a part of [Enshwick Loader](../../../README.md). Mods
+Internal, not for mods: a part of [Enshwick](../../../README.md). Mods
 depend on [`enshwick`](../../enshwick) only.
 
 The `powrprof.dll` that players put next to `enshrouded.exe` or

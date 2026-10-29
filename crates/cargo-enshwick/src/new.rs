@@ -348,7 +348,7 @@ enshwick::declare_mod!({type});
 
 const README: &str = "# {id}
 
-An Enshrouded mod for the [Enshwick](https://github.com/enshwick/enshwick) loader.
+An Enshrouded mod built on [Enshwick](https://github.com/enshwick/enshwick).
 
 `cargo enshwick install --game <game folder>` builds it and copies it into the
 game's `mods/` folder. Its settings are `mod-configs/{id}.toml`, written on first

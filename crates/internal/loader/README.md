@@ -1,6 +1,6 @@
 # enshwick-loader
 
-Internal, not for mods: a part of [Enshwick Loader](../../../README.md). Mods
+Internal, not for mods: a part of [Enshwick](../../../README.md). Mods
 depend on [`enshwick`](../../enshwick) only.
 
 The Enshwick loader, installed as `mods/enshwick/enshwick.dll` next to the game.

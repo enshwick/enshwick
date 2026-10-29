@@ -1,11 +1,27 @@
-//! The Enshwick modding API for Enshrouded: what a mod is written against.
+//! The Enshwick modding API for Enshrouded: the one crate a Rust mod depends on.
 //!
-//! A mod is a DLL in the game's `mods/` folder. It implements [`Mod`],
-//! exports itself with [`declare_mod!`], and during [`Mod::init`] links hooks
-//! declared with [`detour!`] or [`#[hook]`](macro@hook) through
-//! [`Load::hook`], reads its settings and finds game functions by name. The loader arms every hook once all mods are
-//! initialised; a mod that fails or panics is turned off and the game runs
-//! vanilla where it acted.
+//! Enshwick is a modding API platform for Enshrouded. A mod maker gets:
+//!
+//! - a typed Rust API for settings, events, the world, items and recipes, the
+//!   game's interface and messages between server and client;
+//! - [Luau scripts](https://github.com/enshwick/enshwick/blob/main/book/src/luau.md)
+//!   and [data packs](https://github.com/enshwick/enshwick/blob/main/book/src/content/packs.md)
+//!   without code, for mods that need no Rust;
+//! - tests without the game: the `test` feature adds a fake host, so a mod's
+//!   unit tests run on any computer;
+//! - translations: [`i18n`] reads a mod's texts in the 15 languages the game
+//!   offers, and each player sees their own language.
+//!
+//! The Enshwick loader comes with the platform and runs every mod, so players
+//! install one thing.
+//!
+//! A mod is a DLL in the game's `mods/` folder. It implements [`Mod`] and
+//! exports itself with [`declare_mod!`]. In [`Mod::init`] it reads its
+//! settings and adds its handlers through [`Load`]. Where the API has no
+//! call, it links hooks declared with [`detour!`] or [`#[hook]`](macro@hook)
+//! through [`Load::hook`]. The loader turns on every hook once all mods are
+//! initialised. A mod that fails or panics is turned off, and the game runs
+//! vanilla where the mod acted.
 //!
 //! Depend on this crate from crates.io; `cargo enshwick new` writes the
 //! lines. The derive and attribute macros come from `enshwick-macros`, which
@@ -20,7 +36,7 @@
 //! ```
 //!
 //! A mod builds for `x86_64-pc-windows-msvc`, the game's target. The crate
-//! also builds on other hosts, so a mod's tests run against the fake loader
+//! also builds on other hosts, so a mod's tests run against the fake host
 //! anywhere.
 //!
 //! # Modules
@@ -46,9 +62,10 @@
 )]
 //! | Tests | `test`, with the `test` feature |
 //!
-//! Items marked unstable may change in any release; everything else keeps
-//! the compatibility rules of the version. The book's Stability chapter
-//! names what is unstable and why.
+//! Items marked unstable may change in any release. Everything else keeps
+//! the compatibility rules of the version. The book's
+//! [Stability](https://github.com/enshwick/enshwick/blob/main/book/src/stability.md)
+//! chapter names what is unstable and why.
 //!
 //! # Features
 //!
@@ -58,38 +75,31 @@
 //!
 //! ```rust,standalone_crate
 //! /// Hello's settings.
-//! #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+//! #[derive(serde::Deserialize, serde::Serialize, enshwick::Config)]
 //! struct Settings {
-//!     /// Whether the hook goes in.
-//!     enabled: bool,
+//!     /// Altars added at every Flame level.
+//!     extra_altars: u8,
 //! }
 //!
-//! struct Hello {
-//!     settings: Settings,
+//! impl Default for Settings {
+//!     fn default() -> Self {
+//!         Self { extra_altars: 2 }
+//!     }
 //! }
 //!
-//! enshwick::detour! {
-//!     static UPGRADE: unsafe extern "system" fn(ctx: *mut u64) = upgrade;
-//! }
-//!
-//! fn upgrade(next: enshwick::Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
-//!     // SAFETY: the original takes the same context.
-//!     unsafe { next.get()(ctx) }
-//! }
+//! struct Hello;
 //!
 //! impl enshwick::Mod for Hello {
 //!     fn manifest() -> &'static enshwick::abi::Manifest {
-//!         enshwick::manifest!(id: "you.hello", side: SERVER)
+//!         enshwick::manifest!(id: "you.hello", side: BOTH, join: true)
 //!     }
 //!
 //!     fn init(load: &mut enshwick::Load<'_>) -> Result<Self, enshwick::Off> {
 //!         let settings: Settings = load.config()?;
-//!         if settings.enabled {
-//!             let target = load.system("upgrade_building_range")?;
-//!             // SAFETY: the system takes the building context, as `UPGRADE` does.
-//!             unsafe { load.hook(&UPGRADE, target) }?;
-//!         }
-//!         Ok(Self { settings })
+//!         let extra = settings.extra_altars;
+//!         load.on_altar_limit(move |limit| limit.allowed = limit.allowed.saturating_add(extra))?;
+//!         enshwick::info!("{extra} more altars per Flame level");
+//!         Ok(Self)
 //!     }
 //! }
 //!
