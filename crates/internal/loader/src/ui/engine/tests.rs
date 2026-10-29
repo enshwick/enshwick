@@ -321,11 +321,12 @@ const FIELDS_426: scroll::Fields = scroll::Fields {
     range: 0x24,
     slider: 0x44,
     shown: 0x7c,
-    sizes: 0x80,
+    widths: [0x80, 0x84, 0x88, 0x8c],
     filled: 0x90,
     config_size: 0x104,
     flags: 0x40,
-    axes: 0x2e,
+    scissor: 0x2e,
+    center: 0x2f,
     bar: 0x32,
     look: 0x44,
 };
@@ -351,7 +352,7 @@ fn the_scroll_area_s_reflected_fields_fit_its_buffers() {
     };
     assert_eq!(refused(config), "keen::GameUiScrollingLayoutParameterData");
     let moved = scroll::Fields {
-        sizes: 0xb8,
+        widths: [0xbe, 0x84, 0x88, 0x8c],
         ..FIELDS_426
     };
     assert_eq!(refused(moved), "sliderIdleWidth");

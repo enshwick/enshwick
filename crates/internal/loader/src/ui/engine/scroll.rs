@@ -50,16 +50,14 @@ pub(super) const STATE_SIZE: usize = 0x18;
 /// states of a node: `enshwick` in ASCII.
 const STATE_KEY: u64 = 0x656e_7368_7769_636b;
 
-/// The scrollbar look's four widths from `sliderIdleWidth` on, as the
-/// world settings fill them.
-const LOOK_SIZE_VALUES: [f32; 4] = [24.0, 24.0, 24.0, 20.0];
+/// The scrollbar look's `sliderIdleWidth`, `sliderHoverWidth`, `baseWidth`
+/// and `rangeTextureWidth`, as the world settings fill them.
+const LOOK_WIDTHS: [f32; 4] = [24.0, 24.0, 24.0, 20.0];
 /// A nine-slice texture of the look bundle, copied into the look.
 const TEXTURE_SIZE: usize = 32;
 
-/// What the world settings set in the scroll config: two keys in its hot key
-/// mask, and scissoring with its children centred.
+/// The keys the world settings add to the scroll config's hot key mask.
 const CONFIG_FLAGS_SET: u8 = 0x18;
-const CONFIG_AXES_ON: u16 = 0x101;
 
 /// The navigation config's highlight sound, which the window's navigation
 /// leaves empty.
@@ -137,16 +135,18 @@ pub(super) struct Fields {
     pub(super) slider: usize,
     /// The slider's style byte.
     pub(super) shown: usize,
-    /// Four floats from here: the bar's widths and its slider's least length.
-    pub(super) sizes: usize,
+    /// The look's widths, a float each, in the order of [`LOOK_WIDTHS`].
+    pub(super) widths: [usize; 4],
     /// Whether the range is drawn filled, a byte.
     pub(super) filled: usize,
     /// The config's size.
     pub(super) config_size: usize,
     /// The config's hot key mask byte.
     pub(super) flags: usize,
-    /// The config's scissor and centring bytes.
-    pub(super) axes: usize,
+    /// The config's byte that clips its rows while they scroll.
+    pub(super) scissor: usize,
+    /// The config's byte that centres its rows.
+    pub(super) center: usize,
     /// The config's global focus byte.
     pub(super) bar: usize,
     /// The look inside the config.
@@ -177,11 +177,17 @@ impl Fields {
             range: field(LOOK, "rangeTexture")?,
             slider: field(LOOK, "sliderTexture")?,
             shown: field(LOOK, "sliderStyle")?,
-            sizes: field(LOOK, "sliderIdleWidth")?,
+            widths: [
+                field(LOOK, "sliderIdleWidth")?,
+                field(LOOK, "sliderHoverWidth")?,
+                field(LOOK, "baseWidth")?,
+                field(LOOK, "rangeTextureWidth")?,
+            ],
             filled: field(LOOK, "useInverseRangeRect")?,
             config_size: size(CONFIG)?,
             flags: field(CONFIG, "scrollingHotKeyMask")?,
-            axes: field(CONFIG, "doScissorWhenScrolling")?,
+            scissor: field(CONFIG, "doScissorWhenScrolling")?,
+            center: field(CONFIG, "centerChildren")?,
             bar: field(CONFIG, "useGlobalFocus")?,
             look: field(CONFIG, "scrollBar")?,
         }
@@ -206,7 +212,10 @@ impl Fields {
             (self.range, TEXTURE_SIZE, "rangeTexture"),
             (self.slider, TEXTURE_SIZE, "sliderTexture"),
             (self.shown, 1, "sliderStyle"),
-            (self.sizes, 16, "sliderIdleWidth"),
+            (self.widths[0], 4, "sliderIdleWidth"),
+            (self.widths[1], 4, "sliderHoverWidth"),
+            (self.widths[2], 4, "baseWidth"),
+            (self.widths[3], 4, "rangeTextureWidth"),
             (self.filled, 1, "useInverseRangeRect"),
         ] {
             if !inside(at, width, self.look_size) {
@@ -215,7 +224,8 @@ impl Fields {
         }
         for (at, width, name) in [
             (self.flags, 1, "scrollingHotKeyMask"),
-            (self.axes, 2, "doScissorWhenScrolling"),
+            (self.scissor, 1, "doScissorWhenScrolling"),
+            (self.center, 1, "centerChildren"),
             (self.bar, 1, "useGlobalFocus"),
             (self.look, self.look_size, "scrollBar"),
         ] {
@@ -458,8 +468,8 @@ impl Engine {
             let texture = unsafe { crate::memory::read::<[u8; TEXTURE_SIZE]>(bundle, from) };
             look.put(to, texture);
         }
-        for (i, value) in LOOK_SIZE_VALUES.into_iter().enumerate() {
-            look.f32(at.sizes + 4 * i, value);
+        for (to, value) in at.widths.into_iter().zip(LOOK_WIDTHS) {
+            look.f32(to, value);
         }
         // SAFETY: `bundle` is the frame's look bundle, read from the live
         // context, and `fns.tint` the reflected offset of a colour inside it.
@@ -475,7 +485,8 @@ impl Engine {
         config.copy(at.look, look.0.get(..at.look_size).unwrap_or_default());
         let flags = config.0.get(at.flags).copied().unwrap_or_default() | CONFIG_FLAGS_SET;
         config.u8(at.flags, flags);
-        config.u16(at.axes, CONFIG_AXES_ON);
+        config.u8(at.scissor, 1);
+        config.u8(at.center, 1);
         config.u8(at.bar, 1);
         config
     }
