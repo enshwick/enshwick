@@ -3,7 +3,7 @@
 use enshwick::code::Pattern;
 
 use crate::reflect::Fingerprint;
-use crate::{Side, Table};
+use crate::{Body, Side, Table};
 
 /// How a [`Resolved`] table came about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,9 +26,21 @@ pub struct Resolved {
     pub(crate) uncarried: Vec<String>,
     pub(crate) attributes: Vec<(String, String)>,
     pub(crate) heads: Vec<(String, Pattern, u64)>,
+    pub(crate) bodies: Vec<(String, Body)>,
 }
 
 impl Resolved {
+    /// The whole code of symbol `id`'s function, for a symbol whose code
+    /// the loader replaces or relies on as a whole: a hook checks the code
+    /// there before it patches, and the code it searches stays inside it.
+    #[must_use]
+    pub fn body(&self, id: &str) -> Option<&Body> {
+        self.bodies
+            .iter()
+            .find(|(body, _)| body == id)
+            .map(|(_, body)| body)
+    }
+
     /// The pattern of symbol `id` and how many bytes before the symbol it
     /// starts, for a symbol its pattern finds directly: a hook checks the
     /// code there before it patches. `None` for a symbol without one, or

@@ -64,6 +64,12 @@ impl KnownBuild {
         self.table.head(id)
     }
 
+    /// The whole code of symbol `id`'s function; see [`Resolved::body`].
+    #[must_use]
+    pub fn body(&self, id: &str) -> Option<&enshwick_gamedata::Body> {
+        self.table.body(id)
+    }
+
     /// The resolved table, for code that reads entries the same way on
     /// this build and in a test on a game executable.
     #[must_use]
@@ -280,13 +286,14 @@ pub fn by_patterns(
 
 /// Whether the code a hook relies on holds, from the checks its table offers.
 ///
-/// `head` is whether the symbol's pattern matches where its code starts, and
-/// `bytes` whether its first eight bytes are the table's `<id>.bytes`; `None`
-/// for a check the table does not offer. A symbol with neither is refused,
-/// and every check offered must hold.
+/// Each check is `None` when the table does not offer it: whether the
+/// symbol's pattern matches where its code starts, whether its first eight
+/// bytes are the table's `<id>.bytes`, and whether its whole function holds
+/// the table's body. A symbol with none is refused, and every check offered
+/// must hold.
 #[must_use]
-pub fn code_holds(head: Option<bool>, bytes: Option<bool>) -> bool {
-    (head.is_some() || bytes.is_some()) && head != Some(false) && bytes != Some(false)
+pub fn code_holds(checks: &[Option<bool>]) -> bool {
+    checks.iter().any(Option::is_some) && !checks.contains(&Some(false))
 }
 
 /// Why a hook stays off before anything is patched.
@@ -362,22 +369,31 @@ mod tests {
 
     #[test]
     fn code_with_no_check_to_offer_never_holds() {
-        assert!(!code_holds(None, None));
+        assert!(!code_holds(&[None, None, None]));
     }
 
     #[test]
     fn every_check_offered_must_hold() {
-        assert!(code_holds(Some(true), Some(true)));
-        assert!(!code_holds(Some(false), Some(true)));
-        assert!(!code_holds(Some(true), Some(false)));
+        assert!(code_holds(&[Some(true), Some(true), None]));
+        assert!(!code_holds(&[Some(false), Some(true), None]));
+        assert!(!code_holds(&[Some(true), Some(false), None]));
     }
 
     #[test]
     fn a_single_check_decides_alone() {
-        assert!(code_holds(Some(true), None));
-        assert!(!code_holds(Some(false), None));
-        assert!(code_holds(None, Some(true)));
-        assert!(!code_holds(None, Some(false)));
+        assert!(code_holds(&[Some(true), None, None]));
+        assert!(!code_holds(&[Some(false), None, None]));
+        assert!(code_holds(&[None, Some(true), None]));
+        assert!(!code_holds(&[None, Some(false), None]));
+    }
+
+    /// A function whose whole code changed fails its check even when its
+    /// first bytes still match.
+    #[test]
+    fn a_changed_body_fails_the_code_whose_head_holds() {
+        assert!(code_holds(&[Some(true), None, Some(true)]));
+        assert!(!code_holds(&[Some(true), Some(true), Some(false)]));
+        assert!(code_holds(&[None, None, Some(true)]));
     }
 
     #[test]
@@ -450,8 +466,8 @@ mod tests {
     }
 
     /// Every symbol whose code the loader replaces or calls as a whole
-    /// carries a pattern over its whole function in every table that pins
-    /// it, so a change to the game's logic there fails the code check and
+    /// carries a body over its whole function in every table that pins it,
+    /// so a change to the game's logic there fails the code check and
     /// turns its feature off.
     #[test]
     fn every_replaced_function_carries_a_body_pattern_in_every_table() {
@@ -459,7 +475,11 @@ mod tests {
         for table in load() {
             for symbol in crate::pinned::BODIES {
                 let id = symbol.id();
-                if table.symbols().iter().any(|s| s.id() == id && !s.body()) {
+                if table
+                    .symbols()
+                    .iter()
+                    .any(|s| s.id() == id && s.body().is_none())
+                {
                     wrong.push(format!("{}: {id}", table.name()));
                 }
             }

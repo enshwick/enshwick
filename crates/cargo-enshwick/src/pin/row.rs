@@ -383,17 +383,19 @@ pub(crate) fn port_anchors<'r>(
                     format!("read from the code that uses it, at {at}"),
                 )
             }),
-            Anchor::Through(site) => anchor::target(new, *site).map(|rva| {
-                let entry = row.symbols.iter().find(|e| e.id == id);
-                let status = moved(entry.map_or(rva, |e| e.value), rva);
-                (
-                    rva,
-                    status,
-                    Some("medium".to_owned()),
-                    format!("what the code at {} reaches", hex(*site)),
-                )
-            }),
-            Anchor::Confirm(_) | Anchor::Own | Anchor::Body => None,
+            Anchor::Through(site) | Anchor::Body(Some(site)) => {
+                anchor::target(new, *site).map(|rva| {
+                    let entry = row.symbols.iter().find(|e| e.id == id);
+                    let status = moved(entry.map_or(rva, |e| e.value), rva);
+                    (
+                        rva,
+                        status,
+                        Some("medium".to_owned()),
+                        format!("what the code at {} reaches", hex(*site)),
+                    )
+                })
+            }
+            Anchor::Confirm(_) | Anchor::Own | Anchor::Body(None) => None,
         };
         let Some((value, status, confidence, note)) = settled else {
             continue;

@@ -7,7 +7,9 @@ use enshwick::code::{Pattern, find_each_unique};
 
 use crate::entries::read;
 use crate::reflect::Fingerprint;
-use crate::{Constant, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol};
+use crate::{
+    Body, Constant, GameVersion, Kind, Locate, Operand, Resolved, Side, SteamBuild, Symbol,
+};
 
 /// Why a table does not read.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -86,8 +88,33 @@ struct SymbolFull {
     at: u64,
     rel: Option<u64>,
     end: Option<u64>,
+    body: Option<BodyFull>,
+}
+
+/// A symbol's whole function as a table spells it: `len` bytes, the 4-byte
+/// fields at `open` left out, and the hash of the rest in hex.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BodyFull {
+    len: u32,
     #[serde(default)]
-    body: bool,
+    open: Vec<u32>,
+    hash: String,
+}
+
+impl BodyFull {
+    fn body(self, id: &str) -> Result<Body, TableError> {
+        let hash = (self.hash.len() == 32)
+            .then(|| u128::from_str_radix(&self.hash, 16).ok())
+            .flatten()
+            .ok_or_else(|| TableError::Toml(format!("{id}: a body hash is 32 hex digits")))?;
+        Body::checked(self.len, self.open, hash).ok_or_else(|| {
+            TableError::Toml(format!(
+                "{id}: a body spans 1 to {:#x} bytes with its open fields in order inside it",
+                Body::MAX_LEN
+            ))
+        })
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -218,12 +245,26 @@ impl Number {
     }
 }
 
+/// The most bytes a table's pattern spans: a window that finds code, never
+/// a copy of a whole function, which a [`Body`] checks by its hash instead.
+pub const MAX_PATTERN: usize = 192;
+
 fn pattern(id: &str, text: Option<String>) -> Result<Option<Pattern>, TableError> {
     text.map(|text| {
-        Pattern::parse(&text).map_err(|e| TableError::Pattern {
+        let pattern = Pattern::parse(&text).map_err(|e| TableError::Pattern {
             id: id.to_owned(),
             reason: e.to_string(),
-        })
+        })?;
+        if pattern.len() > MAX_PATTERN {
+            return Err(TableError::Pattern {
+                id: id.to_owned(),
+                reason: format!(
+                    "the pattern spans {} bytes, more than {MAX_PATTERN}",
+                    pattern.len()
+                ),
+            });
+        }
+        Ok(pattern)
     })
     .transpose()
 }
@@ -267,7 +308,7 @@ impl Table {
                     )));
                 }
                 let (rva, text, locate, body) = match value {
-                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0), false),
+                    SymbolValue::Plain(rva) => (rva, None, Locate::At(0), None),
                     SymbolValue::Full(full) => {
                         let locate = match (full.rel, full.end) {
                             (Some(at), end) => Locate::Rel {
@@ -279,12 +320,8 @@ impl Table {
                                 return Err(TableError::Toml(format!("{id}: `end` needs `rel`")));
                             }
                         };
-                        if full.body && (full.pattern.is_none() || locate != Locate::At(0)) {
-                            return Err(TableError::Toml(format!(
-                                "{id}: a body pattern starts at the symbol"
-                            )));
-                        }
-                        (full.rva, full.pattern, locate, full.body)
+                        let body = full.body.map(|body| body.body(&id)).transpose()?;
+                        (full.rva, full.pattern, locate, body)
                     }
                 };
                 Ok(Symbol {
@@ -436,6 +473,7 @@ impl Table {
             uncarried: Vec::new(),
             attributes: self.attributes(),
             heads: self.heads(),
+            bodies: self.bodies(),
         }
     }
 
@@ -451,6 +489,14 @@ impl Table {
             .collect()
     }
 
+    /// Each symbol checked by its whole function, with that body.
+    fn bodies(&self) -> Vec<(String, Body)> {
+        self.symbols
+            .iter()
+            .filter_map(|s| Some((s.id.clone(), s.body.clone()?)))
+            .collect()
+    }
+
     fn attributes(&self) -> Vec<(String, String)> {
         self.constants
             .iter()
@@ -461,8 +507,8 @@ impl Table {
     /// The table carried to a build without its own: each entry found by
     /// its pattern in `code`, the code section that starts at `code_rva`.
     /// A symbol counts when its pattern matches exactly once and the code
-    /// there still starts with the bytes its `<id>.bytes` constant pins, if
-    /// any; a constant counts when the code that uses it is still found
+    /// there still starts with the bytes its `<id>.bytes` constant pins and
+    /// still holds its whole function's [`Body`], if any; a constant counts when the code that uses it is still found
     /// once, and takes the value read from that code where its operand
     /// say; a constant read [`Constant::via`] a symbol counts when that
     /// symbol counts and its code there matches; a constant in a
@@ -515,7 +561,13 @@ impl Table {
             let bytes_ok = self
                 .constant_value(&format!("{}.bytes", s.id))
                 .is_none_or(|want| expected_bytes(code, code_rva, rva, want, s));
-            bytes_ok.then_some(rva)
+            let body_ok = s.body.as_ref().is_none_or(|body| {
+                rva.checked_sub(code_rva)
+                    .and_then(|at| usize::try_from(at).ok())
+                    .and_then(|at| code.get(at..))
+                    .is_some_and(|code| body.holds(code))
+            });
+            (bytes_ok && body_ok).then_some(rva)
         });
         let mut symbols = Vec::new();
         let mut missing = Vec::new();
@@ -574,6 +626,7 @@ impl Table {
                 .collect(),
             attributes: self.attributes(),
             heads: self.heads(),
+            bodies: self.bodies(),
         }
     }
 

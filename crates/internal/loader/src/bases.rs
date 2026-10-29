@@ -4,8 +4,8 @@
 //! The game puts zones that touch into one base. It copies only the first 16
 //! zones of the world's list into the bases, its array of bases holds 16 with
 //! no check (a 17th base would write over the zone list), and a base names
-//! its zones in a 32-bit mask. Raised, at functions the build table pins
-//! with patterns over their whole code, so a change to the game's logic
+//! its zones in a 32-bit mask. Raised, at functions the build table checks
+//! by a hash of their whole code, so a change to the game's logic
 //! there keeps the game's limits:
 //!
 //! - the bases' copy of the zone list grows to every listed zone;
@@ -976,35 +976,53 @@ mod tests {
         );
     }
 
-    /// The cursor's code check covers the offsets the detour reads: in
-    /// every table that pins the cursor, its whole-code pattern fixes the
-    /// altar flag test and the balancing load at the table's values.
+    /// The cursor's code check covers the offsets the detour reads: on each
+    /// game executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
+    /// cursor's body in its table holds, and its hash covers the altar flag
+    /// test and the balancing load at the table's values, outside every
+    /// open field; skipped without them.
     #[test]
-    fn the_cursor_s_pattern_fixes_the_offsets_its_detour_reads() {
-        let hex = |bytes: &[u8]| {
-            bytes
-                .iter()
-                .map(|b| format!("{b:02X}"))
-                .collect::<Vec<_>>()
-                .join(" ")
-        };
-        for (file, text) in enshwick_gamedata::embedded() {
-            let table = enshwick_gamedata::Table::parse(text).unwrap();
-            let resolved = table.resolve();
-            if resolved.symbol(pinned::bases::CURSOR.id()).is_none() {
+    fn the_cursor_s_body_fixes_the_offsets_its_detour_reads() {
+        use enshwick_gamedata::reflect::{Image, Layout};
+        use enshwick_gamedata::{Side, exact};
+
+        let tables = crate::builds::load();
+        for (variable, side) in [
+            ("ENSH_SERVER_EXE", Side::Server),
+            ("ENSH_CLIENT_EXE", Side::Client),
+        ] {
+            let Some(path) = std::env::var_os(variable) else {
                 continue;
-            }
-            let row = text
-                .lines()
-                .find(|line| line.starts_with(&format!("\"{}\" ", pinned::bases::CURSOR)))
-                .unwrap();
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image = Image::parse(&bytes, Layout::File, None).unwrap();
+            let resolved = exact(&tables, side, image.fingerprint().unwrap())
+                .unwrap()
+                .resolve();
+            let id = pinned::bases::CURSOR.id();
+            let body = resolved.body(id).unwrap();
+            let start = image.base() + resolved.symbol(id).unwrap();
+            let code = image.read(start, body.len() as u64).unwrap();
+            assert!(body.holds(code), "{variable}");
             let constant = |id: Constant| resolved.constant(id.id()).unwrap();
             let flag = u8::try_from(constant(pinned::bases::ITEM_ALTAR)).unwrap();
             let balancing = u32::try_from(constant(pinned::bases::CURSOR_BALANCING)).unwrap();
             let mut load = vec![0x48, 0x8B, 0x8E];
             load.extend_from_slice(&balancing.to_le_bytes());
-            assert!(row.contains(&hex(&[0x80, 0x7F, flag, 0x00])), "{file}");
-            assert!(row.contains(&hex(&load)), "{file}");
+            let fixed = |want: &[u8]| {
+                code.windows(want.len()).enumerate().any(|(at, bytes)| {
+                    bytes == want
+                        && body.open().iter().all(|&open| {
+                            let open = open as usize;
+                            open + 4 <= at || at + want.len() <= open
+                        })
+                })
+            };
+            assert!(
+                fixed(&[0x80, 0x7F, flag, 0x00]),
+                "{variable}: the flag test"
+            );
+            assert!(fixed(&load), "{variable}: the balancing load");
         }
     }
 
