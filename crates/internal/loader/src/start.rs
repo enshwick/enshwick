@@ -156,6 +156,15 @@ pub(crate) fn start(
     carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
+    let developer_tools = crate::developer_tools::marked(&data_dir);
+    if developer_tools {
+        crate::log!(
+            WARN,
+            "developer tools are on: mod-data/{}/{} exists; never on a server players use",
+            crate::settings::LOADER_ID,
+            crate::developer_tools::MARKER
+        );
+    }
     let loader = Loader {
         side,
         base: game.base,
@@ -164,6 +173,7 @@ pub(crate) fn start(
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
         data_dir,
+        developer_tools,
         mods_dir,
         stub: stub_abi,
         mods: records(&libraries, &candidates, &plan),

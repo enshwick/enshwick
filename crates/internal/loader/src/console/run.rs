@@ -333,8 +333,11 @@ fn config(loader: &Loader, args: &str) -> String {
 }
 
 /// `enshwick ui-demo <player>`: opens the interface demo on the client of
-/// the player online with that name.
+/// the player online with that name, while developer tools are on.
 fn ui_demo(loader: &Loader, name: &str) -> String {
+    if !loader.developer_tools {
+        return texts::text("ui-demo.off").to_owned();
+    }
     let wanted = name.to_lowercase();
     let player = crate::world::players(loader).ok().and_then(|players| {
         players.into_iter().find(|p| {

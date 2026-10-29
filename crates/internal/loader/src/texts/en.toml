@@ -166,6 +166,7 @@
 "ui-demo.player" = "No player named {name} is online."
 "ui-demo.opening" = "Opening the interface demo for {name}."
 "ui-demo.no-client" = "{name}'s client does not run Enshwick, or has not answered yet."
+"ui-demo.off" = "Developer tools are off. To turn them on, create the empty file mod-data/enshwick/developer-tools on the server and on the player's client, then restart both."
 "console.not-run" = "Not run ({status})."
 "usage.entity" = "enshwick entity <number>"
 "usage.placed" = "enshwick placed [number]"

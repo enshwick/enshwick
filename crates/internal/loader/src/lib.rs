@@ -58,6 +58,11 @@ mod daytime;
 mod deaths;
 #[cfg(windows)]
 mod detour;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running game reads the marker")
+)]
+mod developer_tools;
 pub mod diag;
 #[cfg(windows)]
 mod ecs;

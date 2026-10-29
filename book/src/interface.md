@@ -67,7 +67,10 @@ Styles are the game's named ones: `Body`, `Secondary`, `H1` to `H3`,
 The console line `enshwick ui-demo <player>` shows every widget at once: it
 opens the loader's own demo window on that player's client, and its last
 page shows samples on the HUD and a marker on the map where the player
-stood.
+stood. It is a developer tool: it works only when the empty file
+`mod-data/enshwick/developer-tools` exists on the server and on that
+player's client when they start. Never leave the file on a server that
+players use.
 
 `frame.screen()` says where the player is: the menus, loading, or in game.
 
