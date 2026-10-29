@@ -144,7 +144,12 @@ struct Layout {
     resource_layers: usize,
     resource_phenomena: usize,
     layer_size: usize,
-    layer_range: usize,
+    /// Where a layer holds its first phenomenon: the reflected
+    /// `phenomenonIndexRange.start`.
+    layer_range_start: usize,
+    /// Where a layer holds its phenomenon count: the reflected
+    /// `phenomenonIndexRange.count`.
+    layer_range_count: usize,
     phenomenon_size: usize,
     phenomenon_effect: usize,
 }
@@ -175,6 +180,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
             let resource = "keen::WeatherSystemResource";
             let layer = "keen::WeatherSystemLayerResource";
             let phenomenon = "keen::WeatherSystemPhenomenonResource";
+            let range = "keen::Range8";
             let (sample, clock, lock, release, free, spawn) = (
                 function(pinned::weather::SAMPLE)?,
                 function(pinned::weather::CLOCK)?,
@@ -231,7 +237,10 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 resource_layers: field(resource, "layers")?,
                 resource_phenomena: field(resource, "phenomenons")?,
                 layer_size: size(layer)?,
-                layer_range: field(layer, "phenomenonIndexRange")?,
+                layer_range_start: field(layer, "phenomenonIndexRange")?
+                    .checked_add(field(range, "start")?)?,
+                layer_range_count: field(layer, "phenomenonIndexRange")?
+                    .checked_add(field(range, "count")?)?,
                 phenomenon_size: size(phenomenon)?,
                 phenomenon_effect: field(phenomenon, "effect")?,
             })
@@ -521,12 +530,12 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
         let def = layer_defs + layer * layout.layer_size;
         // SAFETY: `layer` is below the resource's layer count (the `min`
         // before it) and the resource stays locked; the u8 first phenomenon
-        // starts the reflected `phenomenonIndexRange` field.
-        let first: u8 = unsafe { read(def, layout.layer_range) };
+        // is the reflected `start` of its `phenomenonIndexRange`.
+        let first: u8 = unsafe { read(def, layout.layer_range_start) };
         // SAFETY: `layer` is below the resource's layer count and the
-        // resource stays locked; the u8 count follows the first in the
-        // reflected `phenomenonIndexRange` field.
-        let count: u8 = unsafe { read(def, layout.layer_range + 1) };
+        // resource stays locked; the u8 count is the reflected `count` of
+        // its `phenomenonIndexRange`.
+        let count: u8 = unsafe { read(def, layout.layer_range_count) };
         let pick = (0..count)
             .find(|&local| {
                 let index = usize::from(first) + usize::from(local);
