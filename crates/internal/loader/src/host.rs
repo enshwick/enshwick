@@ -303,6 +303,18 @@ pub(crate) fn loader() -> Option<&'static Loader> {
     LOADER.get()
 }
 
+/// Where one of the loader's detours goes, and how the code there is
+/// checked before [`Loader::link_feature`] links it.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Target<'a> {
+    /// A build table symbol, whose code [`Loader::code_holds`] checks.
+    Pinned(Symbol),
+    /// An address the caller found and checked by name, named for the log:
+    /// a reflected system's entry, a function the caller's own code
+    /// pattern found, an export of a system library.
+    Found(&'a str, Option<u64>),
+}
+
 /// A mod's callback with the pointer it registered beside it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Registered<F> {
@@ -441,25 +453,49 @@ impl Loader {
         crate::builds::code_holds(head, bytes)
     }
 
-    /// [`Loader::link`] for a feature, logging why it stays off: a target
-    /// this build lacks, or a refused link. True when linked.
+    /// [`Loader::link`] for a feature, after checking its target: a table
+    /// symbol's code must hold by [`Loader::code_holds`]. A target this
+    /// build lacks, code that does not hold or a refused link turns only
+    /// `feature` off, named by [`Loader::feature_off`]. True when linked.
     pub(crate) fn link_feature<F: Copy>(
         &self,
         feature: &str,
-        target: Option<u64>,
+        target: Target<'_>,
         next: &'static Next<F>,
         detour: F,
         flags: HookFlags,
     ) -> bool {
-        let Some(target) = target.filter(|&t| t != 0) else {
-            crate::log!(WARN, "{feature} off: not in this build");
-            return false;
+        let (id, address) = match target {
+            Target::Pinned(symbol) => (
+                symbol.id(),
+                crate::builds::hook_target(self.address(symbol), || self.code_holds(symbol)),
+            ),
+            Target::Found(id, address) => (id, crate::builds::hook_target(address, || true)),
         };
-        let status = self.link(target, next, detour, flags);
+        let address = match address {
+            Ok(address) => address,
+            Err(why) => return self.feature_off(feature, id, &why.to_string()),
+        };
+        let status = self.link(address, next, detour, flags);
         if !status.is_ok() {
-            crate::log!(WARN, "{feature} off: refused ({})", status.0);
+            return self.feature_off(feature, id, &format!("refused the link ({})", status.0));
         }
-        status.is_ok()
+        crate::diag::name(address, id);
+        true
+    }
+
+    /// Turns `feature` off on this build because its entry `id` failed for
+    /// `reason`: one warning that names the build, and the part off on the
+    /// Mods screen and in the status summary. Always false, for the caller
+    /// to return.
+    pub(crate) fn feature_off(&self, feature: &str, id: &str, reason: &str) -> bool {
+        crate::log!(
+            WARN,
+            "{}",
+            crate::builds::off_line(feature, &self.build.name, id, reason)
+        );
+        crate::diag::part_off(feature, &format!("{id} {reason}"));
+        false
     }
 
     /// The mod named `id`, or the mod that had `id` before a rename, as a

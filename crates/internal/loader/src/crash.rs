@@ -42,7 +42,7 @@ use windows_sys::Win32::System::Threading::{
 };
 
 use crate::chains::Next;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::mod_index::ModIndex;
 
 /// Keeps looking for another handler: the default ends the process.
@@ -497,10 +497,10 @@ unsafe extern "system" fn dump(
 pub(crate) fn link(loader: &Loader) {
     let found =
         crate::module::Module::load("dbghelp.dll").and_then(|m| m.export("MiniDumpWriteDump"));
-    let target = found.map(|f| f as *const () as u64);
-    if let Some(address) = target {
-        crate::diag::name(address, "dbghelp.MiniDumpWriteDump");
-    }
+    let target = Target::Found(
+        "dbghelp.MiniDumpWriteDump",
+        found.map(|f| f as *const () as u64),
+    );
     loader.link_feature(
         "crash blame on crash dumps (MiniDumpWriteDump)",
         target,

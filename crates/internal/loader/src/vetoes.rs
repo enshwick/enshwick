@@ -24,7 +24,7 @@ use enshwick::abi::{
 use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
-use crate::host::{Loader, Registered};
+use crate::host::{Loader, Registered, Target};
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
@@ -176,7 +176,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = BUILD.set(layout);
     loader.link_feature(
         "build filters",
-        loader.address(pinned::building::CURSOR_CHECK),
+        Target::Pinned(pinned::building::CURSOR_CHECK),
         &CURSOR_NEXT,
         cursor as CursorFn,
         HookFlags::NONE,

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use enshwick::abi::Side;
-use enshwick_gamedata::reflect::{Image, Layout, Reflection};
+use enshwick_gamedata::reflect::{Fingerprint, Image, Layout, Reflection};
 use windows_sys::Win32::System::LibraryLoader::{GetModuleFileNameW, GetModuleHandleW};
 
 use crate::{builds, errors, log};
@@ -30,7 +30,7 @@ pub(super) struct Game {
     /// Where the executable's image is mapped.
     pub(super) base: u64,
     /// The build's fingerprint from its debug directory.
-    pub(super) fingerprint: enshwick_gamedata::reflect::Fingerprint,
+    pub(super) fingerprint: Fingerprint,
     /// The build table that serves it.
     pub(super) build: &'static builds::KnownBuild,
     /// Its reflected types and systems.
@@ -212,12 +212,9 @@ pub(super) fn game(data_dir: &Path) -> Option<Game> {
         return None;
     };
     let reflection = Reflection::scan(image);
-    crate::log!(
-        INFO,
-        "{} types and {} systems reflected",
-        reflection.type_count(),
-        reflection.system_count()
-    );
+    if !reflection_read(&reflection, fingerprint, data_dir) {
+        return None;
+    }
     let tables = builds::load();
     let code = image.section(".text").and_then(|text| {
         let range = image.range(text);
@@ -349,4 +346,28 @@ pub(super) fn identify() -> Option<(Side, u64, usize)> {
     let optional = usize::try_from(pe::u32_at(header, pe::PE_POINTER)?).ok()? + pe::OPTIONAL;
     let len = usize::try_from(pe::u32_at(header, optional + pe::SIZE_OF_IMAGE)?).ok()?;
     Some((side, u64::try_from(base).ok()?, len))
+}
+
+/// Logs what the scan reflected, and whether it read the game: a build whose
+/// scan finds no types or no systems is logged as unknown, and a mod's hold
+/// under `data_dir` stops the game.
+fn reflection_read(reflection: &Reflection<'_>, fingerprint: Fingerprint, data_dir: &Path) -> bool {
+    crate::log!(
+        INFO,
+        "{} types and {} systems reflected",
+        reflection.type_count(),
+        reflection.system_count()
+    );
+    if builds::reflection_read(reflection.type_count(), reflection.system_count()) {
+        return true;
+    }
+    crate::log!(
+        ERROR,
+        "game build {}/{} reflects no types or no systems: its reflection format is new; the game runs vanilla until Enshwick reads it ({})",
+        hex(&fingerprint.guid()),
+        fingerprint.age(),
+        errors::UNKNOWN_BUILD
+    );
+    crate::holds::enforce(data_dir, &[], true, None);
+    false
 }

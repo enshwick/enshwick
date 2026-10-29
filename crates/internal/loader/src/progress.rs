@@ -13,7 +13,7 @@ use enshwick::abi::{
 
 use crate::chains::Next;
 use crate::ecs::Engine;
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::host::{Registered, take};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
@@ -226,11 +226,10 @@ pub(crate) fn link(loader: &'static Loader) {
             0
         }
     };
-    let address = |name| loader.address(name);
     if wants[0]
         && loader.link_feature(
             "skill checks",
-            address(pinned::skill::NODE_UNLOCKED),
+            Target::Pinned(pinned::skill::NODE_UNLOCKED),
             &SKILL_NEXT,
             node_unlocked,
             HookFlags::CALLER_FRAME,
@@ -241,7 +240,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[1]
         && loader.link_feature(
             "comfort",
-            address(pinned::comfort::BASE_REGISTER),
+            Target::Pinned(pinned::comfort::BASE_REGISTER),
             &COMFORT_NEXT,
             register,
             HookFlags::NONE,
@@ -252,7 +251,7 @@ pub(crate) fn link(loader: &'static Loader) {
     if wants[2]
         && loader.link_feature(
             "experience",
-            Some(player_level),
+            Target::Found("player_level", Some(player_level)),
             &LEVEL_NEXT,
             player_level_link,
             HookFlags::NONE,

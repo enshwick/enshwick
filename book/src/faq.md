@@ -117,8 +117,12 @@ entries found by their code patterns, <m> missing; ...`, and at `debug` the
 missing entries. The game was updated, and
 the loader runs it on the code patterns of the newest build table it has.
 Whatever those patterns do not find stays off: a loader feature logs
-`<feature> off: not in this build`, and a mod that needs a missing entry turns
-off with `symbol <id>: missing on this game build`. Everything else runs
+`<feature> off on <build>: <entry> is not in this build`, or `<entry> does not
+read as the build table says` when the code at the entry changed, and a mod
+that needs a missing entry turns off with
+`symbol <id>: missing on this game build`. The Mods screen lists the features
+that are off. A build whose reflection reads no types or systems runs vanilla,
+as a build the loader does not know. Everything else runs
 until a loader build with the new build's table replaces this one.
 `cargo xtask compat <exe> --mods <dir>`, in a checkout of the
 [platform repository](https://github.com/enshwick/enshwick), shows the
@@ -166,7 +170,7 @@ not turn the mod off: the mod logs
 | `off:` reason                                                  | What happened                                                                     |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `init returned 6` after `off: init panicked`                   | `Mod::init` panicked                                                              |
-| `its hook at 0x... could not be armed`                         | The loader could not detour the function; `hook at 0x... not armed: ...` says why |
+| `its hook on <entry> could not be armed`                       | The detour failed; `hook off on <build>: <entry> could not be armed` says why     |
 | `its code patch at 0x... was skipped`                          | The bytes no longer read as expected, or overlap a hook                           |
 | `panic in hook REWARD`                                         | A detour panicked; the original ran once                                          |
 | `panic in the hook at 0x...`                                   | A mid-function hook's handler panicked                                            |

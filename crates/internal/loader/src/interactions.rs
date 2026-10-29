@@ -13,7 +13,7 @@ use enshwick::raw::{read_at, read_ptr_at, write_at};
 
 use crate::chains::Next;
 use crate::ecs::{Components, Engine};
-use crate::host::{Loader, Registered};
+use crate::host::{Loader, Registered, Target};
 use crate::mod_index::ModIndex;
 use crate::pinned;
 use crate::registry::Registry;
@@ -183,7 +183,6 @@ pub(crate) fn link(loader: &'static Loader) {
         return;
     };
     let _first = LOADED.set((loader, layout, components));
-    let at = |name: &str| loader.address_by_name(&format!("access.{name}"));
     let actions = loader
         .reflection
         .system("inventory_actions")
@@ -197,36 +196,42 @@ pub(crate) fn link(loader: &'static Loader) {
     let none = HookFlags::NONE;
     let offers = loader.link_feature(
         "interaction offers",
-        at("offer_test"),
+        Target::Pinned(pinned::access::OFFER_TEST),
         &OFFER_NEXT,
         offer,
         none,
     );
     let transfers = loader.link_feature(
         "transfers",
-        at("transfer"),
+        Target::Pinned(pinned::access::TRANSFER),
         &TRANSFER_NEXT,
         transfer as ActionFn,
         none,
     );
-    let sorting = loader.link_feature("sorting", at("sort"), &SORT_NEXT, sort as ActionFn, none);
+    let sorting = loader.link_feature(
+        "sorting",
+        Target::Pinned(pinned::access::SORT),
+        &SORT_NEXT,
+        sort as ActionFn,
+        none,
+    );
     let _stock = loader.link_feature(
         "base stock",
-        at("base_stock"),
+        Target::Pinned(pinned::access::BASE_STOCK),
         &STOCK_NEXT,
         stock,
         stock_flags,
     );
     let dismantling = loader.link_feature(
         "dismantling",
-        at("dismantle_method"),
+        Target::Pinned(pinned::access::DISMANTLE_METHOD),
         &DISMANTLE_NEXT,
         dismantle,
         none,
     );
     let actions = loader.link_feature(
         "inventory actions",
-        actions,
+        Target::Found("inventory_actions", actions),
         &ACTIONS_NEXT,
         inventory_actions,
         none,

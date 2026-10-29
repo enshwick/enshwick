@@ -495,7 +495,6 @@ struct Looks {
 #[derive(Debug)]
 pub(crate) struct Engine {
     context: usize,
-    pub(super) popup: u64,
     looks: Looks,
     pub(super) layout: Layout,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
@@ -539,7 +538,6 @@ pub(crate) struct Engine {
     loca_id: LocaIdFn,
     loca_text: LocaTextFn,
     hud_visible: VisibleFn,
-    pub(super) hud: u64,
     main_entry: MainEntryFn,
     pause_entry: PauseEntryFn,
     action_new: ActionNewFn,
@@ -799,7 +797,6 @@ impl Engine {
         }
         Ok(Self {
             context: at(pinned::ui::CONTEXT),
-            popup: loader.address(pinned::ui::POPUP).unwrap_or(0),
             looks,
             layout,
             dialog,
@@ -839,7 +836,6 @@ impl Engine {
             loca_id: function!(pinned::ui::LOCA_ID, LocaIdFn),
             loca_text: function!(pinned::ui::LOCA_TEXT, LocaTextFn),
             hud_visible: function!(pinned::ui::HUD_VISIBLE, VisibleFn),
-            hud: loader.address(pinned::ui::HUD).unwrap_or(0),
             main_entry: function!(pinned::ui::MAIN_ENTRY, MainEntryFn),
             pause_entry: function!(pinned::ui::PAUSE_ENTRY, PauseEntryFn),
             action_new: function!(pinned::ui::ACTION_NEW, ActionNewFn),
