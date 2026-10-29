@@ -419,6 +419,24 @@ mod tests {
         assert!(long.is_empty(), "{long:#?}");
     }
 
+    /// A negative `plus` takes the base of a copy on the stack off a frame
+    /// slot's displacement, leaving the field's offset; one below the base
+    /// is no field.
+    #[test]
+    fn a_negative_plus_takes_the_copy_s_base_off_the_operand() {
+        let table = Table::parse(
+            "name = \"t (1)\"\nside = \"client\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n\"c.field\" = { value = 0x8, pattern = \"48 8B 5C 24 ??\", at = 4, size = 1, plus = -80 }\n",
+        )
+        .unwrap();
+        assert_eq!(table.resolve().constant("c.field"), Some(0x8));
+        let inside = [0x90, 0x48, 0x8b, 0x5c, 0x24, 0x58];
+        let resolved = table.fall_back(&inside, 0, |_| None);
+        assert_eq!(resolved.constant("c.field"), Some(0x8));
+        let below = [0x90, 0x48, 0x8b, 0x5c, 0x24, 0x48];
+        let resolved = table.fall_back(&below, 0, |_| None);
+        assert_eq!(resolved.constant("c.field"), None);
+    }
+
     /// A constant on a pattern says where its value lies: read from an
     /// operand, or held by the pattern's own fixed bytes. Without either, a
     /// build without a table would keep the old value without a sign.

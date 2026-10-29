@@ -8,6 +8,12 @@ use super::game::identify;
 /// The build table ids this part of the loader names.
 #[cfg(windows)]
 pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::join::TARGET_GAME_PORT.id(),
+    pinned::join::TARGET_HAS_ADDRESS.id(),
+    pinned::join::TARGET_HOST.id(),
+    pinned::join::TARGET_IP.id(),
+    pinned::join::TARGET_PASSWORD.id(),
+    pinned::join::TARGET_QUERY_PORT.id(),
     pinned::net::JOIN_GAME.id(),
     pinned::net::PROVIDER_VTABLE.id(),
     pinned::user::START_INTERACTION.id(),
@@ -26,6 +32,17 @@ pub(super) fn link_join(loader: &Loader) {
         .collect();
     crate::join::set_names(names);
     crate::lobby::register();
+    match crate::join::Layout::from_table(|id| loader.build.constant(id)) {
+        Ok(layout) => crate::join::set_layout(layout),
+        Err(error) => {
+            crate::log!(
+                WARN,
+                "join check off on {}: {error}; nothing patched",
+                loader.build.name
+            );
+            return;
+        }
+    }
     match verified_join(loader) {
         Ok((join, code)) => {
             let linked = loader.link_feature(
