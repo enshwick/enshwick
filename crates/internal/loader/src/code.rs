@@ -443,32 +443,49 @@ fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
     Some(bytes.into())
 }
 
+/// The lift of the workshop limit, as the log and the Mods screen name it.
+const LIFT_FEATURE: &str = "workshop recipe limit";
+
+/// Why the lift is off: the table entry and the reason.
+type Off = (String, String);
+
 /// The table's symbol `id` in the running game when its code holds, or
 /// why not.
-fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, String> {
-    loader
+fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, Off> {
+    let address = loader
         .address(id)
-        .filter(|_| loader.code_holds(id))
-        .and_then(|address| usize::try_from(address).ok())
-        .ok_or_else(|| format!("{id} is not in this build or its code moved"))
+        .ok_or_else(|| (id.id().to_owned(), "is not in this build".to_owned()))?;
+    if !loader.code_holds(id) {
+        return Err((
+            id.id().to_owned(),
+            "does not hold the table's code".to_owned(),
+        ));
+    }
+    usize::try_from(address).map_err(|e| (id.id().to_owned(), e.to_string()))
 }
 
 /// The stop block's patch from the build table: the check's code holds, and
 /// the block it jumps to holds its whole code, which the patch replaces.
-fn limit_patch(loader: &Loader) -> Result<CodePatch, String> {
+fn limit_patch(loader: &Loader) -> Result<CodePatch, Off> {
     let _check = checked(loader, pinned::recipe::LIMIT_CHECK)?;
     let stop = checked(loader, pinned::recipe::LIMIT_STOP)?;
-    let next = loader
-        .address(pinned::recipe::LIMIT_NEXT)
-        .and_then(|address| usize::try_from(address).ok())
-        .ok_or_else(|| format!("{} is not in this build", pinned::recipe::LIMIT_NEXT))?;
+    let next = checked(loader, pinned::recipe::LIMIT_NEXT)?;
     let len = loader
         .build
         .body(pinned::recipe::LIMIT_STOP.id())
         .map(enshwick_gamedata::Body::len)
-        .ok_or_else(|| format!("{} carries no body", pinned::recipe::LIMIT_STOP))?;
-    let replacement = stop_replacement(stop, next, len)
-        .ok_or_else(|| format!("the stop block of {len} bytes cannot jump to {next:#x}"))?;
+        .ok_or_else(|| {
+            (
+                pinned::recipe::LIMIT_STOP.id().to_owned(),
+                "carries no body".to_owned(),
+            )
+        })?;
+    let replacement = stop_replacement(stop, next, len).ok_or_else(|| {
+        (
+            pinned::recipe::LIMIT_STOP.id().to_owned(),
+            format!("of {len} bytes cannot jump to {next:#x}"),
+        )
+    })?;
     let mut expected = vec![0u8; len];
     // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
     // bytes of code `checked` compared against the table's body, inside the
@@ -489,21 +506,27 @@ fn limit_patch(loader: &Loader) -> Result<CodePatch, String> {
 pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
     let found = (|| {
         use crate::catalogue::ids;
-        let offset = |id: &str| crate::catalogue::offset(loader, id).ok_or(format!("no {id}"));
+        let missing = |id: &str| (id.to_owned(), "is not in this build".to_owned());
+        let offset = |id: &str| crate::catalogue::offset(loader, id).ok_or_else(|| missing(id));
         let layout = Layout {
             recipes: offset(ids::RECIPE_REGISTRY_RECIPES)?,
             recipe: crate::catalogue::size(loader, ids::RECIPE)
-                .ok_or(format!("no {}", ids::RECIPE))?,
+                .ok_or_else(|| missing(ids::RECIPE))?,
             workshop: offset(ids::RECIPE_WORKSHOP)?,
         };
         let patch = limit_patch(loader)?;
-        let lookup = lookup_address(loader).ok_or("the recipe list lookup is not linked")?;
-        Ok::<_, String>((layout, patch, lookup))
+        let lookup = lookup_address(loader).ok_or_else(|| {
+            (
+                pinned::recipe::LIST_LOOKUP.id().to_owned(),
+                "is not linked".to_owned(),
+            )
+        })?;
+        Ok::<_, Off>((layout, patch, lookup))
     })();
     let (layout, patch, lookup) = match found {
         Ok(found) => found,
-        Err(reason) => {
-            crate::log!(WARN, "workshop recipe limit kept: {reason}");
+        Err((id, reason)) => {
+            let _off = loader.feature_off(LIFT_FEATURE, &id, &reason);
             return;
         }
     };
@@ -541,8 +564,8 @@ fn lookup_address(loader: &'static Loader) -> Option<u64> {
     *LOOKUP_LINK.get_or_init(|| {
         let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
             Ok(at) => at as u64,
-            Err(why) => {
-                crate::log!(WARN, "the recipe list lookup is not found: {why}");
+            Err((id, why)) => {
+                crate::log!(WARN, "the recipe list lookup is not found: {id} {why}");
                 return None;
             }
         };
@@ -874,8 +897,6 @@ mod tests {
         );
     }
 
-    /// The check of 1.0 server 399 and client 426 at `site` in `code`, its
-    /// `je` landing `stop` bytes from the check, and a stop block there.
     #[test]
     fn the_stop_block_becomes_inc_r13_and_a_jump_to_the_next_recipe() {
         let next = 0x1_4096_3cdb;
