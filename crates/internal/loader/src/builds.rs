@@ -405,6 +405,24 @@ pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<
 mod tests {
     use super::*;
 
+    /// On each client executable, every client table reads the size of a
+    /// texture ring's completion record and where it holds its context.
+    #[test]
+    fn the_texture_ring_record_reads_on_each_client() {
+        let ids = ["textures.ring_record_size", "textures.ring_record_context"];
+        let rows = constants_on_executables(&ids);
+        let clients: Vec<_> = rows
+            .iter()
+            .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
+            .collect();
+        if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+            assert!(clients.len() >= 2, "{rows:?}");
+        }
+        for (table, values) in clients {
+            assert_eq!(values, &[Some(0x18), Some(0x8)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads the words of the offer test's
     /// out record a refused offer zeroes.
     #[test]
