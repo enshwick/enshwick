@@ -491,6 +491,22 @@ mod tests {
         }
     }
 
+    /// On each executable, every table reads the bits of a connection
+    /// handle that name its chat slot, and the bytes a chat line counts
+    /// beyond its text.
+    #[test]
+    fn the_chat_handle_slot_and_line_overhead_read_on_each_executable() {
+        let rows = constants_on_executables(&["chat.handle_slot", "chat.line_overhead"]);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        assert!(rows.len() >= named * 2, "{rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x7f), Some(0x17)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads where the zone size's answer
     /// holds its valid byte.
     #[test]

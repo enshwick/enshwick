@@ -32,6 +32,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::chat::CLIENT_QUEUE.id(),
     pinned::chat::CLIENT_SEND.id(),
     pinned::chat::CLIENT_STORE.id(),
+    pinned::chat::HANDLE_SLOT.id(),
+    pinned::chat::LINE_OVERHEAD.id(),
     pinned::chat::MARK_DELIVERED.id(),
     pinned::chat::MAX_TEXT.id(),
     pinned::chat::NODE_DELIVERED.id(),
@@ -90,6 +92,21 @@ struct Layout {
     delivered: usize,
     max_text: usize,
     reply_type: u8,
+    /// The bits of a connection handle that name its slot in the store.
+    handle_slot: u32,
+    /// The bytes a line counts beyond its text, before rounding to 4.
+    line_overhead: usize,
+}
+
+/// The largest line overhead taken from the table: the game adds it as a
+/// sign-extended byte, so a larger byte would be a negative.
+const MOST_OVERHEAD: usize = 0x7f; // bound, not a game offset: the largest positive imm8
+
+/// The bytes the store counts for a line of `text_len` bytes, `overhead`
+/// bytes beyond its text, rounded up to 4 as the game rounds them.
+fn line_bytes(text_len: usize, overhead: usize) -> u32 {
+    let bytes = text_len.saturating_add(overhead).saturating_add(3) & !3;
+    u32::try_from(bytes).unwrap_or(u32::MAX)
 }
 
 type PostFn = unsafe extern "system" fn(
@@ -286,6 +303,9 @@ pub(crate) fn link(loader: &'static Loader) {
             delivered: constant(pinned::chat::NODE_DELIVERED)?,
             max_text: constant(pinned::chat::MAX_TEXT)?,
             reply_type: u8::try_from(constant(pinned::chat::REPLY_TYPE)?).ok()?,
+            handle_slot: u32::try_from(constant(pinned::chat::HANDLE_SLOT)?).ok()?,
+            line_overhead: constant(pinned::chat::LINE_OVERHEAD)
+                .filter(|&overhead| overhead <= MOST_OVERHEAD)?,
         })
     })();
     let Some(layout) = layout else {
@@ -625,7 +645,7 @@ pub(crate) fn drain() {
 unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &str) {
     let (handle, key, target) = match to {
         To::Machine(handle, key) => {
-            let target = (handle & 0x7f) as usize;
+            let target = (handle & layout.handle_slot) as usize;
             if target >= layout.slot_count {
                 dropped(1);
                 return;
@@ -691,7 +711,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         // target's bit stays unset until the game sends the line to the
         // target on a later step.
         let read_mask = || unsafe { crate::memory::read::<u32>(node, layout.delivered) };
-        let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
+        let bytes = line_bytes(text.len(), layout.line_overhead);
         let unmarked = strays(active, target, Some(read_mask()));
         for slot in (0..32).filter(|&slot| unmarked & 1 << slot != 0) {
             // SAFETY: `layout.mark` is the table's `chat.mark_delivered`, the
@@ -719,6 +739,15 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_line_counts_its_text_and_overhead_rounded_up_to_four() {
+        assert_eq!(line_bytes(0, 0x17), 0x18);
+        assert_eq!(line_bytes(1, 0x17), 0x18);
+        assert_eq!(line_bytes(2, 0x17), 0x1c);
+        assert_eq!(line_bytes(0x400, 0x17), 0x418);
+        assert_eq!(line_bytes(usize::MAX, 0x17), u32::MAX);
+    }
 
     #[test]
     fn a_typed_slash_line_stays_in_the_chat_and_only_frames_are_taken() {
