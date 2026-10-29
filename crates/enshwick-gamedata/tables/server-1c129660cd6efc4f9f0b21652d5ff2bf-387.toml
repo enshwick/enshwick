@@ -165,6 +165,7 @@ revision = 1
 # them around the instructions a maintainer picks with `--from`.
 "pacing.loop_wait" = { rva = 0x5c_263b, pattern = "48 3B ?? 44 8B ?? 44 0F 4C CA 48 8B 55 D8 45 33 C0 8B 4D E0 C7 44 24 20 01 00 00 00 FF 15", at = 10 }
 "pacing.server_wait" = { rva = 0x7a_2f53, pattern = "44 39 BB 3C 05 00 00 75 08 41 B9 00 5A 62 02 EB 12 48 81 7D ?? 80 9F D5 00 41 B9 40 42 0F 00 4C 0F 4F CF 4D 8B C4 48 8D 55 ?? 48 8D 4D ?? E8", at = 35 }
+"pacing.wait_divide" = { rva = 0x5c_260a, pattern = "48 B8 DB 34 B6 D7 82 DE 1B 43 BF FF FF FF FF 48 F7 EB 48 C1 FA 12 48 8B C2 48 C1 E8 3F 48 03 D0 79 ?? 44 8B CE EB ?? 48 3B D7 44 8B CF 44 0F 4C CA 48 8B 55 D8", at = 0 }
 "pacing.default_workers" = { rva = 0x5c_e503, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 5 }
 "pacing.background_workers" = { rva = 0x5c_e520, pattern = "41 0F B6 47 09 8B CF 40 3A C7 0F 42 C8 84 DB 89 8D ?? ?? ?? ?? 8B CF 0F B6 C3 0F 45 C8 41 0F B6 47 0A 44 0F B6 E9", at = 34 }
 
@@ -538,5 +539,6 @@ revision = 1
 "skill.airborne_architect" = { value = 0x4475_e8dd, cell = "skill.airborne_architect_cell" }
 "pacing.loop_wait.bytes" = "0x8bc0_3345_d855_8b48"
 "pacing.server_wait.bytes" = 0x48c7_558d_48c4_8b4d
+"pacing.wait_divide.bytes" = "0xde82_d7b6_34db_b848"
 "pacing.default_workers.bytes" = "0xc842_0fc7_3a40_cf8b"
 "pacing.background_workers.bytes" = 0xfc5_3a41_e9b6_0f44
