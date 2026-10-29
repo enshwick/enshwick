@@ -365,10 +365,28 @@ pub fn embedded(running: Side) -> KnownBuild {
 
 /// What `ids` read on the executables `ENSH_SERVER_EXE` and
 /// `ENSH_CLIENT_EXE` name, each skipped without its variable: by the
-/// executable's own table, then by every table of its side that pins them,
-/// carried to it by patterns, each row named after its table.
+/// executable's own table, then by every table of its side carried to it by
+/// patterns, each row named after its table.
 #[cfg(test)]
 pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<u64>>)> {
+    constants_on_executables_by(ids, |_| true)
+}
+
+/// What `ids` read on the executables, as [`constants_on_executables`], by
+/// only the tables that pin every one of them.
+#[cfg(test)]
+pub(crate) fn pinned_constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<u64>>)> {
+    constants_on_executables_by(ids, |table| {
+        let resolved = table.resolve();
+        ids.iter().all(|id| resolved.constant(id).is_some())
+    })
+}
+
+#[cfg(test)]
+fn constants_on_executables_by(
+    ids: &[&str],
+    keep: impl Fn(&Table) -> bool,
+) -> Vec<(String, Vec<Option<u64>>)> {
     let tables = load();
     let mut rows = Vec::new();
     for (var, side) in [
@@ -385,18 +403,15 @@ pub(crate) fn constants_on_executables(ids: &[&str]) -> Vec<(String, Vec<Option<
             None,
         )
         .unwrap();
-        let own = tables::exact(&tables, side, image.fingerprint().unwrap())
-            .unwrap()
-            .resolve();
+        let own = tables::exact(&tables, side, image.fingerprint().unwrap()).unwrap();
         let read = |resolved: &Resolved| ids.iter().map(|id| resolved.constant(id)).collect();
-        if ids.iter().all(|id| own.constant(id).is_some()) {
-            rows.push((format!("{var}: own"), read(&own)));
+        if keep(own) {
+            rows.push((format!("{var}: own"), read(&own.resolve())));
         }
         let base = image.base();
         let text = image.range(image.section(".text").unwrap());
         let code = image.read(text.start, text.end - text.start).unwrap();
-        let pins = |t: &&Table| ids.iter().all(|id| t.resolve().constant(id).is_some());
-        for other in tables.iter().filter(|t| t.side() == side).filter(pins) {
+        for other in tables.iter().filter(|t| t.side() == side && keep(t)) {
             let carried = other.fall_back(code, text.start - base, |rva| image.u32(base + rva));
             rows.push((format!("{var}: {}", other.name()), read(&carried)));
         }
@@ -445,13 +460,16 @@ mod tests {
     /// into bases zeroes its answer's word and reads the entity's position.
     #[test]
     fn the_sort_answer_and_entity_read_on_each_executable() {
-        let rows =
-            constants_on_executables(&["bases.sort_answer_word", "bases.sort_entity_position"]);
-        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
-            .iter()
-            .filter(|var| std::env::var(var).is_ok())
-            .count();
-        assert!(rows.len() >= named, "{rows:?}");
+        let rows = pinned_constants_on_executables(&[
+            "bases.sort_answer_word",
+            "bases.sort_entity_position",
+        ]);
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            if std::env::var(var).is_ok() {
+                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
+                assert!(own.count() >= 2, "{var}: {rows:?}");
+            }
+        }
         for (table, values) in rows {
             assert_eq!(values, [Some(0x4), Some(0x8)], "{table}");
         }

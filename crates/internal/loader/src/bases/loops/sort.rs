@@ -56,8 +56,11 @@ pub(super) unsafe extern "system" fn sort(
 ///
 /// # Safety
 ///
-/// - `out` is writable for 8 bytes, `entity` readable for 0x20, `obj` the
-///   live object `game` views, in the serial bases update.
+/// - `out` is writable for [`super::SORT_ANSWER_BYTES`], `entity` readable
+///   for [`super::SORT_ENTITY_BYTES`], `obj` the live object `game` views, in the
+///   serial bases update.
+/// - `layout` passed [`Layout::misfit`], so its sort fields lie inside
+///   both.
 pub(super) unsafe fn sort_into(
     out: *mut u8,
     obj: *mut u8,
@@ -67,11 +70,13 @@ pub(super) unsafe fn sort_into(
     filtered: bool,
 ) {
     let container = &game.fields().container;
-    // SAFETY: the caller's writable answer; its u32 the game zeroes first
-    // sits at the build table's `bases.sort_answer_word`.
+    // SAFETY: the caller's writable answer; the u32 the game zeroes first,
+    // at the table's `bases.sort_answer_word`, which `misfit` kept inside
+    // its writable bytes.
     unsafe { write_at(out, layout.sort.answer_word, 0u32) };
-    // SAFETY: the caller's entity; its fixed-point position sits at the
-    // build table's `bases.sort_entity_position`.
+    // SAFETY: the caller's entity; its fixed-point position, at the table's
+    // `bases.sort_entity_position`, which `misfit` kept inside its readable
+    // bytes.
     let p = unsafe { point(entity.wrapping_add(layout.sort.entity_position)) };
     let hit = window::indices(game.count()).find(|&i| lookup::in_base(game, i, p));
     let answer = match hit {

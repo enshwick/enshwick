@@ -50,6 +50,10 @@ const LIST_BYTES: usize = 32;
 /// all, kind 1, kinds 2 to 9, flag 4, flag 2.
 pub(super) const BEDS: usize = 3;
 pub(super) const ANIMAL_COUNTS: usize = 5;
+/// The bytes of the sort's answer the detour may write and of its entity
+/// it may read: the room `sort_into` asks of its callers.
+pub(super) const SORT_ANSWER_BYTES: usize = 8;
+pub(super) const SORT_ENTITY_BYTES: usize = 32;
 
 /// What the loops over every base read and write, from the build table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -288,9 +292,21 @@ impl Layout {
                 self.sort.answer_word,
             ),
             (
+                bases::SORT_ANSWER_WORD,
+                self.sort.answer_word.saturating_add(size_of::<u32>()),
+                SORT_ANSWER_BYTES,
+            ),
+            (
                 bases::SORT_ENTITY_POSITION,
                 size_of::<u32>(),
                 self.sort.entity_position,
+            ),
+            (
+                bases::SORT_ENTITY_POSITION,
+                self.sort
+                    .entity_position
+                    .saturating_add(size_of::<[i64; 3]>()),
+                SORT_ENTITY_BYTES,
             ),
         ];
         in_record
