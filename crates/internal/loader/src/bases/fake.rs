@@ -18,7 +18,7 @@ pub(super) const FIELDS: Fields = Fields {
     zone_size: 0x20,
     zone_high: 0x10,
     item_altar: 0x43,
-    max_altars_reached: 0x4000,
+    max_altars_reached: 0x40,
     balancing: 0x170,
     kind: 0x08,
     allocator: 0x0,
