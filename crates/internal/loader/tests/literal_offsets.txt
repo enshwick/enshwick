@@ -8,6 +8,3 @@
 # `// bound, not a game offset: <why>`.
 1 src/base_groups/grouping.rs
 4 src/base_groups/window.rs
-3 src/transactions/block.rs
-1 src/transactions/record.rs
-1 src/voxels.rs

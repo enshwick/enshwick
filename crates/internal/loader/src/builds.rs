@@ -474,6 +474,32 @@ mod tests {
         }
     }
 
+    /// On each executable, every table that pins the block rows reads where
+    /// the builder's box keeps its lowest voxel and its turned size, how far
+    /// it writes, and how far the undo write reads its record.
+    #[test]
+    fn the_block_box_and_undo_record_rows_read_on_each_executable() {
+        let rows = pinned_constants_on_executables(&[
+            "building.box_min",
+            "building.box_size",
+            "building.box_extent",
+            "voxel.undo_extent",
+        ]);
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            if std::env::var(var).is_ok() {
+                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
+                assert!(own.count() >= 2, "{var}: {rows:?}");
+            }
+        }
+        for (table, values) in rows {
+            assert_eq!(
+                values,
+                [Some(0x20), Some(0x2c), Some(0x50), Some(0x28)],
+                "{table}"
+            );
+        }
+    }
+
     /// On each client executable, every client table reads how many bytes
     /// a key of the texture database's tables takes.
     #[test]

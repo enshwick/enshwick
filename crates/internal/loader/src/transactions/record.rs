@@ -22,9 +22,9 @@ pub(crate) struct UndoRecord {
     rest: [u8; REST],
 }
 
-/// The bytes of the game's record past its head: a material feedback id, an
-/// event box, flags and its type, to `+0x50`.
-const REST: usize = 0x28;
+/// The bytes of the game's record past its head, which the loader keeps
+/// zeroed: a material feedback id, an event box, flags and its type.
+const REST: usize = 0x28; // bound, not a game offset: zeroed room past the head the undo write reads
 
 const _: () = {
     assert!(core::mem::offset_of!(UndoRecord, min) == 0);
@@ -35,6 +35,12 @@ const _: () = {
 };
 
 impl UndoRecord {
+    /// Whether the undo write reads only the record's head, as the build
+    /// table's `voxel.undo_extent` gives how far it reads.
+    pub(crate) fn head_holds(extent: Option<usize>) -> bool {
+        extent == Some(core::mem::offset_of!(Self, rest))
+    }
+
     /// The record that puts `brick` back to `voxels`, which must outlive
     /// every use of the record.
     pub(crate) fn brick(brick: Brick, voxels: &[u16; BRICK_VOXELS]) -> Self {
@@ -51,6 +57,17 @@ impl UndoRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_undo_write_must_read_exactly_the_head() {
+        assert!(UndoRecord::head_holds(Some(0x28)));
+        assert!(!UndoRecord::head_holds(Some(0x30)), "reads past the head");
+        assert!(
+            !UndoRecord::head_holds(Some(0x20)),
+            "a head of another shape"
+        );
+        assert!(!UndoRecord::head_holds(None), "not in the table");
+    }
 
     #[test]
     fn a_brick_record_names_its_box_and_all_its_voxels() {

@@ -40,6 +40,9 @@ pub(crate) use paste::{Erase, Paste};
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::building::BLOCK_BOX.id(),
+    pinned::building::BOX_EXTENT.id(),
+    pinned::building::BOX_MIN.id(),
+    pinned::building::BOX_SIZE.id(),
     pinned::building::BLUEPRINT_LOOKUP.id(),
     pinned::building::MATERIAL_FEEDBACK.id(),
     pinned::server::BLUEPRINT_REGISTRY.id(),
@@ -51,6 +54,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::terrain::FLATTEN.id(),
     pinned::voxel::READ_BOX.id(),
     pinned::voxel::UNDO_APPLY.id(),
+    pinned::voxel::UNDO_EXTENT.id(),
 ];
 
 /// The bricks a step aims to write, before-images and after-reads

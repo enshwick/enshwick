@@ -32,7 +32,7 @@ pub(crate) const TABLE_IDS: &[&str] = &[
 /// The materials a voxel word's low byte names, as the build table's
 /// `voxel.materials` counts them; the per-material arrays the game reads are
 /// this long.
-pub(crate) const MATERIALS: usize = 0x100;
+pub(crate) const MATERIALS: usize = 0x100; // bound, not a game offset: an array length that `crate::terrain` checks against the table before any use
 /// The terrain materials: above air, 0, and below the first building
 /// material, the build table's `voxel.building_first` (server 399, client
 /// 426); `crate::terrain` checks both against the running build.

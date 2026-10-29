@@ -14,13 +14,8 @@ use crate::voxels::{BUILDING_FIRST, MATERIALS, TERRAIN};
 pub(crate) struct GameBox(pub(crate) [u8; GameBox::SIZE]);
 
 impl GameBox {
-    /// The bytes the game's builder writes.
-    pub(crate) const SIZE: usize = 0x50;
-    /// Where the box keeps its lowest voxel, `i32` on each axis.
-    pub(crate) const MIN: usize = 0x20;
-    /// Where the box keeps its voxels along each axis once turned, `u32`
-    /// each.
-    pub(crate) const ROTATED_SIZE: usize = 0x2c;
+    /// The loader's room for the box; the builder's extent must fit in it.
+    pub(crate) const SIZE: usize = 0x50; // bound, not a game offset: the loader's room
 
     fn word(&self, at: usize) -> [u8; 4] {
         let mut word = [0; 4];
@@ -28,17 +23,38 @@ impl GameBox {
         word
     }
 
-    /// The voxels the block writes; [`Status::BAD_ARGS`] for a box below
-    /// the world's corner, empty or past the coordinates a box covers.
-    pub(crate) fn region(&self) -> Result<Region, Status> {
+    /// The voxels the block writes, from the fields `layout` places;
+    /// [`Status::BAD_ARGS`] for a box below the world's corner, empty or
+    /// past the coordinates a box covers.
+    pub(crate) fn region(&self, layout: BoxLayout) -> Result<Region, Status> {
         let mut min = [0; 3];
         let mut size = [0; 3];
         for axis in 0..3 {
-            let low = i32::from_le_bytes(self.word(Self::MIN + 4 * axis));
+            let low = i32::from_le_bytes(self.word(layout.min + 4 * axis));
             min[axis] = u32::try_from(low).map_err(|_| Status::BAD_ARGS)?;
-            size[axis] = u32::from_le_bytes(self.word(Self::ROTATED_SIZE + 4 * axis));
+            size[axis] = u32::from_le_bytes(self.word(layout.size + 4 * axis));
         }
         Region::new(min, size)
+    }
+}
+
+/// Where the game's box keeps its lowest voxel, `i32` on each axis, and
+/// its voxels along each axis once turned, `u32` each, from the build
+/// table; both inside the bytes the builder writes, which fit
+/// [`GameBox::SIZE`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BoxLayout {
+    min: usize,
+    size: usize,
+}
+
+impl BoxLayout {
+    /// The layout of a box the builder writes `extent` bytes of; `None`
+    /// when the extent passes the loader's room or a field passes the
+    /// extent.
+    pub(crate) fn new(extent: usize, min: usize, size: usize) -> Option<Self> {
+        let inside = |field: usize| extent.checked_sub(field) >= Some(3 * size_of::<u32>());
+        (extent <= GameBox::SIZE && inside(min) && inside(size)).then_some(Self { min, size })
     }
 }
 
@@ -214,12 +230,18 @@ impl Block {
 mod tests {
     use super::*;
 
+    /// The box layout of the server 399 and client 426 builder.
+    const BOX: BoxLayout = BoxLayout {
+        min: 0x20,
+        size: 0x2c,
+    };
+
     fn game_box(min: [i32; 3], size: [u32; 3]) -> GameBox {
         let mut bytes = [0u8; GameBox::SIZE];
         for axis in 0..3 {
-            let at = GameBox::MIN + 4 * axis;
+            let at = BOX.min + 4 * axis;
             bytes[at..at + 4].copy_from_slice(&min[axis].to_le_bytes());
-            let at = GameBox::ROTATED_SIZE + 4 * axis;
+            let at = BOX.size + 4 * axis;
             bytes[at..at + 4].copy_from_slice(&size[axis].to_le_bytes());
         }
         GameBox(bytes)
@@ -227,14 +249,32 @@ mod tests {
 
     #[test]
     fn the_game_s_box_gives_the_block_s_voxels() {
-        let region = game_box([196, 76, 196], [8, 8, 8]).region().unwrap();
+        let region = game_box([196, 76, 196], [8, 8, 8]).region(BOX).unwrap();
         assert_eq!(region.bounds(), ([196, 76, 196], [8, 8, 8]));
     }
 
     #[test]
     fn a_game_box_below_the_world_or_empty_is_refused() {
-        assert!(game_box([-1, 0, 0], [8, 8, 8]).region().is_err());
-        assert!(game_box([0, 0, 0], [0, 8, 8]).region().is_err());
+        assert!(game_box([-1, 0, 0], [8, 8, 8]).region(BOX).is_err());
+        assert!(game_box([0, 0, 0], [0, 8, 8]).region(BOX).is_err());
+    }
+
+    #[test]
+    fn a_box_layout_keeps_its_fields_inside_the_builder_s_extent_and_the_room() {
+        assert_eq!(BoxLayout::new(0x50, 0x20, 0x2c), Some(BOX));
+        assert!(
+            BoxLayout::new(0x50, 0x20, 0x44).is_some(),
+            "the last field ends at the extent"
+        );
+        assert_eq!(BoxLayout::new(0x50, 0x20, 0x45), None, "past the extent");
+        assert_eq!(
+            BoxLayout::new(0x30, 0x20, 0x2c),
+            None,
+            "past a short extent"
+        );
+        assert_eq!(BoxLayout::new(0x58, 0x20, 0x2c), None, "past the room");
+        assert_eq!(BoxLayout::new(0x50, usize::MAX, 0x2c), None);
+        assert_eq!(BoxLayout::new(0x50, 0xff, 0x2c), None, "a wrong disp8");
     }
 
     fn layout() -> EventLayout {
