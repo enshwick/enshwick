@@ -323,7 +323,7 @@ pub(super) fn take_entries_while_lent() -> u32 {
 /// - `obj` is the live bases object the game's grouping has just filled, on
 ///   the grouping's thread, with no reader meanwhile.
 /// - `new_base` is the game's own new base code, `fn(obj, zone, index)`.
-/// - With `window`, `obj` is a block of [`window::BLOCK`] bytes whose window
+/// - With `window`, `obj` is a grown block of [`window::Geometry::block`] bytes whose window
 ///   records are initialised and released.
 pub(super) unsafe fn settle(
     obj: *mut u8,

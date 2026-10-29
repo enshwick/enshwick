@@ -63,6 +63,8 @@ pub(super) struct Layout {
     pub(super) map: MapFields,
     pub(super) stock: StockFields,
     pub(super) sort: SortFields,
+    /// Where the object keeps its records and stock slots.
+    pub(super) window: window::Geometry,
     /// The object's u32 base count, which the client's count getter reads.
     pub(super) count: usize,
 }
@@ -218,6 +220,12 @@ impl Layout {
                 answer_word: f(bases::SORT_ANSWER_WORD)?,
                 entity_position: f(bases::SORT_ENTITY_POSITION)?,
             },
+            window: window::Geometry::new(
+                (f(bases::RECORDS)?, f(bases::STRIDE)?),
+                (f(bases::SLOTS)?, f(bases::SLOT)?),
+                (f(bases::SERVER_SIZE)?, f(bases::CLIENT_SIZE)?),
+            )
+            .map_err(SiteError::Window)?,
             count: f(bases::COUNT)?,
         };
         layout
@@ -234,8 +242,8 @@ impl Layout {
         let o = &self.object;
         let m = &self.map;
         let s = &self.stock;
-        let object_end = (window::RECORDS + window::WINDOW * window::RECORD)
-            .min(window::SLOTS + window::WINDOW * window::SLOT);
+        let w = &self.window;
+        let object_end = w.record_at(window::WINDOW).min(w.slot_at(window::WINDOW));
         let map_end = [
             m.bitmap + 8,
             m.buckets + 8,
@@ -259,7 +267,7 @@ impl Layout {
             (bases::RECORD_NPCS_HOME, r.npcs_home + 2),
             (bases::RECORD_ANIMALS, r.animals + ANIMAL_COUNTS * 2),
         ]
-        .map(|(id, end)| (id, end, window::RECORD));
+        .map(|(id, end)| (id, end, w.record()));
         let in_object = [
             (bases::REBUILT, o.rebuilt + 4),
             (bases::CHANGES, o.changes + 4),
@@ -276,7 +284,7 @@ impl Layout {
         ]
         .map(|(id, end)| (id, end, object_end));
         let in_values = [
-            (bases::MAP_COUNT, map_end, window::SLOT),
+            (bases::MAP_COUNT, map_end, w.slot()),
             (
                 bases::RECORD_SET,
                 r.set,
@@ -576,9 +584,9 @@ fn window_of(game: &Game) -> impl Iterator<Item = usize> {
     window::window_indices(game.count())
 }
 
-/// Record `i` of `obj`.
-fn rec(obj: *mut u8, i: usize) -> *mut u8 {
-    obj.wrapping_add(window::RECORDS + i * window::RECORD)
+/// Record `i` of `obj`, laid out as `window`.
+fn rec(obj: *mut u8, i: usize, window: &window::Geometry) -> *mut u8 {
+    obj.wrapping_add(window.record_at(i))
 }
 
 /// The point of an entity's fixed-point position, three i64 at `at`.

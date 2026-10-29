@@ -9,7 +9,7 @@ use super::totals::{
 use super::*;
 use crate::bases::Container;
 use crate::bases::fake::{self, Fake, record as at, twenty_bases};
-use crate::bases::fake::{FIELDS, LAYOUT};
+use crate::bases::fake::{FIELDS, GEOMETRY, LAYOUT};
 use crate::locks::Relock;
 
 /// Where a test element's position sits, three i64 after its u32 id.
@@ -331,7 +331,7 @@ fn the_stock_cache_pages_a_window_base_and_fills_its_slot() {
     fake.put(OBJECT.position, 16u32);
     let mut staging = Map::new(64, 8, &[(3, &222u64.to_le_bytes())]);
     staging.put(&mut fake, OBJECT.staging);
-    let slot_at = window::SLOTS + 93 * window::SLOT;
+    let slot_at = GEOMETRY.slot_at(93);
     let mut slot = Map::new(64, 8, &[]);
     slot.put(&mut fake, slot_at);
     let obj = fake.ptr();
@@ -379,7 +379,7 @@ fn the_stock_cache_skips_a_window_index_whose_slot_was_never_made() {
     let mut entities: Vec<u32> = (0..3).collect();
     fake.put(at(93) + RECORD.list_all, entities.as_mut_ptr() as u64);
     fake.put(at(93) + RECORD.list_all + VEC.len, 3u64);
-    let slot_at = window::SLOTS + 93 * window::SLOT;
+    let slot_at = GEOMETRY.slot_at(93);
     fake.put(slot_at + MAP.count, 9u32);
     fake.put(OBJECT.position, 16u32);
     let out = step(&mut fake);
@@ -448,7 +448,7 @@ fn a_field_past_its_record_object_or_answer_is_named() {
     assert_eq!(animals.misfit(), Some(bases::RECORD_ANIMALS.id()));
     let staging = Layout {
         object: ObjectFields {
-            staging: window::RECORDS + window::WINDOW * window::RECORD,
+            staging: GEOMETRY.record_at(window::WINDOW),
             ..OBJECT
         },
         ..LAYOUT
@@ -487,7 +487,7 @@ fn a_sort_field_outside_its_answer_or_entity_is_named() {
 fn a_field_over_the_window_s_slots_a_slot_s_map_or_its_set_is_named() {
     let in_slots = Layout {
         object: ObjectFields {
-            staging: window::SLOTS + window::WINDOW * window::SLOT - 0x10,
+            staging: GEOMETRY.slot_at(window::WINDOW) - 0x10,
             ..OBJECT
         },
         ..LAYOUT
@@ -495,7 +495,7 @@ fn a_field_over_the_window_s_slots_a_slot_s_map_or_its_set_is_named() {
     assert_eq!(in_slots.misfit(), Some(bases::STAGING.id()));
     let wide_map = Layout {
         map: MapFields {
-            count: window::SLOT - 2,
+            count: GEOMETRY.slot() - 2,
             ..MAP
         },
         ..LAYOUT
@@ -511,7 +511,7 @@ fn a_field_over_the_window_s_slots_a_slot_s_map_or_its_set_is_named() {
     assert_eq!(set_after.misfit(), Some(bases::RECORD_SET.id()));
     let page = Layout {
         object: ObjectFields {
-            page: window::SLOTS + window::WINDOW * window::SLOT - 4,
+            page: GEOMETRY.slot_at(window::WINDOW) - 4,
             ..OBJECT
         },
         ..LAYOUT

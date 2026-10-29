@@ -90,7 +90,13 @@ pub(super) unsafe fn sort_into(
             let id = unsafe { read_at::<u32>(entity, 0) };
             // SAFETY: record `i` holds a base the game's new base code
             // started, whose lists are the game's with its grower.
-            if unsafe { append(rec(obj, i).wrapping_add(list), container, id) } {
+            if unsafe {
+                append(
+                    rec(obj, i, &layout.window).wrapping_add(list),
+                    container,
+                    id,
+                )
+            } {
                 SORTED
             } else {
                 GROW_FAILED
@@ -125,10 +131,22 @@ pub(super) unsafe fn empty_lists(obj: *mut u8, game: &Game, layout: &Layout) {
     let len = game.fields().container.len;
     for i in window_of(game) {
         // SAFETY: record `i` holds a base; the u64 length of its first list.
-        unsafe { write_at(rec(obj, i), layout.record.list_all + len, 0u64) };
+        unsafe {
+            write_at(
+                rec(obj, i, &layout.window),
+                layout.record.list_all + len,
+                0u64,
+            )
+        };
         // SAFETY: record `i` holds a base; the u64 length of its second
         // list.
-        unsafe { write_at(rec(obj, i), layout.record.list_kept + len, 0u64) };
+        unsafe {
+            write_at(
+                rec(obj, i, &layout.window),
+                layout.record.list_kept + len,
+                0u64,
+            )
+        };
     }
 }
 
@@ -157,7 +175,7 @@ pub(super) unsafe fn append_ids(vec: *mut u8, obj: *mut u8, game: &Game, layout:
     let container = &game.fields().container;
     for i in window_of(game) {
         // SAFETY: record `i` holds a base; its 16-byte id.
-        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i), layout.record.base_id) };
+        let id = unsafe { read_at::<[u64; 2]>(rec(obj, i, &layout.window), layout.record.base_id) };
         // SAFETY: the caller's live container of 16-byte ids.
         if id != [0, 0] && !unsafe { append(vec, container, id) } {
             break;
