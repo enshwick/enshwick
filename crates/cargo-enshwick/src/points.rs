@@ -491,7 +491,6 @@ fn built_in(name: &str) -> Option<&'static BuiltIn> {
     BUILT_IN.iter().find(|b| b.name == name)
 }
 
-/// Whether `text` is a plain Rust identifier.
 fn is_ident(text: &str) -> bool {
     let mut chars = text.chars();
     chars
@@ -499,7 +498,19 @@ fn is_ident(text: &str) -> bool {
         .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
         && text.len() <= 128
+        && text != "_"
+        && !RUST_KEYWORDS.contains(&text)
 }
+
+/// The words Rust keeps for itself in edition 2024, strict and reserved,
+/// which no generated name may take.
+const RUST_KEYWORDS: &[&str] = &[
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "Self", "static", "struct", "super", "trait", "true", "try", "type",
+    "typeof", "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
+];
 
 /// Whether `id` is a mod id, current or former.
 fn is_owner(id: &str) -> bool {
@@ -955,6 +966,26 @@ mod tests {
             ),
         ];
         for (good, bad) in hostile {
+            assert!(SCHEMA.contains(good), "{good}");
+            let text = SCHEMA.replacen(good, bad, 1);
+            assert!(
+                matches!(Schema::parse(&text), Err(Error::Invalid { .. })),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_schema_name_that_rust_keeps_for_itself_is_refused() {
+        let keywords = [
+            ("name = \"BUY\"", "name = \"while\""),
+            ("name = \"character\"", "name = \"type\""),
+            ("name = \"character\"", "name = \"self\""),
+            ("input = \"Price\"", "input = \"Self\""),
+            ("name = \"BUY\"", "name = \"_\""),
+            ("name = \"BUY\"", "name = \"async\""),
+        ];
+        for (good, bad) in keywords {
             assert!(SCHEMA.contains(good), "{good}");
             let text = SCHEMA.replacen(good, bad, 1);
             assert!(
