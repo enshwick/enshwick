@@ -1,115 +1,123 @@
-# Enshwick Loader
+# Enshwick
 
-A mod loader and modding API for [Enshrouded](https://enshrouded.com), with the
-mods built on it. The loader sits next to the game or the dedicated server, and
-every mod is a DLL in the `mods/` folder beside it. Four things make it up:
+Enshwick is a modding API platform for [Enshrouded](https://enshrouded.com). Mod
+makers write mods against its API. The Enshwick loader comes with the platform
+and runs every mod, so players install one thing.
 
-- **Enshwick Loader**, for players and servers: one archive, `enshwick.zip`,
-  with the loader, its `powrprof.dll` stub and every mod below. See
-  [Install](#install).
-- **[`enshwick`](crates/enshwick)**, for mod authors: the
-  one crate a mod depends on. Its `test` feature adds a fake loader for unit
-  tests.
-- **[`cargo enshwick`](crates/cargo-enshwick)**, the one tool: it starts a mod,
-  builds and installs it, shows a DLL's manifest, and writes the build table
-  of a new game build.
-- **Mods**, grouped by purpose below.
+## For mod makers
 
-The crates under [`crates/internal`](crates/internal) (the loader DLL and the
-stub) are parts of the loader, not for mods; [`enshwick-macros`](crates/enshwick-macros)
-and [`enshwick-gamedata`](crates/enshwick-gamedata) (the macros, and the
-build tables with the reflection reader) are published for `enshwick` and
-`cargo enshwick` to build on.
-[`examples`](examples) holds small mods that show one part of the API each;
-they are never released.
+- **A typed Rust API.** [`enshwick`](crates/enshwick) is the one crate a mod
+  depends on. It covers settings, events, the world, items and recipes, the
+  game's interface and messages between server and client. Where it has no call,
+  a mod adds a hook to a game function.
+- **Luau scripts.** A [Luau mod](book/src/luau.md) is a folder with a
+  `main.luau`. It needs no compiler and runs in a sandbox of its own.
+- **Data packs without code.** A [data pack](book/src/content/packs.md) adds
+  items, recipes, workshops, loot and texts from TOML files.
+- **Tests without the game.** The `test` feature of `enshwick` adds a
+  [fake host](book/src/testing.md), so a mod's unit tests run on any computer.
+- **Translations.** A mod carries its [texts](book/src/content/texts.md) in the
+  15 languages the game offers. Each player sees their own language.
+- **One tool.** [`cargo enshwick`](crates/cargo-enshwick) starts a Rust mod, a
+  Luau mod or a data pack, checks it and installs it into the game.
 
-## Mods
+Parts of the API behind the `unstable` feature can change in any release.
+[Stability](book/src/stability.md) lists them. Mods in C, C++ or Zig use the C
+header ([Mods in C](book/src/mods-in-c.md)).
 
-### Gameplay
+Start with [the modding book](book/src/introduction.md). Contributions follow
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## For players
+
+The loader sits next to the game or the dedicated server as `powrprof.dll`. It
+loads every mod from the `mods/` folder beside it.
+
+### Install
+
+1. Download
+   [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip).
+   It holds the loader and every mod below. It is a development build of the
+   newest commit. Until the first release, 1.0.0, there are no other builds.
+2. Extract it into the folder with `enshrouded.exe` (players) or
+   `enshrouded_server.exe` (servers). You get `powrprof.dll` and a `mods`
+   folder.
+3. Start the game or the server. "Mods" in the main menu and in the pause menu
+   lists the mods.
+
+On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
+game's launch options. For a server in Docker or Kubernetes, see
+[Running a server in Docker or Kubernetes](book/src/servers.md).
+
+To turn a mod off, set `enabled = false` for it in `mods/enshwick/mods.toml`. To
+remove a mod, delete its DLL from `mods/`. To remove Enshwick, delete
+`powrprof.dll`.
+
+Better Altars replaces the older mods More Altars, Flame altar count and Flame
+altar zones. After you extract a newer `enshwick.zip` over an older install,
+delete `mods/enshwick-more-altars.dll`, `mods/enshwick-flame-altar-count.dll`
+and `mods/enshwick-flame-altar-zones.dll`. Enshwick runs only Better Altars,
+carries their settings over and names each old file in `loader.log`.
+
+### Mods
 
 | Mod                                                                        | What it does                                                       |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [Better Altars](https://github.com/enshwick/mod-better-altars)             | twice the altars per Flame level; touching zones grow together     |
-| [Survivors per altar](https://github.com/enshwick/mod-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
-| [Safes](https://github.com/enshwick/mod-personal-safes)                    | a craftable chest only the player who placed it can use            |
+| [Survivors per Altar](https://github.com/enshwick/mod-survivors-per-altar) | a copy of each survivor at every altar, with beds of its own altar |
+| [Personal Safes](https://github.com/enshwick/mod-personal-safes)           | a craftable chest only the player who placed it can use            |
 | [Game Rates](https://github.com/enshwick/mod-game-rates)                   | building recipe output and furniture comfort, twice by default     |
-| [Build camera](https://github.com/enshwick/mod-build-camera)               | the building fly mode for every player, without the skill          |
-| [Shared experience](https://github.com/enshwick/mod-shared-experience)     | every character keeps up with the one furthest ahead in experience |
-| [Area loot](https://github.com/enshwick/mod-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
+| [Build Camera](https://github.com/enshwick/mod-build-camera)               | the building fly mode for every player, without the skill          |
+| [Shared Experience](https://github.com/enshwick/mod-shared-experience)     | every character keeps up with the one furthest ahead in experience |
+| [Area Loot](https://github.com/enshwick/mod-area-loot)                     | emptying one enemy corpse takes the loot of the others around it   |
+| [Optimizer](https://github.com/enshwick/mod-optimizer)                     | less CPU on Windows and under Wine and Proton, for servers         |
 
-### Server
+### Playing on a server
 
-| Mod                                                        | What it does                                                              |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [Optimizer](https://github.com/enshwick/mod-optimizer)     | less CPU on Windows and under Wine and Proton, with a report and measures |
+Some mods count in the join check. Each mod's page says if it does. A player and
+their server need the same versions of these mods. A player who lacks one, or
+has another version, sees which and does not join. Such a mod that the player
+has and the server does not run is off for that session. Other mods are each
+side's own. A server writes the set of mods that loaded, with the SHA-256 of
+each DLL, to `mods/enshwick/enshwick.lock`.
 
-## Install
+### Settings
 
-1. Download
-   [`enshwick.zip`](https://github.com/enshwick/enshwick/releases/download/dev/enshwick.zip):
-   the loader with every mod of this repository. It is a development build
-   of the newest commit; until the first release, 1.0.0, there are no others.
-2. Extract it into the folder that holds `enshrouded.exe` (players) or
-   `enshrouded_server.exe` (servers). You get `powrprof.dll` there and a `mods`
-   folder beside it.
-3. Start the game or the server. Each mod writes its settings to
-   `mod-configs/<id>.toml` on first start (see [Settings](#settings)); the
-   log is `logs/enshwick/` (`all.log`, `loader.log`, `mods/<id>.log`), and
-   how much it keeps is set in `mod-configs/enshwick.toml`. In game, "Mods" in
-   the main menu and in the pause menu lists the mods.
-   `mod-configs/enshwick.recipes.toml` takes recipes out of the game, vanilla
-   or a mod's ([Disabling recipes](book/src/content/disabled-recipes.md)).
+Each mod writes its settings to `mod-configs/<id>.toml` on first start. These
+are the settings a new world starts with, plus a few that belong to each player
+or to the game as a whole.
 
-Better Altars joins the former mods More Altars, once called Flame altar
-count, and Flame altar zones. After you extract a newer `enshwick.zip` over an
-older install, delete `mods/enshwick-more-altars.dll`,
-`mods/enshwick-flame-altar-count.dll` and `mods/enshwick-flame-altar-zones.dll`.
-Enshwick runs only Better Altars, carries their settings over and names each
-old file in `loader.log`.
+A world takes a copy of the file when it first loads and keeps it in
+`mod-data/<id>/worlds/<world>/settings.toml`. From then on the world uses its
+copy. An edit of `mod-configs/<id>.toml` reaches only new worlds, each player's
+own settings and the settings read at start.
 
-Players and their server need the same versions of the mods that count in the
-join check, which each mod's page names; the server advertises them. A
-player's such mods the server does not run are turned off for that session,
-with a note; a player who lacks one the server runs, or has another version,
-is told which and does not join. Other mods are each side's own. To turn a mod off, set `enabled = false` for it in
-`mods/enshwick/mods.toml`, which the loader writes on first start with every
-mod it finds; to remove one, delete its DLL from `mods/`; to remove Enshwick
-Loader, delete `powrprof.dll`. A server keeps the exact set that loaded, with
-each DLL's SHA-256, in `mods/enshwick/enshwick.lock`.
+Change a world's settings in the game, in the world settings, under the last
+tab. On a dedicated server, an administrator uses "Server settings" on the Mods
+screen. The server's command file, `mod-data/enshwick/commands.txt`, also takes
+`enshwick config <mod> <key> <value>`. A change applies at once, unless the
+mod's page says it waits for the world or the game to start again.
 
-On Linux under Proton, add `WINEDLLOVERRIDES="powrprof=n,b" %command%` to the
-game's launch options.
+`mod-configs/enshwick.recipes.toml` takes recipes out of the game
+([Disabling recipes](book/src/content/disabled-recipes.md)). The logs are in
+`logs/enshwick/`: `all.log`, `loader.log` and `mods/<id>.log`.
+`mod-configs/enshwick.toml` sets how much they keep.
 
-A server in Docker or Kubernetes: see
-[Running a server in Docker or Kubernetes](book/src/servers.md).
+## What is in this repository
 
-## Settings
+| Path                                                   | What                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| [`crates/enshwick`](crates/enshwick)                   | the API crate, with the fake host for tests                   |
+| [`crates/cargo-enshwick`](crates/cargo-enshwick)       | the `cargo enshwick` tool                                     |
+| [`crates/enshwick-macros`](crates/enshwick-macros)     | the macros `enshwick` re-exports                              |
+| [`crates/enshwick-gamedata`](crates/enshwick-gamedata) | the build tables and the reader of the game's reflection data |
+| [`crates/internal`](crates/internal)                   | the loader DLL, its `powrprof.dll` stub and the Luau runtime  |
+| [`examples`](examples)                                 | small mods that each show one part of the API                 |
+| [`book`](book)                                         | the modding book                                              |
 
-`mod-configs/<id>.toml` holds a mod's settings as each new world starts with
-them, the few settings that are each player's own, and the few that only a
-start of the game sets up, which every world shares. A world takes a copy
-when it first loads, single player, hosted or on a dedicated server, and
-keeps it in `mod-data/<id>/worlds/<world>/settings.toml`; from then on that
-copy is the one in force, so an edit of `mod-configs/<id>.toml` reaches only
-worlds made later, each player's own settings and the ones read at start. A world's settings are
-changed in the game, while hosting or on the screen that creates or starts a
-world: the world settings list every mod's settings under their last tab.
-On a dedicated server an administrator changes them from "Server settings"
-on the Mods screen, or with `enshwick config <mod> <key> <value>` in the
-server's command file, `mod-data/enshwick/commands.txt`. Such a change applies at once, except where a mod's page says it
-waits for the world to load again or for the game to start again. A hand
-edit of the running world's copy applies about a second after it is saved, as
-such a change does.
-
-## For mod authors
-
-Mods are written in Rust against
-[`enshwick`](crates/enshwick); start with
-[the modding book](book/src/SUMMARY.md).
-[`cargo enshwick`](crates/cargo-enshwick) starts a mod and installs it into the
-game. Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
+Mods depend on `enshwick` only. The other crates are parts of the platform.
 
 ## License
 
-[MIT](LICENSE). Enshrouded is a game by Keen Games; Enshwick is not affiliated
-with them, and Keen's code and data are not part of this repository.
+[MIT](LICENSE). Enshrouded is a game by Keen Games. Enshwick is not affiliated
+with Keen Games, and Keen's code and data are not part of this repository.

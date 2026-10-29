@@ -1,7 +1,8 @@
 # cargo-enshwick
 
-A Cargo subcommand for writing [Enshwick Loader](https://github.com/enshwick/enshwick) mods, and
-the one tool of the repository.
+A Cargo subcommand for writing [Enshwick](https://github.com/enshwick/enshwick)
+mods. It starts a Rust mod, a Luau mod or a data pack, and it installs a mod
+into the game.
 
 ```sh
 cargo install --git https://github.com/enshwick/enshwick cargo-enshwick

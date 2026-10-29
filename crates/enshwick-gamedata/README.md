@@ -1,6 +1,6 @@
 # enshwick-gamedata
 
-Internal, not for mods: a part of [Enshwick Loader](https://github.com/enshwick/enshwick). Mods
+Internal, not for mods: a part of [Enshwick](https://github.com/enshwick/enshwick). Mods
 depend on [`enshwick`](https://crates.io/crates/enshwick) only.
 
 The loader's build tables: per game build, the engine functions and constants

@@ -1,4 +1,4 @@
-//! Luau mods for the Enshwick Loader: each mod runs in a sandboxed Luau VM
+//! Luau mods for the Enshwick loader: each mod runs in a sandboxed Luau VM
 //! of its own, and reaches the game only through the API's script
 //! descriptions ([`enshwick::script`](mod@enshwick::script)).
 //!

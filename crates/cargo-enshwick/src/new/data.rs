@@ -142,7 +142,7 @@ const LOOT_TOML: &str = r#"#:schema ./loot.schema.json
 
 const README: &str = "# {name}
 
-A data pack for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
+A data pack for Enshrouded, built on [Enshwick](https://github.com/enshwick/enshwick).
 
 1. Edit the `.toml` files: each one shows its first change, commented out.
 2. Run `cargo enshwick pack check . --game <game folder>` to check every file
