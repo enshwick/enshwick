@@ -29,6 +29,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::access::DISMANTLE_METHOD.id(),
     pinned::access::OBJECT_ID.id(),
     pinned::access::OBJECT_KIND.id(),
+    pinned::access::OFFER_OUT_TAIL.id(),
+    pinned::access::OFFER_OUT_U32.id(),
+    pinned::access::OFFER_OUT_U64.id(),
     pinned::access::OFFER_TEST.id(),
     pinned::access::SORT.id(),
     pinned::access::SORT_TARGET.id(),
@@ -66,6 +69,9 @@ struct Layout {
     upgrade_target: usize,
     upgrade_version: usize,
     consumed_upgrade: usize,
+    /// The words of the offer test's out record a refused offer zeroes
+    /// after its result: a `u32`, a `u64` and the last `u32`.
+    offer_out: [usize; 3],
     /// Where base stock returns to in the client's interface; 0 for none.
     stock_ui_return: u64,
     used_item: u32,
@@ -139,6 +145,11 @@ fn layout(loader: &Loader) -> Option<Layout> {
         upgrade_target: size("upgrade_target")?,
         upgrade_version: size("upgrade_version")?,
         consumed_upgrade: size("consumed_upgrade")?,
+        offer_out: [
+            size("offer_out_u32")?,
+            size("offer_out_u64")?,
+            size("offer_out_tail")?,
+        ],
         stock_ui_return: if loader.side == Side::CLIENT {
             loader.base
                 + loader
@@ -415,19 +426,23 @@ unsafe extern "system" fn offer(
                 !allowed(&unsafe { interaction(Interaction::OPEN, player, candidate, ctx) })
             })
             .unwrap_or(false);
-    if refused {
+    if let Some((_, layout, _)) = LOADED.get().filter(|_| refused) {
+        let [word, wide, tail] = layout.offer_out;
         // SAFETY: `out` is non-null by the check before it and is the offer
-        // test's 0x14-byte out record, which starts with its u8 result.
+        // test's out record, which starts with its u8 result.
         unsafe { write_at(out, 0, NOT_OFFERED) };
-        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes 4..8
-        // are inside it.
-        unsafe { write_at(out, 4, 0u32) };
-        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes
-        // 8..0x10 are inside it.
-        unsafe { write_at(out, 8, 0u64) };
-        // SAFETY: `out` is the offer test's 0x14-byte out record; bytes
-        // 0x10..0x14 are inside it.
-        unsafe { write_at(out, 0x10, 0u32) };
+        // SAFETY: `out` is the offer test's out record, whose u32 the game
+        // zeroes for no offer sits at the build table's
+        // `access.offer_out_u32`.
+        unsafe { write_at(out, word, 0u32) };
+        // SAFETY: `out` is the offer test's out record, whose u64 the game
+        // zeroes for no offer sits at the build table's
+        // `access.offer_out_u64`.
+        unsafe { write_at(out, wide, 0u64) };
+        // SAFETY: `out` is the offer test's out record, whose last u32 the
+        // game zeroes for no offer sits at the build table's
+        // `access.offer_out_tail`.
+        unsafe { write_at(out, tail, 0u32) };
         return out;
     }
     // SAFETY: this detour runs only as the `access.offer_test` link, so the

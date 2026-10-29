@@ -455,8 +455,8 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
             let data = unsafe { player(index, slot, offsets) };
             crate::admission::joined(data.key.get());
             part!(
-                "the off line at join",
-                crate::off_line::joined(loader, data.key.get())
+                "the greeting at join",
+                crate::greeting::joined(loader, data.key.get())
             );
             part!("player joined events", {
                 crate::stats::player_joined(loader, &data);

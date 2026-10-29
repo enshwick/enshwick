@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · модов: {mods}, отключено: {off}"
 "menu.line.lacking" = "{line} · часть функций отключена в этой версии игры"
 "menu.line.settings" = "{line} · в enshwick.toml есть ошибки, смотрите журнал"
+"menu.line.developer" = "{line} · ИНСТРУМЕНТЫ РАЗРАБОТЧИКА ВКЛЮЧЕНЫ"
+"developer.on" = "ИНСТРУМЕНТЫ РАЗРАБОТЧИКА ВКЛЮЧЕНЫ. ОНИ ТОЛЬКО ДЛЯ ПРОВЕРКИ МОДОВ."

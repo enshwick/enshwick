@@ -319,6 +319,15 @@ mod tests {
     }
 
     #[test]
+    fn the_developer_tools_warning_is_upper_case_in_every_language() {
+        let texts = shipped();
+        for &language in Language::OFFERED {
+            let warning = texts.get("developer.on", language).unwrap();
+            assert_eq!(warning, warning.to_uppercase(), "{}", language.code());
+        }
+    }
+
+    #[test]
     fn every_language_the_game_offers_has_every_text() {
         assert_eq!(shipped().missing_in(Language::OFFERED), []);
     }

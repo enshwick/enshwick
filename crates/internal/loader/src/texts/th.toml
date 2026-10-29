@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · ม็อด: {mods} ปิดอยู่: {off}"
 "menu.line.lacking" = "{line} · บางฟีเจอร์ปิดอยู่ในเกมเวอร์ชันนี้"
 "menu.line.settings" = "{line} · enshwick.toml มีข้อผิดพลาด ดูที่ล็อก"
+"menu.line.developer" = "{line} · เครื่องมือนักพัฒนาเปิดอยู่"
+"developer.on" = "เครื่องมือนักพัฒนาเปิดอยู่ ใช้สำหรับทดสอบม็อดเท่านั้น"

@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · mods: {mods}, off: {off}"
 "menu.line.lacking" = "{line} · some features are off on this game version"
 "menu.line.settings" = "{line} · enshwick.toml has errors, see the log"
+"menu.line.developer" = "{line} · DEVELOPER TOOLS ON"
+"developer.on" = "DEVELOPER TOOLS ARE ON. THEY ARE FOR TESTING MODS ONLY."

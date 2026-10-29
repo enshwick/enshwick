@@ -16,6 +16,13 @@ Each entry names the pull request that made the change.
   field); the fake host serves a registry with
   `FakeHost::map_marker_types` (#728).
 
+- `developer: true` in `manifest!` (`ManifestFlags::DEVELOPER`) marks a mod
+  as a developer tool. While one runs, or the file
+  `mod-data/enshwick/developer-tools` exists, every player reads an
+  upper-case warning in chat at join, on the Mods screen and in the main
+  menu's line. The loader setting `motd` is a message of the day players
+  read in chat at join (#726).
+
 - `Load::apply_config` reads the settings, hands them to a closure at once
   and after every change, and returns them (#721).
 

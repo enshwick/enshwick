@@ -65,15 +65,6 @@ pub(crate) fn names(loader: &crate::host::Loader) -> Vec<String> {
     names
 }
 
-/// Tells the player with account key `key`, who just joined, what this
-/// server has off.
-#[cfg(windows)]
-pub(crate) fn joined(loader: &crate::host::Loader, key: u64) {
-    if let Some(line) = line(&names(loader)) {
-        let _sent = crate::chat::send(key, &line);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

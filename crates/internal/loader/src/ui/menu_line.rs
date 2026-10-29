@@ -67,14 +67,20 @@ fn line(loader: &Loader) -> super::engine::UiText {
         .count();
     LINE.with_borrow_mut(|kept| {
         let line = kept.get(off, || {
-            let lacking = !loader.build.lacking(crate::TABLE_IDS).is_empty();
-            crate::diag::menu_line(
-                env!("CARGO_PKG_VERSION"),
-                loader.mods.len(),
-                off,
-                lacking,
-                !loader.settings_problems.is_empty(),
-            )
+            use crate::diag::MenuNote;
+            let notes = [
+                (
+                    !loader.build.lacking(crate::TABLE_IDS).is_empty(),
+                    MenuNote::Lacking,
+                ),
+                (!loader.settings_problems.is_empty(), MenuNote::BadSettings),
+                (crate::developer_tools::warned(loader), MenuNote::Developer),
+            ];
+            let notes: Vec<MenuNote> = notes
+                .into_iter()
+                .filter_map(|(shown, note)| shown.then_some(note))
+                .collect();
+            crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, &notes)
         });
         copy(&[line.as_bytes()])
     })

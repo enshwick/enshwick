@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · mod: {mods}, disattivate: {off}"
 "menu.line.lacking" = "{line} · alcune funzioni sono disattivate in questa versione del gioco"
 "menu.line.settings" = "{line} · enshwick.toml contiene errori, vedi il log"
+"menu.line.developer" = "{line} · STRUMENTI DI SVILUPPO ATTIVI"
+"developer.on" = "GLI STRUMENTI DI SVILUPPO SONO ATTIVI. SERVONO SOLO PER PROVARE LE MOD."

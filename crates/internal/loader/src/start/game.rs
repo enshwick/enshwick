@@ -135,9 +135,11 @@ pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
         identify().is_some_and(|(side, _, _)| side == Side::SERVER),
     );
     builds::configure(settings.build_patterns);
+    let motd = settings.motd.clone();
     log::set_levels(settings);
     log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
+    crate::greeting::configure(&motd);
     for problem in &settings_problems {
         crate::log!(
             ERROR,
