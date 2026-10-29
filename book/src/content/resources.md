@@ -45,7 +45,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 
 Field offsets change between game builds; resolve a layout such as
 [`ItemLayout::resolve`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/content/items.rs)
-during `init`, which asks the loader by enshwick's ids, and move it into
+during `init`, which asks the loader by Enshwick's ids, and move it into
 the builder. For a field no layout names, `load.field_offset(type, field)`
 and `load.type_size(type)` read the game's reflection. See
 [Finding the game](../finding-the-game.md).

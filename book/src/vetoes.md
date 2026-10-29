@@ -33,7 +33,7 @@ request reaches the crafting system empty, with no crafter and no amount.
 
 [`load.on_build(|placement| ...)`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/vetoes.rs)
 runs after the game's cursor check allows a placement, with a `Placement`,
-enshwick's name, since the game's check has none: the building `player`,
+Enshwick's name, since the game's check has none: the building `player`,
 the `item` placed and its `position` in metres.
 Returning `false` refuses it the way the game refuses a placement without
 building permission: the building systems do not place it.

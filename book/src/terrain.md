@@ -398,7 +398,7 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 of 64 a side; `sample(at)` reads one voxel. Each voxel has a material,
 `Air`, `Terrain(id)` with the id `materials()` lists or `Building(id)`,
 and a fill from 0 to 255, which shapes the surface between voxels; the
-game does not name it, so the name is enshwick's. A box is read in the
+game does not name it, so the name is Enshwick's. A box is read in the
 order x, then y, then z; `VoxelBox::get` finds a voxel by its place and
 `iter` walks them all with their places.
 

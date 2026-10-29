@@ -40,11 +40,11 @@ impl Stage {
     #[must_use]
     pub const fn describe(self) -> &'static str {
         match self {
-            Self::BeforeStart => "before enshwick started",
+            Self::BeforeStart => "before Enshwick started",
             Self::Load => "while it loaded",
-            Self::Skip => "while enshwick unloaded the DLLs it skips",
+            Self::Skip => "while Enshwick unloaded the DLLs it skips",
             Self::Init => "in its init",
-            Self::BeforeArming => "after every init, before enshwick armed its hooks",
+            Self::BeforeArming => "after every init, before Enshwick turned on its hooks",
             Self::Ready => "in its ready",
         }
     }
@@ -490,7 +490,7 @@ mod tests {
         assert_eq!(
             report(&changes, |at| format!("game+{at:#x}")),
             [
-                "game code at game+0x10, 5 bytes: changed outside the API by another program before enshwick started",
+                "game code at game+0x10, 5 bytes: changed outside the API by another program before Enshwick started",
                 "game code at game+0x40, 14 bytes: changed outside the API by b.dll while it loaded, then by you.mod in its init",
             ]
         );
