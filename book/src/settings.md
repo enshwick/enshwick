@@ -331,13 +331,16 @@ struct Settings {
 static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
 
 fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    let settings: Settings = load.config()?;
-    MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-    load.on_config_change(|settings: Settings| {
+    load.apply_config(|settings: &Settings| {
         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
-    })
+    })?;
+    Ok(())
 }
 ```
+
+`apply_config` runs the closure now and after every change, then returns
+the settings it read. The mod writes those lines once instead of after
+`config` and again in `on_config_change`.
 
 A table too large for an atomic goes into an `ArcSwap` in the mod's state, as
 [`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars/blob/main/src/count.rs)

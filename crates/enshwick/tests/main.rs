@@ -11,6 +11,7 @@ mod actions;
 mod affixes;
 mod altar_limit;
 mod altar_zones;
+mod apply_config;
 mod base_limits;
 mod buffs;
 #[cfg(feature = "unstable")]

@@ -43,6 +43,48 @@ impl Load<'_> {
         })
     }
 
+    /// Reads the mod's settings, hands them to `apply` now and after every
+    /// change, and returns them: [`config`](Self::config) and
+    /// [`on_config_change`](Self::on_config_change) in one call, for a mod
+    /// that keeps its running values in step with its settings.
+    ///
+    /// # Errors
+    ///
+    /// [`Off`] when the file does not parse into `T`, a value is refused, or
+    /// the loader cannot watch settings.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::sync::atomic::{AtomicU32, Ordering};
+    ///
+    /// /// Comfort settings.
+    /// #[derive(Default, serde::Deserialize, serde::Serialize, enshwick::Config)]
+    /// struct Settings {
+    ///     /// Comfort per piece of furniture, times this factor.
+    ///     multiplier: f32,
+    /// }
+    ///
+    /// static MULTIPLIER: AtomicU32 = AtomicU32::new(0);
+    ///
+    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
+    ///     load.apply_config(|settings: &Settings| {
+    ///         MULTIPLIER.store(settings.multiplier.to_bits(), Ordering::Relaxed);
+    ///     })?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn apply_config<T, F>(&mut self, apply: F) -> Result<T, Off>
+    where
+        T: Config,
+        F: Fn(&T) + Send + Sync + 'static,
+    {
+        let settings: T = self.config()?;
+        apply(&settings);
+        self.on_config_change(move |settings: T| apply(&settings))?;
+        Ok(settings)
+    }
+
     /// Calls `handler` with the mod's settings each time `mod-configs/<id>.toml`
     /// changes, after the console or the Mods screen sets one of them, and as a
     /// world loads or stops; the thread is not fixed. A file that no longer
