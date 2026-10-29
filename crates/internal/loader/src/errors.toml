@@ -47,8 +47,8 @@ fix = "Under Proton, check that the launch options read WINEDLLOVERRIDES=\"powrp
 [[error]]
 code = "E1007"
 title = "Enshwick's settings file has a mistake"
-cause = "mod-configs/enshwick.toml does not read, so Enshwick runs with its default settings."
-fix = "Fix the line the log names, or delete the file to get a fresh one on the next start."
+cause = "A line in mod-configs/enshwick.toml does not read. Enshwick uses every line that reads. If allowlist, require_enshwick, migrations_dry_run or knowledge_guard does not read, it is held in its safe state until the file is fixed: the allowlist on when its file exists, the join check on, the dry run on, the guard enforcing. A mistake never opens the server."
+fix = "Fix the lines the log names and restart, or delete the file to get a fresh one on the next start."
 
 [[error]]
 code = "E1008"

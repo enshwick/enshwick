@@ -722,6 +722,31 @@ fn about(paint: &Painter<'_>, record: &crate::host::ModRecord) {
 }
 
 /// Paints a line for each part of the loader that is off, with its reason.
+/// What the loader itself has off or wrong, above the mods: features this
+/// build lacks, parts a panic turned off, a broken settings file and
+/// discovery off.
+fn loader_notes(loader: &Loader, paint: &Painter<'_>) {
+    let lacking = loader.build.lacking(crate::TABLE_IDS);
+    if !lacking.is_empty() {
+        let line = texts::fill("mods.features.off", &[("features", lacking)]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
+    parts_off(paint);
+    for (shown, key) in [
+        (!loader.settings_problems.is_empty(), "mods.settings.broken"),
+        (!crate::lobby::discovery_on(), "mods.discovery.off"),
+    ] {
+        if shown {
+            paint.label(
+                texts::text(key).as_bytes(),
+                UiWidget::STYLE_SECONDARY,
+                true,
+                false,
+            );
+        }
+    }
+}
+
 fn parts_off(paint: &Painter<'_>) {
     if !crate::diag::any_part_off() {
         return;
@@ -760,20 +785,7 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
             false,
         );
     }
-    let lacking = loader.build.lacking(crate::TABLE_IDS);
-    if !lacking.is_empty() {
-        let line = texts::fill("mods.features.off", &[("features", lacking)]);
-        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
-    }
-    parts_off(paint);
-    if !crate::lobby::discovery_on() {
-        paint.label(
-            texts::text("mods.discovery.off").as_bytes(),
-            UiWidget::STYLE_SECONDARY,
-            true,
-            false,
-        );
-    }
+    loader_notes(loader, paint);
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, mods.len());
     let shown = listing.shown(*first, mods.len());

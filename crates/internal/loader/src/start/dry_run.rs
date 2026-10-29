@@ -156,6 +156,7 @@ pub fn dry_run(exe: &Path, game_dir: &Path, patterns: bool) -> Result<DryRun, Dr
         caller_frame: read_frame,
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
+        settings_problems: Vec::new(),
     };
     let loader = host::install(loader).ok_or(DryRunError::AlreadyRan)?;
     let order: Vec<&Library> = plan.order.iter().map(|&i| &libraries[i]).collect();

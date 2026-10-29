@@ -68,7 +68,13 @@ fn line(loader: &Loader) -> super::engine::UiText {
     LINE.with_borrow_mut(|kept| {
         let line = kept.get(off, || {
             let lacking = !loader.build.lacking(crate::TABLE_IDS).is_empty();
-            crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, lacking)
+            crate::diag::menu_line(
+                env!("CARGO_PKG_VERSION"),
+                loader.mods.len(),
+                off,
+                lacking,
+                !loader.settings_problems.is_empty(),
+            )
         });
         copy(&[line.as_bytes()])
     })

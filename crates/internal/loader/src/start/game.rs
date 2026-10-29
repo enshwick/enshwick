@@ -88,13 +88,19 @@ pub(super) fn wait_for_window(limit: Duration) -> Duration {
     started.elapsed()
 }
 
-/// Creates `mods/`, opens the log and starts writing the first report; the
-/// `mods` folder and the report's thread, or `None` when the folder cannot
-/// be made.
-pub(super) fn begin(
-    stub_abi: u32,
-    missing_forwards: u32,
-) -> Option<(PathBuf, Option<std::thread::JoinHandle<()>>)> {
+/// What the start has once the log is open.
+pub(super) struct Begun {
+    /// The `mods` folder.
+    pub(super) mods_dir: PathBuf,
+    /// The first report's thread.
+    pub(super) report: Option<std::thread::JoinHandle<()>>,
+    /// What was wrong in the loader settings file, a line each.
+    pub(super) settings_problems: Vec<String>,
+}
+
+/// Creates `mods/`, reads the loader settings, opens the log and starts
+/// writing the first report; `None` when the folders cannot be made.
+pub(super) fn begin(stub_abi: u32, missing_forwards: u32) -> Option<Begun> {
     crate::early::log_panics();
     let Some(game_dir) = game_dir() else {
         crate::early::note("the game's folder was not found; nothing loads");
@@ -115,7 +121,8 @@ pub(super) fn begin(
     let settings_file = game_dir
         .join("mod-configs")
         .join(format!("{}.toml", crate::settings::LOADER_ID));
-    let (settings, problem) = crate::settings::Settings::read(&settings_file);
+    let listed = crate::allowlist::listed(&game_dir.join("mod-data"));
+    let (settings, settings_problems) = crate::settings::Settings::read(&settings_file, listed);
     crate::status::mark_start();
     crate::diag::configure(&settings);
     crate::reload::configure(settings.dev_reload);
@@ -131,10 +138,10 @@ pub(super) fn begin(
     log::set_levels(settings);
     log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
-    if let Some(problem) = problem {
+    for problem in &settings_problems {
         crate::log!(
-            WARN,
-            "loader settings left at their defaults: {problem} ({})",
+            ERROR,
+            "loader settings: {problem}; the rest of the file applies ({})",
             errors::BAD_SETTINGS
         );
     }
@@ -165,7 +172,11 @@ pub(super) fn begin(
     if let Err(e) = &report {
         crate::log!(WARN, "no report at start: {e}");
     }
-    Some((mods_dir, report.ok()))
+    Some(Begun {
+        mods_dir,
+        report: report.ok(),
+        settings_problems,
+    })
 }
 
 /// Identifies the running game and its build table; `None`, logged, when the

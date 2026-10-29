@@ -187,6 +187,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             .and_then(|key| crate::moved_worlds::others(&loader.data_dir, key).ok())
             .unwrap_or_default(),
         messages: crate::net::status(),
+        settings: loader.settings_problems.clone(),
         parts: loader.build.parts(crate::TABLE_IDS),
     }
 }
