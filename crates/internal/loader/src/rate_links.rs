@@ -12,6 +12,7 @@ use enshwick::content::recipes::RecipeLayout;
 use crate::chains::Next;
 use crate::fuse::Fuse;
 use crate::host::{Loader, Target};
+use crate::loot_slot::SlotFields;
 use crate::pinned::{self, Symbol};
 use crate::rates::{
     LINKS, RATES, experience_rates, scale_points, scale_stack, scale_whole, workshop_duration,
@@ -28,10 +29,8 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::skill::POINTS_PER_LEVEL.id(),
 ];
 
-/// Where a rolled loot slot (`LootSlotInfo`, 16 bytes) keeps its item id
-/// (`u32`) and its stack's count (`u16`), on server 399 and client 426.
-const SLOT_ITEM: usize = 0;
-const SLOT_COUNT: usize = 4;
+/// The feature the loot rate turns off as.
+const LOOT_RATE: &str = "the loot rate";
 
 /// `f32 (data)`: a factor getter of the game's data object, in `xmm0`.
 type FactorFn = unsafe extern "system" fn(data: *const u8) -> f32;
@@ -90,6 +89,9 @@ struct Linked {
     loader: &'static Loader,
     /// The experience rate of each of the game's experience source values.
     experience: [Option<RateId>; 256],
+    /// Where a rolled loot slot keeps its item and count, from reflection;
+    /// `None` keeps the loot rate off.
+    slot: Option<SlotFields>,
 }
 
 static LOADED: OnceLock<Linked> = OnceLock::new();
@@ -115,10 +117,25 @@ pub(crate) fn wanted(symbol: Symbol) -> bool {
 /// links after this.
 pub(crate) fn link(loader: &'static Loader) {
     RATES.seal();
+    let slot = SlotFields::reflect(&loader.reflection);
     let _first = LOADED.set(Linked {
         loader,
         experience: experience_rates(|id| crate::catalogue::constant(id, &loader.reflection)),
+        slot: slot.as_ref().ok().copied(),
     });
+    let loot = match &slot {
+        Ok(_) => link_one(
+            loader,
+            LOOT_RATE,
+            pinned::loot::STACK_ROLL,
+            &STACK_NEXT,
+            stack_roll as StackRollFn,
+        ),
+        Err(why) => {
+            wanted(pinned::loot::STACK_ROLL)
+                && loader.feature_off(LOOT_RATE, why.entry(), &why.to_string())
+        }
+    };
     let linked = [
         link_one(
             loader,
@@ -155,13 +172,7 @@ pub(crate) fn link(loader: &'static Loader) {
             &POINTS_NEXT,
             skill_points as PointsFn,
         ),
-        link_one(
-            loader,
-            "the loot rate",
-            pinned::loot::STACK_ROLL,
-            &STACK_NEXT,
-            stack_roll as StackRollFn,
-        ),
+        loot,
     ]
     .into_iter()
     .filter(|&linked| linked)
@@ -260,7 +271,7 @@ unsafe extern "system" fn stack_roll(
     }
     // SAFETY: `out` is the game's non-null slot (checked above), which the
     // roll just wrote and its caller reads only after this returns.
-    let _done = FUSE.run("the loot rate", || unsafe { scale_slot(out, rate) });
+    let _done = FUSE.run(LOOT_RATE, || unsafe { scale_slot(out, rate) });
 }
 
 /// Scales the count of the stack the game rolled into `slot`, held to the
@@ -268,24 +279,30 @@ unsafe extern "system" fn stack_roll(
 ///
 /// # Safety
 ///
-/// - `slot` points at a `LootSlotInfo` the game rolled, writable for 16
-///   bytes, which no other thread touches during the call.
+/// - `slot` points at a `LootSlotInfo` the game rolled, writable for its
+///   reflected size, which no other thread touches during the call.
 #[cold]
 unsafe fn scale_slot(slot: *mut u8, rate: f32) {
-    let slot = slot.addr();
-    // SAFETY: the caller's slot holds the item id at `SLOT_ITEM`.
-    let item: u32 = unsafe { crate::memory::read(slot, SLOT_ITEM) };
-    // SAFETY: the caller's slot holds the stack's count at `SLOT_COUNT`.
-    let count: u16 = unsafe { crate::memory::read(slot, SLOT_COUNT) };
-    let Some(max) = LOADED
+    let Some((loader, fields)) = LOADED
         .get()
-        .and_then(|linked| crate::inventory::item_info(linked.loader, item).ok())
-        .map(|info| info.max_stack)
+        .and_then(|linked| Some((linked.loader, linked.slot?)))
     else {
         return;
     };
-    // SAFETY: the caller's slot is writable at `SLOT_COUNT`, a `u16`.
-    unsafe { crate::memory::write(slot, SLOT_COUNT, scale_stack(count, rate, max)) };
+    let slot = slot.addr();
+    // SAFETY: the caller's slot holds the item id, a `u32`, at the reflected
+    // `itemId`, which `SlotFields::checked` keeps inside the slot.
+    let item: u32 = unsafe { crate::memory::read(slot, fields.item) };
+    // SAFETY: the caller's slot holds the stack's count, a `u16`, at the
+    // reflected `stackSize`, which `SlotFields::checked` keeps inside the
+    // slot.
+    let count: u16 = unsafe { crate::memory::read(slot, fields.count) };
+    let Ok(info) = crate::inventory::item_info(loader, item) else {
+        return;
+    };
+    // SAFETY: the caller's slot is writable at the reflected `stackSize`, a
+    // `u16` inside the slot.
+    unsafe { crate::memory::write(slot, fields.count, scale_stack(count, rate, info.max_stack)) };
 }
 
 /// Whether some mod declared a recipe output rate.

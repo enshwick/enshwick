@@ -14,7 +14,6 @@
 3 src/interactions.rs
 6 src/join/target.rs
 2 src/knowledge.rs
-2 src/rate_links.rs
 1 src/terrain.rs
 3 src/textures.rs
 3 src/transactions/block.rs
