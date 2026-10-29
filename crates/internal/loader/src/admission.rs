@@ -42,19 +42,24 @@ pub enum Guard {
     Passed,
     /// The guard removed the player.
     Removed,
+    /// The guard refused the player, but the kick did not remove it yet: it
+    /// is tried again.
+    Kicking,
+    /// The guard refused the player, but this build has no kick, so the
+    /// player stays.
+    Unkickable,
     /// The guard could not run: it panicked, or an earlier panic turned it
     /// off. The player must still go, so a broken guard never lets anyone in.
     Broken,
 }
 
 impl Guard {
-    /// The guard's run through its fuse: whether it removed the player, or
-    /// `None` when it could not run.
+    /// The guard's run through its fuse: what it did, or `None` when it
+    /// could not run.
     #[must_use]
-    pub const fn of(ran: Option<bool>) -> Self {
+    pub const fn of(ran: Option<Self>) -> Self {
         match ran {
-            Some(true) => Self::Removed,
-            Some(false) => Self::Passed,
+            Some(guard) => guard,
             None => Self::Broken,
         }
     }
@@ -161,6 +166,9 @@ pub struct Gate {
     host: Option<u64>,
     /// Whether the host's key holds a player slot in the game.
     host_in_game: bool,
+    /// The players a join's guard refused, by account key: when the guards
+    /// run on each again, or `None` when this build cannot kick them.
+    refused: FxHashMap<u64, Option<Instant>>,
 }
 
 impl Gate {
@@ -297,11 +305,57 @@ impl Gate {
     /// Forgets the player `key`, who left.
     pub fn left(&mut self, key: u64) {
         self.players.remove(&key);
+        self.refused.remove(&key);
     }
 
     /// Forgets every player whose key holds no live slot in `live`.
     pub fn keep(&mut self, live: &[u64]) {
         self.players.retain(|key, _| live.contains(key));
+        self.refused.retain(|key, _| live.contains(key));
+    }
+
+    /// Follows what a join's guards did with the player `key` at `now`, so
+    /// a refusal fails closed: a refused player is refused again every
+    /// [`KICK_AGAIN`] while its slot stays, whether the kick seemed to work
+    /// or not; one this build cannot kick is followed without tries; one the
+    /// guards now let in is forgotten. A full list first forgets the
+    /// players whose key holds no live slot in `live`, read only then.
+    /// Whether the player is newly refused with no kick, for its one error.
+    pub fn guarded(
+        &mut self,
+        key: u64,
+        guard: Guard,
+        now: Instant,
+        live: impl FnOnce() -> Option<Vec<u64>>,
+    ) -> bool {
+        let next = match guard {
+            Guard::Passed => {
+                self.refused.remove(&key);
+                return false;
+            }
+            Guard::Unkickable => None,
+            Guard::Removed | Guard::Kicking | Guard::Broken => Some(now + KICK_AGAIN),
+        };
+        if !self.refused.contains_key(&key)
+            && self.refused.len() >= MAX_PLAYERS
+            && let Some(live) = live()
+        {
+            self.refused.retain(|key, _| live.contains(key));
+        }
+        let before = self.refused.insert(key, next);
+        next.is_none() && before != Some(None)
+    }
+
+    /// The refused players whose guards run again at `now`.
+    pub fn refusals_due(&mut self, now: Instant) -> Vec<u64> {
+        let mut due = Vec::new();
+        for (&key, next) in &mut self.refused {
+            if next.is_some_and(|at| now >= at) {
+                *next = Some(now + KICK_AGAIN);
+                due.push(key);
+            }
+        }
+        due
     }
 
     /// The steps due at `now` on a server that runs `server`.
@@ -339,7 +393,7 @@ impl Gate {
     /// Whether the gate follows anyone, so a step has work.
     #[must_use]
     pub fn busy(&self) -> bool {
-        !self.players.is_empty()
+        !self.players.is_empty() || !self.refused.is_empty()
     }
 }
 
@@ -450,21 +504,120 @@ mod tests {
     #[test]
     fn a_guard_that_cannot_run_keeps_the_player_out() {
         let fuse = crate::fuse::Fuse::new("test guard");
-        let panicked = fuse.run("an unlisted account's join", || -> bool {
+        let panicked = fuse.run("an unlisted account's join", || -> Guard {
             panic!("broken")
         });
         assert_eq!(Guard::of(panicked), Guard::Broken);
-        let tripped = fuse.run("the next join", || false);
+        let tripped = fuse.run("the next join", || Guard::Passed);
         assert_eq!(Guard::of(tripped), Guard::Broken);
         assert!(Guard::Broken.keeps_out());
     }
 
     #[test]
-    fn a_guard_that_ran_says_whether_it_removed_the_player() {
-        assert_eq!(Guard::of(Some(true)), Guard::Removed);
+    fn a_guard_that_ran_says_what_it_did_with_the_player() {
+        assert_eq!(Guard::of(Some(Guard::Removed)), Guard::Removed);
         assert!(Guard::Removed.keeps_out());
-        assert_eq!(Guard::of(Some(false)), Guard::Passed);
+        assert_eq!(Guard::of(Some(Guard::Passed)), Guard::Passed);
         assert!(!Guard::Passed.keeps_out());
+    }
+
+    #[test]
+    fn a_refused_player_the_kick_did_not_remove_never_counts_as_let_in() {
+        assert!(Guard::Kicking.keeps_out());
+        assert!(Guard::Unkickable.keeps_out());
+    }
+
+    fn no_slots() -> Option<Vec<u64>> {
+        None
+    }
+
+    #[test]
+    fn a_refusal_whose_kick_failed_is_tried_again_until_the_player_leaves() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        assert!(!gate.guarded(7, Guard::Kicking, start, no_slots));
+        assert!(gate.busy());
+        assert_eq!(gate.refusals_due(at(start, 9)), Vec::<u64>::new());
+        assert_eq!(gate.refusals_due(at(start, 10)), [7]);
+        assert_eq!(
+            gate.refusals_due(at(start, 11)),
+            Vec::<u64>::new(),
+            "one try at a time"
+        );
+        assert!(!gate.guarded(7, Guard::Kicking, at(start, 10), no_slots));
+        assert_eq!(gate.refusals_due(at(start, 20)), [7]);
+        gate.left(7);
+        assert!(!gate.busy());
+        assert_eq!(gate.refusals_due(at(start, 60)), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_removed_or_unchecked_player_whose_slot_stays_is_refused_again() {
+        for guard in [Guard::Removed, Guard::Broken] {
+            let mut gate = Gate::default();
+            let start = Instant::now();
+            gate.guarded(7, guard, start, no_slots);
+            assert_eq!(gate.refusals_due(at(start, 10)), [7], "{guard:?}");
+        }
+    }
+
+    #[test]
+    fn a_player_the_guards_now_let_in_is_no_longer_refused() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.guarded(7, Guard::Kicking, start, no_slots);
+        assert!(!gate.guarded(7, Guard::Passed, at(start, 10), no_slots));
+        assert!(!gate.busy());
+        assert_eq!(gate.refusals_due(at(start, 60)), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_refusal_this_build_cannot_kick_is_reported_once_and_not_tried_again() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        assert!(gate.guarded(7, Guard::Unkickable, start, no_slots));
+        assert!(!gate.guarded(7, Guard::Unkickable, at(start, 5), no_slots));
+        assert!(
+            gate.guarded(8, Guard::Unkickable, start, no_slots),
+            "per player"
+        );
+        assert_eq!(gate.refusals_due(at(start, 60)), Vec::<u64>::new());
+        assert!(gate.busy());
+        gate.keep(&[8]);
+        assert!(
+            gate.guarded(7, Guard::Unkickable, at(start, 70), no_slots),
+            "a new stay is reported again"
+        );
+    }
+
+    #[test]
+    fn refused_players_whose_slot_is_gone_are_forgotten() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        gate.guarded(7, Guard::Kicking, start, no_slots);
+        gate.keep(&[9]);
+        assert!(!gate.busy());
+        assert_eq!(gate.refusals_due(at(start, 60)), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn refusals_are_tried_again_in_a_hosted_game_that_does_not_know_its_host() {
+        let mut gate = Gate::hosted();
+        let start = Instant::now();
+        gate.guarded(7, Guard::Kicking, start, no_slots);
+        assert_eq!(gate.refusals_due(at(start, 10)), [7]);
+    }
+
+    #[test]
+    fn a_full_refusal_list_makes_room_from_players_whose_slot_is_gone() {
+        let mut gate = Gate::default();
+        let start = Instant::now();
+        for key in 1..=MAX_PLAYERS as u64 {
+            gate.guarded(key, Guard::Kicking, start, no_slots);
+        }
+        let newcomer = MAX_PLAYERS as u64 + 1;
+        gate.guarded(newcomer, Guard::Kicking, start, || Some(vec![1, newcomer]));
+        assert_eq!(gate.refusals_due(at(start, 10)).len(), 2);
     }
 
     const SERVER: &str = "you.trading-post@0.3.0,zones@0.1.0";
