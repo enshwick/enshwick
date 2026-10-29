@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A world store whose file does not read shows on the Mods screen as the
+  feature `world store <name>` off, with the reason (#675).
+
 - `WorldStore::shut_reason` says why the running world's file did not read
   while the store stays shut, and the loader's status summary shows it
   under the mod (#668).
