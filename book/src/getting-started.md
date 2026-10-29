@@ -1,8 +1,9 @@
 # Getting started
 
-This chapter sets up the tools, creates a mod, puts it into the game and
-shows where its log goes. The first mod uses the API's high-level calls;
-raw hooks come last, as the way down when the API has no call.
+You set up the tools, create a mod, put it into the game and find its log.
+The first mod uses the API's high-level calls. Raw hooks come last, for what
+the API has no call for. For a mod without Rust, start at
+[Luau mods](luau.md) or [A mod without Rust](content/a-mod-without-rust.md).
 
 ## Performance
 
@@ -60,7 +61,7 @@ the crate too. The crate holds:
 Inside a Cargo workspace the crate joins it: `new` adds its folder to the
 workspace's `members`, unless a pattern there already covers it, and leaves
 the release profile out, since Cargo reads profiles only at the workspace
-root; put `panic = "unwind"` there. A folder the workspace excludes gets a
+root. Put `panic = "unwind"` there. A folder the workspace excludes gets a
 workspace of its own.
 
 It builds and loads as it is: on first start it writes
@@ -75,7 +76,7 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 
 `install` builds the mod in release and copies the DLL to
 `<game>/mods/<package>.dll`. The game folder is `--game`, or the
-`ENSHROUDED_DIR` environment variable; it must hold `enshrouded.exe` or
+`ENSHROUDED_DIR` environment variable. It must hold `enshrouded.exe` or
 `enshrouded_server.exe`. In a workspace with several mods, `--package` (`-p`)
 names one; without it, `install` takes the package in the current folder, or
 the workspace's only mod. It also says when the loader is not installed in
@@ -162,8 +163,8 @@ What each piece does:
 - `declare_mod!` exports the mod and adds `AltarCount::instance()`.
 
 [`enshwick-better-altars`](https://github.com/enshwick/mod-better-altars)
-grew from this mod: a table per Flame level swapped with `arc-swap`, the
-table as a join value, and more than 16 altars.
+started as this mod. It adds a table per Flame level swapped with
+`arc-swap`, the table as a join value, and more than 16 altars.
 
 Most of what mods do has such a call: [events](events.md), the
 [world](world.md), [content](content.md), [settings](settings.md) and the
@@ -173,8 +174,8 @@ other chapters of Writing a mod. Look there first.
 
 When the API has no call for what a mod needs, the mod reaches into the game
 itself: it finds a function by its symbolic id and links a hook into it.
-This is the low-level escape hatch, and it is `unsafe`, since the mod vouches
-for the function's type. The same limit as a hook on the game's own lookup:
+This is the low-level way. It is `unsafe`: the mod states the function's
+type, and the compiler cannot check it. The same limit as a hook on the game's own lookup:
 
 ```rust,standalone_crate
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -216,10 +217,10 @@ enshwick::declare_mod!(AltarCount);
 - `detour!` declares a hook: a static `MAX_ALTARS` and an entry point that
   catches panics. The body gets `next`, the rest of the chain, and the
   function's arguments. See [Hooks](hooks.md).
-- `load.symbol` finds the function by its symbolic id on the running build;
+- `load.symbol` finds the function by its symbolic id on the running build.
   [Finding the game](finding-the-game.md) shows how ids are found and pinned.
 - A hook chains with other mods' hooks on the same function, as
-  `on_altar_limit` filters chain; a hook is also the mod's to keep working
+  `on_altar_limit` filters chain. The mod must also keep its hook working
   when the game changes. Prefer the API's call where there is
   one, and ask for one when other mods would need the same hook.
 

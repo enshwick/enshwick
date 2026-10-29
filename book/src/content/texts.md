@@ -81,7 +81,7 @@ shows no text, so there the call has no visible effect; call it anyway, the
 same code runs on both sides.
 
 Texts are registered during `init` only; the loader refuses them later.
-Under the hood each text goes through
+Each text goes through
 [`add_text`](resources.md#one-text-for-one-tag).
 
 ## The mod's own name
