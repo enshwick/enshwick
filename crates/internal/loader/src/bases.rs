@@ -527,49 +527,49 @@ pub(crate) fn link(loader: &'static Loader) {
     let only = HookFlags::EXCLUSIVE;
     let refused = [
         loader.link_feature(
-            "base grouping",
+            RAISED_ZONES,
             at(pinned::bases::GROUPING),
             &GROUP_NEXT,
             group,
             none,
         ),
         loader.link_feature(
-            "new base",
+            RAISED_ZONES,
             at(pinned::bases::NEW_BASE),
             &ADD_BASE_NEXT,
             add_base,
             none,
         ),
         loader.link_feature(
-            "base at a point",
+            RAISED_ZONES,
             at(pinned::bases::BASE_AT),
             &BASE_AT_NEXT,
             base_at,
             only,
         ),
         loader.link_feature(
-            "point in a base",
+            RAISED_ZONES,
             at(pinned::bases::IN_BASE),
             &IN_BASE_NEXT,
             in_base,
             only,
         ),
         loader.link_feature(
-            "zone at a point",
+            RAISED_ZONES,
             at(pinned::bases::HOLDER_AT),
             &HOLDER_AT_NEXT,
             holder_at,
             only,
         ),
         loader.link_feature(
-            "zones of a base",
+            RAISED_ZONES,
             at(pinned::bases::ZONES_AT),
             &ZONES_AT_NEXT,
             zones_at,
             only,
         ),
         loader.link_feature(
-            "placement cursor",
+            RAISED_ZONES,
             at(pinned::bases::CURSOR),
             &CHECK_NEXT,
             check,
@@ -974,6 +974,38 @@ mod tests {
             sites_of(fake::FIELDS, without_zones).map(|_| ()),
             Err(pinned::bases::ZONES_AT)
         );
+    }
+
+    /// The cursor's code check covers the offsets the detour reads: in
+    /// every table that pins the cursor, its whole-code pattern fixes the
+    /// altar flag test and the balancing load at the table's values.
+    #[test]
+    fn the_cursor_s_pattern_fixes_the_offsets_its_detour_reads() {
+        let hex = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .map(|b| format!("{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        for (file, text) in enshwick_gamedata::embedded() {
+            let table = enshwick_gamedata::Table::parse(text).unwrap();
+            let resolved = table.resolve();
+            if resolved.symbol(pinned::bases::CURSOR.id()).is_none() {
+                continue;
+            }
+            let row = text
+                .lines()
+                .find(|line| line.starts_with(&format!("\"{}\" ", pinned::bases::CURSOR)))
+                .unwrap();
+            let constant = |id: Constant| resolved.constant(id.id()).unwrap();
+            let flag = u8::try_from(constant(pinned::bases::ITEM_ALTAR)).unwrap();
+            let balancing = u32::try_from(constant(pinned::bases::CURSOR_BALANCING)).unwrap();
+            let mut load = vec![0x48, 0x8B, 0x8E];
+            load.extend_from_slice(&balancing.to_le_bytes());
+            assert!(row.contains(&hex(&[0x80, 0x7F, flag, 0x00])), "{file}");
+            assert!(row.contains(&hex(&load)), "{file}");
+        }
     }
 
     #[test]

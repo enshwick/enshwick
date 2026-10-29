@@ -28,7 +28,19 @@ use crate::pinned::{Constant, Symbol, bases};
 
 /// Bases past 16, as the log and the Mods screen name them when a build
 /// lacks a site.
-const PAST_16: &str = "bases past 16";
+pub(super) const PAST_16: &str = "bases past 16";
+/// The functions the window patches or calls beside its hooks, whose code
+/// must hold before anything is patched: the creates its size patches grow,
+/// the record constructor and teardown, and what the replaced loops call.
+const CALLED: [Symbol; 7] = [
+    bases::SERVER_CREATE,
+    bases::CLIENT_CREATE,
+    bases::CTOR,
+    bases::TEARDOWN,
+    bases::ENTITY_QUERY,
+    bases::SET_INSERT,
+    bases::STOCK_ADVANCE,
+];
 /// `mov edx, imm32`, which each create loads the object's size with.
 const MOV_EDX: u8 = 0xBA;
 /// The base count the window's code reads, `[obj+0x24]` in the count
@@ -38,22 +50,33 @@ pub(super) const COUNT_AT: usize = 0x24;
 type CreateFn = unsafe extern "system" fn(allocator: *mut u8, part: *mut u8) -> *mut u8;
 type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
 
-/// Why a site of the window is not found.
+/// Why a site of the window is not found, with the table entry it fails on.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub(super) enum SiteError {
     /// The build table lacks an entry.
-    #[error("{0} is not in this build")]
+    #[error("is not in this build")]
     Missing(&'static str),
     /// A create does not load the size the table names exactly once.
-    #[error("a create does not load the size {size:#x} once")]
-    Size { size: u32 },
+    #[error("is not loaded once by its create")]
+    Size(&'static str),
     /// The client's base list calls another getter than the count's.
-    #[error("the base list's count getter is not the expected one")]
+    #[error("is not the expected count getter")]
     Getter,
     /// The build table's base layout is not the one the window is laid out
     /// for.
-    #[error("the bases' records are {stride:#x} apart with the count at {count:#x}")]
+    #[error("{stride:#x} with the count at {count:#x} is not the window's layout")]
     Layout { stride: usize, count: usize },
+}
+
+impl SiteError {
+    /// The table entry the site fails on.
+    pub(super) const fn entry(&self) -> &'static str {
+        match self {
+            Self::Missing(id) | Self::Size(id) => id,
+            Self::Getter => bases::COUNT_GETTER.id(),
+            Self::Layout { .. } => bases::STRIDE.id(),
+        }
+    }
 }
 
 /// The build table entries the window reads, with its symbols as offsets
@@ -75,19 +98,21 @@ impl Pins<'_> {
 
     /// The code of symbol `id`, as far as its pattern covers it.
     fn body(&self, id: Symbol) -> Result<Range<usize>, SiteError> {
-        let at = self.at(id)?;
-        let (pattern, _) = self
-            .table
-            .head(id.id())
-            .ok_or(SiteError::Missing(id.id()))?;
-        Ok(at..at + pattern.len())
+        let missing = || SiteError::Missing(id.id());
+        let (pattern, before) = self.table.head(id.id()).ok_or_else(missing)?;
+        let start = usize::try_from(before)
+            .ok()
+            .and_then(|before| self.at(id).ok()?.checked_sub(before))
+            .ok_or_else(missing)?;
+        Ok(start..start + pattern.len())
     }
 
-    /// Constant `id` as a 32-bit value.
-    fn value(&self, id: Constant) -> Result<u32, SiteError> {
+    /// Constant `id`, a 32-bit size, with its id.
+    fn size(&self, id: Constant) -> Result<(&'static str, u32), SiteError> {
         self.table
             .constant(id.id())
             .and_then(|value| u32::try_from(value).ok())
+            .map(|size| (id.id(), size))
             .ok_or(SiteError::Missing(id.id()))
     }
 }
@@ -173,17 +198,17 @@ fn size_patch(
     code: &[u8],
     start: usize,
     create: Range<usize>,
-    size: u32,
+    (id, size): (&'static str, u32),
 ) -> Result<CodePatch, SiteError> {
     let mut expected = [MOV_EDX, 0, 0, 0, 0];
     expected[1..].copy_from_slice(&size.to_le_bytes());
-    let body = code.get(create.clone()).ok_or(SiteError::Size { size })?;
+    let body = code.get(create.clone()).ok_or(SiteError::Size(id))?;
     let mut found = body
         .windows(expected.len())
         .enumerate()
         .filter(|(_, w)| *w == expected);
     let (Some((at, _)), None) = (found.next(), found.next()) else {
-        return Err(SiteError::Size { size });
+        return Err(SiteError::Size(id));
     };
     let grown = u32::try_from(window::BLOCK).unwrap_or(u32::MAX);
     let mut replacement = expected;
@@ -218,13 +243,13 @@ fn find(
             code,
             start,
             pins.body(bases::SERVER_CREATE)?,
-            pins.value(bases::SERVER_SIZE)?,
+            pins.size(bases::SERVER_SIZE)?,
         )?,
         size_patch(
             code,
             start,
             pins.body(bases::CLIENT_CREATE)?,
-            pins.value(bases::CLIENT_SIZE)?,
+            pins.size(bases::CLIENT_SIZE)?,
         )?,
     ];
     let loops = loops::find(code, start, client, pins)?;
@@ -272,16 +297,17 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         code_rva: text.0 as u64 - loader.base,
     };
     let sites = match find(code, text.0, loader.side == Side::CLIENT, fields, &pins) {
-        Ok(sites) => SITES.get_or_init(|| sites),
-        Err(SiteError::Missing(id)) => {
-            loader.feature_off(PAST_16, id, &Unhooked::Absent.to_string());
-            return;
-        }
-        Err(reason) => {
-            crate::log!(WARN, "bases keep 16 on {build}: {reason}");
+        Ok(sites) => sites,
+        Err(why) => {
+            loader.feature_off(PAST_16, why.entry(), &why.to_string());
             return;
         }
     };
+    if let Some(moved) = CALLED.into_iter().find(|&id| !loader.code_holds(id)) {
+        loader.feature_off(PAST_16, moved.id(), &Unhooked::Moved.to_string());
+        return;
+    }
+    let sites = SITES.get_or_init(|| sites);
     let status = crate::code::register_all(sites.patches.clone(), text);
     if !status.is_ok() {
         crate::log!(
@@ -295,28 +321,28 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
     let at = |symbol| Target::Pinned(symbol);
     let refused = [
         loader.link_feature(
-            "server bases create",
+            PAST_16,
             at(bases::SERVER_CREATE),
             &SERVER_CREATE_NEXT,
             create_server,
             none,
         ),
         loader.link_feature(
-            "client bases create",
+            PAST_16,
             at(bases::CLIENT_CREATE),
             &CLIENT_CREATE_NEXT,
             create_client,
             none,
         ),
         loader.link_feature(
-            "server bases destroy",
+            PAST_16,
             at(bases::SERVER_DESTROY),
             &SERVER_DESTROY_NEXT,
             destroy_server,
             none,
         ),
         loader.link_feature(
-            "client bases destroy",
+            PAST_16,
             at(bases::CLIENT_DESTROY),
             &CLIENT_DESTROY_NEXT,
             destroy_client,
@@ -468,6 +494,10 @@ mod tests {
                 .unwrap_or_else(|why| panic!("{variable}: {why}"));
             assert_eq!(sites.patches.len(), 2 + usize::from(client), "{variable}");
             assert_eq!(sites.targets().count(), 14, "{variable}");
+            assert!(
+                client || pins.at(bases::COUNT_GETTER).is_err(),
+                "{variable}"
+            );
         }
     }
 
@@ -495,15 +525,15 @@ mod tests {
     fn a_grown_size_is_the_one_load_of_the_vanilla_size_in_its_create() {
         let mut code = vec![0x90; 0x60];
         code[0x30..0x35].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
-        let grown = size_patch(&code, 0x1000, 0x20..0x40, 0x2070).unwrap();
+        let grown = size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x2070)).unwrap();
         assert_eq!(grown.address, 0x1030);
         assert_eq!(*grown.expected, [0xBA, 0x70, 0x20, 0, 0]);
         assert_eq!(*grown.replacement, [0xBA, 0x30, 0x30, 0x01, 0]);
-        assert!(size_patch(&code, 0x1000, 0x20..0x40, 0x16e0).is_err());
-        assert!(size_patch(&code, 0x1000, 0x40..0x60, 0x2070).is_err());
+        assert!(size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x16e0)).is_err());
+        assert!(size_patch(&code, 0x1000, 0x40..0x60, ("s", 0x2070)).is_err());
         code[0x10..0x15].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
         assert!(
-            size_patch(&code, 0x1000, 0x00..0x40, 0x2070).is_err(),
+            size_patch(&code, 0x1000, 0x00..0x40, ("s", 0x2070)).is_err(),
             "twice"
         );
     }

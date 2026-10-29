@@ -235,8 +235,10 @@ pub(super) fn find(
 /// Links every loop site and resolves the code the replacements call;
 /// whether each link holds.
 pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
-    // SAFETY: the table's `bases.entity_hash`, the u32 in the game's mapped
-    // image that the rebuild's own `mov r8d, [rip+d]` reads.
+    // SAFETY: the table's `bases.entity_hash`, a u32 the table pins inside
+    // the game's mapped image through the rebuild's own `mov r8d, [rip+d]`,
+    // so it is readable before the rebuild's code check; a rebuild that does
+    // not hold is never linked, so the value goes unused.
     let hash = unsafe { read_at::<u32>(sites.hash_at as *const u8, 0) };
     let code = Code {
         hash,
@@ -259,70 +261,70 @@ pub(super) fn link(loader: &Loader, sites: &Sites) -> [bool; 10] {
     let at = |symbol| Target::Pinned(symbol);
     [
         loader.link_feature(
-            "sort into bases",
+            super::past16::PAST_16,
             at(bases::SORT),
             &sort::SORT_NEXT,
             sort::sort,
             only,
         ),
         loader.link_feature(
-            "sort every entity",
+            super::past16::PAST_16,
             at(bases::SORT_ALL),
             &sort::SORT_ALL_NEXT,
             sort::sort_all,
             none,
         ),
         loader.link_feature(
-            "base ids",
+            super::past16::PAST_16,
             at(bases::BASE_IDS),
             &sort::BASE_IDS_NEXT,
             sort::base_ids,
             none,
         ),
         loader.link_feature(
-            "logic entity sets",
+            super::past16::PAST_16,
             at(bases::REBUILD),
             &rebuild::REBUILD_NEXT,
             rebuild::rebuild,
             only,
         ),
         loader.link_feature(
-            "building stock cache",
+            super::past16::PAST_16,
             at(bases::STOCK_CACHE),
             &stock::STOCK_CACHE_NEXT,
             stock::stock_cache,
             only,
         ),
         loader.link_feature(
-            "NPC totals",
+            super::past16::PAST_16,
             at(bases::NPC_TOTALS),
             &totals::NPC_TOTALS_NEXT,
             totals::npc_totals,
             none,
         ),
         loader.link_feature(
-            "animal totals",
+            super::past16::PAST_16,
             at(bases::SERVER_UPDATE),
             &totals::SERVER_UPDATE_NEXT,
             totals::server_update,
             none,
         ),
         loader.link_feature(
-            "bed count cleanup",
+            super::past16::PAST_16,
             at(bases::BED_CLEANUP),
             &totals::BED_CLEANUP_NEXT,
             totals::bed_cleanup,
             none,
         ),
         loader.link_feature(
-            "comfort cleanup",
+            super::past16::PAST_16,
             at(bases::COMFORT_CLEANUP),
             &totals::COMFORT_CLEANUP_NEXT,
             totals::comfort_cleanup,
             none,
         ),
         loader.link_feature(
-            "crafting prop cleanup",
+            super::past16::PAST_16,
             at(bases::PROPS_CLEANUP),
             &totals::PROPS_CLEANUP_NEXT,
             totals::props_cleanup,
