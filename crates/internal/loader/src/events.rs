@@ -91,6 +91,8 @@ pub(crate) struct Session {
     thread: u32,
     /// Set when the session stopped; its last steps no longer count.
     ended: bool,
+    /// The hosted games that ended, which a new session keeps.
+    games_ended: u64,
 }
 
 /// What a step means for the session.
@@ -114,19 +116,47 @@ impl Session {
             server,
             thread,
             ended: false,
+            games_ended: self.games_ended,
         };
         Step::New
     }
 
-    /// Marks the session stopped.
+    /// Marks the session stopped: the hosted game ended.
     pub(crate) fn stop(&mut self) {
+        if !self.ended {
+            self.games_ended += 1;
+        }
         self.ended = true;
     }
 
     /// A hosted game starts: its first step is a new session even on the
     /// server and thread of the one that stopped.
     pub(crate) fn begin(&mut self) {
-        *self = Self::default();
+        *self = Self {
+            games_ended: self.games_ended,
+            ..Self::default()
+        };
+    }
+
+    /// The game the server steps, from 1, as
+    /// [`TickData::game`](enshwick::abi::TickData::game) counts it.
+    pub(crate) const fn game(&self) -> u64 {
+        self.games_ended + 1
+    }
+
+    /// Follows a step as [`Session::step`] does; with the game it is in.
+    pub(crate) fn step_in_game(&mut self, server: usize, thread: u32) -> (Step, u64) {
+        (self.step(server, thread), self.game())
+    }
+}
+
+/// The data of the every-step [`Event::TICKED`] for step `step` of `game`.
+fn tick_data(step: u64, time: StepTime, game: u64) -> TickData {
+    TickData {
+        elapsed_nanos: time.elapsed,
+        step_nanos: time.average,
+        game,
+        ..TickData::new(step)
     }
 }
 
@@ -134,6 +164,7 @@ static SESSION: Mutex<Session> = Mutex::new(Session {
     server: 0,
     thread: 0,
     ended: false,
+    games_ended: 0,
 });
 
 static LOADED: OnceLock<(&'static Loader, Offsets)> = OnceLock::new();
@@ -327,7 +358,9 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     let now = Instant::now();
     // SAFETY: `GetCurrentThreadId` has no preconditions.
     let thread = unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() };
-    let seen = SESSION.relock().step(server.expose_provenance(), thread);
+    let (seen, game) = SESSION
+        .relock()
+        .step_in_game(server.expose_provenance(), thread);
     match seen {
         Step::Ended => return,
         Step::New if loader.side == Side::CLIENT => {
@@ -385,16 +418,12 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     if crate::host::handles(Event::TICKED) || TICKS.listed() {
         let nanos = TICKS.nanos(now);
         let time = TICKS.advance(nanos);
-        let tick = TickData {
-            elapsed_nanos: time.elapsed,
-            step_nanos: time.average,
-            ..TickData::new(step)
-        };
+        let tick = tick_data(step, time, game);
         part!(
             "tick events",
             loader.emit(Event::TICKED, None, (&raw const tick).cast::<c_void>())
         );
-        part!("periodic ticks", periodic_ticks(step, nanos, time));
+        part!("periodic ticks", periodic_ticks(step, nanos, time, game));
     }
     part!("join admission", crate::admission::after_step(loader));
     part!("console lines", crate::console::after_step(loader));
@@ -433,9 +462,9 @@ unsafe fn after_step(loader: &'static Loader, offsets: &Offsets, server: *mut u8
     }
 }
 
-/// Calls the periodic tick handlers due after step `step` at `now`, each
-/// with its mod's recent cost when callbacks are timed.
-fn periodic_ticks(step: u64, now: u64, time: StepTime) -> usize {
+/// Calls the periodic tick handlers due after step `step` of `game` at
+/// `now`, each with its mod's recent cost when callbacks are timed.
+fn periodic_ticks(step: u64, now: u64, time: StepTime, game: u64) -> usize {
     TICKS.run(
         step,
         now,
@@ -445,6 +474,7 @@ fn periodic_ticks(step: u64, now: u64, time: StepTime) -> usize {
                 && tick.generation() == crate::reload::generation(tick.owner().get())
         },
         |tick, mut data| {
+            data.game = game;
             data.cost_nanos = crate::profile::events_reading(tick.owner())
                 .and_then(|(calls, ticks)| {
                     let (calls, ticks) = tick.since_seen(calls, ticks);
@@ -766,5 +796,21 @@ mod tests {
         // The same address again, on another thread, is another game.
         session.stop();
         assert_eq!(session.step(0x2000, 11), Step::New);
+    }
+
+    #[test]
+    fn each_hosted_game_that_ends_makes_the_next_steps_another_game() {
+        let mut session = Session::default();
+        assert_eq!(session.step(0x1000, 7), Step::New);
+        assert_eq!(session.game(), 1);
+        session.begin();
+        assert_eq!(session.step(0x1000, 7), Step::New);
+        assert_eq!(session.game(), 1, "the game's own start is the same game");
+        session.stop();
+        session.stop();
+        assert_eq!(session.game(), 2, "one game ended, once");
+        session.begin();
+        assert_eq!(session.step(0x2000, 9), Step::New);
+        assert_eq!(session.game(), 2);
     }
 }

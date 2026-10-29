@@ -26,6 +26,8 @@ pub(crate) struct FakeTicks {
     step: u64,
     /// The time of that step, in nanoseconds from the first.
     nanos: u64,
+    /// The hosted games that ended: the steps run in game one more.
+    games_ended: u64,
     ticks: Vec<FakeTick>,
 }
 
@@ -110,6 +112,7 @@ impl Installed {
             let tick = TickData {
                 elapsed_nanos: elapsed,
                 step_nanos: elapsed,
+                game: ticks.games_ended + 1,
                 ..TickData::new(step)
             };
             let every_step = s
@@ -147,6 +150,23 @@ impl Installed {
             };
         }
         calls.len()
+    }
+
+    /// Ends the game a client hosts, as the loader does when the player
+    /// leaves it: the next [`tick`](Self::tick) is the first step of the next
+    /// game, with [`TickData::game`] one more.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// let loader = enshwick::test::FakeHost::new().install();
+    /// loader.end_game();
+    /// assert_eq!(loader.tick(Duration::from_millis(50)), 0);
+    /// ```
+    pub fn end_game(&self) {
+        with((), |s| s.ticks.games_ended += 1);
     }
 }
 

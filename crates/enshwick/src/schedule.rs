@@ -10,6 +10,11 @@
 //! passed runs on the next pass. A wait that should stand still with the
 //! server counts on the [`StepClock`](crate::time::StepClock) instead. A
 //! panic in a task turns the mod off, as in any event handler.
+//!
+//! A task queued while a game runs belongs to that game: when a client
+//! leaves the game it hosts, its tasks end, so none runs in the next game
+//! with the last one's entities. A task queued before the first step, as in
+//! `init`, belongs to no game and runs in every one.
 
 use std::ops::ControlFlow;
 use std::sync::Mutex;
@@ -19,10 +24,14 @@ use std::time::{Duration, Instant};
 use crate::abi::ModHandle;
 use crate::locks::Relock;
 
-/// A task: when it is due, its period when it repeats, and what it runs.
+/// A task: when it is due, its period when it repeats, the game it was
+/// queued in, and what it runs.
 struct Task {
     due: Instant,
     period: Option<Duration>,
+    /// The [`TickData::game`](crate::abi::TickData::game) it was queued in;
+    /// `None` before the first step.
+    game: Option<u64>,
     run: Box<dyn FnMut() -> ControlFlow<()> + Send>,
 }
 
@@ -33,6 +42,8 @@ struct Queue {
     /// [`IDLE`]; written under the `tasks` lock, so a step with nothing due
     /// takes no lock.
     next_due: AtomicU64,
+    /// The game of the last pass, [`NO_GAME`] before the first.
+    game: AtomicU64,
     epoch: Instant,
     tasks: Mutex<Vec<Task>>,
     /// The buffer due tasks run from, kept between runs so a run does not
@@ -41,12 +52,15 @@ struct Queue {
 }
 
 const IDLE: u64 = u64::MAX;
+/// Games count from 1, so 0 stands for "no pass yet" in an atomic.
+const NO_GAME: u64 = 0;
 
 impl Queue {
     fn new() -> Self {
         Self {
             ticking: AtomicBool::new(false),
             next_due: AtomicU64::new(IDLE),
+            game: AtomicU64::new(NO_GAME),
             epoch: Instant::now(),
             tasks: Mutex::new(Vec::new()),
             spare: Mutex::new(Vec::new()),
@@ -190,9 +204,11 @@ impl Scheduler {
         let Some(due) = Instant::now().checked_add(delay) else {
             return;
         };
+        let game = self.queue.game.load(Ordering::Acquire);
         let task = Task {
             due,
             period,
+            game: (game != NO_GAME).then_some(game),
             run: Box::new(run),
         };
         let mut tasks = self.queue.tasks.relock();
@@ -200,9 +216,12 @@ impl Scheduler {
         tasks.push(task);
     }
 
-    /// Runs the tasks that are due; called on each pass.
+    /// Runs the tasks that are due on a pass in `game`; called on each pass.
     #[inline]
-    pub(crate) fn run_due(self) {
+    pub(crate) fn run_due(self, game: u64) {
+        if self.queue.game.load(Ordering::Relaxed) != game {
+            self.enter_game(game);
+        }
         let next_due = self.queue.next_due.load(Ordering::Acquire);
         if next_due == IDLE {
             return;
@@ -211,6 +230,19 @@ impl Scheduler {
         if self.queue.nanos(now) >= next_due {
             self.run_due_at(now);
         }
+    }
+
+    /// The first pass of `game`: the tasks of the games before it end.
+    #[cold]
+    fn enter_game(self, game: u64) {
+        let mut tasks = self.queue.tasks.relock();
+        tasks.retain(|task| task.game.is_none_or(|queued| queued == game));
+        let next = tasks.iter().map(|task| task.due).min();
+        self.queue.next_due.store(
+            next.map_or(IDLE, |at| self.queue.nanos(at)),
+            Ordering::Release,
+        );
+        self.queue.game.store(game, Ordering::Release);
     }
 
     #[cold]
@@ -277,7 +309,7 @@ mod tests {
             count.fetch_add(1, Ordering::Relaxed);
         });
         for _ in 0..5 {
-            scheduler.run_due();
+            scheduler.run_due(1);
         }
         assert_eq!(once.load(Ordering::Relaxed), 1);
         assert_eq!(repeated.load(Ordering::Relaxed), 3);
@@ -289,12 +321,12 @@ mod tests {
     fn runs_keep_their_buffers_between_steps() {
         let (scheduler, _) = Scheduler::get(ModHandle(1));
         scheduler.every(Duration::ZERO, || ControlFlow::Continue(()));
-        scheduler.run_due();
+        scheduler.run_due(1);
         let lock = |m: &'static Mutex<Vec<Task>>| m.relock();
         let spare = lock(&scheduler.queue.spare).capacity();
         let tasks = lock(&scheduler.queue.tasks).capacity();
         assert!(spare >= 1);
-        scheduler.run_due();
+        scheduler.run_due(1);
         assert_eq!(lock(&scheduler.queue.spare).capacity(), spare);
         assert_eq!(lock(&scheduler.queue.tasks).capacity(), tasks);
         assert_eq!(lock(&scheduler.queue.tasks).len(), 1);
@@ -316,6 +348,23 @@ mod tests {
         let (scheduler, _) = Scheduler::get(ModHandle(1));
         scheduler.after(Duration::MAX, || unreachable!());
         scheduler.every(Duration::MAX, || unreachable!());
-        scheduler.run_due();
+        scheduler.run_due(1);
+    }
+
+    #[test]
+    fn a_task_queued_before_the_first_pass_runs_in_every_game() {
+        let (scheduler, _) = Scheduler::get(ModHandle(21));
+        let runs = Arc::new(AtomicU32::new(0));
+        let count = Arc::clone(&runs);
+        scheduler.every(Duration::ZERO, move || {
+            count.fetch_add(1, Ordering::Relaxed);
+            ControlFlow::Continue(())
+        });
+        scheduler.run_due(1);
+        scheduler.after(Duration::ZERO, || unreachable!("a task of game 1"));
+        scheduler.run_due(2);
+        scheduler.run_due(3);
+        assert_eq!(runs.load(Ordering::Relaxed), 3);
+        assert_eq!(scheduler.queue.tasks.relock().len(), 1);
     }
 }

@@ -494,19 +494,23 @@ pub struct TickData {
     /// about a second after they start, while the loader measures its
     /// clock.
     pub cost_nanos: u64,
+    /// Which game the server steps, from 1: a dedicated server runs one,
+    /// and a client counts one more for each game it hosts after the first.
+    pub game: u64,
 }
 
 impl_headed!(TickData);
 
 impl TickData {
-    /// A tick of `step` that follows the step before it, with no time
-    /// measured: what a test raises when the time does not matter.
+    /// A tick of `step` in the first game that follows the step before it,
+    /// with no time measured: what a test raises when the time does not
+    /// matter.
     ///
     /// # Examples
     ///
     /// ```
     /// let tick = enshwick::abi::TickData::new(1);
-    /// assert_eq!(tick.elapsed_steps, 1);
+    /// assert_eq!((tick.elapsed_steps, tick.game), (1, 1));
     /// ```
     #[must_use]
     pub const fn new(step: u64) -> Self {
@@ -517,6 +521,7 @@ impl TickData {
             elapsed_nanos: 0,
             step_nanos: 0,
             cost_nanos: 0,
+            game: 1,
         }
     }
 

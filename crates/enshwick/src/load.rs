@@ -325,7 +325,8 @@ impl Load<'_> {
     pub fn scheduler(&mut self) -> Result<crate::schedule::Scheduler, Off> {
         let (scheduler, subscribe) = crate::schedule::Scheduler::get(self.host.handle());
         if subscribe
-            && let Err(off) = self.on::<crate::events::Ticked>(move |_| scheduler.run_due())
+            && let Err(off) =
+                self.on::<crate::events::Ticked>(move |tick| scheduler.run_due(tick.game))
         {
             scheduler.unsubscribed();
             return Err(off);

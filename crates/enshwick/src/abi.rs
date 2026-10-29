@@ -742,7 +742,7 @@ const _: () = {
     assert!(core::mem::offset_of!(HostApi, request_base_limits) == 24 + 173 * 8);
     assert!(core::mem::offset_of!(HostApi, subscribe_tick) == 24 + 170 * 8);
     assert!(core::mem::offset_of!(HostApi, set_tick_every) == 24 + 171 * 8);
-    assert!(size_of::<TickData>() == 8 + 5 * 8);
+    assert!(size_of::<TickData>() == 8 + 6 * 8);
     assert!(size_of::<TickHandle>() == 4);
     assert!(core::mem::offset_of!(HostApi, map_frame) == 24 + 172 * 8);
     assert!(size_of::<MapFrameInfo>() == 8 + 16 + 16 + 8);
