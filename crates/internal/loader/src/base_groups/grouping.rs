@@ -3,9 +3,11 @@
 
 use super::limit::Aabb;
 
-/// The most zones the game lists in a world.
-/// Found on the 1.0 build 1269579, server and client.
-pub(crate) const MAX_LISTED: usize = 0xff;
+/// The most zones the loader groups, which a u8 zone index reaches. The
+/// game's own list stops at the same 255: its world init sets that capacity
+/// and the list's one writer clips to it (server 399, client 426), so a
+/// longer list is clipped here and never read past.
+pub(crate) const MAX_LISTED: usize = 0xff; // bound, not a game offset: a u8 zone index
 
 /// A set of altar zones, by their place in the game's zone list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
