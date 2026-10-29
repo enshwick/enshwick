@@ -284,7 +284,14 @@ fn the_scroll_area_s_extents_come_from_the_table_and_fit_its_buffers() {
             continue;
         }
         let lookup = |id: &str| constant(&table, id);
-        scroll::extents(&lookup).unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+        let state =
+            scroll::extents(&lookup).unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+        assert_eq!(
+            Some(state as u64),
+            lookup(pinned::ui::SCROLL_STATE_SIZE.id()),
+            "{}: the kept state the loader asks for is the build's",
+            table.name()
+        );
         for (id, room) in [
             (pinned::ui::SCROLL_EXTENT.id(), scroll::SCROLL_OBJECT),
             (pinned::ui::SCROLL_CONFIG_EXTENT.id(), scroll::SCROLL_CONFIG),

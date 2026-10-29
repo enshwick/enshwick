@@ -36,16 +36,16 @@ type ColumnFn = unsafe extern "system" fn(column: Ptr, gap: f32) -> Ptr;
 
 /// The loader's room for the scroll object; the build's `ui.scroll_extent`
 /// must fit in it.
-pub(super) const SCROLL_OBJECT: usize = 0x600;
+pub(super) const SCROLL_OBJECT: usize = 0x600; // bound, not a game offset: the loader's room
 /// The loader's room for the scroll config; the build's
 /// `ui.scroll_config_extent` and the reflected config must fit in it.
-pub(super) const SCROLL_CONFIG: usize = 0x110;
+pub(super) const SCROLL_CONFIG: usize = 0x110; // bound, not a game offset: the loader's room
 /// The loader's room for the scrollbar look; the reflected look must fit.
-pub(super) const SCROLLBAR_LOOK: usize = 0xc0;
-/// The kept state of a scroll area, which holds its offset; the game's
-/// first use zeroes part of it, the loader all of it. The build's
-/// `ui.scroll_state_size` must fit in it.
-pub(super) const STATE_SIZE: usize = 0x18;
+pub(super) const SCROLLBAR_LOOK: usize = 0xc0; // bound, not a game offset: the loader's room
+/// The most kept state the loader asks a scroll area's node for; the
+/// build's `ui.scroll_state_size`, which the loader asks for and zeroes on
+/// first use, must fit in it.
+pub(super) const STATE_SIZE: usize = 0x18; // bound, not a game offset: a sanity bound
 /// The loader's key for its scroll area's kept state among the game's
 /// states of a node: `enshwick` in ASCII.
 const STATE_KEY: u64 = 0x656e_7368_7769_636b;
@@ -89,6 +89,9 @@ pub(super) struct Scrolling {
     nav_highlight: usize,
     /// Where the config and its look take what the loader fills.
     fields: Fields,
+    /// The kept state's size, the table's `ui.scroll_state_size`, at most
+    /// [`STATE_SIZE`].
+    state_size: usize,
 }
 
 fn scrollbar(loader: &Loader, name: &str) -> Option<usize> {
@@ -238,12 +241,14 @@ impl Fields {
 }
 
 /// Checks the scroll area's extents in the build's table against the
-/// loader's buffers: the scroll object, the config the game's init fills
-/// and the kept state it asks for.
-pub(super) fn extents(lookup: Lookup<'_>) -> Result<(), Missing> {
+/// loader's buffers, the scroll object and the config the game's init
+/// fills, and against the most kept state the loader asks for; gives the
+/// build's kept state size.
+pub(super) fn extents(lookup: Lookup<'_>) -> Result<usize, Missing> {
     fits(lookup, pinned::ui::SCROLL_EXTENT.id(), SCROLL_OBJECT)?;
     fits(lookup, pinned::ui::SCROLL_CONFIG_EXTENT.id(), SCROLL_CONFIG)?;
-    fits(lookup, pinned::ui::SCROLL_STATE_SIZE.id(), STATE_SIZE)
+    fits(lookup, pinned::ui::SCROLL_STATE_SIZE.id(), STATE_SIZE)?;
+    field(lookup, pinned::ui::SCROLL_STATE_SIZE.id())
 }
 
 impl Scrolling {
@@ -252,7 +257,7 @@ impl Scrolling {
     /// buffers.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
         let lookup = |id: &str| loader.build.constant(id);
-        extents(&lookup)?;
+        let state_size = extents(&lookup)?;
         macro_rules! function {
             ($name:expr, $ty:ty) => {
                 // SAFETY: `$ty` is the signature of the game function `$name`
@@ -279,6 +284,7 @@ impl Scrolling {
             highlight: sound(loader, "highlightChange").ok_or(Missing::Looks)?,
             nav_highlight: nav_highlight(&lookup)?,
             fields: Fields::reflect(loader)?,
+            state_size,
         })
     }
 }
@@ -354,10 +360,18 @@ impl Engine {
         unsafe { (self.node_stretch)(parent, stretch(1.0, 0.0)) };
         // SAFETY: `fns.persist` is the game's `ui.persist`, checked in
         // `Scrolling::resolve`, on the parent frame's live node; it hands out
-        // `STATE_SIZE` bytes the game keeps for the node under the loader's
-        // key, built by `ui.no_construct`, as the world settings ask.
-        let state =
-            unsafe { (fns.persist)(parent, STATE_KEY, STATE_SIZE as u64, fns.no_construct, 1) };
+        // build's `ui.scroll_state_size` bytes the game keeps for the node
+        // under the loader's key, built by `ui.no_construct`, as the world
+        // settings ask.
+        let state = unsafe {
+            (fns.persist)(
+                parent,
+                STATE_KEY,
+                fns.state_size as u64,
+                fns.no_construct,
+                1,
+            )
+        };
         if state.is_null() {
             return false;
         }
@@ -366,9 +380,9 @@ impl Engine {
         // out, as the world settings call it.
         if unsafe { (fns.first_use)(state) } != 0 {
             // SAFETY: `state` is non-null, checked by the guard above, and
-            // points at the `STATE_SIZE` bytes `persist` handed out for this
-            // node, which nothing else touches on this thread now.
-            unsafe { state.write_bytes(0, STATE_SIZE) };
+            // points at the `fns.state_size` bytes `persist` handed out for
+            // this node, which nothing else touches on this thread now.
+            unsafe { state.write_bytes(0, fns.state_size) };
         }
         let bundle = self.bundle(context);
         let mut config = Self::scroll_config(fns, bundle);
