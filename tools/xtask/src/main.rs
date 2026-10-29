@@ -3,7 +3,7 @@
 //! `cargo xtask check` runs the compiling checks a change needs before it
 //! merges; the git hooks run only the checks that compile nothing. Nothing
 //! runs when no package changed since the branch left `origin/main`.
-//! Otherwise clippy and the doctests run over the workspace, where unchanged
+//! Otherwise clippy, the doctests and rustdoc run over the workspace, where unchanged
 //! packages are already fresh, and nextest runs the tests of the changed
 //! packages and of every package that depends on them. Off Windows the
 //! workspace is also linted for Windows through `cargo xwin`, beside the host
@@ -390,9 +390,9 @@ fn say(text: &str) {
 }
 
 /// The checks of the API crate's stable surface, built without `unstable`:
-/// its lints when its code changed, its examples whenever it changed, and
-/// in the full suite its rustdoc.
-fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
+/// its lints when its code changed, its examples and its rustdoc whenever
+/// it changed.
+fn stable_api_steps(code: bool) -> Vec<Step> {
     let mut steps = Vec::new();
     if code {
         steps.push(
@@ -415,14 +415,22 @@ fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
         "--skip",
         "src/item_data.rs",
     ]));
-    if full {
-        steps.push(
-            Step::new(&["doc", "--no-deps"])
-                .then(&STABLE_API)
-                .env("RUSTDOCFLAGS", "-D warnings"),
-        );
-    }
+    // A link into an unstable module breaks only this build, and the
+    // crate's own rustdoc takes seconds once the examples above built
+    // its dependencies.
+    steps.push(
+        Step::new(&["doc", "--no-deps"])
+            .then(&STABLE_API)
+            .env("RUSTDOCFLAGS", "-D warnings"),
+    );
     steps
+}
+
+/// Whether the workspace's rustdoc runs: whenever code changed, since a
+/// change to one crate breaks links in the docs of the crates that use it,
+/// and in the full suite. It takes seconds once clippy built the workspace.
+const fn workspace_rustdoc(code: bool, full: bool) -> bool {
+    code || full
 }
 
 /// Runs the checks of `scope`. Every build selects the whole workspace, so
@@ -496,10 +504,12 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
     };
     if run_host && (touches(scope, "enshwick") || api_docs) {
-        host_steps.extend(stable_api_steps(touches(scope, "enshwick"), full));
+        host_steps.extend(stable_api_steps(touches(scope, "enshwick")));
+    }
+    if run_host && workspace_rustdoc(code, full) {
+        host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
     }
     if full && run_host {
-        host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));
         host_steps.push(Step::new(&["deny", "check"]));
     }
     // Off Windows the whole workspace is also linted for Windows, where the
@@ -530,4 +540,38 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
         let windows_passed = windows.is_none_or(|handle| handle.join().unwrap_or(false));
         host_passed && windows_passed
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn runs_stable_rustdoc(steps: &[Step]) -> bool {
+        steps.iter().any(|step| {
+            step.args
+                .starts_with(&["doc".to_owned(), "--no-deps".to_owned()])
+                && step.args.ends_with(&STABLE_API.map(str::to_owned))
+                && step
+                    .env
+                    .iter()
+                    .any(|(name, value)| *name == "RUSTDOCFLAGS" && value == "-D warnings")
+        })
+    }
+
+    #[test]
+    fn a_change_to_the_api_code_builds_its_stable_rustdoc() {
+        assert!(runs_stable_rustdoc(&stable_api_steps(true)));
+    }
+
+    #[test]
+    fn a_change_to_the_book_alone_builds_the_stable_rustdoc() {
+        assert!(runs_stable_rustdoc(&stable_api_steps(false)));
+    }
+
+    #[test]
+    fn a_change_to_code_builds_the_workspace_rustdoc_outside_the_full_suite() {
+        assert!(workspace_rustdoc(true, false));
+        assert!(workspace_rustdoc(false, true));
+        assert!(!workspace_rustdoc(false, false));
+    }
 }

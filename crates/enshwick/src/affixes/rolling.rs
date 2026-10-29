@@ -76,7 +76,7 @@ impl Affixes {
 ///
 /// # Examples
 ///
-/// See the [module](self).
+/// See the [module](crate::affixes).
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct AffixLoot {
@@ -93,7 +93,7 @@ impl AffixLoot {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::affixes).
     #[must_use]
     pub const fn new(from: Source, chance: f64) -> Self {
         Self {
@@ -107,7 +107,7 @@ impl AffixLoot {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::affixes).
     #[must_use]
     pub const fn count(mut self, min: u8, max: u8) -> Self {
         self.rules.min = min;
@@ -199,7 +199,7 @@ impl Load<'_> {
     ///
     /// # Examples
     ///
-    /// See the [module](self).
+    /// See the [module](crate::affixes).
     pub fn add_loot_affixes(&mut self, rule: AffixLoot) -> Result<(), Off> {
         if !(0.0..=1.0).contains(&rule.chance) {
             return Err(Off::new(format!(

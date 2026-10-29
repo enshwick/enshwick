@@ -7,8 +7,8 @@
 /// The id lasts one session: every load of a world numbers its entities
 /// anew, in the order of the save, so an id kept across a restart names
 /// another entity. It therefore has no serde form. Data that must outlast a
-/// restart goes in [entity data](crate::entity_data) or
-/// [item data](crate::item_data), which find their entities again after a
+/// restart goes in entity data or item data (the `unstable` modules
+/// `entity_data` and `item_data`), which find their entities again after a
 /// load. The engine's id 0 stands for no entity; the safe API hands it over
 /// as `None` in an `Option<Entity>`, never as an `Entity`.
 ///

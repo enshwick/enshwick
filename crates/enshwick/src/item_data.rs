@@ -72,7 +72,14 @@ pub enum SetError {
     /// The value did not encode.
     #[error("the value does not encode: {0}")]
     Encode(String),
-    /// The encoded value is longer than [`MAX_VALUE`].
+    #[cfg_attr(
+        feature = "unstable",
+        doc = "The encoded value is longer than [`MAX_VALUE`]."
+    )]
+    #[cfg_attr(
+        not(feature = "unstable"),
+        doc = "The encoded value is longer than the largest value an item keeps."
+    )]
     #[error("the value takes {0} bytes, more than {MAX_VALUE}")]
     TooLarge(usize),
     /// Called on a client that hosts no game, or for entity data off the
