@@ -4,7 +4,17 @@ use super::{Constant, Symbol};
 
 pub(crate) const ACCOUNT_ACTION: Symbol = Symbol::new("server.account_action");
 pub(crate) const BAN_ADD: Symbol = Symbol::new("server.ban_add");
+pub(crate) const BAN_COUNT: Constant = Constant::new("server.ban_count");
+pub(crate) const BAN_ENTRY_ACCOUNT: Constant = Constant::new("server.ban_entry_account");
+pub(crate) const BAN_ENTRY_CHARACTER_NAME: Constant =
+    Constant::new("server.ban_entry_character_name");
+pub(crate) const BAN_ENTRY_DATE: Constant = Constant::new("server.ban_entry_date");
+pub(crate) const BAN_ENTRY_DISPLAY_NAME: Constant = Constant::new("server.ban_entry_display_name");
+pub(crate) const BAN_ENTRY_SIZE: Constant = Constant::new("server.ban_entry_size");
+pub(crate) const BAN_LIST: Constant = Constant::new("server.ban_list");
 pub(crate) const BAN_LIST_CHANGED: Constant = Constant::new("server.ban_list_changed");
+pub(crate) const BAN_NAME_LENGTH: Constant = Constant::new("server.ban_name_length");
+pub(crate) const BAN_NAME_TEXT: Constant = Constant::new("server.ban_name_text");
 pub(crate) const BUILD_ZONE_SYSTEM: Constant = Constant::new("server.build_zone_system");
 pub(crate) const CHAT_STORE: Constant = Constant::new("server.chat_store");
 pub(crate) const CONFIG: Constant = Constant::new("server.config");

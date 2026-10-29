@@ -53,7 +53,16 @@ pub(crate) const REGISTRY_TYPE_RECORD_SIZE: Constant =
     Constant::new("ecs.registry_type_record_size");
 pub(crate) const ROW_ENTITY: Symbol = Symbol::new("ecs.row_entity");
 pub(crate) const SLOT_ROOT: Symbol = Symbol::new("ecs.slot_root");
+pub(crate) const SPAWN_COMPONENT_BYTES: Constant = Constant::new("ecs.spawn_component_bytes");
+pub(crate) const SPAWN_COMPONENT_DATA: Constant = Constant::new("ecs.spawn_component_data");
+pub(crate) const SPAWN_COMPONENT_HASH: Constant = Constant::new("ecs.spawn_component_hash");
+pub(crate) const SPAWN_COMPONENT_SIZE: Constant = Constant::new("ecs.spawn_component_size");
+pub(crate) const SPAWN_INITIAL: Constant = Constant::new("ecs.spawn_initial");
+pub(crate) const SPAWN_INITIAL_COUNT: Constant = Constant::new("ecs.spawn_initial_count");
 pub(crate) const SPAWN_REQUEST: Symbol = Symbol::new("ecs.spawn_request");
+pub(crate) const SPAWN_REQUESTER: Constant = Constant::new("ecs.spawn_requester");
+pub(crate) const SPAWN_REQUEST_SIZE: Constant = Constant::new("ecs.spawn_request_size");
+pub(crate) const SPAWN_TEMPLATE: Constant = Constant::new("ecs.spawn_template");
 pub(crate) const TEMPLATE_GUID: Symbol = Symbol::new("ecs.template_guid");
 pub(crate) const TYPE_INDEX: Symbol = Symbol::new("ecs.type_index");
 pub(crate) const TYPE_INFO_HASH: Constant = Constant::new("ecs.type_info_hash");

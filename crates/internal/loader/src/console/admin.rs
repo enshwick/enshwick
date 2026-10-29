@@ -15,7 +15,16 @@ use super::accounts::{Act, Decision, Online, Route, Target, decide, event};
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::server::ACCOUNT_ACTION.id(),
     pinned::server::BAN_ADD.id(),
+    pinned::server::BAN_COUNT.id(),
+    pinned::server::BAN_ENTRY_ACCOUNT.id(),
+    pinned::server::BAN_ENTRY_CHARACTER_NAME.id(),
+    pinned::server::BAN_ENTRY_DATE.id(),
+    pinned::server::BAN_ENTRY_DISPLAY_NAME.id(),
+    pinned::server::BAN_ENTRY_SIZE.id(),
+    pinned::server::BAN_LIST.id(),
     pinned::server::BAN_LIST_CHANGED.id(),
+    pinned::server::BAN_NAME_LENGTH.id(),
+    pinned::server::BAN_NAME_TEXT.id(),
     pinned::server::CONFIG.id(),
 ];
 
