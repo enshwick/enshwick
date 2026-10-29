@@ -58,7 +58,7 @@
 )]
 #![cfg_attr(
     not(feature = "unstable"),
-    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `actions`, `console`, `rates`, `script` |"
+    doc = "| Unstable, with the `unstable` feature | `world`, `map`, `item_data`, `entity_data`, `actions`, `console`, `rates`, `script` |"
 )]
 //! | Tests | `test`, with the `test` feature |
 //!

@@ -53,6 +53,8 @@ pub enum Kind {
 
 /// An interaction the game is about to allow, from [`Load::on_interaction`].
 ///
+/// The name is enshwick's: the loader hooks the game functions behind it.
+///
 /// # Examples
 ///
 /// See the [module](self).

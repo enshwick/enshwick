@@ -376,6 +376,8 @@ impl Containers {
 /// The loot containers of one run of [`SYSTEM`], for [`Load::on_loot_pass`];
 /// valid only during the call.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See [`Load::on_loot_pass`].
