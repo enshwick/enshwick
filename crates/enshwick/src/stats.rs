@@ -47,7 +47,9 @@ use crate::abi::{
 };
 use crate::buffs::BuffTypeId;
 use crate::content::items::StatFormat;
-use crate::item_data::{ItemData, ItemInstance, SetError};
+use crate::inventory::ItemInstance;
+use crate::item_data::ItemData;
+pub use crate::item_data::SetError;
 use crate::{Entity, ItemId};
 use crate::{Host, Load, Off};
 
@@ -247,7 +249,7 @@ impl Stats {
     /// # Examples
     ///
     /// ```
-    /// fn bonuses(stats: &enshwick::stats::Stats, item: enshwick::item_data::ItemInstance) -> usize {
+    /// fn bonuses(stats: &enshwick::stats::Stats, item: enshwick::inventory::ItemInstance) -> usize {
     ///     stats.item(item).modifiers.len()
     /// }
     /// ```
@@ -260,21 +262,26 @@ impl Stats {
     /// [`ItemStats`] removes it. Clients that run Enshwick get it, and the
     /// entities that wear the item follow after the next step.
     ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    /// The value is kept as item data, which sets aside, after a restart, a
+    /// value on an item no load finds, such as one in a player's inventory.
+    ///
     /// # Errors
     ///
-    /// [`SetError`] as for [`ItemData::set`].
+    /// [`SetError`] when the value is too large or the server refuses it.
     ///
     /// # Examples
     ///
     /// ```
     /// use enshwick::stats::{ItemStats, Modifier, Op};
     ///
-    /// fn enchant(stats: &enshwick::stats::Stats, fire: enshwick::stats::Stat, ring: enshwick::item_data::ItemInstance) {
+    /// fn enchant(stats: &enshwick::stats::Stats, fire: enshwick::stats::Stat, ring: enshwick::inventory::ItemInstance) {
     ///     let mut bonuses = stats.item(ring);
     ///     bonuses.modifiers.push(Modifier::new(fire, Op::Add, 0.1).to_item());
     ///     let _set = stats.set_item(ring, &bonuses);
     /// }
     /// ```
+    #[cfg(feature = "unstable")]
     pub fn set_item(&self, item: ItemInstance, stats: &ItemStats) -> Result<(), SetError> {
         if *stats == ItemStats::default() {
             self.items.remove(item)
@@ -478,7 +485,7 @@ impl Load<'_> {
         let host = self.host();
         Ok(Stats {
             host,
-            items: self.item_data(ITEM_KIND)?,
+            items: self.open_item_data(ITEM_KIND)?,
         })
     }
 

@@ -75,7 +75,7 @@ enshwick::detour! {
     static SYSTEM: unsafe extern "system" fn(ctx: *mut u64) = system;
 }
 
-fn system(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+fn system(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
     if let Some(ecs) = ECS.get() {
         // SAFETY: the system's live context, before vanilla runs.
         unsafe {
@@ -91,7 +91,7 @@ fn system(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
         }
     }
     // SAFETY: the original system takes its own context.
-    unsafe { next.get()(ctx) }
+    unsafe { next.call(ctx) }
 }
 # let _ = &SYSTEM;
 ```

@@ -7,6 +7,7 @@
 mod accounts;
 #[cfg(feature = "unstable")]
 mod actions;
+#[cfg(feature = "unstable")]
 mod affixes;
 mod altar_limit;
 mod altar_zones;
@@ -32,6 +33,7 @@ mod daytime;
 #[cfg(feature = "unstable")]
 mod effects;
 mod engine_names;
+#[cfg(feature = "unstable")]
 mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
@@ -52,6 +54,7 @@ mod icons_hidden;
 mod init_off;
 mod inventory;
 mod item_changes;
+#[cfg(feature = "unstable")]
 mod item_data;
 mod knowledge;
 mod language;
@@ -70,12 +73,12 @@ mod no_mod_points;
 mod no_ui;
 #[cfg(feature = "unstable")]
 mod notices;
-mod old_mods;
 mod pacing;
 #[cfg(feature = "schema")]
 mod pack_schemas;
 mod packs;
 mod panic_abort;
+mod panic_reasons;
 #[cfg(feature = "unstable")]
 mod players;
 pub mod point_schema;
@@ -97,10 +100,12 @@ mod recipe_kinds;
 mod recipe_menu;
 mod recipe_rules;
 mod resource_types;
+mod schedule;
 mod services;
 mod shapes;
 mod skills;
 mod startup_sync;
+#[cfg(feature = "unstable")]
 mod stat_kinds;
 #[cfg(feature = "unstable")]
 mod static_halves;

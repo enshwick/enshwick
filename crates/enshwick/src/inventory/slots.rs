@@ -238,3 +238,41 @@ impl Fill {
         f32::from(self.0) / f32::from(u16::MAX)
     }
 }
+
+/// One item: its own entity and the item id it holds.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::Entity;
+/// use enshwick::inventory::{InventoryCategory, ItemInstance, Slot, SlotRef};
+///
+/// let slot = Slot { at: SlotRef::new(Entity(41), 0), category: InventoryCategory::GENERIC, item: enshwick::ItemId::new(0x5e01), count: 1, pide: Some(Entity(900)) };
+/// assert_eq!(ItemInstance::of(&slot), Some(ItemInstance { pide: Entity(900), item: enshwick::ItemId::new(0x5e01) }));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ItemInstance {
+    /// The item's own entity.
+    pub pide: Entity,
+    /// The item id.
+    pub item: ItemId,
+}
+
+impl ItemInstance {
+    /// The item in `slot`; `None` for an empty slot or an item without an
+    /// entity of its own.
+    ///
+    /// # Examples
+    ///
+    /// See [`ItemInstance`].
+    #[must_use]
+    pub const fn of(slot: &Slot) -> Option<Self> {
+        match slot.pide {
+            Some(pide) if !slot.is_empty() => Some(Self {
+                pide,
+                item: slot.item,
+            }),
+            _ => None,
+        }
+    }
+}

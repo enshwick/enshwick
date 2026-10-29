@@ -8,7 +8,7 @@
 //!
 //! # Examples
 //!
-//! ```
+//! ```rust,standalone_crate
 //! use enshwick::script::{IntoScript, Ty, Typed, Value};
 //!
 //! #[derive(Clone, Debug, enshwick::Script)]
@@ -168,7 +168,7 @@ impl Field {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::script::{Ty, Typed};
 ///
 /// /// Where a notice went.
@@ -328,7 +328,7 @@ pub type Call<T> = fn(&T, Vec<Value>) -> Result<Value, Error>;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::script::{Bound, Value};
 ///
 /// #[derive(Clone, Copy, Debug)]
@@ -472,7 +472,7 @@ pub trait Bound: Copy + Send + Sync + 'static {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,standalone_crate
     /// use enshwick::script::Bound;
     ///
     /// assert!(enshwick::world::World::functions().any(|f| f.name() == "broadcast"));
@@ -516,7 +516,7 @@ type CallbackFn = dyn Fn(Vec<Value>) -> Result<Value, Error> + Send + Sync;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::script::{Callback, Value};
 ///
 /// let double = Callback::new(|args| match args.first() {
@@ -565,7 +565,7 @@ impl Callback {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// let error = enshwick::script::Error::new("count: expected a number");
 /// assert_eq!(error.to_string(), "count: expected a number");
 /// ```
@@ -600,7 +600,7 @@ impl From<Error> for crate::Off {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::script::{Ty, Typed};
 ///
 /// assert!(matches!(<Option<u32> as Typed>::TY, Ty::Optional(Ty::Number)));
@@ -624,7 +624,7 @@ pub trait IntoScript: Typed {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use enshwick::script::{FromScript, Value};
 ///
 /// assert_eq!(u8::from_value(Value::Number(7.0))?, 7);
@@ -646,7 +646,7 @@ pub trait FromScript: Typed + Sized {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// use std::ops::ControlFlow;
 ///
 /// use enshwick::script::{Answer, Value};
@@ -668,7 +668,7 @@ pub trait Answer {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// let joined = enshwick::script::events().find(|e| e.name() == "PlayerJoined");
 /// assert!(joined.is_some_and(|e| e.event() == enshwick::abi::Event::PLAYER_JOINED));
 /// ```
@@ -771,7 +771,7 @@ pub fn events() -> impl Iterator<Item = &'static EventKind> {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// let names: Vec<&str> = enshwick::script::NAMESPACES.iter().map(|n| n.name()).collect();
 /// assert!(names.contains(&"world"));
 /// ```
@@ -898,7 +898,7 @@ impl Namespace {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,standalone_crate
     /// let world = enshwick::script::NAMESPACES.iter().find(|n| n.name() == "world");
     /// assert!(world.is_some_and(|w| w.functions().iter().any(|f| f.name() == "players")));
     /// ```
@@ -915,7 +915,7 @@ impl Namespace {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,standalone_crate
     /// use enshwick::script::{NAMESPACES, Value};
     ///
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
@@ -1018,7 +1018,7 @@ type GameHandler = dyn Fn(&dyn Fn() -> Value) + Send + Sync;
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,standalone_crate
 /// let died = enshwick::script::game_events().find(|e| e.name() == "EntityDiedEvent");
 /// assert!(died.is_some());
 /// ```
@@ -1090,7 +1090,7 @@ impl GameEventKind {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```rust,standalone_crate
     /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
     ///     let died = enshwick::script::game_events()
     ///         .find(|e| e.name() == "EntityDiedEvent")

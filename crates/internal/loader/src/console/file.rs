@@ -3,10 +3,13 @@
 //!
 //! The file is read again whenever its length or modified time changes.
 //! Only complete lines run, so a line still being written waits for its line
-//! break. Lines already in the file when the server starts are skipped; a
-//! file that shrinks, or whose part already read changed (emptied or
-//! replaced), is read again from its start once it reads the same twice in
-//! a row, so an editor's save caught half written runs nothing twice.
+//! break. Lines already in the file when the server starts are skipped.
+//!
+//! The file is append-only. A file whose part already read changed counts
+//! once it reads the same twice in a row, so an editor's save caught half
+//! written runs nothing. An emptied file is read again from its start; any
+//! other edit skips as many lines as already ran, so a kick, ban or give
+//! never runs twice, and the edit is reported for a warning.
 
 use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
@@ -22,11 +25,17 @@ const POLL: Duration = Duration::from_secs(1);
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Tail {
     offset: usize,
+    /// The complete lines up to `offset`, blank lines and comments among
+    /// them.
+    lines: usize,
     /// A hash of the part read, to see the file replaced.
     read: u64,
     /// A hash of the whole file last seen replaced or shorter, which waits
     /// for a second read before it counts.
     changed: Option<u64>,
+    /// Whether an edit of the part read counted since the last
+    /// [`Tail::take_edited`].
+    edited: bool,
 }
 
 /// A hash of `bytes`, the same throughout the process.
@@ -43,8 +52,10 @@ impl Tail {
         let offset = complete(content);
         Self {
             offset,
+            lines: breaks(&content[..offset]),
             read: hash(&content[..offset]),
             changed: None,
+            edited: false,
         }
     }
 
@@ -53,6 +64,13 @@ impl Tail {
     #[must_use]
     pub const fn waits(&self) -> bool {
         self.changed.is_some()
+    }
+
+    /// Whether an edit of the part already read counted since the last
+    /// call: lines that ran were changed or removed, so the lines past their
+    /// count are new.
+    pub const fn take_edited(&mut self) -> bool {
+        core::mem::replace(&mut self.edited, false)
     }
 
     /// The console lines `content`, the whole file now, holds past the last
@@ -68,8 +86,16 @@ impl Tail {
                 self.changed = Some(whole);
                 return Vec::new();
             }
-            self.offset = 0;
-            self.read = hash(&[]);
+            let end = complete(content);
+            if end == 0 {
+                self.lines = 0;
+                self.offset = 0;
+            } else {
+                self.lines = self.lines.min(breaks(&content[..end]));
+                self.offset = after_lines(content, self.lines);
+                self.edited = true;
+            }
+            self.read = hash(&content[..self.offset]);
         }
         self.changed = None;
         let end = complete(content);
@@ -77,6 +103,7 @@ impl Tail {
             return Vec::new();
         }
         let fresh = &content[self.offset..end];
+        self.lines += breaks(fresh);
         self.offset = end;
         self.read = hash(&content[..end]);
         String::from_utf8_lossy(fresh)
@@ -92,6 +119,20 @@ fn complete(content: &[u8]) -> usize {
         .iter()
         .rposition(|&b| b == b'\n')
         .map_or(0, |at| at + 1)
+}
+
+/// The line breaks in `content`.
+fn breaks(content: &[u8]) -> usize {
+    memchr::memchr_iter(b'\n', content).count()
+}
+
+/// The length of the first `lines` complete lines of `content`.
+fn after_lines(content: &[u8], lines: usize) -> usize {
+    lines.checked_sub(1).map_or(0, |last| {
+        memchr::memchr_iter(b'\n', content)
+            .nth(last)
+            .map_or(content.len(), |at| at + 1)
+    })
 }
 
 /// The console line a line of input holds, trimmed; `None` for blank lines
@@ -149,12 +190,20 @@ impl Watched {
 }
 
 /// Watches `files` for good, handing each new line to `submit` with the file
-/// it came from.
-pub fn watch(mut files: Vec<Watched>, mut submit: impl FnMut(&Path, String)) -> ! {
+/// it came from, and each file whose lines that ran were edited to `edited`.
+pub fn watch(
+    mut files: Vec<Watched>,
+    mut submit: impl FnMut(&Path, String),
+    mut edited: impl FnMut(&Path),
+) -> ! {
     loop {
         std::thread::sleep(POLL);
         for file in &mut files {
-            for line in file.look() {
+            let lines = file.look();
+            if file.tail.take_edited() {
+                edited(file.path());
+            }
+            for line in lines {
                 submit(file.path(), line);
             }
         }
@@ -186,21 +235,37 @@ mod tests {
     }
 
     #[test]
-    fn a_file_replaced_by_a_longer_one_is_read_from_its_start_once_it_reads_the_same() {
+    fn an_edited_file_skips_as_many_lines_as_already_ran_once_it_reads_the_same() {
         let mut tail = Tail::at(b"enshwick\n");
         assert!(tail.feed(b"enshwick world\nenshwick help\n").is_empty());
         assert!(tail.waits());
+        assert!(!tail.take_edited(), "one read is no edit yet");
         assert_eq!(
             tail.feed(b"enshwick world\nenshwick help\n"),
-            ["enshwick world", "enshwick help"]
+            ["enshwick help"]
         );
+        assert!(tail.take_edited());
+        assert!(!tail.take_edited(), "an edit is reported once");
     }
 
     #[test]
-    fn a_file_that_shrinks_is_read_from_its_start() {
+    fn removing_a_line_that_ran_runs_no_other_line_again() {
+        let mut tail = Tail::at(b"");
+        assert_eq!(
+            tail.feed(b"kick a\nban b\ngive c\n"),
+            ["kick a", "ban b", "give c"]
+        );
+        assert!(tail.feed(b"ban b\ngive c\n").is_empty());
+        assert!(tail.feed(b"ban b\ngive c\n").is_empty());
+        assert!(tail.take_edited());
+        assert_eq!(tail.feed(b"ban b\ngive c\nkick d\n"), ["kick d"]);
+    }
+
+    #[test]
+    fn an_emptied_file_is_read_from_its_start() {
         let mut tail = Tail::at(b"enshwick mods\nenshwick world\n");
         assert!(tail.feed(b"enshwick help\n").is_empty());
-        assert_eq!(tail.feed(b"enshwick help\n"), ["enshwick help"]);
+        assert!(tail.feed(b"enshwick help\n").is_empty());
         assert!(tail.feed(b"").is_empty());
         assert!(tail.feed(b"").is_empty());
         assert_eq!(tail.feed(b"enshwick mods\n"), ["enshwick mods"]);

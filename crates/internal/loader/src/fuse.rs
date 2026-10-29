@@ -34,22 +34,42 @@ impl Fuse {
         if self.is_off() {
             return None;
         }
-        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)).ok();
-        if done.is_none() {
-            self.blow(site);
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(work)) {
+            Ok(done) => Some(done),
+            Err(payload) => {
+                self.panicked(site, payload.as_ref());
+                None
+            }
         }
-        done
+    }
+
+    /// Turns the feature off after the panic at `site` that left `payload`.
+    #[cold]
+    #[inline(never)]
+    fn panicked(&self, site: &str, payload: &(dyn core::any::Any + Send)) {
+        self.turn_off(&format!(
+            "the loader panicked in {site}: {}",
+            crate::early::panic_text(payload)
+        ));
     }
 
     /// Turns the feature off after a panic at `site`, logged the first time.
     #[cold]
     pub fn blow(&self, site: &str) {
+        self.turn_off(&format!("the loader panicked in {site}"));
+    }
+
+    /// Turns the feature off for `reason`, logged and kept for the status
+    /// summary and the Mods screen the first time.
+    #[cold]
+    fn turn_off(&self, reason: &str) {
         if !self.off.swap(true, Ordering::Relaxed) {
             crate::log!(
                 ERROR,
-                "{} off: the loader panicked in {site}; the game runs it vanilla",
+                "{} off: {reason}; the game runs it vanilla",
                 self.feature
             );
+            crate::diag::part_off(self.feature, reason);
         }
     }
 }
@@ -69,5 +89,17 @@ mod tests {
         let mut ran = false;
         assert_eq!(fuse.run("the third call", || ran = true), None);
         assert!(!ran);
+    }
+
+    #[test]
+    fn a_blown_fuse_reports_its_feature_off_with_the_panic_message() {
+        let fuse = Fuse::new("lantern glow");
+        let _caught = fuse.run("the glow pass", || -> u32 { panic!("no oil\nleft: 0") });
+        let off = crate::diag::parts_off();
+        let glow = off.iter().find(|p| p.part == "lantern glow");
+        assert_eq!(
+            glow.map(|p| p.reason.as_str()),
+            Some("the loader panicked in the glow pass: no oil")
+        );
     }
 }

@@ -568,7 +568,7 @@ impl Engine {
 }
 
 fn after_roll(
-    next: Next<RollFn>,
+    next: Next<'_, RollFn>,
     res: *mut u8,
     txn: *mut u8,
     generation: *mut u8,
@@ -578,7 +578,7 @@ fn after_roll(
     // SAFETY: these are the arguments the game called the roll with on this
     // thread, passed on unchanged, so the rest of the chain gets what the
     // game's own call gave it.
-    let out = unsafe { next.get()(res, txn, generation, labels, request) };
+    let out = unsafe { next.call(res, txn, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
     crate::host::guard(
         "panic in a loot roll",
@@ -712,7 +712,7 @@ impl Slot {
 }
 
 fn after_roll_one(
-    next: Next<RollFn>,
+    next: Next<'_, RollFn>,
     res: *mut u8,
     out: *mut u8,
     generation: *mut u8,
@@ -722,7 +722,7 @@ fn after_roll_one(
     // SAFETY: these are the arguments the game called the single roll with
     // on this thread, passed on unchanged, so the rest of the chain gets what
     // the game's own call gave it.
-    let ret = unsafe { next.get()(res, out, generation, labels, request) };
+    let ret = unsafe { next.call(res, out, generation, labels, request) };
     // Guarded here: the detour's own guard would roll again.
     crate::host::guard(
         "panic in a loot roll",
@@ -797,6 +797,7 @@ fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
 /// A queue that gets every container roll the game commits from now on, on
 /// the roll's worker thread; the caller drains it on the game thread, where
 /// the rolled items have their entities.
+#[cfg(feature = "unstable")]
 pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));

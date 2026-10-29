@@ -48,8 +48,8 @@ static BONUS: AtomicU32 = AtomicU32::new(0);
 struct Bonus;
 
 #[hook]
-fn reward(next: Next<extern "system" fn(u32) -> u32>, base: u32) -> u32 {
-    next.get()(base) + BONUS.load(Ordering::Relaxed)
+fn reward(next: Next<'_, extern "system" fn(u32) -> u32>, base: u32) -> u32 {
+    next.call(base) + BONUS.load(Ordering::Relaxed)
 }
 
 impl Mod for Bonus {

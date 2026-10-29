@@ -43,18 +43,18 @@
 //!
 //! | Area | Modules |
 //! | --- | --- |
-//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`migrations`] |
+//! | The mod and the loader | [`Load`], [`Host`], [`abi`], [`mods`], [`config`], [`i18n`], [`status`], [`state`], [`files`], [`migrations`] |
 //! | Hooks and game memory | [`detour!`], [`hook`](macro@hook), [`code`], [`ecs`], [`raw`], [`pacing`] |
 //! | Events and timing | [`events`], [`game_events`], [`schedule`], [`time`] |
 //! | The server's world | [`altars`], [`buffs`], [`daytime`], [`effects`], [`game_settings`], [`terrain`], [`voxels`], [`weather`] |
-//! | Players and their things | [`inventory`], [`item_data`], [`entity_data`], [`interactions`], [`knowledge`], [`progress`] |
+//! | Players and their things | [`inventory`], [`interactions`], [`knowledge`], [`progress`] |
 //! | Game rules | [`damage`], [`loot`], [`stats`], [`affixes`], [`survivors`], [`vetoes`] |
 //! | Content | [`content`], [`packs`] |
 //! | Between mods | [`services`], [`points`], [`net`], [`shape`] |
 //! | Interface | [`ui`] |
 #![cfg_attr(
     feature = "unstable",
-    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
+    doc = "| Unstable, with the `unstable` feature | [`world`], [`map`], [`item_data`], [`entity_data`], [`actions`], [`console`], [`rates`], [`script`](mod@script) |"
 )]
 #![cfg_attr(
     not(feature = "unstable"),
@@ -134,8 +134,10 @@ pub mod ecs;
 pub mod effects;
 mod engine_enum;
 mod engine_ids;
+#[cfg(feature = "unstable")]
 pub mod entity_data;
 pub mod events;
+pub mod files;
 pub(crate) mod fresh;
 pub mod game_events;
 pub mod game_settings;
@@ -144,7 +146,16 @@ mod host;
 pub mod i18n;
 pub mod interactions;
 pub mod inventory;
+#[cfg(feature = "unstable")]
 pub mod item_data;
+// Without `unstable` item data stays inside, for the stats of single items.
+#[cfg(not(feature = "unstable"))]
+#[expect(
+    unreachable_pub,
+    dead_code,
+    reason = "item data is public only with `unstable`"
+)]
+mod item_data;
 pub mod knowledge;
 mod load;
 mod locks;
@@ -325,12 +336,12 @@ pub use enshwick_macros::event;
 /// Declares a hook from its body, as [`detour!`] does: the function stays,
 /// and a static [`Hook`] named after it in upper case joins it.
 ///
-/// The first argument is `next: Next<F>`, where `F` is the target's
+/// The first argument is `next: Next<'_, F>`, where `F` is the target's
 /// `extern "system" fn` type or an alias of it; the other arguments are the
-/// target's, by plain names, and `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
+/// target's, by plain names. Arguments and the return value are `Copy`. `#[hook(priority = <i32>, flags = <HookFlags>)]` sets the link's
 /// order and flags. The static takes the function's visibility and doc
-/// comment. A panic in the body falls through as with [`detour!`]; work after
-/// `next` goes in [`Hook::after_next`].
+/// comment. A panic in the body runs the game's function at most once, as
+/// with [`detour!`].
 ///
 /// # Examples
 ///
@@ -340,9 +351,9 @@ pub use enshwick_macros::event;
 ///
 /// /// Counts upgrades.
 /// #[hook(priority = 5, flags = HookFlags::CALLER_FRAME)]
-/// fn upgrade(next: Next<unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
+/// fn upgrade(next: Next<'_, unsafe extern "system" fn(*mut u64)>, ctx: *mut u64) {
 ///     // SAFETY: the original takes the same context.
-///     unsafe { next.get()(ctx) }
+///     unsafe { next.call(ctx) }
 /// }
 ///
 /// assert_eq!(UPGRADE.name(), "UPGRADE");
@@ -435,6 +446,7 @@ pub use world_error::WorldError;
 pub mod __private {
     pub use const_format::concatcp;
 
+    pub use crate::hook::Frame;
     pub use crate::locks::Relock;
     pub use crate::script::convert::{argument, record_fields};
 
@@ -586,6 +598,9 @@ pub mod __private {
     /// Compiles only for a `Copy` hook argument.
     pub const fn hook_argument<T: Copy>() {}
 
+    /// Compiles only for a `Copy` hook return value.
+    pub const fn hook_return<T: Copy>() {}
+
     #[must_use]
     pub const fn or_default<T: Copy>(given: &[T], default: T) -> T {
         match given {
@@ -594,10 +609,8 @@ pub mod __private {
         }
     }
 
-    pub fn fault_in(hook: &str) {
-        if let Some(host) = crate::host() {
-            host.fault(&format!("panic in hook {hook}"));
-        }
+    pub fn fault_in(hook: &str, payload: &(dyn core::any::Any + Send)) {
+        crate::host::fault_with(&format!("panic in hook {hook}"), payload);
     }
 
     /// The most detailed level the loader keeps, read once at init.
@@ -749,6 +762,7 @@ pub mod __private {
             return Status::BAD_ARGS;
         };
         let host = host.install();
+        crate::host::log_panics();
         MAX_LEVEL.store(host.log_level().0, Ordering::Relaxed);
         let _watched = host.subscribe(
             crate::abi::Event::LOADER_SETTINGS_CHANGED,
@@ -772,8 +786,9 @@ pub mod __private {
                 host.fault(off.to_reason());
                 Status::REFUSED
             }
-            Err(_) => {
-                host.log(Level::ERROR, "off: init panicked");
+            Err(payload) => {
+                let message = crate::host::panic_text(payload.as_ref());
+                host.fault(&format!("init panicked: {message}"));
                 Status::FAULTED
             }
         }
@@ -814,8 +829,9 @@ pub mod __private {
                 host.fault(off.to_reason());
                 Status::REFUSED
             }
-            Err(_) => {
-                host.log(Level::ERROR, "off: init panicked");
+            Err(payload) => {
+                let message = crate::host::panic_text(payload.as_ref());
+                host.fault(&format!("init panicked: {message}"));
                 Status::FAULTED
             }
         }
@@ -843,10 +859,10 @@ pub mod __private {
         let Some(state) = slot.get() else {
             return;
         };
-        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown())).is_err()
-            && let Some(host) = crate::host()
+        if let Err(payload) =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.shutdown()))
         {
-            host.fault("panic in shutdown");
+            crate::host::fault_with("panic in shutdown", payload.as_ref());
         }
     }
 
@@ -854,8 +870,10 @@ pub mod __private {
         let (Some(state), Some(host)) = (slot.get(), crate::host()) else {
             return;
         };
-        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host))).is_err() {
-            host.fault("panic in ready");
+        if let Err(payload) =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| state.ready(host)))
+        {
+            crate::host::fault_with("panic in ready", payload.as_ref());
         }
     }
 }

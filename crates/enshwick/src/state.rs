@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 use crate::Off;
 use crate::locks::Relock;
@@ -111,6 +112,11 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
 
     /// The stored value, or `T::default()` when nothing is stored yet.
     ///
+    /// A key the file lacks, such as a field the type gained in an update,
+    /// comes from `T::default()`, in nested tables too. Arrays come from the file
+    /// whole; a map whose default holds entries gets each one back while
+    /// the file lacks it.
+    ///
     /// # Errors
     ///
     /// [`StoreError`] when the file exists but cannot be read or does not
@@ -121,7 +127,7 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     /// See [`Store`].
     pub fn load(&self) -> Result<T, StoreError> {
         match std::fs::read_to_string(&self.path) {
-            Ok(text) => toml::from_str(&text).map_err(|e| StoreError::Parse {
+            Ok(text) => with_defaults(&text).map_err(|e| StoreError::Parse {
                 path: self.path.clone(),
                 message: e.message().to_owned(),
             }),
@@ -130,7 +136,8 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
         }
     }
 
-    /// Writes `value`: to a temporary file first, then renamed over the old one.
+    /// Writes `value` through [`files::write_atomically`](crate::files::write_atomically),
+    /// which keeps the old file as its backup.
     ///
     /// # Errors
     ///
@@ -153,21 +160,36 @@ impl<T: serde::de::DeserializeOwned + serde::Serialize + Default> Store<T> {
     }
 }
 
-/// Writes `text` to `path`: to a temporary file first, then renamed over the
-/// old one.
-fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
+/// `text` read as `T`, each key it lacks taken from `T::default()`. Arrays
+/// and their tables are taken whole, never filled.
+fn with_defaults<T>(text: &str) -> Result<T, toml::de::Error>
+where
+    T: serde::de::DeserializeOwned + serde::Serialize + Default,
+{
+    let mut table: toml::Table = toml::from_str(text)?;
+    if let Ok(defaults) = toml::Table::try_from(T::default()) {
+        fill(&mut table, defaults);
     }
-    let temporary = path.with_extension("toml.tmp");
-    // On disk before the rename, so a crash leaves the old file or the new.
-    let written = std::fs::File::create(&temporary).and_then(|mut file| {
-        std::io::Write::write_all(&mut file, text.as_bytes())?;
-        file.sync_all()
-    });
-    written
-        .and_then(|()| std::fs::rename(&temporary, path))
-        .map_err(|e| StoreError::io(path, e))
+    table.try_into()
+}
+
+/// Adds to `table` every key of `defaults` it lacks, tables within tables
+/// too.
+fn fill(table: &mut toml::Table, defaults: toml::Table) {
+    for (key, default) in defaults {
+        match (table.get_mut(&key), default) {
+            (None, default) => {
+                table.insert(key, default);
+            }
+            (Some(toml::Value::Table(inner)), toml::Value::Table(default)) => fill(inner, default),
+            (Some(_), _) => {}
+        }
+    }
+}
+
+/// Writes `text` to `path` through [`crate::files::write_atomically`].
+fn write_atomically(path: &Path, text: &str) -> Result<(), StoreError> {
+    crate::files::write_atomically(path, text).map_err(|e| StoreError::io(path, e))
 }
 
 /// The file a [`Hold`] keeps in its mod's data folder.
@@ -291,15 +313,8 @@ impl Hold {
         self.write(&format!("{}\n{text}", first_line(reason)))
     }
 
-    /// Writes `contents` to a temporary file, then renames it to the hold.
     fn write(&self, contents: &str) -> Result<(), StoreError> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| StoreError::io(dir, e))?;
-        }
-        let temporary = self.path.with_extension("txt.tmp");
-        std::fs::write(&temporary, contents)
-            .and_then(|()| std::fs::rename(&temporary, &self.path))
-            .map_err(|e| StoreError::io(&self.path, e))
+        write_atomically(&self.path, contents)
     }
 
     /// Releases the hold; nothing happens when it is not set.
@@ -312,12 +327,16 @@ impl Hold {
     ///
     /// See [`Hold`].
     pub fn clear(&self) -> Result<(), StoreError> {
-        match std::fs::remove_file(&self.path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                Err(StoreError::io(&self.path, e))
+        let backup = crate::files::backup_path(&self.path);
+        for path in [&self.path, &backup] {
+            match std::fs::remove_file(path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(StoreError::io(path, e));
+                }
+                _ => {}
             }
-            _ => Ok(()),
         }
+        Ok(())
     }
 
     /// The reason, while the hold is set.
@@ -441,6 +460,9 @@ pub(crate) fn world_key(host: crate::Host) -> Option<String> {
 /// never inside the game's save: removing the mod leaves the world vanilla.
 /// The value is a TOML table, such as a struct.
 ///
+/// A field the type gains in an update reads from `Default` while a world's
+/// file lacks it, as [`Store::load`] reads.
+///
 /// Get it from [`Load::world_store`](crate::Load::world_store). It reads the
 /// running world's file when the world has loaded and writes it, when
 /// changed, as the world saves and at shutdown, so the mod's state and the
@@ -467,6 +489,8 @@ pub struct WorldStore<T> {
     slot: std::sync::Arc<std::sync::Mutex<WorldSlot<T>>>,
     /// The background write under way, joined before the next one.
     writing: std::sync::Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>>,
+    /// A background write failed: the next save writes the value again.
+    unwritten: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<T> Clone for WorldStore<T> {
@@ -474,6 +498,7 @@ impl<T> Clone for WorldStore<T> {
         Self {
             slot: std::sync::Arc::clone(&self.slot),
             writing: std::sync::Arc::clone(&self.writing),
+            unwritten: std::sync::Arc::clone(&self.unwritten),
         }
     }
 }
@@ -512,6 +537,8 @@ struct WorldSlot<T> {
     worlds: PathBuf,
     name: String,
     open: Option<OpenWorld<T>>,
+    /// Why the running world's file did not read.
+    shut: Option<String>,
 }
 
 /// The value of the world whose file is open.
@@ -522,12 +549,28 @@ struct OpenWorld<T> {
     changed: bool,
 }
 
-/// Whether `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`.
-fn is_store_name(name: &str) -> bool {
-    (1..=64).contains(&name.len())
+/// Names whose `<name>.toml` the loader keeps in a world's folder: the
+/// world's settings, and in the loader's own folder the note naming the save.
+const LOADER_FILE_NAMES: [&str; 2] = ["settings", "save"];
+
+/// Checks that `name` may name a store's file: 1 to 64 of `[a-z0-9_-]`,
+/// and not the name of a file the loader keeps beside it.
+fn check_store_name(name: &str) -> Result<(), Off> {
+    let well_formed = (1..=64).contains(&name.len())
         && name
             .bytes()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_');
+    if !well_formed {
+        return Err(Off::new(format!(
+            "world store {name:?}: a name is 1 to 64 of [a-z0-9_-]"
+        )));
+    }
+    if LOADER_FILE_NAMES.contains(&name) {
+        return Err(Off::new(format!(
+            "world store {name:?}: the name is kept for the loader's {name}.toml in the world's folder"
+        )));
+    }
+    Ok(())
 }
 
 impl<T> WorldStore<T>
@@ -539,20 +582,19 @@ where
     ///
     /// # Errors
     ///
-    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`.
+    /// [`Off`] when `name` is not 1 to 64 of `[a-z0-9_-]`, or is `settings`
+    /// or `save`, which name files the loader keeps beside the store's.
     pub(crate) fn new(dir: &Path, name: &str) -> Result<Self, Off> {
-        if !is_store_name(name) {
-            return Err(Off::new(format!(
-                "world store {name:?}: a name is 1 to 64 of [a-z0-9_-]"
-            )));
-        }
+        check_store_name(name)?;
         Ok(Self {
             slot: std::sync::Arc::new(std::sync::Mutex::new(WorldSlot {
                 worlds: dir.join(WORLDS_DIR),
                 name: name.to_owned(),
                 open: None,
+                shut: None,
             })),
             writing: std::sync::Arc::default(),
+            unwritten: std::sync::Arc::default(),
         })
     }
 
@@ -567,7 +609,9 @@ where
         self.close()?;
         let mut slot = self.lock();
         let store = Store::new(&slot.worlds.join(key), &slot.name);
-        let value = store.load()?;
+        let value = store
+            .load()
+            .inspect_err(|error| slot.shut = Some(error.to_string()))?;
         slot.open = Some(OpenWorld {
             key: key.to_owned(),
             store,
@@ -585,7 +629,9 @@ where
     pub(crate) fn close(&self) -> Result<(), StoreError> {
         drop(self.wait_for_writes());
         self.flush()?;
-        self.lock().open = None;
+        let mut slot = self.lock();
+        slot.open = None;
+        slot.shut = None;
         Ok(())
     }
 
@@ -611,20 +657,29 @@ where
         let mut slot = self.lock();
         // A background write still running would land after this one.
         let _writing = self.wait_for_writes();
-        if let Some(open) = slot.open.as_mut().filter(|open| open.changed) {
-            open.store.save(&open.value)?;
-            open.changed = false;
+        if let Some(open) = slot.open.as_mut() {
+            open.changed |= self.unwritten.swap(false, Ordering::Relaxed);
+            if open.changed {
+                open.store.save(&open.value)?;
+                open.changed = false;
+            }
         }
         Ok(())
     }
 
     /// Writes the open world's value on a thread of its own when it changed;
-    /// the game thread waits only for a previous write still under way.
+    /// the game thread waits only for a previous write still under way. A
+    /// write that fails leaves the value changed for the next save.
     pub(crate) fn flush_in_background(&self) {
         let mut slot = self.lock();
-        let Some(open) = slot.open.as_mut().filter(|open| open.changed) else {
+        let mut writing = self.wait_for_writes();
+        let Some(open) = slot.open.as_mut() else {
             return;
         };
+        open.changed |= self.unwritten.swap(false, Ordering::Relaxed);
+        if !open.changed {
+            return;
+        }
         let text = match open.store.text(&open.value) {
             Ok(text) => text,
             Err(error) => {
@@ -632,22 +687,22 @@ where
                 return;
             }
         };
-        open.changed = false;
         let path = open.store.path.clone();
-        let mut writing = self.wait_for_writes();
+        let unwritten = std::sync::Arc::clone(&self.unwritten);
         let spawned = std::thread::Builder::new()
             .name("world-store".to_owned())
             .spawn(move || {
                 if let Err(error) = write_atomically(&path, &text) {
-                    crate::error!("{error}");
+                    unwritten.store(true, Ordering::Relaxed);
+                    crate::error!("{error}; kept for the next save");
                 }
             });
         match spawned {
-            Ok(handle) => *writing = Some(handle),
-            Err(e) => {
-                open.changed = true;
-                crate::error!("world store kept for the next save: {e}");
+            Ok(handle) => {
+                open.changed = false;
+                *writing = Some(handle);
             }
+            Err(e) => crate::error!("world store kept for the next save: {e}"),
         }
     }
 
@@ -679,6 +734,27 @@ where
         let open = slot.open.as_mut()?;
         open.changed = true;
         Some(f(&mut open.value))
+    }
+
+    /// Why the running world's file did not read, while the store stays shut
+    /// for that world: a mod that guards something with the value keeps it
+    /// guarded meanwhile. The loader's status summary shows it too.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
+    /// # struct Owners { names: Vec<String> }
+    /// fn may_open(store: &enshwick::state::WorldStore<Owners>, name: &str) -> bool {
+    ///     if store.shut_reason().is_some() {
+    ///         return false;
+    ///     }
+    ///     store.with(|o| o.names.iter().any(|n| n == name)).unwrap_or(true)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn shut_reason(&self) -> Option<String> {
+        self.lock().shut.clone()
     }
 
     /// The key of the world whose value is open.
@@ -798,6 +874,69 @@ mod tests {
     }
 
     #[test]
+    fn a_world_store_cannot_take_the_name_of_a_file_kept_beside_it() {
+        let dir = Path::new("mod-data/you.safes");
+        for name in ["settings", "save"] {
+            let refused = WorldStore::<Count>::new(dir, name).unwrap_err().to_string();
+            assert!(refused.contains("kept for the loader"), "{name}: {refused}");
+        }
+        assert!(WorldStore::<Count>::new(dir, "settings-old").is_ok());
+    }
+
+    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+    struct Grown {
+        n: u32,
+        limit: u32,
+        lock: Lock,
+        names: Vec<String>,
+    }
+
+    #[derive(Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+    struct Lock {
+        on: bool,
+        tries: u8,
+    }
+
+    impl Default for Grown {
+        fn default() -> Self {
+            Self {
+                n: 0,
+                limit: 3,
+                lock: Lock { on: true, tries: 5 },
+                names: vec!["a".to_owned()],
+            }
+        }
+    }
+
+    #[test]
+    fn a_store_whose_type_gained_fields_reads_them_from_the_default() {
+        let dir = std::env::temp_dir().join(format!("enshwick-store-grown-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("grown.toml"),
+            "n = 7\nnames = []\n[lock]\non = false\n",
+        )
+        .unwrap();
+        let store: Store<Grown> = Store::new(&dir, "grown");
+        assert_eq!(
+            store.load().unwrap(),
+            Grown {
+                n: 7,
+                limit: 3,
+                lock: Lock {
+                    on: false,
+                    tries: 5
+                },
+                names: Vec::new(),
+            }
+        );
+        std::fs::write(dir.join("grown.toml"), "n = \"seven\"\n").unwrap();
+        assert!(store.load().is_err(), "a wrong type still fails");
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_flush_lands_after_a_background_write() {
         let dir = std::env::temp_dir().join(format!("enshwick-world-flush-{}", std::process::id()));
         let _gone = std::fs::remove_dir_all(&dir);
@@ -813,6 +952,28 @@ mod tests {
             assert_eq!(saved.n, n + 100);
         }
         store.close().unwrap();
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_background_write_is_retried_at_the_next_save() {
+        let dir = std::env::temp_dir().join(format!("enshwick-world-retry-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
+        store.open("world0-aa").unwrap();
+        store.update(|c| c.n = 7);
+        // A folder in the file's place: the rename fails.
+        let file = dir.join("worlds/world0-aa/count.toml");
+        std::fs::create_dir_all(&file).unwrap();
+        store.flush_in_background();
+        drop(store.wait_for_writes());
+        std::fs::remove_dir(&file).unwrap();
+        store.flush().unwrap();
+        let saved: Count = toml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(
+            saved.n, 7,
+            "the next save writes what the failed one did not"
+        );
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }

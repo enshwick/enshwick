@@ -95,10 +95,22 @@ pub(super) fn begin(
     stub_abi: u32,
     missing_forwards: u32,
 ) -> Option<(PathBuf, Option<std::thread::JoinHandle<()>>)> {
-    let game_dir = game_dir()?;
+    crate::early::log_panics();
+    let Some(game_dir) = game_dir() else {
+        crate::early::note("the game's folder was not found; nothing loads");
+        return None;
+    };
     let mods_dir = game_dir.join("mods");
     for dir in GAME_DIRS {
-        std::fs::create_dir_all(game_dir.join(dir)).ok()?;
+        let dir = game_dir.join(dir);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            crate::early::note(&format!(
+                "{} could not be made ({e}); nothing loads. Move the game to a folder \
+                 Windows lets it write to, or run it with the rights to write there",
+                dir.display()
+            ));
+            return None;
+        }
     }
     let settings_file = game_dir
         .join("mod-configs")
@@ -117,7 +129,7 @@ pub(super) fn begin(
     );
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
-    log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
+    log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     if let Some(problem) = problem {
         crate::log!(

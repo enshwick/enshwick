@@ -1,5 +1,8 @@
 # Publishes the platform's crates to crates.io, run by hand: each in turn,
 # after the ones it depends on, and only a version crates.io does not have.
+# While the CRATES_IO_TOKEN secret exists the run publishes with it; once
+# crates.io lists this file as each crate's trusted publisher and the secret
+# is gone, it publishes through trusted publishing.
 name: publish
 
 on:
@@ -15,7 +18,9 @@ jobs:
   publish:
     permissions:
       contents: read
-    # The runner group admits the organization's workflows from main only.
+      # crates.io trusted publishing.
+      id-token: write
+    # The shared workflows are used from the organization's main branch.
     uses: enshwick/.github/.github/workflows/publish-crates.yml@main # zizmor: ignore[unpinned-uses]
     with:
       packages: enshwick-macros enshwick enshwick-gamedata cargo-enshwick

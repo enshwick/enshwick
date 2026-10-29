@@ -84,12 +84,51 @@ pub const ALL: &[Code] = &[
     JOIN_MISSING,
 ];
 
+/// Windows could not find a module the DLL imports.
+const MODULE_NOT_FOUND: i32 = 126;
+/// The file is no valid DLL for this process.
+const BAD_IMAGE: i32 = 193;
+
+/// The log line for a DLL in `mods/` named `file` that Windows did not load
+/// with `error`: the system's own text, and what the player can do for the
+/// two causes a player can fix.
+#[must_use]
+pub fn load_failure(file: &str, error: &std::io::Error) -> String {
+    let hint = match error.raw_os_error() {
+        Some(MODULE_NOT_FOUND) => {
+            "; a DLL it needs is missing, often the Microsoft Visual C++ runtime"
+        }
+        Some(BAD_IMAGE) => "; it is not a 64-bit Windows DLL, or the file is damaged",
+        _ => "",
+    };
+    format!("{file} could not be loaded: {error}{hint} ({BROKEN_DLL})")
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
     use super::*;
+
+    #[test]
+    fn a_dll_that_does_not_load_names_the_system_error_and_what_to_do() {
+        let missing = load_failure(
+            "lanterns.dll",
+            &std::io::Error::from_raw_os_error(MODULE_NOT_FOUND),
+        );
+        assert!(
+            missing.starts_with("lanterns.dll could not be loaded: "),
+            "{missing}"
+        );
+        assert!(missing.contains("(os error 126)"), "{missing}");
+        assert!(missing.contains("Visual C++ runtime"), "{missing}");
+        assert!(missing.ends_with(&format!("({BROKEN_DLL})")), "{missing}");
+        let broken = load_failure("old.dll", &std::io::Error::from_raw_os_error(BAD_IMAGE));
+        assert!(broken.contains("not a 64-bit Windows DLL"), "{broken}");
+        let other = load_failure("x.dll", &std::io::Error::from_raw_os_error(5));
+        assert!(!other.contains("; "), "{other}");
+    }
 
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]

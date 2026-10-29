@@ -35,8 +35,8 @@
 //! }
 //!
 //! #[hook]
-//! fn reward(next: Next<extern "system" fn(u32) -> u32>, base: u32) -> u32 {
-//!     next.get()(base) + Bonus::instance().map_or(0, |state| state.bonus)
+//! fn reward(next: Next<'_, extern "system" fn(u32) -> u32>, base: u32) -> u32 {
+//!     next.call(base) + Bonus::instance().map_or(0, |state| state.bonus)
 //! }
 //!
 //! impl Mod for Bonus {

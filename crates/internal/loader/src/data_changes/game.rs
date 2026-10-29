@@ -270,8 +270,9 @@ pub(crate) fn wanted(loader: &Loader) -> bool {
         || !CHANGES.declared.relock().is_empty(),
         |sealed| !sealed.merged().is_empty(),
     );
+    // Kept sizes that do not read may be there: wanted, so nothing cuts them.
     let kept = CHANGES.kept.relock().as_ref().map_or_else(
-        || !Kept::load(&loader_dir(loader)).is_empty(),
+        || Kept::load(&loader_dir(loader)).map_or(true, |kept| !kept.is_empty()),
         |kept| !kept.is_empty(),
     );
     declared
@@ -440,7 +441,10 @@ pub(crate) fn serve(
         .filter_map(|d| label(&d.source).map(|l| (d.change.entry, l.to_owned())))
         .collect();
     let offsets = item_offsets(loader);
-    let kept = Kept::load(&loader_dir(loader));
+    let kept = Kept::load(&loader_dir(loader)).unwrap_or_else(|why| {
+        crate::log!(WARN, "kept stack sizes do not read: {why}");
+        Kept::default()
+    });
     let mut items = edited(&merged);
     items.extend(kept.items().map(|(item, _)| item));
     items.sort_unstable_by_key(|item| item.0);
@@ -1385,7 +1389,23 @@ fn loader_dir(loader: &Loader) -> std::path::PathBuf {
 fn keep_sizes(loader: &Loader) {
     let stacks = CHANGES.stacks.relock().clone().unwrap_or_default();
     let mut kept = CHANGES.kept.relock();
-    let kept = kept.get_or_insert_with(|| Kept::load(&loader_dir(loader)));
+    if kept.is_none() {
+        match Kept::load(&loader_dir(loader)) {
+            Ok(read) => *kept = Some(read),
+            // The file and its hold stay as they are; the next load or save
+            // tries again.
+            Err(why) => {
+                crate::log!(
+                    WARN,
+                    "kept stack sizes do not read and stay as they are: {why}"
+                );
+                return;
+            }
+        }
+    }
+    let Some(kept) = kept.as_mut() else {
+        return;
+    };
     let mut grew = false;
     for (item, (vanilla, size)) in stacks {
         grew |= kept.record(item, vanilla, size);

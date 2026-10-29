@@ -167,6 +167,7 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
             .map(crate::modlist::Replaced::line)
             .collect(),
         turned_off: crate::diag::history(),
+        parts_off: crate::diag::parts_off(),
         links: {
             let mut links = crate::services::lines(loader);
             links.extend(crate::points::lines(loader));
@@ -182,6 +183,10 @@ pub(crate) fn summary(loader: &Loader) -> Summary {
         costs: cost_lines(loader, 10, 4),
         conflicts: conflicts(loader),
         knowledge_guard: crate::knowledge::guard::status(),
+        world_folders: crate::saves::world_key(loader)
+            .and_then(|key| crate::moved_worlds::others(&loader.data_dir, key).ok())
+            .unwrap_or_default(),
+        messages: crate::net::status(),
         parts: loader.build.parts(crate::TABLE_IDS),
     }
 }

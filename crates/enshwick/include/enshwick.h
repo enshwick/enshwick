@@ -7,12 +7,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// The major version of this interface. A loader refuses a mod built for
-// another major.
-#define ENSHWICK_ABI_MAJOR 4
-
-// The minor version of this interface. A newer minor only appends fields.
-#define ENSHWICK_ABI_MINOR 1
+// The ABI version: a hash of the layout of every ABI type. A loader
+// loads only mods built for its own.
+#define ENSHWICK_ABI_VERSION 0x6e14bb78
 
 // The damage types of a hit, one per value of the game's `DamageTypeNew`:
 // the length of `DamageCheck::amounts`.
@@ -33,15 +30,13 @@ typedef uint8_t EnshwickAccountActionType;
 // Takes the account off the ban list.
 #define EnshwickAccountActionType_UN_BAN 2
 
-// The start of every struct the other side may know an older or newer
-// version of.
+// The start of every struct that crosses the boundary on its own: its size
+// and the ABI version of its writer.
 typedef struct EnshwickHeader {
   // The size of the whole struct as its writer knew it.
   uint32_t size;
-  // `ABI_MAJOR` of the writer.
-  uint16_t abi_major;
-  // `ABI_MINOR` of the writer.
-  uint16_t abi_minor;
+  // `ABI_VERSION` of the writer.
+  uint32_t abi_version;
 } EnshwickHeader;
 
 // An entity id, as the engine numbers entities: a character, a prop, an item
@@ -50,8 +45,8 @@ typedef struct EnshwickHeader {
 // The id lasts one session: every load of a world numbers its entities
 // anew, in the order of the save, so an id kept across a restart names
 // another entity. It therefore has no serde form. Data that must outlast a
-// restart goes in entity data or
-// item data, which find their entities again after a
+// restart goes in entity data or item data (the `unstable` modules
+// `entity_data` and `item_data`), which find their entities again after a
 // load. The engine's id 0 stands for no entity; the safe API hands it over
 // as `None` in an `Option<Entity>`, never as an `Entity`.
 typedef uint32_t EnshwickEntity;
@@ -3204,8 +3199,10 @@ typedef struct EnshwickHostApi {
   // Shows `text`, cut at 255 bytes, on the screen of the player with
   // account key `key`, as the game shows its own "can't do that"
   // messages; `Status::MISSING` when the player's client lacks
-  // Enshwick and cannot show it, and nothing is sent. On the server's
-  // game thread only.
+  // Enshwick and cannot show it, and nothing is sent;
+  // `Status::REFUSED` when the server's line queue is full or sends no
+  // lines to one player, and nothing is sent. On the server's game
+  // thread only.
   EnshwickStatus (*notify)(EnshwickModHandle me, EnshwickPlayerKey key, struct EnshwickStr text);
   // Writes the clock of the server's world, as far as the `Header`
   // `out` starts with says the caller's struct reaches. On the server's
@@ -4331,6 +4328,9 @@ typedef struct EnshwickTickData {
   // about a second after they start, while the loader measures its
   // clock.
   uint64_t cost_nanos;
+  // Which game the server steps, from 1: a dedicated server runs one,
+  // and a client counts one more for each game it hosts after the first.
+  uint64_t game;
 } EnshwickTickData;
 
 // A box of voxels, for `TransactionOp::ERASE`.
@@ -4373,7 +4373,7 @@ typedef struct EnshwickVoxelWrite {
 extern "C" {
 #endif
 
-// The ENSHWICK_ABI_MAJOR the mod was built for.
+// The ENSHWICK_ABI_VERSION the mod was built for.
 ENSHWICK_EXPORT uint32_t enshwick_mod_abi(void);
 // The mod's manifest; static, no side effects.
 ENSHWICK_EXPORT const EnshwickManifest *enshwick_mod_query(void);

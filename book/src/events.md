@@ -36,7 +36,7 @@ The types are in
 
 | Event | Data | When | Thread |
 | --- | --- | --- | --- |
-| `Ticked` | `TickData` (`step`, `elapsed_steps`, `elapsed_nanos`, `step_nanos`, `cost_nanos`) | after a server step, every 100 ms by default; see [Ticks](#ticks); from before `WorldLoaded` | game |
+| `Ticked` | `TickData` (`step`, `elapsed_steps`, `elapsed_nanos`, `step_nanos`, `cost_nanos`, `game`) | after a server step, every 100 ms by default; see [Ticks](#ticks); from before `WorldLoaded` | game |
 | `WorldLoaded` | none | the world finished loading and the server runs | game |
 | `WorldSaved` | none | a save of the world finished writing to disk | game |
 | `PlayerJoined` | `PlayerData` (`slot`, `entity`, `key`) | a player's character entered the world | game |
@@ -229,6 +229,10 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   [read the world](world.md) and [run console lines](chat.md#the-console).
 - Tasks run only while steps run: on a dedicated server, or on a client while
   it hosts a game. A task is late by up to one tick period and one step.
+- A task queued while a game runs belongs to that game. When a client
+  leaves the game it hosts, the game's tasks end, so none runs in the next
+  game with the last one's entities. Tasks queued during `init` run in every
+  game.
 - A pass with nothing due costs one atomic load, and the steps between
   passes cost nothing.
 

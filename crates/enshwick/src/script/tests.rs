@@ -166,7 +166,7 @@ fn a_task_from_a_script_runs_until_it_answers_false() {
         .call(&scheduler, vec![Value::Number(0.0), Value::Function(task)])
         .unwrap();
     for _ in 0..4 {
-        scheduler.run_due();
+        scheduler.run_due(1);
     }
     assert_eq!(runs.load(Ordering::Relaxed), 2);
 }

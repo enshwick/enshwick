@@ -31,15 +31,15 @@ mod tests {
         static DOUBLE: extern "system" fn(value: u32) -> u32 = double, priority = -5;
     }
 
-    fn double(next: Next<extern "system" fn(u32) -> u32>, value: u32) -> u32 {
+    fn double(next: Next<'_, extern "system" fn(u32) -> u32>, value: u32) -> u32 {
         assert_ne!(value, 13, "unlucky");
-        next.get()(value) * 2
+        next.call(value) * 2
     }
 
     #[hook(priority = 5, flags = HookFlags::EXCLUSIVE)]
-    fn halve(next: Next<unsafe extern "system" fn(u32) -> u32>, value: u32) -> u32 {
+    fn halve(next: Next<'_, unsafe extern "system" fn(u32) -> u32>, value: u32) -> u32 {
         // SAFETY: the chain behind `HALVE` ends in `tripled`, which takes any value.
-        unsafe { next.get()(value) / 2 }
+        unsafe { next.call(value) / 2 }
     }
 
     /// Test settings.
@@ -97,7 +97,7 @@ mod tests {
         // SAFETY: the id points at a `'static` string literal of `manifest!`.
         assert_eq!(unsafe { manifest.id.as_str() }, Some("you.test-mod"));
         assert_eq!(manifest.dependency_count, 1);
-        assert_eq!(enshwick_mod_abi(), u32::from(enshwick::abi::ABI_MAJOR));
+        assert_eq!(enshwick_mod_abi(), enshwick::abi::ABI_VERSION);
 
         let target = address(original as extern "system" fn(u32) -> u32);
         let loader = FakeHost::new()
@@ -151,7 +151,10 @@ mod tests {
         let calls = ORIGINAL_CALLS.load(Ordering::Relaxed);
         assert_eq!(entry(13), 14);
         assert_eq!(ORIGINAL_CALLS.load(Ordering::Relaxed), calls + 1);
-        assert_eq!(loader.faults(), ["panic in hook DOUBLE"]);
+        assert_eq!(
+            loader.faults(),
+            ["panic in hook DOUBLE: assertion `left != right` failed: unlucky"]
+        );
 
         // SAFETY: `enshwick_mod_ready` is the export of this file's `declare_mod!(Test)`,
         // and its `enshwick_mod_init` returned `Status::OK`.

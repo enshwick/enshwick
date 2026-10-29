@@ -53,7 +53,7 @@ messages now. Both send from any thread and fail with a `SendError`:
 | --- | --- |
 | `NotReady` | the peer takes no messages: a client without Enshwick, a player who left, a server that has not answered yet |
 | `TooLarge` | the message is over 4096 bytes encoded |
-| `OverRate` | the side sent more than about twenty messages a second to that peer |
+| `OverRate` | the side sent more than about twenty messages a second to that peer, or too many lines wait on the server |
 | `Encode` | the message does not encode |
 | `Refused` | the loader refused the message for another reason |
 
@@ -77,3 +77,9 @@ mod's `load.channel` turns it off. A message is encoded with `postcard`, so
 both sides must agree on `M`: change the type, change the `version`, and a
 peer on another version never hears the channel. Each side drops what goes
 over a peer's rate and logs the drops.
+
+Delivery is best effort. Nothing confirms that a message arrived, and a
+message lost on the way does not come again. When too many lines wait on the
+server, it drops whole messages and counts them in the log and the status
+summary. Send whole values, not changes, so a message that comes twice changes
+nothing. Send important state again once `is_ready` turns true.

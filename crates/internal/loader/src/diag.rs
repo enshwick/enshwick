@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -30,6 +30,8 @@ const HOOK_LINES: usize = 40;
 static COUNTING: OnceLock<(bool, bool)> = OnceLock::new();
 static STATUS_MINUTES: AtomicU32 = AtomicU32::new(crate::settings::STATUS_MINUTES);
 static TURNED_OFF: Mutex<Vec<TurnedOff>> = Mutex::new(Vec::new());
+static PARTS_OFF: Mutex<Vec<PartOff>> = Mutex::new(Vec::new());
+static ANY_PART_OFF: AtomicBool = AtomicBool::new(false);
 static NAMES: Mutex<BTreeMap<u64, String>> = Mutex::new(BTreeMap::new());
 static PATCHES: [AtomicUsize; 3] = [const { AtomicUsize::new(0) }; 3];
 
@@ -98,6 +100,50 @@ pub fn turned_off(id: &str, reason: &str) {
 #[must_use]
 pub fn history() -> Vec<TurnedOff> {
     TURNED_OFF.relock().clone()
+}
+
+/// A part of the loader turned off while the game runs, and why.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PartOff {
+    /// The part, as its fuse or its link names it.
+    pub part: String,
+    /// Why, as the log says.
+    pub reason: String,
+    /// When, in seconds since the Unix epoch.
+    pub at: u64,
+}
+
+/// Remembers that the loader's `part` is off for `reason`, for the status
+/// summary and the Mods screen. A part keeps its first reason; past
+/// [`HISTORY`] parts, later ones reach only the log.
+pub fn part_off(part: &str, reason: &str) {
+    keep_part(&mut PARTS_OFF.relock(), part, reason, now());
+    ANY_PART_OFF.store(true, Ordering::Release);
+}
+
+/// Whether any part is off, read without the lock, for a per-frame check.
+#[must_use]
+pub fn any_part_off() -> bool {
+    ANY_PART_OFF.load(Ordering::Acquire)
+}
+
+/// Adds `part` off for `reason` at `at` to `parts`, unless it is there or
+/// `parts` is full.
+fn keep_part(parts: &mut Vec<PartOff>, part: &str, reason: &str, at: u64) {
+    if parts.len() == HISTORY || parts.iter().any(|p| p.part == part) {
+        return;
+    }
+    parts.push(PartOff {
+        part: part.to_owned(),
+        reason: reason.to_owned(),
+        at,
+    });
+}
+
+/// The loader's parts that are off, in the order they went off.
+#[must_use]
+pub fn parts_off() -> Vec<PartOff> {
+    PARTS_OFF.relock().clone()
 }
 
 /// Remembers that `address` was found as `name`, a symbol or a system, so the
@@ -260,6 +306,8 @@ pub struct Summary {
     pub replaced: Vec<String>,
     /// Mods turned off, oldest first.
     pub turned_off: Vec<TurnedOff>,
+    /// The loader's parts turned off while the game runs, oldest first.
+    pub parts_off: Vec<PartOff>,
     /// The services mods publish and the events they define, a line each.
     pub links: Vec<String>,
     /// What mods serve.
@@ -280,9 +328,64 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
+    /// Other world keys of the running world's save name that hold mod
+    /// data, such as the world before its save moved; empty for none.
+    pub world_folders: Vec<String>,
+    /// What became of mod messages that did not arrive as sent, once any
+    /// did not.
+    pub messages: Option<String>,
     /// Each loader feature that names build table entries, with what this
     /// build lacks of them.
     pub parts: Vec<Part<'static>>,
+}
+
+/// The summary's line on mod messages that did not arrive as sent, `None`
+/// when all did.
+///
+/// It counts the `messages` a side dropped whole, the frame `lines` the
+/// server's queue dropped, and the lines for one player that reached
+/// others (`strayed`).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::diag::messages_line;
+///
+/// assert_eq!(messages_line(0, 0, 0), None);
+/// assert!(messages_line(0, 1, 0).is_some_and(|line| line.starts_with("1 line for one player dropped")));
+/// ```
+#[must_use]
+pub fn messages_line(messages: u64, lines: u64, strayed: u64) -> Option<String> {
+    let counted =
+        |n: u64, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    let mut parts = Vec::new();
+    if messages > 0 {
+        parts.push(format!(
+            "{} (over a rate or unreadable)",
+            counted(messages, "message dropped", "messages dropped")
+        ));
+    }
+    if lines > 0 {
+        parts.push(format!(
+            "{} (queue full, player gone or such lines off)",
+            counted(
+                lines,
+                "line for one player dropped",
+                "lines for one player dropped"
+            )
+        ));
+    }
+    if strayed > 0 {
+        parts.push(format!(
+            "{}, lines for one player off",
+            counted(
+                strayed,
+                "line for one player reached others",
+                "lines for one player reached others"
+            )
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join(", "))
 }
 
 /// What the log and the summary say of a loader feature this build does
@@ -352,6 +455,7 @@ impl Summary {
                 let _w = writeln!(out, "  {} {}: {}", clock(t.at), t.id, t.reason);
             }
         }
+        self.render_parts_off(&mut out);
         if !self.links.is_empty() {
             let _w = writeln!(
                 out,
@@ -376,6 +480,17 @@ services and events:"
         );
         if let Some(guard) = &self.knowledge_guard {
             let _w = writeln!(out, "knowledge guard: {guard}");
+        }
+        if let Some(messages) = &self.messages {
+            let _w = writeln!(out, "mod messages: {messages}");
+        }
+        if !self.world_folders.is_empty() {
+            let _w = writeln!(
+                out,
+                "mod data of other worlds of this save name: {}; a moved world takes it over \
+                 only when one is left (see mod-data/<mod>/worlds/)",
+                self.world_folders.join(", ")
+            );
         }
         let _w = writeln!(out, "hooks: {} functions armed", self.targets);
         match &self.hooks {
@@ -467,6 +582,16 @@ conflicts:"
         }
     }
 
+    /// The loader's parts that are off, under their own heading.
+    fn render_parts_off(&self, out: &mut String) {
+        if !self.parts_off.is_empty() {
+            let _w = writeln!(out, "\nloader parts off:");
+            for p in &self.parts_off {
+                let _w = writeln!(out, "  {} {}: {}", clock(p.at), p.part, p.reason);
+            }
+        }
+    }
+
     /// A few lines for the console, in the reader's language.
     #[must_use]
     pub fn short(&self) -> String {
@@ -492,6 +617,12 @@ conflicts:"
             lines.push(crate::texts::fill(
                 "status.off",
                 &[("id", &t.id), ("reason", &t.reason)],
+            ));
+        }
+        for p in self.parts_off.iter().take(3) {
+            lines.push(crate::texts::fill(
+                "status.off",
+                &[("id", &p.part), ("reason", &p.reason)],
             ));
         }
         let hooks = self.targets.to_string();
@@ -656,6 +787,7 @@ mod tests {
                 reason: "panic in an action".into(),
                 at: 44_000,
             }],
+            parts_off: Vec::new(),
             links: vec!["event trading-post:sold from trading-post 0.3.0 to market-stalls".into()],
             served: Served {
                 resources: 4,
@@ -695,6 +827,8 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            world_folders: Vec::new(),
+            messages: messages_line(0, 3, 1),
             parts: vec![
                 Part {
                     name: "weather",
@@ -713,6 +847,48 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn the_summary_counts_mod_messages_lost_on_the_way() {
+        let mut quiet = summary();
+        quiet.messages = None;
+        assert!(!quiet.render().contains("mod messages:"));
+        let text = summary().render();
+        assert!(text.contains(
+            "\nmod messages: 3 lines for one player dropped (queue full, player gone or such lines off), \
+             1 line for one player reached others, lines for one player off\n"
+        ));
+    }
+
+    #[test]
+    fn the_summary_names_other_worlds_of_the_save_name_with_mod_data() {
+        let mut summary = summary();
+        assert!(!summary.render().contains("other worlds"));
+        summary.world_folders = vec!["world0-aaaaaaaa".into(), "world0-cccccccc".into()];
+        assert!(summary.render().contains(
+            "mod data of other worlds of this save name: world0-aaaaaaaa, world0-cccccccc;"
+        ));
+    }
+
+    #[test]
+    fn the_messages_line_names_only_what_happened() {
+        assert_eq!(messages_line(0, 0, 0), None);
+        assert_eq!(
+            messages_line(2, 0, 0).as_deref(),
+            Some("2 messages dropped (over a rate or unreadable)")
+        );
+        assert_eq!(
+            messages_line(1, 300, 0).as_deref(),
+            Some(
+                "1 message dropped (over a rate or unreadable), \
+                 300 lines for one player dropped (queue full, player gone or such lines off)"
+            )
+        );
+        assert_eq!(
+            messages_line(0, 0, 4).as_deref(),
+            Some("4 lines for one player reached others, lines for one player off")
+        );
     }
 
     #[test]
@@ -835,6 +1011,50 @@ conflicts:
         assert_eq!(nanos(850.0), "850 ns");
         assert_eq!(nanos(12_400.0), "12.4 us");
         assert_eq!(nanos(3_100_000.0), "3.1 ms");
+    }
+
+    #[test]
+    fn a_part_off_keeps_its_first_reason_and_the_list_stays_bounded() {
+        let mut off = Vec::new();
+        keep_part(
+            &mut off,
+            "map markers",
+            "the loader panicked in the marker pass: boom",
+            1,
+        );
+        keep_part(&mut off, "map markers", "a later reason", 2);
+        for i in 0..HISTORY + 2 {
+            keep_part(&mut off, &format!("part {i}"), "off", 3);
+        }
+        assert_eq!(off.len(), HISTORY);
+        let markers = off.iter().find(|p| p.part == "map markers");
+        assert_eq!(
+            markers.map(|p| p.reason.as_str()),
+            Some("the loader panicked in the marker pass: boom")
+        );
+    }
+
+    #[test]
+    fn the_summary_lists_the_loader_s_parts_that_are_off() {
+        let mut s = summary();
+        s.parts_off = vec![PartOff {
+            part: "map markers".into(),
+            reason: "the loader panicked in the marker pass: boom".into(),
+            at: 44_100,
+        }];
+        let text = s.render();
+        assert!(
+            text.contains(
+                "loader parts off:\n  12:15:00Z map markers: the loader panicked in the marker pass: boom"
+            ),
+            "{text}"
+        );
+        assert!(
+            s.short()
+                .contains("map markers off: the loader panicked in the marker pass: boom"),
+            "{}",
+            s.short()
+        );
     }
 
     #[test]

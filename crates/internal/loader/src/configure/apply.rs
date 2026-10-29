@@ -49,7 +49,16 @@ pub(crate) fn apply(
     let global_path = loader.configs_dir.join(format!("{id}.toml"));
     let global = std::fs::read_to_string(&global_path)
         .map_err(|_| texts::fill("config.missing", &[("id", id)]))?;
-    let (path, text) = crate::worlds::target_text(loader, record, &destination);
+    let (path, text) =
+        crate::worlds::target_text(loader, record, &destination).map_err(|(path, e)| {
+            texts::fill(
+                "refused.write",
+                &[
+                    ("path", &path.display().to_string()),
+                    ("error", &e.to_string()),
+                ],
+            )
+        })?;
     let mut change = super::set(id, &schema, &text, key, value)?;
     // The mod checks what it would read with the change.
     let read = match &destination {
