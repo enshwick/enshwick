@@ -1,4 +1,4 @@
-# Recipe cost and time
+# Recipe Cost And Time
 
 A data pack for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
 It changes three production recipes in `recipes.toml`:

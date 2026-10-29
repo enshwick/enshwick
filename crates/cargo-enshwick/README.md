@@ -13,11 +13,15 @@ cargo enshwick install --game "C:/Program Files (x86)/Steam/steamapps/common/Ens
 
 - `new <id>` creates a mod crate for the id `<author>.<name>` in
   `<dir>/<name>` (`--dir`, default the current folder) for `--side server`,
-  `client` or `both`. It builds and loads as it is:
-  settings in `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`.
+  `client` or `both`. The crate is the one the
+  [mod template](https://github.com/enshwick/template-mod) makes, with its
+  toolchain file, build flags, lints, texts and tests. It builds and loads as it is: settings in
+  `mod-configs/<id>.toml`, a line in `logs/enshwick/mods/<id>.log`. It pins
+  the `enshwick` release the tool was built with; `--enshwick-rev <commit>`
+  takes a commit of this repository's `main` branch from git instead.
   Inside a Cargo workspace the crate joins it: its folder goes into the
   workspace's `members` unless a pattern there covers it, and the release
-  profile is left to the workspace root.
+  profile, the toolchain and the build flags are left to the workspace root.
 - `new --data <id>` creates a data pack folder `<dir>/<id>` instead: every
   pack file with its first change commented out, their JSON Schemas and a
   README. It checks clean as it is.

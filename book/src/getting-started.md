@@ -48,23 +48,33 @@ current one by default) and `--side` is `server` (the default), `client` or
 `both`. The id is `<author>.<name>`: your name or handle, a dot, and the
 mod's name, each of `[a-z0-9-]`, at most 64 characters in all. The author part
 keeps two mods of one name apart. The name starts with a letter, since it names
-the crate too. The crate holds:
+the crate too. The crate is the one the
+[mod template](https://github.com/enshwick/template-mod) makes, without the
+template's repository tools. It holds:
 
-- `Cargo.toml`: a `cdylib` named after the id's name, `enshwick` from this
-  repository's git tag for the API version the tool was built with (from its
-  `main` branch while the tool is a development build, before 1.0.0), `serde`,
-  and a release profile with `panic = "unwind"`, which every hook needs to
-  catch panics;
+- `Cargo.toml`: a `cdylib` named after the id's name, `enshwick` pinned with
+  `=` to the release the tool was built with, `serde`, the lints, and a
+  release profile with `panic = "unwind"`, which every hook needs to catch
+  panics;
 - `src/lib.rs`: a settings type with one field, `enabled`, a mod type named
-  after the id's name (`my-mod` becomes `MyMod`), its manifest and
-  `declare_mod!`;
+  after the id's name (`my-mod` becomes `MyMod`), its manifest,
+  `declare_mod!` and two tests: every text exists in every language, and the
+  mod starts on the [fake loader](testing.md);
+- `src/texts.toml`: the mod's name, description and setting labels;
+- `rust-toolchain.toml`, with the Windows target, and `.cargo/config.toml`,
+  which links the C runtime statically, so players need no redistributable;
 - `README.md` and `.gitignore`.
 
+`--enshwick-rev <commit>` builds the mod on a commit of this repository's
+`main` branch from git instead of the release, as the rolling `dev` loader is
+built.
+
 Inside a Cargo workspace the crate joins it: `new` adds its folder to the
-workspace's `members`, unless a pattern there already covers it, and leaves
-the release profile out, since Cargo reads profiles only at the workspace
-root. Put `panic = "unwind"` there. A folder the workspace excludes gets a
-workspace of its own.
+workspace's `members`, unless a pattern there already covers it. The release
+profile, the toolchain file and `.cargo/config.toml` stay out, since Cargo
+reads them only at the workspace root; put `panic = "unwind"` and the static C
+runtime there. Lints and dependencies come from the workspace where it
+declares them. A folder the workspace excludes gets a workspace of its own.
 
 It builds and loads as it is: on first start it writes
 `mod-configs/my-mod.toml` and logs one line.

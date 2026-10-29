@@ -1,6 +1,6 @@
 id = "you.recipe-cost-and-time"
 version = "0.1.0"
-name = "Recipe cost and time"
+name = "Recipe Cost And Time"
 description = "Bronze bars, fired bricks and flat bread take half the ingredients and half the time."
 authors = ["You"]
 license = "MIT"
