@@ -197,16 +197,9 @@ fn loader_lines() -> Vec<(Level, String)> {
         .collect()
 }
 
-#[test]
-fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
-    let dir = std::env::temp_dir().join(format!("enshwick-discovery-{}", std::process::id()));
-    let _old = std::fs::remove_dir_all(&dir);
-    let Some(built) = build_fixtures(&dir.join("fixtures")) else {
-        eprintln!("skipped: cargo does not run in this process");
-        std::fs::remove_dir_all(&dir).unwrap();
-        return;
-    };
-    let mods = dir.join("game").join("mods");
+/// Fills `mods` from the fixtures in `built`: one mod that runs beside a
+/// copy of itself, and one DLL for each other reason to skip.
+fn fill_mods(built: &Path, mods: &Path) {
     std::fs::create_dir_all(mods.join(crate::settings::LOADER_ID)).unwrap();
     for (from, to) in [
         ("lanterns", "lanterns.dll"),
@@ -226,6 +219,19 @@ fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
         LIST,
     )
     .unwrap();
+}
+
+#[test]
+fn each_dll_that_does_not_start_gets_one_line_with_its_reason_and_code() {
+    let dir = std::env::temp_dir().join(format!("enshwick-discovery-{}", std::process::id()));
+    let _old = std::fs::remove_dir_all(&dir);
+    let Some(built) = build_fixtures(&dir.join("fixtures")) else {
+        eprintln!("skipped: cargo does not run in this process");
+        std::fs::remove_dir_all(&dir).unwrap();
+        return;
+    };
+    let mods = dir.join("game").join("mods");
+    fill_mods(&built, &mods);
 
     // Tests sharing the process may have raised the level past news.
     crate::log::set_levels(crate::settings::Settings {
