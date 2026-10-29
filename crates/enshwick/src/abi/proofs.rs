@@ -120,14 +120,22 @@ proptest! {
 #[kani::proof]
 #[kani::unwind(66)]
 fn every_headed_read_copies_only_what_the_header_states() {
-    headed_read(kani::any(), kani::any(), kani::any());
+    headed_read(kani::any(), kani::any(), numbered());
 }
 
 #[cfg(kani)]
 #[kani::proof]
 #[kani::unwind(66)]
 fn every_headed_write_fills_only_the_room_the_header_states() {
-    headed_write(kani::any(), kani::any(), kani::any());
+    headed_write(kani::any(), kani::any(), numbered());
+}
+
+/// Bytes that each name their own index, so a byte copied to or from the
+/// wrong place shows. Symbolic bytes add nothing the lengths do not cover
+/// and take the solver past the memory of a CI machine.
+#[cfg(kani)]
+fn numbered() -> [u8; 64] {
+    core::array::from_fn(|i| u8::try_from(i).unwrap_or(u8::MAX))
 }
 
 #[cfg(kani)]
