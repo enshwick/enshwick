@@ -44,6 +44,9 @@ Each entry names the pull request that made the change.
   part way. A record or store that does not read turns the mod off with
   the reason instead of being skipped or read as empty (#670).
 
+- `Store` and `WorldStore` fill every key a file lacks from `T::default()`,
+  so a store whose type gained a field still reads (#672).
+
 - `WorldStore` writes a value again at the next save when its background
   write failed, instead of dropping the change (#667).
 
