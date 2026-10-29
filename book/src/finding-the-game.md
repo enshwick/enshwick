@@ -159,11 +159,12 @@ the run stays unique without them.
   carries a `body`: the function's length in bytes (`len`), the offsets of
   the 4-byte fields that move between builds (`open`: call and jump
   targets, RIP-relative addresses), and a hash of every other byte
-  (`hash`, XXH3-128 in hex). The table holds no code of the function. Its
-  pattern is a short window from its start, over at most half of it, or a
-  call to it (`rel`) for a short function or one whose start has a twin,
-  and the loader hashes the live code before it hooks or calls it. When Keen changes that function's
-  logic, the hash differs, and the feature that relies on it turns off on
+  (`hash`, XXH3-128 in hex). Of the function's code the table holds only
+  the short window that finds it: a window from its start over at most
+  half of it, or a call to it (`rel`) for a short function or one whose
+  start has a twin. The loader hashes the live code before it hooks or
+  calls it. When Keen changes that function's logic, the hash differs,
+  and the feature that relies on it turns off on
   that build instead of running over code it does not know.
 - No pattern spans more than 192 bytes; a table with a longer one does not
   read.

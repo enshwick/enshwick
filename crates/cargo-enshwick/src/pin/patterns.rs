@@ -410,7 +410,9 @@ fn preceded_window(
     for end in ends {
         'starts: for start in (0..=first).rev() {
             for loose in [true, false] {
-                let window = masked.window_hiding(start..end, &[], loose, &[])?;
+                let Some(window) = masked.window_hiding(start..end, &[], loose, &[]) else {
+                    continue;
+                };
                 if window.bytes.len() > MAX_LEN {
                     break 'starts;
                 }

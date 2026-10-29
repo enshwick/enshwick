@@ -544,8 +544,9 @@ impl Table {
     /// there still starts with the bytes its `<id>.bytes` constant pins and
     /// still holds its whole function's [`Body`], if any; a constant counts
     /// when the code that uses it is still found once, and takes the value
-    /// read from that code where its operand say; a constant read [`Constant::via`] a symbol counts when that
-    /// symbol counts and its code there matches; a constant in a
+    /// read from that code where its operand say; a constant read
+    /// [`Constant::via`] a symbol counts when that symbol counts and its code
+    /// there matches; a constant in a
     /// [`Constant::cell`] counts when the cell's symbol counts and `cell`
     /// reads the `u32` at its RVA, and takes that value. Everything else is
     /// [`Resolved::missing`], the slots of [`Constant::attribute`]s among
