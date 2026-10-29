@@ -4,12 +4,6 @@
 # reflection or the build table, never the other way.
 1 src/base_groups/grouping.rs
 4 src/base_groups/window.rs
-1 src/bases/fake.rs
-2 src/bases/lifecycle.rs
-37 src/bases/loops.rs
-3 src/bases/loops/stock.rs
-12 src/bases/members.rs
-1 src/bases/past16.rs
 1 src/buffs.rs
 1 src/chains/model.rs
 3 src/code.rs

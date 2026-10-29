@@ -3,7 +3,8 @@
 
 use enshwick::raw::{read_at, write_at};
 
-use super::Fields;
+use super::loops::{Layout, MapFields, ObjectFields, RecordFields, StockFields};
+use super::{Answer, Container, Fields};
 use crate::base_groups::limit::Aabb;
 use crate::base_groups::window;
 
@@ -17,11 +18,75 @@ pub(super) const FIELDS: Fields = Fields {
     zone_size: 0x20,
     zone_high: 0x10,
     item_altar: 0x43,
-    max_altars_reached: 0x4000,
+    max_altars_reached: 0x40,
     balancing: 0x170,
+    kind: 0x08,
+    allocator: 0x0,
+    answer: Answer {
+        error: 0x0,
+        zero: 0x4,
+        index: 0x8,
+        boxed: 0x10,
+        size: 0x30,
+    },
+    container: Container {
+        data: 0x0,
+        len: 0x8,
+        cap: 0x10,
+        grow: 0x18,
+        allocator: 0x20,
+        boxed: 0x20,
+    },
 };
-/// The byte that tells the server's object (1) from the client's (0).
-const KIND_AT: usize = 0x08;
+
+/// The build table's layout of the loops over every base on server 399 and
+/// client 426.
+pub(super) const LAYOUT: Layout = Layout {
+    record: RecordFields {
+        list_all: 0x0,
+        list_kept: 0x28,
+        set: 0x50,
+        set_bitmap: 0x58,
+        set_buckets: 0x60,
+        set_count: 0x88,
+        comfort: 0x90,
+        comfort_len: 0x44,
+        props: 0xd8,
+        base_id: 0xe0,
+        beds: 0x114,
+        npcs_home: 0x120,
+        animals: 0x122,
+    },
+    object: ObjectFields {
+        rebuilt: 0x18,
+        changes: 0x1c,
+        grouped: 0x20,
+        animals: 0x28,
+        npcs: 0x2c,
+        npcs_home: 0x2e,
+        npc_map: 0x1560,
+        npc_value: 0xc,
+        npc_kind: 0x8,
+        animal_map: 0x15b8,
+        animal_value: 0x3,
+        staging: 0x1b90,
+        page: 0x1be8,
+        position: 0x1bec,
+    },
+    map: MapFields {
+        bitmap: 0x8,
+        buckets: 0x10,
+        keys: 0x28,
+        values: 0x40,
+        count: 0x54,
+    },
+    stock: StockFields {
+        entities: 0x18,
+        count: 0x20,
+        size: 0x28,
+    },
+    count: 0x24,
+};
 
 /// A bases object, 16-aligned as the game's.
 #[repr(C, align(16))]
@@ -71,7 +136,7 @@ impl Fake {
             obj: Object::zeroed(),
             zones,
         };
-        fake.obj.0[KIND_AT] = kind;
+        fake.obj.0[FIELDS.kind] = kind;
         let list = fake.zones.as_ptr() as usize;
         fake.obj.0[0x1330..0x1338].copy_from_slice(&list.to_le_bytes());
         fake.obj.0[0x1338..0x1340].copy_from_slice(&fake.zones.len().to_le_bytes());
@@ -238,7 +303,7 @@ pub(super) fn twenty_bases() -> Fake {
     // SAFETY: the fake object of the grown size, fresh.
     assert!(unsafe { super::lifecycle::init(obj, &CODE) });
     // SAFETY: the same object, windowed, live for the call.
-    let ready = unsafe { super::lifecycle::ready(obj, CODE) }.unwrap();
+    let ready = unsafe { super::lifecycle::ready(obj, FIELDS.allocator, CODE) }.unwrap();
     // SAFETY: the fake object, its window initialised, which the fake new
     // base code takes as released.
     let bases =
