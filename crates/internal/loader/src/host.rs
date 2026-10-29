@@ -270,6 +270,8 @@ pub(crate) struct Loader {
     pub(crate) subscriptions: Mutex<Vec<Subscription>>,
     /// The subscriptions once every mod is initialised, read without a lock.
     pub(crate) delivery: OnceLock<Box<[Subscription]>>,
+    /// What was wrong in the loader settings file at start, a line each.
+    pub(crate) settings_problems: Vec<String>,
 }
 
 static LOADER: OnceLock<Loader> = OnceLock::new();

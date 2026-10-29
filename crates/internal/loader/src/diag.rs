@@ -280,6 +280,8 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
+    /// What was wrong in the loader settings file at start, a line each.
+    pub settings: Vec<String>,
     /// Each loader feature that names build table entries, with what this
     /// build lacks of them.
     pub parts: Vec<Part<'static>>,
@@ -325,6 +327,15 @@ impl Summary {
         );
         if let Some(crash) = &self.last_crash {
             let _w = writeln!(out, "the last session crashed: {crash}");
+        }
+        if !self.settings.is_empty() {
+            let _w = writeln!(
+                out,
+                "\nloader settings file has problems; the protections it does not read stay closed:"
+            );
+            for line in &self.settings {
+                let _w = writeln!(out, "  {line}");
+            }
         }
         self.render_parts(&mut out);
         let running = self.mods.iter().filter(|m| m.running).count();
@@ -487,6 +498,11 @@ conflicts:"
                 ("mods", &mods),
             ],
         )];
+        lines.extend(
+            self.settings
+                .iter()
+                .map(|problem| crate::texts::fill("status.settings", &[("problem", problem)])),
+        );
         lines.extend(self.replaced.iter().map(|line| format!("{line}.")));
         for t in self.turned_off.iter().rev().take(3) {
             lines.push(crate::texts::fill(
@@ -566,9 +582,16 @@ fn nanos(ns: f64) -> String {
 ///
 /// It names the loader's version and how many `mods` load, how many of them
 /// are `off`, and whether this game version leaves some of the loader's
-/// features off (`lacking`).
+/// features off (`lacking`) or the loader settings file has problems
+/// (`bad_settings`).
 #[must_use]
-pub fn menu_line(version: &str, mods: usize, off: usize, lacking: bool) -> String {
+pub fn menu_line(
+    version: &str,
+    mods: usize,
+    off: usize,
+    lacking: bool,
+    bad_settings: bool,
+) -> String {
     let mods = mods.to_string();
     let off = off.to_string();
     let line = if off == "0" {
@@ -579,8 +602,13 @@ pub fn menu_line(version: &str, mods: usize, off: usize, lacking: bool) -> Strin
             &[("version", version), ("mods", &mods), ("off", &off)],
         )
     };
-    if lacking {
+    let line = if lacking {
         crate::texts::fill("menu.line.lacking", &[("line", &line)])
+    } else {
+        line
+    };
+    if bad_settings {
+        crate::texts::fill("menu.line.settings", &[("line", &line)])
     } else {
         line
     }
@@ -626,13 +654,16 @@ mod tests {
 
     #[test]
     fn the_menu_line_counts_mods_and_warns_of_what_is_off() {
-        assert_eq!(menu_line("1.0.0", 6, 0, false), "Enshwick 1.0.0 · mods: 6");
         assert_eq!(
-            menu_line("1.0.0", 6, 2, false),
+            menu_line("1.0.0", 6, 0, false, false),
+            "Enshwick 1.0.0 · mods: 6"
+        );
+        assert_eq!(
+            menu_line("1.0.0", 6, 2, false, false),
             "Enshwick 1.0.0 · mods: 6, off: 2"
         );
         assert_eq!(
-            menu_line("1.0.0", 0, 0, true),
+            menu_line("1.0.0", 0, 0, true, false),
             "Enshwick 1.0.0 · mods: 0 · some features are off on this game version"
         );
     }
@@ -695,6 +726,7 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            settings: Vec::new(),
             parts: vec![
                 Part {
                     name: "weather",
@@ -812,6 +844,28 @@ conflicts:
     fn the_status_report_reads_as_its_snapshot() {
         insta::assert_snapshot!("status", summary().render());
         insta::assert_snapshot!("status_short", summary().short());
+    }
+
+    #[test]
+    fn a_broken_settings_file_shows_in_the_summary_and_the_menu_line() {
+        let mut summary = summary();
+        summary.settings = vec!["enshwick.toml: allowlist: invalid type".into()];
+        assert!(
+            summary
+                .render()
+                .contains("enshwick.toml: allowlist: invalid type")
+        );
+        assert!(
+            summary
+                .short()
+                .contains("enshwick.toml: allowlist: invalid type")
+        );
+        let good = menu_line("0.1.5", 2, 0, false, false);
+        let broken = menu_line("0.1.5", 2, 0, false, true);
+        assert!(
+            broken.starts_with(&good) && broken.len() > good.len(),
+            "{broken}"
+        );
     }
 
     #[test]

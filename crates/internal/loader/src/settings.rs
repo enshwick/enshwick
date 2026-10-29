@@ -133,28 +133,115 @@ impl Settings {
     }
 
     /// Reads `path`, writing the commented defaults there first when it is
-    /// missing; the defaults and a reason for the log when it cannot be read.
+    /// missing, with a line per problem for the log.
+    ///
+    /// A file that cannot be read or parsed holds every protection closed,
+    /// as [`Settings::parse`] describes; `listed` says whether the
+    /// allowlist's file exists.
     #[must_use]
-    pub fn read(path: &Path) -> (Self, Option<String>) {
-        match std::fs::read_to_string(path) {
-            Ok(text) => match toml::from_str(&text) {
-                Ok(settings) => (settings, None),
-                Err(e) => (
-                    Self::default(),
-                    Some(format!("{}: {}", path.display(), e.message())),
-                ),
-            },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                let written = std::fs::write(path, Self::template());
-                (
-                    Self::default(),
-                    written.err().map(|e| format!("{}: {e}", path.display())),
-                )
+    pub fn read(path: &Path, listed: bool) -> (Self, Vec<String>) {
+        let (settings, problems) = match std::fs::read_to_string(path) {
+            Ok(text) => Self::parse(&text, listed),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (
+                Self::default(),
+                std::fs::write(path, Self::template())
+                    .err()
+                    .map(|e| e.to_string())
+                    .into_iter()
+                    .collect(),
+            ),
+            Err(e) => Self::closed(listed, e.to_string()),
+        };
+        let problems = problems
+            .into_iter()
+            .map(|problem| format!("{}: {problem}", path.display()))
+            .collect();
+        (settings, problems)
+    }
+
+    /// Parses the settings file's `text` key by key, with a line per problem.
+    ///
+    /// Every valid key applies and every bad one is named. A protection
+    /// ([`PROTECTIONS`]) that is bad or missing in a file with problems is
+    /// held closed until the file is fixed: the allowlist on when its file
+    /// exists (`listed`), the migrations dry run on, the join check on and
+    /// the knowledge guard enforcing. Text that is not TOML holds them all.
+    #[must_use]
+    pub fn parse(text: &str, listed: bool) -> (Self, Vec<String>) {
+        let table: toml::Table = match toml::from_str(text) {
+            Ok(table) => table,
+            Err(e) => return Self::closed(listed, e.message().to_owned()),
+        };
+        let mut good = toml::Table::new();
+        let mut problems = Vec::new();
+        for (key, value) in table {
+            let alone = toml::Table::from_iter([(key.clone(), value.clone())]);
+            match alone.try_into::<Self>() {
+                Ok(_) => {
+                    good.insert(key, value);
+                }
+                Err(e) => problems.push(format!("{key}: {}", e.message())),
             }
-            Err(e) => (Self::default(), Some(format!("{}: {e}", path.display()))),
+        }
+        let Ok(mut settings) = good.clone().try_into::<Self>() else {
+            return Self::closed(listed, "the keys do not read together".to_owned());
+        };
+        if problems.is_empty() {
+            return (settings, problems);
+        }
+        let held: Vec<&str> = PROTECTIONS
+            .into_iter()
+            .filter(|key| !good.contains_key(*key))
+            .collect();
+        for key in &held {
+            settings.close(key, listed);
+        }
+        if !held.is_empty() {
+            problems.push(format!("held closed until fixed: {}", held.join(", ")));
+        }
+        (settings, problems)
+    }
+
+    /// The defaults with every protection closed, and `problem` naming why.
+    fn closed(listed: bool, problem: String) -> (Self, Vec<String>) {
+        let mut settings = Self::default();
+        for key in PROTECTIONS {
+            settings.close(key, listed);
+        }
+        (
+            settings,
+            vec![
+                problem,
+                format!("held closed until fixed: {}", PROTECTIONS.join(", ")),
+            ],
+        )
+    }
+
+    /// Sets the protection `key` to its closed state.
+    fn close(&mut self, key: &str, listed: bool) {
+        match key {
+            ALLOWLIST => self.allowlist = listed,
+            MIGRATIONS_DRY_RUN => self.migrations_dry_run = true,
+            REQUIRE_ENSHWICK => self.require_enshwick = true,
+            KNOWLEDGE_GUARD => self.knowledge_guard = KnowledgeGuard::Enforce,
+            _ => {}
         }
     }
 }
+
+const ALLOWLIST: &str = "allowlist";
+const MIGRATIONS_DRY_RUN: &str = "migrations_dry_run";
+const REQUIRE_ENSHWICK: &str = "require_enshwick";
+const KNOWLEDGE_GUARD: &str = "knowledge_guard";
+
+/// The settings that keep players out or data unchanged; a broken file
+/// never opens them.
+pub const PROTECTIONS: [&str; 4] = [
+    ALLOWLIST,
+    MIGRATIONS_DRY_RUN,
+    REQUIRE_ENSHWICK,
+    KNOWLEDGE_GUARD,
+];
 
 #[cfg(test)]
 mod tests {
@@ -236,9 +323,112 @@ status_minutes = 0
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("enshwick.toml");
         let _fresh = std::fs::remove_file(&path);
-        assert_eq!(Settings::read(&path), (Settings::default(), None));
+        assert_eq!(
+            Settings::read(&path, true),
+            (Settings::default(), Vec::new())
+        );
         assert!(path.exists());
-        assert_eq!(Settings::read(&path), (Settings::default(), None));
+        assert_eq!(
+            Settings::read(&path, true),
+            (Settings::default(), Vec::new())
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn closed(listed: bool) -> Settings {
+        Settings {
+            allowlist: listed,
+            migrations_dry_run: true,
+            require_enshwick: true,
+            knowledge_guard: KnowledgeGuard::Enforce,
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn the_template_parses_without_problems() {
+        assert_eq!(
+            Settings::parse(&Settings::template(), true),
+            (Settings::default(), Vec::new())
+        );
+    }
+
+    #[test]
+    fn a_file_that_does_not_parse_holds_every_protection_closed() {
+        let (settings, problems) =
+            Settings::parse("allowlist = = true\nlog_level = \"debug\"\n", true);
+        assert_eq!(settings, closed(true));
+        assert!(!problems.is_empty());
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("allowlist") && p.contains("migrations_dry_run")),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn without_an_allowlist_file_a_broken_file_leaves_the_allowlist_off() {
+        let (settings, _) = Settings::parse("[[[", false);
+        assert_eq!(settings, closed(false));
+    }
+
+    #[test]
+    fn a_bad_value_keeps_the_valid_keys_and_names_the_bad_one() {
+        let text = "log_level = \"warn\"\nstatus_minutes = \"ten\"\nallowlist = true\n\
+                    migrations_dry_run = false\nrequire_enshwick = false\nknowledge_guard = \"off\"\n";
+        let (settings, problems) = Settings::parse(text, false);
+        assert_eq!(settings.log_level, Level::WARN);
+        assert_eq!(settings.status_minutes, STATUS_MINUTES);
+        assert!(settings.allowlist);
+        assert!(!settings.migrations_dry_run);
+        assert!(!settings.require_enshwick);
+        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Off);
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert!(problems[0].contains("status_minutes"), "{problems:?}");
+    }
+
+    #[test]
+    fn a_bad_protection_value_holds_that_protection_closed() {
+        let text = "allowlist = \"yes\"\nmigrations_dry_run = 1\nrequire_enshwick = false\n\
+                    knowledge_guard = \"loud\"\n";
+        let (settings, problems) = Settings::parse(text, true);
+        assert!(settings.allowlist);
+        assert!(settings.migrations_dry_run);
+        assert!(!settings.require_enshwick);
+        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Enforce);
+        for key in ["allowlist", "migrations_dry_run", "knowledge_guard"] {
+            assert!(
+                problems.iter().any(|p| p.contains(key)),
+                "{key}: {problems:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_misspelled_protection_holds_it_closed() {
+        let text = "alowlist = false\nmigrations_dry_run = false\nrequire_enshwick = true\n\
+                    knowledge_guard = \"watch\"\n";
+        let (settings, problems) = Settings::parse(text, true);
+        assert!(settings.allowlist);
+        assert!(!settings.migrations_dry_run);
+        assert_eq!(settings.knowledge_guard, KnowledgeGuard::Watch);
+        assert!(
+            problems.iter().any(|p| p.contains("alowlist")),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "Miri isolates the file system")]
+    fn a_file_that_cannot_be_read_holds_every_protection_closed() {
+        let dir =
+            std::env::temp_dir().join(format!("enshwick-settings-dir-{}", std::process::id()));
+        let path = dir.join("enshwick.toml");
+        std::fs::create_dir_all(&path).unwrap();
+        let (settings, problems) = Settings::read(&path, true);
+        assert_eq!(settings, closed(true));
+        assert!(!problems.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

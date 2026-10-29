@@ -741,6 +741,14 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
+    if !loader.settings_problems.is_empty() {
+        paint.label(
+            texts::text("mods.settings.broken").as_bytes(),
+            UiWidget::STYLE_SECONDARY,
+            true,
+            false,
+        );
+    }
     let listing = listing(paint, MODS_PER_PAGE);
     *first = listing.clamp_first(*first, mods.len());
     let shown = listing.shown(*first, mods.len());

@@ -129,7 +129,12 @@ pub(crate) fn start(
         return;
     }
     let began = std::time::Instant::now();
-    let Some((mods_dir, first_report)) = begin(stub_abi, missing_forwards) else {
+    let Some(game::Begun {
+        mods_dir,
+        report: first_report,
+        settings_problems,
+    }) = begin(stub_abi, missing_forwards)
+    else {
         return;
     };
     let data_dir = mods_dir.with_file_name("mod-data");
@@ -173,6 +178,7 @@ pub(crate) fn start(
         caller_frame: read_frame,
         subscriptions: Mutex::default(),
         delivery: OnceLock::new(),
+        settings_problems,
     };
     let Some(loader) = host::install(loader) else {
         return;
@@ -216,9 +222,15 @@ pub(crate) fn start(
     }
     watch_copies(loader, &order);
     write_lock(loader, lock_files);
+    start_services(loader);
+}
+
+/// Starts what runs once every mod is ready: the file watch, the status
+/// summary, the server's own services and the join's guards.
+fn start_services(loader: &'static Loader) {
     crate::watch::start(loader);
     crate::status::start(loader);
-    if side == Side::SERVER {
+    if loader.side == Side::SERVER {
         serve(loader);
     }
     crate::admission::start(

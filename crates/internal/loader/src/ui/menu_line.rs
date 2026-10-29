@@ -75,8 +75,13 @@ fn line(loader: &Loader) -> super::engine::UiText {
     LINE.with_borrow_mut(|kept| {
         if kept.as_ref().is_none_or(|(was, _)| *was != off) {
             let lacking = !loader.build.lacking(crate::TABLE_IDS).is_empty();
-            let line =
-                crate::diag::menu_line(env!("CARGO_PKG_VERSION"), loader.mods.len(), off, lacking);
+            let line = crate::diag::menu_line(
+                env!("CARGO_PKG_VERSION"),
+                loader.mods.len(),
+                off,
+                lacking,
+                !loader.settings_problems.is_empty(),
+            );
             *kept = Some((off, line));
         }
         let line = kept.as_ref().map_or("", |(_, line)| line.as_str());
