@@ -216,8 +216,9 @@ server's log and status summary.
 
 Developer tools are on while the file `mod-data/enshwick/developer-tools`
 exists or a mod with `developer: true` in its manifest runs. Then every
-player reads `DEVELOPER TOOLS ARE ON` in red, upper-case letters: in chat,
-at the top of the Mods screen and at the end of the main menu's line.
+player reads `DEVELOPER TOOLS ARE ON` in upper-case letters: in chat at
+join, in red at the top of the Mods screen and at the end of the main
+menu's line.
 
 ## Testing
 
