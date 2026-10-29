@@ -197,6 +197,9 @@ pub(crate) fn register_experience(
     Status::OK
 }
 
+/// The system that levels players up from their experience.
+const LEVEL_SYSTEM: &str = "player_level";
+
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
         skills: take(&SKILLS).into_boxed_slice(),
@@ -214,16 +217,21 @@ pub(crate) fn link(loader: &'static Loader) {
         symbol(loader, pinned::skill::FLY_MODE_GATE_RETURN).unwrap_or(0),
         Ordering::Relaxed,
     );
-    let player_level = match crate::ecs::components_match(loader, "player_level", &READS, &WRITES) {
-        Ok(()) => loader
-            .reflection
-            .system("player_level")
-            .map_or(0, enshwick_gamedata::reflect::System::entry),
+    let player_level = match crate::ecs::components_match(loader, LEVEL_SYSTEM, &READS, &WRITES) {
+        Ok(()) => Some(Target::Found(
+            LEVEL_SYSTEM,
+            loader
+                .reflection
+                .system(LEVEL_SYSTEM)
+                .ok()
+                .map(enshwick_gamedata::reflect::System::entry),
+        )),
         Err(why) => {
             if wants[2] {
                 crate::log!(WARN, "experience filters off: {why}");
+                crate::diag::part_off("experience", &why);
             }
-            0
+            None
         }
     };
     if wants[0]
@@ -249,9 +257,10 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(INFO, "comfort filtered by mods");
     }
     if wants[2]
+        && let Some(player_level) = player_level
         && loader.link_feature(
             "experience",
-            Target::Found("player_level", Some(player_level)),
+            player_level,
             &LEVEL_NEXT,
             player_level_link,
             HookFlags::NONE,

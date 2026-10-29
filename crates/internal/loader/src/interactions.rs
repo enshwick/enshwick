@@ -174,6 +174,9 @@ pub(crate) fn register(
         .map_or(Status::TOO_LATE, |()| Status::OK)
 }
 
+/// The system that runs players' inventory actions.
+const ACTIONS_SYSTEM: &str = "inventory_actions";
+
 pub(crate) fn link(loader: &'static Loader) {
     let filters = FILTERS.seal();
     // Linked on every side, as any can host a world whose transactions hold
@@ -185,7 +188,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let _first = LOADED.set((loader, layout, components));
     let actions = loader
         .reflection
-        .system("inventory_actions")
+        .system(ACTIONS_SYSTEM)
         .ok()
         .map(enshwick_gamedata::reflect::System::entry);
     let stock_flags = if layout.stock_ui_return == 0 {
@@ -231,7 +234,7 @@ pub(crate) fn link(loader: &'static Loader) {
     );
     let actions = loader.link_feature(
         "inventory actions",
-        Target::Found("inventory_actions", actions),
+        Target::Found(ACTIONS_SYSTEM, actions),
         &ACTIONS_NEXT,
         inventory_actions,
         none,

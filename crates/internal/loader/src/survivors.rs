@@ -481,19 +481,26 @@ pub(crate) fn register_status(
 
 /// `ui_npc_status`, while it reads the components its iterator layout
 /// assumes.
-fn menu_system(loader: &Loader) -> Option<u64> {
-    match crate::ecs::components_match(loader, "ui_npc_status", &UI_READS, &[]) {
-        Ok(()) => loader
-            .reflection
-            .system("ui_npc_status")
-            .ok()
-            .map(enshwick_gamedata::reflect::System::entry),
+fn menu_system(loader: &Loader) -> Option<Target<'static>> {
+    match crate::ecs::components_match(loader, MENU_SYSTEM, &UI_READS, &[]) {
+        Ok(()) => Some(Target::Found(
+            MENU_SYSTEM,
+            loader
+                .reflection
+                .system(MENU_SYSTEM)
+                .ok()
+                .map(enshwick_gamedata::reflect::System::entry),
+        )),
         Err(why) => {
             crate::log!(WARN, "survivor menu off: {why}");
+            crate::diag::part_off("survivor menu", &why);
             None
         }
     }
 }
+
+/// The system that fills the survivor menu.
+const MENU_SYSTEM: &str = "ui_npc_status";
 
 pub(crate) fn link(loader: &'static Loader) {
     let sealed = Sealed {
@@ -570,11 +577,10 @@ pub(crate) fn link(loader: &'static Loader) {
             HookFlags::NONE,
         );
     }
-    if status {
-        let menu = menu_system(loader);
+    if status && let Some(menu) = menu_system(loader) {
         loader.link_feature(
             "survivor menu",
-            Target::Found("ui_npc_status", menu),
+            menu,
             &MENU_NEXT,
             menu_link,
             HookFlags::NONE,

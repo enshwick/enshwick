@@ -292,12 +292,15 @@ pub(crate) fn link(loader: &'static Loader) {
         crate::log!(WARN, "chat lines off: this build has no chat layout");
         return;
     };
-    if LOADED.set((loader, layout)).is_err() {
+    if LOADED.get().is_some() {
         return;
     }
+    // Linked first: without the post, mods' lines must stay refused.
     let target = Target::Pinned(pinned::chat::POST);
     let flags = HookFlags::CALLER_FRAME;
-    if !loader.link_feature("chat lines", target, &POST_NEXT, post, flags) {
+    if !loader.link_feature("chat lines", target, &POST_NEXT, post, flags)
+        || LOADED.set((loader, layout)).is_err()
+    {
         return;
     }
     crate::log!(INFO, "chat lines and mod messages on");
