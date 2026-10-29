@@ -274,6 +274,7 @@
 "join.refused.more" = "还有 {count} 个。"
 "join.refused.leaving" = "服务器将在 {seconds} 秒后断开你的连接。"
 "join.admitted" = "你的 Enshwick 模组现在与服务器一致，你可以留下。"
+"join.off" = "此服务器上已关闭：{names}。原因见服务器日志。"
 "join.dialog.title" = "缺少模组"
 "join.dialog.message" = "此服务器运行的 Enshwick 模组在你的游戏中缺失或版本不同。获取这些模组，重新启动游戏后再次加入。"
 "join.dialog.mod" = "{mod} {version}"

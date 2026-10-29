@@ -274,6 +274,7 @@
 "join.refused.more" = "Y {count} más."
 "join.refused.leaving" = "El servidor te desconectará en {seconds} s."
 "join.admitted" = "Tus mods de Enshwick ya coinciden con los del servidor, así que te quedas."
+"join.off" = "Desactivado en este servidor: {names}. El registro del servidor dice por qué."
 "join.dialog.title" = "Faltan mods"
 "join.dialog.message" = "Este servidor ejecuta mods de Enshwick que a tu juego le faltan o que tiene en otra versión. Consíguelos, reinicia el juego y vuelve a unirte."
 "join.dialog.mod" = "{mod} {version}"

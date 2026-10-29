@@ -274,6 +274,7 @@
 "join.refused.more" = "Ve {count} tane daha."
 "join.refused.leaving" = "Sunucu {seconds} saniye içinde bağlantınızı kesecek."
 "join.admitted" = "Enshwick modlarınız artık sunucununkilerle eşleşiyor, bu yüzden oyunda kalıyorsunuz."
+"join.off" = "Bu sunucuda kapalı: {names}. Nedeni sunucunun günlüğünde yazar."
 "join.dialog.title" = "Eksik modlar"
 "join.dialog.message" = "Bu sunucu, oyununuzda olmayan veya başka bir sürümde çalışan Enshwick modları çalıştırıyor. Onları edinin, oyunu yeniden başlatın ve tekrar katılın."
 "join.dialog.mod" = "{mod} {version}"

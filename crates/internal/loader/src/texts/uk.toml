@@ -274,6 +274,7 @@
 "join.refused.more" = "І ще {count}."
 "join.refused.leaving" = "Сервер від'єднає вас за {seconds} с."
 "join.admitted" = "Ваші моди Enshwick тепер збігаються з серверними, тож ви лишаєтеся."
+"join.off" = "Вимкнено на цьому сервері: {names}. Чому, сказано в журналі сервера."
 "join.dialog.title" = "Бракує модів"
 "join.dialog.message" = "На цьому сервері є моди Enshwick, яких у вашій грі немає або які в ній іншої версії. Встановіть їх, перезапустіть гру й приєднайтеся знову."
 "join.dialog.mod" = "{mod} {version}"

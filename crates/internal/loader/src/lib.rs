@@ -144,6 +144,11 @@ mod notice_queue;
 mod notices;
 #[cfg_attr(
     all(not(windows), not(test)),
+    expect(dead_code, reason = "only the running server tells a joining player")
+)]
+mod off_line;
+#[cfg_attr(
+    all(not(windows), not(test)),
     expect(dead_code, reason = "used by the start, which runs on Windows")
 )]
 mod others;

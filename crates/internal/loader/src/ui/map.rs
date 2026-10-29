@@ -319,14 +319,14 @@ pub(crate) fn link(loader: &Loader) {
     );
 }
 
+/// Turns the mods' map markers off at their first panic.
+static MARKERS_FUSE: crate::fuse::Fuse = crate::fuse::Fuse::new("map markers");
+
 unsafe extern "system" fn detour(context: *mut u8) {
     // SAFETY: the game's own argument, passed on unchanged to the rest of the
     // chain, which has the replicate system's signature.
     unsafe { NEXT.get()(context) };
-    let appended = std::panic::catch_unwind(append);
-    if appended.is_err() {
-        crate::log!(ERROR, "map markers: the loader panicked while adding them");
-    }
+    let _appended = MARKERS_FUSE.run("adding the markers", append);
     let now = MARKERS.frame.fetch_add(1, Ordering::AcqRel) + 1;
     if let Some(mut retired) = MARKERS.retired.try_relock() {
         retire(&mut retired, now);

@@ -40,6 +40,7 @@ use engine::{Engine, HudWindow, PopupFn, UiText, Window};
 pub(crate) use map::set as set_markers;
 
 use crate::chains::Next;
+use crate::fuse::Fuse;
 use crate::host::{Loader, Registered};
 
 /// The build table ids this part of the loader names.
@@ -266,6 +267,12 @@ const MAX_HUD_ITEMS: usize = 128;
 static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 /// The thread that draws the interface, once it drew.
 static UI_THREAD: AtomicU32 = AtomicU32::new(0);
+/// Turns the loader's windows (the Mods screen, actions, dialogs, mods'
+/// windows) off at their first panic: a panic between a window's begin and
+/// end would leave the game's window stack unbalanced every frame.
+static WINDOWS_FUSE: Fuse = Fuse::new("the interface's windows");
+/// Turns the mods' HUD items off at their first panic.
+static HUD_FUSE: Fuse = Fuse::new("the HUD items");
 
 /// Frames a text copied into the arena stays readable.
 const ARENA_FRAMES: usize = 3;
@@ -529,7 +536,7 @@ unsafe extern "system" fn detour(state: *mut u8) {
     if vanilla {
         return;
     }
-    let drawn = std::panic::catch_unwind(|| {
+    let _drawn = WINDOWS_FUSE.run("its windows' draw", || {
         UI_THREAD.store(thread_id(), Ordering::Release);
         let frame = mods::next_frame();
         map::note(context);
@@ -555,9 +562,6 @@ unsafe extern "system" fn detour(state: *mut u8) {
         // `ui.popup`'s chain while this detour runs.
         unsafe { dialog::draw(engine, NEXT.get(), context) };
     });
-    if drawn.is_err() {
-        crate::log!(ERROR, "interface: the loader panicked while drawing");
-    }
 }
 
 /// The loader's link on the game's HUD: the game's draw, then the mods' HUD
@@ -581,19 +585,13 @@ unsafe extern "system" fn hud_detour(arg: *mut u8) {
     if context == 0 {
         return;
     }
-    let drawn = std::panic::catch_unwind(|| {
+    let _drawn = HUD_FUSE.run("the HUD's draw", || {
         // SAFETY: the game draws its HUD inside the frame on the interface
         // thread, and this runs after the game's own HUD draw returned.
         if unsafe { engine.hud_visible() } {
             hud(engine, context);
         }
     });
-    if drawn.is_err() {
-        crate::log!(
-            ERROR,
-            "interface: the loader panicked while drawing the HUD"
-        );
-    }
 }
 
 /// Whether the HUD turns the text arena to the next frame: only when the

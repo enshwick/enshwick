@@ -34,6 +34,7 @@ use enshwick::config::{Scope, Stage};
 use world::{WorldRows, world_settings};
 
 use crate::configure::rows::{self, Lock, Row, Widget};
+use crate::fuse::Fuse;
 use crate::host::Loader;
 use crate::listing::{self, Listing};
 use crate::locks::Relock;
@@ -61,6 +62,10 @@ const FROM_PAUSE: u8 = 2;
 
 /// Asked to open, from a menu hook: where from.
 static OPEN: AtomicU8 = AtomicU8::new(0);
+/// Turns the main menu's Mods entry off at its first panic.
+static MAIN_MENU_FUSE: Fuse = Fuse::new("the main menu's Mods entry");
+/// Turns the pause menu's Mods entry off at its first panic.
+static PAUSE_MENU_FUSE: Fuse = Fuse::new("the pause menu's Mods entry");
 /// The frame each menu hook last ran in.
 static MAIN_SEEN: AtomicU64 = AtomicU64::new(0);
 static PAUSE_SEEN: AtomicU64 = AtomicU64::new(0);
@@ -247,8 +252,14 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
     let Some(registers) = (unsafe { registers.as_ref() }) else {
         return;
     };
-    let menu = usize::try_from(registers.rdi).unwrap_or(0) + 8;
-    let drawn = std::panic::catch_unwind(|| {
+    let Some(menu) = usize::try_from(registers.rdi)
+        .ok()
+        .filter(|&page| page != 0)
+    else {
+        return;
+    };
+    let menu = menu + 8;
+    let _drawn = MAIN_MENU_FUSE.run("the main menu's entry", || {
         // SAFETY: the hook at the table's `ui.main_menu_site` sits before the
         // main menu's Credits entry, on the frame's thread, where `rdi` holds
         // the menu page and +8 its entries' state; the text lives in the
@@ -257,9 +268,6 @@ unsafe extern "system" fn main_menu(registers: *mut Registers, _user: *mut core:
             engine.main_menu_entry(menu, text)
         });
     });
-    if drawn.is_err() {
-        crate::log!(ERROR, "interface: the loader panicked in the main menu");
-    }
 }
 
 /// The hook after the pause menu's Settings entry: draws the Mods entry and
@@ -284,7 +292,7 @@ unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core
         unsafe { crate::memory::write(submenu, 0, WORLD_SETTINGS_SUBMENU) };
         BACK.store(2, Ordering::Relaxed);
     }
-    let drawn = std::panic::catch_unwind(|| {
+    let _drawn = PAUSE_MENU_FUSE.run("the pause menu's entry", || {
         // SAFETY: the hook at the table's `ui.pause_menu_site` sits right
         // after the pause menu's Settings entry, on the frame's thread; the
         // text lives in the frame's arena.
@@ -292,9 +300,6 @@ unsafe extern "system" fn pause_menu(registers: *mut Registers, _user: *mut core
             engine.pause_menu_entry(text)
         });
     });
-    if drawn.is_err() {
-        crate::log!(ERROR, "interface: the loader panicked in the pause menu");
-    }
 }
 
 /// Draws the screen while it is open.
@@ -739,6 +744,13 @@ fn list(loader: &Loader, paint: &Painter<'_>, first: &mut usize) -> Listed {
     let lacking = loader.build.lacking(crate::TABLE_IDS);
     if !lacking.is_empty() {
         let line = texts::fill("mods.features.off", &[("features", lacking)]);
+        paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
+    }
+    for part in crate::diag::parts_off() {
+        let line = texts::fill(
+            "mods.feature.off",
+            &[("feature", &part.part), ("reason", &part.reason)],
+        );
         paint.label(line.as_bytes(), UiWidget::STYLE_SECONDARY, true, false);
     }
     if !crate::lobby::discovery_on() {
