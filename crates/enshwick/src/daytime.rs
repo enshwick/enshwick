@@ -98,6 +98,8 @@ fn hours(ns: i64) -> f32 {
 
 /// The clock of the server's world; get it from [`Load::clock`].
 ///
+/// The name is enshwick's, not the game's.
+///
 /// # Examples
 ///
 /// See the [module](self).

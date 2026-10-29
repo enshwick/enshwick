@@ -568,6 +568,8 @@ impl Refusal {
 /// Knowledge a client asks the server for in its input, from
 /// `Load::on_knowledge_input`.
 ///
+/// The name is enshwick's, not the game's.
+///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples

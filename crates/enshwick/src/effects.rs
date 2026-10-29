@@ -45,6 +45,8 @@ use crate::{Host, Load, Off};
 
 /// How an entity arrives, for [`Effects::teleport`].
 ///
+/// The name is enshwick's: the game takes a whole arrival transform.
+///
 /// Unstable: needs the `unstable` feature and may change in any release.
 ///
 /// # Examples

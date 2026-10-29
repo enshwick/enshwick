@@ -13,7 +13,7 @@ Everything the crate offers without a feature:
 - the mod and its loader: `Load`, `Host`, settings, texts, state and migrations;
 - hooks, game memory, events and game events;
 - the server's world calls outside `world`: altars, buffs, daytime, effects,
-  game settings, rates, damage, terrain, voxels and weather, whose errors share
+  game settings, the damage types, terrain, voxels and weather, whose errors share
   one type, `enshwick::WorldError`;
 - inventories, stats and affixes, apart from writing them onto single items;
 - content and data packs;
