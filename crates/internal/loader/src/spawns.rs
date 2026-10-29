@@ -14,52 +14,34 @@ use enshwick::abi::{SpawnRequest, Status};
 use crate::host::Loader;
 use crate::pinned;
 use crate::pinned::Symbol;
+use crate::spawn_request::{RequestLayout, Start};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ecs::COMMAND_BUFFERS.id(),
+    pinned::ecs::SPAWN_COMPONENT_BYTES.id(),
+    pinned::ecs::SPAWN_COMPONENT_DATA.id(),
+    pinned::ecs::SPAWN_COMPONENT_HASH.id(),
+    pinned::ecs::SPAWN_COMPONENT_SIZE.id(),
+    pinned::ecs::SPAWN_INITIAL.id(),
+    pinned::ecs::SPAWN_INITIAL_COUNT.id(),
     pinned::ecs::SPAWN_REQUEST.id(),
+    pinned::ecs::SPAWN_REQUESTER.id(),
+    pinned::ecs::SPAWN_REQUEST_SIZE.id(),
+    pinned::ecs::SPAWN_TEMPLATE.id(),
     pinned::world::ENTITIES.id(),
     pinned::world::TIME.id(),
 ];
 
+/// The engine's spawn: the command buffer, the new entity's id out, the
+/// requester, and the request [`RequestLayout`] lays out.
 type SpawnFn = unsafe extern "system" fn(
     buffer: *mut u8,
     out: *mut u32,
     requester: u32,
-    request: *const Request,
+    request: *const u64,
 ) -> *mut u32;
 type TimeFn = unsafe extern "system" fn(world: *const u8) -> i64;
-
-/// One component a spawned entity starts with, as the engine reads it.
-#[repr(C)]
-struct Initial {
-    hash: u32,
-    reserved: u32,
-    data: *const u8,
-    size: u64,
-}
-
-/// The engine's spawn request.
-#[repr(C)]
-struct Request {
-    /// The entity that asks for the spawn: the placing player for a prop,
-    /// as the game's own place records it; 0 for none.
-    requester: u32,
-    template: [u8; 16],
-    reserved_after: u32,
-    initial: *const Initial,
-    initial_count: u64,
-    reserved_tail: [u8; 8],
-}
-
-const _: () = {
-    assert!(size_of::<Initial>() == 0x18);
-    assert!(core::mem::offset_of!(Request, template) == 4);
-    assert!(core::mem::offset_of!(Request, initial) == 0x18);
-    assert!(core::mem::offset_of!(Request, initial_count) == 0x20);
-    assert!(size_of::<Request>() == 0x30);
-};
 
 /// A component type a spawn starts an entity with: its hash and size.
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +58,7 @@ struct Layout {
     time: TimeFn,
     command_buffers: usize,
     world_entities: usize,
+    request: RequestLayout,
     transform: Component,
     transform_orientation: usize,
     transform_scale: usize,
@@ -112,6 +95,25 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 function(pinned::ecs::SPAWN_REQUEST)?,
                 function(pinned::world::TIME)?,
             );
+            let request = RequestLayout {
+                size: loader.offset(pinned::ecs::SPAWN_REQUEST_SIZE)?,
+                requester: loader.offset(pinned::ecs::SPAWN_REQUESTER)?,
+                template: loader.offset(pinned::ecs::SPAWN_TEMPLATE)?,
+                initial: loader.offset(pinned::ecs::SPAWN_INITIAL)?,
+                initial_count: loader.offset(pinned::ecs::SPAWN_INITIAL_COUNT)?,
+                component_size: loader.offset(pinned::ecs::SPAWN_COMPONENT_SIZE)?,
+                component_hash: loader.offset(pinned::ecs::SPAWN_COMPONENT_HASH)?,
+                component_data: loader.offset(pinned::ecs::SPAWN_COMPONENT_DATA)?,
+                component_bytes: loader.offset(pinned::ecs::SPAWN_COMPONENT_BYTES)?,
+            };
+            if !request.fits() {
+                crate::log!(
+                    WARN,
+                    "spawns off on {}: the spawn request's fields do not fit ({request:x?})",
+                    loader.build.name
+                );
+                return None;
+            }
             Some(Layout {
                 // SAFETY: the build table's `ecs.spawn_request` is the address
                 // of the game function with the `SpawnFn` signature on this
@@ -122,6 +124,7 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
                 time: unsafe { core::mem::transmute::<usize, TimeFn>(time) },
                 command_buffers: loader.offset(pinned::ecs::COMMAND_BUFFERS)?,
                 world_entities: loader.offset(pinned::world::ENTITIES)?,
+                request,
                 transform: component("keen::ecs::CurrentTransform")?,
                 transform_orientation: offset("keen::WorldTransform", "orientation")?,
                 transform_scale: offset("keen::WorldTransform", "scale")?,
@@ -230,23 +233,24 @@ pub(crate) fn spawn_with(
         ));
     }
     initial.extend(extra);
-    let entries: Vec<Initial> = initial
+    let starts: Vec<Start> = initial
         .iter()
-        .map(|(hash, data)| Initial {
+        .map(|(hash, data)| Start {
             hash: *hash,
-            reserved: 0,
-            data: data.as_ptr(),
-            size: data.len() as u64,
+            data: data.as_ptr().expose_provenance() as u64,
+            bytes: data.len() as u64,
         })
         .collect();
-    let engine_request = Request {
-        requester,
-        template: request.template,
-        reserved_after: 0,
-        initial: entries.as_ptr(),
-        initial_count: entries.len() as u64,
-        reserved_tail: [0; 8],
-    };
+    let entries = layout.request.components(&starts).ok_or(Status::MISSING)?;
+    let engine_request = layout
+        .request
+        .request(
+            requester,
+            request.template,
+            entries.as_ptr().expose_provenance() as u64,
+            starts.len() as u64,
+        )
+        .ok_or(Status::MISSING)?;
     // SAFETY: `world::server` checked the caller is on the server's game
     // thread and `world` is non-null; the entity world holds the pointer to
     // its command buffers at the table's `ecs.command_buffers`.
@@ -259,14 +263,7 @@ pub(crate) fn spawn_with(
     // earlier check, used on the game thread between steps, where no system
     // writes it; the request and its components stay alive for the call,
     // which copies them.
-    unsafe {
-        (layout.spawn)(
-            buffer,
-            &raw mut entity,
-            requester,
-            &raw const engine_request,
-        )
-    };
+    unsafe { (layout.spawn)(buffer, &raw mut entity, requester, engine_request.as_ptr()) };
     if entity == 0 {
         return Err(Status::REFUSED);
     }

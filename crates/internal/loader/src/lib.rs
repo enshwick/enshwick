@@ -234,6 +234,11 @@ mod server_pin;
 #[cfg(windows)]
 mod services;
 pub mod settings;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "only the Windows build spawns entities")
+)]
+mod spawn_request;
 #[cfg(windows)]
 mod spawns;
 #[cfg(windows)]

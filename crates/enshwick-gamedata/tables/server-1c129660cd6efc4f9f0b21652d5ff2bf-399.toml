@@ -245,6 +245,18 @@ revision = 1
 # flag that has the next step send the list to admins online (u8).
 "server.config" = { value = 0x28, pattern = "4C 8B F9 0F 85 ?? ?? ?? ?? 48 83 C2 08 48 8B C8 E8 ?? ?? ?? ?? 66 0F 6F 05 ?? ?? ?? ?? 48 8D 85 ?? ?? ?? ?? 41 C6 87 ?? ?? ?? ?? 01 33 F6 4D 8B 7F ??", at = 49, size = 1 }
 "server.ban_list_changed" = { value = 0x18a8, pattern = "4C 8B F9 0F 85 ?? ?? ?? ?? 48 83 C2 08 48 8B C8 E8 ?? ?? ?? ?? 66 0F 6F 05 ?? ?? ?? ?? 48 8D 85 ?? ?? ?? ?? 41 C6 87 ?? ?? ?? ?? 01 33 F6 4D 8B 7F ??", at = 39, size = 4 }
+# The ban list the config holds: its entries and their count (u64),
+# and a live entry as the add copies it, with its two names' text
+# pointer and length.
+"server.ban_list" = { value = 0x38, pattern = "74 25 49 8B 0E 48 8B 46 ?? 0F 1F 80 ?? ?? ?? ?? 48 39 08 0F 84 ?? ?? ?? ??", at = 8, size = 1 }
+"server.ban_count" = { value = 0x40, pattern = "48 8B CB 4C 8B F2 E8 ?? ?? ?? ?? 4C 8B 4E ?? 33 ED 44 8B C5 4D 85 C9", at = 14, size = 1 }
+"server.ban_entry_size" = { value = 0xd0, pattern = "48 39 08 0F 84 ?? ?? ?? ?? 49 FF C0 48 05 ?? ?? ?? ?? 4D 3B C1 72 E9 49 8D 51 ??", at = 14, size = 4 }
+"server.ban_entry_account" = { value = 0x0, pattern = "48 8B 02 48 8B F9 48 89 01 33 F6 48 83 C1 08 48 8B DA", fixed = true }
+"server.ban_entry_display_name" = { value = 0x8, pattern = "48 89 01 33 F6 48 83 C1 ?? 48 8B DA 48 89 71 ?? 48 8D 41 ??", at = 8, size = 1 }
+"server.ban_entry_character_name" = { value = 0x68, pattern = "48 8D 54 24 ?? 4D 03 C8 E8 ?? ?? ?? ?? 48 8D 4F ?? 48 89 71 ?? 48 8D 41 ?? 48 89 01", at = 16, size = 1 }
+"server.ban_entry_date" = { value = 0xc8, pattern = "48 8B 5C 24 ?? 48 8B 74 24 ?? 48 89 87 ?? ?? ?? ?? 48 8B C7 48 83 C4 30", at = 13, size = 4 }
+"server.ban_name_text" = { value = 0x0, pattern = "48 C7 41 ?? 40 00 00 00 48 89 71 ?? 4C 8B 42 08 4C 8B 4A ?? 48 8D 54 24 ??", fixed = true }
+"server.ban_name_length" = { value = 0x8, pattern = "48 89 71 ?? 4C 8B 42 ?? 4C 8B 4A 10 48 8D 54 24 ?? 4D 03 C8", fixed = true }
 "session.host_machine" = { value = 0x1_1528, pattern = "45 0F B6 E0 8B DA 4C 8B F9 3B 91 ?? ?? ?? ?? 75 ?? 0F 10 05 ?? ?? ?? ?? 45 33 C9 4C 8D 44 24 20 48 8D 15", at = 11, size = 4 }
 "server.chat_store" = { value = 0x60, pattern = "48 8D 8D ?? ?? ?? ?? 89 54 24 ?? 48 8B 56 ?? 89 44 24 ?? 44 89 44 24 ??", at = 14, size = 1 }
 "server.custom_strings" = { value = 0x58, pattern = "EB 03 4C 8B 03 49 8B 55 ?? 48 8D 85 ?? ?? ?? ?? 48 89 45 ?? 4C 8D 4D ??", at = 8, size = 1 }
@@ -366,6 +378,19 @@ revision = 1
 "ecs.entities_entry_size" = { value = 0x40, pattern = "4C 8B 4F ?? 4C 8B 07 49 C1 E1 ?? 4F 89 54 01 ?? 4F 89 54 01 ??", at = 10, size = 1, shl = true }
 "ecs.entities_entry_transform" = { value = 0x8, pattern = "0F 10 04 02 43 0F 11 44 01 ?? 0F 10 4C 02 ?? 43 0F 11 4C 01 ??", at = 9, size = 1 }
 "ecs.command_buffers" = { value = 0xeb_9f08, pattern = "49 FF C2 4A 89 B4 02 ?? ?? ?? ?? 48 8B 8E ?? ?? ?? ?? 4A 89 BC 02 ?? ?? ?? ?? 48 03 CB", at = 14, size = 4 }
+# The spawn request the loader hands to `ecs.spawn_request`, as the
+# request's copy into the command buffer reads it: the requester, the
+# template, the starting components and their count, and the size up to
+# its last field; each component's hash, data, size and stride.
+"ecs.spawn_requester" = { value = 0x0, pattern = "89 5D ?? 48 8D 7D ?? 41 8B 06 89 45 ?? 41 0F 10 46 ?? 0F 11 45 ??", fixed = true }
+"ecs.spawn_template" = { value = 0x4, pattern = "41 8B 06 89 45 ?? 41 0F 10 46 ?? 0F 11 45 ?? 41 0F B6 46 ??", at = 10, size = 1 }
+"ecs.spawn_initial" = { value = 0x18, pattern = "4C 89 64 24 ?? 4C 8B E6 49 8B 56 ?? 49 03 D4 8B 02 89 07", at = 11, size = 1 }
+"ecs.spawn_initial_count" = { value = 0x20, pattern = "41 0F B6 46 ?? 88 45 ?? 49 39 76 ?? 76 47 4C 89 64 24 ?? 4C 8B E6", at = 11, size = 1 }
+"ecs.spawn_request_size" = { value = 0x30, pattern = "41 0F 10 46 ?? 0F 11 45 ?? 41 0F B6 46 ?? 88 45 ?? 41 0F B7 46 ??", at = 13, size = 1, plus = 4 }
+"ecs.spawn_component_hash" = { value = 0x0, pattern = "49 8B 56 ?? 49 03 D4 8B 02 89 07 0F B7 42 ?? 66 89 47 ??", fixed = true }
+"ecs.spawn_component_data" = { value = 0x8, pattern = "48 8B 5A ?? 48 8B CF 48 8B 52 ?? 4C 8B C3 E8 ?? ?? ?? ?? 48 03 FB", at = 10, size = 1 }
+"ecs.spawn_component_bytes" = { value = 0x10, pattern = "66 89 47 ?? 48 83 C7 06 48 8B 5A ?? 48 8B CF 48 8B 52 ??", at = 11, size = 1 }
+"ecs.spawn_component_size" = { value = 0x18, pattern = "48 03 FB 48 FF C6 49 83 C4 ?? 49 3B 76 ?? 72 C6 4C 8B 64 24 ??", at = 9, size = 1 }
 "server.save_system" = { value = 0x20, pattern = "48 8B D9 75 37 48 8B 49 ?? 80 79 ?? 00 75 2D 0F B6 51 ??", at = 8, size = 1 }
 "server.save_blocked" = { value = 0x18aa, pattern = "40 53 48 83 EC 20 80 B9 ?? ?? ?? ?? 00 48 8B D9 75 37 48 8B 49 ??", at = 8, size = 4 }
 "save.flags" = { value = 0x70, pattern = "80 79 ?? 00 75 2D 0F B6 51 ?? 48 8B 83 ?? ?? ?? ?? F6 C2 04 74 1D", at = 9, size = 1 }

@@ -211,12 +211,6 @@ pub fn event(
     Some(words.iter().copied().map(u64::from_le_bytes).collect())
 }
 
-/// Where a string keeps its text pointer and its length in bytes: the
-/// game's string with an inline buffer, as its ban entry holds two (server
-/// 399, client 426, by the ban add's copy, which reads only these two).
-const STRING_DATA: usize = 0;
-const STRING_LENGTH: usize = 8;
-
 /// Where the game's ban entry in its live list keeps its fields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BanFields {
@@ -230,6 +224,11 @@ pub struct BanFields {
     pub character_name: usize,
     /// `banDate`, Unix seconds as an `i64`.
     pub date: usize,
+    /// Where each name, a string with an inline buffer, keeps its text
+    /// pointer, from the name's start.
+    pub name_text: usize,
+    /// Where each name keeps its length in bytes, from the name's start.
+    pub name_length: usize,
 }
 
 /// The game's ban entry for `account`, banned at `date` in Unix seconds,
@@ -246,8 +245,8 @@ pub fn ban_entry(fields: &BanFields, account: u64, date: i64, empty: u64) -> Opt
     };
     put(fields.account, account)?;
     for name in [fields.display_name, fields.character_name] {
-        put(name.checked_add(STRING_DATA)?, empty)?;
-        put(name.checked_add(STRING_LENGTH)?, 0)?;
+        put(name.checked_add(fields.name_text)?, empty)?;
+        put(name.checked_add(fields.name_length)?, 0)?;
     }
     put(fields.date, u64::from_ne_bytes(date.to_ne_bytes()))?;
     Some(words)
@@ -381,15 +380,19 @@ mod tests {
         assert!(!Act::Unban.needs_player());
     }
 
+    const LIVE: BanFields = BanFields {
+        size: 0xd0,
+        account: 0,
+        display_name: 8,
+        character_name: 0x68,
+        date: 0xc8,
+        name_text: 0,
+        name_length: 8,
+    };
+
     #[test]
     fn a_ban_entry_holds_the_account_the_date_and_two_empty_names() {
-        let fields = BanFields {
-            size: 0xd0,
-            account: 0,
-            display_name: 8,
-            character_name: 0x68,
-            date: 0xc8,
-        };
+        let fields = LIVE;
         let words = ban_entry(&fields, 0x0102_0304_0506_0708, 1_761_500_000, 0xabc0).unwrap();
         assert_eq!(words.len(), 0xd0 / 8);
         assert_eq!(words[0], 0x0102_0304_0506_0708);
@@ -402,14 +405,35 @@ mod tests {
     }
 
     #[test]
-    fn a_ban_entry_whose_fields_fall_outside_is_none() {
+    fn a_ban_entry_puts_each_name_s_text_and_length_where_the_build_keeps_them() {
         let fields = BanFields {
-            size: 0xd0,
-            account: 0,
-            display_name: 8,
-            character_name: 0x68,
-            date: 0xc8,
+            name_text: 8,
+            name_length: 0,
+            ..LIVE
         };
+        let words = ban_entry(&fields, 7, 0, 0xabc0).unwrap();
+        assert_eq!(words[1], 0);
+        assert_eq!(words[2], 0xabc0);
+        assert_eq!(words[0x68 / 8], 0);
+        assert_eq!(words[0x68 / 8 + 1], 0xabc0);
+    }
+
+    #[test]
+    fn a_ban_entry_whose_fields_fall_outside_is_none() {
+        let fields = LIVE;
+        assert!(
+            ban_entry(
+                &BanFields {
+                    name_length: 0x10,
+                    character_name: 0xc0,
+                    ..fields
+                },
+                1,
+                0,
+                0
+            )
+            .is_none()
+        );
         assert!(
             ban_entry(
                 &BanFields {
