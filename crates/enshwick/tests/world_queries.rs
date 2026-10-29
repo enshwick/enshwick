@@ -132,6 +132,18 @@ mod tests {
             lines.contains("visits") && lines.contains("does not parse"),
             "{lines}"
         );
+        let shown = |loader: &enshwick::test::Installed| {
+            loader
+                .features()
+                .into_iter()
+                .find(|(name, _)| name == "world store visits")
+                .and_then(|(_, off)| off)
+        };
+        let off = shown(&loader).unwrap_or_default();
+        assert!(
+            off.contains("does not parse"),
+            "the Mods screen shows the store off: {off:?}"
+        );
         assert_eq!(loader.raise::<WorldSaved>(&()), 1);
         assert_eq!(loader.raise::<ShutdownStarted>(&()), 1);
         assert_eq!(

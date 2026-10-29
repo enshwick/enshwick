@@ -60,7 +60,8 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
   hosted game stops. `flush()` writes now.
 - A file that does not read or parse keeps the store shut and stays as it
   is, so a fix by hand loses nothing. `shut_reason()` says why, and the
-  loader's status summary shows it under the mod. A mod that guards
+  loader's status summary and the Mods screen show it under the mod, as the
+  feature `world store <name>` off. A mod that guards
   something with the value, such as who may open a chest, keeps it guarded
   while the store is shut.
 - `T` is a TOML table, such as a struct, with a `Default` for a new world.
