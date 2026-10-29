@@ -11,13 +11,23 @@ use std::path::Path;
 
 use super::*;
 
-/// A type's size, alignment and fields as `(name, offset, size)` in
-/// declaration order.
+/// A type's size, alignment and fields in declaration order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Shape {
     size: usize,
     align: usize,
-    fields: Vec<(String, usize, usize)>,
+    fields: Vec<Field>,
+}
+
+/// One field of a [`Shape`]: where it sits and what it holds, so a field
+/// that keeps its size but changes its type, such as a function pointer with
+/// another signature, still changes the layout.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Field {
+    name: String,
+    offset: usize,
+    size: usize,
+    ty: String,
 }
 
 /// The layout of the whole ABI at one version.
@@ -26,9 +36,50 @@ struct Snapshot {
     types: BTreeMap<String, Shape>,
 }
 
-/// The size of the field `field` picks out of an `S`.
-fn field_size<S, T>(_field: fn(&S) -> &T) -> usize {
-    size_of::<T>()
+/// The field `name` at `offset`, of the type the accessor `_field` picks out
+/// of an `S`.
+fn field<S, T>(name: &str, offset: usize, _field: fn(&S) -> &T) -> Field {
+    Field {
+        name: name.to_owned(),
+        offset,
+        size: size_of::<T>(),
+        ty: type_text(core::any::type_name::<T>()),
+    }
+}
+
+/// `name`, a type as `core::any::type_name` writes it, with every path cut
+/// to its last segment: `core::option::Option<enshwick::abi::Str>` becomes
+/// `Option<Str>`. Moving a type to another module leaves the layout alone;
+/// its own entry holds what it is.
+fn type_text(name: &str) -> String {
+    let mut text = String::with_capacity(name.len());
+    let mut rest = name;
+    while let Some(c) = rest.chars().next() {
+        if let Some(after) = rest.strip_prefix("::") {
+            let kept = text.trim_end_matches(|c: char| c.is_alphanumeric() || c == '_');
+            text.truncate(kept.len());
+            rest = after;
+        } else {
+            text.push(c);
+            rest = &rest[c.len_utf8()..];
+        }
+    }
+    text
+}
+
+/// The [`Shape`] of `$ty` with the fields named.
+macro_rules! shape {
+    ($ty:ident { $($field:tt),* }) => {
+        Shape {
+            size: size_of::<$ty>(),
+            align: align_of::<$ty>(),
+            fields: vec![$(field(
+                stringify!($field),
+                core::mem::offset_of!($ty, $field),
+                |value: &$ty| &value.$field,
+            )),*],
+        }
+    };
 }
 
 /// Every ABI type with all of its fields; the test
@@ -37,20 +88,7 @@ macro_rules! shapes {
     ($($ty:ident { $($field:tt),* }),* $(,)?) => {
         fn current() -> Snapshot {
             let mut types = BTreeMap::new();
-            $(
-                types.insert(
-                    stringify!($ty).to_owned(),
-                    Shape {
-                        size: size_of::<$ty>(),
-                        align: align_of::<$ty>(),
-                        fields: vec![$((
-                            stringify!($field).to_owned(),
-                            core::mem::offset_of!($ty, $field),
-                            field_size(|value: &$ty| &value.$field),
-                        )),*],
-                    },
-                );
-            )*
+            $(types.insert(stringify!($ty).to_owned(), shape!($ty { $($field),* }));)*
             Snapshot { types }
         }
 
@@ -199,8 +237,14 @@ impl Snapshot {
         let mut text = String::new();
         for (name, shape) in &self.types {
             let _ = writeln!(text, "{name} size {} align {}", shape.size, shape.align);
-            for (field, offset, size) in &shape.fields {
-                let _ = writeln!(text, "    {field} at {offset} size {size}");
+            for Field {
+                name,
+                offset,
+                size,
+                ty,
+            } in &shape.fields
+            {
+                let _ = writeln!(text, "    {name} at {offset} size {size} type {ty}");
             }
         }
         text
@@ -214,14 +258,18 @@ impl Snapshot {
         for line in text.lines() {
             let words: Vec<&str> = line.split_whitespace().collect();
             if let Some(field) = line.strip_prefix("    ") {
-                let words: Vec<&str> = field.split_whitespace().collect();
+                let (place, ty) = field.split_once(" type ")?;
+                let words: Vec<&str> = place.split_whitespace().collect();
                 let [name, "at", offset, "size", size] = words[..] else {
                     return None;
                 };
                 let shape = layout.types.get_mut(last.as_deref()?)?;
-                shape
-                    .fields
-                    .push((name.to_owned(), offset.parse().ok()?, size.parse().ok()?));
+                shape.fields.push(Field {
+                    name: name.to_owned(),
+                    offset: offset.parse().ok()?,
+                    size: size.parse().ok()?,
+                    ty: ty.to_owned(),
+                });
             } else {
                 let [name, "size", size, "align", align] = words[..] else {
                     return None;
@@ -338,6 +386,46 @@ fn every_change_to_the_layout_is_another_abi_version() {
             layout_version(text.as_bytes())
         );
     }
+}
+
+/// Two versions of one struct whose function pointer keeps its size and
+/// changes its signature.
+mod fixture {
+    #[repr(C)]
+    pub(super) struct Before {
+        pub(super) call: extern "system" fn(u32) -> u32,
+    }
+
+    #[repr(C)]
+    pub(super) struct After {
+        pub(super) call: extern "system" fn(u64, u32) -> u32,
+    }
+}
+
+/// The ABI version of a layout holding only `shape`, under one name.
+fn version_of(shape: Shape) -> u32 {
+    let types = BTreeMap::from([("Fixture".to_owned(), shape)]);
+    layout_version(Snapshot { types }.render().as_bytes())
+}
+
+#[test]
+fn a_changed_function_signature_is_another_abi_version() {
+    use fixture::{After, Before};
+    assert_eq!(size_of::<Before>(), size_of::<After>());
+    assert_ne!(
+        version_of(shape!(Before { call })),
+        version_of(shape!(After { call }))
+    );
+}
+
+#[test]
+fn a_type_is_written_without_its_paths() {
+    assert_eq!(
+        type_text(
+            "core::option::Option<unsafe extern \"system\" fn(*const enshwick::abi::Str, u32) -> enshwick::abi::Status>"
+        ),
+        "Option<unsafe extern \"system\" fn(*const Str, u32) -> Status>"
+    );
 }
 
 #[test]

@@ -51,7 +51,8 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
   a mod exports `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init`
   and `enshwick_mod_ready`, which `declare_mod!` writes.
 - The ABI version is a hash of the committed layout file
-  `crates/enshwick/src/abi/layout.txt`; a mod built for any other version is
+  `crates/enshwick/src/abi/layout.txt`, which lists every field's offset,
+  size and type, function pointers with their signature; a mod built for any other version is
   refused with the release to rebuild it for.
 - Strings are borrowed for the call, and memory is never freed across the
   boundary.
