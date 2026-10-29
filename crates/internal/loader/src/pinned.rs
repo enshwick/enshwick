@@ -32,6 +32,7 @@ pub(crate) mod net;
 pub(crate) mod npc;
 pub(crate) mod pacing;
 pub(crate) mod player;
+pub(crate) mod recipe;
 pub(crate) mod resource;
 pub(crate) mod save;
 pub(crate) mod server;
@@ -135,6 +136,7 @@ pub(crate) const HOOKED: &[Symbol] = &[
     npc::MOVE,
     npc::UPDATE,
     player::DEATH_SINK,
+    recipe::LIST_LOOKUP,
     resource::KEY_OF,
     resource::OPEN,
     resource::RESOLVE,
@@ -190,4 +192,5 @@ pub(crate) const BODIES: &[Symbol] = &[
     bases::STOCK_CACHE,
     bases::TEARDOWN,
     bases::ZONES_AT,
+    recipe::LIMIT_STOP,
 ];

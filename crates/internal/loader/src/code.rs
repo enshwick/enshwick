@@ -13,34 +13,29 @@ use std::sync::{Mutex, OnceLock};
 
 use enshwick::__private::rules::{patch_fits, spans_overlap as overlaps};
 use enshwick::abi::{HookFlags, Status};
-use enshwick::code::Pattern;
 use rustc_hash::FxHashMap;
 
 use crate::chains::Next;
 use crate::host::Loader;
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
+use crate::pinned;
 
 use enshwick::content::recipes::WORKSHOP_RECIPES;
 
-/// The check before a recipe joins its workshop's list, the same on server
-/// and client: `movzx eax, word [rdx+0x1000]; mov ecx, 0x200; cmp ax, cx;
-/// je stop; mov [rdx+rax*8], rdi; inc r13; inc word [rdx+0x1000]`, which
-/// ends where the loop's next recipe starts.
-const LIMIT_SITE: &str = "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ?? \
-                          48 89 3C C2 49 FF C5 66 FF 82 00 10 00 00";
-/// Where the check's `je` to the block that stops the game on a full list
-/// holds its rel32, and where the jump ends.
-const STOP_JUMP: usize = 0x11;
-const STOP_JUMP_END: usize = 0x15;
-/// Its length.
-const STOP_LEN: usize = 27;
-/// How the block starts: the message's arguments.
-const STOP_START: &str = "4C 8D 05 ?? ?? ?? ?? 33 C9 48 8D 15";
-/// The next recipe of the loop, from the check: the end of [`LIMIT_SITE`].
-const NEXT_RECIPE: usize = 0x23;
-/// The per-workshop list lookup's first bytes, the same on server and client.
-const LOOKUP: &str = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 83 BA 4C 01 00 00 00 4C 8B D2 48 8B BA 08 01 00 00";
+/// The build table ids the workshop limit's lift names: the check before a
+/// recipe joins its workshop's list, `movzx eax, word [rdx+0x1000]; mov
+/// ecx, 0x200; cmp ax, cx; je stop; ...`, the block its `je` reaches, which
+/// stops the game on a full list and which the lift replaces whole, the
+/// loop's next recipe after the check, and the per-workshop list lookup.
+pub(crate) const TABLE_IDS: &[&str] = &[
+    pinned::recipe::LIMIT_CHECK.id(),
+    pinned::recipe::LIMIT_NEXT.id(),
+    pinned::recipe::LIMIT_STOP.id(),
+    pinned::recipe::LIST_LOOKUP.id(),
+];
+/// The bytes the stop block's replacement needs: `inc r13` and a `jmp`.
+const JUMP_LEN: usize = 8;
 
 /// A patch of game code, registered during init.
 #[derive(Clone, Debug)]
@@ -426,56 +421,64 @@ struct Lift {
 static LIFT: OnceLock<Lift> = OnceLock::new();
 static LIFTED: AtomicBool = AtomicBool::new(false);
 // SAFETY: `LookupFn` is the exact signature of the game's per-workshop list
-// lookup that `lookup_address` finds by the `LOOKUP` pattern, and the slot is
+// lookup the table's `recipe.list_lookup` pins, and the slot is
 // used only as the `next` of the `lookup_detour` link on that function.
 static LOOKUP_NEXT: Next<LookupFn> = unsafe { Next::new() };
 /// Full recipe lists of the workshops past the game's limit, as addresses.
 static WORKSHOPS: OnceLock<FxHashMap<u32, Box<[usize]>>> = OnceLock::new();
 
-/// The replacement of the stop block `stop` bytes from the check: `inc r13`
+/// The replacement of the `len` bytes of the stop block at `stop`: `inc r13`
 /// (the loop counter the skipped append would have raised), then `jmp` to
-/// the next recipe.
-fn stop_replacement(stop: usize) -> [u8; STOP_LEN] {
-    let mut bytes = [0xcc; STOP_LEN];
-    bytes[..4].copy_from_slice(&[0x49, 0xff, 0xc5, 0xe9]);
-    let from = i32::try_from(stop + 8).unwrap_or(i32::MAX);
-    let to = i32::try_from(NEXT_RECIPE).unwrap_or(0);
-    bytes[4..8].copy_from_slice(&(to - from).to_le_bytes());
-    bytes
-}
-
-/// The one offset in `code` where `pattern` matches, or why not.
-pub(crate) fn find(code: &[u8], pattern: &str) -> Result<usize, String> {
-    let parsed = Pattern::parse(pattern).map_err(|e| e.to_string())?;
-    parsed
-        .find_unique(code)
-        .map_err(|e| format!("{e} for {pattern}"))
-}
-
-/// The stop block's patch for the check at `site` in `code`, which starts at
-/// `start`.
-fn limit_patch(code: &[u8], start: usize) -> Result<CodePatch, String> {
-    let site = find(code, LIMIT_SITE)?;
-    let jump: [u8; 4] = code
-        .get(site + STOP_JUMP..site + STOP_JUMP_END)
-        .and_then(|b| b.try_into().ok())
-        .ok_or("the check is cut")?;
-    let from_site = STOP_JUMP_END
-        .checked_add_signed(isize::try_from(i32::from_le_bytes(jump)).map_err(|e| e.to_string())?)
-        .ok_or("the check jumps before itself")?;
-    let stop = site + from_site;
-    let expected = code
-        .get(stop..stop + STOP_LEN)
-        .ok_or("the stop block is past the code")?;
-    let starts = Pattern::parse(STOP_START).map_err(|e| e.to_string())?;
-    if !starts.matches(expected) {
-        return Err(format!("the stop block reads {}", hex(expected)));
+/// the next recipe at `next`, the rest `int3`; `None` when the block is too
+/// short or the jump too far.
+fn stop_replacement(stop: usize, next: usize, len: usize) -> Option<Box<[u8]>> {
+    if len < JUMP_LEN {
+        return None;
     }
+    let from = i64::try_from(stop.checked_add(JUMP_LEN)?).ok()?;
+    let rel = i32::try_from(i64::try_from(next).ok()? - from).ok()?;
+    let mut bytes = vec![0xcc; len];
+    bytes[..4].copy_from_slice(&[0x49, 0xff, 0xc5, 0xe9]);
+    bytes[4..JUMP_LEN].copy_from_slice(&rel.to_le_bytes());
+    Some(bytes.into())
+}
+
+/// The table's symbol `id` in the running game when its code holds, or
+/// why not.
+fn checked(loader: &Loader, id: pinned::Symbol) -> Result<usize, String> {
+    loader
+        .address(id)
+        .filter(|_| loader.code_holds(id))
+        .and_then(|address| usize::try_from(address).ok())
+        .ok_or_else(|| format!("{id} is not in this build or its code moved"))
+}
+
+/// The stop block's patch from the build table: the check's code holds, and
+/// the block it jumps to holds its whole code, which the patch replaces.
+fn limit_patch(loader: &Loader) -> Result<CodePatch, String> {
+    let _check = checked(loader, pinned::recipe::LIMIT_CHECK)?;
+    let stop = checked(loader, pinned::recipe::LIMIT_STOP)?;
+    let next = loader
+        .address(pinned::recipe::LIMIT_NEXT)
+        .and_then(|address| usize::try_from(address).ok())
+        .ok_or_else(|| format!("{} is not in this build", pinned::recipe::LIMIT_NEXT))?;
+    let len = loader
+        .build
+        .body(pinned::recipe::LIMIT_STOP.id())
+        .map(enshwick_gamedata::Body::len)
+        .ok_or_else(|| format!("{} carries no body", pinned::recipe::LIMIT_STOP))?;
+    let replacement = stop_replacement(stop, next, len)
+        .ok_or_else(|| format!("the stop block of {len} bytes cannot jump to {next:#x}"))?;
+    let mut expected = vec![0u8; len];
+    // SAFETY: `stop` is the table's `recipe.limit_stop`, whose whole `len`
+    // bytes of code `checked` compared against the table's body, inside the
+    // game's image, which stays mapped and readable.
+    unsafe { crate::memory::read_bytes(stop, 0, &mut expected) };
     Ok(CodePatch {
         owner: ModIndex::LOADER,
-        address: start + stop,
+        address: stop,
         expected: expected.into(),
-        replacement: stop_replacement(from_site).into(),
+        replacement,
         needs: Box::default(),
     })
 }
@@ -493,9 +496,7 @@ pub(crate) fn lift_workshop_limit(loader: &'static Loader) {
                 .ok_or(format!("no {}", ids::RECIPE))?,
             workshop: offset(ids::RECIPE_WORKSHOP)?,
         };
-        let (start, _) = text(loader.base).ok_or("the code section is not found")?;
-        let code = text_bytes(loader.base).ok_or("the code section is not found")?;
-        let patch = limit_patch(code, start)?;
+        let patch = limit_patch(loader)?;
         let lookup = lookup_address(loader).ok_or("the recipe list lookup is not linked")?;
         Ok::<_, String>((layout, patch, lookup))
     })();
@@ -538,10 +539,8 @@ static LOOKUP_LINK: OnceLock<Option<u64>> = OnceLock::new();
 /// first call; `None` when its code is not found or the link is refused.
 fn lookup_address(loader: &'static Loader) -> Option<u64> {
     *LOOKUP_LINK.get_or_init(|| {
-        let (start, _) = text(loader.base)?;
-        let code = text_bytes(loader.base)?;
-        let lookup = match find(code, LOOKUP) {
-            Ok(at) => (start + at) as u64,
+        let lookup = match checked(loader, pinned::recipe::LIST_LOOKUP) {
+            Ok(at) => at as u64,
             Err(why) => {
                 crate::log!(WARN, "the recipe list lookup is not found: {why}");
                 return None;
@@ -877,47 +876,24 @@ mod tests {
 
     /// The check of 1.0 server 399 and client 426 at `site` in `code`, its
     /// `je` landing `stop` bytes from the check, and a stop block there.
-    fn limit_site(code: &mut [u8], site: usize, stop: usize) {
-        let je = i32::try_from(stop - 0x15).unwrap().to_le_bytes();
-        let check = [
-            [
-                0x0f, 0xb7, 0x82, 0x00, 0x10, 0x00, 0x00, 0xb9, 0x00, 0x02, 0x00, 0x00,
-            ]
-            .as_slice(),
-            &[0x66, 0x3b, 0xc1, 0x0f, 0x84],
-            &je,
-            &[0x48, 0x89, 0x3c, 0xc2, 0x49, 0xff, 0xc5],
-            &[0x66, 0xff, 0x82, 0x00, 0x10, 0x00, 0x00],
-        ]
-        .concat();
-        code[site..site + check.len()].copy_from_slice(&check);
-        code[site + stop..site + stop + 12]
-            .copy_from_slice(&[0x4c, 0x8d, 0x05, 1, 2, 3, 4, 0x33, 0xc9, 0x48, 0x8d, 0x15]);
+    #[test]
+    fn the_stop_block_becomes_inc_r13_and_a_jump_to_the_next_recipe() {
+        let next = 0x1_4096_3cdb;
+        for stop in [0x1_4096_3ddb, 0x1_4096_3c00] {
+            let made = stop_replacement(stop, next, 27).unwrap();
+            assert_eq!(made.len(), 27);
+            assert_eq!(&made[..4], &[0x49, 0xff, 0xc5, 0xe9]);
+            let rel = i32::from_le_bytes(made[4..8].try_into().unwrap());
+            let end = i64::try_from(stop + 8).unwrap();
+            assert_eq!(end + i64::from(rel), i64::try_from(next).unwrap());
+            assert!(made[8..].iter().all(|&b| b == 0xcc));
+        }
     }
 
     #[test]
-    fn the_stop_block_becomes_inc_r13_and_a_jump_to_the_next_recipe() {
-        let site = 0x40;
-        for stop_at in [0x123, 0x150] {
-            let mut code = vec![0x90_u8; 0x200];
-            limit_site(&mut code, site, stop_at);
-            assert_eq!(Pattern::parse(LIMIT_SITE).unwrap().len(), NEXT_RECIPE);
-            let stop = site + stop_at;
-            let made = limit_patch(&code, 0x1_4000_0000).unwrap();
-            assert_eq!(made.address, 0x1_4000_0000 + stop, "{stop_at:#x}");
-            assert_eq!(&made.expected[..], &code[stop..stop + STOP_LEN]);
-            // inc r13, then jmp rel32 from the end of the jump to the next recipe.
-            assert_eq!(&made.replacement[..4], &[0x49, 0xff, 0xc5, 0xe9]);
-            let rel = i32::from_le_bytes(made.replacement[4..8].try_into().unwrap());
-            let end = i64::try_from(stop + 8).unwrap();
-            assert_eq!(
-                end + i64::from(rel),
-                i64::try_from(site + NEXT_RECIPE).unwrap()
-            );
-            assert!(made.replacement[8..].iter().all(|&b| b == 0xcc));
-            code[stop] = 0x90;
-            assert!(limit_patch(&code, 0).is_err());
-        }
+    fn a_stop_block_too_short_or_too_far_from_the_next_recipe_is_refused() {
+        assert_eq!(stop_replacement(0x1000, 0x2000, 7), None);
+        assert_eq!(stop_replacement(0x1_0000_1000, 0x1000, 27), None);
     }
 
     #[test]
