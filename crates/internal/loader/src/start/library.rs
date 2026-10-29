@@ -3,7 +3,7 @@
 use std::os::windows::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 
-use enshwick::abi::{ABI_MAJOR, ABI_MINOR, HostApi, Manifest, ModHandle, Status, exports};
+use enshwick::abi::{ABI_VERSION, HostApi, Manifest, ModHandle, Status, exports};
 use windows_sys::Win32::Foundation::{FreeLibrary, HMODULE};
 use windows_sys::Win32::System::LibraryLoader::{
     GetModuleHandleW, LOAD_WITH_ALTERED_SEARCH_PATH, LoadLibraryExW,
@@ -146,8 +146,7 @@ pub(super) fn libraries(
                 libraries.push(library);
             }
             Err(reason) => {
-                let header = library.manifest.header;
-                let code = if header.abi_major != ABI_MAJOR || header.abi_minor > ABI_MINOR {
+                let code = if reason == crate::manifest::ManifestError::OtherAbi {
                     crate::errors::OTHER_ABI
                 } else {
                     crate::errors::BROKEN_DLL
@@ -466,11 +465,11 @@ fn exports_of(module: HMODULE, file: &str) -> Option<Library> {
     // SAFETY: a mod's `READY` export has the signature `enshwick::abi::exports`
     // documents for it.
     let ready = unsafe { core::mem::transmute::<Export, ReadyFn>(ready) };
-    if abi() != u32::from(ABI_MAJOR) {
+    if abi() != ABI_VERSION {
         crate::log!(
             WARN,
-            "{file} is built for ABI {}, the loader speaks {ABI_MAJOR} ({})",
-            abi(),
+            "{file} skipped: {} ({})",
+            crate::manifest::ManifestError::OtherAbi,
             crate::errors::OTHER_ABI
         );
         return None;

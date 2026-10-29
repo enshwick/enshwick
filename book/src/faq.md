@@ -120,7 +120,7 @@ These lines read `<file> skipped: <reason>`, or name the file alone:
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `<file> is not an Enshwick mod`                                                                                 | The DLL lacks the four required exports of `declare_mod!`              |
 | `<file> could not be loaded`                                                                                    | Windows could not load the DLL, such as a missing dependency           |
-| `<file> is built for ABI 2, the loader speaks 1`                                                                | The mod was built for another ABI major                                |
+| `<file> skipped: built for another Enshwick: rebuild it for Enshwick <version>`                                 | The mod was built for another Enshwick release                         |
 | `skipped: not for this side of the game`                                                                        | A client-only mod on the dedicated server                              |
 | `old.dll skipped: you.trading-post 0.1.0 is also in trading_post.dll, which runs 0.2.0; old.dll can be deleted` | Two files hold one mod; the highest version runs, then the newest file |
 | `skipped: requires trading-post, which is not loaded`                                                           | A required mod is absent or was skipped itself                         |
@@ -145,8 +145,6 @@ The mod's log has `off: <reason>` at `warn`, then the loader's
 | `hook REWARD: refused by the loader`                   | Another mod holds the function exclusively, or the mod hooked it twice |
 | `service <name> v<major>: <reason>`                    | No running mod publishes it, or its table lacks or changed a field     |
 
-A mod built for a newer ABI minor than the loader's never starts: the log
-shows `built for ABI 3.<n>, newer than the loader's 3.<m>: update Enshwick`.
 A settings file that stops parsing while the game runs does
 not turn the mod off: the mod logs
 `settings change skipped, the running values stay: ...` and keeps its values.

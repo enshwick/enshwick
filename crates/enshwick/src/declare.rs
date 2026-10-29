@@ -260,10 +260,10 @@ macro_rules! declare_mod {
             }
         }
 
-        /// The interface major this mod was built for.
+        /// The ABI version this mod was built for.
         #[cfg_attr(not(test), unsafe(no_mangle))]
         pub extern "system" fn enshwick_mod_abi() -> u32 {
-            ::core::primitive::u32::from($crate::abi::ABI_MAJOR)
+            $crate::abi::ABI_VERSION
         }
 
         /// The mod's static manifest.

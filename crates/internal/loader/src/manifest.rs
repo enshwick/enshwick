@@ -1,12 +1,11 @@
 //! Reading a mod's manifest into a resolver candidate.
 
-use enshwick::abi::{ABI_MAJOR, ABI_MINOR, Dependency, Manifest, Relation, Side, Str, read_headed};
+use enshwick::abi::{ABI_VERSION, Dependency, Manifest, Relation, Side, Str, read_headed};
 use semver::{Version, VersionReq};
 
 use crate::resolve::{self, Candidate};
 
-/// Where the fields every manifest of this major has end; a newer minor
-/// appends after them.
+/// Where the fields of a manifest end.
 const REQUIRED: usize = size_of::<Manifest>();
 
 /// Why a mod's manifest is refused.
@@ -19,14 +18,9 @@ pub enum ManifestError {
     /// The manifest is shorter than this ABI needs.
     #[error("the manifest is truncated")]
     Truncated,
-    /// The mod is built for another ABI major.
-    #[error("built for ABI {0}, the loader speaks {ABI_MAJOR}")]
-    OtherMajor(u16),
-    /// The mod is built for a newer ABI minor.
-    #[error(
-        "built for ABI {ABI_MAJOR}.{0}, newer than the loader's {ABI_MAJOR}.{ABI_MINOR}: update Enshwick"
-    )]
-    NewerMinor(u16),
+    /// The mod is built for another ABI version.
+    #[error("{}", enshwick::abi::OTHER_ABI)]
+    OtherAbi,
     /// A text of the manifest is not UTF-8.
     #[error("the {0} is not UTF-8")]
     NotUtf8(&'static str),
@@ -71,7 +65,7 @@ pub enum ManifestError {
 }
 
 /// Copies the manifest a mod's `enshwick_mod_query` returned, for the
-/// process; the fields of a newer minor than the mod's stay empty.
+/// process.
 ///
 /// # Safety
 ///
@@ -197,16 +191,11 @@ pub(crate) fn enshwick_refusal(requirement: &str) -> Option<String> {
 ///
 /// # Errors
 ///
-/// A reason for the log when the manifest is malformed, from another ABI
-/// major, or from a newer minor than the loader's: a mod meets only loaders
-/// that know every entry it calls, and an older minor's mod is read as far
-/// as it knows each struct.
+/// A reason for the log when the manifest is malformed or built for another
+/// ABI version.
 pub unsafe fn parse(manifest: &Manifest) -> Result<Candidate, ManifestError> {
-    if manifest.header.abi_major != ABI_MAJOR {
-        return Err(ManifestError::OtherMajor(manifest.header.abi_major));
-    }
-    if manifest.header.abi_minor > ABI_MINOR {
-        return Err(ManifestError::NewerMinor(manifest.header.abi_minor));
+    if manifest.header.abi_version != ABI_VERSION {
+        return Err(ManifestError::OtherAbi);
     }
     if !manifest.header.covers(REQUIRED) {
         return Err(ManifestError::Truncated);
@@ -531,12 +520,6 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(loader.contains("loader's own"), "{loader}");
-        let mut other = manifest("you.ok", "0.1.0");
-        other.header.abi_major = ABI_MAJOR + 1;
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        let major = unsafe { parse(&other) }.unwrap_err().to_string();
-        assert!(major.contains(&format!("ABI {}", ABI_MAJOR + 1)), "{major}");
     }
 
     #[test]
@@ -594,13 +577,21 @@ mod tests {
     }
 
     #[test]
-    fn a_mod_of_a_newer_minor_is_refused_and_one_of_this_minor_loads() {
-        let mut newer = manifest("you.ok", "0.1.0");
-        newer.header.abi_minor = ABI_MINOR + 1;
-        // SAFETY: every string and list in the manifest points at `'static`
-        // literals and statics, readable and never written.
-        let why = unsafe { parse(&newer) }.unwrap_err().to_string();
-        assert!(why.contains("update Enshwick"), "{why}");
+    fn a_mod_of_any_other_abi_version_is_refused_with_the_release_to_rebuild_for() {
+        for other in [ABI_VERSION.wrapping_add(1), ABI_VERSION.wrapping_sub(1), 4] {
+            let mut built = manifest("you.ok", "0.1.0");
+            built.header.abi_version = other;
+            // SAFETY: every string and list in the manifest points at `'static`
+            // literals and statics, readable and never written.
+            let why = unsafe { parse(&built) }.unwrap_err().to_string();
+            assert_eq!(
+                why,
+                format!(
+                    "built for another Enshwick: rebuild it for Enshwick {}",
+                    enshwick::VERSION
+                )
+            );
+        }
         let current = manifest("you.ok", "0.1.0");
         // SAFETY: every string and list in the manifest points at `'static`
         // literals and statics, readable and never written.
