@@ -678,10 +678,14 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         // SAFETY: `node` is non-zero, checked by `then`, and is the store's
         // tail node just posted; its delivered mask sits at the table's
         // `chat.node_delivered`. It stays live across the `mark` calls
-        // below, which run between the two reads: the store drops a node
-        // only once every connection received it, and the target's bit
-        // stays unset until the game sends the line to the target on a
-        // later step.
+        // below, which run between the two reads: the store frees a node
+        // only when a later `chat.post` needs pool space and the node is the
+        // oldest, or when the whole store is cleared, and `mark_delivered`
+        // only sets a bit and counts down pending bytes (server build 399
+        // and client build 426). Neither free happens here: both reads run
+        // on the game thread with only `mark` calls between them. The
+        // target's bit stays unset until the game sends the line to the
+        // target on a later step.
         let read_mask = || unsafe { crate::memory::read::<u32>(node, layout.delivered) };
         let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
         let unmarked = strays(active, target, Some(read_mask()));
