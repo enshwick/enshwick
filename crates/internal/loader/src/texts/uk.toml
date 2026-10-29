@@ -22,6 +22,7 @@
 "mods.others.beside" = "Файли інших модів поруч із грою: {files}"
 "mods.others.chain-failed" = "Не завантажилися з mods/chain: {files}"
 "mods.features.off" = "Вимкнено повністю або частково в цій версії гри: {features}"
+"mods.discovery.off" = "Пошук модів вимкнено: у грі, яку запускає гравець, хост і гравці, що приєднуються, не бачать модів одне одного."
 "mods.extends" = "Розширює: {points}"
 "mods.settings" = "Налаштування"
 "mods.settings.yours" = "Ваші налаштування"

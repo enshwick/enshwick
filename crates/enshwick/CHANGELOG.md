@@ -6,6 +6,21 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `PackManifest::enshwick`: a pack's `pack.toml` may name the Enshwick
+  releases it is made for, such as `enshwick = "=1.0.0-alpha.12"`; a loader
+  of another release skips the pack and logs both versions (#661).
+
+### Changed
+
+- `abi::ABI_VERSION`, a hash of the committed ABI layout, replaces
+  `ABI_MAJOR` and `ABI_MINOR`; `Header` carries it as `abi_version`, and the
+  C header defines `ENSHWICK_ABI_VERSION`. The loader, a mod's host check and
+  `cargo enshwick` load only mods built for exactly this version and name the
+  release to rebuild any other for (`abi::OTHER_ABI`). `cargo enshwick new`
+  pins `enshwick` with `=`. Every mod needs a rebuild (#657).
+
 ## [1.0.0-alpha.11] - 2026-10-28
 
 ### Added

@@ -116,7 +116,8 @@ fn manifest_of(manifest: &PackManifest) -> &'static Manifest {
 }
 
 /// Every pack folder under `mods_dir` with a readable `pack.toml` whose id
-/// is the folder's name; the rest are logged and left out.
+/// is the folder's name and that is made for this Enshwick; the rest are
+/// logged and left out.
 pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
     let Ok(entries) = std::fs::read_dir(mods_dir) else {
         return Vec::new();
@@ -156,6 +157,10 @@ pub(crate) fn discover(mods_dir: &Path) -> Vec<Found> {
                 "{file} skipped: its id {:?} is not its folder's name",
                 manifest.id
             );
+            continue;
+        }
+        if let Some(why) = crate::manifest::enshwick_refusal(&manifest.enshwick) {
+            crate::log!(WARN, "{name} skipped: {why} ({})", crate::errors::OTHER_ABI);
             continue;
         }
         let files = match PackFiles::read_dir(&dir) {

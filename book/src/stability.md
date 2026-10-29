@@ -59,17 +59,13 @@ may change in any release, as their Rust counterparts do.
 ## The ABI
 
 The loader and the mods talk through one C ABI, whatever features a mod turns
-on. An unstable call is a slot of the same table as a stable one. From 1.0:
+on. An unstable call is a slot of the same table as a stable one.
 
-- `ABI_MAJOR` changes only with an incompatible change, and with it the crate's
-  major. A loader refuses a mod built for another major.
-- `ABI_MINOR` grows when the loader's table or a struct gains fields at its end,
-  and with it the crate's minor. No slot or field goes away or moves. A loader
-  refuses a mod of a newer minor and runs every older one of its major.
-- A loader that only adds game builds is a patch release and changes neither
-  number.
+Until 1.0 the ABI version is a hash of the layout of every ABI type, and a
+loader loads only mods built for its own version (see
+[ABI reference](abi-reference.md#versions)). A release that changes the
+layout needs every mod rebuilt against it, while a release that only adds
+game builds keeps the layout and the mods.
 
-An unstable call may change its safe wrapper in any release. Its ABI slot
-changes only under the rules above, so a mod built with `unstable` keeps
-loading; whether it still builds against a newer crate is what the feature does
-not promise.
+From 1.0 the layout is frozen. The loader's table and its structs grow only
+by appending fields, and a loader runs mods built against older releases.

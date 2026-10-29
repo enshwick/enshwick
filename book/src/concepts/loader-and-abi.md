@@ -22,7 +22,7 @@ patterns; a mod whose entries are not found stays off with the reason, and
 Every `*.dll` directly in `mods/` is a candidate, taken in file name order. The
 loader loads each and keeps it when it exports the four required functions of
 [`abi::exports`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs)
-and was built for the loader's ABI major. The fifth, `enshwick_mod_shutdown`,
+and was built for the loader's ABI version. The fifth, `enshwick_mod_shutdown`,
 is optional. A DLL without `enshwick_mod_abi` is a native mod: it stays loaded
 and runs on its own, and the status summary and the Mods screen list it. One
 with only part of the interface is logged and unloaded. The file name is free; the id in the manifest
@@ -62,13 +62,10 @@ since the last start goes to `loader.log`, such as
 A mod and the loader are built separately, so they talk through a C ABI,
 [`enshwick::abi`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
 
-- `ABI_MAJOR` changes only with an incompatible change. A loader refuses a mod
-  built for another major.
-- `ABI_MINOR` grows when fields are appended. A loader refuses a mod built
-  for a newer minor, so a mod always meets a loader that has every call it
-  knows. Structs that either side may outgrow start with a `Header` (size,
-  major, minor), and the loader reads and writes a mod of an older minor
-  only as far as that mod knows each struct.
+- `ABI_VERSION` is a hash of the layout of every ABI type. A loader loads
+  only mods built for its own version and tells the player which Enshwick
+  release to rebuild any other mod for. Structs that cross the boundary on
+  their own start with a `Header` (size and ABI version).
 - `HostApi` is the loader's table of functions, passed to the mod at init.
 
 A mod rarely touches the ABI. [`Load`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/load.rs)

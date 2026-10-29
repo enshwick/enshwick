@@ -22,6 +22,7 @@
 "mods.others.beside" = "Pliki innych modów obok gry: {files}"
 "mods.others.chain-failed" = "Nie wczytały się z mods/chain: {files}"
 "mods.features.off" = "Wyłączone w całości lub częściowo w tej wersji gry: {features}"
+"mods.discovery.off" = "Wykrywanie modów jest wyłączone: w grach hostowanych przez gracza host i dołączający gracze nie widzą nawzajem swoich modów."
 "mods.extends" = "Rozszerza: {points}"
 "mods.settings" = "Ustawienia"
 "mods.settings.yours" = "Twoje ustawienia"

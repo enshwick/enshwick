@@ -1,10 +1,22 @@
 # A development build of the commit it runs on, until the first public
-# release, 1.0.0: `cargo xtask bundle` on the organization's runners, whose
-# archives replace the files of the single prerelease `dev`. enshwick.zip
-# there holds everything that goes into the game folder.
+# release, 1.0.0: `cargo xtask bundle` on a fresh GitHub-hosted runner,
+# whose archives replace the files of the single prerelease `dev`.
+# enshwick.zip there holds everything that goes into the game folder. Every
+# push to main that changes what the bundle builds from runs it, so `dev`
+# always carries main; a run by hand rebuilds it, or only builds.
 name: dev-build
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "tools/**"
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - LICENSE
+      - .github/workflows/dev-build.yml
   workflow_dispatch:
     inputs:
       publish:
@@ -14,6 +26,8 @@ on:
 
 permissions: {}
 
+# One build at a time, never cut off half way through replacing the files;
+# of the pushes that wait, only the newest is built.
 concurrency:
   group: dev-build
   cancel-in-progress: false
@@ -28,10 +42,11 @@ jobs:
     # From main: the runners take only enshwick/.github's workflows on main.
     uses: enshwick/.github/.github/workflows/dev-bundle.yml@main # zizmor: ignore[unpinned-uses]
     with:
-      publish: ${{ inputs.publish }}
+      publish: ${{ github.event_name == 'push' || inputs.publish }}
 
-  # The site lists the mods of the dev bundle; start its build once the
-  # prerelease changed.
+  # The site lists the mods of the dev bundle; start its build once a run by
+  # hand changed the prerelease. A push changes the mods only through
+  # tools/mods.toml, which starts the site's build itself (docs.yml).
   docs:
     needs: bundle
     if: inputs.publish
