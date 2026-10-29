@@ -6,7 +6,7 @@ mod tests {
     use std::sync::OnceLock;
 
     use enshwick::abi::{
-        MapMarkerTypeInfo, MarkerTypeSorting as RawSorting, Side, Status, UiMarker,
+        Header, MapMarkerTypeInfo, MarkerTypeSorting as RawSorting, Side, Status, UiMarker,
     };
     use enshwick::content::Guid;
     use enshwick::map::{MapMarkerTypeId, MarkerTypeSorting};
@@ -119,6 +119,38 @@ mod tests {
                 marker_type: 0,
             }
         );
+    }
+
+    #[test]
+    fn entries_shorter_than_a_header_are_refused_and_short_ones_say_their_size() {
+        let (loader, _ui) = start(enshwick::test::FakeHost::new().map_marker_types(registry()));
+        // SAFETY: the fake's table lives for the process.
+        let api = unsafe { &*loader.api() };
+        let mut out = [MapMarkerTypeInfo::EMPTY; 3];
+        let mut count = 0u32;
+        let header = u32::try_from(size_of::<Header>()).unwrap();
+        let refused = (api.map_marker_types)(
+            loader.handle(),
+            out.as_mut_ptr(),
+            header - 1,
+            3,
+            &raw mut count,
+        );
+        assert_eq!(refused, Status::BAD_ARGS);
+        let older = header + 16;
+        let mut bytes = vec![0u8; 3 * older as usize];
+        let status = (api.map_marker_types)(
+            loader.handle(),
+            bytes.as_mut_ptr().cast(),
+            older,
+            3,
+            &raw mut count,
+        );
+        assert_eq!((status, count), (Status::OK, 3));
+        for entry in bytes.chunks(older as usize) {
+            let size = u32::from_le_bytes(entry[..4].try_into().unwrap());
+            assert_eq!(size, older, "the header says what the entry holds");
+        }
     }
 
     #[test]
