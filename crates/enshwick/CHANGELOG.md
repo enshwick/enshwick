@@ -8,6 +8,11 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A part of the loader that a panic turns off, such as the HUD items, a
+  window or map markers, shows on the Mods screen and in the status summary
+  with its reason; each window and menu entry turns off alone. A player who
+  joins a server gets one chat line naming what is off there (#683).
+
 - A panic in a mod logs a line at `error` with its message, place and
   thread, and the reason of a mod a panic turns off carries the panic's
   message; a panicking `init` turns the mod off with that reason (#682).
