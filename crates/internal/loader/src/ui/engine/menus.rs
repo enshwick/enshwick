@@ -11,15 +11,18 @@ impl Engine {
     /// - `menu` is the menu state the hooked code holds there.
     /// - The bytes `text` points at outlive the frame.
     pub(in crate::ui) unsafe fn main_menu_entry(&self, menu: usize, text: &UiText) -> bool {
+        let Some(draw) = self.main_entry else {
+            return false;
+        };
         let mut entry = Buf::<MENU_ENTRY>::zeroed();
         entry.text(self.layout.menu_entry_text, text);
         entry.u8(self.layout.menu_entry_font, 1);
-        // SAFETY: `self.main_entry` is the game's `ui.main_entry`, checked in
+        // SAFETY: `draw` is the game's `ui.main_entry`, checked in
         // `Engine::resolve`, called at the menu's hook with its state `menu`
         // by this function's `# Safety`; `entry` holds the table's
         // `ui.menu_entry_extent` bytes (`Layout::read`), filled as the menu's
         // own Settings entry is: label, normal font.
-        unsafe { (self.main_entry)(menu, entry.ptr()) != 0 }
+        unsafe { draw(menu, entry.ptr()) != 0 }
     }
 
     /// Draws one more entry of the pause menu, after its Settings, with
@@ -31,11 +34,14 @@ impl Engine {
     ///   Settings entry, on the frame's thread.
     /// - The bytes `text` points at outlive the frame.
     pub(in crate::ui) unsafe fn pause_menu_entry(&self, text: &UiText) -> bool {
-        // SAFETY: `self.pause_entry` is the game's `ui.pause_entry`, checked
+        let Some(draw) = self.pause_entry else {
+            return false;
+        };
+        // SAFETY: `draw` is the game's `ui.pause_entry`, checked
         // in `Engine::resolve`, called at the pause menu's hook with a `text`
         // that outlives the frame, by this function's `# Safety`; enabled, no
         // attention badge.
-        unsafe { (self.pause_entry)(text, 1, 0) != 0 }
+        unsafe { draw(text, 1, 0) != 0 }
     }
 
     /// Whether the player pressed Back (Escape, B) this frame, taking the

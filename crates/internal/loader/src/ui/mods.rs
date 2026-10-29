@@ -210,7 +210,7 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
             "the world settings' Mods rows",
         ),
     ] {
-        if site == engine.world_settings_site && engine.view.is_none() {
+        if site == 0 || (site == engine.world_settings_site && engine.view.is_none()) {
             continue;
         }
         let link = crate::mid::MidLink {

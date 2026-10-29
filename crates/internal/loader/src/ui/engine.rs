@@ -537,9 +537,9 @@ pub(crate) struct Engine {
     sound: SoundFn,
     loca_id: LocaIdFn,
     loca_text: LocaTextFn,
-    hud_visible: VisibleFn,
-    main_entry: MainEntryFn,
-    pause_entry: PauseEntryFn,
+    hud_visible: Option<VisibleFn>,
+    main_entry: Option<MainEntryFn>,
+    pause_entry: Option<PauseEntryFn>,
     action_new: ActionNewFn,
     action_query: ActionQueryFn,
     pub(super) main_menu_site: u64,
@@ -572,16 +572,9 @@ impl Legal {
 
 /// Every function the loader calls or hooks, by symbol; each must read its
 /// `<symbol>.bytes` constant.
-const FUNCTIONS: [Symbol; 43] = [
-    pinned::ui::WORLD_SETTINGS_SITE,
-    pinned::ui::MAIN_ENTRY,
-    pinned::ui::PAUSE_ENTRY,
+const FUNCTIONS: [Symbol; 36] = [
     pinned::ui::ACTION_NEW,
     pinned::ui::ACTION_QUERY,
-    pinned::ui::MAIN_MENU_SITE,
-    pinned::ui::PAUSE_MENU_SITE,
-    pinned::ui::HUD,
-    pinned::ui::HUD_VISIBLE,
     pinned::ui::POPUP,
     pinned::ui::WINDOW_BEGIN,
     pinned::ui::WINDOW_END,
@@ -733,67 +726,190 @@ pub(crate) enum Missing {
     Looks,
 }
 
+impl Missing {
+    /// The table entry or the reflected name that failed.
+    pub(crate) const fn id(&self) -> &'static str {
+        match self {
+            Self::Entry(name) | Self::Bytes(name) | Self::Room(name) => name,
+            Self::Looks => "the look bundle",
+        }
+    }
+
+    /// Why it failed, after its [`Missing::id`].
+    pub(crate) const fn reason(&self) -> &'static str {
+        match self {
+            Self::Entry(_) => "is not in this build",
+            Self::Bytes(_) => "does not read as the build table says",
+            Self::Room(_) => "runs past the loader's buffer",
+            Self::Looks => "lacks a reflected field",
+        }
+    }
+}
+
 impl core::fmt::Display for Missing {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            Self::Entry(name) => write!(f, "{name} is not in this build"),
-            Self::Bytes(name) => write!(f, "{name} does not read as the build table says"),
-            Self::Room(name) => write!(f, "{name} runs past the loader's buffer"),
-            Self::Looks => f.write_str("the look bundle lacks a reflected field"),
+        write!(f, "{} {}", self.id(), self.reason())
+    }
+}
+
+/// An optional part of the interface and the game functions only it needs:
+/// a part whose function is missing or does not read turns off alone, and
+/// the rest of the interface stays on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Part {
+    /// The part, as the log and the Mods screen name it.
+    pub(super) name: &'static str,
+    /// The functions and hook sites only this part uses.
+    pub(super) functions: &'static [Symbol],
+}
+
+impl Part {
+    pub(super) const MAIN_MENU: Self = Self {
+        name: "the main menu's Mods entry",
+        functions: &[pinned::ui::MAIN_MENU_SITE, pinned::ui::MAIN_ENTRY],
+    };
+    pub(super) const PAUSE_MENU: Self = Self {
+        name: "the pause menu's Mods entry",
+        functions: &[pinned::ui::PAUSE_MENU_SITE, pinned::ui::PAUSE_ENTRY],
+    };
+    pub(super) const WORLD_ROWS: Self = Self {
+        name: "the world settings' Mods rows",
+        functions: &[pinned::ui::WORLD_SETTINGS_SITE],
+    };
+    pub(super) const HUD: Self = Self {
+        name: "the HUD",
+        functions: &[pinned::ui::HUD, pinned::ui::HUD_VISIBLE],
+    };
+    pub(super) const ALL: [Self; 4] = [
+        Self::MAIN_MENU,
+        Self::PAUSE_MENU,
+        Self::WORLD_ROWS,
+        Self::HUD,
+    ];
+}
+
+/// Checks the interface's own functions with `check`, then each optional
+/// part's: the first own function that fails keeps the interface off, and
+/// each part with a function that fails comes back with why, to turn off
+/// alone.
+///
+/// # Errors
+///
+/// The first of [`FUNCTIONS`] that `check` refuses.
+pub(super) fn check_functions(
+    check: impl Fn(Symbol) -> Result<(), Missing>,
+) -> Result<Vec<(Part, Missing)>, Missing> {
+    for name in FUNCTIONS {
+        check(name)?;
+    }
+    Ok(Part::ALL
+        .into_iter()
+        .filter_map(|part| {
+            let failed = part.functions.iter().find_map(|&name| check(name).err());
+            failed.map(|why| (part, why))
+        })
+        .collect())
+}
+
+/// The interface's optional parts read from the build's table and
+/// reflection, each `None` when it turned off alone.
+struct Optional {
+    dialog: Option<DialogLayout>,
+    view: Option<ViewLayout>,
+    scroll: Option<scroll::Scrolling>,
+    text_fields: Option<text_field::TextFields>,
+}
+
+impl Optional {
+    /// Turns off each of `parts_off` with its reason, then reads each
+    /// optional layout, turning off each that does not read; the world
+    /// settings' rows only while their hook site reads.
+    fn resolve(loader: &Loader, parts_off: &[(Part, Missing)]) -> Self {
+        let lookup = |id: &str| loader.build.constant(id);
+        let off = |part: &'static str| {
+            move |why: &Missing| {
+                loader.feature_off(part, why.id(), why.reason());
+            }
+        };
+        for (part, why) in parts_off {
+            off(part.name)(why);
+        }
+        let world_rows = !parts_off.iter().any(|(p, _)| *p == Part::WORLD_ROWS);
+        Self {
+            dialog: DialogLayout::read(&lookup)
+                .inspect_err(off("interface dialogs"))
+                .ok(),
+            view: ViewLayout::read(&lookup)
+                .inspect_err(off(Part::WORLD_ROWS.name))
+                .ok()
+                .filter(|_| world_rows),
+            scroll: scroll::Scrolling::resolve(loader)
+                .inspect_err(off("scrolling lists"))
+                .ok(),
+            text_fields: text_field::TextFields::resolve(loader)
+                .inspect_err(off("text fields"))
+                .ok(),
         }
     }
 }
 
 impl Engine {
-    /// Resolves every function and look; the first that is missing or does
-    /// not read as expected keeps the interface off. The scroll area and
-    /// the text field resolve on their own: without them the interface
-    /// stays on and pages its lists and shows texts read-only.
+    /// Resolves every function and look. The first of the interface's own
+    /// that is missing or does not read as expected keeps the interface
+    /// off; an optional part, the dialogs, the world settings' rows, the
+    /// menus' entries, the HUD, the scroll area and the text field, turns
+    /// off alone with its reason, and the rest stays on.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        for name in FUNCTIONS {
+        let parts_off = check_functions(|name| {
             if name == pinned::ui::CONTEXT {
                 loader.address(name).ok_or(Missing::Entry(name.id()))?;
-                continue;
+                return Ok(());
             }
-            verify(loader, name)?;
-        }
+            verify(loader, name).map(drop)
+        })?;
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
         let layout = Layout::read(&lookup)?;
-        let dialog = DialogLayout::read(&lookup)
-            .inspect_err(|why| crate::log!(WARN, "interface dialogs off: {why}"))
-            .ok();
-        let view = ViewLayout::read(&lookup)
-            .inspect_err(|why| crate::log!(WARN, "the world settings' Mods rows off: {why}"))
-            .ok();
-        let scroll = scroll::Scrolling::resolve(loader)
-            .inspect_err(|why| {
-                crate::log!(WARN, "the Mods screen pages instead of scrolling: {why}");
-            })
-            .ok();
-        let text_fields = text_field::TextFields::resolve(loader)
-            .inspect_err(|why| {
-                crate::log!(
-                    WARN,
-                    "text settings are read-only on the Mods screen: {why}"
-                );
-            })
-            .ok();
+        let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
+        let Optional {
+            dialog,
+            view,
+            scroll,
+            text_fields,
+        } = Optional::resolve(loader, &parts_off);
         let at = |name: Symbol| {
             loader
                 .address(name)
                 .and_then(|a| usize::try_from(a).ok())
                 .unwrap_or(0)
         };
+        let site = |part: Part, name: Symbol| {
+            if on(part) {
+                loader.address(name).unwrap_or(0)
+            } else {
+                0
+            }
+        };
         macro_rules! function {
             ($name:expr, $ty:ty) => {{
                 let address = at($name);
-                // SAFETY: the loop over `FUNCTIONS` returned unless every
-                // function's first eight bytes match its `<name>.bytes`
-                // constant, so the address is the game function the build table
-                // types as `$ty`.
+                // SAFETY: `check_functions` returned unless every function
+                // of `FUNCTIONS` has first eight bytes that match its
+                // `<name>.bytes` constant, so the address is the game function
+                // the build table types as `$ty`.
                 unsafe { core::mem::transmute::<usize, $ty>(address) }
             }};
+        }
+        macro_rules! part_fn {
+            ($part:expr, $name:expr, $ty:ty) => {
+                if on($part) {
+                    // SAFETY: `$ty` is the signature of the game function
+                    // `$name` names on every build whose table pins it.
+                    unsafe { game_fn::<$ty>(loader, $name) }.ok()
+                } else {
+                    None
+                }
+            };
         }
         Ok(Self {
             context: at(pinned::ui::CONTEXT),
@@ -835,14 +951,14 @@ impl Engine {
             sound: function!(pinned::ui::SOUND, SoundFn),
             loca_id: function!(pinned::ui::LOCA_ID, LocaIdFn),
             loca_text: function!(pinned::ui::LOCA_TEXT, LocaTextFn),
-            hud_visible: function!(pinned::ui::HUD_VISIBLE, VisibleFn),
-            main_entry: function!(pinned::ui::MAIN_ENTRY, MainEntryFn),
-            pause_entry: function!(pinned::ui::PAUSE_ENTRY, PauseEntryFn),
+            hud_visible: part_fn!(Part::HUD, pinned::ui::HUD_VISIBLE, VisibleFn),
+            main_entry: part_fn!(Part::MAIN_MENU, pinned::ui::MAIN_ENTRY, MainEntryFn),
+            pause_entry: part_fn!(Part::PAUSE_MENU, pinned::ui::PAUSE_ENTRY, PauseEntryFn),
             action_new: function!(pinned::ui::ACTION_NEW, ActionNewFn),
             action_query: function!(pinned::ui::ACTION_QUERY, ActionQueryFn),
-            main_menu_site: loader.address(pinned::ui::MAIN_MENU_SITE).unwrap_or(0),
-            pause_menu_site: loader.address(pinned::ui::PAUSE_MENU_SITE).unwrap_or(0),
-            world_settings_site: loader.address(pinned::ui::WORLD_SETTINGS_SITE).unwrap_or(0),
+            main_menu_site: site(Part::MAIN_MENU, pinned::ui::MAIN_MENU_SITE),
+            pause_menu_site: site(Part::PAUSE_MENU, pinned::ui::PAUSE_MENU_SITE),
+            world_settings_site: site(Part::WORLD_ROWS, pinned::ui::WORLD_SETTINGS_SITE),
             legal_line_site: if loader.code_holds(pinned::ui::LEGAL_LINE_SITE) {
                 loader.address(pinned::ui::LEGAL_LINE_SITE).unwrap_or(0)
             } else {

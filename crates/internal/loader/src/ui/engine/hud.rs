@@ -13,10 +13,18 @@ impl Engine {
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
     pub(in crate::ui) unsafe fn hud_visible(&self) -> bool {
-        // SAFETY: `self.hud_visible` is the game's `ui.hud_visible`, checked
-        // in `Engine::resolve`, called in a frame on its thread by this
+        let Some(visible) = self.hud_visible else {
+            return false;
+        };
+        // SAFETY: `visible` is the game's `ui.hud_visible`, checked in
+        // `Engine::resolve`, called in a frame on its thread by this
         // function's `# Safety`; it reads the frame's context itself.
-        unsafe { (self.hud_visible)(HUD_MASK) != 0 }
+        unsafe { visible(HUD_MASK) != 0 }
+    }
+
+    /// Whether the HUD part read on this build, so its hook is worth linking.
+    pub(in crate::ui) const fn has_hud(&self) -> bool {
+        self.hud_visible.is_some()
     }
 
     /// Starts the HUD window, a layer over the game's HUD that takes no

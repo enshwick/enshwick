@@ -261,3 +261,59 @@ fn buffers_write_little_endian_in_bounds() {
     assert_eq!(buf.read_usize(8), 7);
     assert_eq!(buf.read_u64(12), 0);
 }
+
+/// A function belongs to the interface itself or to one optional part,
+/// never to two, so a part's failure never reaches the rest.
+#[test]
+fn every_interface_function_belongs_to_one_place() {
+    let mut seen: Vec<Symbol> = FUNCTIONS.to_vec();
+    for part in Part::ALL {
+        for &name in part.functions {
+            assert!(!seen.contains(&name), "{name} in two places");
+            seen.push(name);
+        }
+    }
+}
+
+/// A function of an optional part that does not read turns only that part
+/// off, with its reason, and the interface stays on; one of the
+/// interface's own keeps it off.
+#[test]
+fn each_part_s_function_turns_only_that_part_off() {
+    for part in Part::ALL {
+        for &broken in part.functions {
+            let check = |name: Symbol| {
+                if name == broken {
+                    Err(Missing::Bytes(name.id()))
+                } else {
+                    Ok(())
+                }
+            };
+            let off = check_functions(check).unwrap();
+            assert_eq!(off.len(), 1, "{broken}");
+            assert_eq!(off[0].0, part, "{broken}");
+            assert_eq!(off[0].1.id(), broken.id());
+        }
+    }
+    assert!(check_functions(|_| Ok(())).unwrap().is_empty());
+    let core = FUNCTIONS[0];
+    let refused = check_functions(|name| {
+        if name == core {
+            Err(Missing::Entry(name.id()))
+        } else {
+            Ok(())
+        }
+    });
+    assert!(matches!(refused, Err(Missing::Entry(id)) if id == core.id()));
+}
+
+/// The reason a part is off reads as one line after its entry.
+#[test]
+fn a_missing_entry_names_itself_then_why() {
+    let why = Missing::Bytes(pinned::ui::HUD.id());
+    assert_eq!(why.id(), "ui.hud");
+    assert_eq!(
+        why.to_string(),
+        "ui.hud does not read as the build table says"
+    );
+}

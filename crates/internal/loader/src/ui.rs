@@ -465,7 +465,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let engine = match Engine::resolve(loader) {
         Ok(engine) => engine,
         Err(missing) => {
-            crate::log!(WARN, "interface off: {missing}");
+            loader.feature_off("interface", missing.id(), missing.reason());
             return;
         }
     };
@@ -474,13 +474,15 @@ pub(crate) fn link(loader: &'static Loader) {
         mods::link(loader, engine);
         menu_line::link(loader, engine);
     }
-    loader.link_feature(
-        "HUD",
-        Target::Pinned(pinned::ui::HUD),
-        &HUD_NEXT,
-        hud_detour as HudFn,
-        HookFlags::NONE,
-    );
+    if ENGINE.get().is_some_and(Engine::has_hud) {
+        loader.link_feature(
+            "the HUD",
+            Target::Pinned(pinned::ui::HUD),
+            &HUD_NEXT,
+            hud_detour as HudFn,
+            HookFlags::NONE,
+        );
+    }
     if loader.link_feature(
         "interface",
         Target::Pinned(pinned::ui::POPUP),
