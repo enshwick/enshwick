@@ -24,28 +24,14 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::pacing::LOOP_WAIT.id(),
     pinned::pacing::MESSAGE_WAIT.id(),
     pinned::pacing::SERVER_WAIT.id(),
+    pinned::pacing::WAIT_DIVIDE.id(),
 ];
 
-/// `mov rax, 0x431bde82d7b634db`: the start of a division by 1 000 000.
-const DIVIDE: [u8; 10] = [0x48, 0xB8, 0xDB, 0x34, 0xB6, 0xD7, 0x82, 0xDE, 0x1B, 0x43];
-/// `imul rbx; sar rdx, 18`: the dividend is `rbx`, the nanoseconds left.
-const DIVIDE_RBX: [u8; 7] = [0x48, 0xF7, 0xEB, 0x48, 0xC1, 0xFA, 0x12];
-/// How far before a wait's hook the division may start.
-const DIVIDE_SPAN: usize = 0x80;
-
-/// Whether `before`, the code ahead of a wait's hook, divides `rbx` by a
-/// million, so `rbx` holds the nanoseconds left at the hook (1.0 builds).
-fn divides_rbx(before: &[u8]) -> bool {
-    before
-        .windows(DIVIDE.len())
-        .enumerate()
-        .any(|(at, window)| {
-            window == DIVIDE
-                && before[at + DIVIDE.len()..]
-                    .windows(DIVIDE_RBX.len())
-                    .take(9)
-                    .any(|next| next == DIVIDE_RBX)
-        })
+/// Whether the wait at `wait` lies after the division at `divide`, inside
+/// the `span` bytes of code from the division on that its table pattern
+/// covers, so `rbx` holds the nanoseconds left at the hook (1.0 builds).
+fn after_division(divide: u64, span: usize, wait: u64) -> bool {
+    u64::try_from(span).is_ok_and(|span| wait > divide && wait - divide < span)
 }
 
 /// A mod's handler with its pointer, kept for the life of the process as a
@@ -168,20 +154,23 @@ fn verified(loader: &Loader, id: Symbol) -> Option<u64> {
     None
 }
 
-/// The address of the wait `id` on this build, when its bytes are the
-/// table's and the code before it divides `rbx` by a million, so the hook
-/// reads the time left.
+/// The address of the wait `id` on this build, when its code and the
+/// division before it are the table's and the wait lies in the code the
+/// division's pattern spans, so the hook reads the time left.
 fn checked_wait(loader: &Loader, id: Symbol) -> Option<u64> {
     let at = verified(loader, id)?;
-    let code = crate::code::text_bytes(loader.base)?;
-    let end = usize::try_from(at.checked_sub(code.as_ptr().addr() as u64)?).ok()?;
-    let checked = code
-        .get(end.saturating_sub(DIVIDE_SPAN)..end)
-        .is_some_and(divides_rbx);
+    let divide = pinned::pacing::WAIT_DIVIDE;
+    let span = loader
+        .build
+        .head(divide.id())
+        .and_then(|(pattern, start)| pattern.len().checked_sub(usize::try_from(start).ok()?));
+    let checked = verified(loader, divide)
+        .zip(span)
+        .is_some_and(|(divide, span)| after_division(divide, span, at));
     if !checked {
         crate::log!(
             WARN,
-            "{id} on {}: the code before it does not read the time left; it is not hooked",
+            "{id} on {}: {divide} does not lead to it, so the time left is unknown; it is not hooked",
             loader.build.name
         );
     }
@@ -303,16 +292,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_division_of_rbx_by_a_million_is_recognised() {
-        let mut code = vec![0x90; 16];
-        code.extend(DIVIDE);
-        code.extend([0x90; 3]);
-        code.extend(DIVIDE_RBX);
-        assert!(divides_rbx(&code));
-        let mut other = code.clone();
-        other[16 + DIVIDE.len() + 3 + 2] = 0xEA;
-        assert!(!divides_rbx(&other));
-        assert!(!divides_rbx(&code[..20]));
+    fn a_wait_counts_only_inside_the_code_after_its_division() {
+        assert!(after_division(0x1000, 0x40, 0x1031));
+        assert!(after_division(0x1000, 0x40, 0x103f));
+        assert!(!after_division(0x1000, 0x40, 0x1040), "past the span");
+        assert!(!after_division(0x1000, 0x40, 0x1000), "the division itself");
+        assert!(!after_division(0x1000, 0x40, 0xff0), "before it");
+    }
+
+    /// In every embedded table, the division's pattern starts at the
+    /// division and spans each wait of the event loop the table has.
+    #[test]
+    fn every_table_s_division_leads_to_each_of_its_waits() {
+        for table in crate::builds::load() {
+            let resolved = table.resolve();
+            let name = resolved.name().to_owned();
+            let divide = resolved
+                .symbol(pinned::pacing::WAIT_DIVIDE.id())
+                .unwrap_or_else(|| panic!("{name}: no division"));
+            let (pattern, at) = resolved
+                .head(pinned::pacing::WAIT_DIVIDE.id())
+                .unwrap_or_else(|| panic!("{name}: the division has no pattern"));
+            let span = pattern.len().saturating_sub(usize::try_from(at).unwrap());
+            let mut waits = 0;
+            for wait in [pinned::pacing::LOOP_WAIT, pinned::pacing::MESSAGE_WAIT] {
+                if let Some(address) = resolved.symbol(wait.id()) {
+                    assert!(after_division(divide, span, address), "{name}: {wait}");
+                    waits += 1;
+                }
+            }
+            assert!(waits > 0, "{name}: no wait");
+        }
+    }
+
+    /// In each executable `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the
+    /// division and the waits found by their patterns alone, as on a build
+    /// without its own table, still have each wait after the division;
+    /// skipped without them.
+    #[test]
+    fn the_patterns_find_the_division_before_each_wait_in_the_game_s_executables() {
+        use enshwick_gamedata::reflect::{Image, Layout};
+
+        let tables = crate::builds::load();
+        for (variable, side) in [
+            ("ENSH_SERVER_EXE", Side::SERVER),
+            ("ENSH_CLIENT_EXE", Side::CLIENT),
+        ] {
+            let Some(path) = std::env::var_os(variable) else {
+                continue;
+            };
+            let bytes = std::fs::read(path).unwrap();
+            let image = Image::parse(&bytes, Layout::File, None).unwrap();
+            let text = image.section(".text").unwrap();
+            let range = image.range(text);
+            let code = image.read(range.start, range.end - range.start).unwrap();
+            let found = crate::builds::by_patterns(
+                &tables,
+                side,
+                (code, range.start - image.base()),
+                |rva| image.u32(image.base() + rva),
+            )
+            .unwrap();
+            let divide = found
+                .symbol(pinned::pacing::WAIT_DIVIDE.id())
+                .unwrap_or_else(|| panic!("{variable}: no division"));
+            let (pattern, at) = found.head(pinned::pacing::WAIT_DIVIDE.id()).unwrap();
+            let span = pattern.len() - usize::try_from(at).unwrap();
+            let waits: &[Symbol] = if side == Side::CLIENT {
+                &[pinned::pacing::LOOP_WAIT, pinned::pacing::MESSAGE_WAIT]
+            } else {
+                &[pinned::pacing::LOOP_WAIT]
+            };
+            for &wait in waits {
+                let address = found
+                    .symbol(wait.id())
+                    .unwrap_or_else(|| panic!("{variable}: no {wait}"));
+                assert!(after_division(divide, span, address), "{variable}: {wait}");
+            }
+        }
     }
 
     #[test]
