@@ -183,6 +183,7 @@ mod rates;
 pub mod raw;
 #[cfg(doctest)]
 mod refused;
+mod rules;
 pub mod schedule;
 #[cfg(feature = "unstable")]
 pub mod script;
@@ -463,6 +464,11 @@ pub mod __private {
     /// the catalogue to name them from one place.
     pub mod ids {
         pub use crate::engine_ids::*;
+    }
+
+    /// The rules the loader and the fake host refuse a mod's requests by.
+    pub mod rules {
+        pub use crate::rules::*;
     }
 
     /// Links an `InventorySetup` holds, for the inventory walks of the API
@@ -770,8 +776,13 @@ pub mod __private {
             core::ptr::null_mut(),
         );
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let joins = M::manifest().flags.contains(ManifestFlags::JOIN);
-            M::init(&mut Load::of(host, joins))
+            let manifest = M::manifest();
+            #[cfg(feature = "test")]
+            crate::test::table::note_manifest(api, manifest);
+            M::init(&mut Load::of(
+                host,
+                manifest.flags.contains(ManifestFlags::JOIN),
+            ))
         }));
         match outcome {
             Ok(Ok(state)) => match slot.0.set(state) {

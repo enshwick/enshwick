@@ -45,70 +45,146 @@ fn the_tables_layouts_fit_the_loader_s_buffers() {
     }
 }
 
+/// The client tables, parsed.
+fn client_tables() -> Vec<enshwick_gamedata::Table> {
+    enshwick_gamedata::embedded()
+        .iter()
+        .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap())
+        .filter(|t| t.side() == enshwick_gamedata::Side::Client)
+        .collect()
+}
+
+/// A table's constant by id.
+fn constant(table: &enshwick_gamedata::Table, id: &str) -> Option<u64> {
+    table
+        .constants()
+        .iter()
+        .find(|c| c.id() == id)
+        .map(enshwick_gamedata::Constant::value)
+}
+
+/// Which optional parts of the interface read on a build whose constants
+/// `lookup` gives: the dialogs, the world settings' Mods rows and the
+/// scroll area's layout.
+fn optional_parts(lookup: Lookup<'_>) -> [bool; 3] {
+    [
+        DialogLayout::read(lookup).is_ok(),
+        ViewLayout::read(lookup).is_ok(),
+        scroll::nav_highlight(lookup).is_ok(),
+    ]
+}
+
+/// Each optional part whose layout does not read turns off alone: the
+/// interface's own layout and every other optional part still read.
+#[test]
+fn each_optional_part_turns_off_alone() {
+    let parts = [
+        pinned::ui::POPUP_TITLE.id(),
+        pinned::ui::VIEW_TAB.id(),
+        pinned::ui::NAV_HIGHLIGHT.id(),
+    ];
+    for table in client_tables() {
+        let lookup = |id: &str| constant(&table, id);
+        if optional_parts(&lookup) != [true; 3] {
+            continue;
+        }
+        for (off, part) in parts.into_iter().enumerate() {
+            let without = |id: &str| if id == part { None } else { lookup(id) };
+            Layout::read(&without).unwrap();
+            let read = optional_parts(&without);
+            for (index, on) in read.into_iter().enumerate() {
+                assert_eq!(on, index != off, "{} without {part}", table.name());
+            }
+        }
+    }
+}
+
 /// Every client table that pins the text field gives its sizes, they fit
 /// the loader's buffer, and a build whose field or kept state moved turns
 /// the text field off instead of letting the game write past the buffer.
 #[test]
 fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
-    let tables = enshwick_gamedata::embedded()
-        .iter()
-        .map(|(_, text)| enshwick_gamedata::Table::parse(text).unwrap())
-        .filter(|t| t.side() == enshwick_gamedata::Side::Client)
-        .filter(|t| {
-            t.symbols()
-                .iter()
-                .any(|s| s.id() == pinned::ui::TEXT_FIELD.id())
-        });
     let mut checked = 0;
-    for table in tables {
-        let lookup = |id: &str| {
-            table
-                .constants()
-                .iter()
-                .find(|c| c.id() == id)
-                .map(enshwick_gamedata::Constant::value)
-        };
+    for table in client_tables() {
+        if !table
+            .symbols()
+            .iter()
+            .any(|s| s.id() == pinned::ui::TEXT_FIELD.id())
+        {
+            continue;
+        }
+        let lookup = |id: &str| constant(&table, id);
         text_field::TextLayout::read(&lookup)
             .unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+        let changed = |changed: &'static str, value: Option<u64>| {
+            move |id: &str| if id == changed { value } else { lookup(id) }
+        };
+        let extent = pinned::ui::TEXT_FIELD_EXTENT.id();
+        let text = pinned::ui::TEXT_FIELD_TEXT.id();
+        let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
+        let editing = pinned::ui::TEXT_FIELD_EDITING.id();
+        for (id, value, room, blamed) in [
+            (extent, Some(0x1000), true, extent),
+            (text, Some(0x1000), true, text),
+            (state, Some(0x10), true, editing),
+            (extent, None, false, extent),
+        ] {
+            let read = text_field::TextLayout::read(&changed(id, value));
+            let got = match read {
+                Err(Missing::Room(id)) => Some((true, id)),
+                Err(Missing::Entry(id)) => Some((false, id)),
+                _ => None,
+            };
+            assert_eq!(
+                got,
+                Some((room, blamed)),
+                "{} with {id} at {value:?}",
+                table.name()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "no client table pins the text field");
+}
 
-        let changed = |changed: &'static str, value: u64| {
-            move |id: &str| {
-                if id == changed {
+/// The scroll area's highlight sound sits inside the navigation config on
+/// every client table that has it, and one past it keeps the scroll area
+/// off.
+#[test]
+fn the_scroll_areas_highlight_fits_the_navigation_config() {
+    let highlight = pinned::ui::NAV_HIGHLIGHT.id();
+    for table in client_tables() {
+        let lookup = |id: &str| constant(&table, id);
+        if lookup(highlight).is_none() {
+            assert!(matches!(
+                scroll::nav_highlight(&lookup),
+                Err(Missing::Entry(id)) if id == highlight
+            ));
+            continue;
+        }
+        let at = scroll::nav_highlight(&lookup).unwrap();
+        assert!(at + 16 <= NAV_CONFIG, "{}", table.name());
+        let config = lookup(pinned::ui::NAV_CONFIG.id()).unwrap();
+        for value in [config + NAV_CONFIG as u64, config.wrapping_sub(1), u64::MAX] {
+            let moved = |id: &str| {
+                if id == highlight {
                     Some(value)
                 } else {
                     lookup(id)
                 }
-            }
-        };
-        let grown = changed(pinned::ui::TEXT_FIELD_EXTENT.id(), 0x1000);
-        assert!(matches!(
-            text_field::TextLayout::read(&grown),
-            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_EXTENT.id()
-        ));
-        let moved = changed(pinned::ui::TEXT_FIELD_TEXT.id(), 0x1000);
-        assert!(matches!(
-            text_field::TextLayout::read(&moved),
-            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_TEXT.id()
-        ));
-        let shrunk = changed(pinned::ui::TEXT_FIELD_STATE_SIZE.id(), 0x10);
-        assert!(matches!(
-            text_field::TextLayout::read(&shrunk),
-            Err(Missing::Room(id)) if id == pinned::ui::TEXT_FIELD_EDITING.id()
-        ));
-        let gone = |id: &str| {
-            if id == pinned::ui::TEXT_FIELD_EXTENT.id() {
-                None
-            } else {
-                lookup(id)
-            }
-        };
-        assert!(matches!(
-            text_field::TextLayout::read(&gone),
-            Err(Missing::Entry(id)) if id == pinned::ui::TEXT_FIELD_EXTENT.id()
-        ));
-        checked += 1;
+            };
+            assert!(
+                matches!(scroll::nav_highlight(&moved), Err(Missing::Room(id)) if id == highlight),
+                "{} at {value:#x}",
+                table.name()
+            );
+        }
     }
-    assert!(checked > 0, "no client table pins the text field");
+    let far = |id: &str| (id == highlight).then_some(u64::MAX).or(Some(0));
+    assert!(matches!(
+        scroll::nav_highlight(&far),
+        Err(Missing::Room(id)) if id == highlight
+    ));
 }
 
 /// A client table pins the scroll area's and the text field's functions

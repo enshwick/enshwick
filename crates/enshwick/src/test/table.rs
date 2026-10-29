@@ -92,6 +92,12 @@ pub(crate) struct State {
     pub(crate) logs: Vec<(Level, String)>,
     pub(crate) faults: Vec<String>,
     pub(crate) hooks: Vec<LinkedHook>,
+    /// The slots of the linked hooks: one slot joins one chain.
+    pub(crate) hook_slots: Vec<usize>,
+    /// The mod as its manifest names it, once its init ran.
+    pub(crate) manifest: Option<ManifestFacts>,
+    /// Whether the mod may still ask for what only init may.
+    pub(crate) registration: Registration,
     /// Mid-function hooks: address, handler and the mod's pointer.
     pub(crate) mid_hooks: Vec<(u64, MidHookFn, usize)>,
     pub(crate) subscriptions: Vec<(Event, EventFn, usize)>,
@@ -302,6 +308,62 @@ fn take_turn() -> MutexGuard<'static, ()> {
     turn
 }
 
+/// Whether the mod may still ask for hooks, code patches, points and rates:
+/// the loader takes them during init only and arms once every mod is
+/// initialised.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Registration {
+    /// The mod's init runs, or has not run yet.
+    Open,
+    /// The mod's init returned; such requests come too late.
+    Closed,
+}
+
+/// What the fake reads from the mod's manifest, as the loader does.
+#[derive(Debug)]
+pub(crate) struct ManifestFacts {
+    /// The mod's id, then the ids it had before a rename.
+    pub(crate) ids: Vec<String>,
+    /// Whether the mod takes part in the join check.
+    pub(crate) joins: bool,
+}
+
+impl ManifestFacts {
+    /// The facts of `manifest`.
+    fn of(manifest: &crate::abi::Manifest) -> Self {
+        let dependencies = if manifest.dependencies.is_null() {
+            &[][..]
+        } else {
+            // SAFETY: `manifest!` builds `dependencies` as a static array of
+            // `dependency_count` entries, which a non-null pointer points at.
+            unsafe { core::slice::from_raw_parts(manifest.dependencies, manifest.dependency_count) }
+        };
+        let id = text(manifest.id);
+        let former = dependencies
+            .iter()
+            .filter(|d| d.relation == crate::abi::Relation::WAS)
+            .map(|d| text(d.id))
+            .filter(|former| *former != id);
+        Self {
+            ids: core::iter::once(id.clone()).chain(former).collect(),
+            joins: manifest.flags.contains(crate::abi::ManifestFlags::JOIN),
+        }
+    }
+
+    /// The ids as borrowed names.
+    pub(crate) fn names(&self) -> Vec<&str> {
+        self.ids.iter().map(String::as_str).collect()
+    }
+}
+
+/// Notes the manifest of the mod whose init runs on `api`, when `api` is the
+/// fake's table, so the fake refuses by the mod's names and join flag.
+pub(crate) fn note_manifest(api: *const HostApi, manifest: &crate::abi::Manifest) {
+    if core::ptr::eq(api, &raw const TABLE) {
+        with((), |s| s.manifest = Some(ManifestFacts::of(manifest)));
+    }
+}
+
 /// The base limits the mod asked for, and whether the hooks are armed.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct BaseLimitState {
@@ -396,6 +458,9 @@ pub(crate) fn install(host: FakeHost) -> MutexGuard<'static, ()> {
         logs: Vec::new(),
         faults: Vec::new(),
         hooks: Vec::new(),
+        hook_slots: Vec::new(),
+        manifest: None,
+        registration: Registration::Open,
         mid_hooks: Vec::new(),
         subscriptions: Vec::new(),
         game_events: Vec::new(),

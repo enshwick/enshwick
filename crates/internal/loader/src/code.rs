@@ -11,6 +11,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use enshwick::__private::rules::{patch_fits, spans_overlap as overlaps};
 use enshwick::abi::{HookFlags, Status};
 use enshwick::code::Pattern;
 use rustc_hash::FxHashMap;
@@ -77,11 +78,6 @@ pub(crate) enum Verdict {
 static PENDING: Mutex<Vec<CodePatch>> = Mutex::new(Vec::new());
 static SEALED: AtomicBool = AtomicBool::new(false);
 static TEXT: OnceLock<Option<(usize, usize)>> = OnceLock::new();
-
-/// Whether two byte ranges, as start and length, share a byte.
-fn overlaps(a: (usize, usize), b: (usize, usize)) -> bool {
-    a.0 < b.0.saturating_add(b.1) && b.0 < a.0.saturating_add(a.1)
-}
 
 /// The `.text` section in PE `headers`: its offset from the image base and
 /// its length.
@@ -289,14 +285,9 @@ pub(crate) fn register_all(patches: Vec<CodePatch>, text: (usize, usize)) -> Sta
     if SEALED.load(Ordering::Acquire) {
         return Status::TOO_LATE;
     }
-    let inside = |(address, len): (usize, usize)| {
-        len != 0
-            && address >= text.0
-            && address.saturating_add(len) <= text.0.saturating_add(text.1)
-    };
     if patches
         .iter()
-        .any(|p| p.replacement.len() != p.expected.len() || !inside(p.span()))
+        .any(|p| p.replacement.len() != p.expected.len() || !patch_fits(p.span(), text))
     {
         return Status::BAD_ARGS;
     }

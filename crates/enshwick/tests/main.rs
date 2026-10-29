@@ -38,6 +38,7 @@ mod entity_data;
 #[cfg(feature = "unstable")]
 mod events_described;
 mod fake_per_test;
+mod fake_refusals;
 mod fake_second_install;
 mod features;
 #[cfg(feature = "unstable")]
