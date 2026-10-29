@@ -44,6 +44,14 @@ pub(super) const FIELDS: Fields = Fields {
     },
 };
 
+/// The build table's records and stock slots on server 399 and client 426,
+/// and their vanilla object sizes.
+pub(super) const GEOMETRY: window::Geometry =
+    match window::Geometry::new((0x30, 0x130), (0x1610, 0x58), (0x2070, 0x16e0)) {
+        Ok(geometry) => geometry,
+        Err(_) => panic!("the fake geometry holds the window"),
+    };
+
 /// The build table's layout of the loops over every base on server 399 and
 /// client 426.
 pub(super) const LAYOUT: Layout = Layout {
@@ -94,12 +102,13 @@ pub(super) const LAYOUT: Layout = Layout {
         answer_word: 0x4,
         entity_position: 0x8,
     },
+    window: GEOMETRY,
     count: 0x24,
 };
 
 /// A bases object, 16-aligned as the game's.
 #[repr(C, align(16))]
-pub(super) struct Object(pub(super) [u8; window::BLOCK]);
+pub(super) struct Object(pub(super) [u8; GEOMETRY.block()]);
 
 impl Object {
     /// A zeroed object on the heap, too large for the stack.
@@ -186,7 +195,7 @@ impl Fake {
 
 /// Record `i`'s offset in the object.
 pub(super) const fn record(i: usize) -> usize {
-    window::RECORDS + i * window::RECORD
+    GEOMETRY.record_at(i)
 }
 
 /// The game's list grower, `fn(list, -wanted, exact) -> grown`, over
@@ -299,6 +308,7 @@ const CODE: super::lifecycle::Code = super::lifecycle::Code {
     teardown: nothing,
     slot_init: slot_made,
     slot_free: nothing,
+    window: GEOMETRY,
 };
 
 impl Drop for Fake {

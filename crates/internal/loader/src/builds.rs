@@ -611,6 +611,19 @@ mod tests {
         }
     }
 
+    /// On each executable, every table that pins them reads where the bases
+    /// object keeps its first record and first stock slot, and a slot's
+    /// stride.
+    #[test]
+    fn the_first_record_and_stock_slot_read_on_each_executable() {
+        let rows = pinned_constants_on_executables(&["bases.records", "bases.slots", "bases.slot"]);
+        let unread = executables_without_rows(&rows, &named_executables());
+        assert!(unread.is_empty(), "{unread:?}: {rows:?}");
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x30), Some(0x1610), Some(0x58)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads the words of the offer test's
     /// out record a refused offer zeroes.
     #[test]

@@ -99,6 +99,9 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::bases::COUNT.id(),
     pinned::bases::SORT_ANSWER_WORD.id(),
     pinned::bases::SORT_ENTITY_POSITION.id(),
+    pinned::bases::RECORDS.id(),
+    pinned::bases::SLOTS.id(),
+    pinned::bases::SLOT.id(),
     pinned::bases::ITEM_ALTAR.id(),
     pinned::bases::MAX_ALTARS_REACHED.id(),
     pinned::bases::MEMBERS.id(),
@@ -1167,6 +1170,30 @@ mod tests {
             assert_eq!(Fields::read(&offset), Ok(fields), "{side:?}");
             assert_eq!(loops::Layout::read(&offset), Ok(fake::LAYOUT), "{side:?}");
         }
+    }
+
+    /// A table whose stock slots are too narrow to put index 93 behind the
+    /// server's fields keeps 16 bases, naming the stock slots.
+    #[test]
+    fn a_table_that_puts_the_window_on_a_vanilla_field_keeps_16_bases() {
+        use enshwick_gamedata::{Side as TableSide, newest};
+
+        let tables = crate::builds::load();
+        let resolved = newest(&tables, TableSide::Server).unwrap().resolve();
+        let offset = |id: Constant| {
+            if id == pinned::bases::SLOT {
+                return Some(0x10);
+            }
+            resolved
+                .constant(id.id())
+                .and_then(|value| usize::try_from(value).ok())
+        };
+        let why = loops::Layout::read(&offset).unwrap_err();
+        assert_eq!(
+            why,
+            past16::SiteError::Window(window::GeometryError::Overlap)
+        );
+        assert_eq!(why.entry(), pinned::bases::SLOTS.id());
     }
 
     /// Fields whose answer cannot hold a zone box are refused, with the

@@ -143,11 +143,12 @@ pub(super) unsafe fn cache_stock(
         return;
     };
     let made = i < window::VANILLA || crate::bases::lifecycle::has_slot(obj, i);
-    let slot = obj.wrapping_add(window::SLOTS + i * window::SLOT);
+    let slot = obj.wrapping_add(layout.window.slot_at(i));
     // SAFETY: record `i` holds a base; its stock list's data pointer.
-    let entities = unsafe { read_ptr_at::<u32>(rec(obj, i), list + container.data) };
+    let entities =
+        unsafe { read_ptr_at::<u32>(rec(obj, i, &layout.window), list + container.data) };
     // SAFETY: record `i` holds a base; its stock list's u64 length.
-    let len = unsafe { read_at::<u64>(rec(obj, i), list + container.len) };
+    let len = unsafe { read_at::<u64>(rec(obj, i, &layout.window), list + container.len) };
     if len == 0 || !made {
         if made {
             // SAFETY: slot `i` is made: by the game's create in the array,

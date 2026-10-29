@@ -154,7 +154,7 @@ pub(super) unsafe fn rebuild_sets(
     for i in indices() {
         // SAFETY: record `i` holds a base the client's new base code started,
         // which made its set.
-        unsafe { empty_set(rec(obj, i).wrapping_add(record.set), record) };
+        unsafe { empty_set(rec(obj, i, &layout.window).wrapping_add(record.set), record) };
     }
     let mut found = Found::new();
     // SAFETY: the game's entity query on its world, appending only through
@@ -170,7 +170,7 @@ pub(super) unsafe fn rebuild_sets(
         let mut result = [0u8; 16];
         // SAFETY: the element's u32 id comes first.
         let id = unsafe { read_at::<u32>(at, 0) };
-        let set = rec(obj, i).wrapping_add(record.set);
+        let set = rec(obj, i, &layout.window).wrapping_add(record.set);
         // SAFETY: the game's insert into record `i`'s set, which the client's
         // new base code made with room, as the game's rebuild calls it.
         let _same = unsafe { (code.insert)(set, result.as_mut_ptr(), &raw const id) };

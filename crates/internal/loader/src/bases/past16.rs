@@ -3,7 +3,7 @@
 //! together or not at all.
 //!
 //! Both create functions allocate the object with one size immediate, which
-//! grows to [`window::BLOCK`]; their hooks fill the window records, and the
+//! grows to [`window::Geometry::block`]; their hooks fill the window records, and the
 //! destroy hooks free them first. A miss of any site leaves the game its
 //! 16 bases, with the zones still raised. Server 399 and client 426, where
 //! the bodies are the same.
@@ -59,10 +59,10 @@ pub(super) enum SiteError {
     /// The client's base list calls another getter than the count's.
     #[error("is not the expected count getter")]
     Getter,
-    /// The build table's record stride is not the one the window is laid out
-    /// for.
-    #[error("{0:#x} is not the window's record stride")]
-    Stride(usize),
+    /// The build table's records and stock slots leave no room for the
+    /// window behind the game's fields.
+    #[error("{0}")]
+    Window(window::GeometryError),
     /// A field lies outside its record, the object or an answer.
     #[error("lies outside its record, the object or its answer")]
     Fit(&'static str),
@@ -74,7 +74,14 @@ impl SiteError {
         match self {
             Self::Missing(id) | Self::Size(id) | Self::Fit(id) => id,
             Self::Getter => bases::COUNT_GETTER.id(),
-            Self::Stride(_) => bases::STRIDE.id(),
+            Self::Window(why) => match why {
+                window::GeometryError::Record(_) | window::GeometryError::Block => {
+                    bases::STRIDE.id()
+                }
+                window::GeometryError::Slot(_) => bases::SLOT.id(),
+                window::GeometryError::Records => bases::RECORDS.id(),
+                window::GeometryError::Slots | window::GeometryError::Overlap => bases::SLOTS.id(),
+            },
         }
     }
 }
@@ -204,12 +211,13 @@ pub(super) fn sites() -> Option<&'static Sites> {
 }
 
 /// The patch that grows the object the create whose code is `create`
-/// allocates, at its one `mov edx, size`.
+/// allocates to `grown` bytes, at its one `mov edx, size`.
 fn size_patch(
     code: &[u8],
     start: usize,
     create: Range<usize>,
     (id, size): (&'static str, u32),
+    grown: u32,
 ) -> Result<CodePatch, SiteError> {
     let mut expected = [MOV_EDX, 0, 0, 0, 0];
     expected[1..].copy_from_slice(&size.to_le_bytes());
@@ -221,7 +229,6 @@ fn size_patch(
     let (Some((at, _)), None) = (found.next(), found.next()) else {
         return Err(SiteError::Size(id));
     };
-    let grown = u32::try_from(window::BLOCK).unwrap_or(u32::MAX);
     let mut replacement = expected;
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
@@ -243,27 +250,34 @@ fn find(
     fields: Fields,
     pins: &Pins<'_>,
 ) -> Result<Sites, SiteError> {
-    if fields.stride != window::RECORD {
-        return Err(SiteError::Stride(fields.stride));
-    }
     if let Some(id) = loops::list_misfit(&fields.container) {
         return Err(SiteError::Fit(id));
     }
+    let loops = loops::find(code, start, client, pins)?;
+    let geometry = loops.layout.window;
+    if fields.stride != geometry.record() {
+        return Err(SiteError::Window(window::GeometryError::Record(
+            fields.stride,
+        )));
+    }
+    let grown = u32::try_from(geometry.block())
+        .map_err(|_| SiteError::Window(window::GeometryError::Block))?;
     let patches = vec![
         size_patch(
             code,
             start,
             pins.body(bases::SERVER_CREATE)?,
             pins.size(bases::SERVER_SIZE)?,
+            grown,
         )?,
         size_patch(
             code,
             start,
             pins.body(bases::CLIENT_CREATE)?,
             pins.size(bases::CLIENT_SIZE)?,
+            grown,
         )?,
     ];
-    let loops = loops::find(code, start, client, pins)?;
     let patches: Vec<CodePatch> = patches.into_iter().chain(loops.patches()).collect();
     let at = |id: Symbol| pins.at(id).map(|offset| (start + offset) as u64);
     let address = |id: Symbol| pins.at(id).map(|offset| start + offset);
@@ -280,6 +294,7 @@ fn find(
         // SAFETY: the table's `bases.slot_free`, the stock map free the
         // server's destroy calls.
         slot_free: unsafe { core::mem::transmute::<usize, SlotFreeFn>(address(bases::SLOT_FREE)?) },
+        window: geometry,
     };
     Ok(Sites {
         code: code_of,
@@ -513,35 +528,25 @@ mod tests {
     }
 
     #[test]
-    fn a_layout_other_than_the_window_s_is_refused_before_any_search() {
-        let other = Fields {
-            stride: 0x138,
-            ..FIELDS
-        };
-        let tables = crate::builds::load();
-        let pins = Pins {
-            table: &tables[0].resolve(),
-            code_rva: 0,
-        };
-        assert_eq!(
-            find(&[], 0, false, other, &pins).map(|_| ()),
-            Err(SiteError::Stride(0x138))
-        );
+    fn a_window_that_overlaps_names_the_stock_slots() {
+        let why = SiteError::Window(window::GeometryError::Overlap);
+        assert_eq!(why.entry(), bases::SLOTS.id());
+        assert_eq!(why.to_string(), "index 93 overlaps the game's fields");
     }
 
     #[test]
     fn a_grown_size_is_the_one_load_of_the_vanilla_size_in_its_create() {
         let mut code = vec![0x90; 0x60];
         code[0x30..0x35].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
-        let grown = size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x2070)).unwrap();
+        let grown = size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x2070), 0x13030).unwrap();
         assert_eq!(grown.address, 0x1030);
         assert_eq!(*grown.expected, [0xBA, 0x70, 0x20, 0, 0]);
         assert_eq!(*grown.replacement, [0xBA, 0x30, 0x30, 0x01, 0]);
-        assert!(size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x16e0)).is_err());
-        assert!(size_patch(&code, 0x1000, 0x40..0x60, ("s", 0x2070)).is_err());
+        assert!(size_patch(&code, 0x1000, 0x20..0x40, ("s", 0x16e0), 0x13030).is_err());
+        assert!(size_patch(&code, 0x1000, 0x40..0x60, ("s", 0x2070), 0x13030).is_err());
         code[0x10..0x15].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
         assert!(
-            size_patch(&code, 0x1000, 0x00..0x40, ("s", 0x2070)).is_err(),
+            size_patch(&code, 0x1000, 0x00..0x40, ("s", 0x2070), 0x13030).is_err(),
             "twice"
         );
     }

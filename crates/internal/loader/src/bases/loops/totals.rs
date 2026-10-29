@@ -83,8 +83,9 @@ pub(super) unsafe fn count_npcs(obj: *mut u8, game: &Game, layout: &Layout) {
         }
     }
     for i in window_of(game) {
+        let record = rec(obj, i, &layout.window);
         // SAFETY: record `i` holds a base; its u16 count of NPCs at home.
-        unsafe { write_at(rec(obj, i), layout.record.npcs_home, home[i]) };
+        unsafe { write_at(record, layout.record.npcs_home, home[i]) };
         // SAFETY: the live object's u16 total of placed NPCs.
         unsafe { add_u16(obj, object.npcs, placed[i]) };
         // SAFETY: the live object's u16 total of NPCs at home.
@@ -136,7 +137,7 @@ pub(super) unsafe fn count_animals(obj: *mut u8, game: &Game, layout: &Layout) {
             let at = layout.record.animals + k * 2;
             // SAFETY: record `i` holds a base; its u16 animal counts, which
             // `Layout::read` holds inside the record.
-            unsafe { write_at(rec(obj, i), at, count) };
+            unsafe { write_at(rec(obj, i, &layout.window), at, count) };
         }
         // SAFETY: the live object's u32 animal total.
         let total = unsafe { read_at::<u32>(obj, object.animals) };
@@ -156,22 +157,22 @@ unsafe fn clean(obj: *mut u8, site: &str, clear: Clear) {
     if let Some((game, layout)) = unsafe { windowed(obj) } {
         // SAFETY: the same live object, viewed by `game`.
         let _done = crate::bases::BASES_FUSE.run(site, || unsafe {
-            clean_window(obj, &game, &layout.record, clear);
+            clean_window(obj, &game, layout, clear);
         });
     }
 }
 
-/// `clear` for every window record of the object `game` views, whose fields
-/// are `record`.
+/// `clear` for every window record of the object `game` views, laid out as
+/// `layout`.
 ///
 /// # Safety
 ///
 /// - `obj` is the live object `game` views; `clear` writes only inside the
 ///   record it gets.
-pub(super) unsafe fn clean_window(obj: *mut u8, game: &Game, record: &RecordFields, clear: Clear) {
+pub(super) unsafe fn clean_window(obj: *mut u8, game: &Game, layout: &Layout, clear: Clear) {
     for i in window_of(game) {
         // SAFETY: record `i` holds a base of the caller's live object.
-        unsafe { clear(rec(obj, i), record) };
+        unsafe { clear(rec(obj, i, &layout.window), &layout.record) };
     }
 }
 

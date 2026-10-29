@@ -32,19 +32,18 @@ pub(super) type SlotInitFn =
 /// Frees everything a stock slot's map holds.
 pub(super) type SlotFreeFn = unsafe extern "system" fn(slot: *mut u8);
 
-/// The bytes the constructor writes from the object's start, up to the
-/// first stock slot.
-const CONSTRUCTED: usize = window::SLOTS;
 /// The entries of a stock slot's map, as create makes the 16 of the array.
 const SLOT_ENTRIES: u64 = 0x106;
 
-/// The game's code the window needs.
+/// The game's code the window needs, and where that code keeps records and
+/// stock slots.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Code {
     pub(super) ctor: CtorFn,
     pub(super) teardown: TeardownFn,
     pub(super) slot_init: SlotInitFn,
     pub(super) slot_free: SlotFreeFn,
+    pub(super) window: window::Geometry,
 }
 
 /// One grown object whose window records are initialised, and which window
@@ -81,8 +80,9 @@ impl Windowed {
 /// is destroyed.
 static WINDOWED: [Windowed; 4] = [const { Windowed::new() }; 4];
 
-/// The record the constructor makes, copied into every window record.
-static CONSTRUCTED_RECORD: OnceLock<[u8; window::RECORD]> = OnceLock::new();
+/// The record the constructor makes, copied into every window record: its
+/// first [`window::Geometry::record`] bytes.
+static CONSTRUCTED_RECORD: OnceLock<[u8; window::MOST_RECORD]> = OnceLock::new();
 
 /// The entry of `obj`; none for null, which marks a free entry.
 fn windowed(obj: *const u8) -> Option<&'static Windowed> {
@@ -99,20 +99,28 @@ fn zeroed(len: usize) -> Box<[u128]> {
     vec![0u128; len.div_ceil(16)].into_boxed_slice()
 }
 
-/// The record the constructor makes on a zeroed block.
-fn constructed(ctor: CtorFn) -> &'static [u8; window::RECORD] {
-    CONSTRUCTED_RECORD.get_or_init(|| {
-        let mut scratch = zeroed(CONSTRUCTED);
-        let at = scratch.as_mut_ptr().cast::<u8>();
+/// The record the constructor makes on a zeroed block, its first
+/// [`window::Geometry::record`] bytes.
+fn constructed(code: &Code) -> &'static [u8] {
+    let window = &code.window;
+    let record = CONSTRUCTED_RECORD.get_or_init(|| {
+        let mut scratch = zeroed(window.slots());
         // SAFETY: the game's constructor writes only the header, the 16
-        // records and the tail below the first stock slot, `CONSTRUCTED`
-        // bytes, all inside the zeroed, 16-aligned scratch block; it calls
-        // nothing and allocates nothing.
-        let _obj = unsafe { ctor(at) };
-        // SAFETY: record 0 lies inside the scratch block, written by the
-        // constructor or zero.
-        unsafe { read_at::<[u8; window::RECORD]>(at, window::RECORDS) }
-    })
+        // records and the tail below the first stock slot, `slots()` bytes,
+        // all inside the zeroed, 16-aligned scratch block; it calls nothing
+        // and allocates nothing.
+        let _obj = unsafe { (code.ctor)(scratch.as_mut_ptr().cast::<u8>()) };
+        let bytes: &[u8] = bytemuck::cast_slice(&scratch);
+        let mut record = [0u8; window::MOST_RECORD];
+        // `Geometry::new` holds record 0 below the first stock slot and a
+        // record at most `MOST_RECORD` bytes.
+        let at = window.record_at(0);
+        if let Some(made) = bytes.get(at..at + window.record()) {
+            record[..made.len()].copy_from_slice(made);
+        }
+        record
+    });
+    &record[..window.record()]
 }
 
 /// Whether window index `i` of `obj` has its stock slot made.
@@ -126,7 +134,7 @@ pub(super) fn has_slot(obj: *const u8, i: usize) -> bool {
 ///
 /// # Safety
 ///
-/// - `obj` is a live bases object of [`window::BLOCK`] bytes that its create
+/// - `obj` is a live bases object of `code.window.block()` bytes that its create
 ///   has just returned, on the create's thread, before any other code has
 ///   it.
 pub(super) unsafe fn init(obj: *mut u8, code: &Code) -> bool {
@@ -145,13 +153,13 @@ pub(super) unsafe fn init(obj: *mut u8, code: &Code) -> bool {
     }) else {
         return false;
     };
-    let record = constructed(code.ctor);
+    let record = constructed(code);
     for i in window::WINDOW..window::INDICES {
-        let at = obj.wrapping_add(window::RECORDS + i * window::RECORD);
-        // SAFETY: record `i` of the window lies inside the caller's block
-        // of `window::BLOCK` bytes, which no one else has yet, and the
-        // constructed record is `window::RECORD` bytes of our own.
-        unsafe { core::ptr::copy_nonoverlapping(record.as_ptr(), at, window::RECORD) };
+        let at = obj.wrapping_add(code.window.record_at(i));
+        // SAFETY: record `i` of the window ends by the caller's block of
+        // `code.window.block()` bytes, which no one else has yet, and the
+        // constructed record is a record's bytes of our own.
+        unsafe { core::ptr::copy_nonoverlapping(record.as_ptr(), at, record.len()) };
     }
     for word in &entry.slots {
         word.store(0, Ordering::Relaxed);
@@ -176,7 +184,7 @@ pub(super) unsafe fn release(obj: *mut u8, code: &Code) {
         // record, initialised by `init` or since started by the game's new
         // base code; the teardown reads and frees only the 16 records from
         // record `k`, which end at index 255 at the latest.
-        unsafe { (code.teardown)(obj.wrapping_add(window::RECORDS + k * window::RECORD)) };
+        unsafe { (code.teardown)(obj.wrapping_add(code.window.record_at(k))) };
     }
 }
 
@@ -205,11 +213,11 @@ pub(super) unsafe fn ready(
         if entry.has_slot(i) || i < window::WINDOW {
             return;
         }
-        let slot = obj.wrapping_add(window::SLOTS + i * window::SLOT);
+        let slot = obj.wrapping_add(code.window.slot_at(i));
         // SAFETY: slot `i` lies in the window of the caller's live, grown
         // object, which no game code reads before the index is handed out;
         // zeroed, it holds no map the init would release.
-        unsafe { slot.write_bytes(0, window::SLOT) };
+        unsafe { slot.write_bytes(0, code.window.slot()) };
         // SAFETY: the caller guarantees a live object; its world allocator
         // sits at `allocator_at`, the build table's `bases.allocator`.
         let allocator = unsafe { read_at::<usize>(obj, allocator_at) };
@@ -237,13 +245,13 @@ pub(super) unsafe fn destroy(obj: *mut u8, code: &Code) {
     // with no other user.
     unsafe { release(obj, code) };
     for i in entry.made_slots() {
-        let slot = obj.wrapping_add(window::SLOTS + i * window::SLOT);
+        let slot = obj.wrapping_add(code.window.slot_at(i));
         // SAFETY: slot `i` is one `ready` made through the game's init, in
         // the window of the live object, freed once here.
         unsafe { (code.slot_free)(slot) };
         // SAFETY: slot `i` in the window of the live object, its map just
         // freed, zeroed so nothing frees it twice.
-        unsafe { slot.write_bytes(0, window::SLOT) };
+        unsafe { slot.write_bytes(0, code.window.slot()) };
     }
     entry.owner.store(0, Ordering::Release);
 }
@@ -263,7 +271,7 @@ mod tests {
     use enshwick::raw::write_at;
 
     use super::*;
-    use crate::bases::fake::{CONSTRUCTED_GROWER, FIELDS, LAYOUT, ctor};
+    use crate::bases::fake::{CONSTRUCTED_GROWER, FIELDS, GEOMETRY, LAYOUT, ctor};
     use crate::locks::Relock;
 
     /// What the fake game code was called with, in order.
@@ -279,7 +287,7 @@ mod tests {
     unsafe extern "system" fn slot_init(slot: *mut u8, allocator: usize, entries: u64, grows: u8) {
         assert_eq!((entries, grows), (SLOT_ENTRIES, 0));
         // SAFETY: the test's slot, inside its block.
-        let bytes = unsafe { core::slice::from_raw_parts(slot, window::SLOT) };
+        let bytes = unsafe { core::slice::from_raw_parts(slot, GEOMETRY.slot()) };
         assert!(bytes.iter().all(|&b| b == 0));
         CALLS.relock().push(("slot_init", slot.addr() ^ allocator));
     }
@@ -293,11 +301,12 @@ mod tests {
         teardown,
         slot_init,
         slot_free,
+        window: GEOMETRY,
     };
 
     /// A grown object full of garbage, as the game's allocator may hand it.
     fn garbage() -> Box<[u128]> {
-        vec![u128::MAX / 3; window::BLOCK.div_ceil(16)].into_boxed_slice()
+        vec![u128::MAX / 3; GEOMETRY.block().div_ceil(16)].into_boxed_slice()
     }
 
     /// No object windowed and no call seen, as each test starts.
@@ -323,14 +332,14 @@ mod tests {
         // SAFETY: a fresh block of the grown size.
         assert!(unsafe { init(obj, &CODE) });
         let bytes: &[u8] = bytemuck::cast_slice(&block);
-        let made = constructed(ctor);
+        let made = constructed(&CODE);
         for i in window::WINDOW..window::INDICES {
-            let at = window::RECORDS + i * window::RECORD;
-            assert_eq!(&bytes[at..at + window::RECORD], made, "record {i}");
+            let at = GEOMETRY.record_at(i);
+            assert_eq!(&bytes[at..at + GEOMETRY.record()], made, "record {i}");
         }
         assert_eq!(made[GROWER..GROWER + 8], CONSTRUCTED_GROWER.to_le_bytes());
         assert!(made[0x50..0x90].iter().all(|&b| b == 0), "zeroed first");
-        let header = window::RECORDS + 15 * window::RECORD;
+        let header = GEOMETRY.record_at(15);
         assert_eq!(bytes[header], 0x55, "the array is the game's");
     }
 
@@ -373,7 +382,7 @@ mod tests {
         // SAFETY: the windowed block.
         unsafe { release(obj, &CODE) };
         let starts: Vec<usize> = window::teardown_starts()
-            .map(|k| obj.addr() + window::RECORDS + k * window::RECORD)
+            .map(|k| obj.addr() + GEOMETRY.record_at(k))
             .collect();
         assert_eq!(calls("teardown"), starts);
     }
@@ -393,7 +402,7 @@ mod tests {
         readied(93);
         readied(200);
         readied(3);
-        let slot = |i: usize| obj.addr() + window::SLOTS + i * window::SLOT;
+        let slot = |i: usize| obj.addr() + GEOMETRY.slot_at(i);
         assert_eq!(
             calls("slot_init"),
             [slot(93) ^ 0x7000, slot(200) ^ 0x7000],

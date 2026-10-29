@@ -990,6 +990,12 @@ revision = 1
 "bases.record_list_kept" = { value = 0x28, via = "bases.sort", within = 0x174, pattern = "B8 ?? ?? ?? ?? B9 30 00 00 00 0F 44 C1", at = 1, size = 4, plus = -48 }
 "bases.sort_answer_word" = { value = 0x4, via = "bases.sort", within = 0x174, pattern = "C7 47 ?? 00 00 00 00 C6 07 1F", at = 2, size = 1 }
 "bases.sort_entity_position" = { value = 0x8, via = "bases.sort", within = 0x174, pattern = "41 0F 10 50 ?? 41 0F 10 58 ??", at = 4, size = 1 }
+# Where the bases object keeps its first record and its first building
+# stock slot, and a stock slot's stride, as the constructor and the
+# server's create step through them.
+"bases.records" = { value = 0x30, via = "bases.ctor", within = 0x1de, pattern = "45 33 D2 48 8D 51 ?? 4C 89 11", at = 6, size = 1 }
+"bases.slots" = { value = 0x1610, via = "bases.server_create", within = 0x1ef, pattern = "C6 43 ?? 01 48 8D BB ?? ?? ?? ??", at = 7, size = 4 }
+"bases.slot" = { value = 0x58, via = "bases.server_create", within = 0x1ef, pattern = "49 8B D6 48 8B CF E8 ?? ?? ?? ?? 48 83 C7 ?? 48 83 EE 01 75 E2", at = 14, size = 1 }
 "bases.record_set" = { value = 0x50, via = "bases.rebuild", within = 0x25c, pattern = "48 8D 8E ?? ?? ?? ?? 44 89 9D D0 1F 00 00", at = 3, size = 4, plus = -48 }
 "bases.record_set_bitmap" = { value = 0x58, via = "bases.rebuild", within = 0x25c, pattern = "48 8D 99 ?? ?? ?? ?? 49 BF F8 FF FF FF FF FF FF 1F 44 39 2B 74 1D 4C 8B 43 D8 33 D2 48 8B 4B D0", at = 3, size = 4, plus = -96 }
 "bases.record_set_buckets" = { value = 0x60, via = "bases.rebuild", within = 0x25c, pattern = "48 8D 99 ?? ?? ?? ?? 49 BF F8 FF FF FF FF FF FF 1F 44 39 2B 74 1D 4C 8B 43 D8", at = 3, size = 4, plus = -88 }
