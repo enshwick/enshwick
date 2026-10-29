@@ -714,20 +714,35 @@ fn nanos(ns: f64) -> String {
     }
 }
 
+/// What the main menu's line adds after the count of mods.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum MenuNote {
+    /// This game version leaves some of the loader's features off.
+    Lacking,
+    /// The loader settings file has problems.
+    BadSettings,
+    /// Developer tools are on.
+    Developer,
+}
+
+impl MenuNote {
+    /// The key of the text that adds the note to a line.
+    const fn key(self) -> &'static str {
+        match self {
+            Self::Lacking => "menu.line.lacking",
+            Self::BadSettings => "menu.line.settings",
+            Self::Developer => "menu.line.developer",
+        }
+    }
+}
+
 /// The main menu's line under the game's version, in the reader's language.
 ///
-/// It names the loader's version and how many `mods` load, how many of them
-/// are `off`, and whether this game version leaves some of the loader's
-/// features off (`lacking`) or the loader settings file has problems
-/// (`bad_settings`).
+/// It names the loader's version and how many `mods` load and how many of
+/// them are `off`, then each of `notes` in [`MenuNote`]'s order.
 #[must_use]
-pub fn menu_line(
-    version: &str,
-    mods: usize,
-    off: usize,
-    lacking: bool,
-    bad_settings: bool,
-) -> String {
+pub fn menu_line(version: &str, mods: usize, off: usize, notes: &[MenuNote]) -> String {
     let mods = mods.to_string();
     let off = off.to_string();
     let line = if off == "0" {
@@ -738,16 +753,12 @@ pub fn menu_line(
             &[("version", version), ("mods", &mods), ("off", &off)],
         )
     };
-    let line = if lacking {
-        crate::texts::fill("menu.line.lacking", &[("line", &line)])
-    } else {
-        line
-    };
-    if bad_settings {
-        crate::texts::fill("menu.line.settings", &[("line", &line)])
-    } else {
-        line
-    }
+    let mut notes = notes.to_vec();
+    notes.sort_unstable();
+    notes.dedup();
+    notes.into_iter().fold(line, |line, note| {
+        crate::texts::fill(note.key(), &[("line", &line)])
+    })
 }
 
 /// Why the main menu's line stays off on this build; `None` when it shows.
@@ -832,17 +843,22 @@ mod tests {
 
     #[test]
     fn the_menu_line_counts_mods_and_warns_of_what_is_off() {
+        assert_eq!(menu_line("1.0.0", 6, 0, &[]), "Enshwick 1.0.0 · mods: 6");
         assert_eq!(
-            menu_line("1.0.0", 6, 0, false, false),
-            "Enshwick 1.0.0 · mods: 6"
-        );
-        assert_eq!(
-            menu_line("1.0.0", 6, 2, false, false),
+            menu_line("1.0.0", 6, 2, &[]),
             "Enshwick 1.0.0 · mods: 6, off: 2"
         );
         assert_eq!(
-            menu_line("1.0.0", 0, 0, true, false),
+            menu_line("1.0.0", 0, 0, &[MenuNote::Lacking]),
             "Enshwick 1.0.0 · mods: 0 · some features are off on this game version"
+        );
+    }
+
+    #[test]
+    fn the_menu_line_says_developer_tools_are_on_last() {
+        assert_eq!(
+            menu_line("1.0.0", 2, 0, &[MenuNote::Developer, MenuNote::BadSettings]),
+            "Enshwick 1.0.0 · mods: 2 · enshwick.toml has errors, see the log · DEVELOPER TOOLS ON"
         );
     }
 
@@ -1115,8 +1131,8 @@ conflicts:
                 .short()
                 .contains("enshwick.toml: allowlist: invalid type")
         );
-        let good = menu_line("0.1.5", 2, 0, false, false);
-        let broken = menu_line("0.1.5", 2, 0, false, true);
+        let good = menu_line("0.1.5", 2, 0, &[]);
+        let broken = menu_line("0.1.5", 2, 0, &[MenuNote::BadSettings]);
         assert!(
             broken.starts_with(&good) && broken.len() > good.len(),
             "{broken}"

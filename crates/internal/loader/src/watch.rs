@@ -232,6 +232,7 @@ fn changed(loader: &Loader, owner: Option<usize>) {
     let (settings, problems) = Settings::read(&path, crate::allowlist::listed(&loader.data_dir));
     if problems.is_empty() {
         crate::diag::configure(&settings);
+        crate::greeting::configure(&settings.motd);
         crate::log::set_levels(settings);
         crate::log!(INFO, "loader settings reloaded");
         loader.emit(Event::LOADER_SETTINGS_CHANGED, None, core::ptr::null());

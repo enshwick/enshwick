@@ -208,9 +208,17 @@ a part turns off at its first panic, such as the HUD items or map markers,
 and the reason carries the panic's message. The rest of the interface keeps
 working.
 
-A player who joins a server where mods, features or parts of the loader are
-off gets one chat line that names them. The reasons are in the server's log
-and status summary.
+A player who joins a server reads up to three things in chat, in this order:
+the developer tools warning, the server's
+[message of the day](servers.md#greet-players), and one line that names the
+mods, features and parts of the loader that are off. The reasons are in the
+server's log and status summary.
+
+Developer tools are on while the file `mod-data/enshwick/developer-tools`
+exists or a mod with `developer: true` in its manifest runs. Then every
+player reads `DEVELOPER TOOLS ARE ON` in upper-case letters: in chat at
+join, in red at the top of the Mods screen and at the end of the main
+menu's line.
 
 ## Testing
 

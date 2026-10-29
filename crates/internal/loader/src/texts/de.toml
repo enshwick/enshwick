@@ -292,3 +292,5 @@
 "menu.line.off" = "Enshwick {version} · Mods: {mods}, aus: {off}"
 "menu.line.lacking" = "{line} · einige Funktionen sind in dieser Spielversion aus"
 "menu.line.settings" = "{line} · enshwick.toml hat Fehler, siehe das Log"
+"menu.line.developer" = "{line} · ENTWICKLERWERKZEUGE AN"
+"developer.on" = "ENTWICKLERWERKZEUGE SIND AN. SIE SIND NUR ZUM TESTEN VON MODS."

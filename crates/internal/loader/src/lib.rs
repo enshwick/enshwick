@@ -93,6 +93,11 @@ mod game_settings;
     expect(dead_code, reason = "only the running game's texts are read")
 )]
 mod game_texts;
+#[cfg_attr(
+    all(not(windows), not(test)),
+    expect(dead_code, reason = "players read the greeting only in the game")
+)]
+mod greeting;
 pub mod holds;
 #[cfg(windows)]
 mod host;

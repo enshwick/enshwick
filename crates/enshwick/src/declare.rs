@@ -17,6 +17,9 @@ mod unwind;
 /// - `join: true`: the mod counts in the join check;
 /// - `reload: true`: the mod may be reloaded while a development server runs
 ///   (see [`ManifestFlags::RELOAD`](crate::abi::ManifestFlags::RELOAD));
+/// - `developer: true`: the mod is a developer tool, and every player
+///   reads a warning while it runs
+///   (see [`ManifestFlags::DEVELOPER`](crate::abi::ManifestFlags::DEVELOPER));
 /// - `requires: ["id" => "range", ...]`: mods that must load first, in a
 ///   Cargo-style version range (`""` for any);
 /// - `after: ["id", ...]`: mods that load first when present;
@@ -95,6 +98,7 @@ macro_rules! manifest {
         $(, homepage: $homepage:literal)?
         $(, join: $join:expr)?
         $(, reload: $reload:expr)?
+        $(, developer: $developer:expr)?
         $(, requires: [$($req:literal => $range:literal),* $(,)?])?
         $(, after: [$($after:literal),* $(,)?])?
         $(, recommends: [$($rec:literal => $rec_range:literal),* $(,)?])?
@@ -194,7 +198,7 @@ macro_rules! manifest {
             id: $crate::abi::Str::new($id),
             version: $crate::abi::Str::new(VERSION),
             side: $crate::abi::Side::$side,
-            flags: $crate::__private::flags(&[$($join)?], &[$($reload)?]),
+            flags: $crate::__private::flags(&[$($join)?], &[$($reload)?], &[$($developer)?]),
             dependencies: DEPENDENCIES.as_ptr(),
             dependency_count: DEPENDENCIES.len(),
             builds: BUILDS.as_ptr(),
@@ -492,4 +496,19 @@ macro_rules! __every {
             }
         }
     }};
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::abi::ManifestFlags;
+
+    #[test]
+    fn a_developer_tool_carries_its_flag_and_other_mods_do_not() {
+        let tool = crate::manifest!(id: "you.inspector", side: BOTH, reload: true, developer: true);
+        assert!(tool.flags.contains(ManifestFlags::DEVELOPER));
+        assert!(tool.flags.contains(ManifestFlags::RELOAD));
+        let plain = crate::manifest!(id: "you.lanterns", side: BOTH, join: true);
+        assert!(plain.flags.contains(ManifestFlags::JOIN));
+        assert!(!plain.flags.contains(ManifestFlags::DEVELOPER));
+    }
 }

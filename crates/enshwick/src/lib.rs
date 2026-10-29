@@ -486,16 +486,18 @@ pub mod __private {
         &crate::game_events::ExperienceSourceType::IDS;
 
     #[must_use]
-    pub const fn flags(join: &[bool], reload: &[bool]) -> ManifestFlags {
-        let join = match join {
-            [true] => ManifestFlags::JOIN.0,
-            _ => 0,
-        };
-        let reload = match reload {
-            [true] => ManifestFlags::RELOAD.0,
-            _ => 0,
-        };
-        ManifestFlags(join | reload)
+    pub const fn flags(join: &[bool], reload: &[bool], developer: &[bool]) -> ManifestFlags {
+        const fn set(given: &[bool], flag: ManifestFlags) -> u32 {
+            match given {
+                [true] => flag.0,
+                _ => 0,
+            }
+        }
+        ManifestFlags(
+            set(join, ManifestFlags::JOIN)
+                | set(reload, ManifestFlags::RELOAD)
+                | set(developer, ManifestFlags::DEVELOPER),
+        )
     }
 
     /// The schema text of `manifest!`: empty when it names no point, so a

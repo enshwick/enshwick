@@ -78,6 +78,22 @@ and SHA-256 (see [The loader and the ABI](concepts/loader-and-abi.md)).
 Compare it with the lock of a server you trust, or with the hashes of the
 files you baked in, to see that a pod runs exactly the image you meant.
 
+## Greet players
+
+Set `motd` in `mod-configs/enshwick.toml` to a message of the day. Every
+player reads it in chat when they join:
+
+```toml
+motd = """
+Welcome to Ember Vale.
+Restarts at 06:00 UTC. Rules: discord.gg/example
+"""
+```
+
+It is plain text. The loader keeps the first 4 lines and 500 bytes, drops
+empty lines and control characters, and logs a warning when it cuts the
+text. A change applies at the next join, without a restart.
+
 ## Mods from Nexus
 
 Nexus downloads need a login, and through its API a Premium account, so no
