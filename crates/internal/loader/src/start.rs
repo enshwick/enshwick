@@ -88,8 +88,35 @@ fn enforce_holds(loader: &Loader) {
     crate::holds::enforce(&loader.data_dir, &running, false, Some(loader));
 }
 
+/// Whether developer tools are on, by their marker file; warns when they
+/// are.
+fn developer_tools(data_dir: &std::path::Path) -> bool {
+    let on = crate::developer_tools::marked(data_dir);
+    if on {
+        crate::log!(
+            WARN,
+            "developer tools are on: mod-data/{}/{} exists; never on a server players use",
+            crate::settings::LOADER_ID,
+            crate::developer_tools::MARKER
+        );
+    }
+    on
+}
+
+/// Seals the registries mods filled during init, in the order they depend
+/// on each other.
+fn seal(loader: &'static Loader) {
+    crate::stats::seal();
+    crate::item_data::seal();
+    loader.seal_subscriptions();
+    crate::services::seal(loader);
+    crate::points::seal(loader);
+    crate::calls::seal(loader);
+    crate::content::seal_and_link(loader);
+}
+
 /// Runs once, on the stub's thread.
-/// Seals what mods asked for and links the loader's own features; the
+/// Links the loader's own features; the
 /// client links the server's too, for the games it hosts.
 fn link_features(loader: &'static Loader) {
     crate::crash::link(loader);
@@ -156,15 +183,6 @@ pub(crate) fn start(
     carry_former_ids(&mods_dir, &data_dir, &candidates, &plan);
     let frame = *FRAME.get_or_init(FrameSlot::allocate);
     let side = game.side;
-    let developer_tools = crate::developer_tools::marked(&data_dir);
-    if developer_tools {
-        crate::log!(
-            WARN,
-            "developer tools are on: mod-data/{}/{} exists; never on a server players use",
-            crate::settings::LOADER_ID,
-            crate::developer_tools::MARKER
-        );
-    }
     let loader = Loader {
         side,
         base: game.base,
@@ -172,8 +190,8 @@ pub(crate) fn start(
         build: game.build,
         reflection: game.reflection,
         configs_dir: mods_dir.with_file_name("mod-configs"),
+        developer_tools: developer_tools(&data_dir),
         data_dir,
-        developer_tools,
         mods_dir,
         stub: stub_abi,
         mods: records(&libraries, &candidates, &plan),
@@ -199,13 +217,7 @@ pub(crate) fn start(
     attribute_crashes(loader, &order);
     crate::reload::prepare(loader.mods.len());
     initialise(loader, &order, watching.as_mut());
-    crate::stats::seal();
-    crate::item_data::seal();
-    loader.seal_subscriptions();
-    crate::services::seal(loader);
-    crate::points::seal(loader);
-    crate::calls::seal(loader);
-    crate::content::seal_and_link(loader);
+    seal(loader);
     link_features(loader);
     if side == Side::CLIENT {
         link_join(loader);
