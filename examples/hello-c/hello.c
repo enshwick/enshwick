@@ -3,7 +3,7 @@
 #include "enshwick.h"
 
 static const EnshwickManifest MANIFEST = {
-    .header = {sizeof(EnshwickManifest), ENSHWICK_ABI_MAJOR, ENSHWICK_ABI_MINOR},
+    .header = {sizeof(EnshwickManifest), ENSHWICK_ABI_VERSION},
     .id = ENSHWICK_STR_INIT("you.hello-c"),
     .version = ENSHWICK_STR_INIT("0.1.0"),
     .side = EnshwickSide_SERVER,
@@ -13,7 +13,7 @@ static const EnshwickManifest MANIFEST = {
     .license = ENSHWICK_STR_INIT("MIT"),
 };
 
-uint32_t enshwick_mod_abi(void) { return ENSHWICK_ABI_MAJOR; }
+uint32_t enshwick_mod_abi(void) { return ENSHWICK_ABI_VERSION; }
 
 const EnshwickManifest *enshwick_mod_query(void) { return &MANIFEST; }
 

@@ -861,9 +861,8 @@ mod tests {
     }
 
     /// The game's stack roll for a scalable random loot item, as traced on
-    /// server 399 (research/reports/2026-10-26-data-pack-engine.md, "the
-    /// stack roll and stackSizeMaxScaled"): least and largest each scaled by
-    /// the drop factor and held to 1 and the scaled ceiling. The game rounds
+    /// server 399 (the stack roll and `stackSizeMaxScaled`): least and
+    /// largest each scaled by the drop factor and held to 1 and the scaled ceiling. The game rounds
     /// partly at random; the nearest whole number bounds it here.
     fn game_roll(min: u16, max: u16, ceiling: u16, factor: f32) -> (u16, u16) {
         let scale = |v: u16| {

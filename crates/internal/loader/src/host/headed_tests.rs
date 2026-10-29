@@ -1,5 +1,6 @@
 //! Every struct that starts with a [`Header`] crosses the boundary only as far
-//! as both sides know it, so a mod built against an older minor stays safe.
+//! as its header says, so a short or malformed struct is never read past its
+//! end.
 
 use enshwick::abi::Headed;
 

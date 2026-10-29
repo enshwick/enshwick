@@ -9,67 +9,45 @@ C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 
 ## Versions
 
-| Constant | Meaning |
-| --- | --- |
-| [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A loader refuses a mod built for another major. |
-| [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A newer minor only appends. |
+The layout file
+[`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/layout.txt)
+lists the layout of every ABI type, field by field. Its hash is the ABI
+version,
+[`ABI_VERSION`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs).
+Any change to the layout is another version, and a loader loads only mods
+built for its own:
 
-The ABI version is separate from Enshwick's version (such as 0.2.0, see
-[Releasing mods](releasing.md#versions)): a platform release raises
-`ABI_MINOR` only when it appends to the ABI.
-
-The policy:
-
-- **Major.** A mod exports `enshwick_mod_abi`, the major it was built for. A
-  loader of another major does not load it and logs
-  `<file> is built for ABI 2, the loader speaks 3`.
-- **Minor.** A loader refuses a mod built for a newer minor and logs
-  `built for ABI 3.2, newer than the loader's 3.1: update Enshwick`, so a
-  mod always meets a loader that has every entry of the host table it knows,
-  and the safe layer calls them without checks. Structs the other side may
-  know an older version of start with a
+- A mod exports `enshwick_mod_abi`, the version it was built for. A loader
+  of another version does not load it and logs
+  `<file> skipped: built for another Enshwick: rebuild it for Enshwick 1.0.0-alpha.12`,
+  naming its own release.
+- Structs that cross the boundary on their own start with a
   [`Header`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs):
-  the struct's size as its writer knew it and the writer's major and minor.
-  Fields are only ever appended, and the loader reads and writes a mod's
-  struct only as far as that mod's header says. `abi::read_headed` copies
-  such a struct as far as its writer's header reaches and leaves the rest
-  zero.
+  the struct's size as its writer knew it and the writer's ABI version.
 
-A mod built against an older `enshwick` loads under a newer loader:
-the loader reads the manifest fields the mod's header covers and takes the
-rest as empty, with no build rows and no names. A mod built against a
-newer one waits for a loader update.
+Pin `enshwick` with `=` in a mod's `Cargo.toml`, such as
+`enshwick = "=1.0.0-alpha.12"`, as `cargo enshwick new` writes it. A caret
+requirement lets `cargo update` move the mod to the next release, whose
+layout may differ. Releases with the same layout share a version, so a mod
+keeps loading across them.
+
+Until 1.0.0 the layout changes whenever the API needs it. From 1.0.0 it is
+frozen, structs grow only by appending fields, and a loader loads mods built
+against older releases.
 
 ## How does `enshwick` version its API?
 
-The `enshwick` crate follows [SemVer](https://semver.org) for its Rust API,
-and the ABI version follows the crate:
+The `enshwick` crate follows [SemVer](https://semver.org) for its Rust API.
+Until 1.0.0 the crate is a prerelease: any release may break the API and
+the ABI, and a break raises the prerelease number of `1.0.0-alpha.N`.
 
-| Change | ABI | `enshwick` version |
-| --- | --- | --- |
-| A field, struct or host table entry removed, moved or resized | major | major |
-| A public item removed or renamed, a signature changed | none | major |
-| A field appended to a struct, an entry appended to the host table | minor | minor |
-| A new public item that adds no ABI | none | minor |
-| A fix that changes neither the API nor the ABI | none | patch |
+The repository checks this in CI:
 
-Until 1.0.0 the crate is a prerelease: any release may break the API, and a
-break raises the minor of a `0.x` version or the prerelease number of
-`1.0.0-alpha.N`. From 1.0.0 the table holds as written.
-
-Three checks hold the repository to it:
-
-- A layout file,
-  [`abi/layout.txt`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi/layout.txt),
-  lists the size, alignment and field offsets of every ABI type. A test
-  fails when the layout differs from the file, and refuses to rewrite the
-  file unless the change appends with a higher `ABI_MINOR` or comes with a
-  higher `ABI_MAJOR`.
+- A test fails when the layout of the ABI types differs from
+  `abi/layout.txt`. Rewriting the file changes `ABI_VERSION`.
 - CI runs [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
   on `enshwick` against its last release on crates.io, so a release whose
   version claims less change than its API made fails.
-- A test builds a mod against the last published `enshwick` and starts it
-  against the current host table.
 
 ## The exports of a mod
 
@@ -78,7 +56,7 @@ writes five exports:
 
 | Export                  | Signature                                 | When the loader calls it                               |
 | ----------------------- | ----------------------------------------- | ------------------------------------------------------ |
-| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the major the mod was built for.                |
+| `enshwick_mod_abi`      | `fn() -> u32`                             | First: the ABI version the mod was built for.          |
 | `enshwick_mod_query`    | `fn() -> *const Manifest`                 | Before any of the mod's code runs; static data.        |
 | `enshwick_mod_init`     | `fn(*const HostApi, ModHandle) -> Status` | Once, in load order; registers hooks and the rest.     |
 | `enshwick_mod_ready`    | `fn(*const HostApi, ModHandle)`           | After every chain is armed, if `init` returned OK.     |

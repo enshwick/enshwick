@@ -22,6 +22,7 @@
 "mods.others.beside" = "Other mods' files beside the game: {files}"
 "mods.others.chain-failed" = "Did not load from mods/chain: {files}"
 "mods.features.off" = "Off or partly off on this game version: {features}"
+"mods.discovery.off" = "Mod discovery is off: in games a player hosts, the host and the players who join do not see each other's mods."
 "mods.extends" = "Extends: {points}"
 "mods.settings" = "Settings"
 "mods.settings.yours" = "Your settings"

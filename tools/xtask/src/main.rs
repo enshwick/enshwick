@@ -390,8 +390,8 @@ fn say(text: &str) {
 }
 
 /// The checks of the API crate's stable surface, built without `unstable`:
-/// its lints when its code changed, and in the full suite its examples and
-/// its rustdoc.
+/// its lints when its code changed, its examples whenever it changed, and
+/// in the full suite its rustdoc.
 fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
     let mut steps = Vec::new();
     if code {
@@ -401,15 +401,18 @@ fn stable_api_steps(code: bool, full: bool) -> Vec<Step> {
                 .then(&["--", "-D", "warnings"]),
         );
     }
+    // The script binding and the rates are public only with `unstable`, so
+    // their examples fail to build without it. One example that fails to
+    // build makes rustdoc build the rest one by one, which takes minutes;
+    // with every one building they share one binary and take seconds.
+    steps.push(Step::new(&["test", "--doc"]).then(&STABLE_API).then(&[
+        "--",
+        "--skip",
+        "src/script",
+        "--skip",
+        "src/rates.rs",
+    ]));
     if full {
-        // The script binding is public only with `unstable`, so its
-        // examples fail to build without it and the rest build one by one,
-        // which takes minutes.
-        steps.push(Step::new(&["test", "--doc"]).then(&STABLE_API).then(&[
-            "--",
-            "--skip",
-            "src/script",
-        ]));
         steps.push(
             Step::new(&["doc", "--no-deps"])
                 .then(&STABLE_API)
@@ -483,8 +486,14 @@ fn check(scope: &Scope, packages: &[Package], full: bool, parts: &[Part]) -> boo
     if docs && run_host {
         host_steps.push(host(&["test", "--doc"]));
     }
-    if run_host && touches(scope, "enshwick") {
-        host_steps.extend(stable_api_steps(code, full));
+    // The API crate's examples, the book's among them, change with its
+    // documents as well as with its code.
+    let api_docs = match scope {
+        Scope::All => true,
+        Scope::Some { docs, .. } => docs.iter().any(|name| name == "enshwick"),
+    };
+    if run_host && (touches(scope, "enshwick") || api_docs) {
+        host_steps.extend(stable_api_steps(touches(scope, "enshwick"), full));
     }
     if full && run_host {
         host_steps.push(host(&["doc", "--no-deps"]).env("RUSTDOCFLAGS", "-D warnings"));

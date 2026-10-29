@@ -46,12 +46,13 @@ cargo-enshwick ──▶ enshwick, enshwick-gamedata
 ## The ABI contract
 
 - Every type that crosses the loader and a mod is a `repr(C)` struct in
-  `enshwick::abi` behind a size-and-version header; structs only grow at the
-  end, and a reader checks the header before it reads a newer field.
+  `enshwick::abi` behind a size-and-version header.
 - The loader hands each mod one `HostApi` table of `extern "system"` functions;
   a mod exports `enshwick_mod_abi`, `enshwick_mod_query`, `enshwick_mod_init`
   and `enshwick_mod_ready`, which `declare_mod!` writes.
-- A mod built for a newer ABI minor is refused; an older one loads.
+- The ABI version is a hash of the committed layout file
+  `crates/enshwick/src/abi/layout.txt`; a mod built for any other version is
+  refused with the release to rebuild it for.
 - Strings are borrowed for the call, and memory is never freed across the
   boundary.
 - Nothing unwinds across it: the loader catches every panic in a mod's call or

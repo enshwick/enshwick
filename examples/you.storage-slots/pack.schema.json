@@ -17,6 +17,11 @@
       "type": "string",
       "default": ""
     },
+    "enshwick": {
+      "description": "The Enshwick releases it is made for, as a Cargo-style version\nrequirement such as `=1.0.0-alpha.12` (empty for any); a loader of\nanother release skips the pack and names both.",
+      "type": "string",
+      "default": ""
+    },
     "homepage": {
       "description": "Where players read about it, an `https://` address.",
       "type": "string",

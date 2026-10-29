@@ -84,6 +84,11 @@ pub struct PackManifest {
     /// requirement (empty for any).
     #[serde(default)]
     pub requires: BTreeMap<String, String>,
+    /// The Enshwick releases it is made for, as a Cargo-style version
+    /// requirement such as `=1.0.0-alpha.12` (empty for any); a loader of
+    /// another release skips the pack and names both.
+    #[serde(default)]
+    pub enshwick: String,
     /// The pack's settings, in the order the Mods screen shows them; a Luau
     /// mod reads them, as a Rust mod reads its `Config`.
     #[serde(default)]

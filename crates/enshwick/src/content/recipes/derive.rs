@@ -222,13 +222,12 @@ impl RecipeView<'_> {
     /// # Examples
     ///
     /// ```
-    /// use enshwick::content::recipes::{Derived, RecipeKind};
+    /// use enshwick::content::recipes::{Derived, RecipeKind, RecipeView};
     ///
-    /// fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
-    ///     load.derive_recipes("you.decor", |recipe| {
-    ///         (recipe.kind() == Some(RecipeKind::Decorative))
-    ///             .then_some(Derived { output: 2, cost: 1, workshop: None })
-    ///     })
+    /// // Doubles what every decorative recipe makes, at the same cost.
+    /// fn choose(recipe: &RecipeView<'_>) -> Option<Derived> {
+    ///     (recipe.kind() == Some(RecipeKind::Decorative))
+    ///         .then_some(Derived { output: 2, cost: 1, workshop: None })
     /// }
     /// ```
     #[must_use]

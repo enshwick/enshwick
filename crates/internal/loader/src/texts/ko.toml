@@ -22,6 +22,7 @@
 "mods.others.beside" = "게임 옆에 있는 다른 모드의 파일: {files}"
 "mods.others.chain-failed" = "mods/chain에서 불러오지 못함: {files}"
 "mods.features.off" = "이 게임 버전에서 꺼졌거나 일부 꺼짐: {features}"
+"mods.discovery.off" = "모드 감지가 꺼져 있습니다. 플레이어가 호스트하는 게임에서는 호스트와 참가하는 플레이어가 서로의 모드를 볼 수 없습니다."
 "mods.extends" = "확장 대상: {points}"
 "mods.settings" = "설정"
 "mods.settings.yours" = "내 설정"

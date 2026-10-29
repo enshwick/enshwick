@@ -8,11 +8,24 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `PackManifest::enshwick`: a pack's `pack.toml` may name the Enshwick
+  releases it is made for, such as `enshwick = "=1.0.0-alpha.12"`; a loader
+  of another release skips the pack and logs both versions (#661).
+
 - `files`: `read_if_present` and `read_to_string_if_present` tell a
   missing file from one that does not read, and `write_atomically` writes a
   file whole, flushed to disk, keeping the old one as `backup_path`.
   `Store`, `WorldStore` and `Hold` write through it, so a store keeps
   `<name>.toml.bak` beside its file (#658).
+
+### Changed
+
+- `abi::ABI_VERSION`, a hash of the committed ABI layout, replaces
+  `ABI_MAJOR` and `ABI_MINOR`; `Header` carries it as `abi_version`, and the
+  C header defines `ENSHWICK_ABI_VERSION`. The loader, a mod's host check and
+  `cargo enshwick` load only mods built for exactly this version and name the
+  release to rebuild any other for (`abi::OTHER_ABI`). `cargo enshwick new`
+  pins `enshwick` with `=`. Every mod needs a rebuild (#657).
 
 ## [1.0.0-alpha.11] - 2026-10-28
 

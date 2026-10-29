@@ -22,6 +22,7 @@
 "mods.others.beside" = "遊戲旁的其他模組檔案：{files}"
 "mods.others.chain-failed" = "無法從 mods/chain 載入：{files}"
 "mods.features.off" = "在此遊戲版本上全部或部分關閉：{features}"
+"mods.discovery.off" = "模組偵測已關閉：在玩家主持的遊戲中，主機和加入的玩家看不到彼此的模組。"
 "mods.extends" = "擴充：{points}"
 "mods.settings" = "設定"
 "mods.settings.yours" = "你的設定"
