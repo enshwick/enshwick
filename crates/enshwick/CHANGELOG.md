@@ -31,6 +31,10 @@ Each entry names the pull request that made the change.
 
 ### Changed
 
+- The ABI layout file lists each field's type, and a function pointer's
+  signature, so a changed signature is another `ABI_VERSION`. Every mod
+  needs a rebuild (#681).
+
 - `Stats::set_item`, `Affixes::roll`, `Load::add_loot_affixes`,
   `Load::add_craft_affixes`, `AffixLoot` and `AffixCraft` need the
   `unstable` feature: they keep their values as item data, which sets aside
