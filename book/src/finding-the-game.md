@@ -162,8 +162,11 @@ the run stays unique without them.
   `size`), so a field Keen moves comes back with its new offset. `neg` reads
   a frame slot below `rbp`, `shl` a size the code only shifts by, and `plus`
   a value next to the operand, as a size from the offset of the last field.
-  A value no operand holds, such as an offset of 0, has a pattern that fixes
-  the instruction and confirms the value while that code stands.
+  A value no operand holds, such as an offset of 0 or a stride spelled by
+  the instructions' scale, says `fixed = true`: its pattern fixes the
+  instruction and confirms the value while that code stands. A pattern with
+  neither an operand nor `fixed = true` does not read, so no carried value
+  stays without a check.
 - A symbol's expected code bytes (`<id>.bytes`) count where its pattern
   finds code that still starts with them.
 - A value only a function too short to find on its own holds is read `via`

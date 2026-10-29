@@ -175,7 +175,7 @@ mod tests {
         "f.twice" = { rva = 0x1010, pattern = "AA" }
         [constants]
         "c.read" = { value = 0x48, pattern = "8B 48 ?? 48", at = 2, size = 1 }
-        "c.gone" = { value = 0x50, pattern = "8B 50" }
+        "c.gone" = { value = 0x50, pattern = "8B 50", fixed = true }
         "c.only" = { value = 3, carried = false }
     "#;
 

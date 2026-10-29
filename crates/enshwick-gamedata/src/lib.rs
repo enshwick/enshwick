@@ -215,10 +215,10 @@ mod tests {
         "f.called" = { rva = 0x1030, pattern = "E8 ?? ?? ?? ?? C3", rel = 1 }
         [constants]
         "c.plain" = 8
-        "c.used" = { value = 0x48, pattern = "8B 48 ?? 48" }
+        "c.used" = { value = 0x48, pattern = "8B 48 ?? 48", fixed = true }
         "c.read" = { value = 0x48, pattern = "8B 48 ?? 48", at = 2, size = 1 }
         "c.wide" = { value = 0x1234, pattern = "B9 ?? ?? ?? ?? 8B 41 07", at = 1, size = 4 }
-        "c.gone" = { value = 0x50, pattern = "8B 50" }
+        "c.gone" = { value = 0x50, pattern = "8B 50", fixed = true }
         "c.below" = { value = 0x60, pattern = "48 8D 55 ??", at = 3, size = 1, neg = true }
         "c.after" = { value = 0x50, pattern = "8B 48 ?? 48", at = 2, size = 1, plus = 8 }
         "f.found.bytes" = 0x0807_0605_3344_7722
@@ -264,6 +264,35 @@ mod tests {
             "#;
         let error = Table::parse(text).unwrap_err();
         assert!(error.to_string().contains("f.hook.bytes"), "{error}");
+    }
+
+    /// A constant on a pattern says where its value lies: read from an
+    /// operand, or held by the pattern's own fixed bytes. Without either, a
+    /// build without a table would keep the old value without a sign.
+    #[test]
+    fn a_patterned_constant_without_a_read_or_fixed_bytes_is_refused() {
+        let table = |row: &str| {
+            Table::parse(&format!(
+                "name = \"t (1)\"\nside = \"server\"\nguid = \"00000000000000000000000000000001\"\nage = 2\n[constants]\n{row}\n"
+            ))
+        };
+        let error = table(r#""c.size" = { value = 0x10, pattern = "48 03 D2" }"#).unwrap_err();
+        assert!(error.to_string().contains("c.size"), "{error}");
+        let error = table(
+            r#""c.size" = { value = 0x10, pattern = "48 03 D2", at = 2, size = 1, fixed = true }"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("fixed"), "{error}");
+        let error = table(r#""c.size" = { value = 0x10, fixed = true }"#).unwrap_err();
+        assert!(error.to_string().contains("fixed"), "{error}");
+        let fixed =
+            table(r#""c.size" = { value = 0x10, pattern = "48 03 D2", fixed = true }"#).unwrap();
+        assert!(fixed.constants()[0].fixed());
+        let code = [0x90, 0x48, 0x03, 0xd2];
+        assert_eq!(
+            fixed.fall_back(&code, 0, |_| None).constant("c.size"),
+            Some(0x10)
+        );
     }
 
     #[test]

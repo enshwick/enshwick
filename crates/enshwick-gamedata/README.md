@@ -23,7 +23,9 @@ game update that moves a field changes this crate, not the mods.
   uses it, or in the code of a symbol it names (`via`), at its start or
   once `within` a number of bytes from it. The slots of
   attributes name their `attribute` and come from the game's archive, which
-  the loader reads on every build. A value only its own build holds says
+  the loader reads on every build. A value whose pattern fixes the bytes
+  that spell it says `fixed = true`, and a pattern with neither an operand
+  nor `fixed` is refused. A value only its own build holds says
   `carried = false` and is left out.
   What neither finds stays missing, and only the features and mods that
   need it turn off.
