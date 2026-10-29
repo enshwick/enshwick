@@ -924,3 +924,47 @@ fn a_recipe_change_moves_recipes_to_a_station() {
         "recipes.toml:1:1: change 1: Tool_Torch01 is no crafting station"
     );
 }
+
+#[test]
+fn an_item_the_game_dropped_skips_its_change_and_keeps_the_pack() {
+    let (vanilla, wood) = vanilla_wood();
+    let items = "[[change]]\nitems = [\"Material_T1_Wood_Logs\", \"Weapon_Gone_Forever\"]\n\
+                 max_stack = 999\n";
+    let pack = Pack::parse_with("you.stacks", &files(items), Some(&vanilla)).unwrap();
+    let changed: Vec<Guid> = pack.changes().iter().map(|(c, _)| c.entry).collect();
+    assert_eq!(changed, [wood]);
+    let skipped: Vec<String> = pack.skipped().iter().map(ToString::to_string).collect();
+    assert_eq!(
+        skipped,
+        [
+            "items.toml:1:1: change 1: no vanilla item \"Weapon_Gone_Forever\" in this game build; skipped"
+        ]
+    );
+}
+
+#[test]
+fn a_recipe_the_game_dropped_skips_its_change_and_keeps_the_pack() {
+    let (vanilla, _, wood, recipe) = vanilla_torch();
+    let text = "[[change]]\nrecipes = [\"Tool_Torch01_T0_PK\", \"Gone_Recipe_Forever\"]\n\
+                cost = 2\n\n[[change]]\noutput = [\"Weapon_Gone_Forever\"]\ncost = 3\n\n\
+                [[change]]\nrecipes = [\"Tool_Torch01_T0_PK\"]\n\
+                ingredients = { Material_T1_Wood_Logs = 0, Weapon_Gone_Forever = 1 }\n";
+    let pack = Pack::parse_with("you.torches", &recipes(text), Some(&vanilla)).unwrap();
+    let changes: Vec<Change> = pack.changes().iter().map(|(c, _)| *c).collect();
+    assert_eq!(
+        changes,
+        [
+            Change::new(recipe, Field::Cost, Value::Set(2.0)),
+            Change::ingredient(recipe, wood, Value::Set(0.0)),
+        ]
+    );
+    assert_eq!(pack.skipped().len(), 3, "{:?}", pack.skipped());
+}
+
+#[test]
+fn a_name_near_one_the_game_has_stays_a_problem_and_is_not_skipped() {
+    let (vanilla, _) = vanilla_wood();
+    let items = "[[change]]\nitems = [\"Material_T1_Wood_Logss\"]\nmax_stack = 50\n";
+    let errors = Pack::parse_with("you.stacks", &files(items), Some(&vanilla)).unwrap_err();
+    assert!(errors.to_string().contains("near:"), "{errors}");
+}

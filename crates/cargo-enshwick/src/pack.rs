@@ -104,6 +104,10 @@ pub(crate) fn check(
         pack.changes().len(),
         files.hash()
     );
+    let summary = pack
+        .skipped()
+        .iter()
+        .fold(summary, |out, skipped| format!("{out}\nwarning: {skipped}"));
     Ok((summary, manifest, files))
 }
 

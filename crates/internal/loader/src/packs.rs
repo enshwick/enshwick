@@ -218,6 +218,13 @@ fn report(id: &str, errors: &enshwick::packs::ParsePackError) {
     }
 }
 
+/// Logs every change a pack skips because the game dropped what it names.
+fn report_skipped(id: &str, pack: &Pack) {
+    for skipped in pack.skipped() {
+        crate::log::write(Level::WARN, id, &skipped.to_string());
+    }
+}
+
 /// The record of the calling pack and its folder.
 fn calling(me: ModHandle) -> Option<(&'static Loader, usize, String, PathBuf)> {
     let loader = crate::host::loader()?;
@@ -250,6 +257,7 @@ pub(crate) unsafe extern "system" fn init(api: *const HostApi, me: ModHandle) ->
             return Status::REFUSED;
         }
     };
+    report_skipped(&id, &pack);
     let manifest = std::fs::read_to_string(dir.join(MANIFEST_FILE))
         .ok()
         .and_then(|text| PackManifest::parse(&text).ok().map(|m| (m, text)));
@@ -431,6 +439,7 @@ pub(crate) fn changed(loader: &Loader, index: usize) {
             return;
         }
     };
+    report_skipped(id, &pack);
     let (same, values) = with(|packs| {
         packs
             .get(id)

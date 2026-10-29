@@ -15,7 +15,7 @@ use super::entries::{
     RecipesFile, ValueEntry,
 };
 use super::files::PackError;
-use super::pack::Reader;
+use super::pack::{Dropped, Reader};
 use super::{ITEMS_FILE, LOOT_FILE, RECIPES_FILE};
 
 /// A field a recipe change sets, with its ingredient and the name the pack
@@ -393,6 +393,9 @@ fn changes_of(
             }
         }
         for name in *items {
+            if reader.dropped((file, text, at, number), name, Dropped::Item) {
+                continue;
+            }
             let Some((item, _)) = reader.reference(file, text, at, name, "item", "") else {
                 continue;
             };
@@ -506,11 +509,17 @@ pub(super) fn recipe_changes(
         let valid = recipe_fields(reader, text, at, number, e);
         let mut picked: Vec<(Guid, &str)> = Vec::new();
         for name in &e.recipes {
+            if reader.dropped((file, text, at, number), name, Dropped::Recipe) {
+                continue;
+            }
             if let Some(guid) = recipe(reader, text, at, name) {
                 picked.push((guid, name));
             }
         }
         for name in &e.output {
+            if reader.dropped((file, text, at, number), name, Dropped::Item) {
+                continue;
+            }
             for guid in recipes_making(reader, text, at, name) {
                 picked.push((guid, name));
             }
@@ -564,6 +573,9 @@ fn recipe_fields(
     .filter_map(|(field, v)| v.map(|v| (field, None, value(v))))
     .collect();
     for (name, v) in &e.ingredients {
+        if reader.dropped((file, text, at, number), name, Dropped::Item) {
+            continue;
+        }
         if let Some((item, _)) = reader.reference(file, text, at, name, "item", "") {
             fields.push((Field::Ingredient, Some((item, name.clone())), value(*v)));
         }

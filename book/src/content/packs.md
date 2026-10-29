@@ -90,6 +90,15 @@ the names that look like it:
 error [you.lanterns] items.toml:7:1: no item "Tool_Torch1" in this pack, and no vanilla item "Tool_Torch1"; near: Tool_Torch01
 ```
 
+A change is different. When a change names an item or recipe that the game
+no longer has, and no name looks like it, the loader skips that part of the
+change and logs a warning. The rest of the pack still applies, so a game
+update that removes one item does not turn off the whole pack:
+
+```text
+warn  [you.stacks] items.toml:3:1: change 1: no vanilla item "Weapon_Old_Sword" in this game build; skipped
+```
+
 `cargo enshwick id you.lockers:locker` prints a name's GUID and game id.
 
 ## `items.toml`

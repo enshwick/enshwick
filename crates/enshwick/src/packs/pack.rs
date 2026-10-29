@@ -6,7 +6,7 @@ use crate::Off;
 use crate::content::changes::{Change, Entry, ItemsChange, RecipesChange};
 use crate::content::icons::Tint;
 use crate::content::items::StatFormat;
-use crate::content::vanilla::Vanilla;
+use crate::content::vanilla::{Vanilla, VanillaError};
 use crate::content::workshops::{Station, WorkshopId, stations};
 use crate::content::{Guid, Id};
 use crate::i18n::Texts;
@@ -79,8 +79,25 @@ pub struct Pack {
     pub(super) changes: Vec<(Change, String)>,
     pub(super) selections: Vec<(ItemsChange, String)>,
     pub(super) recipe_selections: Vec<(RecipesChange, String)>,
+    pub(super) skipped: Vec<PackError>,
     pub(super) texts: String,
     pub(super) hash: u32,
+}
+
+/// What a vanilla name in a change names, for [`Reader::dropped`].
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Dropped {
+    Item,
+    Recipe,
+}
+
+impl Dropped {
+    const fn word(self) -> &'static str {
+        match self {
+            Self::Item => "item",
+            Self::Recipe => "recipe",
+        }
+    }
 }
 
 /// Collects a pack's problems as it is read.
@@ -88,6 +105,9 @@ pub(super) struct Reader<'a> {
     pub(super) namespace: &'a str,
     pub(super) files: &'a PackFiles,
     pub(super) errors: Vec<PackError>,
+    /// Parts of changes left out because the game's data no longer has
+    /// the vanilla name they give.
+    pub(super) skipped: Vec<PackError>,
     /// Names the pack defines, with what each is.
     pub(super) defined: BTreeMap<String, &'static str>,
     /// The game's content, for vanilla names.
@@ -118,6 +138,46 @@ impl Reader<'_> {
     pub(super) fn error(&mut self, file: &str, text: &str, at: usize, message: impl AsRef<str>) {
         self.errors
             .push(PackError::at(file, text, at, message.as_ref()));
+    }
+
+    /// Whether `name` in change `number` is a vanilla debug name the game's
+    /// data no longer has, with no name near it: an item or recipe a game
+    /// update dropped. That part of the change is noted as skipped, so the
+    /// rest of the pack still applies; a name near one the game has stays a
+    /// problem, since it is likely misspelt.
+    pub(super) fn dropped(
+        &mut self,
+        (file, text, at, number): (&str, &str, usize, usize),
+        name: &str,
+        what: Dropped,
+    ) -> bool {
+        let Some(vanilla) = self.vanilla else {
+            return false;
+        };
+        if Guid::try_parse(name).is_some()
+            || name.contains(':')
+            || self.defined.contains_key(&self.own(name))
+        {
+            return false;
+        }
+        let gone = match what {
+            Dropped::Item => matches!(
+                vanilla.item(name),
+                Err(VanillaError::Unknown { near, .. }) if near.is_empty()
+            ),
+            Dropped::Recipe => matches!(
+                vanilla.recipe(name),
+                Err(VanillaError::UnknownRecipe { near, .. }) if near.is_empty()
+            ),
+        };
+        if gone {
+            let message = format!(
+                "change {number}: no vanilla {} {name:?} in this game build; skipped",
+                what.word()
+            );
+            self.skipped.push(PackError::at(file, text, at, &message));
+        }
+        gone
     }
 
     /// The full id of the pack's own `name`: `<namespace>:<name>`.
@@ -333,6 +393,7 @@ impl Pack {
             namespace,
             files,
             errors: Vec::new(),
+            skipped: Vec::new(),
             defined: BTreeMap::new(),
             vanilla,
         };
@@ -396,6 +457,7 @@ impl Pack {
             changes: Vec::new(),
             selections: Vec::new(),
             recipe_selections: Vec::new(),
+            skipped: Vec::new(),
             texts: texts_text,
             hash: files.hash(),
         };
@@ -419,6 +481,7 @@ impl Pack {
             super::changes::recipe_changes(&mut reader, &recipes_file, &recipes_text);
         pack.changes.extend(recipe_changes);
         pack.recipe_selections = recipe_selections;
+        pack.skipped = reader.skipped;
         if reader.errors.is_empty() {
             Ok(pack)
         } else {
@@ -461,6 +524,27 @@ impl Pack {
     #[must_use]
     pub fn drops(&self) -> &[Drop] {
         &self.drops
+    }
+
+    /// The parts of changes left out because the running game no longer has
+    /// the item or recipe they name, one line each for the log.
+    ///
+    /// A game update that drops one name skips only what names it; the rest
+    /// of the pack applies.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::packs::{Pack, PackFiles};
+    ///
+    /// let files = PackFiles::new().with("items.toml", "[[item]]\nid = \"torch\"\nlike = \"00000000-0000-0000-0000-000000000001\"\n");
+    /// let pack = Pack::parse_with("lights", &files, None).map_err(|e| e.to_string())?;
+    /// assert!(pack.skipped().is_empty());
+    /// # Ok::<(), String>(())
+    /// ```
+    #[must_use]
+    pub fn skipped(&self) -> &[PackError] {
+        &self.skipped
     }
 
     /// The pack's changes of vanilla values, each with its source: the file
