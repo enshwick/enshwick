@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 use std::io::Write as _;
 use std::ops::Range;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, TrySendError, sync_channel};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,6 +23,9 @@ use enshwick::abi::Level;
 use crate::locks::Relock;
 use crate::settings::{LOADER_ID, Settings};
 
+/// The folder beside the game's executable that holds every log, each
+/// writer's in a folder of its own.
+pub const LOGS: &str = "logs";
 /// Lines waiting for the writer at most.
 const QUEUE: usize = 4096;
 /// The latest lines kept in memory.
@@ -79,12 +82,15 @@ struct Counts {
     sent: AtomicU64,
     /// Lines the writer has kept among the latest, for [`settle`].
     taken: AtomicU64,
+    /// Whether the writer stopped because its file could not be made.
+    stopped: AtomicBool,
 }
 
 static COUNTS: Counts = Counts {
     dropped: AtomicU64::new(0),
     sent: AtomicU64::new(0),
     taken: AtomicU64::new(0),
+    stopped: AtomicBool::new(false),
 };
 /// The latest lines the writer kept.
 static RECENT_LINES: Mutex<Recent> = Mutex::new(Recent::new());
@@ -115,7 +121,7 @@ pub fn enabled(level: Level, source: &str) -> bool {
 /// Whether the writer runs, so lines reach the files.
 #[must_use]
 pub fn is_open() -> bool {
-    LINES.get().is_some()
+    LINES.get().is_some() && !COUNTS.stopped.load(Ordering::Acquire)
 }
 
 /// Starts the writer in `dir`, the previous runs' files moved aside first:
@@ -143,6 +149,7 @@ pub fn open(dir: &Path) {
             let mut all = match std::fs::File::create(dir.join("all.log")) {
                 Ok(all) => all,
                 Err(e) => {
+                    COUNTS.stopped.store(true, Ordering::Release);
                     crate::early::write(&format!(
                         "no log: {} could not be written: {e}",
                         dir.join("all.log").display()
@@ -268,7 +275,7 @@ fn keep_tail(from: &Path, to: &Path, bytes: u64) -> std::io::Result<()> {
 }
 
 /// Whether lines go to [`CAPTURED`] instead of the files.
-static CAPTURING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static CAPTURING: AtomicBool = AtomicBool::new(false);
 /// Lines kept in memory instead of written, for a dry run. Its lock stays
 /// off the loader's poison policy: recovering it would log, and logging takes
 /// this lock, so a poisoned capture drops lines instead.
@@ -403,6 +410,15 @@ macro_rules! log {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_log_folder_that_cannot_be_made_leaves_the_log_closed() {
+        let file = std::env::temp_dir().join(format!("enshwick-no-log-{}", std::process::id()));
+        std::fs::write(&file, "a file where the folder should be").unwrap();
+        open(&file);
+        assert!(!is_open());
+        std::fs::remove_file(&file).unwrap();
+    }
 
     #[test]
     fn the_latest_lines_are_kept_bounded_and_filtered() {

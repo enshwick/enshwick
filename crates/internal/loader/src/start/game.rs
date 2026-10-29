@@ -97,10 +97,7 @@ pub(super) fn begin(
 ) -> Option<(PathBuf, Option<std::thread::JoinHandle<()>>)> {
     crate::early::log_panics();
     let Some(game_dir) = game_dir() else {
-        crate::early::note(&format!(
-            "the game's folder was not found ({}); nothing loads",
-            std::io::Error::last_os_error()
-        ));
+        crate::early::note("the game's folder was not found; nothing loads");
         return None;
     };
     let mods_dir = game_dir.join("mods");
@@ -132,7 +129,7 @@ pub(super) fn begin(
     );
     builds::configure(settings.build_patterns);
     log::set_levels(settings);
-    log::open(&game_dir.join("logs").join(crate::settings::LOADER_ID));
+    log::open(&game_dir.join(log::LOGS).join(crate::settings::LOADER_ID));
     crate::log!(INFO, "Enshwick {} starting", env!("CARGO_PKG_VERSION"));
     if let Some(problem) = problem {
         crate::log!(
