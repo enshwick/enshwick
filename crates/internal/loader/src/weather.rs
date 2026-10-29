@@ -27,7 +27,7 @@ use enshwick::raw::read_at;
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
-use crate::memory::{read, write};
+use crate::memory::{BlobArray, read, write};
 use crate::pinned::{self, Symbol};
 
 /// The build table ids this part of the loader names.
@@ -239,26 +239,6 @@ fn layout(loader: &Loader) -> Option<&'static Layout> {
         .as_ref()
 }
 
-/// A blob array at `header`: where its elements start and how many.
-///
-/// # Safety
-///
-/// - `header` is a live blob array header, readable for 8 bytes: an `i32`
-///   offset from itself, then a `u32` count.
-/// - Nothing writes the header during the call.
-unsafe fn blob_array(header: usize) -> (usize, usize) {
-    // SAFETY: the caller guarantees 8 readable bytes of a live header,
-    // starting with its i32 offset.
-    let offset: i32 = unsafe { read(header, 0) };
-    // SAFETY: the caller guarantees 8 readable bytes of a live header, with
-    // its u32 count at 4.
-    let count: u32 = unsafe { read(header, 4) };
-    if offset == 0 {
-        return (0, 0);
-    }
-    (header.wrapping_add_signed(offset as isize), count as usize)
-}
-
 /// The weather system and the weather clock, on the game thread.
 fn system(layout: &Layout) -> Result<(usize, i64), Status> {
     let server = crate::world::server()?;
@@ -408,8 +388,11 @@ pub(crate) fn fronts(loader: &Loader) -> Result<Vec<WeatherFront>, Status> {
     let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `phenomenons` field is a blob array header.
-    let (phenomena, phenomenon_count) =
-        unsafe { blob_array(resource.address() + layout.resource_phenomena) };
+    let BlobArray {
+        start: phenomena,
+        count: phenomenon_count,
+    } = unsafe { BlobArray::read(resource.address() + layout.resource_phenomena) }
+        .unwrap_or_default();
     // SAFETY: `system` is the live weather system `system()` found on the
     // game thread; its layer array pointer sits at the build table's
     // `weather.layers` offset.
@@ -480,12 +463,17 @@ pub(crate) fn set(loader: &Loader, effect: u32, duration: i64) -> Result<(), Sta
     let resource = Resource::lock(layout, system).ok_or(Status::MISSING)?;
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `layers` field is a blob array header.
-    let (layer_defs, layer_def_count) =
-        unsafe { blob_array(resource.address() + layout.resource_layers) };
+    let BlobArray {
+        start: layer_defs,
+        count: layer_def_count,
+    } = unsafe { BlobArray::read(resource.address() + layout.resource_layers) }.unwrap_or_default();
     // SAFETY: `resource` holds the weather resource locked, and its
     // reflected `phenomenons` field is a blob array header.
-    let (phenomena, phenomenon_count) =
-        unsafe { blob_array(resource.address() + layout.resource_phenomena) };
+    let BlobArray {
+        start: phenomena,
+        count: phenomenon_count,
+    } = unsafe { BlobArray::read(resource.address() + layout.resource_phenomena) }
+        .unwrap_or_default();
     // SAFETY: `system` is the live weather system `system()` found on the
     // game thread; its layer array pointer sits at the build table's
     // `weather.layers` offset.

@@ -9,15 +9,11 @@
 1 src/base_groups/grouping.rs
 4 src/base_groups/window.rs
 1 src/bases/loops/sort.rs
-1 src/buffs.rs
 1 src/ecs.rs
 3 src/interactions.rs
-2 src/knowledge.rs
-1 src/terrain.rs
 3 src/textures.rs
 3 src/transactions/block.rs
 1 src/transactions/record.rs
-1 src/ui/map.rs
 2 src/voxels.rs
-2 src/weather.rs
+1 src/weather.rs
 1 src/ui/engine.rs
