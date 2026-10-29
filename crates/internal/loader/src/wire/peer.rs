@@ -1,10 +1,17 @@
 //! A peer's messages on their way in, and its rate.
 
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::frame::Partial;
 use super::{BURST, RATE};
+
+/// How long after a peer got the data a hello of its brings it again.
+///
+/// A client says hello every few seconds until the answer arrives, so a
+/// hello later than this comes from a client that joined again, whose leave
+/// the server never saw.
+pub const DATA_AGAIN: Duration = Duration::from_secs(15);
 
 /// A peer's messages on their way in, and its rate.
 ///
@@ -31,6 +38,8 @@ pub struct Peer {
         expect(dead_code, reason = "the server reads it only in the game")
     )]
     pub(crate) language: Option<enshwick::i18n::Language>,
+    /// When the peer last got the data a hello brings.
+    answered: Option<Instant>,
 }
 
 impl Default for Peer {
@@ -66,7 +75,34 @@ impl Peer {
             tokens,
             seen: Instant::now(),
             language: None,
+            answered: None,
         }
+    }
+
+    /// Whether the peer's hello at `now` brings the data a client gets on
+    /// joining: the first time, and again once [`DATA_AGAIN`] has passed
+    /// since it last did.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Instant;
+    /// use enshwick_loader::wire::{DATA_AGAIN, Peer};
+    ///
+    /// let mut peer = Peer::new();
+    /// let now = Instant::now();
+    /// assert!(peer.data_due(now));
+    /// assert!(!peer.data_due(now));
+    /// assert!(peer.data_due(now + DATA_AGAIN));
+    /// ```
+    pub fn data_due(&mut self, now: Instant) -> bool {
+        let due = self
+            .answered
+            .is_none_or(|at| now.saturating_duration_since(at) >= DATA_AGAIN);
+        if due {
+            self.answered = Some(now);
+        }
+        due
     }
 
     /// Takes one message from the peer's rate; false when it is spent.
@@ -112,5 +148,21 @@ mod tests {
         let mut peer = Peer::new();
         let admitted = (0..100).filter(|_| peer.admit()).count();
         assert!((40..=42).contains(&admitted), "{admitted}");
+    }
+
+    #[test]
+    fn a_hello_long_after_the_last_answer_brings_the_data_again() {
+        let mut peer = Peer::new();
+        let start = Instant::now();
+        assert!(peer.data_due(start), "the first hello gets the data");
+        assert!(
+            !peer.data_due(start + Duration::from_secs(5)),
+            "a hello sent before the answer arrived gets none again"
+        );
+        assert!(
+            peer.data_due(start + DATA_AGAIN),
+            "a client that joined again without a leave gets it"
+        );
+        assert!(!peer.data_due(start + DATA_AGAIN + Duration::from_secs(1)));
     }
 }

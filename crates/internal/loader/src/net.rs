@@ -44,6 +44,9 @@ pub(crate) use crate::wire::{MAX_CONTROL, MAX_MESSAGE, frame_body, is_frame};
 
 /// Frames waiting to leave at most, per side.
 const MAX_WAITING: usize = 512;
+/// Frames a client puts into its chat queue at most per send: nothing tells
+/// it whether the game's queue dropped one.
+const LINES_PER_SEND: usize = 16;
 /// Frames a client takes from its server per second, and in one burst. The
 /// server's chat sends at most 16 lines a step to all its players and holds
 /// at most 256 waiting, so its own frames always fit; a server that sends
@@ -208,8 +211,9 @@ pub(crate) fn notice(key: u64, entity: Entity, text: &str) -> Result<(), Status>
     let mut data = control(NOTICE);
     data.extend_from_slice(&entity.0.to_le_bytes());
     data.extend_from_slice(text.as_bytes());
-    for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
-        crate::chat::send_frame(key, &line);
+    let lines = control_frames(&data).ok_or(Status::BAD_ARGS)?;
+    if !crate::chat::send_frames(key, &lines) {
+        return Err(Status::REFUSED);
     }
     Ok(())
 }
@@ -230,9 +234,7 @@ pub(crate) fn item_data(key: u64, records: &[u8]) {
         return;
     };
     for peer in peers.into_iter().filter(|&p| p != NetMessage::SERVER.get()) {
-        for line in &lines {
-            crate::chat::send_frame(peer, line);
-        }
+        crate::chat::send_frames(peer, &lines);
     }
 }
 
@@ -246,8 +248,9 @@ pub(crate) fn ui_demo(key: u64, at: Option<[i64; 3]>) -> Result<(), Status> {
     for axis in at.iter().flatten() {
         data.extend_from_slice(&axis.to_le_bytes());
     }
-    for line in control_frames(&data).ok_or(Status::BAD_ARGS)? {
-        crate::chat::send_frame(key, &line);
+    let lines = control_frames(&data).ok_or(Status::BAD_ARGS)?;
+    if !crate::chat::send_frames(key, &lines) {
+        return Err(Status::REFUSED);
     }
     Ok(())
 }
@@ -272,9 +275,7 @@ pub(crate) fn to_player(key: u64, message: &crate::remote::Message) {
     if !ready(key) {
         return;
     }
-    for line in remote_frames(message) {
-        crate::chat::send_frame(key, &line);
-    }
+    crate::chat::send_frames(key, &remote_frames(message));
 }
 
 /// Sends a settings message to every client that runs Enshwick.
@@ -291,9 +292,7 @@ pub(crate) fn broadcast_control(message: &crate::remote::Message) {
         return;
     }
     for key in keys {
-        for line in &lines {
-            crate::chat::send_frame(key, line);
-        }
+        crate::chat::send_frames(key, &lines);
     }
 }
 
@@ -317,15 +316,28 @@ pub(crate) fn to_server(message: &crate::remote::Message) -> bool {
     })
 }
 
-/// Makes `key` a peer after its hello; true for a new one.
-fn greet(state: &mut State, key: u64) -> bool {
+/// What a hello the server answers brings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Greeting {
+    /// The client is a new peer.
+    fresh: bool,
+    /// The client gets the data a joining client gets: it is new, or it
+    /// joined again without the server seeing it leave.
+    data: bool,
+}
+
+/// Makes `key` a peer after its hello at `now`.
+fn greet(state: &mut State, key: u64, now: Instant) -> Greeting {
     let pending = state.greeting.remove(&key);
-    match state.peers.entry(key) {
+    let (peer, fresh) = match state.peers.entry(key) {
         std::collections::hash_map::Entry::Vacant(entry) => {
-            entry.insert(pending.unwrap_or_default());
-            true
+            (entry.insert(pending.unwrap_or_default()), true)
         }
-        std::collections::hash_map::Entry::Occupied(_) => false,
+        std::collections::hash_map::Entry::Occupied(entry) => (entry.into_mut(), false),
+    };
+    Greeting {
+        fresh,
+        data: peer.data_due(now),
     }
 }
 
@@ -424,14 +436,20 @@ fn said_hello(key: u64, hello: &crate::admission::Hello) {
     if !crate::admission::hello(key, hello) {
         return;
     }
-    let fresh = state(|s| greet(s, key));
-    if fresh {
+    let greeting = state(|s| greet(s, key, Instant::now()));
+    if greeting.fresh {
         crate::log!(INFO, "mod messages: the client of {key:016x} said hello");
+    } else if greeting.data {
+        crate::log!(
+            INFO,
+            "mod messages: the client of {key:016x} said hello again; it gets its data again"
+        );
     }
-    for line in frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default() {
-        crate::chat::send_frame(key, &line);
-    }
-    if fresh {
+    crate::chat::send_frames(
+        key,
+        &frames(CONTROL, 0, &control(WELCOME)).unwrap_or_default(),
+    );
+    if greeting.data {
         for records in crate::item_data::hello() {
             item_data(key, &records);
         }
@@ -611,7 +629,7 @@ pub(crate) fn send(
 }
 
 fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
-    let lines = state(|s| {
+    let (keys, lines) = state(|s| {
         let keys: Vec<u64> = if peer == 0 {
             s.peers
                 .keys()
@@ -626,19 +644,24 @@ fn send_to_clients(channel: u32, peer: u64, data: &[u8]) -> Result<(), Status> {
         let message = s.next_message;
         s.next_message = s.next_message.wrapping_add(1);
         let lines = frames(channel, message, data).ok_or(Status::BAD_ARGS)?;
-        let mut out = Vec::new();
-        for key in keys {
-            let rate = s.sending.entry(key).or_insert_with(Peer::new);
-            if !rate.admit() {
-                dropped();
-                continue;
-            }
-            out.extend(lines.iter().map(|l| (key, l.clone())));
-        }
-        Ok(out)
+        let keys: Vec<u64> = keys
+            .into_iter()
+            .filter(|&key| {
+                let admitted = s.sending.entry(key).or_insert_with(Peer::new).admit();
+                if !admitted {
+                    dropped();
+                }
+                admitted
+            })
+            .collect();
+        Ok((keys, lines))
     })?;
-    for (key, line) in lines {
-        crate::chat::send_frame(key, &line);
+    let mut queued = true;
+    for key in keys {
+        queued &= crate::chat::send_frames(key, &lines);
+    }
+    if peer != 0 && !queued {
+        return Err(Status::REFUSED);
     }
     Ok(())
 }
@@ -691,12 +714,21 @@ pub(crate) fn client_lines() -> Vec<String> {
                     .unwrap_or_default(),
             );
         }
-        if WAITING.swap(false, Ordering::AcqRel) {
-            lines.extend(s.outbox.drain(..));
+        if WAITING.load(Ordering::Acquire) {
+            let count = s.outbox.len().min(LINES_PER_SEND);
+            lines.extend(s.outbox.drain(..count));
+            WAITING.store(!s.outbox.is_empty(), Ordering::Release);
         }
         lines
     })
     .unwrap_or_default()
+}
+
+/// The status summary's line on mod messages lost on the way, once any
+/// were.
+pub(crate) fn status() -> Option<String> {
+    let (lines, strayed) = crate::chat::delivery();
+    crate::diag::messages_line(DROPPED.load(Ordering::Relaxed), lines, strayed)
 }
 
 /// Counts a dropped message and logs the first and every hundredth.
@@ -713,7 +745,7 @@ fn dropped() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wire::Partial;
+    use crate::wire::{DATA_AGAIN, Partial};
 
     pub(super) fn parsed(lines: &[String]) -> Vec<Frame> {
         lines
@@ -725,7 +757,14 @@ mod tests {
     #[test]
     fn a_repeated_hello_keeps_the_peer_and_spends_its_rate() {
         let mut state = State::default();
-        assert!(greet(&mut state, 7));
+        let now = Instant::now();
+        assert_eq!(
+            greet(&mut state, 7, now),
+            Greeting {
+                fresh: true,
+                data: true
+            }
+        );
         state.peers.get_mut(&7).unwrap().partial.insert(
             (1, 1),
             Partial {
@@ -741,8 +780,22 @@ mod tests {
                 .take_while(Option::is_some)
                 .count();
         assert!(hellos < 50, "{hellos}");
-        assert!(!greet(&mut state, 7));
+        assert_eq!(
+            greet(&mut state, 7, now),
+            Greeting {
+                fresh: false,
+                data: false
+            }
+        );
         assert_eq!(state.peers[&7].partial.len(), 1);
+        assert_eq!(
+            greet(&mut state, 7, now + DATA_AGAIN),
+            Greeting {
+                fresh: false,
+                data: true
+            },
+            "a client back without a leave gets its data again"
+        );
     }
 
     #[test]
@@ -812,7 +865,7 @@ mod tests {
         remember_language(&mut state, 8, Language::DE_DE);
         assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
         assert_eq!(language_in(&state, 8), None, "no frame, no peer to keep it");
-        assert!(greet(&mut state, 7));
+        assert!(greet(&mut state, 7, Instant::now()).fresh);
         assert_eq!(language_in(&state, 7), Some(Language::UK_UA));
         state.peers.remove(&7);
         assert_eq!(language_in(&state, 7), None);

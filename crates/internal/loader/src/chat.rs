@@ -5,7 +5,8 @@
 //! client sends passes through on the game thread. Lines mods send from any
 //! thread wait in a queue that the post-step drains; a line for one player
 //! is posted for that player alone, marked as delivered for every other
-//! connection. What players type, `/` lines included, the game posts as it
+//! connection; once a line reaches another connection all the same, lines
+//! for one player stay off. What players type, `/` lines included, the game posts as it
 //! would without the loader.
 //!
 //! The same links carry mod messages (see the net module): the server takes
@@ -24,6 +25,7 @@ use crate::host::Loader;
 use crate::locks::Relock;
 use crate::pinned;
 use crate::pinned::{Constant, Symbol};
+use crate::wire::{Drops, Outbox, strays};
 
 /// The build table ids this part of the loader names.
 pub(crate) const TABLE_IDS: &[&str] = &[
@@ -128,9 +130,34 @@ static POST_NEXT: Next<PostFn> = unsafe { Next::new() };
 // link on that function.
 static CLIENT_SEND_NEXT: Next<ClientSendFn> = unsafe { Next::new() };
 static CLIENT: OnceLock<ClientLayout> = OnceLock::new();
-static OUTBOX: Mutex<Vec<Line>> = Mutex::new(Vec::new());
+static OUTBOX: Mutex<Outbox<Line>> = Mutex::new(Outbox::new(MAX_WAITING));
 /// Set while the outbox holds anything, so an idle step takes no lock.
 static WAITING: AtomicBool = AtomicBool::new(false);
+
+/// What became of the lines for one player.
+#[derive(Debug)]
+struct Delivery {
+    /// Frame lines dropped: the queue was full, or the player's connection
+    /// was gone.
+    dropped: Drops,
+    /// Lines for one player that reached other players too.
+    strayed: Drops,
+    /// Set once a line for one player reached others: no line goes to one
+    /// player from then on, since this build's chat does not keep it there.
+    one_player_off: AtomicBool,
+}
+
+static DELIVERY: Delivery = Delivery {
+    dropped: Drops::new(),
+    strayed: Drops::new(),
+    one_player_off: AtomicBool::new(false),
+};
+
+/// The frame lines dropped and the lines for one player that reached
+/// others, for the status summary.
+pub(crate) fn delivery() -> (u64, u64) {
+    (DELIVERY.dropped.total(), DELIVERY.strayed.total())
+}
 
 /// Queues `text` for the player with account key `to`, or for everyone.
 pub(crate) fn send(to: u64, text: &str) -> Status {
@@ -142,20 +169,51 @@ pub(crate) fn send(to: u64, text: &str) -> Status {
     Status::OK
 }
 
-/// Queues the frame line `line` for the player with account key `to`: the
-/// one way a line a client takes as the server's frame leaves the server.
-pub(crate) fn send_frame(to: u64, line: &str) {
-    if LOADED.get().is_none() || to == 0 {
-        return;
+/// Queues the frame lines of one message, `lines`, for the player with
+/// account key `to`, all of them or none: the one way a line a client takes
+/// as the server's frame leaves the server. False when none were queued,
+/// which counts them as dropped.
+pub(crate) fn send_frames(to: u64, lines: &[String]) -> bool {
+    if LOADED.get().is_none() || to == 0 || lines.is_empty() {
+        return false;
     }
-    let mut outbox = OUTBOX.relock();
-    if outbox.len() < MAX_WAITING {
-        outbox.push(Line {
+    let queued = !DELIVERY.one_player_off.load(Ordering::Relaxed) && {
+        let mut outbox = OUTBOX.relock();
+        let queued = outbox.push_whole(lines.iter().map(|text| Line {
             to: To::Key(to),
-            text: line.to_owned(),
-        });
+            text: text.clone(),
+        }));
+        WAITING.store(!outbox.is_empty(), Ordering::Release);
+        queued
+    };
+    if !queued {
+        dropped(lines.len());
     }
-    WAITING.store(!outbox.is_empty(), Ordering::Release);
+    queued
+}
+
+/// Counts `count` frame lines dropped, and logs the first and every
+/// hundredth.
+fn dropped(count: usize) {
+    if let Some(total) = DELIVERY.dropped.add(count as u64) {
+        crate::log!(
+            WARN,
+            "mod messages: {total} frame lines dropped, the line queue full or the player gone"
+        );
+    }
+}
+
+/// A line for one player reached `others` other players as well: counts
+/// it and keeps lines for one player off from then on.
+#[cold]
+fn strayed(others: u32) {
+    let _total = DELIVERY.strayed.add(1);
+    if !DELIVERY.one_player_off.swap(true, Ordering::Relaxed) {
+        crate::log!(
+            ERROR,
+            "mod messages to one player off: a line for one player reached {others} other players, since this game build's chat did not mark it delivered to them"
+        );
+    }
 }
 
 /// `text` cut to at most `max` bytes at a character boundary.
@@ -173,13 +231,13 @@ fn cut(text: &str, max: usize) -> &str {
 fn queue(to: To, text: &str) {
     let mut outbox = OUTBOX.relock();
     for line in replied(text) {
-        if outbox.len() >= MAX_WAITING {
-            break;
-        }
-        outbox.push(Line {
+        let line = Line {
             to,
             text: line.to_owned(),
-        });
+        };
+        if !outbox.push_whole([line]) {
+            break;
+        }
     }
     WAITING.store(!outbox.is_empty(), Ordering::Release);
 }
@@ -514,8 +572,7 @@ pub(crate) fn drain() {
     }
     let lines: Vec<Line> = {
         let mut outbox = OUTBOX.relock();
-        let count = outbox.len().min(LINES_PER_DRAIN);
-        let lines = outbox.drain(..count).collect();
+        let lines = outbox.take(LINES_PER_DRAIN).collect();
         WAITING.store(!outbox.is_empty(), Ordering::Release);
         lines
     };
@@ -526,10 +583,17 @@ pub(crate) fn drain() {
     };
     for line in lines {
         let to = match line.to {
-            To::Key(key) => match machines.iter().find(|&&(k, _)| k == key) {
-                Some(&(_, machine)) => To::Machine(machine, key),
-                None => continue,
-            },
+            To::Key(_) if DELIVERY.one_player_off.load(Ordering::Relaxed) => {
+                dropped(1);
+                continue;
+            }
+            To::Key(key) => {
+                let Some(&(_, machine)) = machines.iter().find(|&&(k, _)| k == key) else {
+                    dropped(1);
+                    continue;
+                };
+                To::Machine(machine, key)
+            }
             other => other,
         };
         // SAFETY: `store` is the server's non-zero chat store, checked by the
@@ -552,6 +616,7 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
         To::Machine(handle, key) => {
             let target = (handle & 0x7f) as usize;
             if target >= layout.slot_count {
+                dropped(1);
                 return;
             }
             (handle, key, Some(target))
@@ -582,31 +647,35 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
     let Some(target) = target.filter(|_| result[0] == POSTED) else {
         return;
     };
+    let active = (0..layout.slot_count)
+        .filter(|&slot| {
+            // SAFETY: `store` is the live chat store on the game thread, by
+            // this function's `# Safety`, and holds the table's
+            // `chat.store_slot_count` connection slots, `slot` being under it.
+            let active: u8 =
+                unsafe { crate::memory::read(store, layout.slots + slot * layout.slot_size) };
+            active != 0
+        })
+        .fold(0u32, |mask, slot| mask | 1 << slot);
     // SAFETY: `store` is the live chat store on the game thread, by this
     // function's `# Safety`; its list tail, the node just posted, sits at the
     // table's `chat.store_tail`.
     let node: usize = unsafe { crate::memory::read(store, layout.tail) };
-    if node == 0 {
-        return;
-    }
-    let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
-    for slot in (0..layout.slot_count).filter(|&s| s != target) {
-        // SAFETY: `store` is the live chat store on the game thread, by this
-        // function's `# Safety`, and holds the table's
-        // `chat.store_slot_count` connection slots, `slot` being under it.
-        let active: u8 =
-            unsafe { crate::memory::read(store, layout.slots + slot * layout.slot_size) };
-        // SAFETY: `node` is non-zero, checked by the guard before it, and is
-        // the store's tail node just posted; its delivered mask sits at the
-        // table's `chat.node_delivered`.
-        let mask: u32 = unsafe { crate::memory::read(node, layout.delivered) };
-        if active != 0 && mask & (1 << slot) == 0 {
-            #[expect(clippy::cast_possible_truncation, reason = "slots are under 32")]
-            let slot = slot as u32;
+    #[expect(clippy::cast_possible_truncation, reason = "slots are under 32")]
+    let target = target as u32;
+    let delivered = (node != 0).then(|| {
+        // SAFETY: `node` is non-zero, checked by `then`, and is the store's
+        // tail node just posted; its delivered mask sits at the table's
+        // `chat.node_delivered`.
+        let read_mask = || unsafe { crate::memory::read::<u32>(node, layout.delivered) };
+        let bytes = u32::try_from((text.len() + 0x17 + 3) & !3).unwrap_or(u32::MAX);
+        let unmarked = strays(active, target, Some(read_mask()));
+        for slot in (0..32).filter(|&slot| unmarked & 1 << slot != 0) {
             // SAFETY: `layout.mark` is the table's `chat.mark_delivered`, the
             // game's own step for a line a connection received, on the live
             // store and its non-zero tail node, on the game thread by this
-            // function's `# Safety`; `slot` is under the store's slots.
+            // function's `# Safety`; `slot` is an active one of the store's
+            // slots.
             unsafe {
                 (layout.mark)(
                     store_ptr,
@@ -616,6 +685,11 @@ unsafe fn post_line(post: PostFn, layout: &Layout, store: usize, to: To, text: &
                 );
             };
         }
+        read_mask()
+    });
+    let others = strays(active, target, delivered);
+    if others != 0 {
+        strayed(others.count_ones());
     }
 }
 

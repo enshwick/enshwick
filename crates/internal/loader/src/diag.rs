@@ -280,9 +280,57 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
+    /// What became of mod messages that did not arrive as sent, once any
+    /// did not.
+    pub messages: Option<String>,
     /// Each loader feature that names build table entries, with what this
     /// build lacks of them.
     pub parts: Vec<Part<'static>>,
+}
+
+/// The summary's line on mod messages that did not arrive as sent, `None`
+/// when all did.
+///
+/// It counts the `messages` a side dropped whole, the frame `lines` the
+/// server's queue dropped, and the lines for one player that reached
+/// others (`strayed`).
+///
+/// # Examples
+///
+/// ```
+/// use enshwick_loader::diag::messages_line;
+///
+/// assert_eq!(messages_line(0, 0, 0), None);
+/// assert!(messages_line(0, 1, 0).is_some_and(|line| line.starts_with("1 frame line dropped")));
+/// ```
+#[must_use]
+pub fn messages_line(messages: u64, lines: u64, strayed: u64) -> Option<String> {
+    let counted =
+        |n: u64, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    let mut parts = Vec::new();
+    if messages > 0 {
+        parts.push(format!(
+            "{} (over a rate or unreadable)",
+            counted(messages, "message dropped", "messages dropped")
+        ));
+    }
+    if lines > 0 {
+        parts.push(format!(
+            "{} (queue full or player gone)",
+            counted(lines, "frame line dropped", "frame lines dropped")
+        ));
+    }
+    if strayed > 0 {
+        parts.push(format!(
+            "{}, lines for one player off",
+            counted(
+                strayed,
+                "line for one player reached others",
+                "lines for one player reached others"
+            )
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join(", "))
 }
 
 /// What the log and the summary say of a loader feature this build does
@@ -376,6 +424,9 @@ services and events:"
         );
         if let Some(guard) = &self.knowledge_guard {
             let _w = writeln!(out, "knowledge guard: {guard}");
+        }
+        if let Some(messages) = &self.messages {
+            let _w = writeln!(out, "mod messages: {messages}");
         }
         let _w = writeln!(out, "hooks: {} functions armed", self.targets);
         match &self.hooks {
@@ -695,6 +746,7 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            messages: messages_line(0, 3, 1),
             parts: vec![
                 Part {
                     name: "weather",
@@ -713,6 +765,38 @@ mod tests {
                 },
             ],
         }
+    }
+
+    #[test]
+    fn the_summary_counts_mod_messages_lost_on_the_way() {
+        let mut quiet = summary();
+        quiet.messages = None;
+        assert!(!quiet.render().contains("mod messages:"));
+        let text = summary().render();
+        assert!(text.contains(
+            "\nmod messages: 3 frame lines dropped (queue full or player gone), \
+             1 line for one player reached others, lines for one player off\n"
+        ));
+    }
+
+    #[test]
+    fn the_messages_line_names_only_what_happened() {
+        assert_eq!(messages_line(0, 0, 0), None);
+        assert_eq!(
+            messages_line(2, 0, 0).as_deref(),
+            Some("2 messages dropped (over a rate or unreadable)")
+        );
+        assert_eq!(
+            messages_line(1, 300, 0).as_deref(),
+            Some(
+                "1 message dropped (over a rate or unreadable), \
+                 300 frame lines dropped (queue full or player gone)"
+            )
+        );
+        assert_eq!(
+            messages_line(0, 0, 4).as_deref(),
+            Some("4 lines for one player reached others, lines for one player off")
+        );
     }
 
     #[test]
