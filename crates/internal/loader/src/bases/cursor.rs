@@ -42,9 +42,9 @@ pub(super) unsafe fn refuse_past_limit(
         return;
     }
     // SAFETY: the caller guarantees the cursor's live context; its balancing
-    // registry word sits at the offset the `CURSOR_ALTAR` pattern read from
+    // registry word sits at the table's `bases.cursor_balancing`, read from
     // the cursor's own code.
-    let balancing = unsafe { read_at::<u64>(ctx, sites.balancing) };
+    let balancing = unsafe { read_at::<u64>(ctx, sites.fields.balancing) };
     if balancing == 0 {
         return;
     }

@@ -8,8 +8,8 @@ use crate::base_groups::lookup::{self, Bases};
 use crate::base_groups::window;
 use crate::chains::Next;
 
-// SAFETY: `ObjWorldFn` is the signature of the rebuild `REBUILD` finds, and
-// `link` uses this slot only as its next.
+// SAFETY: `ObjWorldFn` is the signature of the rebuild the table's
+// `bases.rebuild` pins, and `link` uses this slot only as its next.
 pub(super) static REBUILD_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
 
 /// The rebuild's entity list: the game's container header over room of

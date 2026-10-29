@@ -18,6 +18,7 @@ pub(super) const FIELDS: Fields = Fields {
     zone_high: 0x10,
     item_altar: 0x43,
     max_altars_reached: 0x4000,
+    balancing: 0x170,
 };
 /// The byte that tells the server's object (1) from the client's (0).
 const KIND_AT: usize = 0x08;

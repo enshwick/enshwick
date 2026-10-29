@@ -19,20 +19,20 @@ const KINDS_SPAN: u8 = 7;
 const FLAG_4: u8 = 4;
 const FLAG_2: u8 = 2;
 
-// SAFETY: `ObjFn` is the signature of the NPC totals `NPC_TOTALS` finds,
-// and `link` uses this slot only as its next.
+// SAFETY: `ObjFn` is the signature of the NPC totals the table's
+// `bases.npc_totals` pins, and `link` uses this slot only as its next.
 pub(super) static NPC_TOTALS_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjWorldFn` is the signature of the server update
-// `SERVER_UPDATE` finds, and `link` uses this slot only as its next.
+// SAFETY: `ObjWorldFn` is the signature of the server update the table's
+// `bases.server_update` pins, and `link` uses this slot only as its next.
 pub(super) static SERVER_UPDATE_NEXT: Next<ObjWorldFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup `BED_CLEANUP` finds, and
-// `link` uses this slot only as its next.
+// SAFETY: `ObjFn` is the signature of the cleanup the table's
+// `bases.bed_cleanup` pins, and `link` uses this slot only as its next.
 pub(super) static BED_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup `COMFORT_CLEANUP` finds,
-// and `link` uses this slot only as its next.
+// SAFETY: `ObjFn` is the signature of the cleanup the table's
+// `bases.comfort_cleanup` pins, and `link` uses this slot only as its next.
 pub(super) static COMFORT_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
-// SAFETY: `ObjFn` is the signature of the cleanup `PROPS_CLEANUP` finds,
-// and `link` uses this slot only as its next.
+// SAFETY: `ObjFn` is the signature of the cleanup the table's
+// `bases.props_cleanup` pins, and `link` uses this slot only as its next.
 pub(super) static PROPS_CLEANUP_NEXT: Next<ObjFn> = unsafe { Next::new() };
 
 pub(super) unsafe extern "system" fn npc_totals(obj: *mut u8) -> u64 {

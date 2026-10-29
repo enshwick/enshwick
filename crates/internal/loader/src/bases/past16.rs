@@ -8,50 +8,29 @@
 //! 16 bases, with the zones still raised. Server 399 and client 426, where
 //! the bodies are the same.
 
+use core::ops::Range;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use enshwick::abi::{HookFlags, Side};
+use enshwick_gamedata::Resolved;
 
 use super::Fields;
 use super::lifecycle::{self, Code, CtorFn, SlotFreeFn, SlotInitFn, TeardownFn};
 use super::loops;
 use crate::base_groups::window;
+use crate::builds::Unhooked;
 use crate::chains::Next;
 use crate::code::{CodePatch, Verdict};
-use crate::host::Loader;
+use crate::host::{Loader, Target};
 use crate::mod_index::ModIndex;
+use crate::pinned::{Constant, Symbol, bases};
 
-/// The server object's create: `fn(allocator, world part) -> obj`, null
-/// when it fails.
-const SERVER_CREATE: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 \
-                             48 83 EC 50 48 8B 01 48 8B EA";
-/// The client object's create, of the same shape.
-const CLIENT_CREATE: &str =
-    "48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 50 48 8B 01 48 8B EA 45 33 C9";
-/// Where each create loads the object's size, `mov edx, size`, and the
-/// sizes.
-const SERVER_SIZE_AT: usize = 0x30;
-const CLIENT_SIZE_AT: usize = 0x1d;
-const SERVER_SIZE: u32 = 0x2070;
-const CLIENT_SIZE: u32 = 0x16e0;
+/// Bases past 16, as the log and the Mods screen name them when a build
+/// lacks a site.
+const PAST_16: &str = "bases past 16";
+/// `mov edx, imm32`, which each create loads the object's size with.
 const MOV_EDX: u8 = 0xBA;
-/// Where the server's create calls the stock slot init.
-const SLOT_INIT_AT: usize = 0x15f;
-/// The constructor, a leaf.
-const CTOR: &str = "45 33 D2 48 8D 51 30 4C 89 11 48 8D 42 60 44 88 51 08 4C 8D 1D ?? ?? ?? ??";
-/// The teardown of 16 records from `rcx`.
-const TEARDOWN: &str = "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 \
-                        48 83 EC 20 48 8D B1 00 13 00 00";
-/// The server object's destroy, `fn(obj)`, null-safe, and where it calls
-/// the stock map free.
-const SERVER_DESTROY: &str = "40 56 48 83 EC 30 48 8B F1 48 85 C9 0F 84 ?? ?? ?? ?? \
-                              48 89 5C 24 40 48 89 6C 24 48";
-const SLOT_FREE_AT: usize = 0xa8;
-/// The client object's destroy.
-const CLIENT_DESTROY: &str = "41 57 48 83 EC 30 4C 8B F9 48 85 C9 0F 84 ?? ?? ?? ?? \
-                              48 89 5C 24 40 48 89 6C 24 48";
-const CALL: u8 = 0xE8;
 /// The base count the window's code reads, `[obj+0x24]` in the count
 /// getter and the cleanups.
 pub(super) const COUNT_AT: usize = 0x24;
@@ -62,24 +41,12 @@ type DestroyFn = unsafe extern "system" fn(obj: *mut u8) -> u64;
 /// Why a site of the window is not found.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub(super) enum SiteError {
-    /// A pattern does not match once.
-    #[error("{0}")]
-    Pattern(String),
-    /// The code ends before the bytes at an offset.
-    #[error("the code ends before {0:#x}")]
-    Cut(usize),
-    /// An anchor holds no call.
-    #[error("{at:#x} holds {found:#04x}, not a call")]
-    NotACall { at: usize, found: u8 },
-    /// A call leaves the code section.
-    #[error("the call at {0:#x} leaves the code")]
-    CallLeaves(usize),
-    /// A create allocates another size than the game's.
-    #[error("a create loads {found:02X?}, not the size {size:#x}")]
-    Size { found: Vec<u8>, size: u32 },
-    /// An anchor holds another instruction than the expected load.
-    #[error("{at:#x} holds {found:02X?}, not the expected load")]
-    NotALoad { at: usize, found: Vec<u8> },
+    /// The build table lacks an entry.
+    #[error("{0} is not in this build")]
+    Missing(&'static str),
+    /// A create does not load the size the table names exactly once.
+    #[error("a create does not load the size {size:#x} once")]
+    Size { size: u32 },
     /// The client's base list calls another getter than the count's.
     #[error("the base list's count getter is not the expected one")]
     Getter,
@@ -89,9 +56,39 @@ pub(super) enum SiteError {
     Layout { stride: usize, count: usize },
 }
 
-impl From<String> for SiteError {
-    fn from(why: String) -> Self {
-        Self::Pattern(why)
+/// The build table entries the window reads, with its symbols as offsets
+/// into the code that starts at `code_rva` from the image base.
+pub(super) struct Pins<'a> {
+    pub(super) table: &'a Resolved,
+    pub(super) code_rva: u64,
+}
+
+impl Pins<'_> {
+    /// Where symbol `id` lies in the code.
+    pub(super) fn at(&self, id: Symbol) -> Result<usize, SiteError> {
+        self.table
+            .symbol(id.id())
+            .and_then(|rva| rva.checked_sub(self.code_rva))
+            .and_then(|at| usize::try_from(at).ok())
+            .ok_or(SiteError::Missing(id.id()))
+    }
+
+    /// The code of symbol `id`, as far as its pattern covers it.
+    fn body(&self, id: Symbol) -> Result<Range<usize>, SiteError> {
+        let at = self.at(id)?;
+        let (pattern, _) = self
+            .table
+            .head(id.id())
+            .ok_or(SiteError::Missing(id.id()))?;
+        Ok(at..at + pattern.len())
+    }
+
+    /// Constant `id` as a 32-bit value.
+    fn value(&self, id: Constant) -> Result<u32, SiteError> {
+        self.table
+            .constant(id.id())
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or(SiteError::Missing(id.id()))
     }
 }
 
@@ -138,17 +135,21 @@ static SETTLED: AtomicBool = AtomicBool::new(false);
 /// its window.
 static LIFECYCLE: crate::fuse::Fuse = crate::fuse::Fuse::new("bases past 16");
 
-// SAFETY: `CreateFn` is the signature of the create the `SERVER_CREATE`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `CreateFn` is the signature of the create the table's
+// `bases.server_create` pins, and `link` uses this slot only as that
+// function's next.
 static SERVER_CREATE_NEXT: Next<CreateFn> = unsafe { Next::new() };
-// SAFETY: `CreateFn` is the signature of the create the `CLIENT_CREATE`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `CreateFn` is the signature of the create the table's
+// `bases.client_create` pins, and `link` uses this slot only as that
+// function's next.
 static CLIENT_CREATE_NEXT: Next<CreateFn> = unsafe { Next::new() };
-// SAFETY: `DestroyFn` is the signature of the destroy the `SERVER_DESTROY`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `DestroyFn` is the signature of the destroy the table's
+// `bases.server_destroy` pins, and `link` uses this slot only as that
+// function's next.
 static SERVER_DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
-// SAFETY: `DestroyFn` is the signature of the destroy the `CLIENT_DESTROY`
-// pattern finds, and `link` uses this slot only as that function's next.
+// SAFETY: `DestroyFn` is the signature of the destroy the table's
+// `bases.client_destroy` pins, and `link` uses this slot only as that
+// function's next.
 static CLIENT_DESTROY_NEXT: Next<DestroyFn> = unsafe { Next::new() };
 
 /// Whether bases past 16 are armed.
@@ -166,102 +167,90 @@ pub(super) fn sites() -> Option<&'static Sites> {
     SITES.get().filter(|_| armed())
 }
 
-/// The offset `call` at `at` in `code` jumps to, after checking its opcode.
-pub(super) fn call_target(code: &[u8], at: usize) -> Result<usize, SiteError> {
-    let bytes: [u8; 5] = code
-        .get(at..at + 5)
-        .and_then(|b| b.try_into().ok())
-        .ok_or(SiteError::Cut(at))?;
-    if bytes[0] != CALL {
-        return Err(SiteError::NotACall {
-            at,
-            found: bytes[0],
-        });
-    }
-    let rel = i32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
-    isize::try_from(rel)
-        .ok()
-        .and_then(|rel| (at + 5).checked_add_signed(rel))
-        .filter(|&to| to < code.len())
-        .ok_or(SiteError::CallLeaves(at))
-}
-
-/// The patch that grows the object a create at `create` allocates, whose
-/// `mov edx, size` sits `at` bytes in.
+/// The patch that grows the object the create whose code is `create`
+/// allocates, at its one `mov edx, size`.
 fn size_patch(
     code: &[u8],
     start: usize,
-    create: usize,
-    at: usize,
+    create: Range<usize>,
     size: u32,
 ) -> Result<CodePatch, SiteError> {
     let mut expected = [MOV_EDX, 0, 0, 0, 0];
     expected[1..].copy_from_slice(&size.to_le_bytes());
-    let found = code
-        .get(create + at..create + at + expected.len())
-        .ok_or(SiteError::Cut(create + at))?;
-    if found != expected {
-        return Err(SiteError::Size {
-            found: found.to_vec(),
-            size,
-        });
-    }
+    let body = code.get(create.clone()).ok_or(SiteError::Size { size })?;
+    let mut found = body
+        .windows(expected.len())
+        .enumerate()
+        .filter(|(_, w)| *w == expected);
+    let (Some((at, _)), None) = (found.next(), found.next()) else {
+        return Err(SiteError::Size { size });
+    };
     let grown = u32::try_from(window::BLOCK).unwrap_or(u32::MAX);
     let mut replacement = expected;
     replacement[1..].copy_from_slice(&grown.to_le_bytes());
     Ok(CodePatch {
         owner: ModIndex::LOADER,
-        address: start + create + at,
+        address: start + create.start + at,
         expected: expected.into(),
         replacement: replacement.into(),
         needs: Box::default(),
     })
 }
 
-/// Finds every site in `code`, which starts at `start`, for a base layout
-/// of `fields`; the client's base list only on a `client`.
-fn find(code: &[u8], start: usize, client: bool, fields: Fields) -> Result<Sites, SiteError> {
+/// Finds every site in `code`, which starts at `start`, from the build
+/// table's `pins`, for a base layout of `fields`; the client's base list
+/// only on a `client`.
+fn find(
+    code: &[u8],
+    start: usize,
+    client: bool,
+    fields: Fields,
+    pins: &Pins<'_>,
+) -> Result<Sites, SiteError> {
     if fields.stride != window::RECORD || fields.count != COUNT_AT {
         return Err(SiteError::Layout {
             stride: fields.stride,
             count: fields.count,
         });
     }
-    let find = |pattern: &str| crate::code::find(code, pattern).map_err(SiteError::from);
-    let server_create = find(SERVER_CREATE)?;
-    let client_create = find(CLIENT_CREATE)?;
-    let server_destroy = find(SERVER_DESTROY)?;
-    let client_destroy = find(CLIENT_DESTROY)?;
-    let ctor = find(CTOR)?;
-    let teardown = find(TEARDOWN)?;
-    let slot_init = call_target(code, server_create + SLOT_INIT_AT)?;
-    let slot_free = call_target(code, server_destroy + SLOT_FREE_AT)?;
     let patches = vec![
-        size_patch(code, start, server_create, SERVER_SIZE_AT, SERVER_SIZE)?,
-        size_patch(code, start, client_create, CLIENT_SIZE_AT, CLIENT_SIZE)?,
+        size_patch(
+            code,
+            start,
+            pins.body(bases::SERVER_CREATE)?,
+            pins.value(bases::SERVER_SIZE)?,
+        )?,
+        size_patch(
+            code,
+            start,
+            pins.body(bases::CLIENT_CREATE)?,
+            pins.value(bases::CLIENT_SIZE)?,
+        )?,
     ];
-    let loops = loops::find(code, start, client)?;
+    let loops = loops::find(code, start, client, pins)?;
     let patches: Vec<CodePatch> = patches.into_iter().chain(loops.patches()).collect();
-    let at = |offset: usize| (start + offset) as u64;
-    let address = |offset: usize| start + offset;
+    let at = |id: Symbol| pins.at(id).map(|offset| (start + offset) as u64);
+    let address = |id: Symbol| pins.at(id).map(|offset| start + offset);
     let code_of = Code {
-        // SAFETY: the constructor its pattern finds, `fn(obj) -> obj`.
-        ctor: unsafe { core::mem::transmute::<usize, CtorFn>(address(ctor)) },
-        // SAFETY: the teardown its pattern finds, `fn(first record)`.
-        teardown: unsafe { core::mem::transmute::<usize, TeardownFn>(address(teardown)) },
-        // SAFETY: the stock slot init the server's create calls at
-        // `SLOT_INIT_AT`.
-        slot_init: unsafe { core::mem::transmute::<usize, SlotInitFn>(address(slot_init)) },
-        // SAFETY: the stock map free the server's destroy calls at
-        // `SLOT_FREE_AT`.
-        slot_free: unsafe { core::mem::transmute::<usize, SlotFreeFn>(address(slot_free)) },
+        // SAFETY: the table's `bases.ctor`, `fn(obj) -> obj`, whose whole
+        // code its pattern holds.
+        ctor: unsafe { core::mem::transmute::<usize, CtorFn>(address(bases::CTOR)?) },
+        // SAFETY: the table's `bases.teardown`, `fn(first record)`, whose
+        // whole code its pattern holds.
+        teardown: unsafe { core::mem::transmute::<usize, TeardownFn>(address(bases::TEARDOWN)?) },
+        // SAFETY: the table's `bases.slot_init`, the stock slot init the
+        // server's create calls.
+        slot_init: unsafe { core::mem::transmute::<usize, SlotInitFn>(address(bases::SLOT_INIT)?) },
+        // SAFETY: the table's `bases.slot_free`, the stock map free the
+        // server's destroy calls.
+        slot_free: unsafe { core::mem::transmute::<usize, SlotFreeFn>(address(bases::SLOT_FREE)?) },
     };
     Ok(Sites {
         code: code_of,
-        server_create: at(server_create),
-        client_create: at(client_create),
-        server_destroy: at(server_destroy),
-        client_destroy: at(client_destroy),
+        server_create: at(bases::SERVER_CREATE)?,
+        client_create: at(bases::CLIENT_CREATE)?,
+        server_destroy: at(bases::SERVER_DESTROY)?,
+        client_destroy: at(bases::CLIENT_DESTROY)?,
         patches,
         loops,
     })
@@ -278,8 +267,16 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
     ) else {
         return;
     };
-    let sites = match find(code, text.0, loader.side == Side::CLIENT, fields) {
+    let pins = Pins {
+        table: loader.build.resolved(),
+        code_rva: text.0 as u64 - loader.base,
+    };
+    let sites = match find(code, text.0, loader.side == Side::CLIENT, fields, &pins) {
         Ok(sites) => SITES.get_or_init(|| sites),
+        Err(SiteError::Missing(id)) => {
+            loader.feature_off(PAST_16, id, &Unhooked::Absent.to_string());
+            return;
+        }
         Err(reason) => {
             crate::log!(WARN, "bases keep 16 on {build}: {reason}");
             return;
@@ -294,54 +291,41 @@ pub(super) fn link(loader: &'static Loader, fields: Fields) {
         );
         return;
     }
+    let none = HookFlags::NONE;
+    let at = |symbol| Target::Pinned(symbol);
     let refused = [
-        (
+        loader.link_feature(
             "server bases create",
-            loader.link(
-                sites.server_create,
-                &SERVER_CREATE_NEXT,
-                create_server,
-                HookFlags::NONE,
-            ),
+            at(bases::SERVER_CREATE),
+            &SERVER_CREATE_NEXT,
+            create_server,
+            none,
         ),
-        (
+        loader.link_feature(
             "client bases create",
-            loader.link(
-                sites.client_create,
-                &CLIENT_CREATE_NEXT,
-                create_client,
-                HookFlags::NONE,
-            ),
+            at(bases::CLIENT_CREATE),
+            &CLIENT_CREATE_NEXT,
+            create_client,
+            none,
         ),
-        (
+        loader.link_feature(
             "server bases destroy",
-            loader.link(
-                sites.server_destroy,
-                &SERVER_DESTROY_NEXT,
-                destroy_server,
-                HookFlags::NONE,
-            ),
+            at(bases::SERVER_DESTROY),
+            &SERVER_DESTROY_NEXT,
+            destroy_server,
+            none,
         ),
-        (
+        loader.link_feature(
             "client bases destroy",
-            loader.link(
-                sites.client_destroy,
-                &CLIENT_DESTROY_NEXT,
-                destroy_client,
-                HookFlags::NONE,
-            ),
+            at(bases::CLIENT_DESTROY),
+            &CLIENT_DESTROY_NEXT,
+            destroy_client,
+            none,
         ),
     ]
     .into_iter()
     .chain(loops::link(loader, &sites.loops))
-    .filter(|(_, status)| !status.is_ok())
-    .inspect(|(name, status)| {
-        crate::log!(
-            WARN,
-            "bases keep 16 on {build}: {name} refused ({})",
-            status.0
-        );
-    })
+    .filter(|linked| !linked)
     .count();
     LINKED.store(refused == 0, Ordering::Release);
 }
@@ -449,48 +433,41 @@ unsafe extern "system" fn destroy_client(obj: *mut u8) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use enshwick_gamedata::reflect::{Image, Layout};
+    use enshwick_gamedata::{Side as TableSide, exact};
+
     use super::*;
     use crate::bases::fake::FIELDS;
 
-    #[test]
-    fn a_call_anchor_resolves_to_its_target_and_anything_else_is_refused() {
-        let mut code = vec![0xCC; 0x40];
-        code[0x10..0x15].copy_from_slice(&[0xE8, 0x0B, 0, 0, 0]);
-        code[0x20..0x25].copy_from_slice(&[0xE8, 0xF0, 0xFF, 0xFF, 0xFF]);
-        assert_eq!(call_target(&code, 0x10), Ok(0x20));
-        assert_eq!(call_target(&code, 0x20), Ok(0x15));
-        assert_eq!(
-            call_target(&code, 0x00),
-            Err(SiteError::NotACall { at: 0, found: 0xCC })
-        );
-        code[0x30..0x35].copy_from_slice(&[0xE8, 0x00, 0x10, 0, 0]);
-        assert_eq!(call_target(&code, 0x30), Err(SiteError::CallLeaves(0x30)));
-        assert_eq!(call_target(&code, 0x3e), Err(SiteError::Cut(0x3e)));
-    }
-
-    /// Every site is found once in the game's executables that
-    /// `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name, the client's base list
-    /// in the client only; skipped without them.
+    /// Every site is where the table of each game executable that
+    /// `ENSH_SERVER_EXE` and `ENSH_CLIENT_EXE` name puts it, each size patch
+    /// finds its one `mov edx, size` in its create, and the client's count
+    /// getter is in the client only; skipped without them.
     #[test]
     fn every_site_is_found_in_the_game_s_executables() {
-        use enshwick_gamedata::reflect::{Image, Layout};
-        for (variable, client) in [("ENSH_SERVER_EXE", false), ("ENSH_CLIENT_EXE", true)] {
+        let tables = crate::builds::load();
+        for (variable, side) in [
+            ("ENSH_SERVER_EXE", TableSide::Server),
+            ("ENSH_CLIENT_EXE", TableSide::Client),
+        ] {
             let Some(path) = std::env::var_os(variable) else {
                 continue;
             };
             let bytes = std::fs::read(path).unwrap();
             let image = Image::parse(&bytes, Layout::File, None).unwrap();
+            let table = exact(&tables, side, image.fingerprint().unwrap()).unwrap();
             let text = image.section(".text").unwrap();
             let range = image.range(text);
             let code = image.read(range.start, range.end - range.start).unwrap();
-            let sites =
-                find(code, 0, client, FIELDS).unwrap_or_else(|why| panic!("{variable}: {why}"));
+            let pins = Pins {
+                table: &table.resolve(),
+                code_rva: range.start - image.base(),
+            };
+            let client = side == TableSide::Client;
+            let sites = find(code, 0, client, FIELDS, &pins)
+                .unwrap_or_else(|why| panic!("{variable}: {why}"));
             assert_eq!(sites.patches.len(), 2 + usize::from(client), "{variable}");
             assert_eq!(sites.targets().count(), 14, "{variable}");
-            assert!(
-                client || find(code, 0, true, FIELDS).is_err(),
-                "{variable} has no client base list"
-            );
         }
     }
 
@@ -500,8 +477,13 @@ mod tests {
             stride: 0x138,
             ..FIELDS
         };
+        let tables = crate::builds::load();
+        let pins = Pins {
+            table: &tables[0].resolve(),
+            code_rva: 0,
+        };
         assert_eq!(
-            find(&[], 0, false, other).map(|_| ()),
+            find(&[], 0, false, other, &pins).map(|_| ()),
             Err(SiteError::Layout {
                 stride: 0x138,
                 count: 0x24
@@ -510,16 +492,19 @@ mod tests {
     }
 
     #[test]
-    fn a_grown_size_checks_the_vanilla_size_first() {
+    fn a_grown_size_is_the_one_load_of_the_vanilla_size_in_its_create() {
         let mut code = vec![0x90; 0x60];
         code[0x30..0x35].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
-        let grown = size_patch(&code, 0x1000, 0, 0x30, SERVER_SIZE).unwrap();
+        let grown = size_patch(&code, 0x1000, 0x20..0x40, 0x2070).unwrap();
         assert_eq!(grown.address, 0x1030);
         assert_eq!(*grown.expected, [0xBA, 0x70, 0x20, 0, 0]);
         assert_eq!(*grown.replacement, [0xBA, 0x30, 0x30, 0x01, 0]);
-        assert!(matches!(
-            size_patch(&code, 0x1000, 0, 0x30, CLIENT_SIZE),
-            Err(SiteError::Size { .. })
-        ));
+        assert!(size_patch(&code, 0x1000, 0x20..0x40, 0x16e0).is_err());
+        assert!(size_patch(&code, 0x1000, 0x40..0x60, 0x2070).is_err());
+        code[0x10..0x15].copy_from_slice(&[0xBA, 0x70, 0x20, 0, 0]);
+        assert!(
+            size_patch(&code, 0x1000, 0x00..0x40, 0x2070).is_err(),
+            "twice"
+        );
     }
 }

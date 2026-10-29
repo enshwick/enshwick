@@ -146,6 +146,9 @@ mod tests {
                 "weather.entry_size" => 0x50,
                 // The client's session holds more before its host machine.
                 "session.host_machine" => 0x1_1a98,
+                // The client's placement cursor context holds more before
+                // its balancing.
+                "bases.cursor_balancing" => 0x180,
                 _ => *value,
             };
             assert_eq!(client.constant(id), Some(expected), "{id}");
