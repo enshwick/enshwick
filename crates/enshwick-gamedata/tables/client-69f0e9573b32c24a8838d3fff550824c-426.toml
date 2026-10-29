@@ -111,6 +111,13 @@ revision = 1
 "inventory.move_all" = { rva = 0x40_d4b0, pattern = "48 89 4C 24 ?? 55 53 56 57 41 54 41 56 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 58 04 00 00" }
 "inventory.resend" = { rva = 0x49_f1c0, pattern = "74 0B 8B 53 ?? 48 8B CF E8 ?? ?? ?? ?? 83 7B ?? 00 74 0B 8B 53 ?? 48 8B CF", rel = 9 }
 "item.info" = { rva = 0xe7_d430, pattern = "89 4C 24 ?? 48 83 EC 28 85 C9 74 1B 48 8D 4A ?? 48 8D 54 24 ??" }
+# The per-workshop recipe list lookup; the check before a recipe joins
+# its workshop's list, the block its full list jumps to, which stops the
+# game, and the loop's next recipe after the check.
+"recipe.list_lookup" = { rva = 0xe7_2480, pattern = "48 89 5C 24 08 48 89 74 24 10 48 89 7C 24 18 83 BA 4C 01 00 00 00 4C 8B D2 48 8B BA 08 01 00 00" }
+"recipe.limit_check" = { rva = 0xea_ee28, pattern = "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ?? 48 89 3C C2 49 FF C5 66 FF 82 00 10 00 00" }
+"recipe.limit_stop" = { rva = 0xea_ef4b, pattern = "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ?? 48 89 3C C2 49 FF C5 66 FF 82 00 10 00 00", rel = 17, body = { len = 0x1b, open = [0x3, 0xc, 0x11, 0x16], hash = "7f23f4b746f84cd87be3431986aca26d" } }
+"recipe.limit_next" = { rva = 0xea_ee4b, pattern = "0F B7 82 00 10 00 00 B9 00 02 00 00 66 3B C1 0F 84 ?? ?? ?? ?? 48 89 3C C2 49 FF C5 66 FF 82 00 10 00 00", at = 35 }
 "skill.fly_mode_gate_return" = { rva = 0x2d_8435, pattern = "48 8B 95 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01 EB 02 32 DB", at = 18 }
 # The node of Airborne Architect, which the fly mode gate loads from data.
 "skill.airborne_architect_cell" = { rva = 0x150_c9c0, pattern = "48 8B 95 ?? ?? ?? ?? 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 04 B3 01 EB 02 32 DB", rel = 9 }

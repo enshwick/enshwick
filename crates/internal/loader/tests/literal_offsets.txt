@@ -6,7 +6,6 @@
 4 src/base_groups/window.rs
 1 src/buffs.rs
 1 src/chains/model.rs
-3 src/code.rs
 1 src/console/ban_list.rs
 2 src/detour.rs
 1 src/inventory.rs
