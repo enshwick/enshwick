@@ -99,6 +99,54 @@ fn each_optional_part_turns_off_alone() {
     }
 }
 
+/// Every client table that pins the text field gives its sizes, they fit
+/// the loader's buffer, and a build whose field or kept state moved turns
+/// the text field off instead of letting the game write past the buffer.
+#[test]
+fn the_text_field_s_sizes_come_from_the_table_and_fit_its_buffer() {
+    let mut checked = 0;
+    for table in client_tables() {
+        if !table
+            .symbols()
+            .iter()
+            .any(|s| s.id() == pinned::ui::TEXT_FIELD.id())
+        {
+            continue;
+        }
+        let lookup = |id: &str| constant(&table, id);
+        text_field::TextLayout::read(&lookup)
+            .unwrap_or_else(|why| panic!("{}: {why}", table.name()));
+        let changed = |changed: &'static str, value: Option<u64>| {
+            move |id: &str| if id == changed { value } else { lookup(id) }
+        };
+        let extent = pinned::ui::TEXT_FIELD_EXTENT.id();
+        let text = pinned::ui::TEXT_FIELD_TEXT.id();
+        let state = pinned::ui::TEXT_FIELD_STATE_SIZE.id();
+        let editing = pinned::ui::TEXT_FIELD_EDITING.id();
+        for (id, value, room, blamed) in [
+            (extent, Some(0x1000), true, extent),
+            (text, Some(0x1000), true, text),
+            (state, Some(0x10), true, editing),
+            (extent, None, false, extent),
+        ] {
+            let read = text_field::TextLayout::read(&changed(id, value));
+            let got = match read {
+                Err(Missing::Room(id)) => Some((true, id)),
+                Err(Missing::Entry(id)) => Some((false, id)),
+                _ => None,
+            };
+            assert_eq!(
+                got,
+                Some((room, blamed)),
+                "{} with {id} at {value:?}",
+                table.name()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "no client table pins the text field");
+}
+
 /// The scroll area's highlight sound sits inside the navigation config on
 /// every client table that has it, and one past it keeps the scroll area
 /// off.

@@ -6,7 +6,9 @@
 //! buffer's capacity, cutting what does not fit; Enter sets the input's
 //! answer to 1; its kept state says whether it has the caret.
 
-use super::{Buf, Engine, Loader, Missing, NodeFloatFn, OneFn, Ptr, UiText, game_fn, stretch};
+use super::{
+    Buf, Engine, Loader, Lookup, Missing, NodeFloatFn, OneFn, Ptr, UiText, field, game_fn, stretch,
+};
 use crate::configure::rows::{ENTRY_BYTES, typed};
 use crate::pinned;
 
@@ -34,21 +36,46 @@ type StateFn = unsafe extern "system" fn(field: Ptr, key: u64, count: u32) -> *m
 type InputFn = unsafe extern "system" fn(field: Ptr, out: *mut u64, hint: *const UiText, flag: u8);
 type HitFn = unsafe extern "system" fn(frame: Ptr, out: *mut [u8; 8], mode: u32, a: u32, b: u8);
 
-/// The field object, a label with the field's parts after it.
-const FIELD_SIZE: usize = 0x280;
-/// The field's pointer to the [`GameText`] it edits, which the constructor
-/// writes and the input and the drawing read and write through.
-const FIELD_TEXT: usize = 0x150;
+/// The loader's room for the field object, a label with the field's parts
+/// after it; the build's `ui.text_field_extent` must fit in it.
+pub(super) const FIELD_SIZE: usize = 0x280;
 /// The game's key for a field's kept state among its node's states.
 const STATE_KEY: u64 = 0x64d2_7908_60d9_c7f6;
-/// The kept state's size.
-const STATE_SIZE: usize = 0x1990;
-/// The kept state's byte that is set while the field has the caret; the
-/// rename dialog clears it on Back to end the typing.
-const STATE_EDITING: usize = 0x1988;
 
-const _: () = assert!(FIELD_TEXT + 8 <= FIELD_SIZE);
-const _: () = assert!(STATE_EDITING < STATE_SIZE);
+/// Where the field's kept state holds what the loader reads and writes,
+/// from the build's table, once the field object is known to fit.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct TextLayout {
+    /// The kept state's byte that is set while the field has the caret;
+    /// the rename dialog clears it on Back to end the typing.
+    editing: usize,
+}
+
+impl TextLayout {
+    /// Reads the layout from the build's constants. A field object that
+    /// would not fit [`FIELD_SIZE`], a pointer to the [`GameText`] it edits
+    /// outside the object, or a caret byte outside the kept state is
+    /// [`Missing::Room`], so the game never writes past the buffer.
+    pub(super) fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        let extent = field(lookup, pinned::ui::TEXT_FIELD_EXTENT.id())?;
+        if extent > FIELD_SIZE {
+            return Err(Missing::Room(pinned::ui::TEXT_FIELD_EXTENT.id()));
+        }
+        let text = field(lookup, pinned::ui::TEXT_FIELD_TEXT.id())?;
+        if text
+            .checked_add(size_of::<usize>())
+            .is_none_or(|end| end > extent)
+        {
+            return Err(Missing::Room(pinned::ui::TEXT_FIELD_TEXT.id()));
+        }
+        let state = field(lookup, pinned::ui::TEXT_FIELD_STATE_SIZE.id())?;
+        let editing = field(lookup, pinned::ui::TEXT_FIELD_EDITING.id())?;
+        if editing >= state {
+            return Err(Missing::Room(pinned::ui::TEXT_FIELD_EDITING.id()));
+        }
+        Ok(Self { editing })
+    }
+}
 /// The input's answer for Enter.
 const ENTERED: u64 = 1;
 /// The hit test's first byte for a click.
@@ -65,11 +92,13 @@ pub(super) struct TextFields {
     focus: OneFn,
     hit: HitFn,
     min_height: NodeFloatFn,
+    layout: TextLayout,
 }
 
 impl TextFields {
-    /// Resolves every function of the text field.
+    /// Resolves every function of the text field and checks its sizes.
     pub(super) fn resolve(loader: &Loader) -> Result<Self, Missing> {
+        let layout = TextLayout::read(&|id: &str| loader.build.constant(id))?;
         macro_rules! function {
             ($name:expr, $ty:ty) => {
                 // SAFETY: `$ty` is the signature of the game function `$name`
@@ -85,6 +114,7 @@ impl TextFields {
             focus: function!(pinned::ui::FOCUS_REQUEST, OneFn),
             hit: function!(pinned::ui::FRAME_HIT, HitFn),
             min_height: function!(pinned::ui::NODE_MIN_HEIGHT, NodeFloatFn),
+            layout,
         })
     }
 }
@@ -165,8 +195,11 @@ impl Engine {
         let mut field = Buf::<FIELD_SIZE>::zeroed();
         // SAFETY: `fns.field` is the game's `ui.text_field`, checked in
         // `TextFields::resolve`, inside the window this function's `# Safety`
-        // gives; `field` holds the `FIELD_SIZE` bytes the field is. The
-        // constructor stores the `GameText` pointer at `FIELD_TEXT`, and
+        // gives; `field` holds `FIELD_SIZE` bytes, at least the build's
+        // `ui.text_field_extent` the constructor writes, as `TextLayout::read`
+        // checked. The
+        // constructor stores the `GameText` pointer at `ui.text_field_text`,
+        // inside that extent, and
         // `ui.text_field_input` and `ui.label_draw` below read and write the
         // text through it: `buffer` stays exclusively borrowed and unmoved
         // until after `label_draw`, its data points at its own
@@ -205,7 +238,7 @@ impl Engine {
         let mut answer = 0u64;
         // SAFETY: `fns.input` is the game's `ui.text_field_input`, checked
         // in `TextFields::resolve`, on the field built above; it writes the
-        // typed text through the `GameText` at `FIELD_TEXT`, which points at
+        // typed text through the `GameText` at `ui.text_field_text`, which points at
         // `buffer`, exclusively borrowed and unmoved for this call, at most
         // `ENTRY_BYTES` bytes with no grow function, and its answer to the
         // live `answer`; `hint` outlives the frame by this function's
@@ -216,24 +249,27 @@ impl Engine {
         // own key for the field's state.
         let state = unsafe { (fns.state)(field.ptr(), STATE_KEY, 1) };
         let state = state.expose_provenance();
+        let at = fns.layout.editing;
         let mut editing = state != 0
             // SAFETY: `state` is non-zero, checked first, and points at the
-            // field's kept state of `STATE_SIZE` bytes on client 426, whose
-            // editing byte sits at `STATE_EDITING`.
-            && unsafe { crate::memory::read::<u8>(state, STATE_EDITING) } != 0;
+            // field's kept state of the build's `ui.text_field_state_size`
+            // bytes, whose editing byte sits at `ui.text_field_editing`,
+            // inside it as `TextLayout::read` checked.
+            && unsafe { crate::memory::read::<u8>(state, at) } != 0;
         if editing && ending {
             // SAFETY: `state` is non-zero, checked by `editing`, and points at
-            // the field's kept state of `STATE_SIZE` bytes, which the game
-            // touches only on this thread while it draws; clearing its
-            // editing byte ends the typing, as the rename dialog does on Back.
-            unsafe { crate::memory::write::<u8>(state, STATE_EDITING, 0) };
+            // the field's kept state, whose editing byte at `at` lies inside
+            // it as `TextLayout::read` checked; the game touches the state
+            // only on this thread while it draws; clearing its editing byte
+            // ends the typing, as the rename dialog does on Back.
+            unsafe { crate::memory::write::<u8>(state, at, 0) };
             editing = false;
         }
         buffer.text.len = buffer.text.len.min(ENTRY_BYTES as u64);
         // SAFETY: `self.label_draw` is the game's `ui.label_draw`, checked in
         // `Engine::resolve`, on the field built above, which draws and closes
         // it as the game's callers do; it reads the text through the
-        // `GameText` at `FIELD_TEXT`, which points at `buffer`, still
+        // `GameText` at `ui.text_field_text`, which points at `buffer`, still
         // exclusively borrowed and unmoved, its length within its capacity.
         unsafe { (self.label_draw)(field.ptr()) };
         Some(Typed {
