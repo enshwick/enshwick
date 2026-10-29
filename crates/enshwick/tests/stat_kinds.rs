@@ -150,7 +150,14 @@ mod tests {
             .collect();
         assert!(matches!(
             order.as_slice(),
-            [Origin::Item(_), Origin::Buff(BLESSED), Origin::Mod { .. }]
+            [
+                Origin::Item(_),
+                Origin::Buff(BLESSED),
+                Origin::Mod {
+                    index: enshwick::mods::ModIndex(0),
+                    ..
+                }
+            ]
         ));
 
         assert_eq!(loader.settle_stats(), 2);

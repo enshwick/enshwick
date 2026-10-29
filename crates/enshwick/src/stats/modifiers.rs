@@ -3,6 +3,7 @@ use core::time::Duration;
 use crate::abi::StatModifierData;
 use crate::buffs::BuffTypeId;
 use crate::inventory::ItemInstance;
+use crate::mods::ModIndex;
 
 use super::defs::{Stat, StatDef, StatKey, StatType};
 
@@ -280,11 +281,11 @@ pub enum Origin {
     Item(ItemInstance),
     /// A buff the entity has.
     Buff(BuffTypeId),
-    /// A modifier a mod keeps on the entity: the mod's load-order index and
-    /// the hash of its key.
+    /// A modifier a mod keeps on the entity: the mod that set it and the
+    /// hash of its key.
     Mod {
-        /// The mod's index in load order.
-        index: u32,
+        /// The mod that set it; [`ModIndex::entry`] names it.
+        index: ModIndex,
         /// The hash of the modifier's key.
         key: u32,
     },

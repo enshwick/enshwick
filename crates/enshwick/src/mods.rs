@@ -51,6 +51,43 @@ pub const LOADER_FILE: &str = "mods/enshwick/enshwick.dll";
 /// ```
 pub const LOADER_FILES: [&str; 2] = [STUB_FILE, LOADER_FILE];
 
+/// A loaded mod's place in load order, counted from 0 after the loader, as
+/// [`stats::Origin::Mod`](crate::stats::Origin::Mod) names a mod.
+///
+/// # Examples
+///
+/// ```
+/// use enshwick::mods::ModIndex;
+///
+/// if let Some(entry) = ModIndex(0).entry() {
+///     enshwick::info!("the first mod in load order is {}", entry.id);
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ModIndex(pub u32);
+
+impl ModIndex {
+    /// The loaded mod at this place, from [`all`]; `None` past the last
+    /// mod or before the loader initialises this mod.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let first = enshwick::mods::ModIndex(0).entry();
+    /// assert!(first.is_none_or(|entry| entry.id != enshwick::mods::LOADER_ID));
+    /// ```
+    #[must_use]
+    pub fn entry(self) -> Option<ModEntry> {
+        all().into_iter().find(|entry| entry.index == Some(self))
+    }
+}
+
+impl core::fmt::Display for ModIndex {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// One loaded mod, or the loader itself, from [`all`].
 ///
 /// # Examples
@@ -90,6 +127,9 @@ pub struct ModEntry {
     /// In [`replaced`], the id of the mod that replaces this one; empty
     /// elsewhere.
     pub replaced_by: String,
+    /// The mod's place in load order in [`all`]; `None` for the loader and
+    /// in [`join_missing`] and [`replaced`].
+    pub index: Option<ModIndex>,
 }
 
 impl Default for ModEntry {
@@ -118,6 +158,7 @@ impl Default for ModEntry {
             license: String::new(),
             homepage: String::new(),
             replaced_by: String::new(),
+            index: None,
         }
     }
 }
@@ -164,7 +205,7 @@ pub fn label(name: &str, id: &str) -> String {
 #[must_use]
 pub fn all() -> Vec<ModEntry> {
     crate::host()
-        .map(|host| host.listing(host.api().mods))
+        .map(|host| host.listing(host.api().mods, true))
         .unwrap_or_default()
 }
 
@@ -195,7 +236,7 @@ pub fn all() -> Vec<ModEntry> {
 #[must_use]
 pub fn join_missing() -> Vec<ModEntry> {
     crate::host()
-        .map(|host| host.listing(host.api().join_missing))
+        .map(|host| host.listing(host.api().join_missing, false))
         .unwrap_or_default()
 }
 
@@ -215,13 +256,14 @@ pub fn join_missing() -> Vec<ModEntry> {
 #[must_use]
 pub fn replaced() -> Vec<ModEntry> {
     crate::host()
-        .map(|host| host.listing(host.api().replaced))
+        .map(|host| host.listing(host.api().replaced, false))
         .unwrap_or_default()
 }
 
 impl Host {
-    /// The entries a listing function of the table writes.
-    fn listing(&self, list: Listing) -> Vec<ModEntry> {
+    /// The entries a listing function of the table writes; `load_order`
+    /// numbers them as [`all`] lists them, the loader first.
+    fn listing(&self, list: Listing, load_order: bool) -> Vec<ModEntry> {
         let entry_size = u32::try_from(size_of::<ModInfo>()).unwrap_or(u32::MAX);
         let mut count = 0u32;
         let status = list(
@@ -249,10 +291,20 @@ impl Host {
         infos.truncate(count as usize);
         infos
             .iter()
-            // SAFETY: `list` filled `count` entries, and the loader keeps every
-            // string and author array it lists alive and unchanged for the
-            // process, past this call.
-            .filter_map(|info| unsafe { entry(info) })
+            .enumerate()
+            .filter_map(|(at, info)| {
+                // SAFETY: `list` filled `count` entries, and the loader keeps
+                // every string and author array it lists alive and unchanged
+                // for the process, past this call.
+                let mut entry = unsafe { entry(info) }?;
+                if load_order {
+                    entry.index = at
+                        .checked_sub(1)
+                        .and_then(|place| u32::try_from(place).ok())
+                        .map(ModIndex);
+                }
+                Some(entry)
+            })
             .collect()
     }
 }
@@ -317,6 +369,7 @@ unsafe fn entry(info: &ModInfo) -> Option<ModEntry> {
         license,
         homepage,
         replaced_by,
+        index: None,
     })
 }
 

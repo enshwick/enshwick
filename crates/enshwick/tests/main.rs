@@ -68,6 +68,7 @@ mod loot_table_changes;
 mod map;
 mod mid_hook;
 mod migrations;
+mod mod_index;
 mod net;
 mod no_inventories;
 mod no_mod_points;
