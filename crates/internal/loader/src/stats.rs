@@ -921,12 +921,31 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     }
     match event {
         Event::WORLD_LOADED => {
-            let key = crate::saves::world_key(loader).map(str::to_owned);
-            let saved: Vec<Saved> = key
-                .as_deref()
-                .and_then(|key| std::fs::read(file(loader, key)).ok())
-                .and_then(|bytes| postcard::from_bytes(&bytes).ok())
-                .unwrap_or_default();
+            let mut key = crate::saves::world_key(loader).map(str::to_owned);
+            let read = key.as_deref().map_or(Ok(None), |key| {
+                let path = file(loader, key);
+                enshwick::files::read_if_present(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|bytes| {
+                        bytes
+                            .map(|bytes| postcard::from_bytes::<Vec<Saved>>(&bytes))
+                            .transpose()
+                            .map_err(|e| e.to_string())
+                    })
+                    .map_err(|why| format!("{}: {why}", path.display()))
+            });
+            let saved = match read {
+                Ok(saved) => saved.unwrap_or_default(),
+                // With no world to write to, the file stays as it is.
+                Err(why) => {
+                    crate::log!(
+                        WARN,
+                        "stats: saved modifiers do not read and stay as they are: {why}"
+                    );
+                    key = None;
+                    Vec::new()
+                }
+            };
             crate::log!(INFO, "stats: {} saved modifiers", saved.len());
             *STATE.relock() = Some(State {
                 saved,

@@ -31,7 +31,7 @@ mod anchor;
 mod file;
 mod game;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -953,6 +953,34 @@ fn write_file(server: &Server) -> Vec<u8> {
     file::write(values.chain(pending))
 }
 
+/// The records of the world file at `path`, as [`read_file`] gives them;
+/// none when no file is there.
+///
+/// # Errors
+///
+/// Why a file that is there does not read: the system refused it, it is cut
+/// short, or it is of a version this loader does not know.
+fn read_world(path: &Path) -> Result<(Vec<Pending>, Vec<String>), String> {
+    match enshwick::files::read_if_present(path) {
+        Ok(None) => Ok(Default::default()),
+        Ok(Some(bytes)) => read_file(&bytes).ok_or_else(|| {
+            format!(
+                "{} does not read to its end, or is of a version this loader does not know",
+                path.display()
+            )
+        }),
+        Err(error) => Err(format!("{} does not read: {error}", path.display())),
+    }
+}
+
+/// A write of world `key`'s values failed: the next save writes them again,
+/// while that world still runs.
+fn unwritten(server: &mut Option<Server>, key: &str) {
+    if let Some(server) = server.as_mut().filter(|s| s.key.as_deref() == Some(key)) {
+        server.changed = true;
+    }
+}
+
 /// Follows the server's world: reads the world's values once it has
 /// loaded, writes them when it saves and when it shuts down.
 pub(crate) fn world_event(loader: &Loader, event: Event) {
@@ -962,23 +990,22 @@ pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
             let key = crate::saves::world_key(loader).map(str::to_owned);
-            let path = key.as_deref().map(|key| file(loader, key));
-            let read = path.as_ref().and_then(|path| std::fs::read(path).ok());
-            let (pending, unopened) = match read.as_deref().map(read_file) {
-                Some(Some(records)) => records,
-                Some(None) => {
+            let read = key.as_deref().map_or_else(
+                || Ok(Default::default()),
+                |key| read_world(&file(loader, key)),
+            );
+            let (pending, unopened) = match read {
+                Ok(records) => records,
+                Err(why) => {
                     // Keep a file this loader cannot read from being
                     // overwritten: the world runs without its values.
                     crate::log!(
                         WARN,
-                        "mod data: {} does not read to its end, or is of a version this loader does not know; it stays as it is and this world keeps no mod data",
-                        path.as_ref()
-                            .map_or_else(String::new, |p| p.display().to_string())
+                        "mod data: {why}; it stays as it is and this world keeps no mod data"
                     );
                     *SERVER.relock() = None;
                     return;
                 }
-                None => Default::default(),
             };
             crate::log!(
                 INFO,
@@ -1107,7 +1134,12 @@ fn save(loader: &Loader, after_game_save: bool) {
     }
     let path = file(loader, &key);
     if let Err(error) = enshwick::files::write_atomically(&path, &bytes) {
-        crate::log!(WARN, "mod data: {} not written: {error}", path.display());
+        unwritten(&mut SERVER.relock(), &key);
+        crate::log!(
+            WARN,
+            "mod data: {} not written, kept for the next save: {error}",
+            path.display()
+        );
     }
 }
 
@@ -1450,5 +1482,35 @@ mod tests {
         );
         assert_eq!(decode(&bytes[..bytes.len() - 3]).len(), 2);
         assert!(decode(&[200, 1, 2]).is_empty());
+    }
+
+    #[test]
+    fn only_a_missing_world_file_starts_the_world_empty() {
+        let dir = std::env::temp_dir().join(format!("enshwick-item-read-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let Ok((pending, unopened)) = read_world(&dir.join(FILE)) else {
+            panic!("a missing file is an empty world");
+        };
+        assert!(pending.is_empty() && unopened.is_empty());
+        // A folder in the file's place reads as an error, as a locked file does.
+        std::fs::create_dir(dir.join(FILE)).unwrap();
+        assert!(read_world(&dir.join(FILE)).is_err());
+        let newer = dir.join("newer.bin");
+        std::fs::write(&newer, b"EWID\x09").unwrap();
+        assert!(read_world(&newer).is_err());
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_write_marks_the_same_world_changed_again() {
+        let mut kept = Some(server(Vec::new(), Vec::new()));
+        unwritten(&mut kept, "other");
+        assert!(!kept.as_ref().unwrap().changed, "another world's write");
+        unwritten(&mut kept, "w");
+        assert!(kept.as_ref().unwrap().changed, "retried at the next save");
+        let mut none = None;
+        unwritten(&mut none, "w");
+        assert!(none.is_none());
     }
 }

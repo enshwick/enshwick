@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 use crate::Off;
 use crate::locks::Relock;
@@ -453,6 +454,8 @@ pub struct WorldStore<T> {
     slot: std::sync::Arc<std::sync::Mutex<WorldSlot<T>>>,
     /// The background write under way, joined before the next one.
     writing: std::sync::Arc<std::sync::Mutex<Option<std::thread::JoinHandle<()>>>>,
+    /// A background write failed: the next save writes the value again.
+    unwritten: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<T> Clone for WorldStore<T> {
@@ -460,6 +463,7 @@ impl<T> Clone for WorldStore<T> {
         Self {
             slot: std::sync::Arc::clone(&self.slot),
             writing: std::sync::Arc::clone(&self.writing),
+            unwritten: std::sync::Arc::clone(&self.unwritten),
         }
     }
 }
@@ -539,6 +543,7 @@ where
                 open: None,
             })),
             writing: std::sync::Arc::default(),
+            unwritten: std::sync::Arc::default(),
         })
     }
 
@@ -597,20 +602,29 @@ where
         let mut slot = self.lock();
         // A background write still running would land after this one.
         let _writing = self.wait_for_writes();
-        if let Some(open) = slot.open.as_mut().filter(|open| open.changed) {
-            open.store.save(&open.value)?;
-            open.changed = false;
+        if let Some(open) = slot.open.as_mut() {
+            open.changed |= self.unwritten.swap(false, Ordering::Relaxed);
+            if open.changed {
+                open.store.save(&open.value)?;
+                open.changed = false;
+            }
         }
         Ok(())
     }
 
     /// Writes the open world's value on a thread of its own when it changed;
-    /// the game thread waits only for a previous write still under way.
+    /// the game thread waits only for a previous write still under way. A
+    /// write that fails leaves the value changed for the next save.
     pub(crate) fn flush_in_background(&self) {
         let mut slot = self.lock();
-        let Some(open) = slot.open.as_mut().filter(|open| open.changed) else {
+        let mut writing = self.wait_for_writes();
+        let Some(open) = slot.open.as_mut() else {
             return;
         };
+        open.changed |= self.unwritten.swap(false, Ordering::Relaxed);
+        if !open.changed {
+            return;
+        }
         let text = match open.store.text(&open.value) {
             Ok(text) => text,
             Err(error) => {
@@ -618,22 +632,22 @@ where
                 return;
             }
         };
-        open.changed = false;
         let path = open.store.path.clone();
-        let mut writing = self.wait_for_writes();
+        let unwritten = std::sync::Arc::clone(&self.unwritten);
         let spawned = std::thread::Builder::new()
             .name("world-store".to_owned())
             .spawn(move || {
                 if let Err(error) = write_atomically(&path, &text) {
-                    crate::error!("{error}");
+                    unwritten.store(true, Ordering::Relaxed);
+                    crate::error!("{error}; kept for the next save");
                 }
             });
         match spawned {
-            Ok(handle) => *writing = Some(handle),
-            Err(e) => {
-                open.changed = true;
-                crate::error!("world store kept for the next save: {e}");
+            Ok(handle) => {
+                open.changed = false;
+                *writing = Some(handle);
             }
+            Err(e) => crate::error!("world store kept for the next save: {e}"),
         }
     }
 
@@ -799,6 +813,28 @@ mod tests {
             assert_eq!(saved.n, n + 100);
         }
         store.close().unwrap();
+        let _gone = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_background_write_is_retried_at_the_next_save() {
+        let dir = std::env::temp_dir().join(format!("enshwick-world-retry-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        let store: WorldStore<Count> = WorldStore::new(&dir, "count").unwrap();
+        store.open("world0-aa").unwrap();
+        store.update(|c| c.n = 7);
+        // A folder in the file's place: the rename fails.
+        let file = dir.join("worlds/world0-aa/count.toml");
+        std::fs::create_dir_all(&file).unwrap();
+        store.flush_in_background();
+        drop(store.wait_for_writes());
+        std::fs::remove_dir(&file).unwrap();
+        store.flush().unwrap();
+        let saved: Count = toml::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        assert_eq!(
+            saved.n, 7,
+            "the next save writes what the failed one did not"
+        );
         let _gone = std::fs::remove_dir_all(&dir);
     }
 }

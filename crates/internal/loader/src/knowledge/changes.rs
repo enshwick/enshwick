@@ -301,16 +301,26 @@ fn file(loader: &Loader, key: &str) -> PathBuf {
         .join(FILE)
 }
 
-fn read_queue(loader: &Loader, key: &str) -> Vec<Waiting> {
+/// The changes waiting in world `key`; none for a missing file, `None` for
+/// one that does not read, which then stays as it is.
+fn read_queue(loader: &Loader, key: &str) -> Option<Vec<Waiting>> {
     let path = file(loader, key);
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    match toml::from_str::<WaitingFile>(&text) {
-        Ok(file) => file.waiting,
+    let read = enshwick::files::read_to_string_if_present(&path)
+        .map_err(|e| e.to_string())
+        .and_then(|text| {
+            text.map(|text| toml::from_str::<WaitingFile>(&text))
+                .transpose()
+                .map_err(|e| e.to_string())
+        });
+    match read {
+        Ok(file) => Some(file.map(|file| file.waiting).unwrap_or_default()),
         Err(error) => {
-            crate::log!(WARN, "knowledge: {} not read: {error}", path.display());
-            Vec::new()
+            crate::log!(
+                WARN,
+                "knowledge: {} does not read and stays as it is: {error}",
+                path.display()
+            );
+            None
         }
     }
 }
@@ -415,11 +425,16 @@ pub(crate) fn for_account(
 pub(crate) fn world_event(loader: &Loader, event: Event) {
     match event {
         Event::WORLD_LOADED => {
-            let key = crate::saves::world_key(loader).map(str::to_owned);
-            let waiting = key
-                .as_deref()
-                .map(|key| read_queue(loader, key))
-                .unwrap_or_default();
+            let mut key = crate::saves::world_key(loader).map(str::to_owned);
+            let waiting = match key.as_deref().map(|key| read_queue(loader, key)) {
+                Some(Some(waiting)) => waiting,
+                // A world without a key queues nothing, so nothing is written.
+                Some(None) => {
+                    key = None;
+                    Vec::new()
+                }
+                None => Vec::new(),
+            };
             WAITING.store(!waiting.is_empty(), Ordering::Release);
             if !waiting.is_empty() {
                 crate::log!(

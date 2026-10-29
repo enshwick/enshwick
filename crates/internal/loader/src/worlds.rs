@@ -192,6 +192,22 @@ pub fn prepare(template: &str, existing: Option<&str>, next: Option<&str>) -> Op
     }
 }
 
+/// What [`prepare`] makes of the world's settings file at `path`: `None`
+/// when nothing needs writing.
+///
+/// # Errors
+///
+/// When the file is there and does not read, text that is not UTF-8
+/// included: it stays as it is, never replaced by the template.
+pub fn world_text(
+    template: &str,
+    path: &Path,
+    next: Option<&str>,
+) -> std::io::Result<Option<String>> {
+    let existing = enshwick::files::read_to_string_if_present(path)?;
+    Ok(prepare(template, existing.as_deref(), next))
+}
+
 /// `world` with the keys `template` has and it lacks, as a newer version of
 /// the mod adds them, at their template values.
 #[must_use]
@@ -227,7 +243,7 @@ mod live {
     use enshwick::abi::Event;
     use enshwick::config::Schema;
 
-    use super::{Destination, compose, current, next_file, prepare, set_current, world_file};
+    use super::{Destination, compose, current, next_file, set_current, world_file, world_text};
     use crate::host::{Loader, ModRecord};
     use crate::locks::Relock;
 
@@ -239,8 +255,12 @@ mod live {
         loader.configs_dir.join(format!("{}.toml", record.id))
     }
 
+    /// The text of `path` for showing or composing; a file that does not
+    /// read shows as absent, as nothing is written from it.
     fn read(path: &std::path::Path) -> Option<String> {
-        std::fs::read_to_string(path).ok()
+        enshwick::files::read_to_string_if_present(path)
+            .ok()
+            .flatten()
     }
 
     fn write(path: &std::path::Path, text: &str) -> std::io::Result<()> {
@@ -278,19 +298,26 @@ mod live {
         }
     }
 
-    /// The file a change at `destination` goes to and its text now.
+    /// The file a change at `destination` goes to and its text now, empty
+    /// while no file is there.
+    ///
+    /// # Errors
+    ///
+    /// The file and why it does not read; a change must not replace it.
     pub(crate) fn target_text(
         loader: &Loader,
         record: &ModRecord,
         destination: &Destination,
-    ) -> (PathBuf, String) {
+    ) -> Result<(PathBuf, String), (PathBuf, std::io::Error)> {
         let path = match destination {
             Destination::Global => global_path(loader, record),
             Destination::World(key) => world_file(&loader.data_dir, &record.id, key),
             Destination::Next => next_file(&loader.data_dir, &record.id),
         };
-        let text = read(&path).unwrap_or_default();
-        (path, text)
+        match enshwick::files::read_to_string_if_present(&path) {
+            Ok(text) => Ok((path, text.unwrap_or_default())),
+            Err(error) => Err((path, error)),
+        }
     }
 
     /// Writes a change's new text to its file.
@@ -319,7 +346,21 @@ mod live {
             let world_path = world_file(&loader.data_dir, &record.id, &key);
             let next_path = next_file(&loader.data_dir, &record.id);
             let next = read(&next_path);
-            if let Some(text) = prepare(&global, read(&world_path).as_deref(), next.as_deref()) {
+            let text = match world_text(&global, &world_path, next.as_deref()) {
+                Ok(text) => text,
+                Err(e) => {
+                    crate::log::write(
+                        enshwick::abi::Level::WARN,
+                        &record.id,
+                        &format!(
+                            "world settings {} do not read and stay as they are: {e}",
+                            world_path.display()
+                        ),
+                    );
+                    continue;
+                }
+            };
+            if let Some(text) = text {
                 if let Err(e) = write(&world_path, &text) {
                     crate::log::write(
                         enshwick::abi::Level::WARN,
@@ -386,6 +427,23 @@ mod tests {
         assert_eq!(later, "limit = 2 # mine\nlabels = true\n");
         let newer = prepare(template, Some("limit = 9\n"), None).unwrap();
         assert_eq!(newer, "limit = 9\nlabels = true\n");
+    }
+
+    #[test]
+    fn a_world_settings_file_that_does_not_read_is_never_replaced() {
+        let dir = std::env::temp_dir().join(format!("enshwick-world-read-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let template = "limit = 4\n";
+        let path = dir.join("settings.toml");
+        assert_eq!(
+            world_text(template, &path, None).unwrap().as_deref(),
+            Some(template),
+            "a new world starts from the template"
+        );
+        std::fs::write(&path, b"limit = 9\n\xff\n").unwrap();
+        assert!(world_text(template, &path, None).is_err(), "not UTF-8");
+        let _gone = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

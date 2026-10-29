@@ -82,11 +82,16 @@ impl Kept {
         Self { sizes }
     }
 
-    /// The kept sizes in the loader's data folder `dir`; none when the file
-    /// is missing or does not read.
-    #[must_use]
-    pub fn load(dir: &Path) -> Self {
-        std::fs::read_to_string(path(dir)).map_or_else(|_| Self::default(), |t| Self::from_text(&t))
+    /// The kept sizes in the loader's data folder `dir`; none while no file
+    /// is there.
+    ///
+    /// # Errors
+    ///
+    /// When the file is there and does not read: its sizes are not known, so
+    /// nothing may write over it or release the hold it keeps.
+    pub fn load(dir: &Path) -> std::io::Result<Self> {
+        let text = enshwick::files::read_to_string_if_present(&path(dir))?;
+        Ok(text.map_or_else(Self::default, |text| Self::from_text(&text)))
     }
 
     /// Writes the kept sizes to the loader's data folder `dir`.
@@ -168,8 +173,17 @@ mod tests {
         let mut kept = Kept::default();
         kept.record(WOOD, 20, 500);
         kept.save(&dir).unwrap();
-        assert_eq!(Kept::load(&dir), kept);
+        assert_eq!(Kept::load(&dir).unwrap(), kept);
         std::fs::remove_dir_all(&dir).unwrap();
-        assert!(Kept::load(&dir).is_empty());
+        assert!(Kept::load(&dir).unwrap().is_empty());
+    }
+
+    #[test]
+    fn kept_sizes_that_do_not_read_are_an_error_never_empty() {
+        let dir = std::env::temp_dir().join(format!("enshwick-kept-unread-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(path(&dir)).unwrap();
+        assert!(Kept::load(&dir).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
