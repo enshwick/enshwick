@@ -58,8 +58,11 @@ fn init(load: &mut enshwick::Load<'_>) -> Result<(), enshwick::Off> {
 - `with(|value| ...)` reads and `update(|value| ...)` changes the value; both
   return `None` while no world is open, before the world loads or after a
   hosted game stops. `flush()` writes now.
-- A file that does not parse keeps the store shut and stays as it is, so a
-  fix by hand loses nothing.
+- A file that does not read or parse keeps the store shut and stays as it
+  is, so a fix by hand loses nothing. `shut_reason()` says why, and the
+  loader's status summary shows it under the mod. A mod that guards
+  something with the value, such as who may open a chest, keeps it guarded
+  while the store is shut.
 - `T` is a TOML table, such as a struct, with a `Default` for a new world.
 
 ## Store

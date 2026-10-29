@@ -502,6 +502,8 @@ struct WorldSlot<T> {
     worlds: PathBuf,
     name: String,
     open: Option<OpenWorld<T>>,
+    /// Why the running world's file did not read.
+    shut: Option<String>,
 }
 
 /// The value of the world whose file is open.
@@ -541,6 +543,7 @@ where
                 worlds: dir.join(WORLDS_DIR),
                 name: name.to_owned(),
                 open: None,
+                shut: None,
             })),
             writing: std::sync::Arc::default(),
             unwritten: std::sync::Arc::default(),
@@ -558,7 +561,9 @@ where
         self.close()?;
         let mut slot = self.lock();
         let store = Store::new(&slot.worlds.join(key), &slot.name);
-        let value = store.load()?;
+        let value = store
+            .load()
+            .inspect_err(|error| slot.shut = Some(error.to_string()))?;
         slot.open = Some(OpenWorld {
             key: key.to_owned(),
             store,
@@ -576,7 +581,9 @@ where
     pub(crate) fn close(&self) -> Result<(), StoreError> {
         drop(self.wait_for_writes());
         self.flush()?;
-        self.lock().open = None;
+        let mut slot = self.lock();
+        slot.open = None;
+        slot.shut = None;
         Ok(())
     }
 
@@ -679,6 +686,27 @@ where
         let open = slot.open.as_mut()?;
         open.changed = true;
         Some(f(&mut open.value))
+    }
+
+    /// Why the running world's file did not read, while the store stays shut
+    /// for that world: a mod that guards something with the value keeps it
+    /// guarded meanwhile. The loader's status summary shows it too.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[derive(Default, serde::Deserialize, serde::Serialize)]
+    /// # struct Owners { names: Vec<String> }
+    /// fn may_open(store: &enshwick::state::WorldStore<Owners>, name: &str) -> bool {
+    ///     if store.shut_reason().is_some() {
+    ///         return false;
+    ///     }
+    ///     store.with(|o| o.names.iter().any(|n| n == name)).unwrap_or(true)
+    /// }
+    /// ```
+    #[must_use]
+    pub fn shut_reason(&self) -> Option<String> {
+        self.lock().shut.clone()
     }
 
     /// The key of the world whose value is open.

@@ -360,7 +360,8 @@ impl Load<'_> {
 
     /// A value of type `T` kept per world under the mod's data folder,
     /// opened when the world loads and written when it saves; see
-    /// [`WorldStore`](crate::state::WorldStore).
+    /// [`WorldStore`](crate::state::WorldStore). A world file that does not
+    /// read keeps the store shut, with the reason in the status summary.
     ///
     /// # Errors
     ///
@@ -387,6 +388,14 @@ impl Load<'_> {
         })?;
         let saved = store.clone();
         self.on::<crate::events::WorldSaved>(move |()| saved.flush_in_background())?;
+        let shown = store.clone();
+        let named = name.to_owned();
+        self.add_status(move || {
+            shown
+                .shut_reason()
+                .map(|why| format!("world store {named} kept shut: {why}"))
+                .unwrap_or_default()
+        })?;
         let closed = store.clone();
         self.on::<crate::events::ShutdownStarted>(move |()| {
             if let Err(error) = closed.close() {
