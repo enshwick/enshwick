@@ -150,7 +150,11 @@ pub mod inventory;
 pub mod item_data;
 // Without `unstable` item data stays inside, for the stats of single items.
 #[cfg(not(feature = "unstable"))]
-#[expect(unreachable_pub, reason = "item data is public only with `unstable`")]
+#[expect(
+    unreachable_pub,
+    dead_code,
+    reason = "item data is public only with `unstable`"
+)]
 mod item_data;
 pub mod knowledge;
 mod load;

@@ -797,6 +797,7 @@ fn link_roll(load: &mut Load<'_>) -> Result<(), Off> {
 /// A queue that gets every container roll the game commits from now on, on
 /// the roll's worker thread; the caller drains it on the game thread, where
 /// the rolled items have their entities.
+#[cfg(feature = "unstable")]
 pub(crate) fn watch_rolls(load: &mut Load<'_>) -> Result<Arc<Mutex<Vec<Roll>>>, Off> {
     link_roll(load)?;
     let queue = Arc::new(Mutex::new(Vec::new()));

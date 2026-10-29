@@ -17,8 +17,10 @@
 
 mod drops;
 
+pub(crate) use drops::replace_group;
+#[cfg(feature = "unstable")]
+pub(crate) use drops::watch_rolls;
 pub use drops::{Drop, Kinds, LootContainerId, MeterRoll, Roll, Source, replace_drops};
-pub(crate) use drops::{replace_group, watch_rolls};
 
 use crate::Entity;
 use crate::ecs::{ComponentType, Components, Ecs};
