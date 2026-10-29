@@ -441,6 +441,22 @@ mod tests {
         }
     }
 
+    /// On each executable, every table that pins a column grid's pages
+    /// reads where it holds its pages along x and along z.
+    #[test]
+    fn the_grid_depth_reads_on_each_executable() {
+        let rows = pinned_constants_on_executables(&["voxel.grid_pages", "voxel.grid_depth"]);
+        for var in ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"] {
+            if std::env::var(var).is_ok() {
+                let own = rows.iter().filter(|(table, _)| table.starts_with(var));
+                assert!(own.count() >= 2, "{var}: {rows:?}");
+            }
+        }
+        for (table, values) in rows {
+            assert_eq!(values, [Some(0x48), Some(0x4c)], "{table}");
+        }
+    }
+
     /// On each client executable, every client table reads where the
     /// slider's config fields end, before its stop list.
     #[test]
