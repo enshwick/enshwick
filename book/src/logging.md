@@ -255,8 +255,9 @@ A mod that writes game code itself, with a hooking library of its own or by
 hand, passes none of the checks above. The loader finds such changes anyway:
 it keeps a copy of the game's code section while it starts and compares it
 after each DLL in `mods/` loads, after each mod's `init` and after each
-`ready`. A change found is put down to the DLL or mod that ran last, logged as
-a warning in the loader's log and listed with the conflicts:
+`ready`. For a change it finds, the loader names the DLL or mod that ran last.
+It logs the change as a warning in the loader's log and lists it with the
+conflicts:
 
 | Line ends with | The change came |
 | --- | --- |
@@ -274,8 +275,8 @@ won.
 
 The loader's own writes are never listed: its hooks and the code patches
 mods ask for through the API, and the jump that holds the server's entry
-point until the loader is ready. A thread's write is put down to whatever
-ran last before the next comparison. Changes made after the last `ready`,
+point until the loader is ready. For a thread's write, the loader names
+whatever ran last before the next comparison. Changes made after the last `ready`,
 and changes to game data rather than code, are not seen.
 
 ## Faults

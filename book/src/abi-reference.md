@@ -14,7 +14,7 @@ C and other languages are in `enshwick.h`, see [Mods in C](mods-in-c.md).
 | [`ABI_MAJOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A loader refuses a mod built for another major. |
 | [`ABI_MINOR`](https://github.com/enshwick/enshwick/blob/main/crates/enshwick/src/abi.rs) | A newer minor only appends. |
 
-The ABI version is apart from Enshwick Loader's version (such as 0.2.0, see
+The ABI version is separate from Enshwick's version (such as 0.2.0, see
 [Releasing mods](releasing.md#versions)): a platform release raises
 `ABI_MINOR` only when it appends to the ABI.
 
