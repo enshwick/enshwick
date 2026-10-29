@@ -320,10 +320,30 @@ fn hud_page(paint: &Painter<'_>, demo: &mut Demo) {
             position,
             label: enshwick::abi::Str::new(&label),
             color: enshwick::abi::UiMarker::GREEN,
-            reserved: 0,
+            marker_type: 0,
         };
-        let markers: &[_] = if on { &[marker] } else { &[] };
-        let _set = super::map::set(ModIndex::LOADER, markers);
+        let fast_travel = crate::host::loader()
+            .and_then(|loader| crate::scene::marker_types(loader).ok())
+            .and_then(|types| {
+                types
+                    .iter()
+                    .find(|ty| ty.is_fast_travel_destination != 0)
+                    .map(|ty| ty.marker_id)
+            });
+        let mut markers = Vec::new();
+        if on {
+            markers.push(marker);
+            markers.extend(fast_travel.map(|marker_type| enshwick::abi::UiMarker {
+                position: [
+                    position[0].saturating_add(20 << 32),
+                    position[1],
+                    position[2],
+                ],
+                marker_type,
+                ..marker
+            }));
+        }
+        let _set = super::map::set(ModIndex::LOADER, &markers);
     }
 }
 

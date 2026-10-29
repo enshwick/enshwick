@@ -465,6 +465,25 @@ fn a_field_past_its_record_object_or_answer_is_named() {
 }
 
 #[test]
+fn a_sort_field_outside_its_answer_or_entity_is_named() {
+    let sort = |answer_word, entity_position| Layout {
+        sort: SortFields {
+            answer_word,
+            entity_position,
+        },
+        ..LAYOUT
+    };
+    let word = Some(bases::SORT_ANSWER_WORD.id());
+    let position = Some(bases::SORT_ENTITY_POSITION.id());
+    assert_eq!(sort(0, 8).misfit(), word, "on the code byte");
+    assert_eq!(sort(SORT_ANSWER_BYTES - 3, 8).misfit(), word);
+    assert_eq!(sort(0xf8, 8).misfit(), word, "a negative disp8");
+    assert_eq!(sort(4, 0).misfit(), position, "on the id");
+    assert_eq!(sort(4, SORT_ENTITY_BYTES - 23).misfit(), position);
+    assert_eq!(sort(4, 0xf8).misfit(), position, "a negative disp8");
+}
+
+#[test]
 fn a_field_over_the_window_s_slots_a_slot_s_map_or_its_set_is_named() {
     let in_slots = Layout {
         object: ObjectFields {

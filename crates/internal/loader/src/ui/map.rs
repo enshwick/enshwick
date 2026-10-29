@@ -5,14 +5,16 @@
 //! interface's play data, which the clear system empties first. The loader
 //! appends the mods' markers to that list right after the game fills it, on
 //! the same thread, so a marker a mod drops is gone the next frame. A marker
-//! shows only with a marker type the game's registry knows; the loader picks
-//! a custom marker type with a label from the registry once it loads.
+//! shows only with a marker type the game's registry knows: the one the mod
+//! chose from the registry in the game's archive, or else a custom marker
+//! type with a label the loader picks from the registry once it loads.
 //!
 //! The list, its entries and the walk to them come from the build table,
 //! the marker types from reflection; map markers stay off where either
 //! lacks one.
 
 use std::collections::VecDeque;
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -25,6 +27,7 @@ use enshwick_gamedata::catalogue;
 use crate::chains::Next;
 use crate::host::{Loader, Target};
 use crate::locks::Relock;
+use crate::map_marker_types::RunningTypes;
 use crate::mod_index::ModIndex;
 use crate::pinned::{self, Constant};
 
@@ -169,8 +172,9 @@ struct Markers {
     /// When a frame last found it, in milliseconds since the system
     /// started.
     noted_at: AtomicU64,
-    /// The marker type mod markers show with, once the registry is read.
-    marker_type: OnceLock<Option<u32>>,
+    /// The running registry's marker types, once read; `None` for good
+    /// when it has no type for the loader's choice.
+    registry: OnceLock<Option<RunningTypes>>,
 }
 
 static MARKERS: Markers = Markers {
@@ -181,7 +185,7 @@ static MARKERS: Markers = Markers {
     frame: AtomicU64::new(0),
     play_data: AtomicUsize::new(0),
     noted_at: AtomicU64::new(0),
-    marker_type: OnceLock::new(),
+    registry: OnceLock::new(),
 };
 
 /// One marker, owned by the loader.
@@ -190,6 +194,9 @@ struct Owned {
     position: [i64; 3],
     label: Box<[u8]>,
     color: u8,
+    /// The marker type the mod chose, which the entry checked against the
+    /// registry in the game's archive; `None` for the loader's choice.
+    marker_type: Option<NonZeroU32>,
 }
 
 type SystemFn = unsafe extern "system" fn(context: *mut u8);
@@ -226,6 +233,7 @@ pub(crate) fn set(owner: ModIndex, given: &[UiMarker]) -> Status {
             // here before `set` returns, so it outlives every use.
             label: unsafe { m.label.as_str() }.unwrap_or("").as_bytes().into(),
             color: u8::try_from(m.color.min(UiMarker::BLACK)).unwrap_or(0),
+            marker_type: NonZeroU32::new(m.marker_type),
         })
         .collect();
     let mut sets = MARKERS.sets.relock();
@@ -354,7 +362,7 @@ fn append() {
     // SAFETY: `data` is the non-zero play data `note` found under 500 ms ago
     // (checked earlier), and `append` runs inside the replicate system's
     // detour, on its thread while it runs.
-    let Some(kind) = (unsafe { marker_type(layout, data) }) else {
+    let Some(registry) = (unsafe { running_registry(layout, data) }) else {
         return;
     };
     let list = data + layout.list;
@@ -388,7 +396,7 @@ fn append() {
         for (i, axis) in marker.position.iter().enumerate() {
             entry.u64(layout.entry_position + 8 * i, axis.cast_unsigned());
         }
-        entry.u32(layout.entry_type, kind);
+        entry.u32(layout.entry_type, registry.choose(marker.marker_type));
         entry.u8(layout.entry_visibility, layout.visible);
         // The label lives in the snapshot, kept among the retired sets after it
         // is replaced.
@@ -411,9 +419,10 @@ fn append() {
     unsafe { crate::memory::write(list, layout.list_count, count) };
 }
 
-/// The marker type for mod markers: the registry's first custom marker type
-/// with a label, else its first type with a label shown above the fog;
-/// `None` until the registry has loaded, and for good when it has none.
+/// The registry the map runs on: its marker types, and the one for mod
+/// markers without their own, its first custom marker type with a label,
+/// else its first type with a label shown above the fog; `None` until the
+/// registry has loaded, and for good when it has no such type.
 ///
 /// # Safety
 ///
@@ -421,9 +430,9 @@ fn append() {
 ///   `layout` was read for.
 /// - The call runs on the replicate system's thread while the system runs,
 ///   so nothing writes the play data or its registry during the call.
-unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
-    if let Some(found) = MARKERS.marker_type.get() {
-        return *found;
+unsafe fn running_registry(layout: &Layout, data: usize) -> Option<&'static RunningTypes> {
+    if let Some(found) = MARKERS.registry.get() {
+        return found.as_ref();
     }
     // SAFETY: the caller's contract makes `data` the live play data, read on
     // the replicate system's thread; it keeps the marker type registry
@@ -492,7 +501,11 @@ unsafe fn marker_type(layout: &Layout, data: usize) -> Option<u32> {
         listed.join(" "),
         chosen.map_or_else(|| "none".to_owned(), |id| format!("{id:08x}"))
     );
-    *MARKERS.marker_type.get_or_init(|| chosen)
+    let running = chosen.map(|default| RunningTypes {
+        default,
+        ids: types.iter().map(|&(id, ..)| id).collect(),
+    });
+    MARKERS.registry.get_or_init(|| running).as_ref()
 }
 
 fn flag(on: bool, letter: &'static str) -> &'static str {

@@ -1,6 +1,7 @@
 //! Markers on the client's map.
 
-use crate::abi::{Header, Status, Str, UiMarker};
+use crate::abi::{Header, MapMarkerTypeInfo, Status, Str, UiMarker};
+use crate::map::{MapMarkerType, MapMarkerTypeId};
 
 use super::{Ui, UiError};
 
@@ -74,6 +75,7 @@ pub struct Marker<'a> {
     position: [f64; 3],
     label: &'a str,
     color: MarkerColor,
+    type_id: Option<MapMarkerTypeId>,
 }
 
 impl<'a> Marker<'a> {
@@ -89,6 +91,7 @@ impl<'a> Marker<'a> {
             position,
             label: "",
             color: MarkerColor::White,
+            type_id: None,
         }
     }
 
@@ -103,7 +106,7 @@ impl<'a> Marker<'a> {
         self
     }
 
-    /// In `color`.
+    /// In `color`, which the game shows on its custom marker types only.
     ///
     /// # Examples
     ///
@@ -111,6 +114,37 @@ impl<'a> Marker<'a> {
     #[must_use]
     pub const fn color(mut self, color: MarkerColor) -> Self {
         self.color = color;
+        self
+    }
+
+    /// With the game's marker type `marker_type`, one of
+    /// [`Ui::map_marker_types`], for the icon and the rules of that type;
+    /// without it the loader picks a custom marker type with a label.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use enshwick::ui::{Marker, Ui};
+    ///
+    /// fn mark_altars(ui: Ui, altars: &[[f64; 3]]) {
+    ///     let Some(altar) = ui
+    ///         .map_marker_types()
+    ///         .unwrap_or_default()
+    ///         .into_iter()
+    ///         .find(|ty| ty.is_fast_travel_destination)
+    ///     else {
+    ///         return;
+    ///     };
+    ///     let markers: Vec<Marker<'_>> = altars
+    ///         .iter()
+    ///         .map(|&at| Marker::new(at).marker_type(altar.marker_type))
+    ///         .collect();
+    ///     let _shown = ui.set_markers(&markers);
+    /// }
+    /// ```
+    #[must_use]
+    pub const fn marker_type(mut self, marker_type: MapMarkerTypeId) -> Self {
+        self.type_id = Some(marker_type);
         self
     }
 }
@@ -123,7 +157,10 @@ impl Ui {
     ///
     /// # Errors
     ///
-    /// [`UiError::Refused`] past [`MAX_MARKERS`].
+    /// [`UiError::Refused`] past [`MAX_MARKERS`] or for a marker type the
+    /// registry does not list; [`UiError::Unavailable`] for a marker with a
+    /// type where the registry does not read. The mod's markers stay as
+    /// they were.
     ///
     /// # Examples
     ///
@@ -140,7 +177,7 @@ impl Ui {
                 position: crate::ecs::fixed(m.position),
                 label: Str::new(m.label),
                 color: m.color.to_raw(),
-                reserved: 0,
+                marker_type: m.type_id.map_or(0, MapMarkerTypeId::get),
             })
             .collect();
         let count = u32::try_from(raw.len()).map_err(|_| UiError::Refused)?;
@@ -168,5 +205,49 @@ impl Ui {
     /// ```
     pub fn clear_markers(&self) -> Result<(), UiError> {
         self.set_markers(&[])
+    }
+
+    /// Every marker type of the game's marker type registry, in the
+    /// registry's order: an open set the game's data defines. The loader
+    /// reads it from the game's archive once, on the thread of the first
+    /// call or of the first marker with a type, which costs that call a few
+    /// milliseconds; any thread.
+    ///
+    /// Unstable: needs the `unstable` feature and may change in any release.
+    ///
+    /// # Errors
+    ///
+    /// [`UiError::Unavailable`] when the registry does not read on this
+    /// game build.
+    ///
+    /// # Examples
+    ///
+    /// See [`MapMarkerType`].
+    pub fn map_marker_types(&self) -> Result<Vec<MapMarkerType>, UiError> {
+        let api = self.host.api();
+        let size = u32::try_from(size_of::<MapMarkerTypeInfo>()).map_err(|_| UiError::Refused)?;
+        let mut capacity = 0u32;
+        let infos = loop {
+            let mut infos = vec![MapMarkerTypeInfo::EMPTY; capacity as usize];
+            let mut count = 0u32;
+            let status = (api.map_marker_types)(
+                self.host.handle(),
+                infos.as_mut_ptr(),
+                size,
+                capacity,
+                &raw mut count,
+            );
+            match status {
+                Status::OK => {}
+                Status::MISSING => return Err(UiError::Unavailable),
+                _ => return Err(UiError::Refused),
+            }
+            if count <= capacity {
+                infos.truncate(count as usize);
+                break infos;
+            }
+            capacity = count;
+        };
+        Ok(infos.iter().map(MapMarkerType::from_info).collect())
     }
 }
