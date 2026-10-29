@@ -8,6 +8,10 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- A world whose save moved to another folder keeps its mods' data: the
+  loader moves the folders of the world it came from to its new key, or
+  copies them while the old save is still there (#677).
+
 - `WorldStore::shut_reason` says why the running world's file did not read
   while the store stays shut, and the loader's status summary shows it
   under the mod (#668).
