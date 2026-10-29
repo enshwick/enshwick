@@ -83,12 +83,14 @@ mod tests {
                 FakeMarker {
                     position: [1 << 32, 2 << 32, -(3 << 32)],
                     label: "Locker".into(),
-                    color: UiMarker::GREEN
+                    color: UiMarker::GREEN,
+                    marker_type: 0,
                 },
                 FakeMarker {
                     position: [1 << 31, 0, 0],
                     label: String::new(),
-                    color: UiMarker::WHITE
+                    color: UiMarker::WHITE,
+                    marker_type: 0,
                 },
             ]
         );

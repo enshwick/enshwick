@@ -50,6 +50,10 @@ const LIST_BYTES: usize = 32;
 /// all, kind 1, kinds 2 to 9, flag 4, flag 2.
 pub(super) const BEDS: usize = 3;
 pub(super) const ANIMAL_COUNTS: usize = 5;
+/// The bytes of the sort's answer the detour may write and of its entity
+/// it may read: the room `sort_into` asks of its callers.
+pub(super) const SORT_ANSWER_BYTES: usize = 8;
+pub(super) const SORT_ENTITY_BYTES: usize = 32;
 
 /// What the loops over every base read and write, from the build table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,8 +62,18 @@ pub(super) struct Layout {
     pub(super) object: ObjectFields,
     pub(super) map: MapFields,
     pub(super) stock: StockFields,
+    pub(super) sort: SortFields,
     /// The object's u32 base count, which the client's count getter reads.
     pub(super) count: usize,
+}
+
+/// What the sort of one stock entity reads and writes besides the bases.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct SortFields {
+    /// The answer's u32 the game zeroes, after its code byte.
+    pub(super) answer_word: usize,
+    /// The entity's fixed-point position, three i64 after its u32 id.
+    pub(super) entity_position: usize,
 }
 
 /// A record's fields, from its start.
@@ -200,6 +214,10 @@ impl Layout {
                 count: f(bases::STOCK_COUNT)?,
                 size: f(bases::STOCK_ANSWER_SIZE)?,
             },
+            sort: SortFields {
+                answer_word: f(bases::SORT_ANSWER_WORD)?,
+                entity_position: f(bases::SORT_ENTITY_POSITION)?,
+            },
             count: f(bases::COUNT)?,
         };
         layout
@@ -268,6 +286,28 @@ impl Layout {
             (bases::ANIMAL_VALUE, 3, o.animal_value),
             (bases::STOCK_ENTITIES, s.entities + 8, s.size),
             (bases::STOCK_COUNT, s.count + 8, s.size),
+            (
+                bases::SORT_ANSWER_WORD,
+                size_of::<u8>(),
+                self.sort.answer_word,
+            ),
+            (
+                bases::SORT_ANSWER_WORD,
+                self.sort.answer_word.saturating_add(size_of::<u32>()),
+                SORT_ANSWER_BYTES,
+            ),
+            (
+                bases::SORT_ENTITY_POSITION,
+                size_of::<u32>(),
+                self.sort.entity_position,
+            ),
+            (
+                bases::SORT_ENTITY_POSITION,
+                self.sort
+                    .entity_position
+                    .saturating_add(size_of::<[i64; 3]>()),
+                SORT_ENTITY_BYTES,
+            ),
         ];
         in_record
             .into_iter()

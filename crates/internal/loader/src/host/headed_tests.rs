@@ -55,6 +55,7 @@ macro_rules! headed {
             LoopWaitData,
             MapFrameInfo,
             MapMarkerInfo,
+            MapMarkerTypeInfo,
             Manifest,
             MigrationSet,
             ModInfo,

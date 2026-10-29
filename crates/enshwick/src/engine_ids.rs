@@ -500,6 +500,27 @@ ids! {
     MAP_MARKER_REGISTRY_TYPES = "map_marker_registry.types";
     /// The id of the visibility of a marker the map shows.
     MAP_MARKER_VISIBILITY_TYPE_VISIBLE = "map_marker_visibility_type.visible";
+    /// The id of the marker type registry's resource type, of which the
+    /// client's archive holds one.
+    MAP_MARKER_REGISTRY = "map_marker_registry";
+    /// The id of a marker type's name text tag, a GUID.
+    MAP_MARKER_TYPE_TYPE_NAME = "map_marker_type.type_name";
+    /// The id of a marker type's sorting, a byte of [`MARKER_TYPE_SORTING`].
+    MAP_MARKER_TYPE_SORTING_CATEGORY = "map_marker_type.sorting_category";
+    /// The id of a marker type's flag for fast travel destinations, a byte.
+    MAP_MARKER_TYPE_IS_FAST_TRAVEL_DESTINATION = "map_marker_type.is_fast_travel_destination";
+    /// The id of the enum that sorts marker types on the map.
+    MARKER_TYPE_SORTING = "marker_type_sorting";
+    /// The id of the sorting of marker types in no group.
+    MARKER_TYPE_SORTING_NONE = "marker_type_sorting.none";
+    /// The id of the sorting of the Flame's marker types.
+    MARKER_TYPE_SORTING_FLAME_RELATED = "marker_type_sorting.flame_related";
+    /// The id of the sorting of dungeons' marker types.
+    MARKER_TYPE_SORTING_DUNGEONS = "marker_type_sorting.dungeons";
+    /// The id of the sorting of locations' marker types.
+    MARKER_TYPE_SORTING_LOCATIONS = "marker_type_sorting.locations";
+    /// The id of the sorting of players' own marker types.
+    MARKER_TYPE_SORTING_CUSTOM_MARKER = "marker_type_sorting.custom_marker";
     /// The id of a scene chunk's resource type, which lists what it spawns.
     SCENE_CHUNK = "scene_chunk";
     /// The id of a scene chunk's template references, a blob array of GUIDs.

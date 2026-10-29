@@ -3,7 +3,8 @@
 use core::ffi::c_void;
 
 use crate::abi::{
-    FogInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker, UiWidget,
+    FogInfo, MapMarkerTypeInfo, ModHandle, Side, Status, UiAnswerFn, UiDialog, UiFrameFn, UiMarker,
+    UiWidget,
 };
 use crate::test::table::{State, text, with};
 
@@ -217,15 +218,41 @@ pub(crate) extern "system" fn ui_markers(
             position: m.position,
             label: text(m.label),
             color: m.color,
+            marker_type: m.marker_type,
         })
         .collect();
     with(Status::MISSING, |s| {
         if s.host.side == Side::SERVER {
             return Status::MISSING;
         }
+        for marker in markers.iter().filter(|m| m.marker_type != 0) {
+            let Some(types) = &s.host.map_marker_types else {
+                return Status::MISSING;
+            };
+            if !types.iter().any(|t| t.marker_id == marker.marker_type) {
+                return Status::BAD_ARGS;
+            }
+        }
         s.markers = markers;
         Status::OK
     })
+}
+
+pub(crate) extern "system" fn map_marker_types(
+    _me: ModHandle,
+    out: *mut MapMarkerTypeInfo,
+    entry_size: u32,
+    capacity: u32,
+    count: *mut u32,
+) -> Status {
+    let Some(types) = with(None, |s| {
+        (s.host.side != Side::SERVER)
+            .then(|| s.host.map_marker_types.clone())
+            .flatten()
+    }) else {
+        return Status::MISSING;
+    };
+    crate::test::table::mods::list(&types, out, entry_size, capacity, count)
 }
 
 pub(crate) extern "system" fn ui_dialog(

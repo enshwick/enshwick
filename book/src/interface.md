@@ -114,11 +114,10 @@ Unstable: needs the `unstable` feature and may change in any release
 shows the mod's markers on the map, at most 256, each with a position in
 metres, a label and one of the game's eight custom marker colours; the next
 call replaces them all, and `clear_markers` takes them off. It works from any
-thread and copies what it is handed. The markers use one of the game's
-custom marker types with a label; the compass does not show them. The map's
-layout is known only for builds with their own table, so on a build the
-loader runs by patterns the markers stay off and `set_markers` has no
-effect.
+thread and copies what it is handed. By default a marker uses one of the
+game's custom marker types with a label. The compass does not show them.
+When the game build lacks a part of the map's layout, the markers stay off,
+`set_markers` has no effect, and the log and the Mods screen say why.
 
 ```rust
 use enshwick::ui::{Marker, MarkerColor, Ui};
@@ -127,6 +126,36 @@ fn mark_lockers(ui: Ui, lockers: &[([f64; 3], String)]) {
     let markers: Vec<Marker<'_>> = lockers
         .iter()
         .map(|(at, owner)| Marker::new(*at).label(owner).color(MarkerColor::Green))
+        .collect();
+    let _shown = ui.set_markers(&markers);
+}
+```
+
+A marker can also take one of the game's own marker types, for the game's
+icon and rules of that type. `ui.map_marker_types()` lists the client's
+marker type registry: each `MapMarkerType` has its key, its sorting group
+(`Dungeons`, `Locations`, `FlameRelated`, `CustomMarker`, `None`) and the
+game's flags, such as `is_fast_travel_destination` and
+`show_above_fog_of_war`. The registry is game data and grows with the game,
+so pick a type by its flags or its group, not by a fixed key. The colour
+shows only on the custom marker types. `set_markers` refuses a type the
+registry does not list.
+
+```rust
+use enshwick::map::MarkerTypeSorting;
+use enshwick::ui::{Marker, Ui};
+
+fn mark_dungeons(ui: Ui, dungeons: &[[f64; 3]]) {
+    let types = ui.map_marker_types().unwrap_or_default();
+    let Some(dungeon) = types
+        .iter()
+        .find(|ty| ty.sorting_category == Some(MarkerTypeSorting::Dungeons))
+    else {
+        return;
+    };
+    let markers: Vec<Marker<'_>> = dungeons
+        .iter()
+        .map(|&at| Marker::new(at).marker_type(dungeon.marker_type))
         .collect();
     let _shown = ui.set_markers(&markers);
 }

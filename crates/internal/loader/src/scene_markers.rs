@@ -77,7 +77,7 @@ fn i32_at(data: &[u8], at: usize) -> Option<i32> {
 
 /// The start and count of the blob array whose header sits at `field`;
 /// `(0, 0)` for an empty one, `None` when it points outside `data`.
-fn array(data: &[u8], field: usize, element: usize) -> Option<(usize, usize)> {
+pub(crate) fn array(data: &[u8], field: usize, element: usize) -> Option<(usize, usize)> {
     let offset = i32_at(data, field)?;
     let count = usize::try_from(u32_at(data, field + 4)?).ok()?;
     if offset == 0 || count == 0 {

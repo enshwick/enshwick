@@ -141,6 +141,7 @@ pub mod log;
 mod loot_slot;
 pub mod manifest;
 pub mod map_frame;
+pub mod map_marker_types;
 #[cfg_attr(
     all(not(windows), not(test)),
     expect(dead_code, reason = "only the Windows build reads game memory")
