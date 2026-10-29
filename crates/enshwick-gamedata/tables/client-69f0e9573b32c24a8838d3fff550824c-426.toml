@@ -792,6 +792,12 @@ revision = 1
 "ui.nav_layer" = { value = 0x5c, pattern = "66 C7 41 ?? 01 01 C7 41 ?? 02 00 00 00 66 C7 41 ?? 1B 00 0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ??", at = 16, size = 1 }
 "ui.nav_sound" = { value = 0x70, pattern = "0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ?? C7 41 ?? 02 00 00 00", at = 7, size = 1 }
 "ui.nav_highlight" = { value = 0x60, pattern = "0F 11 41 ?? 66 C7 41 ?? 01 00 48 89 71 ?? C7 41 ?? 02 00 00 00", at = 3, size = 1 }
+# The scroll area: the farthest byte its begin and focus write in the
+# scroll object (a flag at 0x468), the last store of its config's init, and
+# the kept state the world settings ask `ui.persist` for.
+"ui.scroll_extent" = { value = 0x469, via = "ui.scroll_set_focus", pattern = "80 B9 ?? ?? ?? ?? 00 75 07 C6 81 ?? ?? ?? ?? 01 F3 0F 11 89 ?? ?? ?? ?? C3", at = 11, size = 4, plus = 1 }
+"ui.scroll_config_extent" = { value = 0x104, via = "ui.scroll_config", within = 0x180, pattern = "0F 11 8B ?? ?? ?? ?? 0F 11 83 ?? ?? ?? ?? 48 8B 9C 24 ?? ?? ?? ??", at = 10, size = 4, plus = 16 }
+"ui.scroll_state_size" = { value = 0x18, pattern = "4C 8D 0D ?? ?? ?? ?? 48 BA 1A 10 39 CC 75 E3 E0 E6 C7 44 24 ?? 01 00 00 00 41 B8 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B C8 4C 8B F8 E8", at = 27, size = 4 }
 "ui.label_align" = { value = 0x38, pattern = "49 89 4E ?? 49 89 4E ?? 41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1 }
 "ui.label_shown" = { value = 0x3d, pattern = "41 C7 46 ?? 02 02 00 00 41 C7 46 ?? 01 00 00 01 41 0F 11 46 ?? 40 88 7C 24 ??", at = 11, size = 1, plus = 1 }
 "ui.label_font_size" = { value = 0x7c, pattern = "40 88 7C 24 ?? 41 0F 11 46 ?? 41 89 4E ?? 0F 10 03 49 89 8E ?? ?? ?? ?? 41 89 8E ?? ?? ?? ?? 41 C7 46 ?? 00 00 40 41 49 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? FF FF 00 00 49 89 8E ?? ?? ?? ?? 41 C7 86 ?? ?? ?? ?? FF FF FF FF 41 C7 86 ?? ?? ?? ?? 00 00 80 3F 41 C7 86 ?? ?? ?? ?? 00 00 00 FF", at = 34, size = 1 }

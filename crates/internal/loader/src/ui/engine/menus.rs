@@ -11,16 +11,16 @@ impl Engine {
     /// - `menu` is the menu state the hooked code holds there.
     /// - The bytes `text` points at outlive the frame.
     pub(in crate::ui) unsafe fn main_menu_entry(&self, menu: usize, text: &UiText) -> bool {
-        let Some(draw) = self.main_entry else {
+        let (Some(draw), Some(layout)) = (self.main_entry, self.menu) else {
             return false;
         };
         let mut entry = Buf::<MENU_ENTRY>::zeroed();
-        entry.text(self.layout.menu_entry_text, text);
-        entry.u8(self.layout.menu_entry_font, 1);
+        entry.text(layout.entry_text, text);
+        entry.u8(layout.entry_font, 1);
         // SAFETY: `draw` is the game's `ui.main_entry`, checked in
         // `Engine::resolve`, called at the menu's hook with its state `menu`
         // by this function's `# Safety`; `entry` holds the table's
-        // `ui.menu_entry_extent` bytes (`Layout::read`), filled as the menu's
+        // `ui.menu_entry_extent` bytes (`MenuLayout::read`), filled as the menu's
         // own Settings entry is: label, normal font.
         unsafe { draw(menu, entry.ptr()) != 0 }
     }
@@ -52,18 +52,23 @@ impl Engine {
     /// - Called inside a frame of the game's interface update, on its
     ///   thread.
     pub(in crate::ui) unsafe fn back_pressed(&self, node: u64) -> bool {
+        let (Some(layout), Some(new), Some(query)) =
+            (self.menu, self.action_new, self.action_query)
+        else {
+            return false;
+        };
         let mut spec = Buf::<ACTION_SPEC>::zeroed();
-        // SAFETY: `self.action_new` is the game's `ui.action_new`, checked in
+        // SAFETY: `new` is the game's `ui.action_new`, checked in
         // `Engine::resolve`, in a frame on its thread by this function's
         // `# Safety`; `spec` holds the table's `ui.action_extent` bytes
-        // (`Layout::read`). Action 1 is Back, as the pause menu builds it.
-        unsafe { (self.action_new)(spec.ptr(), 1, 1) };
-        spec.u64(self.layout.action_node, node);
-        spec.u8(self.layout.action_bound, 1);
-        // SAFETY: `self.action_query` is the game's `ui.action_query`, checked
-        // in `Engine::resolve`, on the spec `action_new` filled; the details
-        // out may be null, 0x10 is the menus' modality.
-        unsafe { (self.action_query)(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
+        // (`MenuLayout::read`). Action 1 is Back, as the pause menu builds it.
+        unsafe { new(spec.ptr(), 1, 1) };
+        spec.u64(layout.action_node, node);
+        spec.u8(layout.action_bound, 1);
+        // SAFETY: `query` is the game's `ui.action_query`, checked in
+        // `Engine::resolve`, on the spec `new` filled; the details out may be
+        // null, 0x10 is the menus' modality.
+        unsafe { query(spec.ptr(), core::ptr::null_mut(), 0x10) != 0 }
     }
 
     /// Plays interface sound `sound`.

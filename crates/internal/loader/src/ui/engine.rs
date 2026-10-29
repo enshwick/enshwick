@@ -12,6 +12,8 @@
 //! how far it reaches, checked against the loader's buffer for it.
 
 use crate::host::Loader;
+pub(crate) use crate::interface_parts::Missing;
+use crate::interface_parts::{Part, check_functions};
 use crate::pinned::{self, Symbol};
 
 /// A buffer the game fills or reads, aligned as the game keeps its own on
@@ -27,6 +29,14 @@ impl<const N: usize> Buf<N> {
     fn put<const M: usize>(&mut self, at: usize, bytes: [u8; M]) {
         if let Some(slot) = self.0.get_mut(at..at + M) {
             slot.copy_from_slice(&bytes);
+        }
+    }
+
+    /// Writes `bytes` at `at`, or nothing when they would run past the end.
+    fn copy(&mut self, at: usize, bytes: &[u8]) {
+        let end = at.checked_add(bytes.len());
+        if let Some(slot) = end.and_then(|end| self.0.get_mut(at..end)) {
+            slot.copy_from_slice(bytes);
         }
     }
 
@@ -243,10 +253,6 @@ pub(super) struct Layout {
     dropdown_enabled: usize,
     dropdown_capacity: usize,
     dropdown_entry_text: usize,
-    menu_entry_text: usize,
-    menu_entry_font: usize,
-    action_node: usize,
-    action_bound: usize,
 }
 
 /// The navigation group's fields the loader's config sets, as offsets in
@@ -272,6 +278,29 @@ pub(super) struct DialogLayout {
     pub(super) detail_len: usize,
     pub(super) answer: usize,
     pub(super) answered: usize,
+}
+
+/// What the menus' Mods entries fill: the entry the main menu draws, and
+/// the Back action the Mods screen they open hears.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct MenuLayout {
+    pub(super) entry_text: usize,
+    pub(super) entry_font: usize,
+    pub(super) action_node: usize,
+    pub(super) action_bound: usize,
+}
+
+impl MenuLayout {
+    fn read(lookup: Lookup<'_>) -> Result<Self, Missing> {
+        fits(lookup, pinned::ui::MENU_ENTRY_EXTENT.id(), MENU_ENTRY)?;
+        fits(lookup, pinned::ui::ACTION_EXTENT.id(), ACTION_SPEC)?;
+        Ok(Self {
+            entry_text: field(lookup, pinned::ui::MENU_ENTRY_TEXT.id())?,
+            entry_font: field(lookup, pinned::ui::MENU_ENTRY_FONT.id())?,
+            action_node: field(lookup, pinned::ui::ACTION_NODE.id())?,
+            action_bound: field(lookup, pinned::ui::ACTION_BOUND.id())?,
+        })
+    }
 }
 
 /// The world settings view's fields at the loader's hook in it: the
@@ -314,8 +343,6 @@ impl Layout {
             (pinned::ui::BUTTON_EXTENT, BUTTON_CONFIG),
             (pinned::ui::TOGGLE_EXTENT, TOGGLE_CONFIG),
             (pinned::ui::DROPDOWN_EXTENT, DROPDOWN_CONFIG),
-            (pinned::ui::MENU_ENTRY_EXTENT, MENU_ENTRY),
-            (pinned::ui::ACTION_EXTENT, ACTION_SPEC),
         ] {
             fits(lookup, id.id(), room)?;
         }
@@ -374,10 +401,6 @@ impl Layout {
             dropdown_enabled: f(pinned::ui::DROPDOWN_ENABLED.id())?,
             dropdown_capacity: f(pinned::ui::DROPDOWN_CAPACITY.id())?,
             dropdown_entry_text: f(pinned::ui::DROPDOWN_ENTRY_TEXT.id())?,
-            menu_entry_text: f(pinned::ui::MENU_ENTRY_TEXT.id())?,
-            menu_entry_font: f(pinned::ui::MENU_ENTRY_FONT.id())?,
-            action_node: f(pinned::ui::ACTION_NODE.id())?,
-            action_bound: f(pinned::ui::ACTION_BOUND.id())?,
         }
         .checked()
     }
@@ -497,6 +520,8 @@ pub(crate) struct Engine {
     context: usize,
     looks: Looks,
     pub(super) layout: Layout,
+    /// The menus' Mods entries' fields; `None` keeps both entries out.
+    pub(super) menu: Option<MenuLayout>,
     /// The dialogs' fields; `None` keeps dialogs in system windows.
     pub(super) dialog: Option<DialogLayout>,
     /// The world settings view's fields; `None` keeps the mods' rows out.
@@ -540,8 +565,8 @@ pub(crate) struct Engine {
     hud_visible: Option<VisibleFn>,
     main_entry: Option<MainEntryFn>,
     pause_entry: Option<PauseEntryFn>,
-    action_new: ActionNewFn,
-    action_query: ActionQueryFn,
+    action_new: Option<ActionNewFn>,
+    action_query: Option<ActionQueryFn>,
     pub(super) main_menu_site: u64,
     pub(super) pause_menu_site: u64,
     pub(super) world_settings_site: u64,
@@ -569,47 +594,6 @@ impl Legal {
         })
     }
 }
-
-/// Every function the loader calls or hooks, by symbol; each must read its
-/// `<symbol>.bytes` constant.
-const FUNCTIONS: [Symbol; 36] = [
-    pinned::ui::ACTION_NEW,
-    pinned::ui::ACTION_QUERY,
-    pinned::ui::POPUP,
-    pinned::ui::WINDOW_BEGIN,
-    pinned::ui::WINDOW_END,
-    pinned::ui::FRAME_FROM_NODE,
-    pinned::ui::FRAME_OPEN,
-    pinned::ui::FRAME_CLOSE,
-    pinned::ui::FRAME_STRETCH,
-    pinned::ui::FRAME_COLOR,
-    pinned::ui::NODE_PADDING,
-    pinned::ui::NODE_SPACING,
-    pinned::ui::NODE_ALIGN,
-    pinned::ui::NODE_WIDTH,
-    pinned::ui::NODE_HEIGHT,
-    pinned::ui::NODE_STRETCH,
-    pinned::ui::PANEL,
-    pinned::ui::NAV_INIT,
-    pinned::ui::NAV_INPUT,
-    pinned::ui::NAV_SET,
-    pinned::ui::NAV_PUSH,
-    pinned::ui::NAV_END,
-    pinned::ui::NAV_DROP,
-    pinned::ui::LABEL_NEW,
-    pinned::ui::LABEL_DRAW,
-    pinned::ui::BUTTON,
-    pinned::ui::TOGGLE,
-    pinned::ui::SLIDER_INIT,
-    pinned::ui::SLIDER,
-    pinned::ui::DROPDOWN_INIT,
-    pinned::ui::DROPDOWN,
-    pinned::ui::PROGRESS,
-    pinned::ui::SOUND,
-    pinned::ui::LOCA_ID,
-    pinned::ui::LOCA_TEXT,
-    pinned::ui::CONTEXT,
-];
 
 /// The bundle offset of a reflected path, `(type, field)` pairs summed.
 fn path(loader: &Loader, steps: &[(&str, &str)]) -> Option<usize> {
@@ -717,103 +701,10 @@ unsafe fn game_fn<F: Copy>(loader: &Loader, name: Symbol) -> Result<F, Missing> 
     Ok(unsafe { core::mem::transmute_copy::<usize, F>(&address) })
 }
 
-/// Why the interface stays off on this build.
-#[derive(Debug)]
-pub(crate) enum Missing {
-    Entry(&'static str),
-    Bytes(&'static str),
-    Room(&'static str),
-    Looks,
-}
-
-impl Missing {
-    /// The table entry or the reflected name that failed.
-    pub(crate) const fn id(&self) -> &'static str {
-        match self {
-            Self::Entry(name) | Self::Bytes(name) | Self::Room(name) => name,
-            Self::Looks => "the look bundle",
-        }
-    }
-
-    /// Why it failed, after its [`Missing::id`].
-    pub(crate) const fn reason(&self) -> &'static str {
-        match self {
-            Self::Entry(_) => "is not in this build",
-            Self::Bytes(_) => "does not read as the build table says",
-            Self::Room(_) => "runs past the loader's buffer",
-            Self::Looks => "lacks a reflected field",
-        }
-    }
-}
-
-impl core::fmt::Display for Missing {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "{} {}", self.id(), self.reason())
-    }
-}
-
-/// An optional part of the interface and the game functions only it needs:
-/// a part whose function is missing or does not read turns off alone, and
-/// the rest of the interface stays on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Part {
-    /// The part, as the log and the Mods screen name it.
-    pub(super) name: &'static str,
-    /// The functions and hook sites only this part uses.
-    pub(super) functions: &'static [Symbol],
-}
-
-impl Part {
-    pub(super) const MAIN_MENU: Self = Self {
-        name: "the main menu's Mods entry",
-        functions: &[pinned::ui::MAIN_MENU_SITE, pinned::ui::MAIN_ENTRY],
-    };
-    pub(super) const PAUSE_MENU: Self = Self {
-        name: "the pause menu's Mods entry",
-        functions: &[pinned::ui::PAUSE_MENU_SITE, pinned::ui::PAUSE_ENTRY],
-    };
-    pub(super) const WORLD_ROWS: Self = Self {
-        name: "the world settings' Mods rows",
-        functions: &[pinned::ui::WORLD_SETTINGS_SITE],
-    };
-    pub(super) const HUD: Self = Self {
-        name: "the HUD",
-        functions: &[pinned::ui::HUD, pinned::ui::HUD_VISIBLE],
-    };
-    pub(super) const ALL: [Self; 4] = [
-        Self::MAIN_MENU,
-        Self::PAUSE_MENU,
-        Self::WORLD_ROWS,
-        Self::HUD,
-    ];
-}
-
-/// Checks the interface's own functions with `check`, then each optional
-/// part's: the first own function that fails keeps the interface off, and
-/// each part with a function that fails comes back with why, to turn off
-/// alone.
-///
-/// # Errors
-///
-/// The first of [`FUNCTIONS`] that `check` refuses.
-pub(super) fn check_functions(
-    check: impl Fn(Symbol) -> Result<(), Missing>,
-) -> Result<Vec<(Part, Missing)>, Missing> {
-    for name in FUNCTIONS {
-        check(name)?;
-    }
-    Ok(Part::ALL
-        .into_iter()
-        .filter_map(|part| {
-            let failed = part.functions.iter().find_map(|&name| check(name).err());
-            failed.map(|why| (part, why))
-        })
-        .collect())
-}
-
 /// The interface's optional parts read from the build's table and
 /// reflection, each `None` when it turned off alone.
 struct Optional {
+    menu: Option<MenuLayout>,
     dialog: Option<DialogLayout>,
     view: Option<ViewLayout>,
     scroll: Option<scroll::Scrolling>,
@@ -821,36 +712,69 @@ struct Optional {
 }
 
 impl Optional {
-    /// Turns off each of `parts_off` with its reason, then reads each
-    /// optional layout, turning off each that does not read; the world
+    /// Reads each optional layout, adding the menus' entries to `parts_off`
+    /// when theirs does not read, then turns off each of `parts_off` and
+    /// each other layout that does not read, with its reason; the world
     /// settings' rows only while their hook site reads.
-    fn resolve(loader: &Loader, parts_off: &[(Part, Missing)]) -> Self {
+    fn resolve(loader: &Loader, parts_off: &mut Vec<(Part, Missing)>) -> Self {
         let lookup = |id: &str| loader.build.constant(id);
+        let menu = MenuLayout::read(&lookup);
+        if let Err(why) = menu {
+            for part in [Part::MAIN_MENU, Part::PAUSE_MENU] {
+                if !parts_off.iter().any(|(p, _)| *p == part) {
+                    parts_off.push((part, why));
+                }
+            }
+        }
         let off = |part: &'static str| {
             move |why: &Missing| {
-                loader.feature_off(part, why.id(), why.reason());
+                loader.feature_off(part, why.id(), &why.reason());
             }
         };
-        for (part, why) in parts_off {
+        for (part, why) in parts_off.iter() {
             off(part.name)(why);
         }
         let world_rows = !parts_off.iter().any(|(p, _)| *p == Part::WORLD_ROWS);
         Self {
-            dialog: DialogLayout::read(&lookup)
-                .inspect_err(off("interface dialogs"))
-                .ok(),
-            view: ViewLayout::read(&lookup)
-                .inspect_err(off(Part::WORLD_ROWS.name))
-                .ok()
-                .filter(|_| world_rows),
+            menu: menu.ok(),
+            dialog: DialogLayout::read(&lookup).inspect_err(off("dialogs")).ok(),
+            view: world_rows
+                .then(|| ViewLayout::read(&lookup).inspect_err(off(Part::WORLD_ROWS.name)))
+                .and_then(Result::ok),
             scroll: scroll::Scrolling::resolve(loader)
-                .inspect_err(off("scrolling lists"))
+                .inspect_err(off("scrolling on the Mods screen (lists page)"))
                 .ok(),
             text_fields: text_field::TextFields::resolve(loader)
-                .inspect_err(off("text fields"))
+                .inspect_err(off("text settings on the Mods screen (read-only)"))
                 .ok(),
         }
     }
+}
+
+/// Checks interface function `name` by [`verify`]; `ui.context`, a data
+/// address, only for being in the build.
+fn check_function(loader: &Loader, name: Symbol) -> Result<(), Missing> {
+    if name == pinned::ui::CONTEXT {
+        loader.address(name).ok_or(Missing::Entry(name.id()))?;
+        return Ok(());
+    }
+    verify(loader, name).map(drop)
+}
+
+/// Game function `$name` as `$ty` of a part that is `$on`, checked by
+/// [`game_fn`]; `None` for a part that is off.
+macro_rules! part_fn {
+    ($loader:expr, $on:expr, $name:expr, $ty:ty) => {
+        if $on {
+            // SAFETY: `$ty` is the signature of the game function
+            // `$name` names, from the game's own calls of it in the
+            // menus and the HUD on client 426; `game_fn` checks its
+            // bytes against the build table.
+            unsafe { game_fn::<$ty>($loader, $name) }.ok()
+        } else {
+            None
+        }
+    };
 }
 
 impl Engine {
@@ -860,23 +784,19 @@ impl Engine {
     /// menus' entries, the HUD, the scroll area and the text field, turns
     /// off alone with its reason, and the rest stays on.
     pub(crate) fn resolve(loader: &Loader) -> Result<Self, Missing> {
-        let parts_off = check_functions(|name| {
-            if name == pinned::ui::CONTEXT {
-                loader.address(name).ok_or(Missing::Entry(name.id()))?;
-                return Ok(());
-            }
-            verify(loader, name).map(drop)
-        })?;
+        let mut parts_off = check_functions(|name| check_function(loader, name))?;
         let looks = looks(loader).ok_or(Missing::Looks)?;
         let lookup = |id: &str| loader.build.constant(id);
         let layout = Layout::read(&lookup)?;
-        let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
         let Optional {
+            menu,
             dialog,
             view,
             scroll,
             text_fields,
-        } = Optional::resolve(loader, &parts_off);
+        } = Optional::resolve(loader, &mut parts_off);
+        let on = |part: Part| !parts_off.iter().any(|(p, _)| *p == part);
+        let menus = on(Part::MAIN_MENU) || on(Part::PAUSE_MENU);
         let at = |name: Symbol| {
             loader
                 .address(name)
@@ -893,28 +813,18 @@ impl Engine {
         macro_rules! function {
             ($name:expr, $ty:ty) => {{
                 let address = at($name);
-                // SAFETY: `check_functions` returned unless every function
-                // of `FUNCTIONS` has first eight bytes that match its
-                // `<name>.bytes` constant, so the address is the game function
-                // the build table types as `$ty`.
+                // SAFETY: `check_functions` with `check_function` returned unless every function of `FUNCTIONS` but
+                // `ui.context`, a data address, has first eight bytes that
+                // match its `<name>.bytes` constant, so the address is the game
+                // function the build table types as `$ty`.
                 unsafe { core::mem::transmute::<usize, $ty>(address) }
             }};
-        }
-        macro_rules! part_fn {
-            ($part:expr, $name:expr, $ty:ty) => {
-                if on($part) {
-                    // SAFETY: `$ty` is the signature of the game function
-                    // `$name` names on every build whose table pins it.
-                    unsafe { game_fn::<$ty>(loader, $name) }.ok()
-                } else {
-                    None
-                }
-            };
         }
         Ok(Self {
             context: at(pinned::ui::CONTEXT),
             looks,
             layout,
+            menu,
             dialog,
             view,
             scroll,
@@ -951,11 +861,21 @@ impl Engine {
             sound: function!(pinned::ui::SOUND, SoundFn),
             loca_id: function!(pinned::ui::LOCA_ID, LocaIdFn),
             loca_text: function!(pinned::ui::LOCA_TEXT, LocaTextFn),
-            hud_visible: part_fn!(Part::HUD, pinned::ui::HUD_VISIBLE, VisibleFn),
-            main_entry: part_fn!(Part::MAIN_MENU, pinned::ui::MAIN_ENTRY, MainEntryFn),
-            pause_entry: part_fn!(Part::PAUSE_MENU, pinned::ui::PAUSE_ENTRY, PauseEntryFn),
-            action_new: function!(pinned::ui::ACTION_NEW, ActionNewFn),
-            action_query: function!(pinned::ui::ACTION_QUERY, ActionQueryFn),
+            hud_visible: part_fn!(loader, on(Part::HUD), pinned::ui::HUD_VISIBLE, VisibleFn),
+            main_entry: part_fn!(
+                loader,
+                on(Part::MAIN_MENU),
+                pinned::ui::MAIN_ENTRY,
+                MainEntryFn
+            ),
+            pause_entry: part_fn!(
+                loader,
+                on(Part::PAUSE_MENU),
+                pinned::ui::PAUSE_ENTRY,
+                PauseEntryFn
+            ),
+            action_new: part_fn!(loader, menus, pinned::ui::ACTION_NEW, ActionNewFn),
+            action_query: part_fn!(loader, menus, pinned::ui::ACTION_QUERY, ActionQueryFn),
             main_menu_site: site(Part::MAIN_MENU, pinned::ui::MAIN_MENU_SITE),
             pause_menu_site: site(Part::PAUSE_MENU, pinned::ui::PAUSE_MENU_SITE),
             world_settings_site: site(Part::WORLD_ROWS, pinned::ui::WORLD_SETTINGS_SITE),

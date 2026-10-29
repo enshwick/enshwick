@@ -164,11 +164,14 @@ pub(crate) const TABLE_IDS: &[&str] = &[
     pinned::ui::SCROLLBAR_LOOK.id(),
     pinned::ui::SCROLL_BEGIN.id(),
     pinned::ui::SCROLL_CONFIG.id(),
+    pinned::ui::SCROLL_CONFIG_EXTENT.id(),
     pinned::ui::SCROLL_END.id(),
+    pinned::ui::SCROLL_EXTENT.id(),
     pinned::ui::SCROLL_FOCUS.id(),
     pinned::ui::SCROLL_INPUT.id(),
     pinned::ui::SCROLL_NAV.id(),
     pinned::ui::SCROLL_SET_FOCUS.id(),
+    pinned::ui::SCROLL_STATE_SIZE.id(),
     pinned::ui::SLIDER.id(),
     pinned::ui::SLIDER_BOUNDED.id(),
     pinned::ui::SLIDER_DISCRETE.id(),
@@ -465,7 +468,7 @@ pub(crate) fn link(loader: &'static Loader) {
     let engine = match Engine::resolve(loader) {
         Ok(engine) => engine,
         Err(missing) => {
-            loader.feature_off("interface", missing.id(), missing.reason());
+            loader.feature_off("interface", missing.id(), &missing.reason());
             return;
         }
     };
@@ -476,7 +479,7 @@ pub(crate) fn link(loader: &'static Loader) {
     }
     if ENGINE.get().is_some_and(Engine::has_hud) {
         loader.link_feature(
-            "the HUD",
+            crate::interface_parts::Part::HUD.name,
             Target::Pinned(pinned::ui::HUD),
             &HUD_NEXT,
             hud_detour as HudFn,

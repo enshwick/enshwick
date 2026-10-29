@@ -36,11 +36,13 @@ use world::{WorldRows, world_settings};
 use crate::configure::rows::{self, Lock, Row, Widget};
 use crate::fuse::Fuse;
 use crate::host::Loader;
+use crate::interface_parts::Part;
 use crate::listing::{self, Listing};
 use crate::locks::Relock;
 use crate::mod_index::ModIndex;
 use crate::mods_screen::{self, BACK_PRESSED, Back, Heard, Kind, WORLD_SETTINGS_OPENED};
 use crate::others::Origin;
+use crate::pinned;
 use crate::texts;
 
 use super::engine::{Engine, Scroll, TextBuffer, Window};
@@ -193,21 +195,24 @@ pub(super) fn next_frame() -> u64 {
 
 /// Links the menu hooks; the screen draws from the interface hook.
 pub(super) fn link(loader: &Loader, engine: &Engine) {
-    for (site, handler, what) in [
+    for (site, handler, part, id) in [
         (
             engine.main_menu_site,
             main_menu as enshwick::abi::MidHookFn,
-            "the main menu's Mods entry",
+            Part::MAIN_MENU,
+            pinned::ui::MAIN_MENU_SITE,
         ),
         (
             engine.pause_menu_site,
             pause_menu,
-            "the pause menu's Mods entry",
+            Part::PAUSE_MENU,
+            pinned::ui::PAUSE_MENU_SITE,
         ),
         (
             engine.world_settings_site,
             world_settings,
-            "the world settings' Mods rows",
+            Part::WORLD_ROWS,
+            pinned::ui::WORLD_SETTINGS_SITE,
         ),
     ] {
         if site == 0 || (site == engine.world_settings_site && engine.view.is_none()) {
@@ -222,7 +227,8 @@ pub(super) fn link(loader: &Loader, engine: &Engine) {
         };
         let status = loader.mids.relock().add(site, link);
         if !status.is_ok() {
-            crate::log!(WARN, "{what} off: its hook was refused ({})", status.0);
+            let reason = format!("refused the link ({})", status.0);
+            loader.feature_off(part.name, id.id(), &reason);
         }
     }
 }
