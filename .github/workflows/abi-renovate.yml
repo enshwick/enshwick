@@ -1,0 +1,22 @@
+# Starts Renovate when a push to main changes the ABI layout. The dev loader
+# then refuses the dev bundle's mods until their pinned platform commit moves
+# to the new layout, which Renovate otherwise does only at its next scheduled
+# run, up to four hours later. Each mod's dev build after the bump rebuilds
+# the bundle. A push that leaves the layout alone starts nothing.
+name: abi-renovate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/enshwick/src/abi/layout.txt"
+
+permissions: {}
+
+jobs:
+  renovate:
+    # main: the organization runners run only workflows from main.
+    uses: enshwick/.github/.github/workflows/renovate-start.yml@main # zizmor: ignore[unpinned-uses]
+    secrets:
+      ENSHWICK_CI_CLIENT_ID: ${{ secrets.ENSHWICK_CI_CLIENT_ID }}
+      ENSHWICK_CI_PRIVATE_KEY: ${{ secrets.ENSHWICK_CI_PRIVATE_KEY }}
