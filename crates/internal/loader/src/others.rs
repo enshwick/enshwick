@@ -316,7 +316,7 @@ mod tests {
     }
 
     const SECTION_RVA: u32 = 0x1000;
-    const SECTION_FILE: usize = 0x200;
+    const SECTION_FILE: usize = 0x200; // bound, not a game offset: a test's memory
 
     fn put(bytes: &mut [u8], at: usize, value: &[u8]) {
         bytes[at..at + value.len()].copy_from_slice(value);

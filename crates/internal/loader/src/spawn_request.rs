@@ -3,7 +3,7 @@
 
 /// The largest request or component record the loader builds, far past the
 /// engine's 0x30 and 0x18 bytes on server 399 and client 426.
-const RECORD_MAX: usize = 0x400;
+const RECORD_MAX: usize = 0x400; // bound, not a game offset: a sanity bound
 
 /// Where the engine's spawn request and each of its starting components keep
 /// their fields.

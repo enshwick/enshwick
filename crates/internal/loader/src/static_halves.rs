@@ -177,7 +177,7 @@ impl StaticHalves {
 mod tests {
     use super::*;
 
-    const RECORD_SIZE: usize = 0x100;
+    const RECORD_SIZE: usize = 0x100; // bound, not a game offset: a test's memory
     const SETUP: u32 = 0x139a_fbec;
 
     /// A component registry with two type records: index 1 with a static
