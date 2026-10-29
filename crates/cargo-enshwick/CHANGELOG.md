@@ -9,13 +9,13 @@ Each entry names the pull request that made the change.
 ### Added
 
 - `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a
-  commit of the platform's `main` branch from git.
+  commit of the platform's `main` branch from git (#696).
 
 ### Changed
 
 - `cargo enshwick new` writes the crate the mod template makes, with its
   toolchain file, build flags, lints, texts and tests. Mod names are in
-  title case.
+  title case (#696).
 
 ### Fixed
 
