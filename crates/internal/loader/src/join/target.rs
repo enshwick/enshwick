@@ -31,9 +31,11 @@ pub type Target = [u8; TARGET_BYTES];
 ///
 /// let rows = [
 ///     ("join.target_host", 0),
-///     ("join.target_ip", 8),
-///     ("join.target_game_port", 12),
-///     ("join.target_query_port", 14),
+///     ("join.target_copy", 0x50),
+///     ("join.target_ip_read", 0x58),
+///     ("join.target_word_copy", 0x48),
+///     ("join.target_game_port_read", 0x4c),
+///     ("join.target_query_port_read", 0x4e),
 ///     ("join.target_has_address", 32),
 ///     ("join.target_password", 36),
 /// ];
@@ -74,6 +76,9 @@ pub enum LayoutError {
     /// A field ends past the start of the password.
     #[error("`{0}` runs into the join target's password")]
     IntoPassword(&'static str),
+    /// The join reads a field outside the stack copy it reads it from.
+    #[error("`{0}` reads outside the join's copy of the target")]
+    OutsideCopy(&'static str),
     /// The password starts past the bytes the check copies.
     #[error(
         "the join target's password at {0:#x} lies past the {TARGET_BYTES} bytes the check copies"
@@ -88,8 +93,9 @@ impl Layout {
     ///
     /// [`LayoutError::Missing`] for a field the table lacks,
     /// [`LayoutError::IntoPassword`] for one that ends past the password's
-    /// start, [`LayoutError::TooLong`] for a password past
-    /// [`TARGET_BYTES`].
+    /// start, [`LayoutError::OutsideCopy`] for one the join reads outside
+    /// its stack copy of the target, [`LayoutError::TooLong`] for a
+    /// password past [`TARGET_BYTES`].
     ///
     /// # Examples
     ///
@@ -104,28 +110,53 @@ impl Layout {
     /// ```
     pub fn from_table(constant: impl Fn(&str) -> Option<u64>) -> Result<Self, LayoutError> {
         use pinned::join::{
-            TARGET_GAME_PORT, TARGET_HAS_ADDRESS, TARGET_HOST, TARGET_IP, TARGET_PASSWORD,
-            TARGET_QUERY_PORT,
+            TARGET_COPY, TARGET_GAME_PORT_READ, TARGET_HAS_ADDRESS, TARGET_HOST, TARGET_IP_READ,
+            TARGET_PASSWORD, TARGET_QUERY_PORT_READ, TARGET_WORD_COPY,
         };
-        let password =
-            constant(TARGET_PASSWORD.id()).ok_or(LayoutError::Missing(TARGET_PASSWORD.id()))?;
+        let row = |id: &'static str| constant(id).ok_or(LayoutError::Missing(id));
+        let password = row(TARGET_PASSWORD.id())?;
         let password = usize::try_from(password)
             .ok()
             .filter(|&at| at <= TARGET_BYTES)
             .ok_or(LayoutError::TooLong(password))?;
-        let field = |id: &'static str, size: usize| {
-            let at = constant(id).ok_or(LayoutError::Missing(id))?;
-            usize::try_from(at)
-                .ok()
+        let field = |id: &'static str, at: usize, size: usize| {
+            Some(at)
                 .filter(|at| at.checked_add(size).is_some_and(|end| end <= password))
                 .ok_or(LayoutError::IntoPassword(id))
         };
+        // The join reads the address from its stack copy of the target's
+        // first 16 bytes, and the ports from a copy of the 8 bytes from the
+        // address on, which it reads as one word from the first copy.
+        let copy = row(TARGET_COPY.id())?;
+        let ip_read = TARGET_IP_READ.id();
+        let ip = copied(ip_read, row(ip_read)?, size_of::<u64>(), copy, 16)?;
+        let word = row(TARGET_WORD_COPY.id())?;
+        let port = |id: &'static str| {
+            copied(id, row(id)?, size_of::<u16>(), word, size_of::<u64>())
+                .and_then(|at| ip.checked_add(at).ok_or(LayoutError::OutsideCopy(id)))
+        };
         Ok(Self {
-            host: field(TARGET_HOST.id(), size_of::<u64>())?,
-            ip: field(TARGET_IP.id(), size_of::<u32>())?,
-            game_port: field(TARGET_GAME_PORT.id(), size_of::<u16>())?,
-            query_port: field(TARGET_QUERY_PORT.id(), size_of::<u16>())?,
-            has_address: field(TARGET_HAS_ADDRESS.id(), size_of::<u8>())?,
+            host: field(
+                TARGET_HOST.id(),
+                usize_from(row(TARGET_HOST.id())?),
+                size_of::<u64>(),
+            )?,
+            ip: field(TARGET_IP_READ.id(), ip, size_of::<u32>())?,
+            game_port: field(
+                TARGET_GAME_PORT_READ.id(),
+                port(TARGET_GAME_PORT_READ.id())?,
+                size_of::<u16>(),
+            )?,
+            query_port: field(
+                TARGET_QUERY_PORT_READ.id(),
+                port(TARGET_QUERY_PORT_READ.id())?,
+                size_of::<u16>(),
+            )?,
+            has_address: field(
+                TARGET_HAS_ADDRESS.id(),
+                usize_from(row(TARGET_HAS_ADDRESS.id())?),
+                size_of::<u8>(),
+            )?,
             password,
         })
     }
@@ -155,9 +186,11 @@ impl Layout {
     ///
     /// # let rows = [
     /// #     ("join.target_host", 0),
-    /// #     ("join.target_ip", 8),
-    /// #     ("join.target_game_port", 12),
-    /// #     ("join.target_query_port", 14),
+    /// #     ("join.target_copy", 0x50),
+    /// #     ("join.target_ip_read", 0x58),
+    /// #     ("join.target_word_copy", 0x48),
+    /// #     ("join.target_game_port_read", 0x4c),
+    /// #     ("join.target_query_port_read", 0x4e),
     /// #     ("join.target_has_address", 32),
     /// #     ("join.target_password", 36),
     /// # ];
@@ -213,6 +246,28 @@ pub enum Destination {
     },
 }
 
+/// A row's value as an offset; one past the address space lies past every
+/// target.
+fn usize_from(value: u64) -> usize {
+    usize::try_from(value).unwrap_or(usize::MAX)
+}
+
+/// Where a `size`-byte field lies in the `copied` bytes the join copies to
+/// its stack at `copy`, when it reads the field at `read` (row `id`);
+/// [`LayoutError::OutsideCopy`] when the read misses the copy.
+fn copied(
+    id: &'static str,
+    read: u64,
+    size: usize,
+    copy: u64,
+    copied: usize,
+) -> Result<usize, LayoutError> {
+    read.checked_sub(copy)
+        .and_then(|at| usize::try_from(at).ok())
+        .filter(|at| at.checked_add(size).is_some_and(|end| end <= copied))
+        .ok_or(LayoutError::OutsideCopy(id))
+}
+
 /// The `N` bytes of a join target from `at`, which [`Layout::from_table`]
 /// keeps inside the target.
 fn field<const N: usize>(target: &Target, at: usize) -> [u8; N] {
@@ -223,12 +278,14 @@ fn field<const N: usize>(target: &Target, at: usize) -> [u8; N] {
 mod tests {
     use super::*;
 
-    /// The layout of client builds 410 and 426.
-    const ROWS: [(&str, u64); 6] = [
+    /// The rows of client builds 410 and 426.
+    const ROWS: [(&str, u64); 8] = [
         ("join.target_host", 0),
-        ("join.target_ip", 8),
-        ("join.target_game_port", 12),
-        ("join.target_query_port", 14),
+        ("join.target_copy", 0x50),
+        ("join.target_ip_read", 0x58),
+        ("join.target_word_copy", 0x48),
+        ("join.target_game_port_read", 0x4c),
+        ("join.target_query_port_read", 0x4e),
         ("join.target_has_address", 32),
         ("join.target_password", 36),
     ];
@@ -239,6 +296,56 @@ mod tests {
 
     fn layout() -> Layout {
         Layout::from_table(rows).unwrap()
+    }
+
+    fn with(id: &'static str, value: u64) -> impl Fn(&str) -> Option<u64> {
+        move |asked| {
+            if asked == id {
+                Some(value)
+            } else {
+                rows(asked)
+            }
+        }
+    }
+
+    #[test]
+    fn the_address_and_ports_lie_where_the_join_s_stack_copies_read_them() {
+        let layout = layout();
+        assert_eq!(
+            (layout.ip, layout.game_port, layout.query_port),
+            (8, 12, 14)
+        );
+    }
+
+    #[test]
+    fn a_read_outside_its_stack_copy_turns_the_check_off() {
+        let outside = |id, value| Layout::from_table(with(id, value));
+        assert_eq!(
+            outside("join.target_ip_read", 0x4f),
+            Err(LayoutError::OutsideCopy("join.target_ip_read"))
+        );
+        assert_eq!(
+            outside("join.target_ip_read", 0x60),
+            Err(LayoutError::OutsideCopy("join.target_ip_read"))
+        );
+        // The join reads eight bytes from the address on, so the ports'
+        // word runs past the copy from 0x59.
+        assert_eq!(
+            outside("join.target_ip_read", 0x5c),
+            Err(LayoutError::OutsideCopy("join.target_ip_read"))
+        );
+        assert_eq!(
+            outside("join.target_game_port_read", 0x47),
+            Err(LayoutError::OutsideCopy("join.target_game_port_read"))
+        );
+        assert_eq!(
+            outside("join.target_query_port_read", 0x4f),
+            Err(LayoutError::OutsideCopy("join.target_query_port_read"))
+        );
+        assert_eq!(
+            outside("join.target_copy", u64::MAX),
+            Err(LayoutError::OutsideCopy("join.target_ip_read"))
+        );
     }
 
     /// A join target as the game's server list hands it: host id, address,

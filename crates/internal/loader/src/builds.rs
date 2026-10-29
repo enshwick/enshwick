@@ -423,6 +423,35 @@ fn constants_on_executables_by(
 mod tests {
     use super::*;
 
+    /// On each client executable, every client table reads where the join
+    /// copies its target to its stack and reads the address and ports from
+    /// the copies.
+    #[test]
+    fn the_join_target_copies_read_on_each_client() {
+        let ids = [
+            "join.target_copy",
+            "join.target_ip_read",
+            "join.target_word_copy",
+            "join.target_game_port_read",
+            "join.target_query_port_read",
+        ];
+        let rows = constants_on_executables(&ids);
+        let clients: Vec<_> = rows
+            .iter()
+            .filter(|(table, _)| table.starts_with("ENSH_CLIENT_EXE"))
+            .collect();
+        if std::env::var("ENSH_CLIENT_EXE").is_ok() {
+            assert!(clients.len() >= 2, "{rows:?}");
+        }
+        for (table, values) in clients {
+            assert_eq!(
+                values,
+                &[Some(0x50), Some(0x58), Some(0x48), Some(0x4c), Some(0x4e)],
+                "{table}"
+            );
+        }
+    }
+
     /// On each client executable, every client table reads the size of a
     /// texture ring's completion record and where it holds its context.
     #[test]

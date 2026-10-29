@@ -261,9 +261,11 @@ revision = 1
 "join.target_host" = { value = 0x0, via = "net.join_game", within = 0x1c9, pattern = "74 09 48 8B 1D ?? ?? ?? ?? EB 0D 0F 10 02", fixed = true }
 "join.target_has_address" = { value = 0x20, via = "net.join_game", within = 0x1c9, pattern = "80 7A 20 01 48 8B F1", at = 2, size = 1 }
 "join.target_password" = { value = 0x24, via = "net.join_game", within = 0x1c9, pattern = "0F B6 42 20 48 83 C2 24", at = 7, size = 1 }
-"join.target_ip" = { value = 0x8, via = "net.join_game", within = 0x1c9, pattern = "0F 11 44 24 50 48 8B 5C 24 58 48 8B EB", at = 9, size = 1, plus = -80 }
-"join.target_game_port" = { value = 0xc, via = "net.join_game", within = 0x1c9, pattern = "44 8B C3 0F B7 6C 24 ?? 89 44 24 30", at = 7, size = 1, plus = -64 }
-"join.target_query_port" = { value = 0xe, via = "net.join_game", within = 0x1c9, pattern = "44 0F B7 CD 0F B7 44 24 ?? 48 8B 11", at = 8, size = 1, plus = -64 }
+"join.target_copy" = { value = 0x50, via = "net.join_game", within = 0x1c9, pattern = "0F 11 44 24 ?? 48 8B 5C 24 ?? 48 8B EB", at = 4, size = 1 }
+"join.target_ip_read" = { value = 0x58, via = "net.join_game", within = 0x1c9, pattern = "0F 11 44 24 ?? 48 8B 5C 24 ?? 48 8B EB", at = 9, size = 1 }
+"join.target_word_copy" = { value = 0x48, via = "net.join_game", within = 0x1c9, pattern = "48 8B EB 48 89 5C 24 ?? 48 C1 ED 20", at = 7, size = 1 }
+"join.target_game_port_read" = { value = 0x4c, via = "net.join_game", within = 0x1c9, pattern = "44 8B C3 0F B7 6C 24 ?? 89 44 24 30", at = 7, size = 1 }
+"join.target_query_port_read" = { value = 0x4e, via = "net.join_game", within = 0x1c9, pattern = "44 0F B7 CD 0F B7 44 24 ?? 48 8B 11", at = 8, size = 1 }
 "text.pool_language" = { value = 0xd8, pattern = "75 38 48 8D 6E ?? 39 BE ?? ?? ?? ?? 75 11 48 8B D5 48 8D 4C 24 ??", at = 8, size = 4 }
 # The first eight code bytes at each mod textures symbol, and
 # the layouts they rely on: a content request (0x48 bytes:
