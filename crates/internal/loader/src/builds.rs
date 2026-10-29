@@ -423,6 +423,25 @@ mod tests {
         }
     }
 
+    /// On each executable, every table that places a column grid's pages
+    /// along x reads where it holds its pages along z.
+    #[test]
+    fn the_grid_depth_reads_on_each_executable() {
+        let rows = constants_on_executables(&["voxel.grid_pages", "voxel.grid_depth"]);
+        let named = ["ENSH_SERVER_EXE", "ENSH_CLIENT_EXE"]
+            .iter()
+            .filter(|var| std::env::var(var).is_ok())
+            .count();
+        let placed: Vec<_> = rows
+            .iter()
+            .filter(|(_, values)| values[0].is_some())
+            .collect();
+        assert!(placed.len() >= named, "{rows:?}");
+        for (table, values) in placed {
+            assert_eq!(values, &[Some(0x48), Some(0x4c)], "{table}");
+        }
+    }
+
     /// On each executable, every table reads where the zone size's answer
     /// holds its valid byte.
     #[test]

@@ -755,6 +755,7 @@ revision = 1
 # `voxel.grid_pages` from the editor) and along z.
 "voxel.grids" = { value = 0x40, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 19, size = 1 }
 "voxel.grid_pages" = { value = 0x48, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", at = 28, size = 1 }
+"voxel.grid_depth" = { value = 0x4c, pattern = "44 3B C1 0F 83 ?? ?? ?? ?? 45 3B 51 ?? 0F 83", at = 12, size = 1 }
 "voxel.grid_stride" = { value = 0x28, pattern = "44 8B 6C 24 7C 4B 8D 0C A4 33 D2 C6 47 08 01 49 8B 6C CF 40 4D 8D 0C CF 41 8B 4C CF 48 44 8B E5 41 C1 EC 03 8B C3 41 F7", fixed = true }
 # The voxel materials a byte names, and the first building material, from
 # the loop that builds the replace table and the test inside it.
