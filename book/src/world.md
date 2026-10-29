@@ -231,7 +231,9 @@ under way counts as asked. Before the world has loaded it is refused.
 
 `key()` names the world the server runs: its save file's name and a hash of
 its folder, such as `world0-1a2b3c4d`, the same in every session. A
-[world store](state.md#per-world-state) files the mod's state under it.
+[world store](state.md#per-world-state) files the mod's state under it. A
+world whose save moves to another folder gets a new key, and the loader
+moves its mods' data along ([Move a world](servers.md#move-a-world)).
 
 Like the reads, all three need the game thread; `key()` works from any
 thread.

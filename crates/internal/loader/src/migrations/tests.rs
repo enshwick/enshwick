@@ -497,6 +497,19 @@ fn an_entry_set_to_nothing_leaves_the_record() {
 }
 
 #[test]
+fn a_moved_world_takes_its_shared_entries_and_a_copy_shares_them() {
+    let mut record = Record::default();
+    record.ran(Some("w0-aaaaaaaa"), "a").push("2".to_owned());
+    record.world_arrived("w0-aaaaaaaa", "w0-cccccccc", true);
+    assert_eq!(record.worlds["w0-aaaaaaaa"]["a"], ["2"]);
+    assert_eq!(record.worlds["w0-cccccccc"]["a"], ["2"]);
+    record.world_arrived("w0-aaaaaaaa", "w0-bbbbbbbb", false);
+    assert!(!record.worlds.contains_key("w0-aaaaaaaa"));
+    assert_eq!(record.worlds["w0-bbbbbbbb"]["a"], ["2"]);
+    assert!(!record.world_arrived("gone", "w0-dddddddd", false));
+}
+
+#[test]
 fn a_setting_renamed_into_or_out_of_a_table_moves_there() {
     let m = migration(
         "2",

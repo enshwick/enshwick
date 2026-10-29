@@ -321,6 +321,27 @@ pub(crate) fn world_loaded(loader: &Loader, key: &str) {
     }
 }
 
+/// The world `from` arrived under the key `to`, its mods' data moved or
+/// `copied` there: what the shared record kept for `from` counts for `to`.
+/// A record that does not read is left alone; its error shows when the
+/// world's migrations run.
+pub(crate) fn world_arrived(loader: &Loader, from: &str, to: &str, copied: bool) {
+    let mut held = RECORD.relock();
+    if held.is_none() {
+        let Ok(read) = Record::read(&loader.data_dir) else {
+            return;
+        };
+        *held = Some(read);
+    }
+    if let Some(full) = held.as_mut()
+        && full.world_arrived(from, to, copied)
+        && !dry_run()
+        && let Err(e) = full.write(&loader.data_dir)
+    {
+        crate::log!(WARN, "migrations: the record was not written: {e}");
+    }
+}
+
 /// The content renames of every running mod, old GUID to new: sealed on
 /// first call, after every mod is initialised.
 pub(crate) fn renamed(loader: &Loader) -> &'static FxHashMap<[u8; 16], [u8; 16]> {

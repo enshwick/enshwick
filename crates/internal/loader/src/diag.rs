@@ -280,6 +280,9 @@ pub struct Summary {
     pub conflicts: Vec<String>,
     /// What the knowledge guard does and has counted, once it runs.
     pub knowledge_guard: Option<String>,
+    /// Other world keys of the running world's save name that hold mod
+    /// data, such as the world before its save moved; empty for none.
+    pub world_folders: Vec<String>,
     /// What became of mod messages that did not arrive as sent, once any
     /// did not.
     pub messages: Option<String>,
@@ -431,6 +434,14 @@ services and events:"
         }
         if let Some(messages) = &self.messages {
             let _w = writeln!(out, "mod messages: {messages}");
+        }
+        if !self.world_folders.is_empty() {
+            let _w = writeln!(
+                out,
+                "mod data of other worlds of this save name: {}; a moved world takes it over \
+                 only when one is left (see mod-data/<mod>/worlds/)",
+                self.world_folders.join(", ")
+            );
         }
         let _w = writeln!(out, "hooks: {} functions armed", self.targets);
         match &self.hooks {
@@ -750,6 +761,7 @@ mod tests {
                 "interaction filter: you.trading-post, you.market-stalls, chained".into(),
             ],
             knowledge_guard: Some("watching; 3 requests it would refuse let through".into()),
+            world_folders: Vec::new(),
             messages: messages_line(0, 3, 1),
             parts: vec![
                 Part {
@@ -780,6 +792,16 @@ mod tests {
         assert!(text.contains(
             "\nmod messages: 3 lines for one player dropped (queue full, player gone or such lines off), \
              1 line for one player reached others, lines for one player off\n"
+        ));
+    }
+
+    #[test]
+    fn the_summary_names_other_worlds_of_the_save_name_with_mod_data() {
+        let mut summary = summary();
+        assert!(!summary.render().contains("other worlds"));
+        summary.world_folders = vec!["world0-aaaaaaaa".into(), "world0-cccccccc".into()];
+        assert!(summary.render().contains(
+            "mod data of other worlds of this save name: world0-aaaaaaaa, world0-cccccccc;"
         ));
     }
 
