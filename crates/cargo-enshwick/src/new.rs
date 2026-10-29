@@ -9,14 +9,21 @@ use crate::Side;
 pub(crate) mod data;
 pub(crate) mod luau;
 
-/// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`;
-/// what was made, for the user.
+/// Creates the crate for mod `id`, `<author>.<name>`, in `<dir>/<name>`, on
+/// the crates.io release or on `commit` of the platform; what was made, for
+/// the user.
 ///
 /// Inside a Cargo workspace the crate joins it: its folder is added to the
-/// workspace's `members` unless a member pattern already covers it, and its
-/// release profile is left to the workspace root, the only place Cargo reads
-/// one. A folder the workspace excludes gets a workspace of its own.
-pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String> {
+/// workspace's `members` unless a member pattern already covers it, and the
+/// release profile, the toolchain and the build flags are left to the
+/// workspace root, the only place Cargo reads them. A folder the workspace
+/// excludes gets a workspace of its own.
+pub(crate) fn create(
+    dir: &Path,
+    id: &str,
+    side: Side,
+    commit: Option<&Commit>,
+) -> anyhow::Result<String> {
     let name = crate_name(id)?;
     let root = std::path::absolute(dir.join(name)).with_context(|| dir.display().to_string())?;
     if root.exists() {
@@ -26,7 +33,7 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String>
         Some(manifest) => plan_join(&manifest, &root)?,
         None => Place::Alone,
     };
-    for (path, text) in files(id, side, &plan)? {
+    for (path, text) in files(id, side, commit, &plan)? {
         let path = root.join(path);
         let written = path
             .parent()
@@ -44,12 +51,12 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String>
                 bail!("{}: {e}", manifest.display());
             }
             format!(
-                "; added to the members of {}, whose root holds the release profile",
+                "; added to the members of {}, whose root holds the release profile, the toolchain and the build flags",
                 manifest.display()
             )
         }
-        Place::Member { manifest } => format!(
-            "; a member of {}, whose root holds the release profile",
+        Place::Member { manifest, .. } => format!(
+            "; a member of {}, whose root holds the release profile, the toolchain and the build flags",
             manifest.display()
         ),
         Place::Alone | Place::Excluded => String::new(),
@@ -65,8 +72,9 @@ pub(crate) fn create(dir: &Path, id: &str, side: Side) -> anyhow::Result<String>
 enum Place {
     /// No workspace around it.
     Alone,
-    /// A member pattern of the workspace at `manifest` covers it.
-    Member { manifest: PathBuf },
+    /// A member pattern of the workspace at `manifest`, whose text is
+    /// `root`, covers it.
+    Member { manifest: PathBuf, root: String },
     /// The workspace at `manifest` takes it once `text` is written there.
     Join { manifest: PathBuf, text: String },
     /// The workspace around it excludes it, so it is a workspace of its own.
@@ -119,6 +127,7 @@ fn plan_join(manifest: &Path, root: &Path) -> anyhow::Result<Place> {
     if patterns("members").iter().any(|p| matches(p, &member)) {
         return Ok(Place::Member {
             manifest: manifest.to_owned(),
+            root: text,
         });
     }
     let workspace = doc["workspace"]
@@ -196,43 +205,160 @@ fn crate_name(id: &str) -> anyhow::Result<&str> {
 }
 
 /// The crate's files for mod `id`, relative to its root.
-fn files(id: &str, side: Side, place: &Place) -> anyhow::Result<Vec<(PathBuf, String)>> {
+fn files(
+    id: &str,
+    side: Side,
+    commit: Option<&Commit>,
+    place: &Place,
+) -> anyhow::Result<Vec<(PathBuf, String)>> {
     let name = crate_name(id)?;
     let side = match side {
         Side::Server => "SERVER",
         Side::Client => "CLIENT",
         Side::Both => "BOTH",
     };
+    let shown = display_name(name);
+    let description = format!("What {shown} does, in one sentence");
+    let enshwick = match commit {
+        None => format!("enshwick = \"={}\"\n", enshwick::VERSION),
+        Some(commit) => format!(
+            "# The platform from git, at a commit of its main branch.\nenshwick = {{ git = \"{PLATFORM_GIT}\", rev = \"{}\" }}\n",
+            commit.0
+        ),
+    };
     let fill = |template: &str| {
         template
             .replace("{id}", id)
             .replace("{crate}", name)
             .replace("{type}", &type_name(name))
-            .replace("{name}", &display_name(name))
+            .replace("{name}", &shown)
             .replace("{side}", side)
-            .replace("{api}", enshwick::VERSION)
+            .replace("{description}", &description)
+            .replace("{enshwick}", &enshwick)
     };
-    let cargo = match place {
-        Place::Alone => fill(CARGO_TOML) + PROFILE,
-        Place::Excluded => fill(CARGO_TOML) + PROFILE + "\n[workspace]\n",
-        Place::Member { .. } | Place::Join { .. } => fill(CARGO_TOML),
-    };
-    Ok(vec![
-        ("Cargo.toml".into(), cargo),
+    let cargo = fill(CARGO_TOML);
+    let mut files = vec![
         ("src/lib.rs".into(), fill(LIB_RS)),
+        ("src/texts.toml".into(), fill(TEXTS_TOML)),
         ("README.md".into(), fill(README)),
-        (".gitignore".into(), "/target\n".into()),
-    ])
+        (".gitignore".into(), "/target/\n".into()),
+    ];
+    match place {
+        Place::Alone | Place::Excluded => {
+            files.push(("Cargo.toml".into(), cargo));
+            files.push(("rust-toolchain.toml".into(), RUST_TOOLCHAIN.into()));
+            files.push((".cargo/config.toml".into(), CARGO_CONFIG.into()));
+        }
+        Place::Member { root, .. } | Place::Join { text: root, .. } => {
+            files.push(("Cargo.toml".into(), as_member(&cargo, root)?));
+        }
+    }
+    Ok(files)
 }
 
-/// `street-lanterns` as `Street lanterns`, the name players read until
-/// the author picks one.
+/// The crate's own `Cargo.toml` as a member of the workspace whose root
+/// manifest is `root`: the workspace tables and the profiles go, since
+/// Cargo reads them only at the root; lints and dependencies stay taken from
+/// the workspace where it declares them and are written out where it does
+/// not.
+fn as_member(cargo: &str, root: &str) -> anyhow::Result<String> {
+    let mut doc: toml_edit::DocumentMut = cargo.parse()?;
+    let root: toml_edit::DocumentMut = root.parse()?;
+    let declared = root.get("workspace");
+    let ours = doc
+        .remove("workspace")
+        .context("the crate's manifest has no workspace")?;
+    doc.remove("profile");
+    if declared.and_then(|w| w.get("lints")).is_none() {
+        doc.remove("lints");
+    }
+    for table in ["dependencies", "dev-dependencies"] {
+        let Some(deps) = doc
+            .get_mut(table)
+            .and_then(toml_edit::Item::as_table_like_mut)
+        else {
+            continue;
+        };
+        for (dep, spec) in deps.iter_mut() {
+            let from_workspace = spec
+                .get("workspace")
+                .and_then(toml_edit::Item::as_bool)
+                .unwrap_or(false);
+            let in_root = declared
+                .and_then(|w| w.get("dependencies"))
+                .and_then(|d| d.get(dep.get()))
+                .is_some();
+            if !from_workspace || in_root {
+                continue;
+            }
+            let shared = ours
+                .get("dependencies")
+                .and_then(|d| d.get(dep.get()))
+                .with_context(|| format!("the workspace declares no {}", dep.get()))?;
+            let mut inline = match shared.as_str() {
+                Some(version) => {
+                    let mut inline = toml_edit::InlineTable::new();
+                    inline.insert("version", version.into());
+                    inline
+                }
+                None => shared
+                    .as_inline_table()
+                    .cloned()
+                    .with_context(|| format!("{} is neither a version nor a table", dep.get()))?,
+            };
+            inline.decor_mut().clear();
+            if let Some(rest) = spec.as_table_like() {
+                for (key, value) in rest.iter().filter(|(key, _)| *key != "workspace") {
+                    if let Some(value) = value.as_value() {
+                        inline.insert(key, value.clone());
+                    }
+                }
+            }
+            *spec = if inline.len() == 1
+                && let Some(version) = inline.get("version")
+            {
+                toml_edit::value(version.clone())
+            } else {
+                toml_edit::value(inline)
+            };
+        }
+    }
+    Ok(doc.to_string())
+}
+
+/// A full commit hash of the platform repository, to build a mod on its
+/// `main` branch from git instead of the crates.io release.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Commit(String);
+
+impl std::str::FromStr for Commit {
+    type Err = anyhow::Error;
+
+    fn from_str(text: &str) -> anyhow::Result<Self> {
+        if text.len() == 40 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+            Ok(Self(text.to_owned()))
+        } else {
+            bail!("{text:?} is not a full 40-character commit hash in lowercase")
+        }
+    }
+}
+
+/// Where the platform's git repository is.
+const PLATFORM_GIT: &str = "https://github.com/enshwick/enshwick";
+
+/// `street-lanterns` as `Street Lanterns`, the name players read until the
+/// author picks one.
 fn display_name(id: &str) -> String {
-    let words = id.replace('-', " ");
-    let mut chars = words.trim().chars();
-    chars.next().map_or_else(String::new, |first| {
-        first.to_ascii_uppercase().to_string() + chars.as_str()
-    })
+    id.split('-')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_ascii_uppercase().to_string() + chars.as_str()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `street-lanterns` as `StreetLanterns`; names starting with a digit get `Mod`.
@@ -253,98 +379,14 @@ fn type_name(id: &str) -> String {
     name
 }
 
-const CARGO_TOML: &str = r#"[package]
-name = "{crate}"
-version = "0.1.0"
-edition = "2024"
-# The loader shows these to players on the Mods screen and in the status
-# summary; the homepage is where players are sent to get the mod.
-description = "What {name} does, in one sentence"
-authors = ["Your Name"]
-license = "MIT OR Apache-2.0"
-homepage = "https://github.com/you/your-repo"
-publish = false
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-enshwick = "={api}"
-serde = { version = "1", features = ["derive"] }
-"#;
-
-/// The release profile of a crate that is its own workspace root.
-const PROFILE: &str = r#"
-[profile.release]
-lto = "fat"
-codegen-units = 1
-# Unwinding stays on: every detour catches panics and falls back to vanilla.
-panic = "unwind"
-"#;
-
-const LIB_RS: &str = r#"//! The {id} mod for Enshrouded.
-
-use std::sync::atomic::{AtomicBool, Ordering};
-
-use enshwick::{Load, Mod, Off};
-
-/// Whether the mod does its work now; a settings change updates it.
-static ENABLED: AtomicBool = AtomicBool::new(true);
-
-/// {type} settings, in `mod-configs/{id}.toml`.
-#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
-#[serde(deny_unknown_fields)]
-struct Settings {
-    /// Whether the mod does its work.
-    // `startup` (applied when a world loads), `runtime` (applied by
-    // on_config_change), `client` (each player's own), `sync` (the server's
-    // value) or `restart` (read once as the game starts), and for numbers
-    // `range = 1..=10`, for lists of values `choices = [..]`.
-    #[config(runtime)]
-    enabled: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
-
-/// The mod's state.
-#[derive(Debug)]
-pub struct {type};
-
-impl Mod for {type} {
-    fn manifest() -> &'static enshwick::abi::Manifest {
-        enshwick::manifest!(
-            id: "{id}",
-            side: {side},
-            // What players read; description, authors, license and homepage
-            // come from Cargo.toml.
-            name: "{name}",
-            // Mods this one works better with, and mods it does not work
-            // beside, each with a version range ("" for any):
-            // recommends: ["other-mod" => ">=0.2, <1.0"],
-            // breaks: ["old-mod" => "<0.3"],
-            // After a rename, the old ids: their DLLs never start, and
-            // their settings and data carry over on the first start:
-            // was: ["old-id"],
-        )
-    }
-
-    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
-        let settings: Settings = load.config()?;
-        ENABLED.store(settings.enabled, Ordering::Relaxed);
-        load.on_config_change(|settings: Settings| {
-            ENABLED.store(settings.enabled, Ordering::Relaxed);
-        })?;
-        enshwick::info!("enabled: {}", settings.enabled);
-        Ok(Self)
-    }
-}
-
-enshwick::declare_mod!({type});
-"#;
+// The crate's files are the mod template's, with `{id}`, `{crate}`,
+// `{type}`, `{name}`, `{side}`, `{description}` and `{enshwick}` to fill; a
+// test renders the template and compares.
+const CARGO_TOML: &str = include_str!("new/crate/Cargo.toml.in");
+const LIB_RS: &str = include_str!("new/crate/lib.rs.in");
+const TEXTS_TOML: &str = include_str!("new/crate/texts.toml");
+const RUST_TOOLCHAIN: &str = include_str!("new/crate/rust-toolchain.toml");
+const CARGO_CONFIG: &str = include_str!("new/crate/config.toml");
 
 const README: &str = "# {id}
 
@@ -359,6 +401,17 @@ start; its log is `logs/enshwick/mods/{id}.log`.
 mod tests {
     use super::*;
 
+    const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    /// The text of the file at `name` among `files`.
+    fn text<'a>(files: &'a [(PathBuf, String)], name: &str) -> &'a str {
+        &files
+            .iter()
+            .find(|(path, _)| path == Path::new(name))
+            .unwrap_or_else(|| panic!("no {name}"))
+            .1
+    }
+
     #[test]
     fn ids_become_type_names() {
         assert_eq!(type_name("street-lanterns"), "StreetLanterns");
@@ -368,39 +421,84 @@ mod tests {
 
     #[test]
     fn an_id_that_cannot_name_a_crate_is_refused() {
-        assert!(files("you.2x-loot", Side::Server, &Place::Alone).is_err());
-        assert!(files("you.-loot", Side::Server, &Place::Alone).is_err());
-        assert!(files("you.loot-2x", Side::Server, &Place::Alone).is_ok());
-        assert!(files("lanterns", Side::Server, &Place::Alone).is_err());
+        let alone = |id| files(id, Side::Server, None, &Place::Alone);
+        assert!(alone("you.2x-loot").is_err());
+        assert!(alone("you.-loot").is_err());
+        assert!(alone("you.loot-2x").is_ok());
+        assert!(alone("lanterns").is_err());
+        assert!(alone("Area Loot").is_err());
     }
 
     #[test]
     fn the_files_name_the_mod_everywhere() {
-        let files = files("you.street-lanterns", Side::Both, &Place::Alone).unwrap();
-        let text = |name: &str| {
-            &files
-                .iter()
-                .find(|(path, _)| path == Path::new(name))
-                .unwrap()
-                .1
-        };
-        assert!(text("Cargo.toml").contains("name = \"street-lanterns\""));
-        assert!(text("Cargo.toml").contains(&format!("enshwick = \"={}\"", enshwick::VERSION)));
-        assert!(
-            text("src/lib.rs").contains("id: \"you.street-lanterns\",\n            side: BOTH,")
+        let files = files("you.street-lanterns", Side::Both, None, &Place::Alone).unwrap();
+        let cargo = text(&files, "Cargo.toml");
+        assert!(cargo.contains("name = \"street-lanterns\""));
+        assert!(cargo.contains(&format!(
+            "[workspace.dependencies]\nenshwick = \"={}\"\n",
+            enshwick::VERSION
+        )));
+        let lib = text(&files, "src/lib.rs");
+        assert!(lib.contains("id: \"you.street-lanterns\",\n            side: BOTH,"));
+        assert!(lib.contains("name: \"Street Lanterns\","));
+        assert!(lib.contains("// was: [\"you.old-name\"]"));
+        assert!(lib.contains("declare_mod!(StreetLanterns)"));
+        assert!(text(&files, "src/texts.toml").contains("\"mod.name\" = \"Street Lanterns\""));
+        for (path, text) in &files {
+            for hole in [
+                "{type}",
+                "{id}",
+                "{crate}",
+                "{name}",
+                "{side}",
+                "{description}",
+                "{enshwick}",
+            ] {
+                assert!(!text.contains(hole), "{} keeps {hole}", path.display());
+            }
+        }
+    }
+
+    #[test]
+    fn a_crate_of_its_own_carries_the_toolchain_the_flags_and_the_profile() {
+        for place in [Place::Alone, Place::Excluded] {
+            let files = files("you.lockers", Side::Server, None, &place).unwrap();
+            assert!(text(&files, "rust-toolchain.toml").contains("x86_64-pc-windows-msvc"));
+            assert!(text(&files, ".cargo/config.toml").contains("+crt-static"));
+            let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
+            assert_eq!(cargo["profile"]["release"]["lto"].as_str(), Some("fat"));
+            assert!(cargo["workspace"]["lints"]["clippy"].is_table());
+            assert_eq!(cargo["lints"]["workspace"].as_bool(), Some(true));
+        }
+    }
+
+    #[test]
+    fn a_commit_builds_on_the_platform_from_git() {
+        let commit: Commit = COMMIT.parse().unwrap();
+        let files = files("you.lockers", Side::Server, Some(&commit), &Place::Alone).unwrap();
+        let cargo: toml::Table = text(&files, "Cargo.toml").parse().unwrap();
+        let enshwick = &cargo["workspace"]["dependencies"]["enshwick"];
+        assert_eq!(
+            enshwick["git"].as_str(),
+            Some("https://github.com/enshwick/enshwick")
         );
-        assert!(text("src/lib.rs").contains("// was: [\"old-id\"]"));
-        assert!(text("src/lib.rs").contains("declare_mod!(StreetLanterns)"));
-        assert!(!files.iter().any(|(_, text)| text.contains("{type}")
-            || text.contains("{id}")
-            || text.contains("{crate}")
-            || text.contains("{name}")));
+        assert_eq!(enshwick["rev"].as_str(), Some(COMMIT));
+        assert!(enshwick.get("version").is_none());
+    }
+
+    #[test]
+    fn only_a_full_lowercase_commit_hash_is_taken() {
+        assert!(COMMIT.parse::<Commit>().is_ok());
+        assert!("0123456".parse::<Commit>().is_err());
+        assert!(COMMIT.to_uppercase().parse::<Commit>().is_err());
+        assert!(format!("{COMMIT}0").parse::<Commit>().is_err());
+        assert!("main".parse::<Commit>().is_err());
     }
 
     #[test]
     fn ids_become_names() {
-        assert_eq!(display_name("street-lanterns"), "Street lanterns");
-        assert_eq!(display_name("2x-loot"), "2x loot");
+        assert_eq!(display_name("street-lanterns"), "Street Lanterns");
+        assert_eq!(display_name("loot-2x"), "Loot 2x");
     }
 
     #[test]
@@ -431,15 +529,49 @@ mod tests {
             "[workspace]\nresolver = \"3\"\n# kept\nmembers = [\"tools/x\"]\n",
         )
         .unwrap();
-        create(&dir.join("mods"), "you.street-lanterns", Side::Server).unwrap();
+        create(&dir.join("mods"), "you.street-lanterns", Side::Server, None).unwrap();
         let root = std::fs::read_to_string(&manifest).unwrap();
         assert!(root.contains("# kept"), "{root}");
         assert!(
             root.contains("members = [\"tools/x\", \"mods/street-lanterns\"]"),
             "{root}"
         );
-        let cargo = std::fs::read_to_string(dir.join("mods/street-lanterns/Cargo.toml")).unwrap();
-        assert!(!cargo.contains("[profile.release]") && !cargo.contains("[workspace]"));
+        let member = dir.join("mods/street-lanterns");
+        let cargo: toml::Table = std::fs::read_to_string(member.join("Cargo.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        for table in ["profile", "workspace", "lints"] {
+            assert!(cargo.get(table).is_none(), "the member has [{table}]");
+        }
+        let pin = format!("={}", enshwick::VERSION);
+        assert_eq!(cargo["dependencies"]["enshwick"].as_str(), Some(&*pin));
+        assert_eq!(
+            cargo["dev-dependencies"]["enshwick"]["version"].as_str(),
+            Some(&*pin)
+        );
+        assert!(member.join("src/texts.toml").is_file());
+        assert!(!member.join("rust-toolchain.toml").exists());
+        assert!(!member.join(".cargo").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_member_uses_what_the_workspace_declares() {
+        let dir = scratch("declared");
+        let root = "[workspace]\nmembers = [\"mods/*\"]\n\n[workspace.dependencies]\nenshwick = { path = \"crates/enshwick\" }\n\n[workspace.lints.rust]\nmissing_docs = \"deny\"\n";
+        std::fs::write(dir.join("Cargo.toml"), root).unwrap();
+        create(&dir.join("mods"), "you.lockers", Side::Server, None).unwrap();
+        let cargo: toml::Table = std::fs::read_to_string(dir.join("mods/lockers/Cargo.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert_eq!(cargo["lints"]["workspace"].as_bool(), Some(true));
+        assert_eq!(
+            cargo["dependencies"]["enshwick"]["workspace"].as_bool(),
+            Some(true)
+        );
+        assert!(cargo["dependencies"]["serde"]["version"].is_str());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -449,11 +581,14 @@ mod tests {
         let manifest = dir.join("Cargo.toml");
         let text = "[workspace]\nmembers = [\"mods/*\"]\nexclude = [\"scratch\"]\n";
         std::fs::write(&manifest, text).unwrap();
-        create(&dir.join("mods"), "you.lockers", Side::Server).unwrap();
-        create(&dir.join("scratch"), "you.my-mod", Side::Server).unwrap();
+        create(&dir.join("mods"), "you.lockers", Side::Server, None).unwrap();
+        create(&dir.join("scratch"), "you.my-mod", Side::Server, None).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
-        let created = std::fs::read_to_string(dir.join("scratch/my-mod/Cargo.toml")).unwrap();
-        assert!(created.contains("[profile.release]") && created.ends_with("\n[workspace]\n"));
+        let created: toml::Table = std::fs::read_to_string(dir.join("scratch/my-mod/Cargo.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(created["profile"]["release"].is_table() && created["workspace"].is_table());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -463,7 +598,7 @@ mod tests {
         let manifest = dir.join("Cargo.toml");
         let text = "[workspace]\nmembers = []\nexclude = [\"./scratch/\"]\n";
         std::fs::write(&manifest, text).unwrap();
-        create(&dir.join("scratch"), "you.my-mod", Side::Server).unwrap();
+        create(&dir.join("scratch"), "you.my-mod", Side::Server, None).unwrap();
         assert_eq!(std::fs::read_to_string(&manifest).unwrap(), text);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -472,23 +607,10 @@ mod tests {
     fn a_bad_id_is_refused_before_the_folder_is_looked_at() {
         let dir = scratch("bad-id");
         std::fs::create_dir_all(dir.join("Area Loot")).unwrap();
-        let refused = create(&dir, "Area Loot", Side::Server)
+        let refused = create(&dir, "Area Loot", Side::Server, None)
             .unwrap_err()
             .to_string();
         assert!(refused.contains("is not <author>.<name>"), "{refused}");
         std::fs::remove_dir_all(&dir).unwrap();
-    }
-
-    #[test]
-    fn a_crate_outside_any_workspace_keeps_its_profile() {
-        let place = Place::Alone;
-        let files = files("you.lockers", Side::Server, &place).unwrap();
-        assert!(files[0].1.contains("[profile.release]\nlto = \"fat\""));
-        assert!(!files[0].1.contains("[workspace]"));
-    }
-
-    #[test]
-    fn a_bad_id_is_refused() {
-        assert!(files("Area Loot", Side::Server, &Place::Alone).is_err());
     }
 }

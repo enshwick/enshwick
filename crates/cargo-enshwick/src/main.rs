@@ -58,6 +58,11 @@ enum Command {
         /// types a Luau mod gets beside the API's.
         #[arg(long, requires = "luau", conflicts_with = "data")]
         game: Option<PathBuf>,
+        /// A full commit hash of the platform repository to build the crate
+        /// on from git, as the rolling `dev` loader is built; the crates.io
+        /// release when left out.
+        #[arg(long, value_name = "COMMIT", conflicts_with_all = ["data", "luau"])]
+        enshwick_rev: Option<new::Commit>,
     },
     /// Shows what a built mod DLL says about itself: id, version, side and
     /// dependencies. Loads the DLL, which runs its code: only for DLLs you
@@ -227,7 +232,18 @@ fn main() -> ExitCode {
             game,
             ..
         } => new::luau::create(&dir, &id, side.unwrap_or(Side::Server), game.as_deref()),
-        Command::New { id, side, dir, .. } => new::create(&dir, &id, side.unwrap_or(Side::Server)),
+        Command::New {
+            id,
+            side,
+            dir,
+            enshwick_rev,
+            ..
+        } => new::create(
+            &dir,
+            &id,
+            side.unwrap_or(Side::Server),
+            enshwick_rev.as_ref(),
+        ),
         Command::Install { game, package } => install::install(&game, package.as_deref()),
         Command::Manifest {
             dll,

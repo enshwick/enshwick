@@ -1,0 +1,97 @@
+# `cargo enshwick new` against the mod template: renders the template,
+# compares the crate files with the ones `new` writes, and builds and tests
+# both crates on this platform. A pull request that changes cargo-enshwick
+# runs it here; the template repository calls it for its own pull requests.
+# A branch of the same name in the other repository is taken over its main,
+# so a change to both passes before either merges.
+name: template
+
+on:
+  pull_request:
+    paths:
+      - crates/cargo-enshwick/**
+      - .github/workflows/template.yml
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: template-${{ github.repository }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  crate:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Choose the refs
+        id: refs
+        env:
+          REPOSITORY: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          pick() {
+            if [ -n "$BRANCH" ] &&
+              git ls-remote --exit-code --heads "https://github.com/$1" "$BRANCH" > /dev/null; then
+              echo "$BRANCH"
+            else
+              echo main
+            fi
+          }
+          if [ "$REPOSITORY" = enshwick/template-mod ]; then
+            echo "platform=$(pick enshwick/enshwick)" >> "$GITHUB_OUTPUT"
+            echo "template=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          else
+            echo "platform=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            echo "template=$(pick enshwick/template-mod)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: enshwick/enshwick
+          ref: ${{ steps.refs.outputs.platform }}
+          path: enshwick
+          persist-credentials: false
+
+      # copier reads the template's version from its history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: enshwick/template-mod
+          ref: ${{ steps.refs.outputs.template }}
+          path: template-mod
+          fetch-depth: 0
+          persist-credentials: false
+
+      # uv runs copier; the checked release stays in the tool cache.
+      - name: Install uv
+        env:
+          UV_VERSION: 0.13.6
+          UV_SHA256: f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645
+        run: | # zizmor: ignore[github-env] fixed paths only
+          dir="${RUNNER_TOOL_CACHE:-$HOME/.cache}/uv/$UV_VERSION"
+          if [ ! -x "$dir/uv" ]; then
+            archive="$RUNNER_TEMP/uv.tar.gz"
+            curl --proto '=https' --tlsv1.2 -sSfL -o "$archive" \
+              "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-x86_64-unknown-linux-gnu.tar.gz"
+            echo "$UV_SHA256  $archive" | sha256sum -c -
+            staging="$(dirname "$dir")/.staging-$GITHUB_RUN_ID-$GITHUB_JOB-$$"
+            mkdir -p "$staging"
+            tar -xzf "$archive" -C "$staging" --strip-components 1
+            mv -T "$staging" "$dir" 2> /dev/null || rm -rf "$staging"
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+          echo "UV_CACHE_DIR=${RUNNER_TOOL_CACHE:-$HOME/.cache}/uv-cache" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: enshwick
+          shared-key: template
+
+      - name: Compare and build
+        working-directory: enshwick
+        env:
+          ENSHWICK_TEMPLATE: ${{ github.workspace }}/template-mod
+        run: cargo test --locked -p cargo-enshwick --test template

@@ -1,0 +1,96 @@
+//! {description}.
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use enshwick::{Load, Mod, Off};
+
+/// The mod's texts, a table per language; the settings' labels among them.
+const TEXTS: &str = include_str!("texts.toml");
+
+/// Whether the mod does its work now; a settings change updates it.
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// The settings, in `mod-configs/{id}.toml`.
+#[derive(Debug, serde::Deserialize, serde::Serialize, enshwick::Config)]
+#[serde(deny_unknown_fields)]
+struct Settings {
+    /// Whether the mod does its work.
+    // `startup` (applied when a world loads), `runtime` (applied by
+    // on_config_change), `client` (each player's own), `sync` (the server's
+    // value) or `restart` (read once as the game starts), and for numbers
+    // `range = 1..=10`, for lists of values `choices = [..]`.
+    #[config(runtime)]
+    enabled: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+/// The mod's state.
+#[derive(Debug)]
+pub struct {type};
+
+impl Mod for {type} {
+    fn manifest() -> &'static enshwick::abi::Manifest {
+        enshwick::manifest!(
+            id: "{id}",
+            side: {side},
+            // What players read; description, authors, license and homepage
+            // come from Cargo.toml.
+            name: "{name}",
+            // Mods this one works better with, and mods it does not work
+            // beside, each with a version range ("" for any):
+            // recommends: ["someone.other-mod" => ">=0.2, <1.0"],
+            // breaks: ["someone.old-mod" => "<0.3"],
+            // After a rename, the old ids: their DLLs never start, and
+            // their settings and data carry over on the first start:
+            // was: ["you.old-name"],
+        )
+    }
+
+    fn init(load: &mut Load<'_>) -> Result<Self, Off> {
+        load.texts(TEXTS)?;
+        let settings: Settings = load.config()?;
+        ENABLED.store(settings.enabled, Ordering::Relaxed);
+        load.on_config_change(|settings: Settings| {
+            ENABLED.store(settings.enabled, Ordering::Relaxed);
+        })?;
+        enshwick::info!("enabled: {}", settings.enabled);
+        Ok(Self)
+    }
+}
+
+enshwick::declare_mod!({type});
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use enshwick::abi::Status;
+
+    use super::*;
+
+    #[test]
+    fn every_text_exists_in_all_languages() {
+        let languages: BTreeMap<String, BTreeMap<String, String>> = toml::from_str(TEXTS).unwrap();
+        for (language, entries) in &languages {
+            for key in languages.values().flat_map(BTreeMap::keys) {
+                assert!(entries.contains_key(key), "{key} has no {language}");
+            }
+        }
+    }
+
+    #[test]
+    fn starts_with_the_settings_it_reads() {
+        let loader = enshwick::test::FakeHost::new()
+            .settings("enabled = false\n")
+            .install();
+        // SAFETY: the exports of `declare_mod!` above.
+        let status = unsafe { loader.start(enshwick_mod_init, enshwick_mod_ready) };
+        assert_eq!(status, Status::OK);
+        assert!(!ENABLED.load(Ordering::Relaxed));
+    }
+}

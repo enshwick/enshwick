@@ -7,11 +7,12 @@ then check what the mod asked for and what its hooks and handlers do.
 
 It is part of `enshwick`, behind the `test` feature. Turn the
 feature on for tests only: list the crate again under `[dev-dependencies]`,
-at the same tag `cargo enshwick new` pins under `[dependencies]`:
+at the same version as under `[dependencies]`. A crate from
+`cargo enshwick new` has it there already:
 
 ```toml
 [dev-dependencies]
-enshwick = { git = "https://github.com/enshwick/enshwick", tag = "enshwick-v<version>", features = ["test"] }
+enshwick = { workspace = true, features = ["test"] }
 ```
 
 ## The shape of a test

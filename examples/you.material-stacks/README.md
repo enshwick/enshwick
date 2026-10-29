@@ -1,4 +1,4 @@
-# Material stacks
+# Material Stacks
 
 A data pack for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
 It changes one value in `items.toml`:

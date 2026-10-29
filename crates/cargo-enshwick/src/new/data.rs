@@ -171,7 +171,7 @@ mod tests {
         let (summary, manifest, _) =
             crate::pack::check(&dir.join("you.material-stacks"), None).unwrap();
         assert_eq!(manifest.id, "you.material-stacks");
-        assert_eq!(manifest.name, "Material stacks");
+        assert_eq!(manifest.name, "Material Stacks");
         assert!(summary.contains("0 changes"), "{summary}");
         std::fs::remove_dir_all(&dir).unwrap();
     }

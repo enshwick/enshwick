@@ -6,6 +6,17 @@ Each entry names the pull request that made the change.
 
 ## [Unreleased]
 
+### Added
+
+- `cargo enshwick new --enshwick-rev <commit>` builds the new mod on a
+  commit of the platform's `main` branch from git.
+
+### Changed
+
+- `cargo enshwick new` writes the crate the mod template makes, with its
+  toolchain file, build flags, lints, texts and tests. Mod names are in
+  title case.
+
 ### Fixed
 
 - `cargo enshwick install` builds a Windows DLL on every host, through

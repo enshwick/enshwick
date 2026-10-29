@@ -1,4 +1,4 @@
-# Storage slots
+# Storage Slots
 
 A data pack for Enshrouded, run by the [Enshwick](https://github.com/enshwick/enshwick) loader.
 It changes the slots of every storage box in `items.toml`:
