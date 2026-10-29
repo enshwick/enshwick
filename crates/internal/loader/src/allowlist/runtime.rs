@@ -39,12 +39,19 @@ static STATE: State = State {
     on: AtomicBool::new(false),
     listed: Mutex::new(None),
     writing: Mutex::new(()),
-    fuse: Fuse::new("the allowlist (every account may join while it is off)"),
+    fuse: Fuse::new("the allowlist (every player but the host is removed while it is off)"),
 };
 
 /// Takes the loader settings' switch, before the loader starts.
 pub(crate) fn configure(settings: &crate::settings::Settings) {
     STATE.on.store(settings.allowlist, Ordering::Release);
+}
+
+/// Whether the allowlist applies: on in the loader settings, on a
+/// dedicated server.
+pub(crate) fn is_on() -> bool {
+    STATE.on.load(Ordering::Acquire)
+        && crate::host::loader().is_some_and(|loader| loader.side == enshwick::abi::Side::SERVER)
 }
 
 /// The file in the game's `data_dir`.

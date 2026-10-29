@@ -9,7 +9,7 @@ use crate::console::accounts;
 #[cfg(windows)]
 mod runtime;
 #[cfg(windows)]
-pub(crate) use runtime::{command, configure, guarded, has, refuses, set, start};
+pub(crate) use runtime::{command, configure, guarded, has, is_on, refuses, set, start};
 
 /// The file under the loader's data folder.
 pub const FILE: &str = "allowlist.txt";
