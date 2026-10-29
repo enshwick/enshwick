@@ -8,6 +8,9 @@ Each entry names the pull request that made the change.
 
 ### Added
 
+- `Load::apply_config` reads the settings, hands them to a closure at once
+  and after every change, and returns them (#721).
+
 - A part of the loader that a panic turns off, such as the HUD items, a
   window or map markers, shows on the Mods screen and in the status summary
   with its reason; each window and menu entry turns off alone. A player who
