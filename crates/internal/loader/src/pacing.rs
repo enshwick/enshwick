@@ -154,24 +154,39 @@ fn verified(loader: &Loader, id: Symbol) -> Option<u64> {
     None
 }
 
-/// The address of the wait `id` on this build, when its code and the
-/// division before it are the table's and the wait lies in the code the
-/// division's pattern spans, so the hook reads the time left.
-fn checked_wait(loader: &Loader, id: Symbol) -> Option<u64> {
-    let at = verified(loader, id)?;
-    let divide = pinned::pacing::WAIT_DIVIDE;
+/// The division before the event loop's waits on this build, with the bytes
+/// of code from it that its table pattern spans, when its code is the
+/// table's; `None`, logged when the build has it, otherwise.
+fn division(loader: &Loader) -> Option<(u64, usize)> {
+    let id = pinned::pacing::WAIT_DIVIDE;
+    let at = loader.address(id)?;
     let span = loader
         .build
-        .head(divide.id())
+        .head(id.id())
         .and_then(|(pattern, start)| pattern.len().checked_sub(usize::try_from(start).ok()?));
-    let checked = verified(loader, divide)
-        .zip(span)
-        .is_some_and(|(divide, span)| after_division(divide, span, at));
+    let span = span.filter(|_| loader.code_holds(id));
+    if span.is_none() {
+        crate::log!(
+            WARN,
+            "{id} on {}: the code is not what the build table expects; the loop's waits are not hooked",
+            loader.build.name
+        );
+    }
+    Some((at, span?))
+}
+
+/// The address of the wait `id` on this build, when its code is the table's
+/// and it lies in the code `division`'s pattern spans, so the hook reads
+/// the time left.
+fn checked_wait(loader: &Loader, id: Symbol, division: Option<(u64, usize)>) -> Option<u64> {
+    let at = verified(loader, id)?;
+    let checked = division.is_some_and(|(divide, span)| after_division(divide, span, at));
     if !checked {
         crate::log!(
             WARN,
-            "{id} on {}: {divide} does not lead to it, so the time left is unknown; it is not hooked",
-            loader.build.name
+            "{id} on {}: {} does not lead to it, so the time left is unknown; it is not hooked",
+            loader.build.name,
+            pinned::pacing::WAIT_DIVIDE
         );
     }
     checked.then_some(at)
@@ -234,9 +249,10 @@ pub(crate) fn loop_wait(
             LoopWaitSites::MESSAGES,
         ),
     ];
+    let division = division(loader);
     let mut found = LoopWaitSites::NONE;
     for (id, hook, site) in sites {
-        if let Some(at) = checked_wait(loader, id)
+        if let Some(at) = checked_wait(loader, id, division)
             && link(loader, owner, id, at, hook, handler)
         {
             found = LoopWaitSites(found.0 | site.0);
